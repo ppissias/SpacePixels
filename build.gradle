@@ -19,13 +19,16 @@ tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
 }
 
+java {
+    withJavadocJar()
+}
+
 dependencies {	
 	implementation 'gov.nasa.gsfc.heasarc:nom-tam-fits:1.15.2'
 	implementation 'org.apache.commons:commons-configuration2:2.7'
 	implementation 'commons-beanutils:commons-beanutils:1.9.4'
 	implementation 'com.google.code.gson:gson:2.8.6'
-	implementation 'org.apache.httpcomponents:httpclient:4.5.10'
-		
+	implementation  fileTree(dir: 'lib', include: '*.jar')	
     // Use JUnit test framework
     testImplementation 'junit:junit:4.12'
 }

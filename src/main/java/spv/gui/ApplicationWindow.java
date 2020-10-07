@@ -1,44 +1,37 @@
 package spv.gui;
 
-import java.awt.EventQueue;
-
-import javax.swing.JFrame;
-import javax.swing.JMenuBar;
-import javax.swing.JMenu;
-import javax.swing.JTabbedPane;
-
-import org.apache.commons.configuration2.ex.ConfigurationException;
-
-import nom.tam.fits.Fits;
-import nom.tam.fits.FitsException;
-import nom.tam.fits.Header;
-import nom.tam.fits.HeaderCard;
-import nom.tam.util.Cursor;
-import spv.util.ImagePreprocessing;
-import spv.util.PlateSolveResult;
-
-import javax.swing.JPanel;
 import java.awt.BorderLayout;
-import javax.swing.JScrollPane;
-import javax.swing.JList;
-import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
-import javax.swing.AbstractAction;
+import java.awt.EventQueue;
+import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
-import javax.swing.Action;
-import javax.swing.DefaultListModel;
-import javax.swing.JFileChooser;
-
 import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
+import javax.swing.DefaultListModel;
 import javax.swing.JButton;
-import javax.swing.JRadioButton;
-import java.awt.FlowLayout;
 import javax.swing.JCheckBox;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JList;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+
+import org.apache.commons.configuration2.ex.ConfigurationException;
+
+import io.github.ppissias.astrolib.PlateSolveResult;
+import nom.tam.fits.Fits;
+import nom.tam.fits.FitsException;
+import nom.tam.fits.Header;
+import nom.tam.fits.HeaderCard;
+import nom.tam.util.Cursor;
+import spv.util.ImagePreprocessing;
 
 public class ApplicationWindow {
 
@@ -155,11 +148,14 @@ public class ApplicationWindow {
 				File selectedFitsFile = selectedFitsEntry.getTypeA();
 										
 				Future<PlateSolveResult> solveResult = imagePreProcessing.solve(selectedFitsFile.getAbsolutePath(), astapSolveCheckbox.isSelected(), astrometrynetSolveCheckbox.isSelected());
-				try {
-					PlateSolveResult result = solveResult.get();
-					System.out.println(result);
-				} catch (InterruptedException | ExecutionException e) {
-					e.printStackTrace();
+				if (solveResult != null) {
+					try {
+						PlateSolveResult result = solveResult.get();
+						
+						System.out.println(result);
+					} catch (InterruptedException | ExecutionException e) {
+						JOptionPane.showMessageDialog(new JFrame(), "Cannot solve image:"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);
+					}
 				}
 				
 			}

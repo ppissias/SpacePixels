@@ -6,9 +6,6 @@ package spv.util;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.Socket;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -30,9 +27,11 @@ import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
 import org.apache.commons.configuration2.builder.fluent.Configurations;
 import org.apache.commons.configuration2.ex.ConfigurationException;
 
+import io.github.ppissias.astrolib.AstrometryDotNet;
+import io.github.ppissias.astrolib.PlateSolveResult;
 import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
-import spv.util.astrometry.net.AstrometryDotNet;
+
 
 /**
  * Util class for referencing a bunch of FITS files,
@@ -240,31 +239,15 @@ public class ImagePreprocessing {
 			AstrometryDotNet astrometryInterface = new AstrometryDotNet();
 			try {
 				astrometryInterface.login();
-				//astrometryInterface.login2();
-				//astrometryInterface.login3();
-			} catch (IOException | InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			return new FutureTask<PlateSolveResult>(new Callable<PlateSolveResult>() {
-
-				@Override
-				public PlateSolveResult call() throws Exception {
-					// TODO Auto-generated method stub
-					return new PlateSolveResult(true, "", "", null);
-				}
+				Future<PlateSolveResult> solveResult = astrometryInterface.blindSolve(new File(fitsFileFullPath));
+				return solveResult;
 				
-			});
+			} catch (IOException | InterruptedException e) {
+				JOptionPane.showMessageDialog(new JFrame(), "Could not solve image with astrometry.net :"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);
+			}
+
 		}
 		
-		return new FutureTask<PlateSolveResult>(new Callable<PlateSolveResult>() {
-
-			@Override
-			public PlateSolveResult call() throws Exception {
-				// TODO Auto-generated method stub
-				return new PlateSolveResult(true, "", "", null);
-			}
-			
-		});
+		return null;
 	}
 }
