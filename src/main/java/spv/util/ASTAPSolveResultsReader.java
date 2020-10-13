@@ -16,8 +16,10 @@ import org.apache.commons.configuration2.builder.fluent.Configurations;
 import org.apache.commons.configuration2.ex.ConfigurationException;
 
 import io.github.ppissias.astrolib.PlateSolveResult;
+import spv.gui.ApplicationWindow;
 
 /**
+ * Helper class to read ASTAP plate solve results
  * @author Petros Pissias
  *
  */
@@ -43,7 +45,7 @@ public class ASTAPSolveResultsReader {
 		File iniFile = new File(iniFileName);
 		while (!iniFile.exists()) {
 			try {
-				System.out.println("Waiting for file to become available:"+iniFileName);
+				ApplicationWindow.logger.info("Waiting for file to become available:"+iniFileName);
 				Thread.sleep(1000);
 			} catch (InterruptedException e) {
 			}
@@ -57,6 +59,7 @@ public class ASTAPSolveResultsReader {
 		//basic results
 		String PLTSOLVD = iniFileConfig.getString("PLTSOLVD");
 		String WARNING = iniFileConfig.getString("WARNING");
+		
 		//solve result (including all properties)
 		Map<String,String> solveResult = new HashMap<String,String>();		
 		Iterator<String> keysIter = iniFileConfig.getKeys();
@@ -64,7 +67,10 @@ public class ASTAPSolveResultsReader {
 			String key = keysIter.next();
 			solveResult.put(key, iniFileConfig.getString(key));
 		}
+		solveResult.put("source", "astap");
+		solveResult.put("annotated_image_link",getExpectedAnnotatedFilename(fileBeingSolvedFullPath));
 		
+		//return results
 		if (PLTSOLVD.equals("T")) {
 			return new PlateSolveResult(true, null, WARNING, solveResult);
 		} else if (PLTSOLVD.equals("F")) {
@@ -86,5 +92,13 @@ public class ASTAPSolveResultsReader {
 
 	}
 	
-	
+	/**
+	 * Expected .ini file
+	 * @param fitsFileName
+	 * @return
+	 */
+	private String getExpectedAnnotatedFilename(String fitsFileName) {		
+		int lastSepPosition = fitsFileName.lastIndexOf(".");		
+		return fitsFileName.substring(0, lastSepPosition)+"_annotated.jpg";
+	}	
 }

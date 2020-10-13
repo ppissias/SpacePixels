@@ -9,10 +9,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -29,8 +26,13 @@ import org.apache.commons.configuration2.ex.ConfigurationException;
 
 import io.github.ppissias.astrolib.AstrometryDotNet;
 import io.github.ppissias.astrolib.PlateSolveResult;
+import io.github.ppissias.astrolib.SubmitFileRequest;
 import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
+import nom.tam.fits.Header;
+import nom.tam.fits.HeaderCard;
+import nom.tam.util.Cursor;
+import spv.gui.ApplicationWindow;
 
 
 /**
@@ -43,14 +45,27 @@ import nom.tam.fits.FitsException;
  */
 public class ImagePreprocessing {
 
-	private final File astapExecutableFullPath;
+	//astap executable path
+	private final File astapExecutable;
 	
+	//fits folder path
 	private final File alignedFitsFolderFullPath;
+
+	//executor service
+	private final ExecutorService executor = Executors.newFixedThreadPool(1);
 	
-	//todo close all as ASTAP cannot read them?
-	//vgazw ta properties kai ta methods ta anoigoun kathe fora
-	//exw method close all fits files gia na kleisoun ola kai na synexisei to processing apo astap 
+	//astrometry.net interface
+	private final AstrometryDotNet astrometryNetInterface = new AstrometryDotNet();
 	
+	/**
+	 * Returns new instance
+	 * @param astapExecutableFullPath
+	 * @param alignedFitsFolderFullPath
+	 * @return
+	 * @throws IOException
+	 * @throws FitsException
+	 * @throws ConfigurationException
+	 */
 	public static synchronized ImagePreprocessing getInstance(File astapExecutableFullPath, File alignedFitsFolderFullPath) throws IOException, FitsException, ConfigurationException {
 		//first create config file if it does not exist
 		
@@ -61,7 +76,7 @@ public class ImagePreprocessing {
 		}
 		//create file
 		File configurationFile = new File(userhome+"/spacepixelviewer.config");
-		System.out.println("Will use config file:"+configurationFile.getAbsolutePath());
+		ApplicationWindow.logger.info("Will use config file:"+configurationFile.getAbsolutePath());
 		
 		configurationFile.createNewFile();
 		
@@ -97,35 +112,115 @@ public class ImagePreprocessing {
 	
 
 	/**
-	 * 
+	 * internal constructor
 	 * @param aspsExecutableFullPath
 	 * @param alignedFitsFolderFullPath
 	 * @throws IOException 
 	 * @throws FitsException 
 	 */
-	private ImagePreprocessing(File astapExecutableFullPath, File alignedFitsFolderFullPath) throws IOException, FitsException {
+	private ImagePreprocessing(File astapExecutable, File alignedFitsFolderFullPath) throws IOException, FitsException {
 		this.alignedFitsFolderFullPath = alignedFitsFolderFullPath;
-		this.astapExecutableFullPath = astapExecutableFullPath;
+		this.astapExecutable = astapExecutable;
 		
 	}
 	
 	/**
-	 * Returns the Fits objects of the associated files of this directory
-	 * @return sorted by filename
-	 * @throws IOException
-	 * @throws FitsException
+	 * Returns the FITS file information
+	 * @return
+	 * @throws FitsException 
+	 * @throws IOException 
 	 */
-	public Fits[] getFitsFiles() throws IOException, FitsException {
-
-		File[] fitsFiles = getFitsFilesDetails();
-		Fits[] ret = new Fits[fitsFiles.length];
-	
+	public FitsFileInformation[] getFitsfileInformation() throws IOException, FitsException {
+		//list of fits files in DIR
+		File[] fitsFileInformation = getFitsFilesDetails();
+		
+		//get FITS objects
+		Fits[] fitsFiles = new Fits[fitsFileInformation.length];
+		
+		//return 
+		FitsFileInformation[] ret = new FitsFileInformation[fitsFileInformation.length];
+		
+		//populate information
 		for (int i=0;i<fitsFiles.length;i++) {
-			ret[i] = new Fits(fitsFiles[i]);
+			fitsFiles[i] = new Fits(fitsFileInformation[i]);
+			
+			//get info from FITS file
+			int hdu = fitsFiles[i].getNumberOfHDUs();
+			
+
+			Header fitsHeader = fitsFiles[i].getHDU(0).getHeader();
+			Cursor<String, HeaderCard> iter = fitsHeader.iterator();							 						
+			
+			//info
+			String fpath = fitsFileInformation[i].getAbsolutePath();
+			boolean monochromeImage;
+			int width;
+			int height;
+			
+			int[] axes = fitsFiles[i].getHDU(0).getAxes();
+			if (axes.length == 2) {
+				//mono image
+				monochromeImage = true;
+				Object kernelData = fitsFiles[i].getHDU(0).getKernel();
+				if (kernelData instanceof short[][]) {
+					short[][] data = (short[][])fitsFiles[i].getHDU(0).getKernel();
+					height=data.length;
+					width=data[0].length;					
+				} else if (kernelData instanceof int[][]) {
+					short[][] data = (short[][])fitsFiles[i].getHDU(0).getKernel();
+					height=data.length;
+					width=data[0].length;						
+				} else if (kernelData instanceof float[][]) {
+					short[][] data = (short[][])fitsFiles[i].getHDU(0).getKernel();
+					height=data.length;
+					width=data[0].length;						
+				} else {
+					throw new FitsException("Cannot understand file, it has a type="+kernelData.getClass().getName());
+				}								
+			} else if (axes.length == 3) {
+				//color image
+				monochromeImage = false;
+				Object kernelData = fitsFiles[i].getHDU(0).getKernel();
+				if (kernelData instanceof short[][][]) {
+					short[][][] data = (short[][][])fitsFiles[i].getHDU(0).getKernel();
+					height=data[0].length;
+					width=data[0][0].length;						
+				} else if (kernelData instanceof int[][][]) {
+					int[][][] data = (int[][][])fitsFiles[i].getHDU(0).getKernel();
+					height=data[0].length;
+					width=data[0][0].length;						
+				} else if (kernelData instanceof float[][][]) {
+					float[][][] data = (float[][][])fitsFiles[i].getHDU(0).getKernel();
+					height=data[0].length;
+					width=data[0][0].length;						
+				} else {
+					throw new FitsException("Cannot understand file, it has a type="+kernelData.getClass().getName());
+				}
+			
+			} else {
+				throw new FitsException("Cannot understand file, it has axes length="+axes.length);
+			}
+			
+			//populate return object
+			ret[i] = new FitsFileInformation(fpath,fitsFileInformation[i].getName(), monochromeImage, width, height);
+			
+			while (iter.hasNext()) {
+				//fits header
+				HeaderCard fitsHeaderCard = iter.next();
+				ret[i].getFitsHeader().put(fitsHeaderCard.getKey(), fitsHeaderCard.getValue());
+				//ApplicationWindow.logger.info("processing "+fitsHeaderCard.getKey()+" key form fits header");
+			}
+																	
+			ApplicationWindow.logger.info("populated fits object as "+ret[i]);
 		}
 		
+		closeFitsFiles(fitsFiles);
+		
+		//return the full list
 		return ret;
+							
 	}
+
 
 	/**
 	 * Returns FITS files in the provided directory
@@ -133,7 +228,7 @@ public class ImagePreprocessing {
 	 * @throws IOException
 	 * @throws FitsException
 	 */
-	public File[] getFitsFilesDetails() throws IOException, FitsException {
+	private File[] getFitsFilesDetails() throws IOException, FitsException {
 		
 		File directory = alignedFitsFolderFullPath;
 		if (!directory.isDirectory()) {
@@ -181,7 +276,7 @@ public class ImagePreprocessing {
 	 * @param fitsFiles
 	 * @throws IOException
 	 */
-	public static void closeFitsFiles(Fits[] fitsFiles) throws IOException {
+	private static void closeFitsFiles(Fits[] fitsFiles) throws IOException {
 		for (Fits fitsFile : fitsFiles) {
 			fitsFile.close();
 		}
@@ -195,51 +290,24 @@ public class ImagePreprocessing {
 	 * @param astap should astap be used? 
 	 * @param astrometry should the online Astromerty.net service be used ? 
 	 * @return after the completion of the solve execution the result is returned.
+	 * @throws FitsException 
 	 */
-	public Future<PlateSolveResult> solve(String fitsFileFullPath, boolean astap, boolean astrometry) {
-		System.out.println("trying to solve image astap="+astap+" astrometry="+astrometry);
+	public Future<PlateSolveResult> solve(String fitsFileFullPath, boolean astap, boolean astrometry) throws FitsException {
+		ApplicationWindow.logger.info("trying to solve image astap="+astap+" astrometry="+astrometry);
 		
 		if (astap) {
-			FutureTask<PlateSolveResult> task = new FutureTask<PlateSolveResult>(new Callable<PlateSolveResult>() {
-	
-				@Override
-				public PlateSolveResult call() throws Exception {
-					//map that stores 
-					Map<String, String> solveResult = new HashMap<String, String>();
-					
-					//call ASTAP with correct arguments
-					//do a simple test run of astap
-					String[] cmdArray = new String[6];
-					cmdArray[0] = astapExecutableFullPath.getAbsolutePath();
-					cmdArray[1] = "-f";
-					cmdArray[2] = fitsFileFullPath;
-					cmdArray[3] = "-r";
-					cmdArray[4] = "360"; //blind if necessary
-					cmdArray[5] = "-wcs";
-					
-					try {
-						Process proc = Runtime.getRuntime().exec(cmdArray, null, astapExecutableFullPath.getParentFile());
-						//proc.
-					} catch (IOException e) {
-						JOptionPane.showMessageDialog(new JFrame(), "Cannot execute ASTAP:"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);
-					}
-					
-					//waitfor results and return to the user
-					ASTAPSolveResultsReader astapSolveResultsReader = new ASTAPSolveResultsReader(fitsFileFullPath);
-					PlateSolveResult ret = astapSolveResultsReader.getSolveResult();				
-					return ret;
-				}			
-			});
+			FutureTask<PlateSolveResult> task = ASTAPInterface.solveImage(astapExecutable, fitsFileFullPath);
 			
-			ExecutorService executor = Executors.newFixedThreadPool(1);
 			executor.execute(task);
 			return task;
 		}		
-		else if (astrometry) {
-			AstrometryDotNet astrometryInterface = new AstrometryDotNet();
-			try {
-				astrometryInterface.login();
-				Future<PlateSolveResult> solveResult = astrometryInterface.blindSolve(new File(fitsFileFullPath));
+		else if (astrometry) {			
+			try {				
+				astrometryNetInterface.login();
+				
+				SubmitFileRequest typicalParamsRequest = SubmitFileRequest.builder().withPublicly_visible("y").withScale_units("degwidth").withScale_lower(0.1f).withScale_upper(180.0f).withDownsample_factor(2f).withRadius(10f).build();
+
+				Future<PlateSolveResult> solveResult = astrometryNetInterface.customSolve(new File(fitsFileFullPath), typicalParamsRequest);
 				return solveResult;
 				
 			} catch (IOException | InterruptedException e) {
