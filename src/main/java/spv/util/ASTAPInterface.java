@@ -38,7 +38,7 @@ public class ASTAPInterface {
 				cmdArray[4] = "360"; //blind if necessary
 				cmdArray[5] = "-z";
 				cmdArray[6] = "0"; 
-				cmdArray[7] = "-f";
+				cmdArray[7] = "-fov";
 				cmdArray[8] = "0"; 				
 				cmdArray[9] = "-wcs";
 				cmdArray[10] = "-annotate";
@@ -46,6 +46,14 @@ public class ASTAPInterface {
 				
 				try {
 					Process proc = Runtime.getRuntime().exec(cmdArray, null, astapExecutable.getParentFile());
+					//wait 2 seconds
+					Thread.sleep(2000);
+					
+					if (!proc.isAlive()) {
+						if (proc.exitValue() > 0) {
+							JOptionPane.showMessageDialog(new JFrame(), "ASTAP exited with error code:"+proc.exitValue(), "Error",JOptionPane.ERROR_MESSAGE);
+						}
+					}
 					//proc.
 				} catch (IOException e) {
 					JOptionPane.showMessageDialog(new JFrame(), "Cannot execute ASTAP:"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);

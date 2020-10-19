@@ -68,10 +68,11 @@ public class ASTAPSolveResultsReader {
 			solveResult.put(key, iniFileConfig.getString(key));
 		}
 		solveResult.put("source", "astap");
-		solveResult.put("annotated_image_link",getExpectedAnnotatedFilename(fileBeingSolvedFullPath));
-		
 		//return results
 		if (PLTSOLVD.equals("T")) {
+			solveResult.put("annotated_image_link",getExpectedAnnotatedFilename(fileBeingSolvedFullPath));
+			solveResult.put("wcs_link",getExpectedWCSFilename(fileBeingSolvedFullPath));
+
 			return new PlateSolveResult(true, null, WARNING, solveResult);
 		} else if (PLTSOLVD.equals("F")) {
 			String ERROR = iniFileConfig.getString("ERROR");
@@ -93,12 +94,22 @@ public class ASTAPSolveResultsReader {
 	}
 	
 	/**
-	 * Expected .ini file
+	 * Expected .jpg file
 	 * @param fitsFileName
 	 * @return
 	 */
 	private String getExpectedAnnotatedFilename(String fitsFileName) {		
 		int lastSepPosition = fitsFileName.lastIndexOf(".");		
 		return fitsFileName.substring(0, lastSepPosition)+"_annotated.jpg";
+	}	
+	
+	/**
+	 * Expected .wcs file
+	 * @param fitsFileName
+	 * @return
+	 */
+	private String getExpectedWCSFilename(String fitsFileName) {		
+		int lastSepPosition = fitsFileName.lastIndexOf(".");		
+		return fitsFileName.substring(0, lastSepPosition)+".wcs";
 	}	
 }

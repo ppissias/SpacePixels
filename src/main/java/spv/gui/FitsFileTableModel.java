@@ -78,7 +78,7 @@ public class FitsFileTableModel extends AbstractTableModel {
 	    			return fitsfiles[row].getFitsHeader().size()+" elements";
 	    		}
 	
-	    		case 5 : { //solved
+	    		case 5 : { //solved, holds the PlateSolveResult here
 	    			PlateSolveResult solveResult = fitsfiles[row].getSolveResult();
 	    			if (solveResult != null) {
 	    				if (solveResult.isSuccess()) {
