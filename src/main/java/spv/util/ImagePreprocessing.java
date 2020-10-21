@@ -617,8 +617,11 @@ public class ImagePreprocessing {
 				}
 				
 				//TODO problem with AsteroidHunter 
-				//TODO FIX DATE keyword (or delete?) replace iwth value from DATE-OBS ? 
-				//TODO Number, change between integers and Doubles
+				//TODO FIX DATE keyword (or delete?) replace with value from DATE-OBS ? 
+				
+				//replace DATA content with DATA-OBS content as it is mis-interpreted by NASA Asteroid hunter
+				
+
 			}				
 		
 			/**
@@ -628,8 +631,22 @@ public class ImagePreprocessing {
 			 * from DATE='2019-07-23'
 			 * 
 			 */
-			
+			Cursor<String, HeaderCard> headerCursor = headerHDU.iterator();
+			String dateObs = headerHDU.getStringValue("DATE-OBS");
+			if (dateObs != null) {
+				headerCursor.setKey("DATE");
+				if (headerCursor.hasNext()) {
+					//property exists
+					headerCursor.next();
+					//remove
+					headerCursor.remove();	
+					headerCursor.add(new HeaderCard("DATE",dateObs,"replaced"));
+					ApplicationWindow.logger.info("applying : "+dateObs+" to DATE field");
+					
+				}
+			}
 
+			//write modified FITS file
 			String newFName = fitsFileInformation[i].getPath();
 			int lastSepPosition = newFName.lastIndexOf(".");		
 			newFName= newFName.substring(0, lastSepPosition)+"_modified.fit";

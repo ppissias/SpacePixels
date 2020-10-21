@@ -22,6 +22,7 @@ import spv.util.FitsFileInformation;
 import javax.swing.JSeparator;
 import java.awt.Font;
 import javax.swing.JTextField;
+import javax.swing.SwingConstants;
 
 
 public class SPConfigurationApplicationPanel extends JPanel {
@@ -42,10 +43,10 @@ public class SPConfigurationApplicationPanel extends JPanel {
 	public SPConfigurationApplicationPanel(ApplicationWindow mainAppWindow) {
 		this.mainAppWindow = mainAppWindow;
 		GridBagLayout gridBagLayout = new GridBagLayout();
-		gridBagLayout.columnWidths = new int[]{89, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-		gridBagLayout.rowHeights = new int[]{23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-		gridBagLayout.columnWeights = new double[]{0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, Double.MIN_VALUE};
-		gridBagLayout.rowWeights = new double[]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, Double.MIN_VALUE};
+		gridBagLayout.columnWidths = new int[]{231, 332, 0};
+		gridBagLayout.rowHeights = new int[]{23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+		gridBagLayout.columnWeights = new double[]{0.0, 1.0, Double.MIN_VALUE};
+		gridBagLayout.rowWeights = new double[]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, Double.MIN_VALUE};
 		setLayout(gridBagLayout);
 		
 		JLabel astapConfigLabel = new JLabel("ASTAP configuration");
@@ -56,14 +57,6 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_astapConfigLabel.gridx = 0;
 		gbc_astapConfigLabel.gridy = 0;
 		add(astapConfigLabel, gbc_astapConfigLabel);
-		
-		astapPathLabel = new JLabel();
-		GridBagConstraints gbc_astapPathLabel = new GridBagConstraints();
-		gbc_astapPathLabel.insets = new Insets(0, 0, 5, 5);
-		gbc_astapPathLabel.fill = GridBagConstraints.HORIZONTAL;
-		gbc_astapPathLabel.gridx = 1;
-		gbc_astapPathLabel.gridy = 1;
-		add(astapPathLabel, gbc_astapPathLabel);
 		
 		JButton btnNewButton = new JButton("ASTAP path");
 		btnNewButton.addActionListener(new ActionListener() {
@@ -110,13 +103,32 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_btnNewButton.gridy = 1;
 		add(btnNewButton, gbc_btnNewButton);
 		
+		astapPathLabel = new JLabel();
+		astapPathLabel.setHorizontalAlignment(SwingConstants.LEFT);
+		GridBagConstraints gbc_astapPathLabel = new GridBagConstraints();
+		gbc_astapPathLabel.insets = new Insets(0, 0, 5, 0);
+		gbc_astapPathLabel.fill = GridBagConstraints.HORIZONTAL;
+		gbc_astapPathLabel.gridx = 1;
+		gbc_astapPathLabel.gridy = 2;
+		add(astapPathLabel, gbc_astapPathLabel);
+		
+		JLabel groupLabel = new JLabel("Parameters used to help with plate solving (optional)");
+		groupLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
+		GridBagConstraints gbc_groupLabel = new GridBagConstraints();
+		gbc_groupLabel.anchor = GridBagConstraints.WEST;
+		gbc_groupLabel.gridwidth = 2;
+		gbc_groupLabel.insets = new Insets(0, 0, 5, 0);
+		gbc_groupLabel.gridx = 0;
+		gbc_groupLabel.gridy = 3;
+		add(groupLabel, gbc_groupLabel);
+		
 		JLabel telescopeParamsLabel = new JLabel("Telescope parameters");
 		telescopeParamsLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
 		GridBagConstraints gbc_telescopeParamsLabel = new GridBagConstraints();
 		gbc_telescopeParamsLabel.anchor = GridBagConstraints.WEST;
 		gbc_telescopeParamsLabel.insets = new Insets(0, 0, 5, 5);
 		gbc_telescopeParamsLabel.gridx = 0;
-		gbc_telescopeParamsLabel.gridy = 2;
+		gbc_telescopeParamsLabel.gridy = 4;
 		add(telescopeParamsLabel, gbc_telescopeParamsLabel);
 		
 		JLabel focalLengthLabel = new JLabel("Focal length");
@@ -124,15 +136,15 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_focalLengthLabel.anchor = GridBagConstraints.EAST;
 		gbc_focalLengthLabel.insets = new Insets(0, 0, 5, 5);
 		gbc_focalLengthLabel.gridx = 0;
-		gbc_focalLengthLabel.gridy = 3;
+		gbc_focalLengthLabel.gridy = 5;
 		add(focalLengthLabel, gbc_focalLengthLabel);
 		
 		focalLengthTextField = new JTextField();
 		GridBagConstraints gbc_focalLengthTextField = new GridBagConstraints();
-		gbc_focalLengthTextField.insets = new Insets(0, 0, 5, 5);
-		gbc_focalLengthTextField.fill = GridBagConstraints.HORIZONTAL;
+		gbc_focalLengthTextField.anchor = GridBagConstraints.WEST;
+		gbc_focalLengthTextField.insets = new Insets(0, 0, 5, 0);
 		gbc_focalLengthTextField.gridx = 1;
-		gbc_focalLengthTextField.gridy = 3;
+		gbc_focalLengthTextField.gridy = 5;
 		add(focalLengthTextField, gbc_focalLengthTextField);
 		focalLengthTextField.setColumns(10);
 		
@@ -143,7 +155,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_cameraParamsLabel.anchor = GridBagConstraints.WEST;
 		gbc_cameraParamsLabel.insets = new Insets(0, 0, 5, 5);
 		gbc_cameraParamsLabel.gridx = 0;
-		gbc_cameraParamsLabel.gridy = 4;
+		gbc_cameraParamsLabel.gridy = 6;
 		add(cameraParamsLabel, gbc_cameraParamsLabel);
 		
 		JLabel lblNewLabel = new JLabel("Pixel size");
@@ -151,83 +163,26 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_lblNewLabel.anchor = GridBagConstraints.EAST;
 		gbc_lblNewLabel.insets = new Insets(0, 0, 5, 5);
 		gbc_lblNewLabel.gridx = 0;
-		gbc_lblNewLabel.gridy = 5;
+		gbc_lblNewLabel.gridy = 7;
 		add(lblNewLabel, gbc_lblNewLabel);
 		
 		pixelSizeTextfield = new JTextField();
 		GridBagConstraints gbc_pixelSizeTextfield = new GridBagConstraints();
-		gbc_pixelSizeTextfield.insets = new Insets(0, 0, 5, 5);
-		gbc_pixelSizeTextfield.fill = GridBagConstraints.HORIZONTAL;
+		gbc_pixelSizeTextfield.anchor = GridBagConstraints.WEST;
+		gbc_pixelSizeTextfield.insets = new Insets(0, 0, 5, 0);
 		gbc_pixelSizeTextfield.gridx = 1;
-		gbc_pixelSizeTextfield.gridy = 5;
+		gbc_pixelSizeTextfield.gridy = 7;
 		add(pixelSizeTextfield, gbc_pixelSizeTextfield);
 		pixelSizeTextfield.setColumns(10);
 		
-		JLabel siteLabel = new JLabel("Site");
-		siteLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
-		GridBagConstraints gbc_siteLabel = new GridBagConstraints();
-		gbc_siteLabel.anchor = GridBagConstraints.NORTHWEST;
-		gbc_siteLabel.insets = new Insets(0, 0, 5, 5);
-		gbc_siteLabel.gridx = 0;
-		gbc_siteLabel.gridy = 6;
-		add(siteLabel, gbc_siteLabel);
-		
-		JLabel latLabel = new JLabel("Latitude");
-		GridBagConstraints gbc_latLabel = new GridBagConstraints();
-		gbc_latLabel.anchor = GridBagConstraints.EAST;
-		gbc_latLabel.insets = new Insets(0, 0, 5, 5);
-		gbc_latLabel.gridx = 0;
-		gbc_latLabel.gridy = 7;
-		add(latLabel, gbc_latLabel);
-		
-		latTextField = new JTextField();
-		GridBagConstraints gbc_latTextField = new GridBagConstraints();
-		gbc_latTextField.insets = new Insets(0, 0, 5, 5);
-		gbc_latTextField.fill = GridBagConstraints.HORIZONTAL;
-		gbc_latTextField.gridx = 1;
-		gbc_latTextField.gridy = 7;
-		add(latTextField, gbc_latTextField);
-		latTextField.setColumns(10);
-		
-		JLabel latNLabal = new JLabel("N");
-		GridBagConstraints gbc_latNLabal = new GridBagConstraints();
-		gbc_latNLabal.insets = new Insets(0, 0, 5, 5);
-		gbc_latNLabal.gridx = 2;
-		gbc_latNLabal.gridy = 7;
-		add(latNLabal, gbc_latNLabal);
-		
-		JLabel longLabel = new JLabel("Longitude");
-		GridBagConstraints gbc_longLabel = new GridBagConstraints();
-		gbc_longLabel.anchor = GridBagConstraints.EAST;
-		gbc_longLabel.insets = new Insets(0, 0, 5, 5);
-		gbc_longLabel.gridx = 0;
-		gbc_longLabel.gridy = 8;
-		add(longLabel, gbc_longLabel);
-		
-		longTextField = new JTextField();
-		GridBagConstraints gbc_longTextField = new GridBagConstraints();
-		gbc_longTextField.insets = new Insets(0, 0, 5, 5);
-		gbc_longTextField.fill = GridBagConstraints.HORIZONTAL;
-		gbc_longTextField.gridx = 1;
-		gbc_longTextField.gridy = 8;
-		add(longTextField, gbc_longTextField);
-		longTextField.setColumns(10);
-		
-		JLabel lblNewLabel_1 = new JLabel("E");
-		GridBagConstraints gbc_lblNewLabel_1 = new GridBagConstraints();
-		gbc_lblNewLabel_1.insets = new Insets(0, 0, 5, 5);
-		gbc_lblNewLabel_1.gridx = 2;
-		gbc_lblNewLabel_1.gridy = 8;
-		add(lblNewLabel_1, gbc_lblNewLabel_1);
-		
-		JLabel fieldLabel = new JLabel("Field coordinates");
+		JLabel fieldLabel = new JLabel("Field coordinates (approx)");
 		fieldLabel.setToolTipText("Approx coordinates at the center of the image");
 		fieldLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
 		GridBagConstraints gbc_fieldLabel = new GridBagConstraints();
 		gbc_fieldLabel.anchor = GridBagConstraints.WEST;
 		gbc_fieldLabel.insets = new Insets(0, 0, 5, 5);
 		gbc_fieldLabel.gridx = 0;
-		gbc_fieldLabel.gridy = 9;
+		gbc_fieldLabel.gridy = 8;
 		add(fieldLabel, gbc_fieldLabel);
 		
 		JLabel raLabel = new JLabel("RA");
@@ -235,15 +190,15 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_raLabel.anchor = GridBagConstraints.EAST;
 		gbc_raLabel.insets = new Insets(0, 0, 5, 5);
 		gbc_raLabel.gridx = 0;
-		gbc_raLabel.gridy = 10;
+		gbc_raLabel.gridy = 9;
 		add(raLabel, gbc_raLabel);
 		
 		raTextfield = new JTextField();
 		GridBagConstraints gbc_raTextfield = new GridBagConstraints();
-		gbc_raTextfield.insets = new Insets(0, 0, 5, 5);
-		gbc_raTextfield.fill = GridBagConstraints.HORIZONTAL;
+		gbc_raTextfield.anchor = GridBagConstraints.WEST;
+		gbc_raTextfield.insets = new Insets(0, 0, 5, 0);
 		gbc_raTextfield.gridx = 1;
-		gbc_raTextfield.gridy = 10;
+		gbc_raTextfield.gridy = 9;
 		add(raTextfield, gbc_raTextfield);
 		raTextfield.setColumns(10);
 		
@@ -252,25 +207,78 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_decLabel.anchor = GridBagConstraints.EAST;
 		gbc_decLabel.insets = new Insets(0, 0, 5, 5);
 		gbc_decLabel.gridx = 0;
-		gbc_decLabel.gridy = 11;
+		gbc_decLabel.gridy = 10;
 		add(decLabel, gbc_decLabel);
 		
 		decTextField = new JTextField();
 		GridBagConstraints gbc_decTextField = new GridBagConstraints();
-		gbc_decTextField.insets = new Insets(0, 0, 5, 5);
-		gbc_decTextField.fill = GridBagConstraints.HORIZONTAL;
+		gbc_decTextField.anchor = GridBagConstraints.WEST;
+		gbc_decTextField.insets = new Insets(0, 0, 5, 0);
 		gbc_decTextField.gridx = 1;
-		gbc_decTextField.gridy = 11;
+		gbc_decTextField.gridy = 10;
 		add(decTextField, gbc_decTextField);
 		decTextField.setColumns(10);
 		
-		JLabel importLabel = new JLabel("Import");
+		JLabel group2Label = new JLabel("Parameters used for object detection and annotation");
+		group2Label.setFont(new Font("Tahoma", Font.PLAIN, 13));
+		GridBagConstraints gbc_group2Label = new GridBagConstraints();
+		gbc_group2Label.anchor = GridBagConstraints.WEST;
+		gbc_group2Label.gridwidth = 2;
+		gbc_group2Label.insets = new Insets(0, 0, 5, 0);
+		gbc_group2Label.gridx = 0;
+		gbc_group2Label.gridy = 12;
+		add(group2Label, gbc_group2Label);
+		
+		JLabel siteLabel = new JLabel("Site");
+		siteLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
+		GridBagConstraints gbc_siteLabel = new GridBagConstraints();
+		gbc_siteLabel.anchor = GridBagConstraints.NORTHWEST;
+		gbc_siteLabel.insets = new Insets(0, 0, 5, 5);
+		gbc_siteLabel.gridx = 0;
+		gbc_siteLabel.gridy = 13;
+		add(siteLabel, gbc_siteLabel);
+		
+		JLabel latLabel = new JLabel("Latitude (N)");
+		GridBagConstraints gbc_latLabel = new GridBagConstraints();
+		gbc_latLabel.anchor = GridBagConstraints.EAST;
+		gbc_latLabel.insets = new Insets(0, 0, 5, 5);
+		gbc_latLabel.gridx = 0;
+		gbc_latLabel.gridy = 14;
+		add(latLabel, gbc_latLabel);
+		
+		latTextField = new JTextField();
+		GridBagConstraints gbc_latTextField = new GridBagConstraints();
+		gbc_latTextField.anchor = GridBagConstraints.WEST;
+		gbc_latTextField.insets = new Insets(0, 0, 5, 0);
+		gbc_latTextField.gridx = 1;
+		gbc_latTextField.gridy = 14;
+		add(latTextField, gbc_latTextField);
+		latTextField.setColumns(10);
+		
+		JLabel longLabel = new JLabel("Longitude (E)");
+		GridBagConstraints gbc_longLabel = new GridBagConstraints();
+		gbc_longLabel.anchor = GridBagConstraints.EAST;
+		gbc_longLabel.insets = new Insets(0, 0, 5, 5);
+		gbc_longLabel.gridx = 0;
+		gbc_longLabel.gridy = 15;
+		add(longLabel, gbc_longLabel);
+		
+		longTextField = new JTextField();
+		GridBagConstraints gbc_longTextField = new GridBagConstraints();
+		gbc_longTextField.anchor = GridBagConstraints.WEST;
+		gbc_longTextField.insets = new Insets(0, 0, 5, 0);
+		gbc_longTextField.gridx = 1;
+		gbc_longTextField.gridy = 15;
+		add(longTextField, gbc_longTextField);
+		longTextField.setColumns(10);
+		
+		JLabel importLabel = new JLabel("Import parameters");
 		importLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
 		GridBagConstraints gbc_importLabel = new GridBagConstraints();
 		gbc_importLabel.anchor = GridBagConstraints.WEST;
 		gbc_importLabel.insets = new Insets(0, 0, 5, 5);
 		gbc_importLabel.gridx = 0;
-		gbc_importLabel.gridy = 12;
+		gbc_importLabel.gridy = 17;
 		add(importLabel, gbc_importLabel);
 		
 		JButton fitsDeduceButton = new JButton("deduce from FITS header");
@@ -340,14 +348,14 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		GridBagConstraints gbc_fitsDeduceButton = new GridBagConstraints();
 		gbc_fitsDeduceButton.insets = new Insets(0, 0, 5, 5);
 		gbc_fitsDeduceButton.gridx = 0;
-		gbc_fitsDeduceButton.gridy = 13;
+		gbc_fitsDeduceButton.gridy = 18;
 		add(fitsDeduceButton, gbc_fitsDeduceButton);
 		
 		JLabel saveConfigLabel = new JLabel("Save current configuration");
 		GridBagConstraints gbc_saveConfigLabel = new GridBagConstraints();
 		gbc_saveConfigLabel.insets = new Insets(0, 0, 0, 5);
 		gbc_saveConfigLabel.gridx = 0;
-		gbc_saveConfigLabel.gridy = 14;
+		gbc_saveConfigLabel.gridy = 19;
 		add(saveConfigLabel, gbc_saveConfigLabel);
 		
 		JButton saveConfigButton = new JButton("save");
@@ -370,9 +378,8 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		});
 		GridBagConstraints gbc_saveConfigButton = new GridBagConstraints();
 		gbc_saveConfigButton.anchor = GridBagConstraints.WEST;
-		gbc_saveConfigButton.insets = new Insets(0, 0, 0, 5);
 		gbc_saveConfigButton.gridx = 1;
-		gbc_saveConfigButton.gridy = 14;
+		gbc_saveConfigButton.gridy = 19;
 		add(saveConfigButton, gbc_saveConfigButton);
 
 		
