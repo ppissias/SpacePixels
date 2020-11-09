@@ -17,12 +17,16 @@ import javax.swing.JPanel;
 
 import org.apache.commons.configuration2.ex.ConfigurationException;
 
+import nom.tam.fits.FitsException;
 import spv.util.FitsFileInformation;
 
 import javax.swing.JSeparator;
 import java.awt.Font;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
+import javax.swing.JSlider;
+import javax.swing.event.ChangeListener;
+import javax.swing.event.ChangeEvent;
 
 
 public class SPConfigurationApplicationPanel extends JPanel {
@@ -37,6 +41,11 @@ public class SPConfigurationApplicationPanel extends JPanel {
 	private JTextField raTextfield;
 	private JTextField decTextField;
 	
+	private JSlider stretchSlider;
+	public JSlider getStretchSlider() {
+		return stretchSlider;
+	}
+
 	/**
 	 * Create the panel.
 	 */
@@ -44,9 +53,9 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		this.mainAppWindow = mainAppWindow;
 		GridBagLayout gridBagLayout = new GridBagLayout();
 		gridBagLayout.columnWidths = new int[]{231, 332, 0};
-		gridBagLayout.rowHeights = new int[]{23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+		gridBagLayout.rowHeights = new int[]{23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 		gridBagLayout.columnWeights = new double[]{0.0, 1.0, Double.MIN_VALUE};
-		gridBagLayout.rowWeights = new double[]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, Double.MIN_VALUE};
+		gridBagLayout.rowWeights = new double[]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, Double.MIN_VALUE};
 		setLayout(gridBagLayout);
 		
 		JLabel astapConfigLabel = new JLabel("ASTAP configuration");
@@ -272,13 +281,42 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		add(longTextField, gbc_longTextField);
 		longTextField.setColumns(10);
 		
+		JLabel detectionLabel = new JLabel("Stretch Factor");
+		detectionLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
+		GridBagConstraints gbc_detectionLabel = new GridBagConstraints();
+		gbc_detectionLabel.anchor = GridBagConstraints.WEST;
+		gbc_detectionLabel.insets = new Insets(0, 0, 5, 5);
+		gbc_detectionLabel.gridx = 0;
+		gbc_detectionLabel.gridy = 16;
+		add(detectionLabel, gbc_detectionLabel);
+		
+		stretchSlider = new JSlider();
+		stretchSlider.addChangeListener(new ChangeListener() {
+			public void stateChanged(ChangeEvent arg0) {
+				try {
+					mainAppWindow.getMainApplicationPanel().updateImageStretchWindow();
+				} catch (FitsException | IOException e) {
+					e.printStackTrace();
+				}
+			}
+		});
+		
+		
+		stretchSlider.setPaintLabels(true);
+		stretchSlider.setPaintTicks(true);
+		GridBagConstraints gbc_stretchSlider = new GridBagConstraints();
+		gbc_stretchSlider.insets = new Insets(0, 0, 5, 5);
+		gbc_stretchSlider.gridx = 0;
+		gbc_stretchSlider.gridy = 17;
+		add(stretchSlider, gbc_stretchSlider);
+		
 		JLabel importLabel = new JLabel("Import parameters");
 		importLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
 		GridBagConstraints gbc_importLabel = new GridBagConstraints();
 		gbc_importLabel.anchor = GridBagConstraints.WEST;
 		gbc_importLabel.insets = new Insets(0, 0, 5, 5);
 		gbc_importLabel.gridx = 0;
-		gbc_importLabel.gridy = 17;
+		gbc_importLabel.gridy = 18;
 		add(importLabel, gbc_importLabel);
 		
 		JButton fitsDeduceButton = new JButton("deduce from FITS header");
@@ -348,14 +386,14 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		GridBagConstraints gbc_fitsDeduceButton = new GridBagConstraints();
 		gbc_fitsDeduceButton.insets = new Insets(0, 0, 5, 5);
 		gbc_fitsDeduceButton.gridx = 0;
-		gbc_fitsDeduceButton.gridy = 18;
+		gbc_fitsDeduceButton.gridy = 19;
 		add(fitsDeduceButton, gbc_fitsDeduceButton);
 		
 		JLabel saveConfigLabel = new JLabel("Save current configuration");
 		GridBagConstraints gbc_saveConfigLabel = new GridBagConstraints();
 		gbc_saveConfigLabel.insets = new Insets(0, 0, 0, 5);
 		gbc_saveConfigLabel.gridx = 0;
-		gbc_saveConfigLabel.gridy = 19;
+		gbc_saveConfigLabel.gridy = 20;
 		add(saveConfigLabel, gbc_saveConfigLabel);
 		
 		JButton saveConfigButton = new JButton("save");
@@ -379,7 +417,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		GridBagConstraints gbc_saveConfigButton = new GridBagConstraints();
 		gbc_saveConfigButton.anchor = GridBagConstraints.WEST;
 		gbc_saveConfigButton.gridx = 1;
-		gbc_saveConfigButton.gridy = 19;
+		gbc_saveConfigButton.gridy = 20;
 		add(saveConfigButton, gbc_saveConfigButton);
 
 		

@@ -5,10 +5,12 @@ import java.awt.EventQueue;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.logging.Logger;
 
+import javax.swing.ImageIcon;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
@@ -38,6 +40,7 @@ public class ApplicationWindow {
 	public static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
 	private JTable table;
 	
+	private StretchPreviewFrame stretchPreviewFrame = new StretchPreviewFrame();
 	/**
 	 * Launch the application.
 	 */
@@ -65,6 +68,7 @@ public class ApplicationWindow {
 	 * Initialize the contents of the frame.
 	 */
 	private void initialize() {
+		stretchPreviewFrame.setVisible(false);
 		frame = new JFrame();
 		frame.setBounds(new Rectangle(100, 100, 800, 600));
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -140,4 +144,23 @@ public class ApplicationWindow {
 		return mainApplicationPanel.getSelectedFileInformation();
 	}
 
+	public SPMainApplicationPanel getMainApplicationPanel() {
+		return mainApplicationPanel;
+	}
+
+	public SPConfigurationApplicationPanel getConfigurationApplicationPanel() {
+		return configurationApplicationPanel;
+	}
+
+	public void setStretchFrameVisible(boolean visibility) {
+		stretchPreviewFrame.setVisible(visibility);
+	}
+	
+	public void setOriginalImage(BufferedImage image) {
+		stretchPreviewFrame.setOriginalImage(image);		
+	}
+	
+	public void setStretchedImage(BufferedImage image) {
+		stretchPreviewFrame.setStretchedImage(image);	
+	}		
 }

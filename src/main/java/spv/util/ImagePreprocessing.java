@@ -3,11 +3,14 @@
  */
 package spv.util;
 
+import java.awt.Color;
+import java.awt.image.BufferedImage;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -35,8 +38,10 @@ import io.github.ppissias.astrolib.PlateSolveResult;
 import io.github.ppissias.astrolib.SubmitFileRequest;
 import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
+import nom.tam.fits.FitsFactory;
 import nom.tam.fits.Header;
 import nom.tam.fits.HeaderCard;
+import nom.tam.util.BufferedDataOutputStream;
 import nom.tam.util.Cursor;
 import spv.gui.ApplicationWindow;
 
@@ -45,6 +50,10 @@ import spv.gui.ApplicationWindow;
  * Util class for referencing a bunch of FITS files,
  * interfacing with plate solving utility and finally
  * updating the FITS header files. 
+ * 
+ * TODO
+ * stretch images after mono conversion: values from Average and above: stretch to the helf value between their current value and the MAX value.
+ * no nlinear stretch to help detections. 
  * 
  * @author Petros Pissias
  *
@@ -134,7 +143,7 @@ public class ImagePreprocessing {
 			int height;
 			
 			int[] axes = fitsFiles[i].getHDU(0).getAxes();
-			
+						
 			
 			if (axes.length == 2) {
 				//mono image
@@ -314,24 +323,7 @@ public class ImagePreprocessing {
 	
 	/**
 	 * Will apply the WCS FITS header to all images
-	 * @param wcsHeaderFile
-	 * @throws FitsException 
-	 * @throws IOException 
-	 */
-	public void applyWCSHeader(String wcsHeaderFile) throws IOException, FitsException {
-		//list of fits files in DIR
-		File[] fitsFileInformation = getFitsFilesDetails();
-		
-		//get FITS objects
-		Fits[] fitsFiles = new Fits[fitsFileInformation.length];
-		//populate information
-		for (int i=0;i<fitsFiles.length;i++) {
-			fitsFiles[i] = new Fits(fitsFileInformation[i]);
-		}
-		
-		
-
-		/**
+	 * 		
 		 * Sample FITS WCS headers form astrometry.net and astap 
 		 *
 		 *astap
@@ -513,8 +505,23 @@ public class ImagePreprocessing {
 		 * COMMENT Verify pixels: 1 pix                                                    
 		 * COMMENT Maxquads: 0                                                             
 		 * COMMENT Maxmatches: 0                                                           COMMENT Cpu limit: 600.000000 s                                                 COMMENT Time limit: 0 s                                                         COMMENT Total time limit: 0 s                                                   COMMENT Total CPU limit: 0.000000 s                                             COMMENT Tweak: yes                                                              COMMENT Tweak AB order: 2                                                       COMMENT Tweak ABP order: 2                                                      COMMENT --                                                                      COMMENT -- properties of the matching quad: --                                  COMMENT index id: 4109                                                          COMMENT index healpix: -1                                                       COMMENT index hpnside: 0                                                        COMMENT log odds: 127.771                                                       COMMENT odds: 3.09287e+55                                                       COMMENT quadno: 505184                                                          COMMENT stars: 574205,574181,574216,574173                                      COMMENT field: 8,5,4,2                                                          COMMENT code error: 0.00143375                                                  COMMENT nmatch: 15                                                              COMMENT nconflict: 0                                                            COMMENT nfield: 681                                                             COMMENT nindex: 15                                                              COMMENT scale: 2.54278 arcsec/pix                                               COMMENT parity: 1                                                               COMMENT quads tried: 1651                                                       COMMENT quads matched: 25839                                                    COMMENT quads verified: 195                                                     COMMENT objs tried: 9                                                           COMMENT cpu time: 0.048                                                         COMMENT --                                                                      END                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
-		 */
 		
+	 * @param wcsHeaderFile
+	 * @throws FitsException 
+	 * @throws IOException 
+	 */
+	public void applyWCSHeader(String wcsHeaderFile, int stretchFactor) throws IOException, FitsException {
+	
+		//list of fits files in DIR
+		File[] fitsFileInformation = getFitsFilesDetails();
+		
+		//get FITS objects
+		Fits[] fitsFiles = new Fits[fitsFileInformation.length];
+		//populate information
+		for (int i=0;i<fitsFiles.length;i++) {
+			fitsFiles[i] = new Fits(fitsFileInformation[i]);
+		}
+
 		//open FITS WCS header
 		Fits wcsHeaderFITS = new Fits(wcsHeaderFile);
 		Header wcsHeaderFITSHeader = wcsHeaderFITS.getHDU(0).getHeader();
@@ -526,12 +533,37 @@ public class ImagePreprocessing {
 		
 		String[] wcsHeaderDoubleKeywords = {"CRPIX", "CRVAL","CDELT","CROTA","CD1_","CD2_","EQUINOX", "LONPOLE", "LATPOLE",  "A_", "B_","AP_","BP_"}; 
 	
+		String[] wcsHeaderElements = {"CTYPE", "CUNIT1", "CUNIT2", "WCSAXES", "IMAGEW", "IMAGEH","A_ORDER", "B_ORDER","AP_ORDER","BP_ORDER", "CRPIX", "CRVAL","CDELT","CROTA","CD1_","CD2_","EQUINOX", "LONPOLE", "LATPOLE",  "A_", "B_","AP_","BP_"};
+		/**
+		 * TODO 
+		 * can probably be simplified with calling
+		 * updatedFits.getHDU(0).getHeader().addLine(originalHeaderCard);
+		 * 
+		 * addline ==> this takes a header element and does not look at the type so we do not need to know more and separate per type
+		 */
 		//apply to each FITS
 		for (int i=0;i<fitsFiles.length;i++) {
-			
+			//get current fits header
 			Header headerHDU = fitsFiles[i].getHDU(0).getHeader();
-			 
+			
+			//read all elements of the WCS fits header
 			Cursor<String, HeaderCard> wcsHeaderFITSHeaderIter = wcsHeaderFITSHeader.iterator();
+			while (wcsHeaderFITSHeaderIter.hasNext()) {
+				// WCS header element
+				HeaderCard wcsHeaderFITSHeaderCard = wcsHeaderFITSHeaderIter.next();
+				//WCS elemet key
+				String wcsHeaderKey = wcsHeaderFITSHeaderCard.getKey();
+				//check if the current WCS element key starts with the predefined keys to be updated
+				for (String wcsKeyword : wcsHeaderElements) {
+					if (wcsHeaderKey.startsWith(wcsKeyword)) {
+						headerHDU.deleteKey(wcsHeaderKey);
+						headerHDU.addLine(wcsHeaderFITSHeaderCard);
+						break;
+					}					
+				}
+			}
+			
+			/**
 			while (wcsHeaderFITSHeaderIter.hasNext()) {
 				//fits WCS header
 				HeaderCard wcsHeaderFITSHeaderCard = wcsHeaderFITSHeaderIter.next();
@@ -615,51 +647,38 @@ public class ImagePreprocessing {
 					fitsHeaderCursor.add(new HeaderCard(wcsHeaderKey,Double.parseDouble(wcsHeaderValue),comment));
 					
 				}
-				
-				//TODO problem with AsteroidHunter 
-				//TODO FIX DATE keyword (or delete?) replace with value from DATE-OBS ? 
-				
-				//replace DATA content with DATA-OBS content as it is mis-interpreted by NASA Asteroid hunter
-				
-
-			}				
+			
+			
+			}		*/			
 		
-			/**
-			 * Bug?
+
+			/*
+			 * DATE keyword issue (not needed)
+			 * was a modification for testing with the NASA asteroid hunter, but I never managed to make it work
 			 * 
-			 * java.text.ParseException: Unparseable date: "2019-07-23"
-			 * from DATE='2019-07-23'
+			 Cursor<String, HeaderCard> headerCursor = headerHDU.iterator(); 
+			 String dateObs = headerHDU.getStringValue("DATE-OBS"); 
+			 if (dateObs != null) {
+				 headerCursor.setKey("DATE"); if (headerCursor.hasNext()) { //property exists
+					 headerCursor.next(); 
+					 //remove 
+					 headerCursor.remove(); headerCursor.add(new HeaderCard("DATE",dateObs,"replaced"));
+					 ApplicationWindow.logger.info("applying : "+dateObs+" to DATE field");
+				 }
+			 }
 			 * 
+			 * } }
 			 */
-			Cursor<String, HeaderCard> headerCursor = headerHDU.iterator();
-			String dateObs = headerHDU.getStringValue("DATE-OBS");
-			if (dateObs != null) {
-				headerCursor.setKey("DATE");
-				if (headerCursor.hasNext()) {
-					//property exists
-					headerCursor.next();
-					//remove
-					headerCursor.remove();	
-					headerCursor.add(new HeaderCard("DATE",dateObs,"replaced"));
-					ApplicationWindow.logger.info("applying : "+dateObs+" to DATE field");
-					
-				}
-			}
+			
+			//write to disk
+			writeUpdatedFITSFile(fitsFileInformation[i], fitsFiles[i], stretchFactor);
 
-			//write modified FITS file
-			String newFName = fitsFileInformation[i].getPath();
-			int lastSepPosition = newFName.lastIndexOf(".");		
-			newFName= newFName.substring(0, lastSepPosition)+"_modified.fit";
-			
-			fitsFiles[i].write(new File(newFName));
-			
 		}
-		
 
 		wcsHeaderFITS.close();
 		closeFitsFiles(fitsFiles);
 	}
-	
+
 	/**
 	 * Downloads a file ot the target filename
 	 * @param fileURL
@@ -777,5 +796,489 @@ public class ImagePreprocessing {
 	
 	public String getProperty(String key) {
 		return configurationFile.getProperty(key);
+	}	
+	
+	
+	/**
+	 * Writes an updated FITS file to disk. This call will
+	 * - create 2 directories _solved and _solved_stretched an will save the image with the updated WCS header elements and also a stretched version
+	 * - if the image is a color image, it will repeat the process after converting it to a monochrome image
+	 * @param fileInformation
+	 * @param originalFits
+	 * @throws IOException 
+	 * @throws FitsException 
+	 */
+	private void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor) throws FitsException, IOException {
+		//check if it is a color image
+		int naxis = originalFits.getHDU(0).getHeader().getIntValue("NAXIS");
+		boolean isColor = false;
+		if (naxis == 3) {
+			isColor = true;
+		}
+		
+		
+		//create dir for storing solved image if it does not exist
+		String newFNameSolved = addDirectory(fileInformation, "_solved");
+		//write FITS image with suffix wcs
+		writeFitsWithSuffix(originalFits, newFNameSolved, "_wcs");
+		
+		Fits monochromeFits = null;
+		if (isColor) {
+			//convert to Mono
+			monochromeFits = convertToMono(originalFits);
+
+			//create dir for storing monochrome solved image if it does not exist
+			String newFNameSolvedMono = addDirectory(fileInformation, "_solved_mono");
+			//write FITS image with suffix
+			writeFitsWithSuffix(monochromeFits, newFNameSolvedMono, "_mono_wcs");			
+		}
+		
+		//stretch and write stretched FITS file
+		String newFNameSolvedStretched = addDirectory(fileInformation, "_solved_stretched");
+		stretch(originalFits, stretchFactor);
+		writeFitsWithSuffix(originalFits, newFNameSolvedStretched, "_wcs_stretch");
+		
+		if (isColor) {
+			//create dir for storing monochrome solved streched image if it does not exist
+			String newFNameSolvedMonoStretch = addDirectory(fileInformation, "_solved_mono_stretched");
+			stretch(monochromeFits, stretchFactor);
+			//write FITS image with suffix
+			writeFitsWithSuffix(monochromeFits, newFNameSolvedMonoStretch, "_mono_wcs_stretch");			
+		}
+
+
+	}
+	
+	/**
+	 * Converts the FITS color image to a monochrome version, using as pixel value the average of R,G and B 
+	 * @param colorImage
+	 * @return monochrome FITS image
+	 * @throws IOException 
+	 * @throws FitsException 
+	 */
+	private Fits convertToMono(Fits colorFITSImage) throws FitsException, IOException {
+		// convert data
+		Object monoKernelData = convertToMono(colorFITSImage.getHDU(0).getKernel());
+		//create new FITS object with mono data
+		Fits updatedFits = new Fits();
+		updatedFits.addHDU(FitsFactory.hduFactory(monoKernelData));
+
+		//copy all header elements
+		
+		//remove all previous header elements and copy the updated ones (not sure if removing is needed)
+		Cursor<String, HeaderCard> updatedFitsHeaderIterator = updatedFits.getHDU(0).getHeader().iterator();
+		while (updatedFitsHeaderIterator.hasNext()) {				
+			updatedFitsHeaderIterator.next();
+			updatedFitsHeaderIterator.remove();
+			
+		}
+		
+		//copy the corrected FITS header elements to the new file
+		Cursor<String, HeaderCard> originalHeader = colorFITSImage.getHDU(0).getHeader().iterator();
+		while (originalHeader.hasNext()) {
+			HeaderCard originalHeaderCard = originalHeader.next();
+			updatedFits.getHDU(0).getHeader().addLine(originalHeaderCard);
+		}
+		
+		//update header elements to specify that this is a monochrome image
+		Cursor<String, HeaderCard> headerCursor = updatedFits.getHDU(0).getHeader().iterator();
+		// set axis to 2
+		headerCursor.setKey("NAXIS");
+		if (headerCursor.hasNext()) { // property exists
+			headerCursor.next();
+			// remove
+			headerCursor.remove();
+			headerCursor.add(new HeaderCard("NAXIS", 2, "replaced"));
+			ApplicationWindow.logger.info("applying : " + 2 + " to NAXIS field");
+		}
+
+		// remove NAXIS3
+		headerCursor.setKey("NAXIS3");
+		if (headerCursor.hasNext()) { // property exists
+			headerCursor.next();
+			// remove
+			headerCursor.remove();
+			ApplicationWindow.logger.info("removed NAXIS3 field");
+		}
+
+				
+		//finished copying header elements, assign the new Fits object (monochrome data and header elements)
+		return updatedFits;		
+	}
+	/**
+	 * Writes the FITS image to disk on the target pth adding also the suffix to the filename, the target file will be deleted if it exists 
+	 * @param fitsImage
+	 * @param path
+	 * @param suffix
+	 * @throws FitsException 
+	 * @throws IOException 
+	 */
+	private void writeFitsWithSuffix(Fits fitsImage, String fitsFilename, String suffix) throws IOException, FitsException {
+		int lastSepPosition = fitsFilename.lastIndexOf(".");
+		fitsFilename = fitsFilename.substring(0, lastSepPosition)+suffix+".fit";
+		File toDeleteFile = new File(fitsFilename);
+		if (toDeleteFile.exists()) {
+			toDeleteFile.delete();
+		}
+		fitsImage.write(new File(fitsFilename));		
+	}
+	/**
+	 * Adds the directory if missing, and returns the new filename under the new directory
+	 * @param path
+	 * @return
+	 * @throws IOException 
+	 */
+	private String addDirectory(File currentFile, String directory) throws IOException {
+		String newDirectory = currentFile.getParent()+File.separator+directory;
+		ApplicationWindow.logger.info("addDirectory called. currentFile:"+currentFile.getAbsolutePath()+" dir:"+directory);
+		File newDirFile = new File( newDirectory);
+		if (newDirFile.exists()) {
+
+		}else {
+			//create
+			newDirFile.mkdirs();
+		}
+		return newDirFile.getAbsolutePath()+File.separator+currentFile.getName();
+	}
+	/**
+	 * Converts the FITS data to monochrome
+	 * @param kernelData
+	 * @return
+	 * @throws FitsException 
+	 */
+	private Object convertToMono(Object kernelData) throws FitsException {
+		
+		ApplicationWindow.logger.info("converting color to mono");
+		if (kernelData instanceof short[][][]) {
+			short[][][] data = (short[][][])kernelData;
+			short[][] monoData = new short[data[0].length][data[0][0].length];
+			
+			for (int i=0;i<data[0].length;i++) {
+				for (int j=0; j<data[0][i].length; j++) {
+					short val1 = data[0][i][j]; //R
+					short val2 = data[1][i][j]; //G
+					short val3 = data[2][i][j]; //B
+					
+					int average = ((val1+val2+val3) / 3);
+					monoData[i][j] = (short)average;
+				}
+			}
+			ApplicationWindow.logger.info("returning short[][] with height"+monoData.length+ "and width"+monoData[0].length);
+
+			return monoData;
+			
+		} else if (kernelData instanceof int[][][]) {
+			int[][][] data = (int[][][])kernelData;
+			int[][] monoData = new int[data[0].length][data[0][0].length];
+			
+			for (int i=0;i<data[0].length;i++) {
+				for (int j=0; j<data[0][i].length; j++) {
+					int val1 = data[0][i][j]; //R
+					int val2 = data[1][i][j]; //G
+					int val3 = data[2][i][j]; //B
+					
+					long average = ((val1+val2+val3) / 3);
+					monoData[i][j] = (int)average;
+				}
+			}
+			ApplicationWindow.logger.info("returning int[][] with height"+monoData.length+ "and width"+monoData[0].length);
+
+			return monoData;
+			
+		} else if (kernelData instanceof float[][][]) {
+			float[][][] data = (float[][][])kernelData;
+			float[][] monoData = new float[data[0].length][data[0][0].length];
+			
+			for (int i=0;i<data.length;i++) {
+				for (int j=0; j<data[i].length; j++) {
+					float val1 = data[0][i][j]; //R
+					float val2 = data[1][i][j]; //G
+					float val3 = data[2][i][j]; //B
+					
+					double average = ((val1+val2+val3) / 3);
+					monoData[i][j] = (float)average;
+				}
+			}
+			ApplicationWindow.logger.info("returning float[][] with height"+monoData.length+ "and width"+monoData[0].length);
+
+			return monoData;
+			
+		} else {
+			throw new FitsException("Cannot understand file, it has a type="+kernelData.getClass().getName());
+		}	
+		
+	}
+	
+
+	/**
+	 * Does a non linear stretch on the image data. 
+	 * stretch each pixel value as (current pixel value = current pixel value + ((max pixel value - current pixel value) * stretchFactor/100)
+	 * This is a non linear stretch that will stretch more faint data
+	 * @param fitsImage
+	 * @param stretchFactor percentage from 0 to 100
+	 * @throws FitsException
+	 * @throws IOException
+	 */
+	public void stretch(Fits fitsImage, int stretchFactor) throws FitsException, IOException {
+		
+		ApplicationWindow.logger.info("will stretch FITS image with factor:"+stretchFactor);
+		//stretchFactor is from 0 to 100 
+		Object kernelData = fitsImage.getHDU(0).getKernel();
+		
+		if (kernelData instanceof short[][]) {
+			short[][] data =(short[][]) kernelData;
+			
+			//determine average value
+			BigInteger sum = BigInteger.ZERO;
+			for (int i=0;i<data.length;i++) {
+				for (int j=0;j<data[i].length;j++) {
+					sum = sum.add(BigInteger.valueOf(data[i][j]));
+				}
+			}
+			ApplicationWindow.logger.info("Addition of all values:"+sum);
+
+			BigInteger averageValueBI = sum.divide(BigInteger.valueOf(data.length*data[0].length));
+			short averageValue = averageValueBI.shortValue();
+			ApplicationWindow.logger.info("Average value:"+averageValue);
+			ApplicationWindow.logger.info("Average value BI:"+averageValueBI);
+
+			//now stretch each value
+			for (int i=0;i<data.length;i++) {
+				for (int j=0;j<data[i].length;j++) {
+//					if (data[i][j] > averageValue) {
+					int distanceToMaxValue = Short.MAX_VALUE-data[i][j];
+					int delta = (int) (distanceToMaxValue * ((float)stretchFactor/100));
+					data[i][j] = (short) (data[i][j] + delta);
+					//ApplicationWindow.logger.info("distance to max="+distanceToMaxValue+" stretching value additional pixel value(R):"+delta+" final value="+data[i][j]);
+					
+//					}
+				}
+			}
+
+		} else if (kernelData instanceof int[][]) {
+			int[][] data = (int[][])kernelData;
+			
+		} else if (kernelData instanceof float[][]) {
+			float[][] data = (float[][])kernelData;
+			
+		}else if (kernelData instanceof short[][][]) {
+			short[][][] data =(short[][][]) kernelData;
+
+			//determine average value
+			BigInteger sum = BigInteger.ZERO;
+
+			for (int i=0;i<data[0].length;i++) {
+				for (int j=0; j<data[0][i].length; j++) {
+					short val1 = data[0][i][j]; //R
+					short val2 = data[1][i][j]; //G
+					short val3 = data[2][i][j]; //B
+					
+					int average = ((val1+val2+val3) / 3);
+					
+					sum = sum.add(BigInteger.valueOf(average));
+				}
+			}
+			
+			ApplicationWindow.logger.info("Addition of all values:"+sum);
+
+			BigInteger averageValueBI = sum.divide(BigInteger.valueOf(data[0].length*data[0][0].length));
+			short averageValue = averageValueBI.shortValue();
+			ApplicationWindow.logger.info("Average value:"+averageValue);
+			ApplicationWindow.logger.info("Average value BI:"+averageValueBI);
+
+			//now stretch each value
+			for (int i=0;i<data[0].length;i++) {
+				for (int j=0; j<data[0][i].length; j++) {
+					short val1 = data[0][i][j]; //R
+					short val2 = data[1][i][j]; //G
+					short val3 = data[2][i][j]; //B
+					
+					int average = ((val1+val2+val3) / 3);
+					short averageShort = (short)average;
+					
+					//if (averageShort > averageValue) {
+						
+					//R
+					int distanceToMaxValueR = Short.MAX_VALUE-data[0][i][j];						
+					int deltaR = (int) (distanceToMaxValueR * ((float)stretchFactor/100));
+					data[0][i][j] = (short) (data[0][i][j] + deltaR);
+					//ApplicationWindow.logger.info("distance to max="+distanceToMaxValueR+" stretching value additional pixel value(R):"+deltaR+" final value="+data[0][i][j]);
+					
+					
+					//G
+					int distanceToMaxValueG = Short.MAX_VALUE-data[1][i][j];
+					int deltaG = (int) (distanceToMaxValueG * ((float)stretchFactor/100));
+					data[1][i][j] = (short) (data[1][i][j] + deltaG);
+					//ApplicationWindow.logger.info("distance to max="+distanceToMaxValueG+" stretching value additional pixel value(G):"+deltaG+" final value="+data[1][i][j]);
+					
+					//B
+					int distanceToMaxValueB = Short.MAX_VALUE-data[2][i][j];
+					int deltaB = (int) (distanceToMaxValueB * ((float)stretchFactor/100));
+					data[2][i][j] = (short) (data[2][i][j] + deltaB);						
+					//ApplicationWindow.logger.info("distance to max="+distanceToMaxValueB+" stretching value additional pixel value(B):"+deltaB+" final value="+data[2][i][j]);
+				
+					//}
+				}
+			}		
+		} else if (kernelData instanceof int[][][]) {
+			int[][][] data =(int[][][]) kernelData;
+		
+		} else if (kernelData instanceof float[][][]) {
+			float[][][] data =(float[][][]) kernelData;
+			
+		}
+		else {
+			throw new FitsException("Cannot understand file, it has a type="+kernelData.getClass().getName());
+		}								
+
+	}
+	
+	/**
+	 * Returns an image preview
+	 * @param kernelData
+	 * @return
+	 * @throws FitsException 
+	 */
+	public BufferedImage getImagePreview(Object kernelData) throws FitsException {
+        BufferedImage ret = new BufferedImage(350, 350, BufferedImage.TYPE_INT_RGB);
+        
+		if (kernelData instanceof short[][]) {
+			short[][] data =(short[][]) kernelData;
+			
+			//determine average value
+			for (int i=0;i<350;i++) {
+				for (int j=0;j<350;j++) {
+					int convertedValue = ((int)data[i][j]) + ((int)Short.MAX_VALUE);
+					float intensity = ((float)convertedValue) / (2*(float)Short.MAX_VALUE);
+					ret.setRGB(i, j, new Color(intensity,intensity,intensity).getRGB()); 
+				}
+			}
+
+
+		} else if (kernelData instanceof int[][]) {
+			int[][] data = (int[][])kernelData;
+			
+		} else if (kernelData instanceof float[][]) {
+			float[][] data = (float[][])kernelData;
+			
+		}else if (kernelData instanceof short[][][]) {
+			short[][][] data =(short[][][]) kernelData;
+
+			//determine average value
+			for (int i=0;i<350;i++) {
+				for (int j=0;j<350;j++) {
+					int convertedValueR = ((int)data[0][i][j]) + ((int)Short.MAX_VALUE);
+					float intensityR = ((float)convertedValueR) / (2*(float)Short.MAX_VALUE);
+
+					int convertedValueG = ((int)data[1][i][j]) + ((int)Short.MAX_VALUE);
+					float intensityG = ((float)convertedValueG) / (2*(float)Short.MAX_VALUE);
+					
+					int convertedValueB = ((int)data[2][i][j]) + ((int)Short.MAX_VALUE);
+					float intensityB = ((float)convertedValueB) / (2*(float)Short.MAX_VALUE);
+					
+					ret.setRGB(i, j,  new Color(intensityR,intensityG,intensityB).getRGB()); 
+				}
+			}
+
+				
+		} else if (kernelData instanceof int[][][]) {
+			int[][][] data =(int[][][]) kernelData;
+		
+		} else if (kernelData instanceof float[][][]) {
+			float[][][] data =(float[][][]) kernelData;
+			
+		}
+		else {
+			throw new FitsException("Cannot understand file, it has a type="+kernelData.getClass().getName());
+		}
+		
+		return ret;
+	}
+	
+	/**
+	 * Returns an image preview for the stretch window
+	 * @param kernelData
+	 * @return
+	 * @throws FitsException 
+	 */
+	public BufferedImage getStretchedImagePreview(Object kernelData, int stretchFactor) throws FitsException {
+        BufferedImage ret = new BufferedImage(350, 350, BufferedImage.TYPE_INT_RGB);
+		
+		if (kernelData instanceof short[][]) {
+			short[][] data =(short[][]) kernelData;
+			
+			//determine average value
+			for (int i=0;i<350;i++) {
+				for (int j=0;j<350;j++) {
+					int convertedValue = ((int)data[i][j]) + ((int)Short.MAX_VALUE);
+					float intensity = ((float)convertedValue) / (2*(float)Short.MAX_VALUE);
+					
+					//distance to max 
+					float distanceToMax = (1-intensity);
+					float percentage = (float)stretchFactor/(float)100;
+					float delta = intensity + (distanceToMax*percentage);
+					ret.setRGB(i, j, new Color(intensity+delta,intensity+delta,intensity+delta).getRGB()); 
+				}
+			}
+
+
+		} else if (kernelData instanceof int[][]) {
+			int[][] data = (int[][])kernelData;
+			
+		} else if (kernelData instanceof float[][]) {
+			float[][] data = (float[][])kernelData;
+			
+		}else if (kernelData instanceof short[][][]) {
+			short[][][] data =(short[][][]) kernelData;
+
+			//determine average value
+			for (int i=0;i<350;i++) {
+				for (int j=0;j<350;j++) {
+					float percentage = (float)stretchFactor/(float)100;
+					
+					int convertedValueR = ((int)data[0][i][j]) + ((int)Short.MAX_VALUE);
+					float intensityR = ((float)convertedValueR) / (2*((float)Short.MAX_VALUE));
+					//distance to max 
+					float distanceToMaxR = (1-intensityR);
+					float deltaR = (distanceToMaxR*percentage);
+					
+					int convertedValueG = ((int)data[1][i][j]) + ((int)Short.MAX_VALUE);
+					float intensityG = ((float)convertedValueG) / (2*(float)Short.MAX_VALUE);
+					//distance to max 
+					float distanceToMaxG = (1-intensityG);
+					float deltaG = (distanceToMaxG*percentage);
+					
+					int convertedValueB = ((int)data[2][i][j]) + ((int)Short.MAX_VALUE);
+					float intensityB = ((float)convertedValueB) / (2*(float)Short.MAX_VALUE);
+					//distance to max 
+					float distanceToMaxB = (1-intensityB);
+					float deltaB = (distanceToMaxB*percentage);
+					
+					//ApplicationWindow.logger.info("deltaR="+deltaR+" distanceToMaxR = "+distanceToMaxR+ " intensityR="+intensityR+" convertedValueR ="+convertedValueR+" stretch="+stretchFactor+" R="+convertedValueR+" G="+convertedValueG+" B="+convertedValueB);
+					
+					
+					//ApplicationWindow.logger.info("setting R"+(intensityR+deltaR));
+					//ApplicationWindow.logger.info("setting G"+(intensityG+deltaG));
+					//ApplicationWindow.logger.info("setting B"+(intensityB+deltaB));
+		
+					Color targetColor = new Color(intensityR+deltaR,intensityG+deltaG,intensityB+deltaB);
+					ret.setRGB(i, j,  targetColor.getRGB()); 
+
+				}
+			}
+
+				
+		} else if (kernelData instanceof int[][][]) {
+			int[][][] data =(int[][][]) kernelData;
+		
+		} else if (kernelData instanceof float[][][]) {
+			float[][][] data =(float[][][]) kernelData;
+			
+		}
+		else {
+			throw new FitsException("Cannot understand file, it has a type="+kernelData.getClass().getName());
+		}
+		
+		return ret;		
 	}	
 }

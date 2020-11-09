@@ -1,6 +1,7 @@
 package spv.gui;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -30,6 +31,7 @@ import javax.swing.table.AbstractTableModel;
 import org.apache.commons.configuration2.ex.ConfigurationException;
 
 import io.github.ppissias.astrolib.PlateSolveResult;
+import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
 import spv.util.FitsFileInformation;
 import spv.util.ImagePreprocessing;
@@ -110,9 +112,10 @@ public class SPMainApplicationPanel extends JPanel {
 						//apply the WCS file
 		        		ApplicationWindow.logger.info("applying WCS header "+wcsFile+" to all images");
 						try {
-							mainAppWindow.getImagePreProcessing().applyWCSHeader(wcsFile);
+							mainAppWindow.getImagePreProcessing().applyWCSHeader(wcsFile, mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue() );
 						} catch (IOException | FitsException e) {
-							JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot show image :"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);
+							e.printStackTrace();
+							JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot apply WCS header :"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);
 
 						}
 						
@@ -220,8 +223,7 @@ public class SPMainApplicationPanel extends JPanel {
 		
 		table.getSelectionModel().addListSelectionListener(new ListSelectionListener(){
 	        public void valueChanged(ListSelectionEvent event) {
-	            // do some actions here, for example
-	            // print first column value from selected row
+	        	
 	        	if (table.getValueAt(table.getSelectedRow(), 0) != null) {
 	        		ApplicationWindow.logger.info(table.getValueAt(table.getSelectedRow(), 0).toString());
 
@@ -235,8 +237,19 @@ public class SPMainApplicationPanel extends JPanel {
 	        			showAnnotatedImageButton.setEnabled(false);
 	        			solveButton.setEnabled(true);
 	        		}
-		        		
+	        		
+	        		mainAppWindow.setStretchFrameVisible(true);
+	        		try {
+						updateImageStretchWindow();
+					} catch (FitsException | IOException e) {
+						e.printStackTrace();
+					}
+	        	} else {
+	        		mainAppWindow.setStretchFrameVisible(false);
+	        		
 	        	}
+	        	
+	        	
 	        	
 	        }
 	    });
@@ -310,8 +323,36 @@ public class SPMainApplicationPanel extends JPanel {
 			return null;
 		}
 		
-		FitsFileInformation seletedFile = (FitsFileInformation)table.getValueAt(row, 6);
-		return seletedFile;		
+		FitsFileInformation selectedFile = (FitsFileInformation)table.getValueAt(row, 6);
+		return selectedFile;		
+	}
+
+	/**
+	 * Updates the image preview stretch window
+	 * @throws FitsException
+	 * @throws IOException 
+	 */
+	public void updateImageStretchWindow() throws FitsException, IOException {
+		int stretchFactor = mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue();
+		
+		FitsFileInformation selectedFitsFileInfo = getSelectedFileInformation();
+		if (selectedFitsFileInfo != null) {
+			Fits selectedFitsImage = new Fits(selectedFitsFileInfo.getFilePath());
+			if (selectedFitsFileInfo.getSizeHeight() > 350 && selectedFitsFileInfo.getSizeWidth()>350) {
+				//get image data
+				Object kernelData = selectedFitsImage.getHDU(0).getKernel();
+				
+				BufferedImage fitsImagePreview = mainAppWindow.getImagePreProcessing().getImagePreview(kernelData);
+				BufferedImage fitsImagePreviewStretch = mainAppWindow.getImagePreProcessing().getStretchedImagePreview(kernelData, stretchFactor);
+						        
+				mainAppWindow.setOriginalImage(fitsImagePreview);
+				mainAppWindow.setStretchedImage(fitsImagePreviewStretch);
+				
+			} else {
+			}
+		} else {
+		}
+		
 	}
 
 }
