@@ -70,7 +70,7 @@ public class ApplicationWindow {
 	private void initialize() {
 		stretchPreviewFrame.setVisible(false);
 		frame = new JFrame();
-		frame.setBounds(new Rectangle(100, 100, 800, 600));
+		frame.setBounds(new Rectangle(100, 100, 850, 650));
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.getContentPane().setLayout(new BorderLayout(0, 0));
 		

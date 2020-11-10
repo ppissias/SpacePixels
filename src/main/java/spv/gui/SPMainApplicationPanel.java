@@ -112,7 +112,7 @@ public class SPMainApplicationPanel extends JPanel {
 						//apply the WCS file
 		        		ApplicationWindow.logger.info("applying WCS header "+wcsFile+" to all images");
 						try {
-							mainAppWindow.getImagePreProcessing().applyWCSHeader(wcsFile, mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue() );
+							mainAppWindow.getImagePreProcessing().applyWCSHeader(wcsFile, mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue(), mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue() );
 						} catch (IOException | FitsException e) {
 							e.printStackTrace();
 							JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot apply WCS header :"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);
@@ -334,6 +334,7 @@ public class SPMainApplicationPanel extends JPanel {
 	 */
 	public void updateImageStretchWindow() throws FitsException, IOException {
 		int stretchFactor = mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue();
+		int iterations = mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue();
 		
 		FitsFileInformation selectedFitsFileInfo = getSelectedFileInformation();
 		if (selectedFitsFileInfo != null) {
@@ -343,7 +344,7 @@ public class SPMainApplicationPanel extends JPanel {
 				Object kernelData = selectedFitsImage.getHDU(0).getKernel();
 				
 				BufferedImage fitsImagePreview = mainAppWindow.getImagePreProcessing().getImagePreview(kernelData);
-				BufferedImage fitsImagePreviewStretch = mainAppWindow.getImagePreProcessing().getStretchedImagePreview(kernelData, stretchFactor);
+				BufferedImage fitsImagePreviewStretch = mainAppWindow.getImagePreProcessing().getStretchedImagePreview(kernelData, stretchFactor, iterations);
 						        
 				mainAppWindow.setOriginalImage(fitsImagePreview);
 				mainAppWindow.setStretchedImage(fitsImagePreviewStretch);

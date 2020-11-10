@@ -320,197 +320,8 @@ public class ImagePreprocessing {
 		
 		return null;
 	}
-	
-	/**
-	 * Will apply the WCS FITS header to all images
-	 * 		
-		 * Sample FITS WCS headers form astrometry.net and astap 
-		 *
-		 *astap
-		 *
-		 *SIMPLE  =                    T / file does conform to FITS standard             
-		 * BITPIX  =                    8 / number of bits per data pixel                  
-		 * NAXIS   =                    0 / number of data axes                            
-		 * NAXIS3  =                    3 / length of data axis 3                          
-		 * EXTEND  =                    T / FITS dataset may contain extensions            
-		 * COMMENT   FITS (Flexible Image Transport System) format is defined in 'Astronomy
-		 * COMMENT   and Astrophysics', volume 376, page 359; bibcode: 2001A&A...376..359H 
-		 * BZERO   =                32768 / offset data range to that of unsigned short    
-		 * BSCALE  =                    1 / default scaling factor                         
-		 * EXPTIME =                 120. / Exposure time (in seconds)                     
-		 * EXPOSURE=                 120. / Exposure time (in seconds)                     
-		 * SOFTWARE= 'DeepSkyStacker 4.1.1'                                                
-		 * OBJECT  = 'ic5070  '                                                            
-		 * TELESCOP= '        '                                                            
-		 * INSTRUME= 'SBIG ST-2K Color Dual CCD Camera' / Camera Model                     
-		 * OBSERVER= '        '                                                            
-		 * DATE-OBS= '2019-07-23T00:07:23.000' / GMT START OF EXPOSURE                     
-		 * CCD-TEMP=     9.78091507038411 / CCD TEMP IN DEGREES C                          
-		 * XPIXSZ  =                  7.4 / PIXEL WIDTH IN MICRONS                        
-		 * YPIXSZ  =                  7.4 / PIXEL HEIGHT IN MICRONS                        
-		 * XBINNING=                    1 / HORIZONTAL BINNING FACTOR                      
-		 * YBINNING=                    1 / VERTICAL BINNING FACTOR                        
-		 * XORGSUBF=                    0 / SUB_FRAME ORIGIN X_POS                         
-		 * YORGSUBF=                    0 / SUB_FRAME ORIGIN Y_POS                         
-		 * EGAIN   =                 0.55 / ELECTRONS PER ADU                              
-		 * FOCALLEN=                 600. / FOCAL LENGTH IN MM                             
-		 * APTDIA  =                   0. / APERTURE DIAMETER IN MM                        
-		 * APTAREA =                   0. / APERTURE AREA IN SQ-MM                         
-		 * CBLACK  =                    0 / BLACK ADU FOR DISPLAY                          
-		 * CWHITE  =                65535 / WHITE ADU FOR DISPLAY                          
-		 * PEDESTAL=                 -100 / ADD TO ADU FOR 0-BASE                          
-		 * SBSTDVER= 'SBFITSEXT Version 1.0' / SBIG FITS EXTENSIONS VER                    
-		 * SWACQUIR= 'Astro Photography Tool - APT v.3.71' / DATA ACQ SOFTWARE             
-		 * SWCREATE= 'Astro Photography Tool - APT v.3.71' / IMAGING SOFTWARE              
-		 * FILTER  = '        '           / OPTICAL FILTER NAME                            
-		 * SNAPSHOT=                    1 / NUMBER IMAGES COADDED                          
-		 * DATE    = '2019-07-23'         / GMT DATE WHEN THIS FILE CREATED                
-		 * RESMODE =                    0 / RESOLUTION MODE                                
-		 * EXPSTATE= '125     '           / EXPOSURE STATE (HEX)                           
-		 * RESPONSE=                2000. / CCD RESPONSE FACTOR                            
-		 * NOTE    = 'Local time:7/23/2019 at 2:07:23'                                     
-		 * TRAKTIME=                   0. / TRACKING EXPOSURE                              
-		 * JD      =     2458687.50659722 / JULIAN DATE                                    
-		 * SITELAT = '+37 51 54.000'      / THE SITE LATITUDE                              
-		 * SITELONG= '+23 45 18.310'      / THE SITE LONGITUDE                             
-		 * OBJCTRA = '20 50 49'           / THE RA OF THE IMAGE CENTER                     
-		 * OBJCTDEC= '+44 23 51'          / THE DEC OF THE IMAGE CENTER                    
-		 * CTYPE1  = 'RA---TAN'           / first parameter RA  ,  projection TANgential   
-		 * CTYPE2  = 'DEC--TAN'           / second parameter DEC,  projection TANgential   
-		 * CUNIT1  = 'deg     '           / Unit of coordinates                            
-		 * CRPIX1  =  7.615000000000E+002 / X of reference pixel                           
-		 * CRPIX2  =  5.630000000000E+002 / Y of reference pixel                           
-		 * CRVAL1  =  3.127276202297E+002 / RA of reference pixel (deg)                    
-		 * CRVAL2  =  4.434473452560E+001 / DEC of reference pixel (deg)                   
-		 * CDELT1  =  7.063089252922E-004 / X pixel size (deg)                             
-		 * CDELT2  =  7.060478729734E-004 / Y pixel size (deg)                             
-		 * CROTA1  =  1.005937259997E+002 / Image twist of X axis        (deg)             
-		 * CROTA2  =  1.006185817292E+002 / Image twist of Y axis        (deg)             
-		 * CD1_1   = -1.301516297229E-004 / CD matrix to convert (x,y) to (Ra, Dec)        
-		 * CD1_2   =  6.940136303228E-004 / CD matrix to convert (x,y) to (Ra, Dec)        
-		 * CD2_1   = -6.942138368168E-004 / CD matrix to convert (x,y) to (Ra, Dec)        
-		 * CD2_2   = -1.298024647548E-004 / CD matrix to convert (x,y) to (Ra, Dec)        
-		 * PLTSOLVD=                    T / ASTAP internal solver                          
-		 * COMMENT 6  Solved in 75.4 sec. Offset was 0.055 deg.                            
-		 * WARNING = 'Warning scale was inaccurate! Set FOV=0.79d, scale=2.5", FL=601mmStarCOMMENT 
-		 * cmdline:"C:\Users\Petros Pissias\Desktop\apps\astro\astap\astap.exe" -f 
-		 * COMMENT "C:\Users\Petros Pissias\Documents\00space_ic5070\L_2019-07-23_02-09-30_
-		 * COMMENT Bin1x1_120s__10C.reg.fit" -r 360 -z 0 -fov 0 -wcs -annotate             END                                                                                                                                                                                                                                                                                                                             
-		 */
-		
-		/**
-		//astrometry.net
-		//SIMPLE  =                    T / Standard FITS file                             
-		 * BITPIX  =                    8 / ASCII or bytes array                           
-		 * NAXIS   =                    0 / Minimal header                                 
-		 * EXTEND  =                    T / There may be FITS ext                          
-		 * WCSAXES =                    2 / no comment                                     
-		 * CTYPE1  = 'RA---TAN-SIP' / TAN (gnomic) projection + SIP distortions            
-		 * CTYPE2  = 'DEC--TAN-SIP' / TAN (gnomic) projection + SIP distortions            
-		 * EQUINOX =               2000.0 / Equatorial coordinates definition (yr)         
-		 * LONPOLE =                180.0 / no comment                                     
-		 * LATPOLE =                  0.0 / no comment                                     
-		 * CRVAL1  =        312.584785922 / RA  of reference point                         
-		 * CRVAL2  =        44.3796425302 / DEC of reference point                         
-		 * CRPIX1  =        739.564693451 / X reference pixel                              
-		 * CRPIX2  =        412.081944227 / Y reference pixel                              
-		 * CUNIT1  = 'deg     ' / X pixel scale units                                      
-		 * CUNIT2  = 'deg     ' / Y pixel scale units                                      
-		 * CD1_1   =   -0.000129378038268 / Transformation matrix                          
-		 * CD1_2   =    0.000693935921799 / no comment                                     
-		 * CD2_1   =    -0.00069486223599 / no comment                                     
-		 * CD2_2   =   -0.000129152873537 / no comment                                     
-		 * IMAGEW  =                 1522 / Image width,  in pixels.                       
-		 * IMAGEH  =                 1125 / Image height, in pixels.                       
-		 * A_ORDER =                    2 / Polynomial order, axis 1                       
-		 * A_0_0   =                    0 / no comment                                     
-		 * A_0_1   =                    0 / no comment                                     
-		 * A_0_2   =   -1.26499559714E-06 / no comment                                     
-		 * A_1_0   =                    0 / no comment                                     
-		 * A_1_1   =   -2.39062436835E-07 / no comment                                     
-		 * A_2_0   =   -8.12762702006E-08 / no comment                                     
-		 * B_ORDER =                    2 / Polynomial order, axis 2                       
-		 * B_0_0   =                    0 / no comment                                     
-		 * B_0_1   =                    0 / no comment                                     
-		 * B_0_2   =     1.3610757751E-06 / no comment                                     
-		 * B_1_0   =                    0 / no comment                                     
-		 * B_1_1   =     8.8428680197E-08 / no comment                                     
-		 * B_2_0   =     2.5731858321E-07 / no comment                                     
-		 * AP_ORDER=                    2 / Inv polynomial order, axis 1                   
-		 * AP_0_0  =    0.000105004787597 / no comment                                     
-		 * AP_0_1  =    -5.4694811938E-07 / no comment                                     
-		 * AP_0_2  =    1.26357249829E-06 / no comment                                     
-		 * AP_1_0  =   -3.97035003821E-08 / no comment                                     
-		 * AP_1_1  =    2.38950114567E-07 / no comment                                     
-		 * AP_2_0  =    8.11809968058E-08 / no comment                                     
-		 * BP_ORDER=                    2 / Inv polynomial order, axis 2                   
-		 * BP_0_0  =   -0.000114472684206 / no comment                                     
-		 * BP_0_1  =    6.04213905525E-07 / no comment                                     
-		 * BP_0_2  =   -1.35946156203E-06 / no comment                                     
-		 * BP_1_0  =   -3.87567298792E-08 / no comment                                     
-		 * BP_1_1  =   -8.84976210267E-08 / no comment                                     
-		 * BP_2_0  =   -2.57232933876E-07 / no comment                                     
-		 * HISTORY Created by the Astrometry.net suite.                                    
-		 * HISTORY For more details, see http://astrometry.net.                            
-		 * HISTORY Git URL https://github.com/dstndstn/astrometry.net                      
-		 * HISTORY Git revision 0.82-17-g7038e323                                          
-		 * HISTORY Git date Fri_Aug_28_20:54:49_2020_+0000                                 
-		 * HISTORY This is a WCS header was created by Astrometry.net.                     
-		 * DATE    = '2020-10-16T10:15:17' / Date this file was created.                   
-		 * COMMENT -- onefield solver parameters: --                                       
-		 * COMMENT Index(0): /data1/INDEXES/200/index-219.fits                             
-		 * COMMENT Index(1): /data1/INDEXES/200/index-218.fits                             
-		 * COMMENT Index(2): /data1/INDEXES/200/index-217.fits                             
-		 * COMMENT Index(3): /data1/INDEXES/200/index-216.fits                             
-		 * COMMENT Index(4): /data1/INDEXES/200/index-215.fits                             
-		 * COMMENT Index(5): /data1/INDEXES/200/index-214.fits                             
-		 * COMMENT Index(6): /data1/INDEXES/200/index-213.fits                             
-		 * COMMENT Index(7): /data1/INDEXES/200/index-212.fits                             
-		 * COMMENT Index(8): /data1/INDEXES/200/index-211.fits                             
-		 * COMMENT Index(9): /data1/INDEXES/200/index-210.fits                             
-		 * COMMENT Index(10): /data1/INDEXES/200/index-209.fits                            
-		 * COMMENT Index(11): /data1/INDEXES/200/index-208.fits                            
-		 * COMMENT Index(12): /data1/INDEXES/200/index-207.fits                            
-		 * COMMENT Index(13): /data1/INDEXES/200/index-206.fits                            
-		 * COMMENT Index(14): /data1/INDEXES/200/index-205.fits                            
-		 * COMMENT Index(15): /data1/INDEXES/200/index-204-03.fits                         
-		 * COMMENT Index(16): /data1/INDEXES/200/index-203-03.fits                         
-		 * COMMENT Index(17): /data1/INDEXES/200/index-202-03.fits                         
-		 * COMMENT Index(18): /data1/INDEXES/200/index-201-03.fits                         
-		 * COMMENT Index(19): /data1/INDEXES/200/index-200-03.fits                         
-		 * COMMENT Index(20): /data1/INDEXES/4100/index-4119.fits                          
-		 * COMMENT Index(21): /data1/INDEXES/4100/index-4118.fits                          
-		 * COMMENT Index(22): /data1/INDEXES/4100/index-4117.fits                          
-		 * COMMENT Index(23): /data1/INDEXES/4100/index-4116.fits                          
-		 * COMMENT Index(24): /data1/INDEXES/4100/index-4115.fits                          
-		 * COMMENT Index(25): /data1/INDEXES/4100/index-4114.fits                          
-		 * COMMENT Index(26): /data1/INDEXES/4100/index-4113.fits                          
-		 * COMMENT Index(27): /data1/INDEXES/4100/index-4112.fits                          
-		 * COMMENT Index(28): /data1/INDEXES/4100/index-4111.fits                          
-		 * COMMENT Index(29): /data1/INDEXES/4100/index-4110.fits                          
-		 * COMMENT Index(30): /data1/INDEXES/4100/index-4109.fits                          
-		 * COMMENT Index(31): /data1/INDEXES/4100/index-4108.fits                          
-		 * COMMENT Index(32): /data1/INDEXES/4100/index-4107.fits                          
-		 * COMMENT Field name: job.axy                                                     
-		 * COMMENT Field scale lower: 0.236531 arcsec/pixel                                
-		 * COMMENT Field scale upper: 425.756 arcsec/pixel                                 
-		 * COMMENT X col name: X                                                           
-		 * COMMENT Y col name: Y                                                           
-		 * COMMENT Start obj: 0                                                            
-		 * COMMENT End obj: 0                                                              
-		 * COMMENT Solved_in: (null)                                                       
-		 * COMMENT Solved_out: (null)                                                      
-		 * COMMENT Parity: 2                                                               
-		 * COMMENT Codetol: 0.01                                                           
-		 * COMMENT Verify pixels: 1 pix                                                    
-		 * COMMENT Maxquads: 0                                                             
-		 * COMMENT Maxmatches: 0                                                           COMMENT Cpu limit: 600.000000 s                                                 COMMENT Time limit: 0 s                                                         COMMENT Total time limit: 0 s                                                   COMMENT Total CPU limit: 0.000000 s                                             COMMENT Tweak: yes                                                              COMMENT Tweak AB order: 2                                                       COMMENT Tweak ABP order: 2                                                      COMMENT --                                                                      COMMENT -- properties of the matching quad: --                                  COMMENT index id: 4109                                                          COMMENT index healpix: -1                                                       COMMENT index hpnside: 0                                                        COMMENT log odds: 127.771                                                       COMMENT odds: 3.09287e+55                                                       COMMENT quadno: 505184                                                          COMMENT stars: 574205,574181,574216,574173                                      COMMENT field: 8,5,4,2                                                          COMMENT code error: 0.00143375                                                  COMMENT nmatch: 15                                                              COMMENT nconflict: 0                                                            COMMENT nfield: 681                                                             COMMENT nindex: 15                                                              COMMENT scale: 2.54278 arcsec/pix                                               COMMENT parity: 1                                                               COMMENT quads tried: 1651                                                       COMMENT quads matched: 25839                                                    COMMENT quads verified: 195                                                     COMMENT objs tried: 9                                                           COMMENT cpu time: 0.048                                                         COMMENT --                                                                      END                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
-		
-	 * @param wcsHeaderFile
-	 * @throws FitsException 
-	 * @throws IOException 
-	 */
-	public void applyWCSHeader(String wcsHeaderFile, int stretchFactor) throws IOException, FitsException {
+
+	public void applyWCSHeader(String wcsHeaderFile, int stretchFactor, int iterations) throws IOException, FitsException {
 	
 		//list of fits files in DIR
 		File[] fitsFileInformation = getFitsFilesDetails();
@@ -526,21 +337,9 @@ public class ImagePreprocessing {
 		Fits wcsHeaderFITS = new Fits(wcsHeaderFile);
 		Header wcsHeaderFITSHeader = wcsHeaderFITS.getHDU(0).getHeader();
 
-		//keywords with priority matching (startsWith)
-		String[] wcsHeaderStringKeywords = {"CTYPE", "CUNIT1", "CUNIT2"}; 
-
-		String[] wcsHeaderIntegerKeywords = {"WCSAXES", "IMAGEW", "IMAGEH","A_ORDER", "B_ORDER","AP_ORDER","BP_ORDER"}; 
-		
-		String[] wcsHeaderDoubleKeywords = {"CRPIX", "CRVAL","CDELT","CROTA","CD1_","CD2_","EQUINOX", "LONPOLE", "LATPOLE",  "A_", "B_","AP_","BP_"}; 
 	
 		String[] wcsHeaderElements = {"CTYPE", "CUNIT1", "CUNIT2", "WCSAXES", "IMAGEW", "IMAGEH","A_ORDER", "B_ORDER","AP_ORDER","BP_ORDER", "CRPIX", "CRVAL","CDELT","CROTA","CD1_","CD2_","EQUINOX", "LONPOLE", "LATPOLE",  "A_", "B_","AP_","BP_"};
-		/**
-		 * TODO 
-		 * can probably be simplified with calling
-		 * updatedFits.getHDU(0).getHeader().addLine(originalHeaderCard);
-		 * 
-		 * addline ==> this takes a header element and does not look at the type so we do not need to know more and separate per type
-		 */
+
 		//apply to each FITS
 		for (int i=0;i<fitsFiles.length;i++) {
 			//get current fits header
@@ -562,116 +361,9 @@ public class ImagePreprocessing {
 					}					
 				}
 			}
-			
-			/**
-			while (wcsHeaderFITSHeaderIter.hasNext()) {
-				//fits WCS header
-				HeaderCard wcsHeaderFITSHeaderCard = wcsHeaderFITSHeaderIter.next();
-				String wcsHeaderKey = wcsHeaderFITSHeaderCard.getKey();
-				String wcsHeaderValue = wcsHeaderFITSHeaderCard.getValue();				
-				String comment = wcsHeaderFITSHeaderCard.getComment();
-				
-				//add the relevant keywords, determine the type
-				boolean isWCSStringkeyword = false; 
-				for (String wcsKeyword : wcsHeaderStringKeywords) {
-					if (wcsHeaderKey.startsWith(wcsKeyword)) {
-						isWCSStringkeyword = true;
-						break;
-					}
-				}
 
-				//add the relevant keywords
-				boolean isWCSIntegerkeyword = false; 
-				for (String wcsKeyword : wcsHeaderIntegerKeywords) {
-					if (wcsHeaderKey.startsWith(wcsKeyword)) {
-						isWCSIntegerkeyword = true;
-						break;
-					}
-				}
-
-				
-				//add the relevant keywords
-				boolean isWCSDoublekeyword = false; 
-				for (String wcsKeyword : wcsHeaderDoubleKeywords) {
-					if (wcsHeaderKey.startsWith(wcsKeyword)) {
-						isWCSDoublekeyword = true;
-						break;
-					}
-				}
-				
-				//apply the keyword with priority for matching, String => Integer => Double 
-				if (isWCSStringkeyword) {
-					//STRING
-					
-					//read header of the current file
-					Cursor<String, HeaderCard> fitsHeaderCursor = headerHDU.iterator();				
-					fitsHeaderCursor.setKey(wcsHeaderKey);
-					if (fitsHeaderCursor.hasNext()) {
-						//property exists
-						fitsHeaderCursor.next();
-						//remove
-						fitsHeaderCursor.remove();					
-					}
-					//add new value
-					ApplicationWindow.logger.info("applying : "+wcsHeaderKey+" with value "+wcsHeaderValue+" to "+fitsFileInformation[i].getName());
-					fitsHeaderCursor.add(new HeaderCard(wcsHeaderKey,wcsHeaderValue,comment));
-					
-				} else if (isWCSIntegerkeyword) {
-					//NUMBER
-					//read header of the current file
-					Cursor<String, HeaderCard> fitsHeaderCursor = headerHDU.iterator();				
-					fitsHeaderCursor.setKey(wcsHeaderKey);
-					if (fitsHeaderCursor.hasNext()) {
-						//property exists
-						fitsHeaderCursor.next();
-						//remove
-						fitsHeaderCursor.remove();					
-					}
-					//add new value
-					ApplicationWindow.logger.info("applying : "+wcsHeaderKey+" with value "+Integer.parseInt(wcsHeaderValue)+" to "+fitsFileInformation[i].getName());
-					fitsHeaderCursor.add(new HeaderCard(wcsHeaderKey,Integer.parseInt(wcsHeaderValue),comment));
-					
-				} else if (isWCSDoublekeyword) {
-					//NUMBER
-					//read header of the current file
-					Cursor<String, HeaderCard> fitsHeaderCursor = headerHDU.iterator();				
-					fitsHeaderCursor.setKey(wcsHeaderKey);
-					if (fitsHeaderCursor.hasNext()) {
-						//property exists
-						fitsHeaderCursor.next();
-						//remove
-						fitsHeaderCursor.remove();					
-					}
-					//add new value
-					ApplicationWindow.logger.info("applying : "+wcsHeaderKey+" with value "+Double.parseDouble(wcsHeaderValue)+" to "+fitsFileInformation[i].getName());
-					fitsHeaderCursor.add(new HeaderCard(wcsHeaderKey,Double.parseDouble(wcsHeaderValue),comment));
-					
-				}
-			
-			
-			}		*/			
-		
-
-			/*
-			 * DATE keyword issue (not needed)
-			 * was a modification for testing with the NASA asteroid hunter, but I never managed to make it work
-			 * 
-			 Cursor<String, HeaderCard> headerCursor = headerHDU.iterator(); 
-			 String dateObs = headerHDU.getStringValue("DATE-OBS"); 
-			 if (dateObs != null) {
-				 headerCursor.setKey("DATE"); if (headerCursor.hasNext()) { //property exists
-					 headerCursor.next(); 
-					 //remove 
-					 headerCursor.remove(); headerCursor.add(new HeaderCard("DATE",dateObs,"replaced"));
-					 ApplicationWindow.logger.info("applying : "+dateObs+" to DATE field");
-				 }
-			 }
-			 * 
-			 * } }
-			 */
-			
 			//write to disk
-			writeUpdatedFITSFile(fitsFileInformation[i], fitsFiles[i], stretchFactor);
+			writeUpdatedFITSFile(fitsFileInformation[i], fitsFiles[i], stretchFactor, iterations);
 
 		}
 
@@ -805,10 +497,11 @@ public class ImagePreprocessing {
 	 * - if the image is a color image, it will repeat the process after converting it to a monochrome image
 	 * @param fileInformation
 	 * @param originalFits
+	 * @param iterations 
 	 * @throws IOException 
 	 * @throws FitsException 
 	 */
-	private void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor) throws FitsException, IOException {
+	private void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations) throws FitsException, IOException {
 		//check if it is a color image
 		int naxis = originalFits.getHDU(0).getHeader().getIntValue("NAXIS");
 		boolean isColor = false;
@@ -835,13 +528,13 @@ public class ImagePreprocessing {
 		
 		//stretch and write stretched FITS file
 		String newFNameSolvedStretched = addDirectory(fileInformation, "_solved_stretched");
-		stretch(originalFits, stretchFactor);
+		stretch(originalFits, stretchFactor,iterations);
 		writeFitsWithSuffix(originalFits, newFNameSolvedStretched, "_wcs_stretch");
 		
 		if (isColor) {
 			//create dir for storing monochrome solved streched image if it does not exist
 			String newFNameSolvedMonoStretch = addDirectory(fileInformation, "_solved_mono_stretched");
-			stretch(monochromeFits, stretchFactor);
+			stretch(monochromeFits, stretchFactor, iterations);
 			//write FITS image with suffix
 			writeFitsWithSuffix(monochromeFits, newFNameSolvedMonoStretch, "_mono_wcs_stretch");			
 		}
@@ -1016,42 +709,25 @@ public class ImagePreprocessing {
 	 * This is a non linear stretch that will stretch more faint data
 	 * @param fitsImage
 	 * @param stretchFactor percentage from 0 to 100
+	 * @param iterations 
 	 * @throws FitsException
 	 * @throws IOException
 	 */
-	public void stretch(Fits fitsImage, int stretchFactor) throws FitsException, IOException {
+	public void stretch(Fits fitsImage, int stretchFactor, int iterations) throws FitsException, IOException {
 		
-		ApplicationWindow.logger.info("will stretch FITS image with factor:"+stretchFactor);
+		ApplicationWindow.logger.info("will stretch FITS image with factor:"+stretchFactor+" and iterations="+iterations);
 		//stretchFactor is from 0 to 100 
 		Object kernelData = fitsImage.getHDU(0).getKernel();
 		
 		if (kernelData instanceof short[][]) {
 			short[][] data =(short[][]) kernelData;
-			
-			//determine average value
-			BigInteger sum = BigInteger.ZERO;
-			for (int i=0;i<data.length;i++) {
-				for (int j=0;j<data[i].length;j++) {
-					sum = sum.add(BigInteger.valueOf(data[i][j]));
-				}
-			}
-			ApplicationWindow.logger.info("Addition of all values:"+sum);
 
-			BigInteger averageValueBI = sum.divide(BigInteger.valueOf(data.length*data[0].length));
-			short averageValue = averageValueBI.shortValue();
-			ApplicationWindow.logger.info("Average value:"+averageValue);
-			ApplicationWindow.logger.info("Average value BI:"+averageValueBI);
-
+			short[][] stretchedData = (short[][])stretchImageData(data, stretchFactor, iterations, data.length, data[0].length);
 			//now stretch each value
 			for (int i=0;i<data.length;i++) {
 				for (int j=0;j<data[i].length;j++) {
-//					if (data[i][j] > averageValue) {
-					int distanceToMaxValue = Short.MAX_VALUE-data[i][j];
-					int delta = (int) (distanceToMaxValue * ((float)stretchFactor/100));
-					data[i][j] = (short) (data[i][j] + delta);
-					//ApplicationWindow.logger.info("distance to max="+distanceToMaxValue+" stretching value additional pixel value(R):"+delta+" final value="+data[i][j]);
+					data[i][j] = stretchedData[i][j];
 					
-//					}
 				}
 			}
 
@@ -1064,60 +740,17 @@ public class ImagePreprocessing {
 		}else if (kernelData instanceof short[][][]) {
 			short[][][] data =(short[][][]) kernelData;
 
-			//determine average value
-			BigInteger sum = BigInteger.ZERO;
-
-			for (int i=0;i<data[0].length;i++) {
-				for (int j=0; j<data[0][i].length; j++) {
-					short val1 = data[0][i][j]; //R
-					short val2 = data[1][i][j]; //G
-					short val3 = data[2][i][j]; //B
-					
-					int average = ((val1+val2+val3) / 3);
-					
-					sum = sum.add(BigInteger.valueOf(average));
-				}
-			}
-			
-			ApplicationWindow.logger.info("Addition of all values:"+sum);
-
-			BigInteger averageValueBI = sum.divide(BigInteger.valueOf(data[0].length*data[0][0].length));
-			short averageValue = averageValueBI.shortValue();
-			ApplicationWindow.logger.info("Average value:"+averageValue);
-			ApplicationWindow.logger.info("Average value BI:"+averageValueBI);
+			//Red data
+			short[][] stretchedRedData = (short[][])stretchImageData(data[0], stretchFactor, iterations, data[0].length, data[0][0].length);
+			short[][] stretchedGreenData = (short[][])stretchImageData(data[1], stretchFactor, iterations, data[1].length, data[1][0].length);
+			short[][] stretchedBlueData = (short[][])stretchImageData(data[2], stretchFactor, iterations, data[2].length, data[2][0].length);
 
 			//now stretch each value
 			for (int i=0;i<data[0].length;i++) {
 				for (int j=0; j<data[0][i].length; j++) {
-					short val1 = data[0][i][j]; //R
-					short val2 = data[1][i][j]; //G
-					short val3 = data[2][i][j]; //B
-					
-					int average = ((val1+val2+val3) / 3);
-					short averageShort = (short)average;
-					
-					//if (averageShort > averageValue) {
-						
-					//R
-					int distanceToMaxValueR = Short.MAX_VALUE-data[0][i][j];						
-					int deltaR = (int) (distanceToMaxValueR * ((float)stretchFactor/100));
-					data[0][i][j] = (short) (data[0][i][j] + deltaR);
-					//ApplicationWindow.logger.info("distance to max="+distanceToMaxValueR+" stretching value additional pixel value(R):"+deltaR+" final value="+data[0][i][j]);
-					
-					
-					//G
-					int distanceToMaxValueG = Short.MAX_VALUE-data[1][i][j];
-					int deltaG = (int) (distanceToMaxValueG * ((float)stretchFactor/100));
-					data[1][i][j] = (short) (data[1][i][j] + deltaG);
-					//ApplicationWindow.logger.info("distance to max="+distanceToMaxValueG+" stretching value additional pixel value(G):"+deltaG+" final value="+data[1][i][j]);
-					
-					//B
-					int distanceToMaxValueB = Short.MAX_VALUE-data[2][i][j];
-					int deltaB = (int) (distanceToMaxValueB * ((float)stretchFactor/100));
-					data[2][i][j] = (short) (data[2][i][j] + deltaB);						
-					//ApplicationWindow.logger.info("distance to max="+distanceToMaxValueB+" stretching value additional pixel value(B):"+deltaB+" final value="+data[2][i][j]);
-				
-					//}
+					data[0][i][j] = (short) (stretchedRedData[i][j]);
+					data[1][i][j] = (short) (stretchedGreenData[i][j]);
+					data[2][i][j] = (short) (stretchedBlueData[i][j]);						
 				}
 			}		
 		} else if (kernelData instanceof int[][][]) {
@@ -1164,16 +797,15 @@ public class ImagePreprocessing {
 		}else if (kernelData instanceof short[][][]) {
 			short[][][] data =(short[][][]) kernelData;
 
-			//determine average value
 			for (int i=0;i<350;i++) {
 				for (int j=0;j<350;j++) {
-					int convertedValueR = ((int)data[0][i][j]) + ((int)Short.MAX_VALUE);
+					int convertedValueR = ((int)data[0][i][j]) + ((int)Short.MAX_VALUE) +1;
 					float intensityR = ((float)convertedValueR) / (2*(float)Short.MAX_VALUE);
 
-					int convertedValueG = ((int)data[1][i][j]) + ((int)Short.MAX_VALUE);
+					int convertedValueG = ((int)data[1][i][j]) + ((int)Short.MAX_VALUE) + 1;
 					float intensityG = ((float)convertedValueG) / (2*(float)Short.MAX_VALUE);
 					
-					int convertedValueB = ((int)data[2][i][j]) + ((int)Short.MAX_VALUE);
+					int convertedValueB = ((int)data[2][i][j]) + ((int)Short.MAX_VALUE) + 1;
 					float intensityB = ((float)convertedValueB) / (2*(float)Short.MAX_VALUE);
 					
 					ret.setRGB(i, j,  new Color(intensityR,intensityG,intensityB).getRGB()); 
@@ -1195,29 +827,28 @@ public class ImagePreprocessing {
 		return ret;
 	}
 	
+
 	/**
 	 * Returns an image preview for the stretch window
 	 * @param kernelData
+	 * @param iterations 
 	 * @return
 	 * @throws FitsException 
 	 */
-	public BufferedImage getStretchedImagePreview(Object kernelData, int stretchFactor) throws FitsException {
+	public BufferedImage getStretchedImagePreview(Object kernelData, int stretchFactor, int iterations) throws FitsException {
         BufferedImage ret = new BufferedImage(350, 350, BufferedImage.TYPE_INT_RGB);
 		
 		if (kernelData instanceof short[][]) {
 			short[][] data =(short[][]) kernelData;
 			
-			//determine average value
+			short[][] stretchedData = (short[][])stretchImageData(data, stretchFactor, iterations, 350, 350);
+			
 			for (int i=0;i<350;i++) {
 				for (int j=0;j<350;j++) {
-					int convertedValue = ((int)data[i][j]) + ((int)Short.MAX_VALUE);
-					float intensity = ((float)convertedValue) / (2*(float)Short.MAX_VALUE);
-					
-					//distance to max 
-					float distanceToMax = (1-intensity);
-					float percentage = (float)stretchFactor/(float)100;
-					float delta = intensity + (distanceToMax*percentage);
-					ret.setRGB(i, j, new Color(intensity+delta,intensity+delta,intensity+delta).getRGB()); 
+
+					int absValue = ((int)stretchedData[i][j]) + ((int)Short.MAX_VALUE)+1;
+					float intensity = (((float)absValue) / ((float)(2*Short.MAX_VALUE)));
+					ret.setRGB(i, j, new Color(intensity,intensity,intensity).getRGB()); 
 				}
 			}
 
@@ -1231,37 +862,34 @@ public class ImagePreprocessing {
 		}else if (kernelData instanceof short[][][]) {
 			short[][][] data =(short[][][]) kernelData;
 
+			short[][] stretchedDataRed = (short[][])stretchImageData(data[0], stretchFactor, iterations, 350, 350);
+			short[][] stretchedDataGreen = (short[][])stretchImageData(data[1], stretchFactor, iterations, 350, 350);
+			short[][] stretchedDataBlue = (short[][])stretchImageData(data[2], stretchFactor, iterations, 350, 350);
+
 			//determine average value
 			for (int i=0;i<350;i++) {
 				for (int j=0;j<350;j++) {
-					float percentage = (float)stretchFactor/(float)100;
-					
-					int convertedValueR = ((int)data[0][i][j]) + ((int)Short.MAX_VALUE);
-					float intensityR = ((float)convertedValueR) / (2*((float)Short.MAX_VALUE));
-					//distance to max 
-					float distanceToMaxR = (1-intensityR);
-					float deltaR = (distanceToMaxR*percentage);
-					
-					int convertedValueG = ((int)data[1][i][j]) + ((int)Short.MAX_VALUE);
-					float intensityG = ((float)convertedValueG) / (2*(float)Short.MAX_VALUE);
-					//distance to max 
-					float distanceToMaxG = (1-intensityG);
-					float deltaG = (distanceToMaxG*percentage);
-					
-					int convertedValueB = ((int)data[2][i][j]) + ((int)Short.MAX_VALUE);
-					float intensityB = ((float)convertedValueB) / (2*(float)Short.MAX_VALUE);
-					//distance to max 
-					float distanceToMaxB = (1-intensityB);
-					float deltaB = (distanceToMaxB*percentage);
-					
-					//ApplicationWindow.logger.info("deltaR="+deltaR+" distanceToMaxR = "+distanceToMaxR+ " intensityR="+intensityR+" convertedValueR ="+convertedValueR+" stretch="+stretchFactor+" R="+convertedValueR+" G="+convertedValueG+" B="+convertedValueB);
-					
-					
-					//ApplicationWindow.logger.info("setting R"+(intensityR+deltaR));
-					//ApplicationWindow.logger.info("setting G"+(intensityG+deltaG));
-					//ApplicationWindow.logger.info("setting B"+(intensityB+deltaB));
-		
-					Color targetColor = new Color(intensityR+deltaR,intensityG+deltaG,intensityB+deltaB);
+
+					int absValueRed = ((int)stretchedDataRed[i][j]) + ((int)Short.MAX_VALUE)+1;
+					float intensityRed = (((float)absValueRed) / ((float)(2*Short.MAX_VALUE)));
+
+					int absValueGreen = ((int)stretchedDataGreen[i][j]) + ((int)Short.MAX_VALUE)+1;
+					float intensityGreen = (((float)absValueGreen) / ((float)(2*Short.MAX_VALUE)));
+
+					int absValueBlue = ((int)stretchedDataBlue[i][j]) + ((int)Short.MAX_VALUE)+1;
+					float intensityBlue = (((float)absValueBlue) / ((float)(2*Short.MAX_VALUE)));
+
+					//ApplicationWindow.logger.info("preparing preview: stretchedDataRed="+stretchedDataRed[i][j]);
+					//ApplicationWindow.logger.info("preparing preview: absValueRed="+absValueRed);
+					//ApplicationWindow.logger.info("preparing preview: intensityRed="+intensityRed);
+					//ApplicationWindow.logger.info("preparing preview: stretchedDataGreen="+stretchedDataGreen[i][j]);
+					//ApplicationWindow.logger.info("preparing preview: absValueGreen="+absValueGreen);
+					//ApplicationWindow.logger.info("preparing preview: intensityGreen="+intensityGreen);
+					//ApplicationWindow.logger.info("preparing preview: stretchedDataBlue="+stretchedDataBlue[i][j]);
+					//ApplicationWindow.logger.info("preparing preview: absValueBlue="+absValueBlue);
+					//ApplicationWindow.logger.info("preparing preview: intensityBlue="+intensityBlue);
+				
+					Color targetColor = new Color(intensityRed,intensityGreen,intensityBlue);
 					ret.setRGB(i, j,  targetColor.getRGB()); 
 
 				}
@@ -1281,4 +909,121 @@ public class ImagePreprocessing {
 		
 		return ret;		
 	}	
+	
+	/**
+	 * Stretches non-linearly and iteratively the image data for the selected window starting from the top left.
+	 * stretch each pixel value as (current pixel value = current pixel value + ((max pixel value - current pixel value) * stretchFactor/100)
+	 * then it stretches the min value to black and proceeds again for N iterations.
+	 * @param intensity
+	 * @param iterations
+	 * @return
+	 * @throws FitsException 
+	 */
+	private Object stretchImageData(Object kernelData, int intensity, int iterations, int width, int height) throws FitsException {
+			ApplicationWindow.logger.info("will stretch FITS image with factor:"+intensity+" for iterations:"+iterations+" width="+width+" height="+height);
+			
+			//solution TODO
+			//stretch top black , just minus the lowest value! 
+			
+			//the stretch back to highest value
+			
+			if (kernelData instanceof short[][]) {
+				short[][] data =(short[][]) kernelData;
+				
+				//copy initial set of data
+				short[][] returnData = new short[width][height];
+				for (int i=0;i<width;i++) {
+					for (int j=0;j<height;j++) {
+						returnData[i][j] = data[i][j];
+
+					}
+				}
+				
+				
+				for (int iteration=0;iteration<iterations;iteration++) {
+					short minimumValue = Short.MAX_VALUE;
+					//stretch each value
+					for (int i=0;i<width;i++) {
+						for (int j=0;j<height;j++) {
+//							int distanceToMaxValue = (int)Short.MAX_VALUE-(int)returnData[i][j];
+//							int delta = (int) (distanceToMaxValue * ((float)intensity/100));
+//							if (i==10 & j ==10) {
+//								ApplicationWindow.logger.info("1 stretching value from "+returnData[i][j]+" to "+(returnData[i][j] + delta));
+//							}
+//							returnData[i][j] = (short) (returnData[i][j] + delta);
+							
+							int absValue = (int)returnData[i][j] - (int)Short.MIN_VALUE;
+
+							float newValue = (float)absValue * ((float)1 + ((float)intensity/(float)100));
+							newValue = newValue - Short.MAX_VALUE;
+							if (newValue > Short.MAX_VALUE) {
+								returnData[i][j] = Short.MAX_VALUE;
+							} else {
+								returnData[i][j] = (short)newValue;
+							}
+							//set minimum value
+							if (minimumValue > returnData[i][j]) {
+								minimumValue=returnData[i][j];
+							}
+						}
+					}
+					ApplicationWindow.logger.info("minimum value ="+minimumValue);
+
+					//set black to minimum value and stretch
+					int minimumValueDistanceFromZero = (int)minimumValue-(int)Short.MIN_VALUE;
+					if (minimumValueDistanceFromZero > 2*(int)Short.MAX_VALUE) {
+						minimumValueDistanceFromZero = 2*(int)Short.MAX_VALUE;
+					}
+					int minimumValueDistanceFromMax = (int)Short.MAX_VALUE-(int)minimumValue;	
+					if (minimumValueDistanceFromMax > 2*(int)Short.MAX_VALUE) {
+						minimumValueDistanceFromMax = 2*(int)Short.MAX_VALUE;
+					}
+					
+					for (int i=0;i<width;i++) {
+						for (int j=0;j<height;j++) {
+							//deduce minimum value (set black to minimum)
+							if (i==10 & j ==10) {
+
+								ApplicationWindow.logger.info("2 cutting value from "+returnData[i][j]+" to "+(short) ((int)returnData[i][j] - minimumValueDistanceFromZero));
+							}
+							returnData[i][j] = (short) ((int)returnData[i][j] - minimumValueDistanceFromZero);
+							
+							//stretch
+							//point distance from zero
+							//int pointValueDistanceFromZero = (int)returnData[i][j]-(int)Short.MIN_VALUE;
+							
+							//float delta = (((float)pointValueDistanceFromZero) / ((float)minimumValueDistanceFromMax))*minimumValueDistanceFromZero;
+							//if (i==10 & j ==10) {
+							//	ApplicationWindow.logger.info("3 re-stretching value from "+returnData[i][j]+" to "+(returnData[i][j] + delta));
+							//}
+							//if (returnData[i][j] + delta > Short.MAX_VALUE) {
+							//	returnData[i][j] = Short.MAX_VALUE;
+							//} else { 
+							//	returnData[i][j] = (short) (returnData[i][j] + delta);
+							//}
+
+						}
+					}					
+
+					ApplicationWindow.logger.info("iteration"+iteration);
+
+				}
+				ApplicationWindow.logger.info("started with value "+data[10][10]+" finished with value "+returnData[10][10]);
+
+				return returnData;
+
+			} else if (kernelData instanceof int[][]) {
+				int[][] data = (int[][])kernelData;
+				
+				return null;
+				
+			} else if (kernelData instanceof float[][]) {
+				float[][] data = (float[][])kernelData;
+				
+				return null;
+			}
+			else {
+				throw new FitsException("Cannot understand file, it has a type="+kernelData.getClass().getName());
+			}	
+	}
 }

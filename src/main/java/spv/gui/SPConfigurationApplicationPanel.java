@@ -45,6 +45,13 @@ public class SPConfigurationApplicationPanel extends JPanel {
 	public JSlider getStretchSlider() {
 		return stretchSlider;
 	}
+	
+	private JSlider stretchIterationsSlider;
+	
+
+	public JSlider getStretchIterationsSlider() {
+		return stretchIterationsSlider;
+	}
 
 	/**
 	 * Create the panel.
@@ -53,9 +60,9 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		this.mainAppWindow = mainAppWindow;
 		GridBagLayout gridBagLayout = new GridBagLayout();
 		gridBagLayout.columnWidths = new int[]{231, 332, 0};
-		gridBagLayout.rowHeights = new int[]{23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+		gridBagLayout.rowHeights = new int[]{23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 		gridBagLayout.columnWeights = new double[]{0.0, 1.0, Double.MIN_VALUE};
-		gridBagLayout.rowWeights = new double[]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, Double.MIN_VALUE};
+		gridBagLayout.rowWeights = new double[]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, Double.MIN_VALUE};
 		setLayout(gridBagLayout);
 		
 		JLabel astapConfigLabel = new JLabel("ASTAP configuration");
@@ -291,6 +298,9 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		add(detectionLabel, gbc_detectionLabel);
 		
 		stretchSlider = new JSlider();
+		stretchSlider.setToolTipText("Intensity");
+
+		
 		stretchSlider.addChangeListener(new ChangeListener() {
 			public void stateChanged(ChangeEvent arg0) {
 				try {
@@ -301,14 +311,50 @@ public class SPConfigurationApplicationPanel extends JPanel {
 			}
 		});
 		
+		JLabel stretchIntensityLabel = new JLabel("Intensity");
+		GridBagConstraints gbc_stretchIntensityLabel = new GridBagConstraints();
+		gbc_stretchIntensityLabel.insets = new Insets(0, 0, 5, 5);
+		gbc_stretchIntensityLabel.gridx = 0;
+		gbc_stretchIntensityLabel.gridy = 17;
+		add(stretchIntensityLabel, gbc_stretchIntensityLabel);
 		
-		stretchSlider.setPaintLabels(true);
-		stretchSlider.setPaintTicks(true);
+		JLabel stretchIterationsLabel = new JLabel("Iterations");
+		GridBagConstraints gbc_stretchIterationsLabel = new GridBagConstraints();
+		gbc_stretchIterationsLabel.anchor = GridBagConstraints.WEST;
+		gbc_stretchIterationsLabel.insets = new Insets(0, 0, 5, 0);
+		gbc_stretchIterationsLabel.gridx = 1;
+		gbc_stretchIterationsLabel.gridy = 18;
+		add(stretchIterationsLabel, gbc_stretchIterationsLabel);
 		GridBagConstraints gbc_stretchSlider = new GridBagConstraints();
 		gbc_stretchSlider.insets = new Insets(0, 0, 5, 5);
 		gbc_stretchSlider.gridx = 0;
-		gbc_stretchSlider.gridy = 17;
+		gbc_stretchSlider.gridy = 19;
 		add(stretchSlider, gbc_stretchSlider);
+		
+		stretchIterationsSlider = new JSlider();
+		stretchIterationsSlider.setPaintTicks(true);
+		stretchIterationsSlider.setSnapToTicks(true);
+		stretchIterationsSlider.setMajorTickSpacing(1);
+		stretchIterationsSlider.setMinimum(1);
+		stretchIterationsSlider.setValue(1);
+		stretchIterationsSlider.setMaximum(20);
+		stretchIterationsSlider.setToolTipText("Iterations");
+		stretchIterationsSlider.addChangeListener(new ChangeListener() {
+			public void stateChanged(ChangeEvent arg0) {
+				try {
+					mainAppWindow.getMainApplicationPanel().updateImageStretchWindow();
+				} catch (FitsException | IOException e) {
+					e.printStackTrace();
+				}
+			}
+		});
+		
+		GridBagConstraints gbc_stretchIterationsSlider = new GridBagConstraints();
+		gbc_stretchIterationsSlider.anchor = GridBagConstraints.WEST;
+		gbc_stretchIterationsSlider.insets = new Insets(0, 0, 5, 0);
+		gbc_stretchIterationsSlider.gridx = 1;
+		gbc_stretchIterationsSlider.gridy = 19;
+		add(stretchIterationsSlider, gbc_stretchIterationsSlider);
 		
 		JLabel importLabel = new JLabel("Import parameters");
 		importLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
@@ -316,7 +362,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_importLabel.anchor = GridBagConstraints.WEST;
 		gbc_importLabel.insets = new Insets(0, 0, 5, 5);
 		gbc_importLabel.gridx = 0;
-		gbc_importLabel.gridy = 18;
+		gbc_importLabel.gridy = 20;
 		add(importLabel, gbc_importLabel);
 		
 		JButton fitsDeduceButton = new JButton("deduce from FITS header");
@@ -386,14 +432,14 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		GridBagConstraints gbc_fitsDeduceButton = new GridBagConstraints();
 		gbc_fitsDeduceButton.insets = new Insets(0, 0, 5, 5);
 		gbc_fitsDeduceButton.gridx = 0;
-		gbc_fitsDeduceButton.gridy = 19;
+		gbc_fitsDeduceButton.gridy = 21;
 		add(fitsDeduceButton, gbc_fitsDeduceButton);
 		
 		JLabel saveConfigLabel = new JLabel("Save current configuration");
 		GridBagConstraints gbc_saveConfigLabel = new GridBagConstraints();
 		gbc_saveConfigLabel.insets = new Insets(0, 0, 0, 5);
 		gbc_saveConfigLabel.gridx = 0;
-		gbc_saveConfigLabel.gridy = 20;
+		gbc_saveConfigLabel.gridy = 22;
 		add(saveConfigLabel, gbc_saveConfigLabel);
 		
 		JButton saveConfigButton = new JButton("save");
@@ -417,7 +463,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		GridBagConstraints gbc_saveConfigButton = new GridBagConstraints();
 		gbc_saveConfigButton.anchor = GridBagConstraints.WEST;
 		gbc_saveConfigButton.gridx = 1;
-		gbc_saveConfigButton.gridy = 20;
+		gbc_saveConfigButton.gridy = 22;
 		add(saveConfigButton, gbc_saveConfigButton);
 
 		
