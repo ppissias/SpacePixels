@@ -238,12 +238,15 @@ public class SPMainApplicationPanel extends JPanel {
 	        			solveButton.setEnabled(true);
 	        		}
 	        		
-	        		mainAppWindow.setStretchFrameVisible(true);
-	        		try {
-						updateImageStretchWindow();
-					} catch (FitsException | IOException e) {
-						e.printStackTrace();
-					}
+	        		//show stretch window
+	        		if (mainAppWindow.getConfigurationApplicationPanel().isStretchEnabled()) {
+		        		mainAppWindow.setStretchFrameVisible(true);
+		        		try {
+							updateImageStretchWindow();
+						} catch (FitsException | IOException e) {
+							e.printStackTrace();
+						}
+	        		}
 	        	} else {
 	        		mainAppWindow.setStretchFrameVisible(false);
 	        		

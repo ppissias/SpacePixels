@@ -3,13 +3,23 @@ package spv.gui;
 import java.awt.BorderLayout;
 import java.awt.EventQueue;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
+
+import nom.tam.fits.Fits;
+import nom.tam.fits.FitsException;
+import spv.util.FitsFileInformation;
+
 import javax.swing.JSplitPane;
+import javax.swing.JButton;
+import java.awt.event.ActionListener;
+import java.awt.event.ActionEvent;
 
 public class StretchPreviewFrame extends JFrame {
 
@@ -23,19 +33,25 @@ public class StretchPreviewFrame extends JFrame {
 	
 	private JLabel stretchedImageLabel;
 
+	// link to main window
+	private ApplicationWindow mainAppWindow;
 	/**
 	 * Create the frame.
+	 * @param applicationWindow 
 	 */
-	public StretchPreviewFrame() {
+	public StretchPreviewFrame(ApplicationWindow applicationWindow) {
+		this.mainAppWindow = applicationWindow;
+		
+		setResizable(false);
 		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-		setBounds(100, 100, 800, 400);
+		setBounds(100, 100, 800, 440);
 		contentPane = new JPanel();
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
 		setContentPane(contentPane);
 		contentPane.setLayout(null);
 		
 		originalImagePanel = new JPanel();
-		originalImagePanel.setBounds(0, 0, 350, 350);
+		originalImagePanel.setBounds(21, 0, 350, 350);
 		contentPane.add(originalImagePanel);
 		
 		strethcedImagePanel = new JPanel();
@@ -53,6 +69,39 @@ public class StretchPreviewFrame extends JFrame {
         stretchedImageLabel= new JLabel(stretchedImageIcon);
         
         strethcedImagePanel.add(stretchedImageLabel);
+        
+        JButton btnNewButton = new JButton("show full size");
+        btnNewButton.addActionListener(new ActionListener() {
+        	public void actionPerformed(ActionEvent arg0) {
+        		mainAppWindow.getFullImagePreviewFrame().setVisible(true);
+        		int stretchFactor = mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue();
+        		int iterations = mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue();
+        		
+        		FitsFileInformation selectedFitsFileInfo = mainAppWindow.getSelectedFile();
+        		if (selectedFitsFileInfo != null) {
+        			Fits selectedFitsImage;
+					try {
+						selectedFitsImage = new Fits(selectedFitsFileInfo.getFilePath());
+
+        				//get image data
+        				Object kernelData = selectedFitsImage.getHDU(0).getKernel();
+        				
+        				BufferedImage fitsImagePreview = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData, stretchFactor, iterations);
+        						        
+        				mainAppWindow.getFullImagePreviewFrame().setImage(fitsImagePreview);
+					} catch (FitsException | IOException e) {
+						e.printStackTrace();
+						JOptionPane.showMessageDialog(StretchPreviewFrame.this,
+								"Cannot show full image:" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+						return;
+					}
+
+        		} else {
+        		}
+        	}
+        });
+        btnNewButton.setBounds(410, 361, 135, 23);
+        contentPane.add(btnNewButton);
         
 	}
 	

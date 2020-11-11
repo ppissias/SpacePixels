@@ -40,7 +40,14 @@ public class ApplicationWindow {
 	public static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
 	private JTable table;
 	
-	private StretchPreviewFrame stretchPreviewFrame = new StretchPreviewFrame();
+	private StretchPreviewFrame stretchPreviewFrame;
+	
+	private FullImageStretchPreviewFrame fullImagePreviewFrame = new FullImageStretchPreviewFrame();
+	
+	public FullImageStretchPreviewFrame getFullImagePreviewFrame() {
+		return fullImagePreviewFrame;
+	}
+
 	/**
 	 * Launch the application.
 	 */
@@ -68,7 +75,9 @@ public class ApplicationWindow {
 	 * Initialize the contents of the frame.
 	 */
 	private void initialize() {
+		stretchPreviewFrame  = new StretchPreviewFrame(this);
 		stretchPreviewFrame.setVisible(false);
+		fullImagePreviewFrame.setVisible(false);
 		frame = new JFrame();
 		frame.setBounds(new Rectangle(100, 100, 850, 650));
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -86,7 +95,7 @@ public class ApplicationWindow {
 		
 		tabbedPane.addTab("Main", mainApplicationPanel);
 		tabbedPane.addTab("Configuration", configurationApplicationPanel);
-		
+		tabbedPane.setEnabledAt(1, false);
 
 		JMenuBar menuBar = new JMenuBar();
 		frame.setJMenuBar(menuBar);
@@ -116,7 +125,7 @@ public class ApplicationWindow {
 						//update table
 						AbstractTableModel tableModel = new FitsFileTableModel(filesInformation);
 						mainApplicationPanel.setTableModel(tableModel);
-
+						tabbedPane.setEnabledAt(1, true);
 						configurationApplicationPanel.refreshComponents();
 						
 					} catch (IOException | FitsException | ConfigurationException e) {

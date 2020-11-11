@@ -909,7 +909,92 @@ public class ImagePreprocessing {
 		
 		return ret;		
 	}	
-	
+
+	/**
+	 * Returns an image preview for the stretch window
+	 * @param kernelData
+	 * @param iterations 
+	 * @return
+	 * @throws FitsException 
+	 */
+	public BufferedImage getStretchedImageFullSize(Object kernelData, int stretchFactor, int iterations) throws FitsException {
+        BufferedImage ret = null;
+		
+		if (kernelData instanceof short[][]) {
+			short[][] data =(short[][]) kernelData;
+			ret = new BufferedImage(data.length, data[0].length, BufferedImage.TYPE_INT_RGB);
+			
+			short[][] stretchedData = (short[][])stretchImageData(data, stretchFactor, iterations, data.length, data[0].length);
+			
+			for (int i=0;i<data.length;i++) {
+				for (int j=0;j<data[0].length;j++) {
+
+					int absValue = ((int)stretchedData[i][j]) + ((int)Short.MAX_VALUE)+1;
+					float intensity = (((float)absValue) / ((float)(2*Short.MAX_VALUE)));
+					ret.setRGB(i, j, new Color(intensity,intensity,intensity).getRGB()); 
+				}
+			}
+
+
+		} else if (kernelData instanceof int[][]) {
+			int[][] data = (int[][])kernelData;
+			
+		} else if (kernelData instanceof float[][]) {
+			float[][] data = (float[][])kernelData;
+			
+		}else if (kernelData instanceof short[][][]) {
+			short[][][] data =(short[][][]) kernelData;
+
+			ret = new BufferedImage(data[0].length, data[0][0].length, BufferedImage.TYPE_INT_RGB);
+			
+			short[][] stretchedDataRed = (short[][])stretchImageData(data[0], stretchFactor, iterations, data[0].length, data[0][0].length);
+			short[][] stretchedDataGreen = (short[][])stretchImageData(data[1], stretchFactor, iterations, data[1].length, data[1][0].length);
+			short[][] stretchedDataBlue = (short[][])stretchImageData(data[2], stretchFactor, iterations, data[2].length, data[2][0].length);
+
+			//determine average value
+			for (int i=0;i<data[0].length;i++) {
+				for (int j=0;j<data[0][0].length;j++) {
+
+					int absValueRed = ((int)stretchedDataRed[i][j]) + ((int)Short.MAX_VALUE)+1;
+					float intensityRed = (((float)absValueRed) / ((float)(2*Short.MAX_VALUE)));
+
+					int absValueGreen = ((int)stretchedDataGreen[i][j]) + ((int)Short.MAX_VALUE)+1;
+					float intensityGreen = (((float)absValueGreen) / ((float)(2*Short.MAX_VALUE)));
+
+					int absValueBlue = ((int)stretchedDataBlue[i][j]) + ((int)Short.MAX_VALUE)+1;
+					float intensityBlue = (((float)absValueBlue) / ((float)(2*Short.MAX_VALUE)));
+
+					//ApplicationWindow.logger.info("preparing preview: stretchedDataRed="+stretchedDataRed[i][j]);
+					//ApplicationWindow.logger.info("preparing preview: absValueRed="+absValueRed);
+					//ApplicationWindow.logger.info("preparing preview: intensityRed="+intensityRed);
+					//ApplicationWindow.logger.info("preparing preview: stretchedDataGreen="+stretchedDataGreen[i][j]);
+					//ApplicationWindow.logger.info("preparing preview: absValueGreen="+absValueGreen);
+					//ApplicationWindow.logger.info("preparing preview: intensityGreen="+intensityGreen);
+					//ApplicationWindow.logger.info("preparing preview: stretchedDataBlue="+stretchedDataBlue[i][j]);
+					//ApplicationWindow.logger.info("preparing preview: absValueBlue="+absValueBlue);
+					//ApplicationWindow.logger.info("preparing preview: intensityBlue="+intensityBlue);
+				
+					Color targetColor = new Color(intensityRed,intensityGreen,intensityBlue);
+					ret.setRGB(i, j,  targetColor.getRGB()); 
+
+				}
+			}
+
+				
+		} else if (kernelData instanceof int[][][]) {
+			int[][][] data =(int[][][]) kernelData;
+		
+		} else if (kernelData instanceof float[][][]) {
+			float[][][] data =(float[][][]) kernelData;
+			
+		}
+		else {
+			throw new FitsException("Cannot understand file, it has a type="+kernelData.getClass().getName());
+		}
+		
+		return ret;		
+	}	
+		
 	/**
 	 * Stretches non-linearly and iteratively the image data for the selected window starting from the top left.
 	 * stretch each pixel value as (current pixel value = current pixel value + ((max pixel value - current pixel value) * stretchFactor/100)
