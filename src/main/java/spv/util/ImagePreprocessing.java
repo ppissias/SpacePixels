@@ -204,7 +204,7 @@ public class ImagePreprocessing {
 				ret[i].setSolveResult(previousSolveresult);
 			}
 			
-			ApplicationWindow.logger.info("populated fits object as "+ret[i]);
+			//ApplicationWindow.logger.info("populated fits object as "+ret[i]);
 		}
 		
 		closeFitsFiles(fitsFiles);
@@ -321,7 +321,7 @@ public class ImagePreprocessing {
 		return null;
 	}
 
-	public void applyWCSHeader(String wcsHeaderFile, int stretchFactor, int iterations) throws IOException, FitsException {
+	public void applyWCSHeader(String wcsHeaderFile, int stretchFactor, int iterations, boolean stretch) throws IOException, FitsException {
 	
 		//list of fits files in DIR
 		File[] fitsFileInformation = getFitsFilesDetails();
@@ -363,7 +363,7 @@ public class ImagePreprocessing {
 			}
 
 			//write to disk
-			writeUpdatedFITSFile(fitsFileInformation[i], fitsFiles[i], stretchFactor, iterations);
+			writeUpdatedFITSFile(fitsFileInformation[i], fitsFiles[i], stretchFactor, iterations, stretch);
 
 		}
 
@@ -371,6 +371,27 @@ public class ImagePreprocessing {
 		closeFitsFiles(fitsFiles);
 	}
 
+	/**
+	 * Will stretch all FITS files creating a mono file where needed as well
+	 * @param stretchFactor
+	 * @param iterations
+	 * @throws IOException
+	 * @throws FitsException
+	 */
+	public void onlyStretch(int stretchFactor, int iterations) throws IOException, FitsException {
+		
+		//list of fits files in DIR
+		File[] fitsFileInformation = getFitsFilesDetails();
+		
+		//populate information
+		for (int i=0;i<fitsFileInformation.length;i++) {
+			Fits fitsFile = new Fits(fitsFileInformation[i]);
+			//write to disk
+			writeOnlyStretchedFitsFile(fitsFileInformation[i], fitsFile, stretchFactor, iterations);
+			
+		}
+		
+	}	
 	/**
 	 * Downloads a file ot the target filename
 	 * @param fileURL
@@ -412,7 +433,7 @@ public class ImagePreprocessing {
 		//create file
 		String solveResultFilename = fitsFileFullPath.substring(0,fitsFileFullPath.lastIndexOf("."))+"_result.ini";
 		File solveResultFile = new File(solveResultFilename);
-		ApplicationWindow.logger.info("Will write solve results to:"+solveResultFilename);
+		//ApplicationWindow.logger.info("Will write solve results to:"+solveResultFilename);
 		
 		if (solveResultFile.exists()) {
 			solveResultFile.delete();
@@ -454,7 +475,7 @@ public class ImagePreprocessing {
 		File solveResultFile = new File(solveResultFilename);
 		
 		if (solveResultFile.exists()) {
-			ApplicationWindow.logger.info("Will read solve results from:"+solveResultFilename);
+			//ApplicationWindow.logger.info("Will read solve results from:"+solveResultFilename);
 			
 			Configurations configs = new Configurations();
 			FileBasedConfigurationBuilder<PropertiesConfiguration> configBuilder = configs.propertiesBuilder(solveResultFile);
@@ -498,10 +519,11 @@ public class ImagePreprocessing {
 	 * @param fileInformation
 	 * @param originalFits
 	 * @param iterations 
+	 * @param stretch 
 	 * @throws IOException 
 	 * @throws FitsException 
 	 */
-	private void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations) throws FitsException, IOException {
+	private void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, boolean stretch) throws FitsException, IOException {
 		//check if it is a color image
 		int naxis = originalFits.getHDU(0).getHeader().getIntValue("NAXIS");
 		boolean isColor = false;
@@ -526,21 +548,62 @@ public class ImagePreprocessing {
 			writeFitsWithSuffix(monochromeFits, newFNameSolvedMono, "_mono_wcs");			
 		}
 		
+		if (stretch) {
+			//stretch and write stretched FITS file
+			String newFNameSolvedStretched = addDirectory(fileInformation, "_solved_stretched");
+			stretch(originalFits, stretchFactor,iterations);
+			writeFitsWithSuffix(originalFits, newFNameSolvedStretched, "_wcs_stretch");
+			
+			if (isColor) {
+				//create dir for storing monochrome solved streched image if it does not exist
+				String newFNameSolvedMonoStretch = addDirectory(fileInformation, "_solved_mono_stretched");
+				stretch(monochromeFits, stretchFactor, iterations);
+				//write FITS image with suffix
+				writeFitsWithSuffix(monochromeFits, newFNameSolvedMonoStretch, "_mono_wcs_stretch");			
+			}
+		}
+	}
+	
+	/**
+	 * Writes an updated FITS file to disk. This call will
+	 * - create 2 directories _solved and _solved_stretched an will save the image with the updated WCS header elements and also a stretched version
+	 * - if the image is a color image, it will repeat the process after converting it to a monochrome image
+	 * @param fileInformation
+	 * @param originalFits
+	 * @param iterations 
+	 * @param stretch 
+	 * @throws IOException 
+	 * @throws FitsException 
+	 */
+	private void writeOnlyStretchedFitsFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations) throws FitsException, IOException {
+		//check if it is a color image
+		int naxis = originalFits.getHDU(0).getHeader().getIntValue("NAXIS");
+		boolean isColor = false;
+		if (naxis == 3) {
+			isColor = true;
+		}
+				
+		Fits monochromeFits = null;
+		if (isColor) {
+			//convert to Mono
+			monochromeFits = convertToMono(originalFits);
+		}
+		
+
 		//stretch and write stretched FITS file
-		String newFNameSolvedStretched = addDirectory(fileInformation, "_solved_stretched");
+		String newFNameSolvedStretched = addDirectory(fileInformation, "_stretched");
 		stretch(originalFits, stretchFactor,iterations);
-		writeFitsWithSuffix(originalFits, newFNameSolvedStretched, "_wcs_stretch");
+		writeFitsWithSuffix(originalFits, newFNameSolvedStretched, "_stretch");
 		
 		if (isColor) {
 			//create dir for storing monochrome solved streched image if it does not exist
-			String newFNameSolvedMonoStretch = addDirectory(fileInformation, "_solved_mono_stretched");
+			String newFNameSolvedMonoStretch = addDirectory(fileInformation, "_mono_stretched");
 			stretch(monochromeFits, stretchFactor, iterations);
 			//write FITS image with suffix
-			writeFitsWithSuffix(monochromeFits, newFNameSolvedMonoStretch, "_mono_wcs_stretch");			
+			writeFitsWithSuffix(monochromeFits, newFNameSolvedMonoStretch, "_mono_stretch");			
 		}
-
-
-	}
+		
+	}	
 	
 	/**
 	 * Converts the FITS color image to a monochrome version, using as pixel value the average of R,G and B 
@@ -582,7 +645,7 @@ public class ImagePreprocessing {
 			// remove
 			headerCursor.remove();
 			headerCursor.add(new HeaderCard("NAXIS", 2, "replaced"));
-			ApplicationWindow.logger.info("applying : " + 2 + " to NAXIS field");
+			//ApplicationWindow.logger.info("applying : " + 2 + " to NAXIS field");
 		}
 
 		// remove NAXIS3
@@ -591,7 +654,7 @@ public class ImagePreprocessing {
 			headerCursor.next();
 			// remove
 			headerCursor.remove();
-			ApplicationWindow.logger.info("removed NAXIS3 field");
+			//ApplicationWindow.logger.info("removed NAXIS3 field");
 		}
 
 				
@@ -623,7 +686,7 @@ public class ImagePreprocessing {
 	 */
 	private String addDirectory(File currentFile, String directory) throws IOException {
 		String newDirectory = currentFile.getParent()+File.separator+directory;
-		ApplicationWindow.logger.info("addDirectory called. currentFile:"+currentFile.getAbsolutePath()+" dir:"+directory);
+		//ApplicationWindow.logger.info("addDirectory called. currentFile:"+currentFile.getAbsolutePath()+" dir:"+directory);
 		File newDirFile = new File( newDirectory);
 		if (newDirFile.exists()) {
 
@@ -641,7 +704,7 @@ public class ImagePreprocessing {
 	 */
 	private Object convertToMono(Object kernelData) throws FitsException {
 		
-		ApplicationWindow.logger.info("converting color to mono");
+		//ApplicationWindow.logger.info("converting color to mono");
 		if (kernelData instanceof short[][][]) {
 			short[][][] data = (short[][][])kernelData;
 			short[][] monoData = new short[data[0].length][data[0][0].length];
@@ -656,7 +719,7 @@ public class ImagePreprocessing {
 					monoData[i][j] = (short)average;
 				}
 			}
-			ApplicationWindow.logger.info("returning short[][] with height"+monoData.length+ "and width"+monoData[0].length);
+			//ApplicationWindow.logger.info("returning short[][] with height"+monoData.length+ "and width"+monoData[0].length);
 
 			return monoData;
 			
@@ -674,7 +737,7 @@ public class ImagePreprocessing {
 					monoData[i][j] = (int)average;
 				}
 			}
-			ApplicationWindow.logger.info("returning int[][] with height"+monoData.length+ "and width"+monoData[0].length);
+			//ApplicationWindow.logger.info("returning int[][] with height"+monoData.length+ "and width"+monoData[0].length);
 
 			return monoData;
 			
@@ -692,7 +755,7 @@ public class ImagePreprocessing {
 					monoData[i][j] = (float)average;
 				}
 			}
-			ApplicationWindow.logger.info("returning float[][] with height"+monoData.length+ "and width"+monoData[0].length);
+			//ApplicationWindow.logger.info("returning float[][] with height"+monoData.length+ "and width"+monoData[0].length);
 
 			return monoData;
 			
@@ -715,7 +778,7 @@ public class ImagePreprocessing {
 	 */
 	public void stretch(Fits fitsImage, int stretchFactor, int iterations) throws FitsException, IOException {
 		
-		ApplicationWindow.logger.info("will stretch FITS image with factor:"+stretchFactor+" and iterations="+iterations);
+		//ApplicationWindow.logger.info("will stretch FITS image with factor:"+stretchFactor+" and iterations="+iterations);
 		//stretchFactor is from 0 to 100 
 		Object kernelData = fitsImage.getHDU(0).getKernel();
 		
@@ -1005,7 +1068,7 @@ public class ImagePreprocessing {
 	 * @throws FitsException 
 	 */
 	private Object stretchImageData(Object kernelData, int intensity, int iterations, int width, int height) throws FitsException {
-			ApplicationWindow.logger.info("will stretch FITS image with factor:"+intensity+" for iterations:"+iterations+" width="+width+" height="+height);
+			//ApplicationWindow.logger.info("will stretch FITS image with factor:"+intensity+" for iterations:"+iterations+" width="+width+" height="+height);
 			
 			//solution TODO
 			//stretch top black , just minus the lowest value! 
@@ -1052,7 +1115,7 @@ public class ImagePreprocessing {
 							}
 						}
 					}
-					ApplicationWindow.logger.info("minimum value ="+minimumValue);
+					//ApplicationWindow.logger.info("minimum value ="+minimumValue);
 
 					//set black to minimum value and stretch
 					int minimumValueDistanceFromZero = (int)minimumValue-(int)Short.MIN_VALUE;
@@ -1069,7 +1132,7 @@ public class ImagePreprocessing {
 							//deduce minimum value (set black to minimum)
 							if (i==10 & j ==10) {
 
-								ApplicationWindow.logger.info("2 cutting value from "+returnData[i][j]+" to "+(short) ((int)returnData[i][j] - minimumValueDistanceFromZero));
+								//ApplicationWindow.logger.info("2 cutting value from "+returnData[i][j]+" to "+(short) ((int)returnData[i][j] - minimumValueDistanceFromZero));
 							}
 							returnData[i][j] = (short) ((int)returnData[i][j] - minimumValueDistanceFromZero);
 							
@@ -1090,10 +1153,10 @@ public class ImagePreprocessing {
 						}
 					}					
 
-					ApplicationWindow.logger.info("iteration"+iteration);
+					//ApplicationWindow.logger.info("iteration"+iteration);
 
 				}
-				ApplicationWindow.logger.info("started with value "+data[10][10]+" finished with value "+returnData[10][10]);
+				//ApplicationWindow.logger.info("started with value "+data[10][10]+" finished with value "+returnData[10][10]);
 
 				return returnData;
 

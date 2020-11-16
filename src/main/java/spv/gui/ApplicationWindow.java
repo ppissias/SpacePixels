@@ -28,9 +28,9 @@ import spv.util.ImagePreprocessing;
 
 public class ApplicationWindow {
 
-	private JFrame frame;
+	private JFrame frmIpodImage;
 
-	private ImagePreprocessing imagePreProcessing;	
+	private volatile ImagePreprocessing imagePreProcessing;	
 	
 	private SPMainApplicationPanel mainApplicationPanel; 
 	
@@ -56,7 +56,7 @@ public class ApplicationWindow {
 			public void run() {
 				try {
 					ApplicationWindow window = new ApplicationWindow();
-					window.frame.setVisible(true);
+					window.frmIpodImage.setVisible(true);
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -78,16 +78,18 @@ public class ApplicationWindow {
 		stretchPreviewFrame  = new StretchPreviewFrame(this);
 		stretchPreviewFrame.setVisible(false);
 		fullImagePreviewFrame.setVisible(false);
-		frame = new JFrame();
-		frame.setBounds(new Rectangle(100, 100, 850, 650));
-		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		frame.getContentPane().setLayout(new BorderLayout(0, 0));
+		frmIpodImage = new JFrame();
+		frmIpodImage.setTitle("IPOD - Image Preparation for Object Detection");
+		frmIpodImage.setBounds(new Rectangle(100, 100, 1000, 650));
+		frmIpodImage.setResizable(false);
+		frmIpodImage.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frmIpodImage.getContentPane().setLayout(new BorderLayout(0, 0));
 		
 		//the main tabbed pane
 		JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
 		
 		//tabbedPane.addT
-		frame.getContentPane().add(tabbedPane, BorderLayout.CENTER);
+		frmIpodImage.getContentPane().add(tabbedPane, BorderLayout.CENTER);
 		
 		mainApplicationPanel = new SPMainApplicationPanel(this);
 		
@@ -98,7 +100,7 @@ public class ApplicationWindow {
 		tabbedPane.setEnabledAt(1, false);
 
 		JMenuBar menuBar = new JMenuBar();
-		frame.setJMenuBar(menuBar);
+		frmIpodImage.setJMenuBar(menuBar);
 		
 		JMenu fileMenu = new JMenu("File");
 		menuBar.add(fileMenu);
@@ -108,29 +110,44 @@ public class ApplicationWindow {
 			public void actionPerformed(ActionEvent arg0) {							
 				ApplicationWindow.logger.info("Will try to import fits files!");
 								
+				mainApplicationPanel.setProgressBarWorking();
 				//Create a file chooser
 				final JFileChooser fc = new JFileChooser();
 				fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 				
 				fc.setDialogTitle("Directory containing aligned fits images");
-				int returnVal = fc.showOpenDialog(frame);
+				int returnVal = fc.showOpenDialog(frmIpodImage);
 				
 				if (returnVal == JFileChooser.APPROVE_OPTION) {
 		            File file = fc.getSelectedFile();
 		            
-		            try {
-						imagePreProcessing = ImagePreprocessing.getInstance(file);
-						FitsFileInformation[] filesInformation = imagePreProcessing.getFitsfileInformation();
-						
-						//update table
-						AbstractTableModel tableModel = new FitsFileTableModel(filesInformation);
-						mainApplicationPanel.setTableModel(tableModel);
-						tabbedPane.setEnabledAt(1, true);
-						configurationApplicationPanel.refreshComponents();
-						
-					} catch (IOException | FitsException | ConfigurationException e) {
-						e.printStackTrace();
-					}
+
+		            new Thread() {
+		            	public void run () {
+				            try {
+								imagePreProcessing = ImagePreprocessing.getInstance(file);
+								final FitsFileInformation[] filesInformation = imagePreProcessing.getFitsfileInformation();
+								
+								//update table
+								final AbstractTableModel tableModel = new FitsFileTableModel(filesInformation);
+								
+								EventQueue.invokeLater(new Runnable() {
+
+									@Override
+									public void run() {
+										mainApplicationPanel.setTableModel(tableModel);
+										tabbedPane.setEnabledAt(1, true);
+										configurationApplicationPanel.refreshComponents();	
+										mainApplicationPanel.setProgressBarIdle();
+									}}
+								);
+
+								
+							} catch (IOException | FitsException | ConfigurationException e) {
+								e.printStackTrace();
+							}
+		            	}
+		            }.start();
 		        }
 				
 			}
@@ -152,7 +169,9 @@ public class ApplicationWindow {
 	public FitsFileInformation getSelectedFile() {
 		return mainApplicationPanel.getSelectedFileInformation();
 	}
-
+	public FitsFileInformation[] getSelectedFiles() {
+		return mainApplicationPanel.getSelectedFilesInformation();
+	}
 	public SPMainApplicationPanel getMainApplicationPanel() {
 		return mainApplicationPanel;
 	}
@@ -171,5 +190,7 @@ public class ApplicationWindow {
 	
 	public void setStretchedImage(BufferedImage image) {
 		stretchPreviewFrame.setStretchedImage(image);	
-	}		
+	}
+	
+	
 }

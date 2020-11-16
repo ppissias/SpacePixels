@@ -161,6 +161,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		add(telescopeParamsLabel, gbc_telescopeParamsLabel);
 
 		JLabel focalLengthLabel = new JLabel("Focal length");
+		focalLengthLabel.setToolTipText("focal length of the telescope");
 		GridBagConstraints gbc_focalLengthLabel = new GridBagConstraints();
 		gbc_focalLengthLabel.anchor = GridBagConstraints.EAST;
 		gbc_focalLengthLabel.insets = new Insets(0, 0, 5, 5);
@@ -188,6 +189,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		add(cameraParamsLabel, gbc_cameraParamsLabel);
 
 		JLabel lblNewLabel = new JLabel("Pixel size");
+		lblNewLabel.setToolTipText("pixel size in microns");
 		GridBagConstraints gbc_lblNewLabel = new GridBagConstraints();
 		gbc_lblNewLabel.anchor = GridBagConstraints.EAST;
 		gbc_lblNewLabel.insets = new Insets(0, 0, 5, 5);
@@ -215,6 +217,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		add(fieldLabel, gbc_fieldLabel);
 
 		JLabel raLabel = new JLabel("RA");
+		raLabel.setToolTipText("HH MM SS.xxx");
 		GridBagConstraints gbc_raLabel = new GridBagConstraints();
 		gbc_raLabel.anchor = GridBagConstraints.EAST;
 		gbc_raLabel.insets = new Insets(0, 0, 5, 5);
@@ -232,6 +235,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		raTextfield.setColumns(10);
 
 		JLabel decLabel = new JLabel("DEC");
+		decLabel.setToolTipText("+HH MM SS.xxx");
 		GridBagConstraints gbc_decLabel = new GridBagConstraints();
 		gbc_decLabel.anchor = GridBagConstraints.EAST;
 		gbc_decLabel.insets = new Insets(0, 0, 5, 5);
@@ -302,6 +306,12 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		longTextField.setColumns(10);
 
 		stretchCheckbox = new JCheckBox("Stretch");
+		stretchCheckbox.setToolTipText("if checked the images will also be stretched");
+		stretchCheckbox.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent arg0) {
+				mainAppWindow.getMainApplicationPanel().setBatchStretchButtonEnabled(isStretchEnabled());
+			}
+		});
 		stretchCheckbox.addItemListener(new ItemListener() {
 			public void itemStateChanged(ItemEvent arg0) {
 				if (stretchCheckbox.isSelected()) {
@@ -402,6 +412,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		add(importLabel, gbc_importLabel);
 
 		JButton fitsDeduceButton = new JButton("deduce from FITS header");
+		fitsDeduceButton.setToolTipText("Try to deduce parameters from the selected image FITS header");
 		fitsDeduceButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {
 				FitsFileInformation selectedFile = mainAppWindow.getSelectedFile();
@@ -479,6 +490,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		add(saveConfigLabel, gbc_saveConfigLabel);
 
 		JButton saveConfigButton = new JButton("save");
+		saveConfigButton.setToolTipText("Saves current configuration");
 		saveConfigButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {
 				// save config
