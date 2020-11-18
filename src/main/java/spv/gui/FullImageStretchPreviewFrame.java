@@ -38,6 +38,7 @@ public class FullImageStretchPreviewFrame extends JFrame {
 	 * Create the frame.
 	 */
 	public FullImageStretchPreviewFrame() {
+		setTitle("Full size");
 		setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
 		setBounds(100, 100, 800, 600);
 		contentPane = new JPanel();

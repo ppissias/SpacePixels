@@ -51,7 +51,11 @@ public class SPMainApplicationPanel extends JPanel {
 	
 	private final JButton blinkButton = new JButton("blink");
 	
-	//TODO add tooltips for everything to document
+	private final JButton applySolutionButton = new JButton("apply solution");
+	
+	private final JButton showAnnotatedImageButton = new JButton("show annotated image");
+	
+	private final JButton solveButton = new JButton("Solve");
 	/**
 	 * Create the panel.
 	 */
@@ -66,7 +70,7 @@ public class SPMainApplicationPanel extends JPanel {
 		add(panel, BorderLayout.NORTH);
 		panel.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));
 		
-		JButton solveButton = new JButton("Solve");
+		
 		solveButton.setToolTipText("Solve current image");
 
 		panel.add(solveButton);
@@ -81,11 +85,12 @@ public class SPMainApplicationPanel extends JPanel {
 		astrometrynetSolveCheckbox.setToolTipText("solve the image using the online nova.astrometry.net web services");
 		panel.add(astrometrynetSolveCheckbox);
 	 
-		JButton applySolutionButton = new JButton("apply solution");
+		
 		applySolutionButton.setToolTipText("Apply solution to all images, convert to monochrome (if color) and stretch (if checked). It will create separate folders for each file category");
 		applySolutionButton.setEnabled(false);
 		applySolutionButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent event) {
+				//TODO disable / enable controls
 				if (table.getValueAt(table.getSelectedRow(), 6) != null) {
 					setProgressBarWorking();
 					//check how the image was solved
@@ -179,7 +184,7 @@ public class SPMainApplicationPanel extends JPanel {
 		panel.add(applySolutionButton);
 		
 		
-		JButton showAnnotatedImageButton = new JButton("show annotated image");
+		
 		showAnnotatedImageButton.setToolTipText("show annotated image");
 		showAnnotatedImageButton.setEnabled(false);
 		showAnnotatedImageButton.addActionListener(new ActionListener() {
@@ -247,7 +252,7 @@ public class SPMainApplicationPanel extends JPanel {
 		stretchButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {
 				//only stretch images
-				
+				//TODO enable disable controls
 				setProgressBarWorking();
 				
 				new Thread() {
@@ -293,6 +298,8 @@ public class SPMainApplicationPanel extends JPanel {
 		blinkButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {
 				//new thread 
+				//TODO enable disable controls
+				//TODO disable closing of the blink window
 				new Thread() { 
 					public void run() {
 						if (blinkButton.getText().equals("blink")) {
@@ -472,6 +479,9 @@ public class SPMainApplicationPanel extends JPanel {
 				FitsFileInformation seletedFile = (FitsFileInformation)table.getValueAt(row, 6);
 				//update progress bar
 				setProgressBarWorking();
+				//disable controls
+				disableControlsSolving();
+				//mainAppWindow.setMainViewEnabled(false);
 				new Thread() {
 					public void run() {
 
@@ -487,6 +497,7 @@ public class SPMainApplicationPanel extends JPanel {
 										@Override
 										public void run() {
 											JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Image was succesfully plate-solved");
+
 										}
 									});
 									//write results file
@@ -497,6 +508,7 @@ public class SPMainApplicationPanel extends JPanel {
 										@Override
 										public void run() {
 											JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Image was not plate-solved sccesfully:"+result.getFailureReason()+" "+result.getWarning());
+
 										}
 									});									
 								}
@@ -509,7 +521,11 @@ public class SPMainApplicationPanel extends JPanel {
 										table.setValueAt(result, row, 5);	
 										((FitsFileTableModel)table.getModel()).fireTableDataChanged();
 										
-										setProgressBarIdle();										}
+										setProgressBarIdle();	
+										//mainAppWindow.setMainViewEnabled(true);
+										enableControlsSolvingFinished();
+
+}
 								});								
 
 		
@@ -520,7 +536,11 @@ public class SPMainApplicationPanel extends JPanel {
 								@Override
 								public void run() {
 									JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot solve image:"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);
-									setProgressBarIdle();								}
+									setProgressBarIdle();		
+									//mainAppWindow.setMainViewEnabled(true);
+									enableControlsSolvingFinished();
+
+}
 							});									
 
 						} 
@@ -604,9 +624,18 @@ public class SPMainApplicationPanel extends JPanel {
 						        
 				mainAppWindow.setOriginalImage(fitsImagePreview);
 				mainAppWindow.setStretchedImage(fitsImagePreviewStretch);
-				
+				if (mainAppWindow.getFullImagePreviewFrame().isVisible()) {
+					//update full size as well
+					
+					BufferedImage fitsImagePreviewFS = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData, stretchFactor, iterations);				
+					mainAppWindow.getFullImagePreviewFrame().setImage(fitsImagePreviewFS);
+					
+				}				
 			} else {
 			}
+			
+
+			selectedFitsImage.close();
 		} else {
 		}
 		
@@ -623,5 +652,72 @@ public class SPMainApplicationPanel extends JPanel {
 	public void setBatchStretchButtonEnabled(boolean state) {
 		stretchButton.setEnabled(state);
 	}
+	
+	private void disableControlsSolving() {
+		this.applySolutionButton.setEnabled(false);
+		this.blinkButton.setEnabled(false);
+		this.showAnnotatedImageButton.setEnabled(false);
+		this.stretchButton.setEnabled(false);
+		this.table.setEnabled(false);
+		this.solveButton.setEnabled(false);
+		mainAppWindow.setMenuState(false);
+		mainAppWindow.getTabbedPane().setEnabledAt(1, false);
+	}
 
+	private void enableControlsSolvingFinished() {
+		this.applySolutionButton.setEnabled(false);
+		this.blinkButton.setEnabled(false);
+		this.showAnnotatedImageButton.setEnabled(false);
+		this.stretchButton.setEnabled(true);
+		this.table.setEnabled(true);
+		this.solveButton.setEnabled(false);
+		mainAppWindow.setMenuState(true);
+
+		mainAppWindow.getTabbedPane().setEnabledAt(1, true);
+	}	
+	
+	private void disableControlsProcessing() {
+		this.applySolutionButton.setEnabled(false);
+		this.blinkButton.setEnabled(false);
+		this.showAnnotatedImageButton.setEnabled(false);
+		this.stretchButton.setEnabled(false);
+		this.table.setEnabled(false);
+		this.solveButton.setEnabled(false);
+		mainAppWindow.setMenuState(false);
+
+		mainAppWindow.getTabbedPane().setEnabledAt(1, false);
+	}
+	
+	private void enableControlsProcessingFinished() {
+		this.applySolutionButton.setEnabled(false);
+		this.blinkButton.setEnabled(false);
+		this.showAnnotatedImageButton.setEnabled(false);
+		this.stretchButton.setEnabled(true);
+		this.table.setEnabled(true);
+		this.solveButton.setEnabled(false);
+		mainAppWindow.setMenuState(true);
+
+		mainAppWindow.getTabbedPane().setEnabledAt(1, true);
+	}
+	private void disableControlsBlinking() {
+		this.applySolutionButton.setEnabled(false);
+		this.blinkButton.setEnabled(false);
+		this.showAnnotatedImageButton.setEnabled(false);
+		this.stretchButton.setEnabled(false);
+		this.table.setEnabled(false);
+		this.solveButton.setEnabled(false);
+		mainAppWindow.setMenuState(false);
+
+	}
+	
+	private void enableControlsProcessingBlinkingFinished() {
+		this.applySolutionButton.setEnabled(false);
+		this.blinkButton.setEnabled(false);
+		this.showAnnotatedImageButton.setEnabled(false);
+		this.stretchButton.setEnabled(true);
+		this.table.setEnabled(true);
+		this.solveButton.setEnabled(false);
+		mainAppWindow.setMenuState(true);
+	}	
+	
 }

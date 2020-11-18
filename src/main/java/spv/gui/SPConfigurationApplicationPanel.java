@@ -61,6 +61,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		return stretchIterationsSlider;
 	}
 
+	//TODO when the inage is shown full size then it cannot be plate solved (there is an oipen Fits file somewhere)
 	/**
 	 * Create the panel.
 	 */
@@ -323,7 +324,6 @@ public class SPConfigurationApplicationPanel extends JPanel {
 					try {
 						mainAppWindow.getMainApplicationPanel().updateImageStretchWindow();
 					} catch (FitsException | IOException e) {
-						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
 				} else {

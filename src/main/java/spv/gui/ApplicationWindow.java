@@ -38,11 +38,18 @@ public class ApplicationWindow {
 	
 	//logger
 	public static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
-	private JTable table;
 	
 	private StretchPreviewFrame stretchPreviewFrame;
 	
 	private FullImageStretchPreviewFrame fullImagePreviewFrame = new FullImageStretchPreviewFrame();
+	
+	private JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
+	
+	private JMenu fileMenu = new JMenu("File");
+	private JMenuItem importMenuItem = new JMenuItem("Import aligned fits files");
+	public void setMenuState(boolean state) {
+		importMenuItem.setEnabled(state);
+	}
 	
 	public FullImageStretchPreviewFrame getFullImagePreviewFrame() {
 		return fullImagePreviewFrame;
@@ -86,7 +93,7 @@ public class ApplicationWindow {
 		frmIpodImage.getContentPane().setLayout(new BorderLayout(0, 0));
 		
 		//the main tabbed pane
-		JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
+		
 		
 		//tabbedPane.addT
 		frmIpodImage.getContentPane().add(tabbedPane, BorderLayout.CENTER);
@@ -105,7 +112,7 @@ public class ApplicationWindow {
 		JMenu fileMenu = new JMenu("File");
 		menuBar.add(fileMenu);
 
-		JMenuItem importMenuItem = new JMenuItem("Import aligned fits files");
+
 		importMenuItem.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {							
 				ApplicationWindow.logger.info("Will try to import fits files!");
@@ -138,7 +145,6 @@ public class ApplicationWindow {
 										mainApplicationPanel.setTableModel(tableModel);
 										tabbedPane.setEnabledAt(1, true);
 										configurationApplicationPanel.refreshComponents();	
-										mainApplicationPanel.setProgressBarIdle();
 									}}
 								);
 
@@ -149,6 +155,13 @@ public class ApplicationWindow {
 		            	}
 		            }.start();
 		        }
+				EventQueue.invokeLater(new Runnable() {
+					@Override
+					public void run() {
+						mainApplicationPanel.setProgressBarIdle();	
+					}}
+				);
+
 				
 			}
 		});
@@ -192,5 +205,11 @@ public class ApplicationWindow {
 		stretchPreviewFrame.setStretchedImage(image);	
 	}
 	
+	public void setMainViewEnabled(boolean state) {
+		tabbedPane.setEnabledAt(0, state);
+	}
 	
+	public JTabbedPane getTabbedPane() {
+		return tabbedPane;
+	}
 }

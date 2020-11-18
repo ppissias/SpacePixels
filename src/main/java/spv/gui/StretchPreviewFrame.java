@@ -40,6 +40,7 @@ public class StretchPreviewFrame extends JFrame {
 	 * @param applicationWindow 
 	 */
 	public StretchPreviewFrame(ApplicationWindow applicationWindow) {
+		setTitle("Stretch preview");
 		this.mainAppWindow = applicationWindow;
 		
 		setResizable(false);
@@ -87,12 +88,14 @@ public class StretchPreviewFrame extends JFrame {
         				Object kernelData = selectedFitsImage.getHDU(0).getKernel();
         				
         				BufferedImage fitsImagePreview = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData, stretchFactor, iterations);
-        						        
+        				selectedFitsImage.close();
+        				
         				mainAppWindow.getFullImagePreviewFrame().setImage(fitsImagePreview);
 					} catch (FitsException | IOException e) {
 						e.printStackTrace();
 						JOptionPane.showMessageDialog(StretchPreviewFrame.this,
 								"Cannot show full image:" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+						
 						return;
 					}
 
