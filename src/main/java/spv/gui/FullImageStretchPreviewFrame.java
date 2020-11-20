@@ -18,6 +18,7 @@ public class FullImageStretchPreviewFrame extends JFrame {
 	private JPanel imagePreviewPanel = new JPanel();
 	private JLabel imageLabel;
 	
+	private ImageVisualizerComponent imageComponent = new ImageVisualizerComponent();
 	/**
 	 * Launch the application.
 	 */
@@ -50,15 +51,18 @@ public class FullImageStretchPreviewFrame extends JFrame {
 		contentPane.add(scrollPane, BorderLayout.CENTER);
 		imageLabel = new JLabel();
         
-		imagePreviewPanel.add(imageLabel);		
+		imagePreviewPanel.add(imageComponent);		
 		scrollPane.setViewportView(imagePreviewPanel);
 		
 	}
 	
 	
 	public void setImage(BufferedImage image) {
-        ImageIcon newImageIcon = new ImageIcon( image );
-        imageLabel.setIcon(newImageIcon);		
+		//https://docs.oracle.com/javase/tutorial/2d/images/drawimage.html
+        //ImageIcon newImageIcon = new ImageIcon( image );
+        //imageLabel.setIcon(newImageIcon);
+		ApplicationWindow.logger.info("setting image");
+		imageComponent.setImage(image);
 	}
 
 }

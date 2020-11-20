@@ -36,6 +36,7 @@ import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
 import spv.util.FitsFileInformation;
 import spv.util.ImagePreprocessing;
+import spv.util.StretchAlgorithm;
 
 public class SPMainApplicationPanel extends JPanel {
 
@@ -93,6 +94,7 @@ public class SPMainApplicationPanel extends JPanel {
 				//TODO disable / enable controls
 				if (table.getValueAt(table.getSelectedRow(), 6) != null) {
 					setProgressBarWorking();
+					disableControlsProcessing();
 					//check how the image was solved
 					FitsFileInformation imageInfo = (FitsFileInformation)table.getValueAt(table.getSelectedRow(), 6); 
 					final PlateSolveResult result = imageInfo.getSolveResult();
@@ -149,8 +151,11 @@ public class SPMainApplicationPanel extends JPanel {
 								//apply the WCS file
 				        		ApplicationWindow.logger.info("applying WCS header "+wcsFile+" to all images");
 								try {
+			        				StretchAlgorithm algo = mainAppWindow.getConfigurationApplicationPanel().getStretchAlgorithm();
+
 									mainAppWindow.getImagePreProcessing().applyWCSHeader(wcsFile, mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue(),
-											mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue(), mainAppWindow.getConfigurationApplicationPanel().isStretchEnabled() );
+											mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue(), 
+											mainAppWindow.getConfigurationApplicationPanel().isStretchEnabled() , algo);
 								} catch (IOException | FitsException e) {
 									e.printStackTrace();
 									EventQueue.invokeLater(new Runnable() {
@@ -168,6 +173,7 @@ public class SPMainApplicationPanel extends JPanel {
 									@Override
 									public void run() {
 										setProgressBarIdle();
+										enableControlsProcessingFinished();
 									}
 									
 								});									
@@ -175,6 +181,8 @@ public class SPMainApplicationPanel extends JPanel {
 						}.start();
 					} else {
 						JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Image not solved :"+imageInfo, "Error",JOptionPane.ERROR_MESSAGE);
+						setProgressBarIdle();
+						enableControlsProcessingFinished();
 						return;
 					}
 				}
@@ -254,7 +262,7 @@ public class SPMainApplicationPanel extends JPanel {
 				//only stretch images
 				//TODO enable disable controls
 				setProgressBarWorking();
-				
+				disableControlsProcessing();
 				new Thread() {
 					public void run() {
 
@@ -262,8 +270,10 @@ public class SPMainApplicationPanel extends JPanel {
 						//apply the WCS file
 		        		ApplicationWindow.logger.info("Will stretch all images");
 						try {
+	        				StretchAlgorithm algo = mainAppWindow.getConfigurationApplicationPanel().getStretchAlgorithm();
+
 							mainAppWindow.getImagePreProcessing().onlyStretch( mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue(),
-									mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue() );
+									mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue() , algo);
 						} catch (IOException | FitsException e) {
 							e.printStackTrace();
 							EventQueue.invokeLater(new Runnable() {
@@ -281,6 +291,7 @@ public class SPMainApplicationPanel extends JPanel {
 							@Override
 							public void run() {
 								setProgressBarIdle();
+								enableControlsProcessingFinished();
 							}
 							
 						});									
@@ -299,6 +310,8 @@ public class SPMainApplicationPanel extends JPanel {
 			public void actionPerformed(ActionEvent arg0) {
 				//new thread 
 				//TODO enable disable controls
+				disableControlsBlinking();
+				mainAppWindow.getFullImagePreviewFrame().setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 				//TODO disable closing of the blink window
 				new Thread() { 
 					public void run() {
@@ -326,9 +339,13 @@ public class SPMainApplicationPanel extends JPanel {
 				
 				        				//get image data
 				        				Object kernelData = selectedFitsImage.getHDU(0).getKernel();
-				        				
-				        				images[i] = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData, mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue(), 
-				        						mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue());
+				        				StretchAlgorithm algo = mainAppWindow.getConfigurationApplicationPanel().getStretchAlgorithm();
+
+				        				images[i] = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData,
+				        						selectedFitsFileInfo.getSizeWidth(), 
+				        						selectedFitsFileInfo.getSizeHeight(),
+				        						mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue(), 
+				        						mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue(), algo);
 				        						        
 				        				
 									} catch (FitsException | IOException e) {
@@ -381,8 +398,9 @@ public class SPMainApplicationPanel extends JPanel {
 								public void run() {
 									//test = stop blinking
 									blinkButton.setText("blink");
+									mainAppWindow.getFullImagePreviewFrame().setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
 									mainAppWindow.getFullImagePreviewFrame().setVisible(false);
-
+									enableControlsProcessingBlinkingFinished();
 								}});								
 
 						}
@@ -611,6 +629,7 @@ public class SPMainApplicationPanel extends JPanel {
 	public void updateImageStretchWindow() throws FitsException, IOException {
 		int stretchFactor = mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue();
 		int iterations = mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue();
+		StretchAlgorithm algo = mainAppWindow.getConfigurationApplicationPanel().getStretchAlgorithm();
 		
 		FitsFileInformation selectedFitsFileInfo = getSelectedFileInformation();
 		if (selectedFitsFileInfo != null) {
@@ -620,14 +639,15 @@ public class SPMainApplicationPanel extends JPanel {
 				Object kernelData = selectedFitsImage.getHDU(0).getKernel();
 				
 				BufferedImage fitsImagePreview = mainAppWindow.getImagePreProcessing().getImagePreview(kernelData);
-				BufferedImage fitsImagePreviewStretch = mainAppWindow.getImagePreProcessing().getStretchedImagePreview(kernelData, stretchFactor, iterations);
+				BufferedImage fitsImagePreviewStretch = mainAppWindow.getImagePreProcessing().getStretchedImagePreview(kernelData, stretchFactor, iterations, algo);
 						        
 				mainAppWindow.setOriginalImage(fitsImagePreview);
 				mainAppWindow.setStretchedImage(fitsImagePreviewStretch);
 				if (mainAppWindow.getFullImagePreviewFrame().isVisible()) {
 					//update full size as well
 					
-					BufferedImage fitsImagePreviewFS = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData, stretchFactor, iterations);				
+					BufferedImage fitsImagePreviewFS = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData, selectedFitsFileInfo.getSizeWidth(), 
+							selectedFitsFileInfo.getSizeHeight(), stretchFactor, iterations, algo);				
 					mainAppWindow.getFullImagePreviewFrame().setImage(fitsImagePreviewFS);
 					
 				}				
@@ -701,23 +721,27 @@ public class SPMainApplicationPanel extends JPanel {
 	}
 	private void disableControlsBlinking() {
 		this.applySolutionButton.setEnabled(false);
-		this.blinkButton.setEnabled(false);
 		this.showAnnotatedImageButton.setEnabled(false);
 		this.stretchButton.setEnabled(false);
 		this.table.setEnabled(false);
 		this.solveButton.setEnabled(false);
 		mainAppWindow.setMenuState(false);
+		
+		mainAppWindow.getTabbedPane().setEnabledAt(1, false);
+
 
 	}
 	
 	private void enableControlsProcessingBlinkingFinished() {
 		this.applySolutionButton.setEnabled(false);
-		this.blinkButton.setEnabled(false);
 		this.showAnnotatedImageButton.setEnabled(false);
 		this.stretchButton.setEnabled(true);
 		this.table.setEnabled(true);
 		this.solveButton.setEnabled(false);
 		mainAppWindow.setMenuState(true);
+		
+		mainAppWindow.getTabbedPane().setEnabledAt(1, true);
+
 	}	
 	
 }

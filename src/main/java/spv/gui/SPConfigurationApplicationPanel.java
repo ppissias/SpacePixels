@@ -30,6 +30,9 @@ import javax.swing.JSlider;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.ChangeEvent;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.DefaultComboBoxModel;
+import spv.util.StretchAlgorithm;
 
 public class SPConfigurationApplicationPanel extends JPanel {
 	// link to main window
@@ -46,7 +49,11 @@ public class SPConfigurationApplicationPanel extends JPanel {
 	private JSlider stretchSlider;
 
 	private JCheckBox stretchCheckbox;
+	private JComboBox<StretchAlgorithm> stretchAlgoCombo = new JComboBox<StretchAlgorithm>();
 	
+	public StretchAlgorithm getStretchAlgorithm() {
+		return (StretchAlgorithm)stretchAlgoCombo.getSelectedItem();
+	}
 	public boolean isStretchEnabled() {
 		return stretchCheckbox.isSelected();
 	}
@@ -61,7 +68,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		return stretchIterationsSlider;
 	}
 
-	//TODO when the inage is shown full size then it cannot be plate solved (there is an oipen Fits file somewhere)
+	//TODO when the image is shown full size then it cannot be plate solved (there is an open Fits file somewhere)
 	/**
 	 * Create the panel.
 	 */
@@ -308,13 +315,13 @@ public class SPConfigurationApplicationPanel extends JPanel {
 
 		stretchCheckbox = new JCheckBox("Stretch");
 		stretchCheckbox.setToolTipText("if checked the images will also be stretched");
-		stretchCheckbox.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent arg0) {
-				mainAppWindow.getMainApplicationPanel().setBatchStretchButtonEnabled(isStretchEnabled());
-			}
-		});
+
 		stretchCheckbox.addItemListener(new ItemListener() {
 			public void itemStateChanged(ItemEvent arg0) {
+				//set other controls accordingly
+				mainAppWindow.getMainApplicationPanel().setBatchStretchButtonEnabled(isStretchEnabled());
+				stretchAlgoCombo.setEnabled(isStretchEnabled());	
+				
 				if (stretchCheckbox.isSelected()) {
 					// Code to execute when it's selected
 					stretchSlider.setEnabled(true);
@@ -343,6 +350,30 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_chckbxNewCheckBox.gridx = 0;
 		gbc_chckbxNewCheckBox.gridy = 15;
 		add(stretchCheckbox, gbc_chckbxNewCheckBox);
+		stretchAlgoCombo.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent arg0) {
+				if (stretchCheckbox.isSelected()) {
+					try {
+						mainAppWindow.getMainApplicationPanel().updateImageStretchWindow();
+					} catch (FitsException | IOException e) {
+						e.printStackTrace();
+					}			
+				}
+			}
+		});
+		
+		
+		stretchAlgoCombo.setEnabled(false);
+		stretchAlgoCombo.setToolTipText("choose stretching algorithm");
+		
+		stretchAlgoCombo.setModel(new DefaultComboBoxModel<StretchAlgorithm>(StretchAlgorithm.values()));
+		stretchAlgoCombo.setSelectedIndex(0);
+		GridBagConstraints gbc_stretchAlgoCombo = new GridBagConstraints();
+		gbc_stretchAlgoCombo.anchor = GridBagConstraints.WEST;
+		gbc_stretchAlgoCombo.insets = new Insets(0, 0, 5, 0);
+		gbc_stretchAlgoCombo.gridx = 1;
+		gbc_stretchAlgoCombo.gridy = 15;
+		add(stretchAlgoCombo, gbc_stretchAlgoCombo);
 
 		JLabel stretchIntensityLabel = new JLabel("Intensity");
 		GridBagConstraints gbc_stretchIntensityLabel = new GridBagConstraints();
@@ -361,7 +392,6 @@ public class SPConfigurationApplicationPanel extends JPanel {
 
 		stretchSlider = new JSlider();
 		stretchSlider.setToolTipText("Intensity");
-
 		stretchSlider.addChangeListener(new ChangeListener() {
 			public void stateChanged(ChangeEvent arg0) {
 				try {
@@ -371,6 +401,8 @@ public class SPConfigurationApplicationPanel extends JPanel {
 				}
 			}
 		});
+		stretchSlider.setEnabled(false);
+
 		GridBagConstraints gbc_stretchSlider = new GridBagConstraints();
 		gbc_stretchSlider.insets = new Insets(0, 0, 5, 5);
 		gbc_stretchSlider.gridx = 0;
@@ -385,6 +417,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		stretchIterationsSlider.setValue(1);
 		stretchIterationsSlider.setMaximum(20);
 		stretchIterationsSlider.setToolTipText("Iterations");
+		
 		stretchIterationsSlider.addChangeListener(new ChangeListener() {
 			public void stateChanged(ChangeEvent arg0) {
 				try {
@@ -394,7 +427,8 @@ public class SPConfigurationApplicationPanel extends JPanel {
 				}
 			}
 		});
-
+		stretchIterationsSlider.setEnabled(false);
+		
 		GridBagConstraints gbc_stretchIterationsSlider = new GridBagConstraints();
 		gbc_stretchIterationsSlider.anchor = GridBagConstraints.WEST;
 		gbc_stretchIterationsSlider.insets = new Insets(0, 0, 5, 0);

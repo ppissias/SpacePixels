@@ -321,7 +321,7 @@ public class ImagePreprocessing {
 		return null;
 	}
 
-	public void applyWCSHeader(String wcsHeaderFile, int stretchFactor, int iterations, boolean stretch) throws IOException, FitsException {
+	public void applyWCSHeader(String wcsHeaderFile, int stretchFactor, int iterations, boolean stretch, StretchAlgorithm algo) throws IOException, FitsException {
 	
 		//list of fits files in DIR
 		File[] fitsFileInformation = getFitsFilesDetails();
@@ -363,7 +363,7 @@ public class ImagePreprocessing {
 			}
 
 			//write to disk
-			writeUpdatedFITSFile(fitsFileInformation[i], fitsFiles[i], stretchFactor, iterations, stretch);
+			writeUpdatedFITSFile(fitsFileInformation[i], fitsFiles[i], stretchFactor, iterations, stretch, algo);
 
 		}
 
@@ -378,7 +378,7 @@ public class ImagePreprocessing {
 	 * @throws IOException
 	 * @throws FitsException
 	 */
-	public void onlyStretch(int stretchFactor, int iterations) throws IOException, FitsException {
+	public void onlyStretch(int stretchFactor, int iterations, StretchAlgorithm algo) throws IOException, FitsException {
 		
 		//list of fits files in DIR
 		File[] fitsFileInformation = getFitsFilesDetails();
@@ -387,7 +387,7 @@ public class ImagePreprocessing {
 		for (int i=0;i<fitsFileInformation.length;i++) {
 			Fits fitsFile = new Fits(fitsFileInformation[i]);
 			//write to disk
-			writeOnlyStretchedFitsFile(fitsFileInformation[i], fitsFile, stretchFactor, iterations);
+			writeOnlyStretchedFitsFile(fitsFileInformation[i], fitsFile, stretchFactor, iterations, algo);
 			
 		}
 		
@@ -523,7 +523,7 @@ public class ImagePreprocessing {
 	 * @throws IOException 
 	 * @throws FitsException 
 	 */
-	private void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, boolean stretch) throws FitsException, IOException {
+	private void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, boolean stretch, StretchAlgorithm algo) throws FitsException, IOException {
 		//check if it is a color image
 		int naxis = originalFits.getHDU(0).getHeader().getIntValue("NAXIS");
 		boolean isColor = false;
@@ -551,13 +551,13 @@ public class ImagePreprocessing {
 		if (stretch) {
 			//stretch and write stretched FITS file
 			String newFNameSolvedStretched = addDirectory(fileInformation, "_solved_stretched");
-			stretch(originalFits, stretchFactor,iterations);
+			stretch(originalFits, stretchFactor,iterations, algo);
 			writeFitsWithSuffix(originalFits, newFNameSolvedStretched, "_wcs_stretch");
 			
 			if (isColor) {
 				//create dir for storing monochrome solved streched image if it does not exist
 				String newFNameSolvedMonoStretch = addDirectory(fileInformation, "_solved_mono_stretched");
-				stretch(monochromeFits, stretchFactor, iterations);
+				stretch(monochromeFits, stretchFactor, iterations, algo);
 				//write FITS image with suffix
 				writeFitsWithSuffix(monochromeFits, newFNameSolvedMonoStretch, "_mono_wcs_stretch");			
 			}
@@ -575,7 +575,7 @@ public class ImagePreprocessing {
 	 * @throws IOException 
 	 * @throws FitsException 
 	 */
-	private void writeOnlyStretchedFitsFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations) throws FitsException, IOException {
+	private void writeOnlyStretchedFitsFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException, IOException {
 		//check if it is a color image
 		int naxis = originalFits.getHDU(0).getHeader().getIntValue("NAXIS");
 		boolean isColor = false;
@@ -592,13 +592,13 @@ public class ImagePreprocessing {
 
 		//stretch and write stretched FITS file
 		String newFNameSolvedStretched = addDirectory(fileInformation, "_stretched");
-		stretch(originalFits, stretchFactor,iterations);
+		stretch(originalFits, stretchFactor,iterations, algo);
 		writeFitsWithSuffix(originalFits, newFNameSolvedStretched, "_stretch");
 		
 		if (isColor) {
 			//create dir for storing monochrome solved streched image if it does not exist
 			String newFNameSolvedMonoStretch = addDirectory(fileInformation, "_mono_stretched");
-			stretch(monochromeFits, stretchFactor, iterations);
+			stretch(monochromeFits, stretchFactor, iterations, algo);
 			//write FITS image with suffix
 			writeFitsWithSuffix(monochromeFits, newFNameSolvedMonoStretch, "_mono_stretch");			
 		}
@@ -776,7 +776,7 @@ public class ImagePreprocessing {
 	 * @throws FitsException
 	 * @throws IOException
 	 */
-	public void stretch(Fits fitsImage, int stretchFactor, int iterations) throws FitsException, IOException {
+	public void stretch(Fits fitsImage, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException, IOException {
 		
 		//ApplicationWindow.logger.info("will stretch FITS image with factor:"+stretchFactor+" and iterations="+iterations);
 		//stretchFactor is from 0 to 100 
@@ -785,7 +785,7 @@ public class ImagePreprocessing {
 		if (kernelData instanceof short[][]) {
 			short[][] data =(short[][]) kernelData;
 
-			short[][] stretchedData = (short[][])stretchImageData(data, stretchFactor, iterations, data.length, data[0].length);
+			short[][] stretchedData = (short[][])stretchImageData(data, stretchFactor, iterations, data.length, data[0].length, algo);
 			//now stretch each value
 			for (int i=0;i<data.length;i++) {
 				for (int j=0;j<data[i].length;j++) {
@@ -804,9 +804,9 @@ public class ImagePreprocessing {
 			short[][][] data =(short[][][]) kernelData;
 
 			//Red data
-			short[][] stretchedRedData = (short[][])stretchImageData(data[0], stretchFactor, iterations, data[0].length, data[0][0].length);
-			short[][] stretchedGreenData = (short[][])stretchImageData(data[1], stretchFactor, iterations, data[1].length, data[1][0].length);
-			short[][] stretchedBlueData = (short[][])stretchImageData(data[2], stretchFactor, iterations, data[2].length, data[2][0].length);
+			short[][] stretchedRedData = (short[][])stretchImageData(data[0], stretchFactor, iterations, data[0].length, data[0][0].length, algo);
+			short[][] stretchedGreenData = (short[][])stretchImageData(data[1], stretchFactor, iterations, data[1].length, data[1][0].length, algo);
+			short[][] stretchedBlueData = (short[][])stretchImageData(data[2], stretchFactor, iterations, data[2].length, data[2][0].length, algo);
 
 			//now stretch each value
 			for (int i=0;i<data[0].length;i++) {
@@ -836,7 +836,7 @@ public class ImagePreprocessing {
 	 * @throws FitsException 
 	 */
 	public BufferedImage getImagePreview(Object kernelData) throws FitsException {
-        BufferedImage ret = new BufferedImage(350, 350, BufferedImage.TYPE_INT_RGB);
+        BufferedImage ret = new BufferedImage(350, 350, BufferedImage.TYPE_INT_ARGB);
         
 		if (kernelData instanceof short[][]) {
 			short[][] data =(short[][]) kernelData;
@@ -846,7 +846,7 @@ public class ImagePreprocessing {
 				for (int j=0;j<350;j++) {
 					int convertedValue = ((int)data[i][j]) + ((int)Short.MAX_VALUE);
 					float intensity = ((float)convertedValue) / (2*(float)Short.MAX_VALUE);
-					ret.setRGB(i, j, new Color(intensity,intensity,intensity).getRGB()); 
+					ret.setRGB(i, j, new Color(intensity,intensity,intensity, 1.0f).getRGB()); 
 				}
 			}
 
@@ -871,7 +871,7 @@ public class ImagePreprocessing {
 					int convertedValueB = ((int)data[2][i][j]) + ((int)Short.MAX_VALUE) + 1;
 					float intensityB = ((float)convertedValueB) / (2*(float)Short.MAX_VALUE);
 					
-					ret.setRGB(i, j,  new Color(intensityR,intensityG,intensityB).getRGB()); 
+					ret.setRGB(i, j,  new Color(intensityR,intensityG,intensityB, 1.0f).getRGB()); 
 				}
 			}
 
@@ -892,26 +892,39 @@ public class ImagePreprocessing {
 	
 
 	/**
-	 * Returns an image preview for the stretch window
-	 * @param kernelData
-	 * @param iterations 
-	 * @return
+	 * Returns a BufferedImage from the FITS raw data
+	 * @param kernelData FITS raw data
+	 * @param width should be maximum to the image width
+	 * @param height should be maximum to the image height
+	 * @param stretchFactor the stretch factor
+	 * @param iterations iterations
+	 * @param algo stretch algorithm
+	 * @return the BufferedImage containing the FITS raw data
 	 * @throws FitsException 
 	 */
-	public BufferedImage getStretchedImagePreview(Object kernelData, int stretchFactor, int iterations) throws FitsException {
-        BufferedImage ret = new BufferedImage(350, 350, BufferedImage.TYPE_INT_RGB);
-		
-		if (kernelData instanceof short[][]) {
+	private BufferedImage getStretchedImage(Object kernelData, int width, int height, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException {
+        BufferedImage ret = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+
+        if (kernelData instanceof short[][]) {
 			short[][] data =(short[][]) kernelData;
 			
-			short[][] stretchedData = (short[][])stretchImageData(data, stretchFactor, iterations, 350, 350);
+			short[][] stretchedData = (short[][])stretchImageData(data, stretchFactor, iterations, width, height, algo);
 			
-			for (int i=0;i<350;i++) {
-				for (int j=0;j<350;j++) {
+			for (int i=0;i<height;i++) {
+				for (int j=0;j<width;j++) {
 
 					int absValue = ((int)stretchedData[i][j]) + ((int)Short.MAX_VALUE)+1;
+					if (absValue > 2*Short.MAX_VALUE) {
+						absValue = 2*Short.MAX_VALUE;
+					}
 					float intensity = (((float)absValue) / ((float)(2*Short.MAX_VALUE)));
-					ret.setRGB(i, j, new Color(intensity,intensity,intensity).getRGB()); 
+					try {
+						ret.setRGB(j, i, new Color(intensity,intensity,intensity, 1.0f).getRGB()); 
+					}catch (IllegalArgumentException e) {
+						ApplicationWindow.logger.info("preparing preview: stretchedData[i][j]="+stretchedData[i][j]);
+						ApplicationWindow.logger.info("preparing preview: intensity="+intensity);
+						throw (e);
+					}
 				}
 			}
 
@@ -925,35 +938,49 @@ public class ImagePreprocessing {
 		}else if (kernelData instanceof short[][][]) {
 			short[][][] data =(short[][][]) kernelData;
 
-			short[][] stretchedDataRed = (short[][])stretchImageData(data[0], stretchFactor, iterations, 350, 350);
-			short[][] stretchedDataGreen = (short[][])stretchImageData(data[1], stretchFactor, iterations, 350, 350);
-			short[][] stretchedDataBlue = (short[][])stretchImageData(data[2], stretchFactor, iterations, 350, 350);
+			short[][] stretchedDataRed = (short[][])stretchImageData(data[0], stretchFactor, iterations, width, height, algo);
+			short[][] stretchedDataGreen = (short[][])stretchImageData(data[1], stretchFactor, iterations, width, height, algo);
+			short[][] stretchedDataBlue = (short[][])stretchImageData(data[2], stretchFactor, iterations, width, height, algo);
 
 			//determine average value
-			for (int i=0;i<350;i++) {
-				for (int j=0;j<350;j++) {
+			for (int i=0;i<height;i++) {
+				for (int j=0;j<width;j++) {
 
 					int absValueRed = ((int)stretchedDataRed[i][j]) + ((int)Short.MAX_VALUE)+1;
+					if (absValueRed > 2*Short.MAX_VALUE) {
+						absValueRed = 2*Short.MAX_VALUE;
+					}
 					float intensityRed = (((float)absValueRed) / ((float)(2*Short.MAX_VALUE)));
 
 					int absValueGreen = ((int)stretchedDataGreen[i][j]) + ((int)Short.MAX_VALUE)+1;
+					if (absValueGreen > 2*Short.MAX_VALUE) {
+						absValueGreen = 2*Short.MAX_VALUE;
+					}					
 					float intensityGreen = (((float)absValueGreen) / ((float)(2*Short.MAX_VALUE)));
 
 					int absValueBlue = ((int)stretchedDataBlue[i][j]) + ((int)Short.MAX_VALUE)+1;
+					if (absValueBlue > 2*Short.MAX_VALUE) {
+						absValueBlue = 2*Short.MAX_VALUE;
+					}					
 					float intensityBlue = (((float)absValueBlue) / ((float)(2*Short.MAX_VALUE)));
 
-					//ApplicationWindow.logger.info("preparing preview: stretchedDataRed="+stretchedDataRed[i][j]);
-					//ApplicationWindow.logger.info("preparing preview: absValueRed="+absValueRed);
-					//ApplicationWindow.logger.info("preparing preview: intensityRed="+intensityRed);
-					//ApplicationWindow.logger.info("preparing preview: stretchedDataGreen="+stretchedDataGreen[i][j]);
-					//ApplicationWindow.logger.info("preparing preview: absValueGreen="+absValueGreen);
-					//ApplicationWindow.logger.info("preparing preview: intensityGreen="+intensityGreen);
-					//ApplicationWindow.logger.info("preparing preview: stretchedDataBlue="+stretchedDataBlue[i][j]);
-					//ApplicationWindow.logger.info("preparing preview: absValueBlue="+absValueBlue);
-					//ApplicationWindow.logger.info("preparing preview: intensityBlue="+intensityBlue);
+
 				
-					Color targetColor = new Color(intensityRed,intensityGreen,intensityBlue);
-					ret.setRGB(i, j,  targetColor.getRGB()); 
+					try {
+						Color targetColor = new Color(intensityRed,intensityGreen,intensityBlue, 1.0f);
+						ret.setRGB(j, i,  targetColor.getRGB()); 
+					}catch (IllegalArgumentException e) {
+						ApplicationWindow.logger.info("preparing preview: stretchedDataRed="+stretchedDataRed[i][j]);
+						ApplicationWindow.logger.info("preparing preview: absValueRed="+absValueRed);
+						ApplicationWindow.logger.info("preparing preview: intensityRed="+intensityRed);
+						ApplicationWindow.logger.info("preparing preview: stretchedDataGreen="+stretchedDataGreen[i][j]);
+						ApplicationWindow.logger.info("preparing preview: absValueGreen="+absValueGreen);
+						ApplicationWindow.logger.info("preparing preview: intensityGreen="+intensityGreen);
+						ApplicationWindow.logger.info("preparing preview: stretchedDataBlue="+stretchedDataBlue[i][j]);
+						ApplicationWindow.logger.info("preparing preview: absValueBlue="+absValueBlue);
+						ApplicationWindow.logger.info("preparing preview: intensityBlue="+intensityBlue);						
+						throw (e);
+					}
 
 				}
 			}
@@ -971,6 +998,17 @@ public class ImagePreprocessing {
 		}
 		
 		return ret;		
+		
+	}
+	/**
+	 * Returns an image preview for the stretch window
+	 * @param kernelData
+	 * @param iterations 
+	 * @return
+	 * @throws FitsException 
+	 */
+	public BufferedImage getStretchedImagePreview(Object kernelData, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException {
+        return getStretchedImage(kernelData, 350, 350, stretchFactor, iterations, algo);
 	}	
 
 	/**
@@ -980,21 +1018,32 @@ public class ImagePreprocessing {
 	 * @return
 	 * @throws FitsException 
 	 */
-	public BufferedImage getStretchedImageFullSize(Object kernelData, int stretchFactor, int iterations) throws FitsException {
+	public BufferedImage getStretchedImageFullSize(Object kernelData, int width, int height, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException {
+		return getStretchedImage(kernelData, width, height, stretchFactor, iterations, algo);
+		/**
         BufferedImage ret = null;
 		
 		if (kernelData instanceof short[][]) {
 			short[][] data =(short[][]) kernelData;
-			ret = new BufferedImage(data.length, data[0].length, BufferedImage.TYPE_INT_RGB);
+			ret = new BufferedImage(data.length, data[0].length, BufferedImage.TYPE_INT_ARGB);
 			
-			short[][] stretchedData = (short[][])stretchImageData(data, stretchFactor, iterations, data.length, data[0].length);
+			short[][] stretchedData = (short[][])stretchImageData(data, stretchFactor, iterations, data.length, data[0].length, algo);
 			
 			for (int i=0;i<data.length;i++) {
 				for (int j=0;j<data[0].length;j++) {
 
 					int absValue = ((int)stretchedData[i][j]) + ((int)Short.MAX_VALUE)+1;
+					if (absValue > 2*Short.MAX_VALUE) {
+						absValue = 2*Short.MAX_VALUE;
+					}
 					float intensity = (((float)absValue) / ((float)(2*Short.MAX_VALUE)));
-					ret.setRGB(i, j, new Color(intensity,intensity,intensity).getRGB()); 
+					try {
+						ret.setRGB(i, j, new Color(intensity,intensity,intensity, 1.0f).getRGB()); 
+					}catch (IllegalArgumentException e) {
+						ApplicationWindow.logger.info("preparing preview: stretchedData[i][j]="+stretchedData[i][j]);
+						ApplicationWindow.logger.info("preparing preview: intensity="+intensity);
+						throw (e);
+					}
 				}
 			}
 
@@ -1008,37 +1057,50 @@ public class ImagePreprocessing {
 		}else if (kernelData instanceof short[][][]) {
 			short[][][] data =(short[][][]) kernelData;
 
-			ret = new BufferedImage(data[0].length, data[0][0].length, BufferedImage.TYPE_INT_RGB);
+			ret = new BufferedImage(data[0].length, data[0][0].length, BufferedImage.TYPE_INT_ARGB);
 			
-			short[][] stretchedDataRed = (short[][])stretchImageData(data[0], stretchFactor, iterations, data[0].length, data[0][0].length);
-			short[][] stretchedDataGreen = (short[][])stretchImageData(data[1], stretchFactor, iterations, data[1].length, data[1][0].length);
-			short[][] stretchedDataBlue = (short[][])stretchImageData(data[2], stretchFactor, iterations, data[2].length, data[2][0].length);
+			short[][] stretchedDataRed = (short[][])stretchImageData(data[0], stretchFactor, iterations, data[0].length, data[0][0].length, algo);
+			short[][] stretchedDataGreen = (short[][])stretchImageData(data[1], stretchFactor, iterations, data[1].length, data[1][0].length, algo);
+			short[][] stretchedDataBlue = (short[][])stretchImageData(data[2], stretchFactor, iterations, data[2].length, data[2][0].length, algo);
 
 			//determine average value
 			for (int i=0;i<data[0].length;i++) {
 				for (int j=0;j<data[0][0].length;j++) {
-
 					int absValueRed = ((int)stretchedDataRed[i][j]) + ((int)Short.MAX_VALUE)+1;
+					if (absValueRed > 2*Short.MAX_VALUE) {
+						absValueRed = 2*Short.MAX_VALUE;
+					}
 					float intensityRed = (((float)absValueRed) / ((float)(2*Short.MAX_VALUE)));
 
 					int absValueGreen = ((int)stretchedDataGreen[i][j]) + ((int)Short.MAX_VALUE)+1;
+					if (absValueGreen > 2*Short.MAX_VALUE) {
+						absValueGreen = 2*Short.MAX_VALUE;
+					}					
 					float intensityGreen = (((float)absValueGreen) / ((float)(2*Short.MAX_VALUE)));
 
 					int absValueBlue = ((int)stretchedDataBlue[i][j]) + ((int)Short.MAX_VALUE)+1;
+					if (absValueBlue > 2*Short.MAX_VALUE) {
+						absValueBlue = 2*Short.MAX_VALUE;
+					}					
 					float intensityBlue = (((float)absValueBlue) / ((float)(2*Short.MAX_VALUE)));
 
-					//ApplicationWindow.logger.info("preparing preview: stretchedDataRed="+stretchedDataRed[i][j]);
-					//ApplicationWindow.logger.info("preparing preview: absValueRed="+absValueRed);
-					//ApplicationWindow.logger.info("preparing preview: intensityRed="+intensityRed);
-					//ApplicationWindow.logger.info("preparing preview: stretchedDataGreen="+stretchedDataGreen[i][j]);
-					//ApplicationWindow.logger.info("preparing preview: absValueGreen="+absValueGreen);
-					//ApplicationWindow.logger.info("preparing preview: intensityGreen="+intensityGreen);
-					//ApplicationWindow.logger.info("preparing preview: stretchedDataBlue="+stretchedDataBlue[i][j]);
-					//ApplicationWindow.logger.info("preparing preview: absValueBlue="+absValueBlue);
-					//ApplicationWindow.logger.info("preparing preview: intensityBlue="+intensityBlue);
+
 				
-					Color targetColor = new Color(intensityRed,intensityGreen,intensityBlue);
-					ret.setRGB(i, j,  targetColor.getRGB()); 
+					try {
+						Color targetColor = new Color(intensityRed,intensityGreen,intensityBlue, 1.0f);
+						ret.setRGB(i, j,  targetColor.getRGB()); 
+					}catch (IllegalArgumentException e) {
+						ApplicationWindow.logger.info("preparing preview: stretchedDataRed="+stretchedDataRed[i][j]);
+						ApplicationWindow.logger.info("preparing preview: absValueRed="+absValueRed);
+						ApplicationWindow.logger.info("preparing preview: intensityRed="+intensityRed);
+						ApplicationWindow.logger.info("preparing preview: stretchedDataGreen="+stretchedDataGreen[i][j]);
+						ApplicationWindow.logger.info("preparing preview: absValueGreen="+absValueGreen);
+						ApplicationWindow.logger.info("preparing preview: intensityGreen="+intensityGreen);
+						ApplicationWindow.logger.info("preparing preview: stretchedDataBlue="+stretchedDataBlue[i][j]);
+						ApplicationWindow.logger.info("preparing preview: absValueBlue="+absValueBlue);
+						ApplicationWindow.logger.info("preparing preview: intensityBlue="+intensityBlue);						
+						throw (e);
+					}
 
 				}
 			}
@@ -1056,32 +1118,53 @@ public class ImagePreprocessing {
 		}
 		
 		return ret;		
+		*/
 	}	
-		
+	
 	/**
-	 * Stretches non-linearly and iteratively the image data for the selected window starting from the top left.
-	 * stretch each pixel value as (current pixel value = current pixel value + ((max pixel value - current pixel value) * stretchFactor/100)
-	 * then it stretches the min value to black and proceeds again for N iterations.
+	 * Facade for stretching the image
+	 * @param kernelData
+	 * @param intensity
+	 * @param iterations
+	 * @param width
+	 * @param height
+	 * @return
+	 * @throws FitsException
+	 */
+	private Object stretchImageData(Object kernelData, int intensity, int iterations, int width, int height, StretchAlgorithm algo) throws FitsException {
+		switch (algo) {
+		case ENHANCE_HIGH : {
+			return stretchImageEnhanceHigh(kernelData, intensity, iterations, width, height);
+
+		}
+		case ENHANCE_LOW: {
+			return stretchImageEnhanceLow(kernelData, intensity, iterations, width, height);
+
+		}
+		default : {
+			return stretchImageEnhanceLow(kernelData, intensity, iterations, width, height);			
+		}
+		}
+	}
+	
+	/**
+	 * Stretches iteratively the image my multiplying all pixel values by a constant 
+	 * and setting the minimum value to zero
 	 * @param intensity
 	 * @param iterations
 	 * @return
 	 * @throws FitsException 
 	 */
-	private Object stretchImageData(Object kernelData, int intensity, int iterations, int width, int height) throws FitsException {
+	private Object stretchImageEnhanceHigh(Object kernelData, int intensity, int iterations, int width, int height) throws FitsException {
 			//ApplicationWindow.logger.info("will stretch FITS image with factor:"+intensity+" for iterations:"+iterations+" width="+width+" height="+height);
-			
-			//solution TODO
-			//stretch top black , just minus the lowest value! 
-			
-			//the stretch back to highest value
-			
+						
 			if (kernelData instanceof short[][]) {
 				short[][] data =(short[][]) kernelData;
 				
 				//copy initial set of data
-				short[][] returnData = new short[width][height];
-				for (int i=0;i<width;i++) {
-					for (int j=0;j<height;j++) {
+				short[][] returnData = new short[height][width];
+				for (int i=0;i<height;i++) {
+					for (int j=0;j<width;j++) {
 						returnData[i][j] = data[i][j];
 
 					}
@@ -1091,14 +1174,8 @@ public class ImagePreprocessing {
 				for (int iteration=0;iteration<iterations;iteration++) {
 					short minimumValue = Short.MAX_VALUE;
 					//stretch each value
-					for (int i=0;i<width;i++) {
-						for (int j=0;j<height;j++) {
-//							int distanceToMaxValue = (int)Short.MAX_VALUE-(int)returnData[i][j];
-//							int delta = (int) (distanceToMaxValue * ((float)intensity/100));
-//							if (i==10 & j ==10) {
-//								ApplicationWindow.logger.info("1 stretching value from "+returnData[i][j]+" to "+(returnData[i][j] + delta));
-//							}
-//							returnData[i][j] = (short) (returnData[i][j] + delta);
+					for (int i=0;i<height;i++) {
+						for (int j=0;j<width;j++) {
 							
 							int absValue = (int)returnData[i][j] - (int)Short.MIN_VALUE;
 
@@ -1117,7 +1194,7 @@ public class ImagePreprocessing {
 					}
 					//ApplicationWindow.logger.info("minimum value ="+minimumValue);
 
-					//set black to minimum value and stretch
+					//set black to minimum value 
 					int minimumValueDistanceFromZero = (int)minimumValue-(int)Short.MIN_VALUE;
 					if (minimumValueDistanceFromZero > 2*(int)Short.MAX_VALUE) {
 						minimumValueDistanceFromZero = 2*(int)Short.MAX_VALUE;
@@ -1127,28 +1204,15 @@ public class ImagePreprocessing {
 						minimumValueDistanceFromMax = 2*(int)Short.MAX_VALUE;
 					}
 					
-					for (int i=0;i<width;i++) {
-						for (int j=0;j<height;j++) {
+					for (int i=0;i<height;i++) {
+						for (int j=0;j<width;j++) {
 							//deduce minimum value (set black to minimum)
 							if (i==10 & j ==10) {
 
 								//ApplicationWindow.logger.info("2 cutting value from "+returnData[i][j]+" to "+(short) ((int)returnData[i][j] - minimumValueDistanceFromZero));
 							}
 							returnData[i][j] = (short) ((int)returnData[i][j] - minimumValueDistanceFromZero);
-							
-							//stretch
-							//point distance from zero
-							//int pointValueDistanceFromZero = (int)returnData[i][j]-(int)Short.MIN_VALUE;
-							
-							//float delta = (((float)pointValueDistanceFromZero) / ((float)minimumValueDistanceFromMax))*minimumValueDistanceFromZero;
-							//if (i==10 & j ==10) {
-							//	ApplicationWindow.logger.info("3 re-stretching value from "+returnData[i][j]+" to "+(returnData[i][j] + delta));
-							//}
-							//if (returnData[i][j] + delta > Short.MAX_VALUE) {
-							//	returnData[i][j] = Short.MAX_VALUE;
-							//} else { 
-							//	returnData[i][j] = (short) (returnData[i][j] + delta);
-							//}
+
 
 						}
 					}					
@@ -1174,4 +1238,131 @@ public class ImagePreprocessing {
 				throw new FitsException("Cannot understand file, it has a type="+kernelData.getClass().getName());
 			}	
 	}
+	
+	/**
+	 * Stretches all pixel values non-linearly (the lowest values more) then sets the black point to zero
+	 * and then stretches all values so that the maximum value reaches the allowed max value (high value to white)
+	 * iteratively. 
+	 * @param intensity
+	 * @param iterations
+	 * @return
+	 * @throws FitsException 
+	 */
+	private Object stretchImageEnhanceLow(Object kernelData, int intensity, int iterations, int width, int height) throws FitsException {
+			//ApplicationWindow.logger.info("will stretch FITS image with factor:"+intensity+" for iterations:"+iterations+" width="+width+" height="+height);
+						
+			if (kernelData instanceof short[][]) {
+				short[][] data =(short[][]) kernelData;
+				
+				//copy initial set of data
+				short[][] returnData = new short[height][width];
+				ApplicationWindow.logger.info("will stretch: width="+width+" height="+height);
+				ApplicationWindow.logger.info("from data: width="+data.length+" height="+data[0].length);
+
+				for (int i=0;i<height;i++) {
+					for (int j=0;j<width;j++) {
+						returnData[i][j] = data[i][j];
+					}
+				}
+				
+				//stretch from current value to value * 2, scaled from 1 ==> 0 depending on the distance to the max value. 
+				for (int iteration=0;iteration<iterations;iteration++) {
+					short minimumValue = Short.MAX_VALUE;
+					short maximumValue = Short.MIN_VALUE;
+
+					//stretch each value
+					for (int i=0;i<height;i++) {
+						for (int j=0;j<width;j++) {
+							
+//							if (i==10 & j ==10) {
+//								ApplicationWindow.logger.info("stretch 1: start value "+returnData[i][j]);
+//							}							
+							int absValue = (int)returnData[i][j] - (int)Short.MIN_VALUE;
+							float scale = 1 - (((float)absValue) / (2*((float) Short.MAX_VALUE)));
+							float newValue = (float)absValue * ((float)1 + ((((float)intensity/(float)100))*scale));
+							newValue = newValue - Short.MAX_VALUE;
+							if (newValue > Short.MAX_VALUE) {
+								returnData[i][j] = Short.MAX_VALUE;
+							} else {
+								returnData[i][j] = (short)newValue;
+							}
+							//set minimum value
+							if (minimumValue > returnData[i][j]) {
+								minimumValue=returnData[i][j];
+							}
+							//set maximum value
+							if (maximumValue < returnData[i][j]) {
+								maximumValue=returnData[i][j];
+							}
+//							if (i==10 & j ==10) {
+//								ApplicationWindow.logger.info("stretch 2: end value "+returnData[i][j]);
+//							}						
+
+						}
+					}
+					//ApplicationWindow.logger.info("minimum value ="+minimumValue);
+
+					//set black to minimum value and stretch
+					int minimumValueDistanceFromZero = (int)minimumValue-(int)Short.MIN_VALUE;
+					if (minimumValueDistanceFromZero > 2*(int)Short.MAX_VALUE) {
+						minimumValueDistanceFromZero = 2*(int)Short.MAX_VALUE;
+					}
+					int maximumValueDistanceFromMax = (int)Short.MAX_VALUE-(int)maximumValue;	
+					if (maximumValueDistanceFromMax > 2*(int)Short.MAX_VALUE) {
+						maximumValueDistanceFromMax = 2*(int)Short.MAX_VALUE;
+					}
+					//ApplicationWindow.logger.info("stretch 2.5: maximumValueDistanceFromMax "+maximumValueDistanceFromMax);
+					//ApplicationWindow.logger.info("stretch 2.5: stretchCoefficient second part "+(((float)maximumValueDistanceFromMax)/(2*(float)Short.MAX_VALUE)));
+
+					float stretchCoefficient = 1 + (((float)maximumValueDistanceFromMax)/(2*(float)Short.MAX_VALUE));
+					//ApplicationWindow.logger.info("stretch 2.5: stretchCoefficient "+stretchCoefficient);
+
+					for (int i=0;i<height;i++) {
+						for (int j=0;j<width;j++) {
+							//deduce minimum value (set black to minimum)
+							int absValue = (int)returnData[i][j] - (int)Short.MIN_VALUE - minimumValueDistanceFromZero;
+							
+							//multiply
+							float newValue = ((float)absValue) * stretchCoefficient;
+//							if (i==10 & j ==10) {
+//								ApplicationWindow.logger.info("stretch 3: abs end value "+absValue);
+//								ApplicationWindow.logger.info("stretch 3: abs newValue "+newValue);
+//
+//							}	
+							newValue = newValue - Short.MAX_VALUE;	
+//							if (i==10 & j ==10) {
+//								ApplicationWindow.logger.info("stretch 3: newValue "+newValue);
+//
+//							}	
+							if (newValue > Short.MAX_VALUE) {
+								returnData[i][j] =  Short.MAX_VALUE;
+							} else {
+								returnData[i][j] = (short)newValue;
+							}
+//							if (i==10 & j ==10) {
+//								ApplicationWindow.logger.info("stretch 4: end value "+returnData[i][j]);
+//							}									
+						}
+					}					
+
+					//
+				}
+				//ApplicationWindow.logger.info("started with value "+data[10][10]+" finished with value "+returnData[10][10]);
+
+				return returnData;
+
+			} else if (kernelData instanceof int[][]) {
+				int[][] data = (int[][])kernelData;
+				
+				return null;
+				
+			} else if (kernelData instanceof float[][]) {
+				float[][] data = (float[][])kernelData;
+				
+				return null;
+			}
+			else {
+				throw new FitsException("Cannot understand file, it has a type="+kernelData.getClass().getName());
+			}	
+	}	
 }

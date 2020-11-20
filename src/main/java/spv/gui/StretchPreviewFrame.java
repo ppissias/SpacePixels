@@ -15,6 +15,7 @@ import javax.swing.border.EmptyBorder;
 import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
 import spv.util.FitsFileInformation;
+import spv.util.StretchAlgorithm;
 
 import javax.swing.JSplitPane;
 import javax.swing.JButton;
@@ -29,9 +30,12 @@ public class StretchPreviewFrame extends JFrame {
 	
 	private JPanel strethcedImagePanel;
 	
-	private JLabel originalImageLabel;
+	//private JLabel originalImageLabel;
 	
-	private JLabel stretchedImageLabel;
+	//private JLabel stretchedImageLabel;
+
+	private ImageVisualizerComponent originalImageComponent = new ImageVisualizerComponent();
+	private ImageVisualizerComponent stretchedImageComponent = new ImageVisualizerComponent();
 
 	// link to main window
 	private ApplicationWindow mainAppWindow;
@@ -61,15 +65,15 @@ public class StretchPreviewFrame extends JFrame {
 		
         BufferedImage originalBufferedImage = new BufferedImage(350, 350, BufferedImage.TYPE_INT_RGB);
         ImageIcon originalImageIcon = new ImageIcon( originalBufferedImage );
-        originalImageLabel = new JLabel(originalImageIcon);
+        //originalImageLabel = new JLabel(originalImageIcon);
         
-        originalImagePanel.add(originalImageLabel);
+        originalImagePanel.add(originalImageComponent);
         
         BufferedImage stretchedBufferedImage = new BufferedImage(350, 350, BufferedImage.TYPE_INT_RGB);
         ImageIcon stretchedImageIcon = new ImageIcon( stretchedBufferedImage );
-        stretchedImageLabel= new JLabel(stretchedImageIcon);
+        //stretchedImageLabel= new JLabel(stretchedImageIcon);
         
-        strethcedImagePanel.add(stretchedImageLabel);
+        strethcedImagePanel.add(stretchedImageComponent);
         
         JButton btnNewButton = new JButton("show full size");
         btnNewButton.addActionListener(new ActionListener() {
@@ -83,11 +87,15 @@ public class StretchPreviewFrame extends JFrame {
         			Fits selectedFitsImage;
 					try {
 						selectedFitsImage = new Fits(selectedFitsFileInfo.getFilePath());
+        				StretchAlgorithm algo = mainAppWindow.getConfigurationApplicationPanel().getStretchAlgorithm();
 
         				//get image data
         				Object kernelData = selectedFitsImage.getHDU(0).getKernel();
         				
-        				BufferedImage fitsImagePreview = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData, stretchFactor, iterations);
+        				BufferedImage fitsImagePreview = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData, 
+        						selectedFitsFileInfo.getSizeWidth(), 
+        						selectedFitsFileInfo.getSizeHeight(), 
+        						stretchFactor, iterations, algo);
         				selectedFitsImage.close();
         				
         				mainAppWindow.getFullImagePreviewFrame().setImage(fitsImagePreview);
@@ -109,12 +117,15 @@ public class StretchPreviewFrame extends JFrame {
 	}
 	
 	public void setOriginalImage(BufferedImage image) {
-        ImageIcon newImageIcon = new ImageIcon( image );
-        originalImageLabel.setIcon(newImageIcon);		
+       // ImageIcon newImageIcon = new ImageIcon( image );
+        //originalImageLabel.setIcon(newImageIcon);	
+		originalImageComponent.setImage(image);
 	}
 	
 	public void setStretchedImage(BufferedImage image) {
-        ImageIcon newImageIcon = new ImageIcon( image );
-        stretchedImageLabel.setIcon(newImageIcon);
+        //ImageIcon newImageIcon = new ImageIcon( image );
+        //stretchedImageLabel.setIcon(newImageIcon);
+        stretchedImageComponent.setImage(image);
+        
 	}	
 }
