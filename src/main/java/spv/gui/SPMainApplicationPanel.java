@@ -2,6 +2,7 @@ package spv.gui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
@@ -91,7 +92,6 @@ public class SPMainApplicationPanel extends JPanel {
 		applySolutionButton.setEnabled(false);
 		applySolutionButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent event) {
-				//TODO disable / enable controls
 				if (table.getValueAt(table.getSelectedRow(), 6) != null) {
 					setProgressBarWorking();
 					disableControlsProcessing();
@@ -260,7 +260,6 @@ public class SPMainApplicationPanel extends JPanel {
 		stretchButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {
 				//only stretch images
-				//TODO enable disable controls
 				setProgressBarWorking();
 				disableControlsProcessing();
 				new Thread() {
@@ -309,10 +308,8 @@ public class SPMainApplicationPanel extends JPanel {
 		blinkButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {
 				//new thread 
-				//TODO enable disable controls
 				disableControlsBlinking();
 				mainAppWindow.getFullImagePreviewFrame().setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-				//TODO disable closing of the blink window
 				new Thread() { 
 					public void run() {
 						if (blinkButton.getText().equals("blink")) {
@@ -321,10 +318,10 @@ public class SPMainApplicationPanel extends JPanel {
 
 								@Override
 								public void run() {
-									mainAppWindow.getFullImagePreviewFrame().setVisible(true);
 
 									blinkButton.setText("stop blinking");
-									
+									mainAppWindow.getFullImagePreviewFrame().setVisible(true);
+
 								}});
 			        		FitsFileInformation[] selectedFitsFilesInfo = mainAppWindow.getSelectedFiles();
 			        		BufferedImage[] images = new BufferedImage[selectedFitsFilesInfo.length];
@@ -647,7 +644,8 @@ public class SPMainApplicationPanel extends JPanel {
 					//update full size as well
 					
 					BufferedImage fitsImagePreviewFS = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData, selectedFitsFileInfo.getSizeWidth(), 
-							selectedFitsFileInfo.getSizeHeight(), stretchFactor, iterations, algo);				
+							selectedFitsFileInfo.getSizeHeight(), stretchFactor, iterations, algo);	
+
 					mainAppWindow.getFullImagePreviewFrame().setImage(fitsImagePreviewFS);
 					
 				}				

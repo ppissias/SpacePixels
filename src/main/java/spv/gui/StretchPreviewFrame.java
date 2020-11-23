@@ -50,6 +50,7 @@ public class StretchPreviewFrame extends JFrame {
 		setResizable(false);
 		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		setBounds(100, 100, 800, 440);
+		setAlwaysOnTop(true);
 		contentPane = new JPanel();
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
 		setContentPane(contentPane);
@@ -78,7 +79,6 @@ public class StretchPreviewFrame extends JFrame {
         JButton btnNewButton = new JButton("show full size");
         btnNewButton.addActionListener(new ActionListener() {
         	public void actionPerformed(ActionEvent arg0) {
-        		mainAppWindow.getFullImagePreviewFrame().setVisible(true);
         		int stretchFactor = mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue();
         		int iterations = mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue();
         		
@@ -99,6 +99,8 @@ public class StretchPreviewFrame extends JFrame {
         				selectedFitsImage.close();
         				
         				mainAppWindow.getFullImagePreviewFrame().setImage(fitsImagePreview);
+                		mainAppWindow.getFullImagePreviewFrame().setVisible(true);
+
 					} catch (FitsException | IOException e) {
 						e.printStackTrace();
 						JOptionPane.showMessageDialog(StretchPreviewFrame.this,

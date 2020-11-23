@@ -1,6 +1,7 @@
 package spv.gui;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.image.BufferedImage;
 
@@ -19,21 +20,7 @@ public class FullImageStretchPreviewFrame extends JFrame {
 	private JLabel imageLabel;
 	
 	private ImageVisualizerComponent imageComponent = new ImageVisualizerComponent();
-	/**
-	 * Launch the application.
-	 */
-	public static void main(String[] args) {
-		EventQueue.invokeLater(new Runnable() {
-			public void run() {
-				try {
-					FullImageStretchPreviewFrame frame = new FullImageStretchPreviewFrame();
-					frame.setVisible(true);
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-			}
-		});
-	}
+
 
 	/**
 	 * Create the frame.
@@ -63,6 +50,11 @@ public class FullImageStretchPreviewFrame extends JFrame {
         //imageLabel.setIcon(newImageIcon);
 		ApplicationWindow.logger.info("setting image");
 		imageComponent.setImage(image);
+		
+		imageComponent.setPreferredSize(new Dimension(image.getWidth(), image.getHeight()));
+		//TODO when blinkin for the first time if the window is not openeed before, then its size does not update accordingly...
 	}
+	
+	
 
 }

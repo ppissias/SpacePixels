@@ -28,6 +28,7 @@ public class ImageVisualizerComponent extends Component {
 		ApplicationWindow.logger.info("setImage");
 
 		repaint();
+		
 	}
 	@Override
 	public Dimension getPreferredSize() {

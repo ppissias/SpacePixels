@@ -68,7 +68,6 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		return stretchIterationsSlider;
 	}
 
-	//TODO when the image is shown full size then it cannot be plate solved (there is an open Fits file somewhere)
 	/**
 	 * Create the panel.
 	 */
