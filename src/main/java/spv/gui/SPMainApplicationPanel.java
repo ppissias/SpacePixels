@@ -631,7 +631,7 @@ public class SPMainApplicationPanel extends JPanel {
 		FitsFileInformation selectedFitsFileInfo = getSelectedFileInformation();
 		if (selectedFitsFileInfo != null) {
 			Fits selectedFitsImage = new Fits(selectedFitsFileInfo.getFilePath());
-			if (selectedFitsFileInfo.getSizeHeight() > 350 && selectedFitsFileInfo.getSizeWidth()>350) {
+			//if (selectedFitsFileInfo.getSizeHeight() > 350 && selectedFitsFileInfo.getSizeWidth()>350) {
 				//get image data
 				Object kernelData = selectedFitsImage.getHDU(0).getKernel();
 				
@@ -649,8 +649,8 @@ public class SPMainApplicationPanel extends JPanel {
 					mainAppWindow.getFullImagePreviewFrame().setImage(fitsImagePreviewFS);
 					
 				}				
-			} else {
-			}
+			//} else {
+			//}
 			
 
 			selectedFitsImage.close();

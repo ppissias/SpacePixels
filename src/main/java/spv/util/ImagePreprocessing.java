@@ -838,9 +838,18 @@ public class ImagePreprocessing {
 		if (kernelData instanceof short[][]) {
 			short[][] data =(short[][]) kernelData;
 			
-			//determine average value
-			for (int i=0;i<350;i++) {
-				for (int j=0;j<350;j++) {
+			int imageHeight = data.length;
+			int imageWidth = data[0].length;
+			
+			if (imageWidth > 350) {
+				imageWidth = 350;
+			}		
+			if (imageHeight > 350) {
+				imageHeight = 350;
+			}
+			for (int i=0;i<imageHeight;i++) {
+				for (int j=0;j<imageWidth;j++) {
+					
 					int convertedValue = ((int)data[i][j]) + ((int)Short.MAX_VALUE);
 					float intensity = ((float)convertedValue) / (2*(float)Short.MAX_VALUE);
 					ret.setRGB(j, i, new Color(intensity,intensity,intensity, 1.0f).getRGB()); 
@@ -857,8 +866,17 @@ public class ImagePreprocessing {
 		}else if (kernelData instanceof short[][][]) {
 			short[][][] data =(short[][][]) kernelData;
 
-			for (int i=0;i<350;i++) {
-				for (int j=0;j<350;j++) {
+			int imageHeight = data[0].length;
+			int imageWidth = data[0][0].length;
+			
+			if (imageWidth > 350) {
+				imageWidth = 350;
+			}		
+			if (imageHeight > 350) {
+				imageHeight = 350;
+			}			
+			for (int i=0;i<imageHeight;i++) {
+				for (int j=0;j<imageWidth;j++) {
 					int convertedValueR = ((int)data[0][i][j]) + ((int)Short.MAX_VALUE) +1;
 					float intensityR = ((float)convertedValueR) / (2*(float)Short.MAX_VALUE);
 
@@ -904,11 +922,21 @@ public class ImagePreprocessing {
 
         if (kernelData instanceof short[][]) {
 			short[][] data =(short[][]) kernelData;
+	
+			int imageHeight = data.length;
+			int imageWidth = data[0].length;
 			
-			short[][] stretchedData = (short[][])stretchImageData(data, stretchFactor, iterations, width, height, algo);
+			if (imageWidth > width) {
+				imageWidth = width;
+			}		
+			if (imageHeight > height) {
+				imageHeight = height;
+			}	
 			
-			for (int i=0;i<height;i++) {
-				for (int j=0;j<width;j++) {
+			short[][] stretchedData = (short[][])stretchImageData(data, stretchFactor, iterations, imageWidth, imageHeight, algo);
+		
+			for (int i=0;i<imageHeight;i++) {
+				for (int j=0;j<imageWidth;j++) {
 
 					int absValue = ((int)stretchedData[i][j]) + ((int)Short.MAX_VALUE)+1;
 					if (absValue > 2*Short.MAX_VALUE) {
@@ -939,9 +967,18 @@ public class ImagePreprocessing {
 			short[][] stretchedDataGreen = (short[][])stretchImageData(data[1], stretchFactor, iterations, width, height, algo);
 			short[][] stretchedDataBlue = (short[][])stretchImageData(data[2], stretchFactor, iterations, width, height, algo);
 
+			int imageHeight = data[0].length;
+			int imageWidth = data[0][0].length;
+			
+			if (imageWidth > width) {
+				imageWidth = width;
+			}		
+			if (imageHeight > height) {
+				imageHeight = height;
+			}				
 			//determine average value
-			for (int i=0;i<height;i++) {
-				for (int j=0;j<width;j++) {
+			for (int i=0;i<imageHeight;i++) {
+				for (int j=0;j<imageWidth;j++) {
 
 					int absValueRed = ((int)stretchedDataRed[i][j]) + ((int)Short.MAX_VALUE)+1;
 					if (absValueRed > 2*Short.MAX_VALUE) {
@@ -1225,7 +1262,7 @@ public class ImagePreprocessing {
 	}
 	
 	/**
-	 * Stretches all pixel values non-linearly (the lowest values more) then sets the black point to zero
+	 * Stretches all pixel values (the lowest values more) then sets the black point to zero
 	 * and then stretches all values so that the maximum value reaches the allowed max value (high value to white)
 	 * iteratively. 
 	 * @param intensity
