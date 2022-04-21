@@ -1,5 +1,6 @@
 package spv.gui;
 
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -10,28 +11,25 @@ import java.awt.event.ItemListener;
 import java.io.File;
 import java.io.IOException;
 
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JSlider;
+import javax.swing.JTextField;
+import javax.swing.SwingConstants;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 
 import org.apache.commons.configuration2.ex.ConfigurationException;
 
 import nom.tam.fits.FitsException;
 import spv.util.FitsFileInformation;
-
-import javax.swing.JSeparator;
-import java.awt.Font;
-import javax.swing.JTextField;
-import javax.swing.SwingConstants;
-import javax.swing.JSlider;
-import javax.swing.event.ChangeListener;
-import javax.swing.event.ChangeEvent;
-import javax.swing.JCheckBox;
-import javax.swing.JComboBox;
-import javax.swing.DefaultComboBoxModel;
 import spv.util.StretchAlgorithm;
 
 public class SPConfigurationApplicationPanel extends JPanel {

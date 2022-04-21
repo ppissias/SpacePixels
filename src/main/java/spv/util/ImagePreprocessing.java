@@ -10,7 +10,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,7 +40,6 @@ import nom.tam.fits.FitsException;
 import nom.tam.fits.FitsFactory;
 import nom.tam.fits.Header;
 import nom.tam.fits.HeaderCard;
-import nom.tam.util.BufferedDataOutputStream;
 import nom.tam.util.Cursor;
 import spv.gui.ApplicationWindow;
 
@@ -52,8 +50,8 @@ import spv.gui.ApplicationWindow;
  * updating the FITS header files. 
  * 
  * TODO
- * stretch images after mono conversion: values from Average and above: stretch to the helf value between their current value and the MAX value.
- * no nlinear stretch to help detections. 
+ * stretch images after mono conversion: values from Average and above: stretch to the half value between their current value and the MAX value.
+ * non linear stretch to help detections. 
  * 
  * @author Petros Pissias
  *

@@ -10,14 +10,12 @@ import java.io.File;
 import java.io.IOException;
 import java.util.logging.Logger;
 
-import javax.swing.ImageIcon;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JTabbedPane;
-import javax.swing.JTable;
 import javax.swing.table.AbstractTableModel;
 
 import org.apache.commons.configuration2.ex.ConfigurationException;
