@@ -1,7 +1,6 @@
 # SpacePixels
- Image preparation tool for detecting objects in astronomical images. 
- This is an ESOC innovation cup activity.
- 
+ Image preparation tool for supporting detecting objects in astronomical images. 
+  
 ## Running
  ```
  gradlew run
