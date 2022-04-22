@@ -1,6 +1,6 @@
 # SpacePixels
  Image preparation tool for supporting object detection in astronomical images (FITS). 
- The intention for this software is to be an easy-to-use tool that typical amateur astronomers can use to detect moving objects in theri astronomical images. 
+ The intention for this software is to be an easy-to-use tool that typical amateur astronomers can use to detect moving objects in their astronomical images. 
  In the current phase, the system is preparing a set of images and relies on other software for automatic object detection, but it is planned to extend the system for doing also object detection. 
  
  The tool currently has the following capabilities
