@@ -11,7 +11,8 @@
  - Apply a plate solution to the FITS header of a set of images
  - Stretch and blink a set of FITS images 
 
-The software is currently still in alpha version. The software was tested with the A-Track object detection software succesfully (https://github.com/akdeniz-uzay/A-Track ).
+The software is currently still in alpha version. 
+The software was tested with the A-Track object detection software succesfully (https://github.com/akdeniz-uzay/A-Track ).
   
 ## Running
  ```
