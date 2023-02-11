@@ -45,10 +45,12 @@ public class ApplicationWindow {
 	
 	private JMenu fileMenu = new JMenu("File");
 	private JMenuItem importMenuItem = new JMenuItem("Import aligned fits files");
+
+	
 	public void setMenuState(boolean state) {
 		importMenuItem.setEnabled(state);
 	}
-	
+
 	public FullImageStretchPreviewFrame getFullImagePreviewFrame() {
 		return fullImagePreviewFrame;
 	}
@@ -84,7 +86,7 @@ public class ApplicationWindow {
 		stretchPreviewFrame.setVisible(false);
 		fullImagePreviewFrame.setVisible(false);
 		frmIpodImage = new JFrame();
-		frmIpodImage.setTitle("IPOD - Image Preparation for Object Detection");
+		frmIpodImage.setTitle("SpacePixels");
 		frmIpodImage.setBounds(new Rectangle(100, 100, 1000, 650));
 		frmIpodImage.setResizable(false);
 		frmIpodImage.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);

@@ -234,6 +234,9 @@ public class SPMainApplicationPanel extends JPanel {
 		        		ApplicationWindow.logger.info("loading image: "+annotatedImageURL.toString());
 						try {
 							BufferedImage image = ImageIO.read(annotatedImageURL);
+							if (image == null) {
+								throw new IOException("cannot show image: "+annotatedImageURL.toString());
+							}
 		                    JLabel label = new JLabel(new ImageIcon(image));
 		                    JFrame f = new JFrame();
 		                    //f.setDefaultCloseOperation(JFrame.);

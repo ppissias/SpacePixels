@@ -43,7 +43,7 @@ public class StretchPreviewFrame extends JFrame {
 		this.mainAppWindow = applicationWindow;
 		
 		setResizable(false);
-		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+		setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
 		setBounds(100, 100, 800, 440);
 		setAlwaysOnTop(true);
 		contentPane = new JPanel();

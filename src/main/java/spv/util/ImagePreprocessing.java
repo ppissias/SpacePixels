@@ -806,6 +806,23 @@ public class ImagePreprocessing {
 			//now stretch each value
 			for (int i=0;i<data[0].length;i++) {
 				for (int j=0; j<data[0][i].length; j++) {
+					
+					//if algo is extreme
+					//set max value to all (convert to mono)
+					if (algo.equals(StretchAlgorithm.EXTREME)) {
+						short max = stretchedRedData[i][j];
+						if (max < stretchedGreenData[i][j]) {
+							max =  stretchedGreenData[i][j];
+						}
+						if (max < stretchedBlueData[i][j]) {
+							max =  stretchedBlueData[i][j];
+						}	
+						
+						stretchedRedData[i][j] = max;
+						stretchedGreenData[i][j] = max;
+						stretchedBlueData[i][j] = max;
+					}
+					
 					data[0][i][j] = (short) (stretchedRedData[i][j]);
 					data[1][i][j] = (short) (stretchedGreenData[i][j]);
 					data[2][i][j] = (short) (stretchedBlueData[i][j]);						
@@ -933,6 +950,7 @@ public class ImagePreprocessing {
 			
 			short[][] stretchedData = (short[][])stretchImageData(data, stretchFactor, iterations, imageWidth, imageHeight, algo);
 		
+			//convert to RGB
 			for (int i=0;i<imageHeight;i++) {
 				for (int j=0;j<imageWidth;j++) {
 
@@ -974,7 +992,7 @@ public class ImagePreprocessing {
 			if (imageHeight > height) {
 				imageHeight = height;
 			}				
-			//determine average value
+			//determine absolute value
 			for (int i=0;i<imageHeight;i++) {
 				for (int j=0;j<imageWidth;j++) {
 
@@ -995,9 +1013,23 @@ public class ImagePreprocessing {
 						absValueBlue = 2*Short.MAX_VALUE;
 					}					
 					float intensityBlue = (((float)absValueBlue) / ((float)(2*Short.MAX_VALUE)));
-
-
 				
+					//if algo is extreme
+					//set max value to all (convert to mono)
+					if (algo.equals(StretchAlgorithm.EXTREME)) {
+						float maxValue = absValueRed;
+						if (maxValue < absValueGreen) {
+							maxValue = absValueGreen;
+						}
+						if (maxValue < absValueBlue) {
+							maxValue = absValueBlue;
+						}
+						
+						intensityRed = (((float)maxValue) / ((float)(2*Short.MAX_VALUE)));
+						intensityGreen = intensityRed;
+						intensityBlue= intensityRed;
+					}
+						
 					try {
 						Color targetColor = new Color(intensityRed,intensityGreen,intensityBlue, 1.0f);
 						ret.setRGB(j, i,  targetColor.getRGB()); 
@@ -1172,6 +1204,11 @@ public class ImagePreprocessing {
 		case ENHANCE_LOW: {
 			return stretchImageEnhanceLow(kernelData, intensity, iterations, width, height);
 
+		}
+		
+		case EXTREME : {
+			return stretchImageEnhanceExtreme(kernelData, intensity, iterations, width, height);
+		
 		}
 		default : {
 			return stretchImageEnhanceLow(kernelData, intensity, iterations, width, height);			
@@ -1363,4 +1400,68 @@ public class ImagePreprocessing {
 				throw new FitsException("Cannot understand file, it has a type="+kernelData.getClass().getName());
 			}	
 	}	
+
+	
+	/**
+	 * Converts to mono and stretches all pixel values above a certain value to an intensity 
+	 * @param kernelData the data
+	 * @param threshhold above that threshhold all values will be strethced to intensity
+	 * @param intensity the intensity to be stretched
+	 * @param width
+	 * @param height
+	 * @return the stretched data
+	 * @throws FitsException
+	 */
+	private Object stretchImageEnhanceExtreme(Object kernelData, int threshold, int intensity, int width, int height) throws FitsException {
+			//ApplicationWindow.logger.info("will stretch FITS image with factor:"+intensity+" for iterations:"+iterations+" width="+width+" height="+height);
+						
+			if (kernelData instanceof short[][]) {
+				short[][] data =(short[][]) kernelData;
+				
+				//copy initial set of data
+				short[][] returnData = new short[height][width];
+
+				for (int i=0;i<height;i++) {
+					for (int j=0;j<width;j++) {
+						returnData[i][j] = data[i][j];
+						
+						//TODO
+						//need to find average value and then the threshold will be around that average value (like -+ 10* value)
+						//check if value is above threshold and set
+						//convert to abs
+						int absValue = (int)returnData[i][j] - (int)Short.MIN_VALUE;
+						//get pixel value scale to max
+						float scale = (((float)absValue) / (2*((float) Short.MAX_VALUE)))*100;
+						if (scale >= threshold) {
+							//set to instensity (intensity is from 1-20)
+							float newValue = (((float)intensity)/(float)20)*(2*((float) Short.MAX_VALUE));
+							newValue = newValue - Short.MAX_VALUE;
+							if (newValue > Short.MAX_VALUE) {
+								returnData[i][j] = Short.MAX_VALUE;
+							} else {
+								returnData[i][j] = (short)newValue;
+							}							
+						}
+						
+					}
+				}
+				
+				//ApplicationWindow.logger.info("started with value "+data[10][10]+" finished with value "+returnData[10][10]);
+
+				return returnData;
+
+			} else if (kernelData instanceof int[][]) {
+				int[][] data = (int[][])kernelData;
+				
+				return null;
+				
+			} else if (kernelData instanceof float[][]) {
+				float[][] data = (float[][])kernelData;
+				
+				return null;
+			}
+			else {
+				throw new FitsException("Cannot understand file, it has a type="+kernelData.getClass().getName());
+			}	
+	}		
 }

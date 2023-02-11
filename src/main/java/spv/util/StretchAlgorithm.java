@@ -2,5 +2,6 @@ package spv.util;
 
 public enum StretchAlgorithm {
 	ENHANCE_LOW,
-	ENHANCE_HIGH
+	ENHANCE_HIGH,
+	EXTREME
 }
