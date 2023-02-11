@@ -1436,11 +1436,7 @@ public class ImagePreprocessing {
 					for (int j=0;j<width;j++) {
 						returnData[i][j] = data[i][j];
 						
-						//TODO
-						//need to find average value and then the threshold will be around that average value (like -+ 10* value)
-						
-						
-						
+					
 						//check if value is above threshold and set
 						//convert to abs
 						int absValue = (int)returnData[i][j] - (int)Short.MIN_VALUE;
