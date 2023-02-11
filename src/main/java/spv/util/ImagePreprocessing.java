@@ -1421,18 +1421,33 @@ public class ImagePreprocessing {
 				//copy initial set of data
 				short[][] returnData = new short[height][width];
 
+				//determine average pixel value (noise level)
+				
+				long allPixelSumValue = 0;
+				for (int i=0;i<height;i++) {
+					for (int j=0;j<width;j++) {
+						allPixelSumValue += (data[i][j]- (int)Short.MIN_VALUE);				
+					}
+				}
+				
+				float averageNoiseLevel = ((float)allPixelSumValue)/((float)width*height);
+				ApplicationWindow.logger.info("avg noise level="+averageNoiseLevel);
 				for (int i=0;i<height;i++) {
 					for (int j=0;j<width;j++) {
 						returnData[i][j] = data[i][j];
 						
 						//TODO
 						//need to find average value and then the threshold will be around that average value (like -+ 10* value)
+						
+						
+						
 						//check if value is above threshold and set
 						//convert to abs
 						int absValue = (int)returnData[i][j] - (int)Short.MIN_VALUE;
 						//get pixel value scale to max
-						float scale = (((float)absValue) / (2*((float) Short.MAX_VALUE)))*100;
-						if (scale >= threshold) {
+						//float scale = (((float)absValue) / (2*((float) Short.MAX_VALUE)))*100;
+						
+						if (absValue >= averageNoiseLevel+10*threshold) {
 							//set to instensity (intensity is from 1-20)
 							float newValue = (((float)intensity)/(float)20)*(2*((float) Short.MAX_VALUE));
 							newValue = newValue - Short.MAX_VALUE;
