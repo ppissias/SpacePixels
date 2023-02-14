@@ -59,7 +59,9 @@ public class FullImageStretchPreviewFrame extends JFrame {
 		imageComponent.setImage(image);
 		
 		imageComponent.setPreferredSize(new Dimension(image.getWidth(), image.getHeight()));
+		
 		//TODO when blinkin for the first time if the window is not openeed before, then its size does not update accordingly...
+		this.setSize(image.getWidth(), image.getHeight());
 	}
 	
 	
