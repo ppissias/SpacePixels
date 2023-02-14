@@ -31,6 +31,11 @@ Quick Tutorial.
 
 [![SpacePixels Tutorial](https://img.youtube.com/vi/4kFGBP43s6M/0.jpg)](https://www.youtube.com/watch?v=4kFGBP43s6M)
 
+## Download
+
+You can download the latest release form the link below.
+
+[Download latest release](https://github.com/ppissias/SpacePixels/releases/download/Feb-2023-1/SpacePixels.zip)
   
 ## Running
  ```
