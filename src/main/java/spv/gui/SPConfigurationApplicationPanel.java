@@ -146,7 +146,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_astapPathLabel.gridy = 2;
 		add(astapPathLabel, gbc_astapPathLabel);
 
-		JLabel groupLabel = new JLabel("Parameters used to help with plate solving (optional)");
+		JLabel groupLabel = new JLabel("Parameters used to help with plate solving - NEAR SOLVE NOT IMPLEMENTED CURRENTLY");
 		groupLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
 		GridBagConstraints gbc_groupLabel = new GridBagConstraints();
 		gbc_groupLabel.anchor = GridBagConstraints.WEST;
@@ -371,6 +371,8 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_stretchAlgoCombo.gridx = 1;
 		gbc_stretchAlgoCombo.gridy = 15;
 		add(stretchAlgoCombo, gbc_stretchAlgoCombo);
+		
+
 
 		JLabel stretchIntensityLabel = new JLabel("Intensity");
 		GridBagConstraints gbc_stretchIntensityLabel = new GridBagConstraints();
@@ -386,7 +388,7 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_stretchIterationsLabel.gridx = 1;
 		gbc_stretchIterationsLabel.gridy = 16;
 		add(stretchIterationsLabel, gbc_stretchIterationsLabel);
-
+		
 		stretchSlider = new JSlider();
 		stretchSlider.setToolTipText("Intensity");
 		stretchSlider.addChangeListener(new ChangeListener() {
@@ -545,6 +547,25 @@ public class SPConfigurationApplicationPanel extends JPanel {
 		gbc_saveConfigButton.gridx = 1;
 		gbc_saveConfigButton.gridy = 20;
 		add(saveConfigButton, gbc_saveConfigButton);
+		
+		//create action listener to change stretch parameter labels for EXTREME stretching
+		stretchAlgoCombo.addActionListener(new ActionListener() {
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				 if (StretchAlgorithm.EXTREME.equals( stretchAlgoCombo.getSelectedItem())) {
+					 //
+					 stretchIntensityLabel.setText("Noise threshold");
+					 stretchIterationsLabel.setText("Intensity");
+					 stretchIterationsSlider.setValue(15);
+				 } else {
+					 //other options
+					 stretchIntensityLabel.setText("Intensity");
+					 stretchIterationsLabel.setText("Iterations");					 
+				 }
+			}
+			
+		});
 
 	}
 
