@@ -1,5 +1,11 @@
-/**
+/*
+ * SpacePixels
  * 
+ * Copyright (c)2020-2023, Petros Pissias.
+ * See the LICENSE file included in this distribution.
+ *
+ * author: Petros Pissias <petrospis at gmail.com>
+ *
  */
 package spv.gui;
 
@@ -10,7 +16,6 @@ import spv.util.FitsFileInformation;
 
 /**
  * The table model showing information from the FITS files
- * @author Petros Pissias
  *
  */
 public class FitsFileTableModel extends AbstractTableModel {

@@ -1,5 +1,11 @@
-/**
+/*
+ * SpacePixels
  * 
+ * Copyright (c)2020-2023, Petros Pissias.
+ * See the LICENSE file included in this distribution.
+ *
+ * author: Petros Pissias <petrospis at gmail.com>
+ *
  */
 package spv.util;
 
@@ -50,10 +56,9 @@ import spv.gui.ApplicationWindow;
  * updating the FITS header files. 
  * 
  * TODO
- * stretch images after mono conversion: values from Average and above: stretch to the half value between their current value and the MAX value.
- * non linear stretch to help detections. 
+ * Stretch images after mono conversion: values from Average and above: stretch to the half value between their current value and the MAX value.
+ * Apply this non linear stretch to help with detections. 
  * 
- * @author Petros Pissias
  *
  */
 public class ImagePreprocessing {

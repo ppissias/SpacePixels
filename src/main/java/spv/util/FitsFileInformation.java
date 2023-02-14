@@ -1,5 +1,11 @@
-/**
+/*
+ * SpacePixels
  * 
+ * Copyright (c)2020-2023, Petros Pissias.
+ * See the LICENSE file included in this distribution.
+ *
+ * author: Petros Pissias <petrospis at gmail.com>
+ *
  */
 package spv.util;
 
@@ -10,7 +16,6 @@ import io.github.ppissias.astrolib.PlateSolveResult;
 
 /**
  * Holds high level information for a FITS file
- * @author Petros Pissias
  *
  */
 public class FitsFileInformation {

@@ -1,5 +1,11 @@
-/**
+/*
+ * SpacePixels
  * 
+ * Copyright (c)2020-2023, Petros Pissias.
+ * See the LICENSE file included in this distribution.
+ *
+ * author: Petros Pissias <petrospis at gmail.com>
+ *
  */
 package spv.util;
 
@@ -12,10 +18,6 @@ import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
 import org.apache.commons.configuration2.builder.fluent.Configurations;
 import org.apache.commons.configuration2.ex.ConfigurationException;
 
-/**
- * @author Petros Pissias
- *
- */
 public class SPConfigurationFile {
 
 	private final Configurations configs = new Configurations();

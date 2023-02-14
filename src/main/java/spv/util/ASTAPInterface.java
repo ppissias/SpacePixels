@@ -1,5 +1,11 @@
-/**
+/*
+ * SpacePixels
  * 
+ * Copyright (c)2020-2023, Petros Pissias.
+ * See the LICENSE file included in this distribution.
+ *
+ * author: Petros Pissias <petrospis at gmail.com>
+ *
  */
 package spv.util;
 
@@ -17,7 +23,6 @@ import io.github.ppissias.astrolib.PlateSolveResult;
  * Main ASTAP interface for plate solving.
  * Returns a task that will call the executable with the correct arguments and will wait until the result is available.
  * 
- * @author Petros Pissias
  *
  */
 public class ASTAPInterface {
