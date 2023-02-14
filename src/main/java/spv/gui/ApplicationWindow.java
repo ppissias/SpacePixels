@@ -36,6 +36,8 @@ import spv.util.ImagePreprocessing;
 public class ApplicationWindow {
 
 	private JFrame frmIpodImage;
+	
+	private final String version = "Feb-2023-2";
 
 	private volatile ImagePreprocessing imagePreProcessing;	
 	
@@ -95,7 +97,7 @@ public class ApplicationWindow {
 		stretchPreviewFrame.setVisible(false);
 		fullImagePreviewFrame.setVisible(false);
 		frmIpodImage = new JFrame();
-		frmIpodImage.setTitle("SpacePixels");
+		frmIpodImage.setTitle("SpacePixels"+" "+version);
 		frmIpodImage.setBounds(new Rectangle(100, 100, 1000, 650));
 		frmIpodImage.setResizable(false);
 		frmIpodImage.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);

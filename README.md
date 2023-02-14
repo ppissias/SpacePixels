@@ -35,7 +35,7 @@ Quick Tutorial.
 
 You can download the latest release form the link below.
 
-[Download latest release](https://github.com/ppissias/SpacePixels/releases/download/Feb-2023-1/SpacePixels.zip)
+[Download latest release](https://github.com/ppissias/SpacePixels/releases/download/Feb-2023-2/SpacePixels.zip)
   
 ## Running
  ```
