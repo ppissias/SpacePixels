@@ -8,7 +8,7 @@
 
 plugins {
     id 'java'
-	id 'application'
+    id 'application'
 }
 
 repositories {
@@ -23,14 +23,15 @@ java {
     withJavadocJar()
 }
 
-dependencies {	
-	implementation 'gov.nasa.gsfc.heasarc:nom-tam-fits:1.15.2'
-	implementation 'org.apache.commons:commons-configuration2:2.7'
-	implementation 'commons-beanutils:commons-beanutils:1.9.4'
-	implementation 'com.google.code.gson:gson:2.8.6'
-	implementation  fileTree(dir: 'lib', include: '*.jar')	
+dependencies {
+    implementation 'gov.nasa.gsfc.heasarc:nom-tam-fits:1.21.2'
+    implementation 'org.apache.commons:commons-configuration2:2.13.0'
+    implementation 'commons-beanutils:commons-beanutils:1.11.0'
+    implementation 'com.google.code.gson:gson:2.13.2'
+    implementation 'com.formdev:flatlaf:3.4'
+    implementation fileTree(dir: 'lib', include: '*.jar')
     // Use JUnit test framework
-    testImplementation 'junit:junit:4.12'
+    testImplementation 'junit:junit:4.13.2'
 }
 
 application {
