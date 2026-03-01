@@ -15,9 +15,9 @@ Deep Sky Stacker) and it can do the following:
 - Apply a plate solution coordinates to the FITS header of a set of images (as all input images are expected to be the
   same size and aligned, the solution applies to all of them)
 
-![Screenshots](https://astropetros.eu/various_files/Application1.jpeg)
+![Screenshots](https://startales.eu/various_files/Application1.jpeg)
 
-The next major release is planned to perform automatic moving object detection.
+The next major release is planned to perform automatic moving object detection (as of March 2026 - Currently being developed!)
 
 The software is currently still in alpha version.
 
