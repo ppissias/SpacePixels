@@ -1,6 +1,6 @@
 /*
  * SpacePixels
- * 
+ *
  * Copyright (c)2020-2023, Petros Pissias.
  * See the LICENSE file included in this distribution.
  *
@@ -9,9 +9,18 @@
  */
 package spv.gui;
 
-import java.awt.BorderLayout;
-import java.awt.EventQueue;
-import java.awt.FlowLayout;
+import io.github.ppissias.astrolib.PlateSolveResult;
+import nom.tam.fits.Fits;
+import nom.tam.fits.FitsException;
+import org.apache.commons.configuration2.ex.ConfigurationException;
+import spv.util.*;
+
+import javax.imageio.ImageIO;
+import javax.swing.*;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+import javax.swing.table.AbstractTableModel;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
@@ -21,748 +30,799 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.List;
 
-import javax.imageio.ImageIO;
-import javax.swing.ImageIcon;
-import javax.swing.JButton;
-import javax.swing.JCheckBox;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JProgressBar;
-import javax.swing.JScrollPane;
-import javax.swing.JTable;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
-import javax.swing.table.AbstractTableModel;
 
-import org.apache.commons.configuration2.ex.ConfigurationException;
+public class MainApplicationPanel extends JPanel {
 
-import io.github.ppissias.astrolib.PlateSolveResult;
-import nom.tam.fits.Fits;
-import nom.tam.fits.FitsException;
-import spv.util.FitsFileInformation;
-import spv.util.ImagePreprocessing;
-import spv.util.StretchAlgorithm;
+    //link to main window
+    private ApplicationWindow mainAppWindow;
 
-public class SPMainApplicationPanel extends JPanel {
+    //the table
+    private volatile JTable table;
 
-	//link to main window
-	private ApplicationWindow mainAppWindow;	
+    private final JProgressBar progressBar = new JProgressBar();
 
-	//the table
-	private volatile JTable table;
-	
-	private final JProgressBar progressBar = new JProgressBar();
-	
-	private final JButton stretchButton = new JButton("batch stretch");
-	
-	private final JButton blinkButton = new JButton("blink");
-	
-	private final JButton applySolutionButton = new JButton("apply solution");
-	
-	private final JButton showAnnotatedImageButton = new JButton("show annotated image");
-	
-	private final JButton solveButton = new JButton("Solve");
+    private final JButton stretchButton = new JButton("batch stretch");
 
-	/**
-	 * How everything connects
-	 * Now, your workflow in SpacePixels is beautifully simple. When the user hits the "Detect" button:
-	 *
-	 * You grab the linear short[][] arrays.
-	 *
-	 * You map them through the SourceExtractor to get List<List<DetectedObject>> allFrames.
-	 *
-	 * You pass that list straight into TrackLinker.findMovingObjects(...).
-	 *
-	 * You get back a clean List<Track> containing every asteroid, satellite, and meteor in the data.
-	 */
-	/**
-	 * Create the panel.
-	 */
-	public SPMainApplicationPanel(ApplicationWindow mainAppWindow) {
-		this.mainAppWindow = mainAppWindow;
-		
-		setLayout(new BorderLayout(0, 0));
+    private final JButton blinkButton = new JButton("blink");
 
-		JPanel panel = new JPanel();
-		//frame.getContentPane().add(panel, BorderLayout.NORTH);
-		
-		add(panel, BorderLayout.NORTH);
-		panel.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));
-		
-		
-		solveButton.setToolTipText("Solve current image");
+    private final JButton applySolutionButton = new JButton("apply solution");
 
-		panel.add(solveButton);
-		
-		JCheckBox astapSolveCheckbox = new JCheckBox("ASTAP");
-		astapSolveCheckbox.setToolTipText("Solve the image using ASTAP");
+    private final JButton showAnnotatedImageButton = new JButton("show annotated image");
 
-		astapSolveCheckbox.setSelected(true);
-		panel.add(astapSolveCheckbox);
-		
-		JCheckBox astrometrynetSolveCheckbox = new JCheckBox("Astrometry.net (online)");
-		astrometrynetSolveCheckbox.setToolTipText("solve the image using the online nova.astrometry.net web services");
-		panel.add(astrometrynetSolveCheckbox);
-	 
-		
-		applySolutionButton.setToolTipText("Apply solution to all images, convert to monochrome (if color) and stretch (if checked). It will create separate folders for each file category");
-		applySolutionButton.setEnabled(false);
-		applySolutionButton.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent event) {
-				if (table.getValueAt(table.getSelectedRow(), 6) != null) {
-					setProgressBarWorking();
-					disableControlsProcessing();
-					//check how the image was solved
-					FitsFileInformation imageInfo = (FitsFileInformation)table.getValueAt(table.getSelectedRow(), 6); 
-					final PlateSolveResult result = imageInfo.getSolveResult();
-					if (result.isSuccess()) {
-						//sanity check
-						final String wcsLink = result.getSolveInformation().get("wcs_link");
-						
-						new Thread() {
-							public void run() {
-								String wcsFile;
+    private final JButton solveButton = new JButton("Solve");
 
-								switch (result.getSolveInformation().get("source")) {
-								case "astrometry.net" : {
-									try {
-										URL wcsURL = new URL(wcsLink);
-										int lastSepPosition = imageInfo.getFilePath().lastIndexOf(".");	
-										wcsFile = imageInfo.getFilePath().substring(0, lastSepPosition)+".wcs";
-										//download file
-										ImagePreprocessing.downloadFile(wcsURL, wcsFile);
-										
-									} catch (IOException e) {
-										EventQueue.invokeLater(new Runnable() {
+    private final JButton detectButton = new JButton("Detect Objects");
 
-											@Override
-											public void run() {
-												JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot understand URL :"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);
-												
-											}
-											
-										});
-										return;
-									}
-									break;
-								}
-								case "astap" : {
-									wcsFile = result.getSolveInformation().get("wcs_link");
-									
-									break;
-								}
-								default : {
-									EventQueue.invokeLater(new Runnable() {
 
-										@Override
-										public void run() {
-											JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot understand solve source :"+imageInfo, "Error",JOptionPane.ERROR_MESSAGE);
-											
-										}
-										
-									});									
-									return;
-								}
-								}
-								
-								//apply the WCS file
-				        		ApplicationWindow.logger.info("applying WCS header "+wcsFile+" to all images");
-								try {
-			        				StretchAlgorithm algo = mainAppWindow.getConfigurationApplicationPanel().getStretchAlgorithm();
+    /**
+     * How everything connects
+     * Now, your workflow in SpacePixels is beautifully simple. When the user hits the "Detect" button:
+     *
+     * You grab the linear short[][] arrays.
+     *
+     * You map them through the SourceExtractor to get List<List<DetectedObject>> allFrames.
+     *
+     * You pass that list straight into TrackLinker.findMovingObjects(...).
+     *
+     * You get back a clean List<Track> containing every asteroid, satellite, and meteor in the data.
+     */
+    /**
+     * Create the panel.
+     */
+    public MainApplicationPanel(ApplicationWindow mainAppWindow) {
+        this.mainAppWindow = mainAppWindow;
 
-									mainAppWindow.getImagePreProcessing().applyWCSHeader(wcsFile, mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue(),
-											mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue(), 
-											mainAppWindow.getConfigurationApplicationPanel().isStretchEnabled() , algo);
-								} catch (IOException | FitsException e) {
-									e.printStackTrace();
-									EventQueue.invokeLater(new Runnable() {
+        setLayout(new BorderLayout(0, 0));
 
-										@Override
-										public void run() {
-											JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot apply WCS header :"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);											
-										}
-										
-									});										
-		
-								}
-								EventQueue.invokeLater(new Runnable() {
+        JPanel panel = new JPanel();
+        //frame.getContentPane().add(panel, BorderLayout.NORTH);
 
-									@Override
-									public void run() {
-										setProgressBarIdle();
-										enableControlsProcessingFinished();
-									}
-									
-								});									
-							}
-						}.start();
-					} else {
-						JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Image not solved :"+imageInfo, "Error",JOptionPane.ERROR_MESSAGE);
-						setProgressBarIdle();
-						enableControlsProcessingFinished();
-						return;
-					}
-				}
-							
-			}
-		});
-		panel.add(applySolutionButton);
-		
-		
-		
-		showAnnotatedImageButton.setToolTipText("show annotated image");
-		showAnnotatedImageButton.setEnabled(false);
-		showAnnotatedImageButton.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent arg0) {
-				if (table.getValueAt(table.getSelectedRow(), 6) != null) {
-					//check how the image was solved
-					FitsFileInformation imageInfo = (FitsFileInformation)table.getValueAt(table.getSelectedRow(), 6); 
-					PlateSolveResult result = imageInfo.getSolveResult();
-					if (result.isSuccess()) {
-						//sanity check
-						String annotatedImageLink = result.getSolveInformation().get("annotated_image_link");
-						URL annotatedImageURL = null;
-						
-						switch (result.getSolveInformation().get("source")) {
-						case "astrometry.net" : {
-							try {
-								annotatedImageURL = new URL(annotatedImageLink);
-							} catch (MalformedURLException e) {
-								JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot understand URL :"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);
-								return;
-							}
-							break;
-						}
-						case "astap" : {
-							try {
-								annotatedImageURL = new File(annotatedImageLink).toURI().toURL();
-							} catch (MalformedURLException e) {
-								JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot understand URL :"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);
-								return;
-							}
-							
-							break;
-						}
-						default : {
-							JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot understand solve source :"+imageInfo, "Error",JOptionPane.ERROR_MESSAGE);
-							return;
-						}
-						}
-						
-						//load image
-		        		ApplicationWindow.logger.info("loading image: "+annotatedImageURL.toString());
-						try {
-							BufferedImage image = ImageIO.read(annotatedImageURL);
-							if (image == null) {
-								throw new IOException("cannot show image: "+annotatedImageURL.toString());
-							}
-		                    JLabel label = new JLabel(new ImageIcon(image));
-		                    JFrame f = new JFrame();
-		                    //f.setDefaultCloseOperation(JFrame.);
-		                    f.getContentPane().add(label);
-		                    f.pack();
-		                    f.setLocation(200, 200);
-		                    f.setVisible(true);							
-						} catch (IOException e) {
-							JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot show image :"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);
+        add(panel, BorderLayout.NORTH);
+        panel.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));
 
-						}
-						
-					} else {
-						JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Image not solved :"+imageInfo, "Error",JOptionPane.ERROR_MESSAGE);
-						return;
-					}
-				}
-			}
-		});
-		panel.add(showAnnotatedImageButton);
-		stretchButton.setToolTipText("Stretch all images as specified (only stretch) and convert to mono (if color)");
-		stretchButton.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent arg0) {
-				//only stretch images
-				setProgressBarWorking();
-				disableControlsProcessing();
-				new Thread() {
-					public void run() {
 
-						
-						//apply the WCS file
-		        		ApplicationWindow.logger.info("Will stretch all images");
-						try {
-	        				StretchAlgorithm algo = mainAppWindow.getConfigurationApplicationPanel().getStretchAlgorithm();
+        solveButton.setToolTipText("Solve current image");
 
-							mainAppWindow.getImagePreProcessing().onlyStretch( mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue(),
-									mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue() , algo);
-						} catch (IOException | FitsException e) {
-							e.printStackTrace();
-							EventQueue.invokeLater(new Runnable() {
+        panel.add(solveButton);
 
-								@Override
-								public void run() {
-									JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot apply WCS header :"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);											
-								}
-								
-							});										
+        JCheckBox astapSolveCheckbox = new JCheckBox("ASTAP");
+        astapSolveCheckbox.setToolTipText("Solve the image using ASTAP");
 
-						}
-						EventQueue.invokeLater(new Runnable() {
+        astapSolveCheckbox.setSelected(true);
+        panel.add(astapSolveCheckbox);
 
-							@Override
-							public void run() {
-								setProgressBarIdle();
-								enableControlsProcessingFinished();
-							}
-							
-						});									
-					}
-				}.start();
-				
-			}
-		});
-		
-		panel.add(stretchButton);
-		stretchButton.setEnabled(false);
-		blinkButton.setToolTipText("Blink 3 or more images");
-		
-		
-		blinkButton.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent arg0) {
-				//new thread 
-				disableControlsBlinking();
-				mainAppWindow.getFullImagePreviewFrame().setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-				new Thread() { 
-					public void run() {
-						if (blinkButton.getText().equals("blink")) {
-							//rename button to stop blink 
-							EventQueue.invokeLater(new Runnable() {
+        JCheckBox astrometrynetSolveCheckbox = new JCheckBox("Astrometry.net (online)");
+        astrometrynetSolveCheckbox.setToolTipText("solve the image using the online nova.astrometry.net web services");
+        panel.add(astrometrynetSolveCheckbox);
 
-								@Override
-								public void run() {
 
-									blinkButton.setText("stop blinking");
-									mainAppWindow.getFullImagePreviewFrame().setVisible(true);
+        applySolutionButton.setToolTipText("Apply solution to all images, convert to monochrome (if color) and stretch (if checked). It will create separate folders for each file category");
+        applySolutionButton.setEnabled(false);
+        applySolutionButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent event) {
+                if (table.getValueAt(table.getSelectedRow(), 6) != null) {
+                    setProgressBarWorking();
+                    disableControlsProcessing();
+                    //check how the image was solved
+                    FitsFileInformation imageInfo = (FitsFileInformation) table.getValueAt(table.getSelectedRow(), 6);
+                    final PlateSolveResult result = imageInfo.getSolveResult();
+                    if (result.isSuccess()) {
+                        //sanity check
+                        final String wcsLink = result.getSolveInformation().get("wcs_link");
 
-								}});
-			        		FitsFileInformation[] selectedFitsFilesInfo = mainAppWindow.getSelectedFiles();
-			        		BufferedImage[] images = new BufferedImage[selectedFitsFilesInfo.length];
-			
-			        		if (selectedFitsFilesInfo != null) {
-			        			//read images
-			        			int i=0;
-			        			for (FitsFileInformation selectedFitsFileInfo : selectedFitsFilesInfo) {
-				        			Fits selectedFitsImage;
-									try {
-										selectedFitsImage = new Fits(selectedFitsFileInfo.getFilePath());
-				
-				        				//get image data
-				        				Object kernelData = selectedFitsImage.getHDU(0).getKernel();
-				        				StretchAlgorithm algo = mainAppWindow.getConfigurationApplicationPanel().getStretchAlgorithm();
+                        new Thread() {
+                            public void run() {
+                                String wcsFile;
 
-				        				images[i] = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData,
-				        						selectedFitsFileInfo.getSizeWidth(), 
-				        						selectedFitsFileInfo.getSizeHeight(),
-				        						mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue(), 
-				        						mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue(), algo);
-				        						        
-				        				
-									} catch (FitsException | IOException e) {
-										e.printStackTrace();
-										EventQueue.invokeLater(new Runnable() {
+                                switch (result.getSolveInformation().get("source")) {
+                                    case "astrometry.net": {
+                                        try {
+                                            URL wcsURL = new URL(wcsLink);
+                                            int lastSepPosition = imageInfo.getFilePath().lastIndexOf(".");
+                                            wcsFile = imageInfo.getFilePath().substring(0, lastSepPosition) + ".wcs";
+                                            //download file
+                                            ImagePreprocessing.downloadFile(wcsURL, wcsFile);
 
-											@Override
-											public void run() {
-												JOptionPane.showMessageDialog(mainAppWindow.getFullImagePreviewFrame(),
-														"Cannot show full image:" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-												
-											}});										
-										return;
-									}
-									i++;
-			        			}
-			        			
-			        			//now we have the images
-			        			int j = 0;
-			        			while (true) {
-			        				BufferedImage image = images[j];
-			        				
-			        				try {
-										Thread.sleep(500);
-									} catch (InterruptedException e) {
-										e.printStackTrace();
-									} //TODO make configurable
-			        				
-									EventQueue.invokeLater(new Runnable() {
+                                        } catch (IOException e) {
+                                            EventQueue.invokeLater(new Runnable() {
 
-										@Override
-										public void run() {
-					        				mainAppWindow.getFullImagePreviewFrame().setImage(image);
-										}});								
+                                                @Override
+                                                public void run() {
+                                                    JOptionPane.showMessageDialog(MainApplicationPanel.this, "Cannot understand URL :" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
 
-									j++; //increase
-									if (j==images.length) {
-										j=0;
-									}
-			        				if (blinkButton.getText().equals("blink")) {
-			        					//it was stopped
-			        					break;
-			        				}
-			        			}
-			        		} 	
-						} else {
-							EventQueue.invokeLater(new Runnable() {
+                                                }
 
-								@Override
-								public void run() {
-									//test = stop blinking
-									blinkButton.setText("blink");
-									mainAppWindow.getFullImagePreviewFrame().setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
-									mainAppWindow.getFullImagePreviewFrame().setVisible(false);
-									enableControlsProcessingBlinkingFinished();
-								}});								
+                                            });
+                                            return;
+                                        }
+                                        break;
+                                    }
+                                    case "astap": {
+                                        wcsFile = result.getSolveInformation().get("wcs_link");
 
-						}
-					}
-				}.start();
-			}
-		});
-		blinkButton.setEnabled(false);
-		panel.add(blinkButton);
-		
-		panel.add(progressBar);
-		progressBar.setEnabled(true);
-		
-		astapSolveCheckbox.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent arg0) {
-				if (astapSolveCheckbox.isSelected()) {
-					astrometrynetSolveCheckbox.setSelected(false);
-				}
-			}
-		});
-		
-		astrometrynetSolveCheckbox.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent arg0) {
-				if (astrometrynetSolveCheckbox.isSelected()) {
-					astapSolveCheckbox.setSelected(false);
-				}
-			}
-		});
-		
-		JScrollPane scrollPane = new JScrollPane();
-		//frame.getContentPane().add(scrollPane);		
-		add(scrollPane, BorderLayout.CENTER);
-				
-		table = new JTable();
-		scrollPane.setViewportView(table);
-		
-		table.getSelectionModel().addListSelectionListener(new ListSelectionListener(){
-	        public void valueChanged(ListSelectionEvent event) {
-	        	
-	        	if (table.getValueAt(table.getSelectedRow(), 0) != null) {
-	        		//ApplicationWindow.logger.info(table.getValueAt(table.getSelectedRow(), 0).toString());
+                                        break;
+                                    }
+                                    default: {
+                                        EventQueue.invokeLater(new Runnable() {
 
-		        	//make buttons available if the selected row has a solution 
-	        		if (table.getValueAt(table.getSelectedRow(), 5).equals("yes")) {
-	        			applySolutionButton.setEnabled(true);
-	        			showAnnotatedImageButton.setEnabled(true);
-	        			solveButton.setEnabled(false);
-	        		} else {
-	        			applySolutionButton.setEnabled(false);
-	        			showAnnotatedImageButton.setEnabled(false);
-	        			solveButton.setEnabled(true);
-	        		}
-	        		
-	        		//show stretch window
-	        		if (mainAppWindow.getConfigurationApplicationPanel().isStretchEnabled()) {
-		        		mainAppWindow.setStretchFrameVisible(true);
-		        		try {
-							updateImageStretchWindow();
-						} catch (FitsException | IOException e) {
-							e.printStackTrace();
-						}
-	        		}
-	        	} else {
-	        		mainAppWindow.setStretchFrameVisible(false);
-	        	}
-	        	
-	        	//if more than 3 files are selected, set blink button (or 3 exactly) 
-	        	FitsFileInformation[] selectedFitsFilesInfo = mainAppWindow.getSelectedFiles();
-	        	if (selectedFitsFilesInfo != null) {
-	        		if (selectedFitsFilesInfo.length >= 3) {
-	        			blinkButton.setEnabled(true);
-	        		} else {
-	        			blinkButton.setEnabled(false);
+                                            @Override
+                                            public void run() {
+                                                JOptionPane.showMessageDialog(MainApplicationPanel.this, "Cannot understand solve source :" + imageInfo, "Error", JOptionPane.ERROR_MESSAGE);
 
-	        		}
-	        	} else {
-        			blinkButton.setEnabled(false);
-	        	}
+                                            }
 
-	        }
-	    });
-		
+                                        });
+                                        return;
+                                    }
+                                }
 
-		solveButton.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent arg0) {
-				ApplicationWindow.logger.info("Will try to solve image");
-				
-				//get file
-				int row = table.getSelectedRow();
-				if (row < 0) {
-					return;
-				}
-				
-				FitsFileInformation seletedFile = (FitsFileInformation)table.getValueAt(row, 6);
-				//update progress bar
-				setProgressBarWorking();
-				//disable controls
-				disableControlsSolving();
-				//mainAppWindow.setMainViewEnabled(false);
-				new Thread() {
-					public void run() {
+                                //apply the WCS file
+                                ApplicationWindow.logger.info("applying WCS header " + wcsFile + " to all images");
+                                try {
+                                    StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-						try {
-							Thread.sleep(500);
-							Future<PlateSolveResult> solveResult = mainAppWindow.getImagePreProcessing().solve(seletedFile.getFilePath(), astapSolveCheckbox.isSelected(), astrometrynetSolveCheckbox.isSelected());
-							if (solveResult != null) {
-								final PlateSolveResult result = solveResult.get();
-								
-								if (result.isSuccess()) {
-									EventQueue.invokeLater(new Runnable() {
+                                    		mainAppWindow.getImagePreProcessing().applyWCSHeader(wcsFile, mainAppWindow.getStretchPanel().getStretchSlider().getValue(),
+                                            mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue(),
+                                            mainAppWindow.getStretchPanel().isStretchEnabled(), algo);
+                                } catch (IOException | FitsException e) {
+                                    e.printStackTrace();
+                                    EventQueue.invokeLater(new Runnable() {
 
-										@Override
-										public void run() {
-											JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Image was succesfully plate-solved");
+                                        @Override
+                                        public void run() {
+                                            JOptionPane.showMessageDialog(MainApplicationPanel.this, "Cannot apply WCS header :" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                                        }
 
-										}
-									});
-									//write results file
-									mainAppWindow.getImagePreProcessing().writeSolveResults(seletedFile.getFilePath(), result);
-								} else {
-									EventQueue.invokeLater(new Runnable() {
+                                    });
 
-										@Override
-										public void run() {
-											JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Image was not plate-solved sccesfully:"+result.getFailureReason()+" "+result.getWarning());
+                                }
+                                EventQueue.invokeLater(new Runnable() {
 
-										}
-									});									
-								}
-								ApplicationWindow.logger.info(result.toString());
-								EventQueue.invokeLater(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        setProgressBarIdle();
+                                        enableControlsProcessingFinished();
+                                    }
 
-									@Override
-									public void run() {
-										//associate the solve result with the table object
-										table.setValueAt(result, row, 5);	
-										((FitsFileTableModel)table.getModel()).fireTableDataChanged();
-										
-										setProgressBarIdle();	
-										//mainAppWindow.setMainViewEnabled(true);
-										enableControlsSolvingFinished();
+                                });
+                            }
+                        }.start();
+                    } else {
+                        JOptionPane.showMessageDialog(MainApplicationPanel.this, "Image not solved :" + imageInfo, "Error", JOptionPane.ERROR_MESSAGE);
+                        setProgressBarIdle();
+                        enableControlsProcessingFinished();
+                        return;
+                    }
+                }
 
-}
-								});								
+            }
+        });
+        panel.add(applySolutionButton);
 
-		
-							}					
-						} catch (InterruptedException | ExecutionException | FitsException | IOException | ConfigurationException e) {
-							EventQueue.invokeLater(new Runnable() {
 
-								@Override
-								public void run() {
-									JOptionPane.showMessageDialog(SPMainApplicationPanel.this, "Cannot solve image:"+e.getMessage(), "Error",JOptionPane.ERROR_MESSAGE);
-									setProgressBarIdle();		
-									//mainAppWindow.setMainViewEnabled(true);
-									enableControlsSolvingFinished();
+        showAnnotatedImageButton.setToolTipText("show annotated image");
+        showAnnotatedImageButton.setEnabled(false);
+        showAnnotatedImageButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent arg0) {
+                if (table.getValueAt(table.getSelectedRow(), 6) != null) {
+                    //check how the image was solved
+                    FitsFileInformation imageInfo = (FitsFileInformation) table.getValueAt(table.getSelectedRow(), 6);
+                    PlateSolveResult result = imageInfo.getSolveResult();
+                    if (result.isSuccess()) {
+                        //sanity check
+                        String annotatedImageLink = result.getSolveInformation().get("annotated_image_link");
+                        URL annotatedImageURL = null;
 
-}
-							});									
+                        switch (result.getSolveInformation().get("source")) {
+                            case "astrometry.net": {
+                                try {
+                                    annotatedImageURL = new URL(annotatedImageLink);
+                                } catch (MalformedURLException e) {
+                                    JOptionPane.showMessageDialog(MainApplicationPanel.this, "Cannot understand URL :" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                                    return;
+                                }
+                                break;
+                            }
+                            case "astap": {
+                                try {
+                                    annotatedImageURL = new File(annotatedImageLink).toURI().toURL();
+                                } catch (MalformedURLException e) {
+                                    JOptionPane.showMessageDialog(MainApplicationPanel.this, "Cannot understand URL :" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                                    return;
+                                }
 
-						} 
-					}
-				}.start();
-								
-			}
-		});		
-	}
-	
-	/**
-	 * Sets the table model
-	 * @param tableModel
-	 */
-	public void setTableModel(AbstractTableModel tableModel) {
-		table.setModel(tableModel);
-		
-		//hide object column
-		table.getColumnModel().getColumn(6).setMinWidth(0);
-		table.getColumnModel().getColumn(6).setMaxWidth(0);
-		table.getColumnModel().getColumn(6).setWidth(0);		
-	}
-	
-	/**
-	 * Returns the file information
-	 * @return
-	 */
-	public FitsFileInformation getSelectedFileInformation() {
-		//get file
-		int row = table.getSelectedRow();
-		if (row < 0) {
-			return null;
-		}
-		
-		FitsFileInformation selectedFile = (FitsFileInformation)table.getValueAt(row, 6);
-		return selectedFile;		
-	}
+                                break;
+                            }
+                            default: {
+                                JOptionPane.showMessageDialog(MainApplicationPanel.this, "Cannot understand solve source :" + imageInfo, "Error", JOptionPane.ERROR_MESSAGE);
+                                return;
+                            }
+                        }
 
-	/**
-	 * Returns the file information
-	 * @return
-	 */
-	public FitsFileInformation[] getSelectedFilesInformation() {
-		//get files
-	    int[] selected_rows= table.getSelectedRows();		
-	    
-	    if (selected_rows != null) {
-	    	if (selected_rows.length > 0) {
-	    		
-	    		FitsFileInformation[] ret = new FitsFileInformation[selected_rows.length];
-	    		for (int i=0;i<selected_rows.length;i++) {
-	    			ret[i] =  (FitsFileInformation)table.getValueAt(selected_rows[i], 6);
-	    		}
-	    		return ret;
-	    	} else {
-	    		return null;
-	    	}
-	    }else {
-	    	return null;
-	    }
-		
-	}	
-	/**
-	 * Updates the image preview stretch window
-	 * @throws FitsException
-	 * @throws IOException 
-	 */
-	public void updateImageStretchWindow() throws FitsException, IOException {
-		int stretchFactor = mainAppWindow.getConfigurationApplicationPanel().getStretchSlider().getValue();
-		int iterations = mainAppWindow.getConfigurationApplicationPanel().getStretchIterationsSlider().getValue();
-		StretchAlgorithm algo = mainAppWindow.getConfigurationApplicationPanel().getStretchAlgorithm();
-		
-		FitsFileInformation selectedFitsFileInfo = getSelectedFileInformation();
-		if (selectedFitsFileInfo != null) {
-			Fits selectedFitsImage = new Fits(selectedFitsFileInfo.getFilePath());
-			//if (selectedFitsFileInfo.getSizeHeight() > 350 && selectedFitsFileInfo.getSizeWidth()>350) {
-				//get image data
-				Object kernelData = selectedFitsImage.getHDU(0).getKernel();
-				
-				BufferedImage fitsImagePreview = mainAppWindow.getImagePreProcessing().getImagePreview(kernelData);
-				BufferedImage fitsImagePreviewStretch = mainAppWindow.getImagePreProcessing().getStretchedImagePreview(kernelData, stretchFactor, iterations, algo);
-						        
-				mainAppWindow.setOriginalImage(fitsImagePreview);
-				mainAppWindow.setStretchedImage(fitsImagePreviewStretch);
-				if (mainAppWindow.getFullImagePreviewFrame().isVisible()) {
-					//update full size as well
-					
-					BufferedImage fitsImagePreviewFS = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData, selectedFitsFileInfo.getSizeWidth(), 
-							selectedFitsFileInfo.getSizeHeight(), stretchFactor, iterations, algo);	
+                        //load image
+                        ApplicationWindow.logger.info("loading image: " + annotatedImageURL.toString());
+                        try {
+                            BufferedImage image = ImageIO.read(annotatedImageURL);
+                            if (image == null) {
+                                throw new IOException("cannot show image: " + annotatedImageURL.toString());
+                            }
+                            JLabel label = new JLabel(new ImageIcon(image));
+                            JFrame f = new JFrame();
+                            //f.setDefaultCloseOperation(JFrame.);
+                            f.getContentPane().add(label);
+                            f.pack();
+                            f.setLocation(200, 200);
+                            f.setVisible(true);
+                        } catch (IOException e) {
+                            JOptionPane.showMessageDialog(MainApplicationPanel.this, "Cannot show image :" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
 
-					mainAppWindow.getFullImagePreviewFrame().setImage(fitsImagePreviewFS);
-					
-				}				
-			//} else {
-			//}
-			
+                        }
 
-			selectedFitsImage.close();
-		} else {
-		}
-		
-	}
-	
-	public void setProgressBarWorking() {
-		progressBar.setIndeterminate(true);
-	}
-	
-	public void setProgressBarIdle() {
-		progressBar.setIndeterminate(false);
-	}
-	
-	public void setBatchStretchButtonEnabled(boolean state) {
-		stretchButton.setEnabled(state);
-	}
-	
-	private void disableControlsSolving() {
-		this.applySolutionButton.setEnabled(false);
-		this.blinkButton.setEnabled(false);
-		this.showAnnotatedImageButton.setEnabled(false);
-		this.stretchButton.setEnabled(false);
-		this.table.setEnabled(false);
-		this.solveButton.setEnabled(false);
-		mainAppWindow.setMenuState(false);
-		mainAppWindow.getTabbedPane().setEnabledAt(1, false);
-	}
+                    } else {
+                        JOptionPane.showMessageDialog(MainApplicationPanel.this, "Image not solved :" + imageInfo, "Error", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                }
+            }
+        });
+        panel.add(showAnnotatedImageButton);
+        stretchButton.setToolTipText("Stretch all images as specified (only stretch) and convert to mono (if color)");
+        stretchButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent arg0) {
+                //only stretch images
+                setProgressBarWorking();
+                disableControlsProcessing();
+                new Thread() {
+                    public void run() {
 
-	private void enableControlsSolvingFinished() {
-		this.applySolutionButton.setEnabled(false);
-		this.blinkButton.setEnabled(false);
-		this.showAnnotatedImageButton.setEnabled(false);
-		this.stretchButton.setEnabled(true);
-		this.table.setEnabled(true);
-		this.solveButton.setEnabled(false);
-		mainAppWindow.setMenuState(true);
 
-		mainAppWindow.getTabbedPane().setEnabledAt(1, true);
-	}	
-	
-	private void disableControlsProcessing() {
-		this.applySolutionButton.setEnabled(false);
-		this.blinkButton.setEnabled(false);
-		this.showAnnotatedImageButton.setEnabled(false);
-		this.stretchButton.setEnabled(false);
-		this.table.setEnabled(false);
-		this.solveButton.setEnabled(false);
-		mainAppWindow.setMenuState(false);
+                        //apply the WCS file
+                        ApplicationWindow.logger.info("Will stretch all images");
+                        try {
+                            StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-		mainAppWindow.getTabbedPane().setEnabledAt(1, false);
-	}
-	
-	private void enableControlsProcessingFinished() {
-		this.applySolutionButton.setEnabled(false);
-		this.blinkButton.setEnabled(false);
-		this.showAnnotatedImageButton.setEnabled(false);
-		this.stretchButton.setEnabled(true);
-		this.table.setEnabled(true);
-		this.solveButton.setEnabled(false);
-		mainAppWindow.setMenuState(true);
+                            mainAppWindow.getImagePreProcessing().onlyStretch(mainAppWindow.getStretchPanel().getStretchSlider().getValue(),
+                                    mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue(), algo);
+                        } catch (IOException | FitsException e) {
+                            e.printStackTrace();
+                            EventQueue.invokeLater(new Runnable() {
 
-		mainAppWindow.getTabbedPane().setEnabledAt(1, true);
-	}
-	private void disableControlsBlinking() {
-		this.applySolutionButton.setEnabled(false);
-		this.showAnnotatedImageButton.setEnabled(false);
-		this.stretchButton.setEnabled(false);
-		this.table.setEnabled(false);
-		this.solveButton.setEnabled(false);
-		mainAppWindow.setMenuState(false);
-		
-		mainAppWindow.getTabbedPane().setEnabledAt(1, false);
+                                @Override
+                                public void run() {
+                                    JOptionPane.showMessageDialog(MainApplicationPanel.this, "Cannot apply WCS header :" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                                }
 
+                            });
+
+                        }
+                        EventQueue.invokeLater(new Runnable() {
+
+                            @Override
+                            public void run() {
+                                setProgressBarIdle();
+                                enableControlsProcessingFinished();
+                            }
+
+                        });
+                    }
+                }.start();
+
+            }
+        });
+
+        panel.add(stretchButton);
+        stretchButton.setEnabled(false);
+
+        blinkButton.setToolTipText("Blink 3 or more images");
+        blinkButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent arg0) {
+                //new thread
+                disableControlsBlinking();
+                mainAppWindow.getFullImagePreviewFrame().setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+                new Thread() {
+                    public void run() {
+                        if (blinkButton.getText().equals("blink")) {
+                            //rename button to stop blink
+                            EventQueue.invokeLater(new Runnable() {
+
+                                @Override
+                                public void run() {
+
+                                    blinkButton.setText("stop blinking");
+                                    mainAppWindow.getFullImagePreviewFrame().setVisible(true);
+
+                                }
+                            });
+                            FitsFileInformation[] selectedFitsFilesInfo = mainAppWindow.getSelectedFiles();
+                            BufferedImage[] images = new BufferedImage[selectedFitsFilesInfo.length];
+
+                            if (selectedFitsFilesInfo != null) {
+                                //read images
+                                int i = 0;
+                                for (FitsFileInformation selectedFitsFileInfo : selectedFitsFilesInfo) {
+                                    Fits selectedFitsImage;
+                                    try {
+                                        selectedFitsImage = new Fits(selectedFitsFileInfo.getFilePath());
+
+                                        //get image data
+                                        Object kernelData = selectedFitsImage.getHDU(0).getKernel();
+                                        StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
+
+                                        images[i] = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData,
+                                                selectedFitsFileInfo.getSizeWidth(),
+                                                selectedFitsFileInfo.getSizeHeight(),
+                                                mainAppWindow.getStretchPanel().getStretchSlider().getValue(),
+                                                mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue(), algo);
+
+
+                                    } catch (FitsException | IOException e) {
+                                        e.printStackTrace();
+                                        EventQueue.invokeLater(new Runnable() {
+
+                                            @Override
+                                            public void run() {
+                                                JOptionPane.showMessageDialog(mainAppWindow.getFullImagePreviewFrame(),
+                                                        "Cannot show full image:" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+
+                                            }
+                                        });
+                                        return;
+                                    }
+                                    i++;
+                                }
+
+                                //now we have the images
+                                int j = 0;
+                                while (true) {
+                                    BufferedImage image = images[j];
+
+                                    try {
+                                        Thread.sleep(500);
+                                    } catch (InterruptedException e) {
+                                        e.printStackTrace();
+                                    } //TODO make configurable
+
+                                    EventQueue.invokeLater(new Runnable() {
+
+                                        @Override
+                                        public void run() {
+                                            mainAppWindow.getFullImagePreviewFrame().setImage(image);
+                                        }
+                                    });
+
+                                    j++; //increase
+                                    if (j == images.length) {
+                                        j = 0;
+                                    }
+                                    if (blinkButton.getText().equals("blink")) {
+                                        //it was stopped
+                                        break;
+                                    }
+                                }
+                            }
+                        } else {
+                            EventQueue.invokeLater(new Runnable() {
+
+                                @Override
+                                public void run() {
+                                    //test = stop blinking
+                                    blinkButton.setText("blink");
+                                    mainAppWindow.getFullImagePreviewFrame().setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
+                                    mainAppWindow.getFullImagePreviewFrame().setVisible(false);
+                                    enableControlsProcessingBlinkingFinished();
+                                }
+                            });
+
+                        }
+                    }
+                }.start();
+            }
+        });
+        blinkButton.setEnabled(false);
+        panel.add(blinkButton);
+
+        detectButton.setToolTipText("Detect objects in images (must be monochrome images)");
+        detectButton.setEnabled(false);
+
+        detectButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent arg0) {
+                try {
+                    FitsFileInformation[] selectedFitsFilesInfo = mainAppWindow.getSelectedFiles();
+                    if (selectedFitsFilesInfo != null) {
+                        //at least one selected
+                        FitsFileInformation aSelectedFile = selectedFitsFilesInfo[0];
+
+                        Fits selectedFitsImage = new Fits(aSelectedFile.getFilePath());
+
+                        //get image data
+                        Object kernelData = selectedFitsImage.getHDU(0).getKernel();
+                        if (kernelData instanceof short[][]) {
+                            short[][] imageData = (short[][])kernelData;
+
+                            // Deep copy the array so the original science data is safe
+                            short[][] debugImage = new short[imageData.length][imageData[0].length];
+                            for(int x = 0; x < imageData.length; x++) {
+                                System.arraycopy(imageData[x], 0, debugImage[x], 0, imageData[x].length);
+                            }
+
+                            List<SourceExtractor.DetectedObject> objects = SourceExtractor.extractSources(debugImage, 5.0,5);
+                            RawImageAnnotator.drawDetections(debugImage, objects);
+                            BufferedImage finalImageToDisplay = ImageDisplayUtils.createDisplayImage(debugImage);
+
+                            mainAppWindow.getFullImagePreviewFrame().setImage(finalImageToDisplay);
+                            mainAppWindow.getFullImagePreviewFrame().setVisible(true);
+
+                        } else {
+                            throw new IOException("Cannot understand FITS format: expected short[][], got "+kernelData.getClass().toString());
+                        }
+
+                    } else {
+                        //detect for all objects
+                        mainAppWindow.getImagePreProcessing().detectObjects();
+                    }
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+
+        panel.add(detectButton);
+
+        panel.add(progressBar);
+        progressBar.setEnabled(true);
+
+        astapSolveCheckbox.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent arg0) {
+                if (astapSolveCheckbox.isSelected()) {
+                    astrometrynetSolveCheckbox.setSelected(false);
+                }
+            }
+        });
+
+        astrometrynetSolveCheckbox.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent arg0) {
+                if (astrometrynetSolveCheckbox.isSelected()) {
+                    astapSolveCheckbox.setSelected(false);
+                }
+            }
+        });
+
+        JScrollPane scrollPane = new JScrollPane();
+        //frame.getContentPane().add(scrollPane);
+        add(scrollPane, BorderLayout.CENTER);
+
+        table = new JTable();
+        scrollPane.setViewportView(table);
+
+        table.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
+            public void valueChanged(ListSelectionEvent event) {
+
+                if (table.getValueAt(table.getSelectedRow(), 0) != null) {
+                    //ApplicationWindow.logger.info(table.getValueAt(table.getSelectedRow(), 0).toString());
+
+                    //make buttons available if the selected row has a solution
+                    if (table.getValueAt(table.getSelectedRow(), 5).equals("yes")) {
+                        applySolutionButton.setEnabled(true);
+                        showAnnotatedImageButton.setEnabled(true);
+                        solveButton.setEnabled(false);
+                    } else {
+                        applySolutionButton.setEnabled(false);
+                        showAnnotatedImageButton.setEnabled(false);
+                        solveButton.setEnabled(true);
+                    }
+
+                    //show stretch window
+                    if (mainAppWindow.getStretchPanel().isStretchEnabled()) {
+                        mainAppWindow.setStretchFrameVisible(true);
+                        try {
+                            updateImageStretchWindow();
+                        } catch (FitsException | IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                } else {
+                    mainAppWindow.setStretchFrameVisible(false);
+                }
+
+                //if more than 3 files are selected, set blink button (or 3 exactly)
+                FitsFileInformation[] selectedFitsFilesInfo = mainAppWindow.getSelectedFiles();
+                if (selectedFitsFilesInfo != null) {
+                    if (selectedFitsFilesInfo.length >= 3) {
+                        blinkButton.setEnabled(true);
+                    } else {
+                        blinkButton.setEnabled(false);
+
+                    }
+                } else {
+                    blinkButton.setEnabled(false);
+                }
+
+            }
+        });
+
+
+        solveButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent arg0) {
+                ApplicationWindow.logger.info("Will try to solve image");
+
+                //get file
+                int row = table.getSelectedRow();
+                if (row < 0) {
+                    return;
+                }
+
+                FitsFileInformation seletedFile = (FitsFileInformation) table.getValueAt(row, 6);
+                //update progress bar
+                setProgressBarWorking();
+                //disable controls
+                disableControlsSolving();
+                //mainAppWindow.setMainViewEnabled(false);
+                new Thread() {
+                    public void run() {
+
+                        try {
+                            Thread.sleep(500);
+                            Future<PlateSolveResult> solveResult = mainAppWindow.getImagePreProcessing().solve(seletedFile.getFilePath(), astapSolveCheckbox.isSelected(), astrometrynetSolveCheckbox.isSelected());
+                            if (solveResult != null) {
+                                final PlateSolveResult result = solveResult.get();
+
+                                if (result.isSuccess()) {
+                                    EventQueue.invokeLater(new Runnable() {
+
+                                        @Override
+                                        public void run() {
+                                            JOptionPane.showMessageDialog(MainApplicationPanel.this, "Image was succesfully plate-solved");
+
+                                        }
+                                    });
+                                    //write results file
+                                    mainAppWindow.getImagePreProcessing().writeSolveResults(seletedFile.getFilePath(), result);
+                                } else {
+                                    EventQueue.invokeLater(new Runnable() {
+
+                                        @Override
+                                        public void run() {
+                                            JOptionPane.showMessageDialog(MainApplicationPanel.this, "Image was not plate-solved sccesfully:" + result.getFailureReason() + " " + result.getWarning());
+
+                                        }
+                                    });
+                                }
+                                ApplicationWindow.logger.info(result.toString());
+                                EventQueue.invokeLater(new Runnable() {
+
+                                    @Override
+                                    public void run() {
+                                        //associate the solve result with the table object
+                                        table.setValueAt(result, row, 5);
+                                        ((FitsFileTableModel) table.getModel()).fireTableDataChanged();
+
+                                        setProgressBarIdle();
+                                        //mainAppWindow.setMainViewEnabled(true);
+                                        enableControlsSolvingFinished();
+
+                                    }
+                                });
+
+
+                            }
+                        } catch (InterruptedException | ExecutionException | FitsException | IOException |
+                                 ConfigurationException e) {
+                            EventQueue.invokeLater(new Runnable() {
+
+                                @Override
+                                public void run() {
+                                    JOptionPane.showMessageDialog(MainApplicationPanel.this, "Cannot solve image:" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                                    setProgressBarIdle();
+                                    //mainAppWindow.setMainViewEnabled(true);
+                                    enableControlsSolvingFinished();
+
+                                }
+                            });
+
+                        }
+                    }
+                }.start();
+
+            }
+        });
+    }
+
+    /**
+     * Sets the table model
+     *
+     * @param tableModel
+     */
+    public void setTableModel(AbstractTableModel tableModel) {
+        table.setModel(tableModel);
+
+        //hide object column
+        table.getColumnModel().getColumn(6).setMinWidth(0);
+        table.getColumnModel().getColumn(6).setMaxWidth(0);
+        table.getColumnModel().getColumn(6).setWidth(0);
+    }
+
+    /**
+     * Returns the file information
+     *
+     * @return
+     */
+    public FitsFileInformation getSelectedFileInformation() {
+        //get file
+        int row = table.getSelectedRow();
+        if (row < 0) {
+            return null;
+        }
+
+        FitsFileInformation selectedFile = (FitsFileInformation) table.getValueAt(row, 6);
+        return selectedFile;
+    }
+
+    /**
+     * Returns the file information
+     *
+     * @return
+     */
+    public FitsFileInformation[] getSelectedFilesInformation() {
+        //get files
+        int[] selected_rows = table.getSelectedRows();
+
+        if (selected_rows != null) {
+            if (selected_rows.length > 0) {
+
+                FitsFileInformation[] ret = new FitsFileInformation[selected_rows.length];
+                for (int i = 0; i < selected_rows.length; i++) {
+                    ret[i] = (FitsFileInformation) table.getValueAt(selected_rows[i], 6);
+                }
+                return ret;
+            } else {
+                return null;
+            }
+        } else {
+            return null;
+        }
+
+    }
+
+    /**
+     * Updates the image preview stretch window
+     *
+     * @throws FitsException
+     * @throws IOException
+     */
+    public void updateImageStretchWindow() throws FitsException, IOException {
+        int stretchFactor = mainAppWindow.getStretchPanel().getStretchSlider().getValue();
+        int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
+        StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
+
+        FitsFileInformation selectedFitsFileInfo = getSelectedFileInformation();
+        if (selectedFitsFileInfo != null) {
+            Fits selectedFitsImage = new Fits(selectedFitsFileInfo.getFilePath());
+            //if (selectedFitsFileInfo.getSizeHeight() > 350 && selectedFitsFileInfo.getSizeWidth()>350) {
+            //get image data
+            Object kernelData = selectedFitsImage.getHDU(0).getKernel();
+
+            BufferedImage fitsImagePreview = mainAppWindow.getImagePreProcessing().getImagePreview(kernelData);
+            BufferedImage fitsImagePreviewStretch = mainAppWindow.getImagePreProcessing().getStretchedImagePreview(kernelData, stretchFactor, iterations, algo);
+
+            mainAppWindow.setOriginalImage(fitsImagePreview);
+            mainAppWindow.setStretchedImage(fitsImagePreviewStretch);
+            if (mainAppWindow.getFullImagePreviewFrame().isVisible()) {
+                //update full size as well
+
+                BufferedImage fitsImagePreviewFS = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(kernelData, selectedFitsFileInfo.getSizeWidth(),
+                        selectedFitsFileInfo.getSizeHeight(), stretchFactor, iterations, algo);
+
+                mainAppWindow.getFullImagePreviewFrame().setImage(fitsImagePreviewFS);
+
+            }
+            //} else {
+            //}
+
+
+            selectedFitsImage.close();
+        } else {
+        }
+
+    }
+
+    public void setProgressBarWorking() {
+        progressBar.setIndeterminate(true);
+    }
+
+    public void setProgressBarIdle() {
+        progressBar.setIndeterminate(false);
+    }
+
+    public void setBatchStretchButtonEnabled(boolean state) {
+        stretchButton.setEnabled(state);
+    }
+
+    private void disableControlsSolving() {
+        this.applySolutionButton.setEnabled(false);
+        this.blinkButton.setEnabled(false);
+        this.showAnnotatedImageButton.setEnabled(false);
+        this.stretchButton.setEnabled(false);
+        this.table.setEnabled(false);
+        this.solveButton.setEnabled(false);
+        mainAppWindow.setMenuState(false);
+        mainAppWindow.getTabbedPane().setEnabledAt(1, false);
+		mainAppWindow.getTabbedPane().setEnabledAt(2, false);
 
 	}
-	
-	private void enableControlsProcessingBlinkingFinished() {
-		this.applySolutionButton.setEnabled(false);
-		this.showAnnotatedImageButton.setEnabled(false);
-		this.stretchButton.setEnabled(true);
-		this.table.setEnabled(true);
-		this.solveButton.setEnabled(false);
-		mainAppWindow.setMenuState(true);
-		
-		mainAppWindow.getTabbedPane().setEnabledAt(1, true);
 
-	}	
-	
+    private void enableControlsSolvingFinished() {
+        this.applySolutionButton.setEnabled(false);
+        this.blinkButton.setEnabled(false);
+        this.showAnnotatedImageButton.setEnabled(false);
+        this.stretchButton.setEnabled(true);
+        this.table.setEnabled(true);
+        this.solveButton.setEnabled(false);
+        mainAppWindow.setMenuState(true);
+
+        mainAppWindow.getTabbedPane().setEnabledAt(1, true);
+		mainAppWindow.getTabbedPane().setEnabledAt(2, true);
+
+	}
+
+    private void disableControlsProcessing() {
+        this.applySolutionButton.setEnabled(false);
+        this.blinkButton.setEnabled(false);
+        this.showAnnotatedImageButton.setEnabled(false);
+        this.stretchButton.setEnabled(false);
+        this.table.setEnabled(false);
+        this.solveButton.setEnabled(false);
+        mainAppWindow.setMenuState(false);
+
+        mainAppWindow.getTabbedPane().setEnabledAt(1, false);
+		mainAppWindow.getTabbedPane().setEnabledAt(2, false);
+
+	}
+
+    private void enableControlsProcessingFinished() {
+        this.applySolutionButton.setEnabled(false);
+        this.blinkButton.setEnabled(false);
+        this.showAnnotatedImageButton.setEnabled(false);
+        this.stretchButton.setEnabled(true);
+        this.table.setEnabled(true);
+        this.solveButton.setEnabled(false);
+        mainAppWindow.setMenuState(true);
+
+        mainAppWindow.getTabbedPane().setEnabledAt(1, true);
+		mainAppWindow.getTabbedPane().setEnabledAt(2, true);
+
+	}
+
+    private void disableControlsBlinking() {
+        this.applySolutionButton.setEnabled(false);
+        this.showAnnotatedImageButton.setEnabled(false);
+        this.stretchButton.setEnabled(false);
+        this.table.setEnabled(false);
+        this.solveButton.setEnabled(false);
+        mainAppWindow.setMenuState(false);
+
+        mainAppWindow.getTabbedPane().setEnabledAt(1, false);
+		mainAppWindow.getTabbedPane().setEnabledAt(2, false);
+
+
+    }
+
+    private void enableControlsProcessingBlinkingFinished() {
+        this.applySolutionButton.setEnabled(false);
+        this.showAnnotatedImageButton.setEnabled(false);
+        this.stretchButton.setEnabled(true);
+        this.table.setEnabled(true);
+        this.solveButton.setEnabled(false);
+        mainAppWindow.setMenuState(true);
+
+        mainAppWindow.getTabbedPane().setEnabledAt(1, true);
+		mainAppWindow.getTabbedPane().setEnabledAt(2, true);
+
+    }
+
+    public void setDetectionEnabled() {
+        detectButton.setEnabled(true);
+    }
+
 }

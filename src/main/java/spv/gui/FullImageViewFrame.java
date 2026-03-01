@@ -14,7 +14,7 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 
-public class FullImageStretchPreviewFrame extends JFrame {
+public class FullImageViewFrame extends JFrame {
 
     private JPanel contentPane;
 
@@ -27,7 +27,7 @@ public class FullImageStretchPreviewFrame extends JFrame {
     /**
      * Create the frame.
      */
-    public FullImageStretchPreviewFrame() {
+    public FullImageViewFrame() {
         setTitle("Full size");
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
         setBounds(100, 100, 800, 600);

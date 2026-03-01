@@ -1,6 +1,6 @@
 /*
  * SpacePixels
- * 
+ *
  * Copyright (c)2020-2023, Petros Pissias.
  * See the LICENSE file included in this distribution.
  *
@@ -10,7 +10,7 @@
 package spv.util;
 
 public enum StretchAlgorithm {
-	ENHANCE_LOW,
-	ENHANCE_HIGH,
-	EXTREME
+    ENHANCE_LOW,
+    ENHANCE_HIGH,
+    EXTREME
 }
