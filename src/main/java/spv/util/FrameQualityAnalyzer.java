@@ -6,6 +6,10 @@ import java.util.List;
 
 public class FrameQualityAnalyzer {
 
+    //values used for statistics for frame quality
+    public static double frameQualitySigmaMultiplier = 5;
+    public static int frameQualityMinDetectionPixels = 5;
+
     public static class FrameMetrics {
         public double backgroundMedian;
         public double backgroundNoise;
@@ -21,12 +25,12 @@ public class FrameQualityAnalyzer {
         // 1. We use a high threshold (e.g., 5.0) for evaluation.
         // We only want to measure strong, distinct stars, not faint fuzzy noise.
         List<SourceExtractor.DetectedObject> objects =
-                SourceExtractor.extractSources(imageData, 5.0, 5);
+                SourceExtractor.extractSources(imageData, frameQualitySigmaMultiplier, frameQualityMinDetectionPixels);
 
         // (Note: You'll need to expose your calculateBackground method in
         // SourceExtractor so we can grab the median/noise directly, or just
         // return it alongside the DetectedObjects).
-        SourceExtractor.BackgroundMetrics bg = SourceExtractor.calculateBackground(imageData, imageData.length, imageData[0].length, 5.0);
+        SourceExtractor.BackgroundMetrics bg = SourceExtractor.calculateBackgroundSigmaClipped(imageData, imageData[0].length, imageData.length,  frameQualitySigmaMultiplier);
 
         metrics.backgroundMedian = bg.median;
         metrics.backgroundNoise = bg.sigma;

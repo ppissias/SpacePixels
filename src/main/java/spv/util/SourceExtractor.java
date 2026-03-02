@@ -7,6 +7,12 @@ import java.util.Queue;
 
 public class SourceExtractor {
 
+    //values used for detection pipeline
+    public static double detectionSigmaMultiplier = 2;
+    public static int minDetectionPixels = 3;
+
+
+
     // Helper classes to hold our data
     public static class DetectedObject {
         public double x, y;
@@ -49,34 +55,40 @@ public class SourceExtractor {
      * Main method to run the detection pipeline on a single frame.
      */
     public static List<DetectedObject> extractSources(short[][] image, double sigmaMultiplier, int minPixels) {
-        int width = image.length;
-        int height = image[0].length;
+        // FITS data is row-major: the first dimension is Height (Y), the second is Width (X)
+        int height = image.length;
+        int width = image[0].length;
 
         // 1. Calculate Background
-        BackgroundMetrics bg = calculateBackground(image, width, height, sigmaMultiplier);
+        // Note: Ensure your calculateBackground method is also using image[y][x] internally!
+        BackgroundMetrics bg = calculateBackgroundSigmaClipped(image, width, height, sigmaMultiplier);
         System.out.println("Background Median: " + bg.median + ", Sigma: " + bg.sigma + ", Threshold: " + bg.threshold);
 
         // 2. Setup for BFS Blob Detection
         List<DetectedObject> detectedObjects = new ArrayList<>();
-        boolean[][] visited = new boolean[width][height];
 
-        // 8-way directional arrays for finding neighbors
+        // The visited array dimensions must match the image array: [height][width]
+        boolean[][] visited = new boolean[height][width];
+
+        // 8-way directional arrays for finding neighbors (dx is for X/width, dy is for Y/height)
         int[] dx = {-1, -1, -1, 0, 0, 1, 1, 1};
         int[] dy = {-1, 0, 1, -1, 1, -1, 0, 1};
 
-        // 3. Scan the image
-        for (int x = 0; x < width; x++) {
-            for (int y = 0; y < height; y++) {
-                int pixelValue = image[x][y] & 0xFFFF; // Convert Java signed short to unsigned 16-bit
+        // 3. Scan the image (Outer loop Y, Inner loop X for cache-friendly row-major access)
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                // Access data correctly as [y][x]
+                int pixelValue = image[y][x] & 0xFFFF; // Convert Java signed short to unsigned 16-bit
 
-                if (pixelValue > bg.threshold && !visited[x][y]) {
+                if (pixelValue > bg.threshold && !visited[y][x]) {
                     // Start a new BFS for a new Blob
                     List<Pixel> currentBlob = new ArrayList<>();
                     Queue<Pixel> queue = new LinkedList<>();
 
+                    // Pixel object still stores coordinates in standard (x, y) format
                     Pixel startPixel = new Pixel(x, y, pixelValue);
                     queue.add(startPixel);
-                    visited[x][y] = true;
+                    visited[y][x] = true;
 
                     // BFS Loop
                     while (!queue.isEmpty()) {
@@ -90,10 +102,11 @@ public class SourceExtractor {
 
                             // Check boundaries
                             if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-                                if (!visited[nx][ny]) {
-                                    int nValue = image[nx][ny] & 0xFFFF;
+                                if (!visited[ny][nx]) {
+                                    // Access neighbor data as [ny][nx]
+                                    int nValue = image[ny][nx] & 0xFFFF;
                                     if (nValue > bg.threshold) {
-                                        visited[nx][ny] = true;
+                                        visited[ny][nx] = true;
                                         queue.add(new Pixel(nx, ny, nValue));
                                     }
                                 }
@@ -120,6 +133,79 @@ public class SourceExtractor {
         return detectedObjects;
     }
 
+
+    /**
+     * Fast Histogram-based background estimation using Iterative Sigma Clipping.
+     * This removes stars from the background math to reveal faint objects.
+     */
+    public static BackgroundMetrics calculateBackgroundSigmaClipped(short[][] image, int width, int height, double sigmaMultiplier) {
+        BackgroundMetrics metrics = new BackgroundMetrics();
+        int[] histogram = new int[65536]; // For 16-bit unsigned data
+
+        // 1. Build Histogram (Cache-friendly row-major traversal)
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int val = image[y][x] & 0xFFFF;
+                histogram[val]++;
+            }
+        }
+
+        // 2. Setup for Iterative Clipping
+        int currentMinBin = 0;
+        int currentMaxBin = 65535;
+        double currentMedian = 0;
+        double currentSigma = 0;
+
+        int iterations = 3;          // 3 passes is standard for astrophotography
+        double clippingFactor = 3.0; // We clip anything outside of 3-sigma from the median
+
+        // 3. Perform Sigma Clipping
+        for (int iter = 0; iter < iterations; iter++) {
+            long count = 0;
+            long validPixelCount = 0;
+
+            // a. Count total valid pixels in our current allowed range
+            for (int i = currentMinBin; i <= currentMaxBin; i++) {
+                validPixelCount += histogram[i];
+            }
+
+            if (validPixelCount == 0) break; // Safety catch
+
+            // b. Find the median bin within the allowed range
+            for (int i = currentMinBin; i <= currentMaxBin; i++) {
+                count += histogram[i];
+                if (count >= validPixelCount / 2) {
+                    currentMedian = i;
+                    break;
+                }
+            }
+
+            // c. Calculate Standard Deviation (Sigma) within the allowed range
+            double sumSqDiff = 0;
+            for (int i = currentMinBin; i <= currentMaxBin; i++) {
+                if (histogram[i] > 0) {
+                    double diff = i - currentMedian;
+                    // Multiply the squared difference by the number of pixels in this bin
+                    sumSqDiff += (diff * diff) * histogram[i];
+                }
+            }
+            currentSigma = Math.sqrt(sumSqDiff / validPixelCount);
+
+            // d. Update the bounds for the next iteration!
+            // This pulls the ceiling down, cutting out the stars iteration by iteration.
+            currentMinBin = (int) Math.max(0, Math.floor(currentMedian - (clippingFactor * currentSigma)));
+            currentMaxBin = (int) Math.min(65535, Math.ceil(currentMedian + (clippingFactor * currentSigma)));
+        }
+
+        // 4. Set final metrics based on the fully clipped data
+        metrics.median = currentMedian;
+        metrics.sigma = currentSigma;
+
+        // Use the user's requested multiplier against the true sky sigma
+        metrics.threshold = currentMedian + (currentSigma * sigmaMultiplier);
+
+        return metrics;
+    }
     /**
      * Fast Histogram-based background estimation.
      */
@@ -128,10 +214,11 @@ public class SourceExtractor {
         int[] histogram = new int[65536]; // For 16-bit unsigned data
         int totalPixels = width * height;
 
-        // Build Histogram
-        for (int x = 0; x < width; x++) {
-            for (int y = 0; y < height; y++) {
-                int val = image[x][y] & 0xFFFF;
+        // Build Histogram (Cache-friendly row-major traversal)
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                // Access data correctly as [y][x]
+                int val = image[y][x] & 0xFFFF;
                 histogram[val]++;
             }
         }
@@ -154,9 +241,11 @@ public class SourceExtractor {
         int bgPixelCount = 0;
         int upperLimit = medianValue * 2; // Rough cutoff to exclude stars from noise math
 
-        for (int x = 0; x < width; x++) {
-            for (int y = 0; y < height; y++) {
-                int val = image[x][y] & 0xFFFF;
+        // Variance Loop (Cache-friendly row-major traversal)
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                // Access data correctly as [y][x]
+                int val = image[y][x] & 0xFFFF;
                 if (val < upperLimit) {
                     double diff = val - medianValue;
                     sumSqDiff += (diff * diff);
@@ -170,7 +259,6 @@ public class SourceExtractor {
 
         return metrics;
     }
-
     /**
      * Intensity-weighted centroiding for sub-pixel accuracy.
      */

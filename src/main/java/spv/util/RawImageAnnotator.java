@@ -85,8 +85,11 @@ public class RawImageAnnotator {
      * is right on the edge of the image.
      */
     private static void setPixelSafe(short[][] image, int x, int y, short value) {
-        if (x >= 0 && x < image.length && y >= 0 && y < image[0].length) {
-            image[x][y] = value;
+        // Because image is row-major [height][width], image.length is the Height (Y axis)
+        // and image[0].length is the Width (X axis).
+        if (y >= 0 && y < image.length && x >= 0 && x < image[0].length) {
+            // Write to the array in the proper [y][x] format
+            image[y][x] = value;
         }
     }
 }

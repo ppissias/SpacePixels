@@ -1501,8 +1501,8 @@ public class ImagePreprocessing {
         }
 
         // --- 1. Define Realistic Extraction Parameters ---
-        double sigmaMultiplier = 3.5;
-        int minPixels = 5;
+        double sigmaMultiplier = SourceExtractor.detectionSigmaMultiplier;
+        int minPixels = SourceExtractor.minDetectionPixels;
 
         System.out.println("\n--- PHASE 1: Loading & Evaluating Frame Quality ---");
 
@@ -1542,10 +1542,8 @@ public class ImagePreprocessing {
 
             // Check if the evaluator flagged this frame
             if (metrics.isRejected) {
+                // We simply log it and skip. NO empty lists are added to allFramesData.
                 System.out.println("⚠️ Skipping Frame " + (i + 1) + ": " + metrics.rejectionReason);
-
-                // CRITICAL: Insert an empty placeholder to keep the time-steps aligned for the TrackLinker
-                allFramesData.add(new ArrayList<>());
             } else {
                 System.out.println("Processing Frame " + (i + 1) + "...");
 
@@ -1554,40 +1552,32 @@ public class ImagePreprocessing {
                         SourceExtractor.extractSources(rawFrames.get(i), sigmaMultiplier, minPixels);
 
                 System.out.println("Found " + objectsInFrame.size() + " objects in Frame " + (i + 1));
-                DetectionDebugger.printDetectedObjects(objectsInFrame, "Frame " + (i + 1));
+                //DetectionDebugger.printDetectedObjects(objectsInFrame, "Frame " + (i + 1));
 
+                // Only valid, extracted frames are added to the list
                 allFramesData.add(objectsInFrame);
             }
         }
 
         System.out.println("\n--- PHASE 4: Track Linking ---");
-        System.out.println("Linking tracks across " + allFramesData.size() + " frames...");
+        System.out.println("Linking tracks across " + allFramesData.size() + " valid frames...");
 
         double maxStarJitter = 2.0;       // Stars can wobble by ~2 pixels due to seeing
-        double maxAsteroidSpeed = 50.0;   // Asteroids rarely move more than 50 pixels per minute
         double predictionTolerance = 3.0; // Allow a 3-pixel radius for the predicted path
         double angleToleranceRad = Math.toRadians(5.0); // Streaks must point in the same direction
 
-        // Count how many frames were NOT rejected by the SessionEvaluator
-        int totalGoodFrames = 0;
-        for (FrameQualityAnalyzer.FrameMetrics metrics : sessionMetrics) {
-            if (!metrics.isRejected) {
-                totalGoodFrames++;
-            }
-        }
+        // The TrackLinker now only receives guaranteed good frames, so it can rely on allFramesData.size()
         List<TrackLinker.Track> confirmedTargets = TrackLinker.findMovingObjects(
                 allFramesData,
                 maxStarJitter,
-                maxAsteroidSpeed,
                 predictionTolerance,
-                angleToleranceRad,
-                totalGoodFrames
+                angleToleranceRad
         );
 
         System.out.println("Success! Found " + confirmedTargets.size() + " moving targets/streaks.");
 
         // Print the final tracking results!
-        DetectionDebugger.printTracks(confirmedTargets);
+        //DetectionDebugger.printTracks(confirmedTargets);
 
         // Next: Send 'confirmedTargets' to your UI to be drawn!
     }
