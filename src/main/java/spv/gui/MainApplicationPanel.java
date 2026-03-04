@@ -454,6 +454,8 @@ public class MainApplicationPanel extends JPanel {
                             mainAppWindow.getFullImagePreviewFrame().setImage(finalImageToDisplay);
                             mainAppWindow.getFullImagePreviewFrame().setVisible(true);
 
+                            ImageDisplayUtils.analyzeFitsData(imageData);
+
                         } else {
                             throw new IOException("Cannot understand FITS format: expected short[][], got "+kernelData.getClass().toString());
                         }

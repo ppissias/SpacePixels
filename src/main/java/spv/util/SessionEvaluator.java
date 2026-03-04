@@ -6,8 +6,11 @@ import java.util.List;
 
 public class SessionEvaluator {
 
-    // Define how strict we want the outlier rejection to be (e.g., 2.5 sigma)
-    private static final double OUTLIER_SIGMA = 2.5;
+
+    private static final double STAR_COUNT_SIGMA = 2.0;
+    private static final double FWHM_SIGMA = 2.5;
+    private static final double ECCENTRICITY_SIGMA = 3.0;
+    private static final double BACKGROUND_SIGMA = 3.0;
 
     public static void rejectOutlierFrames(List<FrameQualityAnalyzer.FrameMetrics> sessionMetrics) {
         if (sessionMetrics.size() < 3) return; // Not enough data for statistical analysis
@@ -16,19 +19,25 @@ public class SessionEvaluator {
         List<Double> fwhmValues = new ArrayList<>();
         List<Double> bgValues = new ArrayList<>();
         List<Double> starCounts = new ArrayList<>();
+        List<Double> eccValues = new ArrayList<>(); // NEW: Eccentricity list
 
         for (FrameQualityAnalyzer.FrameMetrics m : sessionMetrics) {
             fwhmValues.add(m.medianFWHM);
             bgValues.add(m.backgroundMedian);
             starCounts.add((double) m.starCount);
+            eccValues.add(m.medianEccentricity); // NEW: Populate eccentricity
         }
 
         // 2. Calculate the Session Medians and Sigma (MAD)
         double[] fwhmStats = calculateMedianAndSigma(fwhmValues);
         double[] bgStats = calculateMedianAndSigma(bgValues);
         double[] starStats = calculateMedianAndSigma(starCounts);
+        double[] eccStats = calculateMedianAndSigma(eccValues); // NEW: Calculate stats
 
-        System.out.println("Session Baseline - FWHM: " + fwhmStats[0] + ", Background: " + bgStats[0] + ", Stars: " + starStats[0]);
+        System.out.println(String.format(
+                "Session Baseline - FWHM: %.2f, Background: %.2f, Stars: %.0f, Eccentricity: %.2f",
+                fwhmStats[0], bgStats[0], starStats[0], eccStats[0]
+        ));
 
         // 3. Evaluate each frame against the global session baseline
         for (int i = 0; i < sessionMetrics.size(); i++) {
@@ -36,21 +45,26 @@ public class SessionEvaluator {
 
             // Rejection Logic: Is it too far from the median?
 
-            // Stars: We only care if it drops too low (clouds). Too many stars is rarely a bad thing.
-            if (m.starCount < starStats[0] - (OUTLIER_SIGMA * starStats[1])) {
+            // Stars: We only care if it drops too low (clouds).
+            if (m.starCount < starStats[0] - (STAR_COUNT_SIGMA * starStats[1])) {
                 reject(m, "Star Count dropped anomalously low");
                 continue;
             }
 
             // FWHM: We only care if it gets too high (blurry/bad focus/wind).
-            if (m.medianFWHM > fwhmStats[0] + (OUTLIER_SIGMA * fwhmStats[1])) {
+            if (m.medianFWHM > fwhmStats[0] + (FWHM_SIGMA * fwhmStats[1])) {
                 reject(m, "FWHM spiked (Blurry image)");
                 continue;
             }
 
-            // Background: We care if it spikes (clouds reflecting light/car headlights)
-            // or drops completely (camera disconnected).
-            if (Math.abs(m.backgroundMedian - bgStats[0]) > (OUTLIER_SIGMA * bgStats[1])) {
+            // Eccentricity: We only care if it gets too high (tracking error, mount bump, wind).
+            if (m.medianEccentricity > eccStats[0] + (ECCENTRICITY_SIGMA * eccStats[1])) {
+                reject(m, "Eccentricity spiked (Tracking error/Wind)");
+                continue;
+            }
+
+            // Background: We care if it spikes (car headlights) or drops completely.
+            if (Math.abs(m.backgroundMedian - bgStats[0]) > (BACKGROUND_SIGMA * bgStats[1])) {
                 reject(m, "Background deviation (Clouds/Light leak)");
             }
         }

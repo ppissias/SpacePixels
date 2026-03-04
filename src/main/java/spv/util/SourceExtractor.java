@@ -8,8 +8,8 @@ import java.util.Queue;
 public class SourceExtractor {
 
     //values used for detection pipeline
-    public static double detectionSigmaMultiplier = 2;
-    public static int minDetectionPixels = 3;
+    public static double detectionSigmaMultiplier = 4.5;
+    public static int minDetectionPixels = 5;
 
 
 
@@ -26,6 +26,10 @@ public class SourceExtractor {
         public double elongation;
         public double angle; // The angle of the streak in radians
         public boolean isStreak;
+        public boolean isNoise;
+
+        public int sourceFrameIndex; // NEW: Points back to rawFrames.get(i)
+        public String sourceFilename;
 
         public DetectedObject(double x, double y, double flux, int count) {
             this.x = x;
@@ -117,12 +121,15 @@ public class SourceExtractor {
                     // 4. Centroiding and Filtering
                     if (currentBlob.size() >= minPixels) {
 
-                        // We use the new advanced method instead of just calculateCentroid
                         DetectedObject obj = analyzeShape(currentBlob, bg.median);
 
-                        // Optional: You could even log or handle streaks immediately here
+                        // The Roundness Filter Drop
+                        if (obj.isNoise) {
+                            continue; // Skip adding it to the list entirely!
+                        }
+
                         if (obj.isStreak) {
-                            //System.out.println("Streak detected at X: " + obj.x + ", Y: " + obj.y + " with angle: " + obj.angle);
+                            System.out.println("Streak detected at X: " + obj.x + ", Y: " + obj.y + " with angle: " + obj.angle);
                         }
 
                         detectedObjects.add(obj);
@@ -285,80 +292,92 @@ public class SourceExtractor {
 
 
     /**
-     * Calculates centroid, builds the covariance matrix using Image Moments,
-     * and determines if the blob is a streak.
+     * Calculates the centroid, elongation, and angle of a pixel blob using Image Moments.
      */
-    private static DetectedObject analyzeShape(List<Pixel> blob, double backgroundMedian) {
-        double m00 = 0; // Sum of intensities (Area)
-        double m10 = 0; // Sum of X*I
-        double m01 = 0; // Sum of Y*I
+    public static DetectedObject analyzeShape(List<Pixel> blob, double bgMedian) {
+        DetectedObject obj = new DetectedObject(0,0,0,0);
 
-        // 1. First pass: Find the Centroid (m10/m00 and m01/m00)
+        double m00 = 0; // Total mass (sum of intensities)
+        double m10 = 0; // Moment for X
+        double m01 = 0; // Moment for Y
+
+        // =================================================================
+        // STEP 1: Calculate the Center of Mass (Centroid)
+        // =================================================================
         for (Pixel p : blob) {
-            double intensity = p.value - backgroundMedian;
-            if (intensity <= 0) intensity = 0.001; // Avoid division by zero
+            // We subtract the background so faint edges don't drag the center of mass
+            double intensity = p.value - bgMedian;
+            if (intensity <= 0) intensity = 1; // Safety catch
 
             m00 += intensity;
             m10 += p.x * intensity;
             m01 += p.y * intensity;
         }
 
-        double centroidX = m10 / m00;
-        double centroidY = m01 / m00;
+        // The intensity-weighted X and Y coordinates
+        obj.x = m10 / m00;
+        obj.y = m01 / m00;
 
-        // 2. Second pass: Calculate Second-Order Central Moments
-        double mu20 = 0;
-        double mu02 = 0;
-        double mu11 = 0;
-
+        // =================================================================
+        // STEP 2: Calculate 2nd-Order Central Moments (for the Ellipse)
+        // =================================================================
+        double mu20 = 0, mu02 = 0, mu11 = 0;
         for (Pixel p : blob) {
-            double intensity = p.value - backgroundMedian;
-            if (intensity <= 0) intensity = 0.001;
+            double intensity = p.value - bgMedian;
+            if (intensity <= 0) intensity = 1;
 
-            double dx = p.x - centroidX;
-            double dy = p.y - centroidY;
+            double dx = p.x - obj.x;
+            double dy = p.y - obj.y;
 
             mu20 += (dx * dx) * intensity;
             mu02 += (dy * dy) * intensity;
             mu11 += (dx * dy) * intensity;
         }
 
-        // Normalize the central moments by total intensity
+        // Normalize the moments by total mass
         mu20 /= m00;
         mu02 /= m00;
         mu11 /= m00;
 
+        // =================================================================
+        // STEP 3: Eigenvalues to find Elongation and Angle
+        // =================================================================
+        // This math calculates the major and minor axes of the ellipse
+        double delta = Math.sqrt((mu20 - mu02) * (mu20 - mu02) + 4 * mu11 * mu11);
+        double lambda1 = (mu20 + mu02 + delta) / 2.0; // Major axis length squared
+        double lambda2 = (mu20 + mu02 - delta) / 2.0; // Minor axis length squared
 
+        // Safety catch against division by zero for perfect 1-pixel point sources
+        if (lambda2 < 0.001) lambda2 = 0.001;
+        if (lambda1 < 0.001) lambda1 = 0.001;
 
-        // 3. Calculate Eigenvalues (Semi-major and Semi-minor axes squared)
-        double diff = mu20 - mu02;
-        double root = Math.sqrt((diff * diff) + 4 * (mu11 * mu11));
+        obj.elongation = Math.sqrt(lambda1 / lambda2);
 
-        double aSquared = (mu20 + mu02 + root) / 2.0;
-        double bSquared = (mu20 + mu02 - root) / 2.0;
+        // Calculate the rotation angle of the ellipse in radians
+        obj.angle = 0.5 * Math.atan2(2 * mu11, mu20 - mu02);
 
-        // Prevent NaN errors if blob is perfectly 1 pixel wide
-        double a = Math.sqrt(Math.max(0, aSquared));
-        double b = Math.sqrt(Math.max(0, bSquared));
+        // =================================================================
+        // STEP 4: The Roundness Filter Classification
+        // =================================================================
 
-        // 4. Calculate Elongation and Angle
-        // If b is extremely small, it's highly elongated.
-        double elongation = (b > 0.1) ? (a / b) : 10.0;
-
-        // Calculate the angle of the streak (-PI/2 to PI/2)
-        double angle = 0.5 * Math.atan2(2 * mu11, mu20 - mu02);
-
-        // 5. Create Object and Flag it
-        DetectedObject obj = new DetectedObject(centroidX, centroidY, m00, blob.size());
-        obj.elongation = elongation;
-        obj.angle = angle;
-
-        // Define our threshold: If it's more than twice as long as it is wide, it's a streak.
-        obj.isStreak = (elongation > 2.5);
-
-        // Calculate standard deviation of the Gaussian profile
-        double sigmaAvg = Math.sqrt((mu20 + mu02) / 2.0);
-        obj.fwhm = 2.355 * sigmaAvg; // Standard conversion to FWHM
+        // 1. Is it a massive Streak? (Satellite/Airplane)
+        // A high elongation means it is a line.
+        if (obj.elongation > 3.0 && blob.size() > 15) {
+            obj.isStreak = true;
+            obj.isNoise = false;
+        }
+        // 2. Is it Asymmetrical Noise? (Cosmic Ray / Bleeding Pixel)
+        // If it's stretched out, but the blob is tiny, it's a sensor glitch.
+        else if (obj.elongation > 1.8 && blob.size() <= 15) {
+            obj.isStreak = false;
+            obj.isNoise = true;
+        }
+        // 3. It's a Star or Asteroid!
+        // Relatively round, balanced ellipse.
+        else {
+            obj.isStreak = false;
+            obj.isNoise = false;
+        }
 
         return obj;
     }

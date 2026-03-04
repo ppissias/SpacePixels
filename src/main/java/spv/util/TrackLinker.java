@@ -5,6 +5,10 @@ import java.util.List;
 
 public class TrackLinker {
 
+    public static double maxStarJitter = 3.0;       // Stars can wobble by ~2 pixels due to seeing
+    public static double predictionTolerance = 3.0; // Allow a 3-pixel radius for the predicted path
+    public static double angleToleranceRad = Math.toRadians(5.0); // Streaks must point in the same direction
+
     // --- The Data Model for a Confirmed Target ---
     public static class Track {
         public List<SourceExtractor.DetectedObject> points = new ArrayList<>();
@@ -41,49 +45,74 @@ public class TrackLinker {
         List<Track> confirmedTracks = new ArrayList<>();
 
         // =================================================================
-        // PHASE 1: SEPARATE STREAKS AND POINT SOURCES
+        // PHASE 1: Separate Streaks and Purge Stationary Defects
         // =================================================================
-        System.out.println("DEBUG: [PHASE 1] Separating streaks from point sources...");
-        List<SourceExtractor.DetectedObject> allStreaks = new ArrayList<>();
+        List<SourceExtractor.DetectedObject> rawStreaks = new ArrayList<>();
         List<List<SourceExtractor.DetectedObject>> pointSourcesOnly = new ArrayList<>();
 
-        for (int i = 0; i < numFrames; i++) {
-            List<SourceExtractor.DetectedObject> currentFramePoints = new ArrayList<>();
-            int streakCount = 0;
-
+        // 1. Gather all objects
+        for (int i = 0; i < allFrames.size(); i++) {
+            pointSourcesOnly.add(new ArrayList<>());
             for (SourceExtractor.DetectedObject obj : allFrames.get(i)) {
                 if (obj.isStreak) {
-                    allStreaks.add(obj);
-                    streakCount++;
+                    rawStreaks.add(obj);
                 } else {
-                    currentFramePoints.add(obj);
+                    pointSourcesOnly.get(i).add(obj);
                 }
             }
-            pointSourcesOnly.add(currentFramePoints);
-            System.out.println("  -> Frame " + i + ": " + streakCount + " streaks, " + currentFramePoints.size() + " point sources.");
         }
+
+        // 2. The Hot Column Killer for falsely detected streaks.
+        List<SourceExtractor.DetectedObject> validMovingStreaks = new ArrayList<>();
+        double stationaryThreshold = 5.0; // If it moves less than 5 pixels, it's a defect
+
+        System.out.println("DEBUG: Evaluating " + rawStreaks.size() + " total streaks for sensor defects...");
+
+        for (SourceExtractor.DetectedObject candidate : rawStreaks) {
+            boolean isStationaryDefect = false;
+
+            // Check against every other streak we found in the entire session
+            for (SourceExtractor.DetectedObject other : rawStreaks) {
+                // Don't compare it to itself or to streaks in its own frame
+                if (candidate == other || candidate.sourceFrameIndex == other.sourceFrameIndex) {
+                    continue;
+                }
+
+                // If another streak exists in a different frame at the EXACT same location...
+                if (distance(candidate.x, candidate.y, other.x, other.y) <= stationaryThreshold) {
+                    isStationaryDefect = true;
+                    break; // We proved it's a hot column. Stop checking.
+                }
+            }
+
+            if (!isStationaryDefect) {
+                validMovingStreaks.add(candidate);
+            }
+        }
+
+        System.out.println("DEBUG: Purged " + (rawStreaks.size() - validMovingStreaks.size()) + " stationary hot columns.");
 
         // =================================================================
         // PHASE 2: LINK FAST-MOVING STREAKS (Angle & Trajectory Matching)
         // =================================================================
-        System.out.println("DEBUG: [PHASE 2] Linking fast-moving streaks... Total candidate streaks: " + allStreaks.size());
-        boolean[] streakMatched = new boolean[allStreaks.size()];
+        System.out.println("DEBUG: [PHASE 2] Linking fast-moving streaks... Total candidate streaks: " + validMovingStreaks.size());
+        boolean[] streakMatched = new boolean[validMovingStreaks.size()];
         int streakTracksFound = 0;
 
-        for (int i = 0; i < allStreaks.size(); i++) {
+        for (int i = 0; i < validMovingStreaks.size(); i++) {
             if (streakMatched[i]) continue;
 
-            SourceExtractor.DetectedObject baseStreak = allStreaks.get(i);
+            SourceExtractor.DetectedObject baseStreak = validMovingStreaks.get(i);
             Track continuousStreakTrack = new Track();
             continuousStreakTrack.isStreakTrack = true;
             continuousStreakTrack.addPoint(baseStreak);
             streakMatched[i] = true;
 
             // Look for matching streaks in subsequent frames
-            for (int j = i + 1; j < allStreaks.size(); j++) {
+            for (int j = i + 1; j < validMovingStreaks.size(); j++) {
                 if (streakMatched[j]) continue;
 
-                SourceExtractor.DetectedObject candidateStreak = allStreaks.get(j);
+                SourceExtractor.DetectedObject candidateStreak = validMovingStreaks.get(j);
 
                 // 1. Do their internal angles match?
                 if (anglesMatch(baseStreak.angle, candidateStreak.angle, angleToleranceRad)) {
@@ -108,53 +137,58 @@ public class TrackLinker {
         System.out.println("DEBUG: [PHASE 2] Completed. Found " + streakTracksFound + " streak track(s).");
 
         // =================================================================
-        // PHASE 3: FILTER STATIONARY STARS FROM POINT SOURCES (OPTIMIZED)
+        // PHASE 3: MASTER STAR MAP (Catalog Stacking)
         // =================================================================
         List<List<SourceExtractor.DetectedObject>> transients = new ArrayList<>();
         for (int i = 0; i < numFrames; i++) {
             transients.add(new ArrayList<>());
         }
 
-        double starPresenceThreshold = 0.80;
-        int requiredFramesForStar = (int) Math.max(2, Math.floor(numFrames * starPresenceThreshold));
-        System.out.println("DEBUG: [PHASE 3] Filtering stationary stars...");
-        System.out.println("  -> Threshold: Object must appear in >= " + requiredFramesForStar + " frames to be ignored as a star.");
+        System.out.println("DEBUG: [PHASE 3] Building Master Star Map (Catalog Stacking)...");
 
-        int totalTransients = 0;
+        // The core rule: If it appears in the same spot in at least 2 frames, it's a star.
+        int requiredDetectionsToBeStar = 2;
+
+        // We slightly increase jitter to account for atmospheric wobble across the whole session
+        double expandedStarJitter = maxStarJitter * 1.5;
+
+        int totalTransientsFound = 0;
+
         for (int i = 0; i < numFrames; i++) {
             List<SourceExtractor.DetectedObject> currentFrame = pointSourcesOnly.get(i);
 
-            for (SourceExtractor.DetectedObject obj1 : currentFrame) {
-                int matchCount = 1; // It exists in the current frame (frame i)
+            for (SourceExtractor.DetectedObject candidateObj : currentFrame) {
+                int spatialMatchCount = 1; // It exists in its own frame
 
-                // Check all other frames to see if this object remains stationary
+                // Check ALL other frames for a detection at this exact location
                 for (int j = 0; j < numFrames; j++) {
                     if (i == j) continue;
 
                     List<SourceExtractor.DetectedObject> otherFrame = pointSourcesOnly.get(j);
-                    for (SourceExtractor.DetectedObject obj2 : otherFrame) {
-                        if (distance(obj1.x, obj1.y, obj2.x, obj2.y) <= maxStarJitter) {
-                            matchCount++;
-                            break;
+
+                    for (SourceExtractor.DetectedObject otherObj : otherFrame) {
+                        if (distance(candidateObj.x, candidateObj.y, otherObj.x, otherObj.y) <= expandedStarJitter) {
+                            spatialMatchCount++;
+                            break; // Found it in frame j, move to check the next frame
                         }
                     }
 
-                    if (matchCount >= requiredFramesForStar) {
+                    // Optimization: The moment it hits our threshold, we know it's a star. Stop searching.
+                    if (spatialMatchCount >= requiredDetectionsToBeStar) {
                         break;
                     }
                 }
 
-                // If it didn't appear often enough to be a star, it must be a transient
-                if (matchCount < requiredFramesForStar) {
-                    transients.get(i).add(obj1);
+                // If it never found a spatial partner in ANY other frame, it is a true transient.
+                if (spatialMatchCount < requiredDetectionsToBeStar) {
+                    transients.get(i).add(candidateObj);
                 }
             }
-            System.out.println("  -> Frame " + i + ": Kept " + transients.get(i).size() + " transients (Filtered out " +
-                    (currentFrame.size() - transients.get(i).size()) + " stars).");
-            totalTransients += transients.get(i).size();
+            totalTransientsFound += transients.get(i).size();
+            System.out.println("  -> Frame " + i + ": Retained " + transients.get(i).size() + " isolated transients out of "+currentFrame.size()+" point sources.");
         }
-        System.out.println("DEBUG: [PHASE 3] Completed. Total transients remaining across all frames: " + totalTransients);
 
+        System.out.println("DEBUG: [PHASE 3] Completed. Total pure transients across sequence: " + totalTransientsFound);
         // =================================================================
         // PHASE 4: GEOMETRIC COLLINEAR LINKING (Time-Agnostic)
         // =================================================================
@@ -200,7 +234,15 @@ public class TrackLinker {
                                     // Is it moving strictly FORWARD from the last known point?
                                     double actualAngle = Math.atan2(p3.y - lastPoint.y, p3.x - lastPoint.x);
 
-                                    if (anglesMatch(expectedAngle, actualAngle, angleToleranceRad)) {
+                                    // --- NEW: STRICT DIRECTIONAL CHECK ---
+                                    // Calculate the absolute difference, handling the PI / -PI wrap-around boundary
+                                    double angleDiff = Math.abs(expectedAngle - actualAngle);
+                                    if (angleDiff > Math.PI) {
+                                        angleDiff = (2.0 * Math.PI) - angleDiff;
+                                    }
+
+                                    // If the difference is within tolerance, it is strictly moving forward
+                                    if (angleDiff <= angleToleranceRad) {
 
                                         // As long as the angle matches, see if it's the closest point to our line
                                         if (lineError < bestError) {
@@ -231,8 +273,9 @@ public class TrackLinker {
         }
 
         confirmedTracks.addAll(pointTracks);
-        System.out.println("DEBUG: [PHASE 4] Completed. Found " + pointTracks.size() + " point tracks.");
-        System.out.println("DEBUG: [FINISH] findMovingObjects complete. Total confirmed moving targets returned: " + confirmedTracks.size() + "\n");
+        printAllTracks(confirmedTracks);
+        //System.out.println("DEBUG: [PHASE 4] Completed. Found " + pointTracks.size() + " point tracks.");
+        //System.out.println("DEBUG: [FINISH] findMovingObjects complete. Total confirmed moving targets returned: " + confirmedTracks.size() + "\n");
 
         return confirmedTracks;
     }
@@ -278,5 +321,125 @@ public class TrackLinker {
             }
         }
         return false;
+    }
+
+    /**
+     * Evaluates if a track maintains a consistent speed, ignoring missing frames.
+     * @param track The track to evaluate.
+     * @param allowedVariance Max allowed deviation from the expected jump distance (e.g., 2.0 or 3.0 px).
+     * @return true if the majority of the track's jumps match the rhythm.
+     */
+    public static boolean hasSteadyRhythm(Track track, double allowedVariance) {
+        if (track.points.size() < 3) return true; // Need at least 3 points to check rhythm
+
+        List<Double> jumps = new ArrayList<>();
+        for (int i = 0; i < track.points.size() - 1; i++) {
+            SourceExtractor.DetectedObject p1 = track.points.get(i);
+            SourceExtractor.DetectedObject p2 = track.points.get(i + 1);
+            jumps.add(distance(p1.x, p1.y, p2.x, p2.y));
+        }
+
+        // 1. Find the median jump to establish the "base rhythm" (the typical 1-frame jump)
+        List<Double> sortedJumps = new ArrayList<>(jumps);
+        sortedJumps.sort(Double::compareTo);
+        double medianJump = sortedJumps.get(sortedJumps.size() / 2);
+
+        // Safety catch: If the median jump is basically zero, it's a stationary noise artifact
+        if (medianJump < 0.5) return false;
+
+        int consistentJumps = 0;
+
+        // 2. Evaluate every jump against the base rhythm
+        for (double jump : jumps) {
+
+            // Figure out how many "missing frames" this jump represents.
+            // If jump is 31 and median is 15, multiplier is 2 (1 missing frame).
+            long multiplier = Math.round(jump / medianJump);
+
+            if (multiplier == 0) continue; // Jump was anomalously small
+
+            double expectedJump = multiplier * medianJump;
+
+            // We scale the variance by the multiplier. A 3-frame gap has 3x the potential seeing jitter.
+            if (Math.abs(jump - expectedJump) <= (allowedVariance * multiplier)) {
+                consistentJumps++;
+            }
+        }
+
+        // 3. Does this rhythm hold true for the majority of the track?
+        // We require at least 70% of the jumps to fit the mathematical rhythm.
+        double consistencyRatio = (double) consistentJumps / jumps.size();
+        return consistencyRatio >= 0.70;
+    }
+    /**
+     * Prints detailed debug information for both Streak Tracks and Point Tracks.
+     */
+    public static void printAllTracks(List<TrackLinker.Track> confirmedTargets) {
+        System.out.println("\n========================================");
+        System.out.println("=== DEBUG: CONFIRMED MOVING TARGETS  ===");
+        System.out.println("========================================");
+
+        int streakCount = 0;
+        int pointTrackCount = 0;
+
+        for (TrackLinker.Track track : confirmedTargets) {
+
+            if (track.isStreakTrack) {
+                // --- PRINT FAST STREAK TRACKS ---
+                streakCount++;
+
+                if (track.points.size() > 2 && hasSteadyRhythm(track, 5.0)) {
+                    System.out.println("\n[STREAK TRACK #" + streakCount + " (STEADY RYTHM!)] (Composed of " + track.points.size() + " sub-streaks):");
+                } else {
+                    System.out.println("\n[STREAK TRACK #" + streakCount + "] (Composed of " + track.points.size() + " sub-streaks):");
+                }
+                for (int p = 0; p < track.points.size(); p++) {
+                    SourceExtractor.DetectedObject pt = track.points.get(p);
+                    System.out.println(String.format(
+                            "  -> Part %d: [X: %7.2f, Y: %7.2f] | Internal Angle: %5.2f rad | Elongation: %5.2f",
+                            (p + 1), pt.x, pt.y, pt.angle, pt.elongation
+                    ));
+                }
+
+            } else {
+                // --- PRINT SLOW POINT TRACKS ---
+                pointTrackCount++;
+
+                if (hasSteadyRhythm(track, 5.0)) {
+                    System.out.println("\n[POINT TRACK #" + pointTrackCount + " (STEADY RYTHM!)] (Linked across " + track.points.size() + " frames):");
+                } else {
+                    System.out.println("\n[POINT TRACK #" + pointTrackCount + "] (Linked across " + track.points.size() + " frames):");
+                }
+                SourceExtractor.DetectedObject prevPt = null;
+
+                for (int p = 0; p < track.points.size(); p++) {
+                    SourceExtractor.DetectedObject pt = track.points.get(p);
+
+                    if (prevPt == null) {
+                        // First point establishes the origin
+                        System.out.println(String.format(
+                                "  -> Point %d: [X: %7.2f, Y: %7.2f] (Origin)",
+                                (p + 1), pt.x, pt.y
+                        ));
+                    } else {
+                        // Subsequent points show the movement vector
+                        double jumpDist = Math.hypot(pt.x - prevPt.x, pt.y - prevPt.y);
+                        double trajectoryAngle = Math.atan2(pt.y - prevPt.y, pt.x - prevPt.x);
+
+                        System.out.println(String.format(
+                                "  -> Point %d: [X: %7.2f, Y: %7.2f] | Jump: %6.2f px | Vector Angle: %5.2f rad",
+                                (p + 1), pt.x, pt.y, jumpDist, trajectoryAngle
+                        ));
+                    }
+                    prevPt = pt;
+                }
+            }
+        }
+
+        System.out.println("\n----------------------------------------");
+        System.out.println("SUMMARY:");
+        System.out.println("Total Streak Tracks: " + streakCount);
+        System.out.println("Total Point Tracks:  " + pointTrackCount);
+        System.out.println("========================================\n");
     }
 }

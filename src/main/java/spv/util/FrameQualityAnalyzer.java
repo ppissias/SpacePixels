@@ -14,6 +14,7 @@ public class FrameQualityAnalyzer {
         public double backgroundMedian;
         public double backgroundNoise;
         public double medianFWHM;
+        public double medianEccentricity;
         public int starCount;
         public boolean isRejected = false;
         public String rejectionReason = "OK";
@@ -53,5 +54,35 @@ public class FrameQualityAnalyzer {
         }
 
         return metrics;
+    }
+
+    /**
+     * Calculates the median elongation of all valid point sources in a frame.
+     * A perfect frame is ~1.0. A bumped/trailed frame will be > 1.5.
+     */
+    public static double calculateFrameEccentricity(List<SourceExtractor.DetectedObject> objectsInFrame) {
+        List<Double> elongations = new ArrayList<>();
+
+        for (SourceExtractor.DetectedObject obj : objectsInFrame) {
+            // Only measure true point sources (ignore obvious noise and massive satellite streaks)
+            if (!obj.isNoise && !obj.isStreak) {
+                elongations.add(obj.elongation);
+            }
+        }
+
+        // If the frame has no stars, it's definitely a bad frame (clouds!)
+        if (elongations.isEmpty()) {
+            return 999.0;
+        }
+
+        // Sort to find the median
+        elongations.sort(Double::compareTo);
+
+        int middle = elongations.size() / 2;
+        if (elongations.size() % 2 == 1) {
+            return elongations.get(middle);
+        } else {
+            return (elongations.get(middle - 1) + elongations.get(middle)) / 2.0;
+        }
     }
 }

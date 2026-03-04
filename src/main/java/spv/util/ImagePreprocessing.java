@@ -1491,10 +1491,10 @@ public class ImagePreprocessing {
      */
     public void detectObjects() throws IOException {
 
-        //list of fits files in DIR
+        // list of fits files in DIR
         File[] fitsFileInformation = getFitsFilesDetails();
 
-        //get FITS objects
+        // get FITS objects
         Fits[] fitsFiles = new Fits[fitsFileInformation.length];
         for (int i = 0; i < fitsFiles.length; i++) {
             fitsFiles[i] = new Fits(fitsFileInformation[i]);
@@ -1504,23 +1504,46 @@ public class ImagePreprocessing {
         double sigmaMultiplier = SourceExtractor.detectionSigmaMultiplier;
         int minPixels = SourceExtractor.minDetectionPixels;
 
-        System.out.println("\n--- PHASE 1: Loading & Evaluating Frame Quality ---");
+        System.out.println("\n--- PHASE 1: Loading & Source Extraction ---");
 
-        // We will store the raw image arrays in memory so we don't have to read the FITS files twice
         List<short[][]> rawFrames = new ArrayList<>();
+        List<List<SourceExtractor.DetectedObject>> rawExtractedFrames = new ArrayList<>();
         List<FrameQualityAnalyzer.FrameMetrics> sessionMetrics = new ArrayList<>();
 
+        // Assuming fitsFiles or fitsFileInformation is your array of File objects
         for (int i = 0; i < fitsFiles.length; i++) {
-            Object kernel = fitsFiles[i].getHDU(0).getKernel();
+            Fits currentFitsFile = fitsFiles[i];
+            Object kernel = currentFitsFile.getHDU(0).getKernel();
 
             if (kernel instanceof short[][]) {
                 short[][] imageData = (short[][]) kernel;
+
                 rawFrames.add(imageData);
 
-                System.out.println("Evaluating quality of Frame " + (i + 1) + "...");
+                System.out.println("Processing and Extracting Frame " + (i + 1) + "...");
 
-                // Generate the FWHM, Background, and Star Count metrics for this specific frame
+                // 1. Extract sources
+                List<SourceExtractor.DetectedObject> objectsInFrame =
+                        SourceExtractor.extractSources(imageData, sigmaMultiplier, minPixels);
+
+                // --- NEW: STAMP THE FILENAME AND INDEX ---
+                String fileName = fitsFileInformation[i].getName();
+                for (SourceExtractor.DetectedObject obj : objectsInFrame) {
+                    obj.sourceFrameIndex = i; // Ensures the index is perfectly synced
+                    obj.sourceFilename = fileName;
+                }
+
+                rawExtractedFrames.add(objectsInFrame);
+                // 2. Generate the base metrics (Background, etc.)
                 FrameQualityAnalyzer.FrameMetrics metrics = FrameQualityAnalyzer.evaluateFrame(imageData);
+
+                // 3. Calculate and attach the Eccentricity Score to the metrics
+                // Note: You will need to add a 'public double medianEccentricity;' field to your FrameMetrics class
+                metrics.medianEccentricity = FrameQualityAnalyzer.calculateFrameEccentricity(objectsInFrame);
+
+                System.out.println("  -> Found " + objectsInFrame.size() + " objects. Median Eccentricity: "
+                        + String.format("%.2f", metrics.medianEccentricity));
+
                 sessionMetrics.add(metrics);
 
             } else {
@@ -1531,40 +1554,32 @@ public class ImagePreprocessing {
         System.out.println("\n--- PHASE 2: Analyzing Session & Rejecting Outliers ---");
 
         // Compare all frames against each other to find the bad ones (clouds, tracking errors)
+        // Make sure your SessionEvaluator now looks at metrics.medianEccentricity!
         SessionEvaluator.rejectOutlierFrames(sessionMetrics);
 
-        System.out.println("\n--- PHASE 3: Source Extraction ---");
+        System.out.println("\n--- PHASE 3: Filtering Bad Frames ---");
 
         List<List<SourceExtractor.DetectedObject>> allFramesData = new ArrayList<>();
 
-        for (int i = 0; i < rawFrames.size(); i++) {
+        for (int i = 0; i < rawExtractedFrames.size(); i++) {
             FrameQualityAnalyzer.FrameMetrics metrics = sessionMetrics.get(i);
 
             // Check if the evaluator flagged this frame
             if (metrics.isRejected) {
-                // We simply log it and skip. NO empty lists are added to allFramesData.
                 System.out.println("⚠️ Skipping Frame " + (i + 1) + ": " + metrics.rejectionReason);
             } else {
-                System.out.println("Processing Frame " + (i + 1) + "...");
-
-                // Execute the math engine on the raw data
-                List<SourceExtractor.DetectedObject> objectsInFrame =
-                        SourceExtractor.extractSources(rawFrames.get(i), sigmaMultiplier, minPixels);
-
-                System.out.println("Found " + objectsInFrame.size() + " objects in Frame " + (i + 1));
-                //DetectionDebugger.printDetectedObjects(objectsInFrame, "Frame " + (i + 1));
-
+                System.out.println("✅ Keeping Frame " + (i + 1));
                 // Only valid, extracted frames are added to the list
-                allFramesData.add(objectsInFrame);
+                allFramesData.add(rawExtractedFrames.get(i));
             }
         }
 
         System.out.println("\n--- PHASE 4: Track Linking ---");
         System.out.println("Linking tracks across " + allFramesData.size() + " valid frames...");
 
-        double maxStarJitter = 2.0;       // Stars can wobble by ~2 pixels due to seeing
-        double predictionTolerance = 3.0; // Allow a 3-pixel radius for the predicted path
-        double angleToleranceRad = Math.toRadians(5.0); // Streaks must point in the same direction
+        double maxStarJitter = TrackLinker.maxStarJitter;
+        double predictionTolerance = TrackLinker.predictionTolerance;
+        double angleToleranceRad = TrackLinker.angleToleranceRad;
 
         // The TrackLinker now only receives guaranteed good frames, so it can rely on allFramesData.size()
         List<TrackLinker.Track> confirmedTargets = TrackLinker.findMovingObjects(
@@ -1576,10 +1591,66 @@ public class ImagePreprocessing {
 
         System.out.println("Success! Found " + confirmedTargets.size() + " moving targets/streaks.");
 
-        // Print the final tracking results!
-        //DetectionDebugger.printTracks(confirmedTargets);
+        System.out.println("\n--- PHASE 5: Exporting Visualizations ---");
 
-        // Next: Send 'confirmedTargets' to your UI to be drawn!
+        // Ensure we actually have files and targets to process
+        if (fitsFileInformation.length > 0 && !confirmedTargets.isEmpty()) {
+
+            // 1. Get the parent directory of the very first FITS file
+            File firstFitsFile = fitsFileInformation[0];
+            File parentDir = firstFitsFile.getParentFile();
+
+            // Fallback just in case the file was passed without an absolute path
+            if (parentDir == null) {
+                parentDir = new File(System.getProperty("user.dir"));
+            }
+
+            // 2. Define the "detections" subfolder
+            File exportDir = new File(parentDir, "detections");
+
+            // 3. Export the lossless PNGs and animated GIFs!
+            try {
+                System.out.println("Preparing to export to: " + exportDir.getAbsolutePath());
+                ImageDisplayUtils.exportTrackVisualizations(confirmedTargets, rawFrames, exportDir);
+
+            } catch (IOException e) {
+                System.err.println("Failed to export visualizations: " + e.getMessage());
+                e.printStackTrace();
+            }
+
+        } else if (confirmedTargets.isEmpty()) {
+            System.out.println("No targets found to export.");
+        }
+
     }
 
+    /**
+     * Creates a "detections" directory in the same folder as the provided FITS file.
+     * * @param anyFitsFile A File object representing one of the processed FITS images.
+     * @return A File object representing the "detections" directory.
+     */
+    public static File createDetectionsDirectory(File anyFitsFile) {
+        // 1. Get the directory where the FITS file lives
+        File parentDir = anyFitsFile.getParentFile();
+
+        // Safety catch: If the file was passed without an absolute path, parentDir might be null
+        if (parentDir == null) {
+            parentDir = new File(System.getProperty("user.dir"));
+        }
+
+        // 2. Define the new "detections" subdirectory
+        File detectionsDir = new File(parentDir, "detections");
+
+        // 3. Create it if it doesn't already exist
+        if (!detectionsDir.exists()) {
+            boolean created = detectionsDir.mkdirs();
+            if (created) {
+                System.out.println("Created new export directory at: " + detectionsDir.getAbsolutePath());
+            } else {
+                System.err.println("Failed to create export directory. Check folder permissions.");
+            }
+        }
+
+        return detectionsDir;
+    }
 }
