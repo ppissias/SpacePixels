@@ -31,8 +31,19 @@ public class RawImageAnnotator {
                 // Draw a small tight box exactly at the centroid
                 drawBox(imageData, cx, cy, 3, HIGHLIGHT_VALUE);
             } else {
-                // Draw a standard 10-pixel radius target box around point sources
-                drawBox(imageData, cx, cy, 10, HIGHLIGHT_VALUE);
+                // --- NEW: DYNAMIC BOX SIZE ---
+                int boxRadius = 10; // Default minimum size
+
+                if (obj.pixelArea > 0) {
+                    // Calculate the rough radius of the object and add 5 pixels of padding
+                    // so the box is drawn outside the glowing core, on the dark sky.
+                    int dynamicRadius = (int) Math.round(Math.sqrt(obj.pixelArea / Math.PI)) + 5;
+
+                    // Use whichever is larger: the default 10, or the new dynamic size
+                    boxRadius = Math.max(10, dynamicRadius);
+                }
+
+                drawBox(imageData, cx, cy, boxRadius, HIGHLIGHT_VALUE);
             }
         }
     }

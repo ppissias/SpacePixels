@@ -19,11 +19,23 @@ public class TrackLinker {
             points.add(obj);
         }
     }
+    /**
+     * Checks if two objects are roughly the same size.
+     * A maxRatio of 3.0 means one object can be up to 3 times larger than the other,
+     * which safely accounts for atmospheric blurring and noise, but rejects massive mismatches.
+     */
+    private static boolean isSizeConsistent(SourceExtractor.DetectedObject obj1, SourceExtractor.DetectedObject obj2, double maxRatio) {
+        // Prevent division by zero just in case
+        double size1 = Math.max(obj1.pixelArea, 1.0);
+        double size2 = Math.max(obj2.pixelArea, 1.0);
+
+        double ratio = Math.max(size1, size2) / Math.min(size1, size2);
+        return ratio <= maxRatio;
+    }
 
     /**
      * Master method to find all moving objects (both fast streaks and slow dots).
-     * * @param allFrames           List of detections for each sequential FITS image.
-     *
+     * @param allFrames           List of detections for each sequential FITS image.
      * @param maxStarJitter       Max pixel wobble for stationary stars (e.g., 2.0).
      * @param predictionTolerance Max pixels a detection can deviate from predicted path (e.g., 3.0).
      * @param angleToleranceRad   Max angle difference (in radians) to link streaks (e.g., Math.toRadians(5)).
@@ -189,34 +201,49 @@ public class TrackLinker {
         }
 
         System.out.println("DEBUG: [PHASE 3] Completed. Total pure transients across sequence: " + totalTransientsFound);
+
         // =================================================================
         // PHASE 4: GEOMETRIC COLLINEAR LINKING (Time-Agnostic)
         // =================================================================
         int minPointsRequired = Math.max(3, (int) Math.ceil(numFrames / 2.0));
+        if (minPointsRequired > 5) {
+            minPointsRequired = 5;
+        }
+        //TODO move to variable
+        double maxSizeRatio = 3.0;
 
         System.out.println("DEBUG: [PHASE 4] Applying time-agnostic geometric filter...");
         System.out.println("  -> Track confirmation threshold: " + minPointsRequired + " points.");
 
         List<Track> pointTracks = new ArrayList<>();
 
+        // --- NEW: THE GLOBAL MEMORY BANK ---
+        // Keeps track of objects already assigned to a confirmed track
+        // to completely eliminate duplicate sub-tracks!
+        java.util.Set<SourceExtractor.DetectedObject> usedPoints = new java.util.HashSet<>();
+
         for (int f1 = 0; f1 < numFrames - 2; f1++) {
             for (SourceExtractor.DetectedObject p1 : transients.get(f1)) {
+
+                // Skip if this point is already claimed by a confirmed track
+                if (usedPoints.contains(p1)) continue;
 
                 for (int f2 = f1 + 1; f2 < numFrames - 1; f2++) {
                     for (SourceExtractor.DetectedObject p2 : transients.get(f2)) {
 
-                        double dist12 = distance(p1.x, p1.y, p2.x, p2.y);
+                        // Skip if this point is already claimed
+                        if (usedPoints.contains(p2)) continue;
 
-                        // If it barely moved, skip
+                        double dist12 = distance(p1.x, p1.y, p2.x, p2.y);
                         if (dist12 < maxStarJitter) continue;
+
+                        if (!isSizeConsistent(p1, p2, maxSizeRatio)) continue;
 
                         Track currentTrack = new Track();
                         currentTrack.addPoint(p1);
                         currentTrack.addPoint(p2);
 
                         SourceExtractor.DetectedObject lastPoint = p2;
-
-                        // Establish the baseline trajectory angle
                         double expectedAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
 
                         // 3. Hunt for points on this infinite line in later frames
@@ -226,28 +253,25 @@ public class TrackLinker {
 
                             for (SourceExtractor.DetectedObject p3 : transients.get(f3)) {
 
-                                // Is it on the line?
+                                // Skip if p3 is already claimed by another track!
+                                if (usedPoints.contains(p3)) continue;
+
                                 double lineError = distanceToLine(p1, p2, p3);
 
                                 if (lineError <= predictionTolerance) {
-
-                                    // Is it moving strictly FORWARD from the last known point?
                                     double actualAngle = Math.atan2(p3.y - lastPoint.y, p3.x - lastPoint.x);
 
-                                    // --- NEW: STRICT DIRECTIONAL CHECK ---
-                                    // Calculate the absolute difference, handling the PI / -PI wrap-around boundary
                                     double angleDiff = Math.abs(expectedAngle - actualAngle);
                                     if (angleDiff > Math.PI) {
                                         angleDiff = (2.0 * Math.PI) - angleDiff;
                                     }
 
-                                    // If the difference is within tolerance, it is strictly moving forward
                                     if (angleDiff <= angleToleranceRad) {
-
-                                        // As long as the angle matches, see if it's the closest point to our line
-                                        if (lineError < bestError) {
-                                            bestError = lineError;
-                                            bestMatch = p3;
+                                        if (isSizeConsistent(lastPoint, p3, maxSizeRatio)) {
+                                            if (lineError < bestError) {
+                                                bestError = lineError;
+                                                bestMatch = p3;
+                                            }
                                         }
                                     }
                                 }
@@ -259,12 +283,25 @@ public class TrackLinker {
                             }
                         }
 
-                        // 4. Final confirmation check
+// 4. Final confirmation check
                         if (currentTrack.points.size() >= minPointsRequired) {
-                            if (!isTrackAlreadyFound(pointTracks, currentTrack)) {
-                                pointTracks.add(currentTrack);
-                                //System.out.println("    -> [SUCCESS] Point Track Confirmed! Length: " + currentTrack.points.size() +
-                                 //       " points. Started at Frame " + f1 + ", Angle: "                                                                                                                                                                                                 + String.format("%.2f", expectedAngle));
+
+                            // --- NEW: STEADY RHYTHM KINEMATIC FILTER ---
+                            // Only accept the track if the object moves at a consistent speed
+                            //TODO move allowed variance to class variable
+                            if (hasSteadyRhythm(currentTrack, 5.0)) {
+
+                                if (!isTrackAlreadyFound(pointTracks, currentTrack)) {
+
+                                    pointTracks.add(currentTrack);
+
+                                    // LOCK THESE POINTS
+                                    usedPoints.addAll(currentTrack.points);
+                                }
+                            } else {
+                                // Optional: You can print a debug statement here to see how many
+                                // geometrically perfect but kinematically invalid tracks get rejected!
+                                // System.out.println("DEBUG: Rejected track due to erratic rhythm.");
                             }
                         }
                     }
@@ -274,8 +311,6 @@ public class TrackLinker {
 
         confirmedTracks.addAll(pointTracks);
         printAllTracks(confirmedTracks);
-        //System.out.println("DEBUG: [PHASE 4] Completed. Found " + pointTracks.size() + " point tracks.");
-        //System.out.println("DEBUG: [FINISH] findMovingObjects complete. Total confirmed moving targets returned: " + confirmedTracks.size() + "\n");
 
         return confirmedTracks;
     }

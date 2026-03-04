@@ -8,16 +8,17 @@ import java.util.Queue;
 public class SourceExtractor {
 
     //values used for detection pipeline
-    public static double detectionSigmaMultiplier = 4.5;
-    public static int minDetectionPixels = 5;
-
-
+    public static double detectionSigmaMultiplier = 3.5;
+    public static int minDetectionPixels = 3;
 
     // Helper classes to hold our data
     public static class DetectedObject {
         public double x, y;
         public double totalFlux;
         public int pixelCount;
+
+        // --- NEW: Size metric for TrackLinker Morphological Filtering ---
+        public double pixelArea;
 
         // --- New FWHM Metric ---
         public double fwhm;
@@ -64,32 +65,28 @@ public class SourceExtractor {
         int width = image[0].length;
 
         // 1. Calculate Background
-        // Note: Ensure your calculateBackground method is also using image[y][x] internally!
         BackgroundMetrics bg = calculateBackgroundSigmaClipped(image, width, height, sigmaMultiplier);
         System.out.println("Background Median: " + bg.median + ", Sigma: " + bg.sigma + ", Threshold: " + bg.threshold);
 
         // 2. Setup for BFS Blob Detection
         List<DetectedObject> detectedObjects = new ArrayList<>();
-
-        // The visited array dimensions must match the image array: [height][width]
         boolean[][] visited = new boolean[height][width];
 
-        // 8-way directional arrays for finding neighbors (dx is for X/width, dy is for Y/height)
+        // 8-way directional arrays for finding neighbors
         int[] dx = {-1, -1, -1, 0, 0, 1, 1, 1};
         int[] dy = {-1, 0, 1, -1, 1, -1, 0, 1};
 
-        // 3. Scan the image (Outer loop Y, Inner loop X for cache-friendly row-major access)
+        // 3. Scan the image
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                // Access data correctly as [y][x]
-                int pixelValue = image[y][x] & 0xFFFF; // Convert Java signed short to unsigned 16-bit
+
+                int pixelValue = image[y][x] + 32768; // Convert Java signed short to unsigned 16-bit
 
                 if (pixelValue > bg.threshold && !visited[y][x]) {
                     // Start a new BFS for a new Blob
                     List<Pixel> currentBlob = new ArrayList<>();
                     Queue<Pixel> queue = new LinkedList<>();
 
-                    // Pixel object still stores coordinates in standard (x, y) format
                     Pixel startPixel = new Pixel(x, y, pixelValue);
                     queue.add(startPixel);
                     visited[y][x] = true;
@@ -107,8 +104,8 @@ public class SourceExtractor {
                             // Check boundaries
                             if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
                                 if (!visited[ny][nx]) {
-                                    // Access neighbor data as [ny][nx]
-                                    int nValue = image[ny][nx] & 0xFFFF;
+                                    // FIXED TYPO HERE: Removed the double plus sign
+                                    int nValue = image[ny][nx] + 32768;
                                     if (nValue > bg.threshold) {
                                         visited[ny][nx] = true;
                                         queue.add(new Pixel(nx, ny, nValue));
@@ -123,14 +120,28 @@ public class SourceExtractor {
 
                         DetectedObject obj = analyzeShape(currentBlob, bg.median);
 
+                        // --- THE COMET TRIPWIRE ---
+                        //if (currentBlob.size() > 150) {
+                        //    System.out.println("\n[TRIPWIRE] Massive object found!");
+                        //    System.out.println("  -> Size: " + currentBlob.size() + " pixels");
+                        //    System.out.println("  -> Location: X:" + obj.x + ", Y:" + obj.y);
+                        //    System.out.println("  -> Flagged as noise by analyzeShape? " + obj.isNoise);
+
+                            // Force the software to keep it so we can see it in the final image!
+                            // obj.isNoise = false;
+                        //}
+
                         // The Roundness Filter Drop
                         if (obj.isNoise) {
-                            continue; // Skip adding it to the list entirely!
+                            continue;
                         }
 
                         if (obj.isStreak) {
                             System.out.println("Streak detected at X: " + obj.x + ", Y: " + obj.y + " with angle: " + obj.angle);
                         }
+
+                        // --- NEW: RECORD THE PIXEL AREA ---
+                        obj.pixelArea = currentBlob.size();
 
                         detectedObjects.add(obj);
                     }
@@ -140,45 +151,38 @@ public class SourceExtractor {
         return detectedObjects;
     }
 
-
     /**
      * Fast Histogram-based background estimation using Iterative Sigma Clipping.
-     * This removes stars from the background math to reveal faint objects.
      */
     public static BackgroundMetrics calculateBackgroundSigmaClipped(short[][] image, int width, int height, double sigmaMultiplier) {
         BackgroundMetrics metrics = new BackgroundMetrics();
-        int[] histogram = new int[65536]; // For 16-bit unsigned data
+        int[] histogram = new int[65536];
 
-        // 1. Build Histogram (Cache-friendly row-major traversal)
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                int val = image[y][x] & 0xFFFF;
+                int val = image[y][x] + 32768;
                 histogram[val]++;
             }
         }
 
-        // 2. Setup for Iterative Clipping
         int currentMinBin = 0;
         int currentMaxBin = 65535;
         double currentMedian = 0;
         double currentSigma = 0;
 
-        int iterations = 3;          // 3 passes is standard for astrophotography
-        double clippingFactor = 3.0; // We clip anything outside of 3-sigma from the median
+        int iterations = 3;
+        double clippingFactor = 3.0;
 
-        // 3. Perform Sigma Clipping
         for (int iter = 0; iter < iterations; iter++) {
             long count = 0;
             long validPixelCount = 0;
 
-            // a. Count total valid pixels in our current allowed range
             for (int i = currentMinBin; i <= currentMaxBin; i++) {
                 validPixelCount += histogram[i];
             }
 
-            if (validPixelCount == 0) break; // Safety catch
+            if (validPixelCount == 0) break;
 
-            // b. Find the median bin within the allowed range
             for (int i = currentMinBin; i <= currentMaxBin; i++) {
                 count += histogram[i];
                 if (count >= validPixelCount / 2) {
@@ -187,50 +191,41 @@ public class SourceExtractor {
                 }
             }
 
-            // c. Calculate Standard Deviation (Sigma) within the allowed range
             double sumSqDiff = 0;
             for (int i = currentMinBin; i <= currentMaxBin; i++) {
                 if (histogram[i] > 0) {
                     double diff = i - currentMedian;
-                    // Multiply the squared difference by the number of pixels in this bin
                     sumSqDiff += (diff * diff) * histogram[i];
                 }
             }
             currentSigma = Math.sqrt(sumSqDiff / validPixelCount);
 
-            // d. Update the bounds for the next iteration!
-            // This pulls the ceiling down, cutting out the stars iteration by iteration.
             currentMinBin = (int) Math.max(0, Math.floor(currentMedian - (clippingFactor * currentSigma)));
             currentMaxBin = (int) Math.min(65535, Math.ceil(currentMedian + (clippingFactor * currentSigma)));
         }
 
-        // 4. Set final metrics based on the fully clipped data
         metrics.median = currentMedian;
         metrics.sigma = currentSigma;
-
-        // Use the user's requested multiplier against the true sky sigma
         metrics.threshold = currentMedian + (currentSigma * sigmaMultiplier);
 
         return metrics;
     }
+
     /**
      * Fast Histogram-based background estimation.
      */
     public static BackgroundMetrics calculateBackground(short[][] image, int width, int height, double sigmaMultiplier) {
         BackgroundMetrics metrics = new BackgroundMetrics();
-        int[] histogram = new int[65536]; // For 16-bit unsigned data
+        int[] histogram = new int[65536];
         int totalPixels = width * height;
 
-        // Build Histogram (Cache-friendly row-major traversal)
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                // Access data correctly as [y][x]
-                int val = image[y][x] & 0xFFFF;
+                int val = image[y][x] + 32768;
                 histogram[val]++;
             }
         }
 
-        // Find Median
         int count = 0;
         int medianValue = 0;
         for (int i = 0; i < histogram.length; i++) {
@@ -242,17 +237,13 @@ public class SourceExtractor {
         }
         metrics.median = medianValue;
 
-        // Calculate Standard Deviation (ignoring bright stars to avoid skewing)
-        // We only look at pixels reasonably close to the median (e.g., within 2x median)
         double sumSqDiff = 0;
         int bgPixelCount = 0;
-        int upperLimit = medianValue * 2; // Rough cutoff to exclude stars from noise math
+        int upperLimit = medianValue * 2;
 
-        // Variance Loop (Cache-friendly row-major traversal)
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                // Access data correctly as [y][x]
-                int val = image[y][x] & 0xFFFF;
+                int val = image[y][x] + 32768;
                 if (val < upperLimit) {
                     double diff = val - medianValue;
                     sumSqDiff += (diff * diff);
@@ -266,6 +257,7 @@ public class SourceExtractor {
 
         return metrics;
     }
+
     /**
      * Intensity-weighted centroiding for sub-pixel accuracy.
      */
@@ -275,9 +267,8 @@ public class SourceExtractor {
         double sumIY = 0;
 
         for (Pixel p : blob) {
-            // Only use the light from the object, subtract the background sky
             double intensity = p.value - backgroundMedian;
-            if (intensity < 0) intensity = 0; // Safety catch
+            if (intensity < 0) intensity = 0;
 
             sumI += intensity;
             sumIX += p.x * intensity;
@@ -290,37 +281,28 @@ public class SourceExtractor {
         return new DetectedObject(centroidX, centroidY, sumI, blob.size());
     }
 
-
     /**
      * Calculates the centroid, elongation, and angle of a pixel blob using Image Moments.
      */
     public static DetectedObject analyzeShape(List<Pixel> blob, double bgMedian) {
         DetectedObject obj = new DetectedObject(0,0,0,0);
 
-        double m00 = 0; // Total mass (sum of intensities)
-        double m10 = 0; // Moment for X
-        double m01 = 0; // Moment for Y
+        double m00 = 0;
+        double m10 = 0;
+        double m01 = 0;
 
-        // =================================================================
-        // STEP 1: Calculate the Center of Mass (Centroid)
-        // =================================================================
         for (Pixel p : blob) {
-            // We subtract the background so faint edges don't drag the center of mass
             double intensity = p.value - bgMedian;
-            if (intensity <= 0) intensity = 1; // Safety catch
+            if (intensity <= 0) intensity = 1;
 
             m00 += intensity;
             m10 += p.x * intensity;
             m01 += p.y * intensity;
         }
 
-        // The intensity-weighted X and Y coordinates
         obj.x = m10 / m00;
         obj.y = m01 / m00;
 
-        // =================================================================
-        // STEP 2: Calculate 2nd-Order Central Moments (for the Ellipse)
-        // =================================================================
         double mu20 = 0, mu02 = 0, mu11 = 0;
         for (Pixel p : blob) {
             double intensity = p.value - bgMedian;
@@ -334,46 +316,28 @@ public class SourceExtractor {
             mu11 += (dx * dy) * intensity;
         }
 
-        // Normalize the moments by total mass
         mu20 /= m00;
         mu02 /= m00;
         mu11 /= m00;
 
-        // =================================================================
-        // STEP 3: Eigenvalues to find Elongation and Angle
-        // =================================================================
-        // This math calculates the major and minor axes of the ellipse
         double delta = Math.sqrt((mu20 - mu02) * (mu20 - mu02) + 4 * mu11 * mu11);
-        double lambda1 = (mu20 + mu02 + delta) / 2.0; // Major axis length squared
-        double lambda2 = (mu20 + mu02 - delta) / 2.0; // Minor axis length squared
+        double lambda1 = (mu20 + mu02 + delta) / 2.0;
+        double lambda2 = (mu20 + mu02 - delta) / 2.0;
 
-        // Safety catch against division by zero for perfect 1-pixel point sources
         if (lambda2 < 0.001) lambda2 = 0.001;
         if (lambda1 < 0.001) lambda1 = 0.001;
 
         obj.elongation = Math.sqrt(lambda1 / lambda2);
-
-        // Calculate the rotation angle of the ellipse in radians
         obj.angle = 0.5 * Math.atan2(2 * mu11, mu20 - mu02);
 
-        // =================================================================
-        // STEP 4: The Roundness Filter Classification
-        // =================================================================
-
-        // 1. Is it a massive Streak? (Satellite/Airplane)
-        // A high elongation means it is a line.
         if (obj.elongation > 3.0 && blob.size() > 15) {
             obj.isStreak = true;
             obj.isNoise = false;
         }
-        // 2. Is it Asymmetrical Noise? (Cosmic Ray / Bleeding Pixel)
-        // If it's stretched out, but the blob is tiny, it's a sensor glitch.
         else if (obj.elongation > 1.8 && blob.size() <= 15) {
             obj.isStreak = false;
             obj.isNoise = true;
         }
-        // 3. It's a Star or Asteroid!
-        // Relatively round, balanced ellipse.
         else {
             obj.isStreak = false;
             obj.isNoise = false;
@@ -381,7 +345,4 @@ public class SourceExtractor {
 
         return obj;
     }
-
-
-
 }
