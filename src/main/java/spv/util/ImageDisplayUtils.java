@@ -266,8 +266,13 @@ public class ImageDisplayUtils {
             report.println("body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1e1e; color: #e0e0e0; margin: 40px; }");
             report.println("h1 { color: #ffffff; border-bottom: 2px solid #444; padding-bottom: 10px; }");
             report.println(".detection-card { background: #2d2d2d; padding: 20px; margin-bottom: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }");
+
+            // Added a specific color class for streak titles to make them pop!
             report.println(".detection-title { font-size: 1.2em; font-weight: bold; color: #4da6ff; margin-bottom: 15px; }");
-            report.println(".image-container { display: flex; gap: 20px; margin-bottom: 15px; align-items: flex-start; }");            report.println("img { border: 1px solid #555; border-radius: 4px; max-width: 100%; height: auto; }");
+            report.println(".streak-title { color: #ff9933; }");
+
+            report.println(".image-container { display: flex; gap: 20px; margin-bottom: 15px; align-items: flex-start; }");
+            report.println("img { border: 1px solid #555; border-radius: 4px; max-width: 100%; height: auto; }");
             report.println(".source-list { list-style-type: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }");
             report.println(".source-list li { background: #3d3d3d; padding: 5px 10px; border-radius: 4px; font-size: 0.9em; font-family: monospace; }");
             report.println("</style>");
@@ -278,9 +283,6 @@ public class ImageDisplayUtils {
             for (TrackLinker.Track track : tracks) {
                 if (track.points == null || track.points.isEmpty()) continue;
 
-                // =================================================================
-                // How many unique FITS frames does this track span?
-                // =================================================================
                 java.util.Set<Integer> uniqueFrames = new java.util.HashSet<>();
                 for (SourceExtractor.DetectedObject pt : track.points) {
                     uniqueFrames.add(pt.sourceFrameIndex);
@@ -295,10 +297,20 @@ public class ImageDisplayUtils {
                     double minY = Double.MAX_VALUE, maxY = Double.MIN_VALUE;
 
                     for (SourceExtractor.DetectedObject pt : track.points) {
-                        if (pt.x < minX) minX = pt.x;
-                        if (pt.x > maxX) maxX = pt.x;
-                        if (pt.y < minY) minY = pt.y;
-                        if (pt.y > maxY) maxY = pt.y;
+
+                        double objectRadius = 0;
+                        if (pt.pixelArea > 0) {
+                            if (pt.isStreak) {
+                                objectRadius = Math.sqrt((pt.pixelArea * pt.elongation) / Math.PI);
+                            } else {
+                                objectRadius = Math.sqrt(pt.pixelArea / Math.PI);
+                            }
+                        }
+
+                        if (pt.x - objectRadius < minX) minX = pt.x - objectRadius;
+                        if (pt.x + objectRadius > maxX) maxX = pt.x + objectRadius;
+                        if (pt.y - objectRadius < minY) minY = pt.y - objectRadius;
+                        if (pt.y + objectRadius > maxY) maxY = pt.y + objectRadius;
                     }
 
                     int padding = 100;
@@ -322,7 +334,7 @@ public class ImageDisplayUtils {
 
                     // --- WRITE HTML CARD FOR STREAK ---
                     report.println("<div class='detection-card'>");
-                    report.println("<div class='detection-title'>Single Streak Event #" + streakCounter + "</div>");
+                    report.println("<div class='detection-title streak-title'>Single Streak Event #" + streakCounter + "</div>");
                     report.println("<div class='image-container'>");
                     report.println("<img src='" + streakFileName + "' alt='Streak Image' />");
                     report.println("</div>");
@@ -343,10 +355,20 @@ public class ImageDisplayUtils {
                     double minY = Double.MAX_VALUE, maxY = Double.MIN_VALUE;
 
                     for (SourceExtractor.DetectedObject pt : track.points) {
-                        if (pt.x < minX) minX = pt.x;
-                        if (pt.x > maxX) maxX = pt.x;
-                        if (pt.y < minY) minY = pt.y;
-                        if (pt.y > maxY) maxY = pt.y;
+
+                        double objectRadius = 0;
+                        if (pt.pixelArea > 0) {
+                            if (pt.isStreak) {
+                                objectRadius = Math.sqrt((pt.pixelArea * pt.elongation) / Math.PI);
+                            } else {
+                                objectRadius = Math.sqrt(pt.pixelArea / Math.PI);
+                            }
+                        }
+
+                        if (pt.x - objectRadius < minX) minX = pt.x - objectRadius;
+                        if (pt.x + objectRadius > maxX) maxX = pt.x + objectRadius;
+                        if (pt.y - objectRadius < minY) minY = pt.y - objectRadius;
+                        if (pt.y + objectRadius > maxY) maxY = pt.y + objectRadius;
                     }
 
                     int padding = 100;
@@ -369,13 +391,15 @@ public class ImageDisplayUtils {
 
                         short[][] rawImage = rawFrames.get(pt.sourceFrameIndex);
 
-                        // 1. Object-Centric Render
-                        short[][] croppedObjData = robustEdgeAwareCrop(
-                                rawImage, (int) pt.x, (int) pt.y, objectCentricSize, objectCentricSize);
-                        BufferedImage objFrame = createDisplayImage(croppedObjData);
-                        objectCentricFrames.add(objFrame);
+                        // 1. Object-Centric Render (SKIP IF IT IS A STREAK TRACK)
+                        if (!track.isStreakTrack) {
+                            short[][] croppedObjData = robustEdgeAwareCrop(
+                                    rawImage, (int) pt.x, (int) pt.y, objectCentricSize, objectCentricSize);
+                            BufferedImage objFrame = createDisplayImage(croppedObjData);
+                            objectCentricFrames.add(objFrame);
+                        }
 
-                        // 2. Star-Centric Render
+                        // 2. Star-Centric Render (ALWAYS DO THIS)
                         short[][] croppedStarData = robustEdgeAwareCrop(
                                 rawImage, fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
                         BufferedImage starFrameGray = createDisplayImage(croppedStarData);
@@ -397,24 +421,42 @@ public class ImageDisplayUtils {
                         starCentricFrames.add(starFrameGray);
                     }
 
-                    String objFileName = "track_" + trackCounter + "_object_centric.gif";
-                    String starFileName = "track_" + trackCounter + "_star_centric.gif";
-
-                    File objFile = new File(exportDir, objFileName);
-                    GifSequenceWriter.saveAnimatedGif(objectCentricFrames, objFile, blinkSpeedMs);
-
-                    File starFile = new File(exportDir, starFileName);
-                    GifSequenceWriter.saveAnimatedGif(starCentricFrames, starFile, blinkSpeedMs);
-
-                    System.out.println("Exported animations for track " + trackCounter + ".");
-
-                    // --- WRITE HTML CARD FOR TRACK ---
+                    // --- EXPORT AND HTML GENERATION ---
                     report.println("<div class='detection-card'>");
-                    report.println("<div class='detection-title'>Moving Target Track #" + trackCounter + "</div>");
-                    report.println("<div class='image-container'>");
-                    report.println("<img src='" + objFileName + "' alt='Object Centric Animation' title='Object-Centric' />");
-                    report.println("<img src='" + starFileName + "' alt='Star Centric Animation' title='Star-Centric' />");
-                    report.println("</div>");
+
+                    if (track.isStreakTrack) {
+                        // MULTI-FRAME STREAK TRACK
+                        String starFileName = "streak_track_" + trackCounter + "_star_centric.gif";
+                        File starFile = new File(exportDir, starFileName);
+                        GifSequenceWriter.saveAnimatedGif(starCentricFrames, starFile, blinkSpeedMs);
+
+                        System.out.println("Exported animation for streak track " + trackCounter + ".");
+
+                        report.println("<div class='detection-title streak-title'>Multi-Frame Streak Track #" + trackCounter + "</div>");
+                        report.println("<div class='image-container'>");
+                        report.println("<img src='" + starFileName + "' alt='Star Centric Animation' title='Star-Centric' />");
+                        report.println("</div>");
+                    } else {
+                        // STANDARD POINT TRACK (Asteroid/Comet)
+                        String objFileName = "track_" + trackCounter + "_object_centric.gif";
+                        String starFileName = "track_" + trackCounter + "_star_centric.gif";
+
+                        File objFile = new File(exportDir, objFileName);
+                        GifSequenceWriter.saveAnimatedGif(objectCentricFrames, objFile, blinkSpeedMs);
+
+                        File starFile = new File(exportDir, starFileName);
+                        GifSequenceWriter.saveAnimatedGif(starCentricFrames, starFile, blinkSpeedMs);
+
+                        System.out.println("Exported animations for point track " + trackCounter + ".");
+
+                        report.println("<div class='detection-title'>Moving Target Track #" + trackCounter + "</div>");
+                        report.println("<div class='image-container'>");
+                        report.println("<img src='" + objFileName + "' alt='Object Centric Animation' title='Object-Centric' />");
+                        report.println("<img src='" + starFileName + "' alt='Star Centric Animation' title='Star-Centric' />");
+                        report.println("</div>");
+                    }
+
+                    // Write chronological sources (applies to both)
                     report.println("<strong>Sequence Frames (Chronological):</strong>");
                     report.println("<ul class='source-list'>");
                     for (String fileName : chronologicalSourceFiles) {

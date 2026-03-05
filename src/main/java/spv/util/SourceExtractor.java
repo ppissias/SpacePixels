@@ -1,35 +1,76 @@
 package spv.util;
 
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 
 public class SourceExtractor {
 
-    //values used for detection pipeline
-    public static double detectionSigmaMultiplier = 3.5;
-    public static int minDetectionPixels = 3;
+    // =================================================================
+    // CONFIGURATION PARAMETERS
+    // =================================================================
 
-    // Helper classes to hold our data
+    /** The primary strict threshold to start detecting a new object.
+     * Lowering this catches fainter objects but increases noise. */
+    public static double detectionSigmaMultiplier = 7.0;
+
+    /** The absolute minimum number of pixels a blob must have to even be evaluated. */
+    public static int minDetectionPixels = 10;
+
+    /** The "dead zone" in pixels around the edge of the sensor.
+     * Objects with their center in this zone are ignored to prevent edge artifacts. */
+    public static int edgeMarginPixels = 15;
+
+    /** Dual-Thresholding (Hysteresis): The lower threshold used to trace the faint
+     * edges of a blob once a bright seed pixel is found. */
+    public static double growSigmaMultiplier = 1.2;
+
+    /** If a pixel is darker than this fraction of the background median
+     * (e.g., 0.5 means 50% darker), it is assumed to be artificial registration padding. */
+    public static double voidThresholdFraction = 0.5;
+
+    // --- Shape Classification Parameters ---
+
+    /** The minimum elongation ratio (length/width) required to classify a blob as a fast-moving streak. */
+    public static double streakMinElongation = 5.0;
+
+    /** The minimum number of pixels required to classify an elongated blob as a streak. */
+    public static int streakMinPixels = 10;
+
+    /** The minimum number of pixels to classify a blob as a point source (star/asteroid). */
+    public static int pointSourceMinPixels = 4;
+
+    // --- Background Statistics Parameters ---
+
+    /** Number of passes used to exclude bright stars when calculating the background sky noise. */
+    public static int bgClippingIterations = 3;
+
+    /** The threshold (in standard deviations) used to chop off stars during background calculation. */
+    public static double bgClippingFactor = 3.0;
+
+
+    // =================================================================
+    // HELPER CLASSES
+    // =================================================================
+
     public static class DetectedObject {
         public double x, y;
         public double totalFlux;
         public int pixelCount;
 
-        // --- NEW: Size metric for TrackLinker Morphological Filtering ---
+        // Size metric for TrackLinker Morphological Filtering
         public double pixelArea;
 
-        // --- New FWHM Metric ---
+        // FWHM Metric
         public double fwhm;
 
-        // --- New Shape Fields ---
+        // Shape Fields
         public double elongation;
         public double angle; // The angle of the streak in radians
         public boolean isStreak;
         public boolean isNoise;
 
-        public int sourceFrameIndex; // NEW: Points back to rawFrames.get(i)
+        public int sourceFrameIndex; // Points back to rawFrames.get(i)
         public String sourceFilename;
 
         public DetectedObject(double x, double y, double flux, int count) {
@@ -56,23 +97,31 @@ public class SourceExtractor {
         public double threshold;
     }
 
+    // =================================================================
+    // CORE EXTRACTION PIPELINE
+    // =================================================================
+
     /**
      * Main method to run the detection pipeline on a single frame.
      */
     public static List<DetectedObject> extractSources(short[][] image, double sigmaMultiplier, int minPixels) {
-        // FITS data is row-major: the first dimension is Height (Y), the second is Width (X)
         int height = image.length;
         int width = image[0].length;
 
         // 1. Calculate Background
         BackgroundMetrics bg = calculateBackgroundSigmaClipped(image, width, height, sigmaMultiplier);
-        System.out.println("Background Median: " + bg.median + ", Sigma: " + bg.sigma + ", Threshold: " + bg.threshold);
+
+        // --- DUAL THRESHOLDS (HYSTERESIS) ---
+        double seedThreshold = bg.median + (bg.sigma * sigmaMultiplier);
+        double growThreshold = bg.median + (bg.sigma * growSigmaMultiplier); // Parameterized!
+
+        System.out.println("Background Median: " + bg.median + ", Sigma: " + bg.sigma);
+        System.out.println("Seed Threshold: " + seedThreshold + " | Grow Threshold: " + growThreshold);
 
         // 2. Setup for BFS Blob Detection
         List<DetectedObject> detectedObjects = new ArrayList<>();
         boolean[][] visited = new boolean[height][width];
 
-        // 8-way directional arrays for finding neighbors
         int[] dx = {-1, -1, -1, 0, 0, 1, 1, 1};
         int[] dy = {-1, 0, 1, -1, 1, -1, 0, 1};
 
@@ -80,39 +129,57 @@ public class SourceExtractor {
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
 
-                int pixelValue = image[y][x] + 32768; // Convert Java signed short to unsigned 16-bit
+                int pixelValue = image[y][x] + 32768;
 
-                if (pixelValue > bg.threshold && !visited[y][x]) {
-                    // Start a new BFS for a new Blob
+                // --- Start a blob ONLY if it beats the strict SEED threshold ---
+                if (pixelValue > seedThreshold && !visited[y][x]) {
                     List<Pixel> currentBlob = new ArrayList<>();
-                    Queue<Pixel> queue = new LinkedList<>();
+
+                    // Optimized to use ArrayDeque instead of LinkedList for faster BFS
+                    Queue<Pixel> queue = new java.util.ArrayDeque<>();
 
                     Pixel startPixel = new Pixel(x, y, pixelValue);
                     queue.add(startPixel);
                     visited[y][x] = true;
+
+                    // THE VOID TRIPWIRE
+                    boolean touchesVoid = false;
 
                     // BFS Loop
                     while (!queue.isEmpty()) {
                         Pixel p = queue.poll();
                         currentBlob.add(p);
 
-                        // Check 8 neighbors
                         for (int i = 0; i < 8; i++) {
                             int nx = p.x + dx[i];
                             int ny = p.y + dy[i];
 
-                            // Check boundaries
-                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-                                if (!visited[ny][nx]) {
-                                    // FIXED TYPO HERE: Removed the double plus sign
-                                    int nValue = image[ny][nx] + 32768;
-                                    if (nValue > bg.threshold) {
-                                        visited[ny][nx] = true;
-                                        queue.add(new Pixel(nx, ny, nValue));
-                                    }
+                            // 1. Did it touch the literal mathematical array boundary?
+                            if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+                                touchesVoid = true;
+                                continue;
+                            }
+
+                            int nValue = image[ny][nx] + 32768;
+
+                            // 2. Did it touch the artificial black registration padding?
+                            // Parameterized checking against the void fraction
+                            if (nValue < (bg.median * voidThresholdFraction)) {
+                                touchesVoid = true;
+                            }
+
+                            if (!visited[ny][nx]) {
+                                if (nValue > growThreshold) {
+                                    visited[ny][nx] = true;
+                                    queue.add(new Pixel(nx, ny, nValue));
                                 }
                             }
                         }
+                    }
+
+                    // ABORT CORRUPTED BLOBS
+                    if (touchesVoid) {
+                        continue;
                     }
 
                     // 4. Centroiding and Filtering
@@ -120,27 +187,17 @@ public class SourceExtractor {
 
                         DetectedObject obj = analyzeShape(currentBlob, bg.median);
 
-                        // --- THE COMET TRIPWIRE ---
-                        //if (currentBlob.size() > 150) {
-                        //    System.out.println("\n[TRIPWIRE] Massive object found!");
-                        //    System.out.println("  -> Size: " + currentBlob.size() + " pixels");
-                        //    System.out.println("  -> Location: X:" + obj.x + ", Y:" + obj.y);
-                        //    System.out.println("  -> Flagged as noise by analyzeShape? " + obj.isNoise);
+                        // SENSOR EDGE FILTER
+                        if (obj.x < edgeMarginPixels || obj.x >= (width - edgeMarginPixels) ||
+                                obj.y < edgeMarginPixels || obj.y >= (height - edgeMarginPixels)) {
+                            continue;
+                        }
 
-                            // Force the software to keep it so we can see it in the final image!
-                            // obj.isNoise = false;
-                        //}
-
-                        // The Roundness Filter Drop
                         if (obj.isNoise) {
                             continue;
                         }
 
-                        if (obj.isStreak) {
-                            System.out.println("Streak detected at X: " + obj.x + ", Y: " + obj.y + " with angle: " + obj.angle);
-                        }
-
-                        // --- NEW: RECORD THE PIXEL AREA ---
+                        // RECORD THE PIXEL AREA
                         obj.pixelArea = currentBlob.size();
 
                         detectedObjects.add(obj);
@@ -170,10 +227,7 @@ public class SourceExtractor {
         double currentMedian = 0;
         double currentSigma = 0;
 
-        int iterations = 3;
-        double clippingFactor = 3.0;
-
-        for (int iter = 0; iter < iterations; iter++) {
+        for (int iter = 0; iter < bgClippingIterations; iter++) { // Parameterized!
             long count = 0;
             long validPixelCount = 0;
 
@@ -200,8 +254,8 @@ public class SourceExtractor {
             }
             currentSigma = Math.sqrt(sumSqDiff / validPixelCount);
 
-            currentMinBin = (int) Math.max(0, Math.floor(currentMedian - (clippingFactor * currentSigma)));
-            currentMaxBin = (int) Math.min(65535, Math.ceil(currentMedian + (clippingFactor * currentSigma)));
+            currentMinBin = (int) Math.max(0, Math.floor(currentMedian - (bgClippingFactor * currentSigma))); // Parameterized!
+            currentMaxBin = (int) Math.min(65535, Math.ceil(currentMedian + (bgClippingFactor * currentSigma))); // Parameterized!
         }
 
         metrics.median = currentMedian;
@@ -209,76 +263,6 @@ public class SourceExtractor {
         metrics.threshold = currentMedian + (currentSigma * sigmaMultiplier);
 
         return metrics;
-    }
-
-    /**
-     * Fast Histogram-based background estimation.
-     */
-    public static BackgroundMetrics calculateBackground(short[][] image, int width, int height, double sigmaMultiplier) {
-        BackgroundMetrics metrics = new BackgroundMetrics();
-        int[] histogram = new int[65536];
-        int totalPixels = width * height;
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int val = image[y][x] + 32768;
-                histogram[val]++;
-            }
-        }
-
-        int count = 0;
-        int medianValue = 0;
-        for (int i = 0; i < histogram.length; i++) {
-            count += histogram[i];
-            if (count >= totalPixels / 2) {
-                medianValue = i;
-                break;
-            }
-        }
-        metrics.median = medianValue;
-
-        double sumSqDiff = 0;
-        int bgPixelCount = 0;
-        int upperLimit = medianValue * 2;
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int val = image[y][x] + 32768;
-                if (val < upperLimit) {
-                    double diff = val - medianValue;
-                    sumSqDiff += (diff * diff);
-                    bgPixelCount++;
-                }
-            }
-        }
-
-        metrics.sigma = Math.sqrt(sumSqDiff / Math.max(1, bgPixelCount));
-        metrics.threshold = metrics.median + (metrics.sigma * sigmaMultiplier);
-
-        return metrics;
-    }
-
-    /**
-     * Intensity-weighted centroiding for sub-pixel accuracy.
-     */
-    private static DetectedObject calculateCentroid(List<Pixel> blob, double backgroundMedian) {
-        double sumI = 0;
-        double sumIX = 0;
-        double sumIY = 0;
-
-        for (Pixel p : blob) {
-            double intensity = p.value - backgroundMedian;
-            if (intensity < 0) intensity = 0;
-
-            sumI += intensity;
-            sumIX += p.x * intensity;
-            sumIY += p.y * intensity;
-        }
-
-        double centroidX = sumI > 0 ? sumIX / sumI : blob.get(0).x;
-        double centroidY = sumI > 0 ? sumIY / sumI : blob.get(0).y;
-
-        return new DetectedObject(centroidX, centroidY, sumI, blob.size());
     }
 
     /**
@@ -330,17 +314,26 @@ public class SourceExtractor {
         obj.elongation = Math.sqrt(lambda1 / lambda2);
         obj.angle = 0.5 * Math.atan2(2 * mu11, mu20 - mu02);
 
-        if (obj.elongation > 3.0 && blob.size() > 15) {
+        // =================================================================
+        // STEP 4: The Shape Filter Classification (Strict Thin Line Logic)
+        // =================================================================
+
+        // 1. Is it a definitive, thin, long line? (Streak)
+        // Parameterized elongation and pixel size!
+        if (obj.elongation > streakMinElongation && blob.size() > streakMinPixels) {
             obj.isStreak = true;
             obj.isNoise = false;
         }
-        else if (obj.elongation > 1.8 && blob.size() <= 15) {
-            obj.isStreak = false;
-            obj.isNoise = true;
-        }
-        else {
+        // 2. Is it a Star, Asteroid, or a merged "Peanut"? (Point Source Fallback)
+        // Parameterized point source minimum pixel size!
+        else if (obj.elongation <= streakMinElongation && blob.size() >= pointSourceMinPixels) {
             obj.isStreak = false;
             obj.isNoise = false;
+        }
+        // 3. Everything else is microscopic noise
+        else {
+            obj.isStreak = false;
+            obj.isNoise = true;
         }
 
         return obj;

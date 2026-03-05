@@ -5,9 +5,47 @@ import java.util.List;
 
 public class TrackLinker {
 
-    public static double maxStarJitter = 3.0;       // Stars can wobble by ~2 pixels due to seeing
+    // =================================================================
+    // CONFIGURATION PARAMETERS
+    // =================================================================
+
+    // --- Provided by Method Arguments (Defaults here for reference) ---
+    public static double maxStarJitter = 3.0;       // Stars can wobble by ~2-3 pixels due to seeing
     public static double predictionTolerance = 3.0; // Allow a 3-pixel radius for the predicted path
     public static double angleToleranceRad = Math.toRadians(5.0); // Streaks must point in the same direction
+
+    // --- Phase 1: Streak Defect Purging ---
+    /** Max movement (in pixels) allowed for a streak to be considered a stationary sensor defect (hot column). */
+    public static double stationaryDefectThreshold = 5.0;
+
+    // --- Phase 3: Star Cataloging ---
+    /** How many frames an object must appear in the exact same spot to be classified as a stationary star. */
+    public static int requiredDetectionsToBeStar = 2;
+    /** Multiplier for star jitter to account for long-term atmospheric wobble over the entire session. */
+    public static double starJitterExpansionFactor = 1.5;
+
+    // --- Phase 4: Geometric & Kinematic Linking ---
+    /** The denominator used to calculate minimum points required. (e.g., 20 frames / 3.0 = ~7 points required). */
+    public static double trackMinFrameRatio = 3.0;
+    /** Hard cap on the minimum points required so the algorithm doesn't demand impossible lengths for huge batches. */
+    public static int absoluteMaxPointsRequired = 5;
+    /** The cosmic speed limit! The absolute maximum distance (in pixels) an object can travel between frames. */
+    public static double maxJumpPixels = 400.0;
+    /** Morphological Filter: The maximum allowable ratio in pixel area between two linked objects. */
+    public static double maxSizeRatio = 3.0;
+
+    // --- Kinematic Rhythm Parameters ---
+    /** The max allowed pixel deviation from the expected speed to still be considered a "steady rhythm". */
+    public static double rhythmAllowedVariance = 5.0;
+    /** The minimum percentage of jumps (e.g., 0.70 = 70%) that must strictly follow the expected speed. */
+    public static double rhythmMinConsistencyRatio = 0.70;
+    /** If the median jump is smaller than this, the object isn't actually moving (it's an artifact). */
+    public static double rhythmStationaryThreshold = 0.5;
+
+
+    // =================================================================
+    // DATA MODELS
+    // =================================================================
 
     // --- The Data Model for a Confirmed Target ---
     public static class Track {
@@ -19,13 +57,15 @@ public class TrackLinker {
             points.add(obj);
         }
     }
+
+    // =================================================================
+    // CORE TRACKING ENGINE
+    // =================================================================
+
     /**
      * Checks if two objects are roughly the same size.
-     * A maxRatio of 3.0 means one object can be up to 3 times larger than the other,
-     * which safely accounts for atmospheric blurring and noise, but rejects massive mismatches.
      */
     private static boolean isSizeConsistent(SourceExtractor.DetectedObject obj1, SourceExtractor.DetectedObject obj2, double maxRatio) {
-        // Prevent division by zero just in case
         double size1 = Math.max(obj1.pixelArea, 1.0);
         double size2 = Math.max(obj2.pixelArea, 1.0);
 
@@ -35,23 +75,19 @@ public class TrackLinker {
 
     /**
      * Master method to find all moving objects (both fast streaks and slow dots).
-     * @param allFrames           List of detections for each sequential FITS image.
-     * @param maxStarJitter       Max pixel wobble for stationary stars (e.g., 2.0).
-     * @param predictionTolerance Max pixels a detection can deviate from predicted path (e.g., 3.0).
-     * @param angleToleranceRad   Max angle difference (in radians) to link streaks (e.g., Math.toRadians(5)).
      */
     public static List<Track> findMovingObjects(
             List<List<SourceExtractor.DetectedObject>> allFrames,
-            double maxStarJitter,
-            double predictionTolerance,
-            double angleToleranceRad) {
+            double maxStarJitterArg,
+            double predictionToleranceArg,
+            double angleToleranceRadArg) {
 
         int numFrames = allFrames.size();
         System.out.println("\nDEBUG: [START] findMovingObjects initialized with " + numFrames + " frames.");
 
         if (numFrames < 3) {
             System.out.println("DEBUG: [ABORT] Less than 3 frames provided. Cannot form point tracks.");
-            return new ArrayList<>(); // Need at least 3 frames for point tracks
+            return new ArrayList<>();
         }
 
         List<Track> confirmedTracks = new ArrayList<>();
@@ -62,7 +98,6 @@ public class TrackLinker {
         List<SourceExtractor.DetectedObject> rawStreaks = new ArrayList<>();
         List<List<SourceExtractor.DetectedObject>> pointSourcesOnly = new ArrayList<>();
 
-        // 1. Gather all objects
         for (int i = 0; i < allFrames.size(); i++) {
             pointSourcesOnly.add(new ArrayList<>());
             for (SourceExtractor.DetectedObject obj : allFrames.get(i)) {
@@ -74,26 +109,23 @@ public class TrackLinker {
             }
         }
 
-        // 2. The Hot Column Killer for falsely detected streaks.
+        // The Hot Column Killer
         List<SourceExtractor.DetectedObject> validMovingStreaks = new ArrayList<>();
-        double stationaryThreshold = 5.0; // If it moves less than 5 pixels, it's a defect
 
         System.out.println("DEBUG: Evaluating " + rawStreaks.size() + " total streaks for sensor defects...");
 
         for (SourceExtractor.DetectedObject candidate : rawStreaks) {
             boolean isStationaryDefect = false;
 
-            // Check against every other streak we found in the entire session
             for (SourceExtractor.DetectedObject other : rawStreaks) {
-                // Don't compare it to itself or to streaks in its own frame
                 if (candidate == other || candidate.sourceFrameIndex == other.sourceFrameIndex) {
                     continue;
                 }
 
-                // If another streak exists in a different frame at the EXACT same location...
-                if (distance(candidate.x, candidate.y, other.x, other.y) <= stationaryThreshold) {
+                // Parameterized threshold
+                if (distance(candidate.x, candidate.y, other.x, other.y) <= stationaryDefectThreshold) {
                     isStationaryDefect = true;
-                    break; // We proved it's a hot column. Stop checking.
+                    break;
                 }
             }
 
@@ -120,29 +152,23 @@ public class TrackLinker {
             continuousStreakTrack.addPoint(baseStreak);
             streakMatched[i] = true;
 
-            // Look for matching streaks in subsequent frames
             for (int j = i + 1; j < validMovingStreaks.size(); j++) {
                 if (streakMatched[j]) continue;
 
                 SourceExtractor.DetectedObject candidateStreak = validMovingStreaks.get(j);
 
-                // 1. Do their internal angles match?
-                if (anglesMatch(baseStreak.angle, candidateStreak.angle, angleToleranceRad)) {
+                if (anglesMatch(baseStreak.angle, candidateStreak.angle, angleToleranceRadArg)) {
 
-                    // 2. Are they collinear? (Does the path between them match the angle?)
                     double dy = candidateStreak.y - baseStreak.y;
                     double dx = candidateStreak.x - baseStreak.x;
                     double trajectoryAngle = Math.atan2(dy, dx);
 
-                    if (anglesMatch(baseStreak.angle, trajectoryAngle, angleToleranceRad)) {
+                    if (anglesMatch(baseStreak.angle, trajectoryAngle, angleToleranceRadArg)) {
                         continuousStreakTrack.addPoint(candidateStreak);
                         streakMatched[j] = true;
-                        System.out.println("    -> Streak linked! Base angle: " + String.format("%.2f", baseStreak.angle) +
-                                ", Trajectory angle: " + String.format("%.2f", trajectoryAngle));
                     }
                 }
             }
-            // Add to confirmed (even if it's only 1 frame long, a streak is proof of movement)
             confirmedTracks.add(continuousStreakTrack);
             streakTracksFound++;
         }
@@ -158,11 +184,8 @@ public class TrackLinker {
 
         System.out.println("DEBUG: [PHASE 3] Building Master Star Map (Catalog Stacking)...");
 
-        // The core rule: If it appears in the same spot in at least 2 frames, it's a star.
-        int requiredDetectionsToBeStar = 2;
-
-        // We slightly increase jitter to account for atmospheric wobble across the whole session
-        double expandedStarJitter = maxStarJitter * 1.5;
+        // Parameterized expansion
+        double expandedStarJitter = maxStarJitterArg * starJitterExpansionFactor;
 
         int totalTransientsFound = 0;
 
@@ -170,9 +193,8 @@ public class TrackLinker {
             List<SourceExtractor.DetectedObject> currentFrame = pointSourcesOnly.get(i);
 
             for (SourceExtractor.DetectedObject candidateObj : currentFrame) {
-                int spatialMatchCount = 1; // It exists in its own frame
+                int spatialMatchCount = 1;
 
-                // Check ALL other frames for a detection at this exact location
                 for (int j = 0; j < numFrames; j++) {
                     if (i == j) continue;
 
@@ -181,17 +203,16 @@ public class TrackLinker {
                     for (SourceExtractor.DetectedObject otherObj : otherFrame) {
                         if (distance(candidateObj.x, candidateObj.y, otherObj.x, otherObj.y) <= expandedStarJitter) {
                             spatialMatchCount++;
-                            break; // Found it in frame j, move to check the next frame
+                            break;
                         }
                     }
 
-                    // Optimization: The moment it hits our threshold, we know it's a star. Stop searching.
+                    // Parameterized threshold
                     if (spatialMatchCount >= requiredDetectionsToBeStar) {
                         break;
                     }
                 }
 
-                // If it never found a spatial partner in ANY other frame, it is a true transient.
                 if (spatialMatchCount < requiredDetectionsToBeStar) {
                     transients.get(i).add(candidateObj);
                 }
@@ -205,38 +226,38 @@ public class TrackLinker {
         // =================================================================
         // PHASE 4: GEOMETRIC COLLINEAR LINKING (Time-Agnostic)
         // =================================================================
-        int minPointsRequired = Math.max(3, (int) Math.ceil(numFrames / 2.0));
-        if (minPointsRequired > 5) {
-            minPointsRequired = 5;
+
+        // Parameterized math rules
+        int minPointsRequired = Math.max(3, (int) Math.ceil(numFrames / trackMinFrameRatio));
+        if (minPointsRequired > absoluteMaxPointsRequired) {
+            minPointsRequired = absoluteMaxPointsRequired;
         }
-        //TODO move to variable
-        double maxSizeRatio = 3.0;
 
         System.out.println("DEBUG: [PHASE 4] Applying time-agnostic geometric filter...");
         System.out.println("  -> Track confirmation threshold: " + minPointsRequired + " points.");
 
         List<Track> pointTracks = new ArrayList<>();
 
-        // --- NEW: THE GLOBAL MEMORY BANK ---
-        // Keeps track of objects already assigned to a confirmed track
-        // to completely eliminate duplicate sub-tracks!
         java.util.Set<SourceExtractor.DetectedObject> usedPoints = new java.util.HashSet<>();
 
         for (int f1 = 0; f1 < numFrames - 2; f1++) {
             for (SourceExtractor.DetectedObject p1 : transients.get(f1)) {
 
-                // Skip if this point is already claimed by a confirmed track
                 if (usedPoints.contains(p1)) continue;
 
                 for (int f2 = f1 + 1; f2 < numFrames - 1; f2++) {
                     for (SourceExtractor.DetectedObject p2 : transients.get(f2)) {
 
-                        // Skip if this point is already claimed
                         if (usedPoints.contains(p2)) continue;
 
                         double dist12 = distance(p1.x, p1.y, p2.x, p2.y);
-                        if (dist12 < maxStarJitter) continue;
 
+                        if (dist12 < maxStarJitterArg) continue;
+
+                        // Parameterized jump filter
+                        if (dist12 > maxJumpPixels) continue;
+
+                        // Parameterized size ratio
                         if (!isSizeConsistent(p1, p2, maxSizeRatio)) continue;
 
                         Track currentTrack = new Track();
@@ -246,19 +267,20 @@ public class TrackLinker {
                         SourceExtractor.DetectedObject lastPoint = p2;
                         double expectedAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
 
-                        // 3. Hunt for points on this infinite line in later frames
                         for (int f3 = f2 + 1; f3 < numFrames; f3++) {
                             SourceExtractor.DetectedObject bestMatch = null;
                             double bestError = Double.MAX_VALUE;
 
                             for (SourceExtractor.DetectedObject p3 : transients.get(f3)) {
 
-                                // Skip if p3 is already claimed by another track!
                                 if (usedPoints.contains(p3)) continue;
+
+                                double jumpDist = distance(lastPoint.x, lastPoint.y, p3.x, p3.y);
+                                if (jumpDist > maxJumpPixels) continue;
 
                                 double lineError = distanceToLine(p1, p2, p3);
 
-                                if (lineError <= predictionTolerance) {
+                                if (lineError <= predictionToleranceArg) {
                                     double actualAngle = Math.atan2(p3.y - lastPoint.y, p3.x - lastPoint.x);
 
                                     double angleDiff = Math.abs(expectedAngle - actualAngle);
@@ -266,7 +288,7 @@ public class TrackLinker {
                                         angleDiff = (2.0 * Math.PI) - angleDiff;
                                     }
 
-                                    if (angleDiff <= angleToleranceRad) {
+                                    if (angleDiff <= angleToleranceRadArg) {
                                         if (isSizeConsistent(lastPoint, p3, maxSizeRatio)) {
                                             if (lineError < bestError) {
                                                 bestError = lineError;
@@ -283,25 +305,16 @@ public class TrackLinker {
                             }
                         }
 
-// 4. Final confirmation check
                         if (currentTrack.points.size() >= minPointsRequired) {
 
-                            // --- NEW: STEADY RHYTHM KINEMATIC FILTER ---
-                            // Only accept the track if the object moves at a consistent speed
-                            //TODO move allowed variance to class variable
-                            if (hasSteadyRhythm(currentTrack, 5.0)) {
+                            // Parameterized variance
+                            if (hasSteadyRhythm(currentTrack, rhythmAllowedVariance)) {
 
                                 if (!isTrackAlreadyFound(pointTracks, currentTrack)) {
 
                                     pointTracks.add(currentTrack);
-
-                                    // LOCK THESE POINTS
                                     usedPoints.addAll(currentTrack.points);
                                 }
-                            } else {
-                                // Optional: You can print a debug statement here to see how many
-                                // geometrically perfect but kinematically invalid tracks get rejected!
-                                // System.out.println("DEBUG: Rejected track due to erratic rhythm.");
                             }
                         }
                     }
@@ -315,7 +328,9 @@ public class TrackLinker {
         return confirmedTracks;
     }
 
-    // --- Helper Methods ---
+    // =================================================================
+    // HELPER METHODS
+    // =================================================================
 
     private static double distance(double x1, double y1, double x2, double y2) {
         double dx = x2 - x1;
@@ -324,33 +339,23 @@ public class TrackLinker {
     }
 
     private static boolean anglesMatch(double a1, double a2, double tolerance) {
-        // Normalizes the angle comparison to handle PI / -PI wrap-arounds
         double diff = Math.abs(a1 - a2) % Math.PI;
         return diff <= tolerance || Math.PI - diff <= tolerance;
     }
 
-    /**
-     * Calculates the perpendicular distance from point p3 to the infinite line defined by p1 and p2.
-     */
     private static double distanceToLine(SourceExtractor.DetectedObject p1,
                                          SourceExtractor.DetectedObject p2,
                                          SourceExtractor.DetectedObject p3) {
 
-        // Formula: |(x2 - x1)(y1 - y0) - (x1 - x0)(y2 - y1)| / sqrt((x2 - x1)^2 + (y2 - y1)^2)
-        // Where p3 is (x0, y0)
         double numerator = Math.abs((p2.x - p1.x) * (p1.y - p3.y) - (p1.x - p3.x) * (p2.y - p1.y));
         double denominator = distance(p1.x, p1.y, p2.x, p2.y);
 
-        if (denominator == 0) return Double.MAX_VALUE; // Safety catch if p1 and p2 are identical
+        if (denominator == 0) return Double.MAX_VALUE;
         return numerator / denominator;
     }
 
-    /**
-     * Prevents duplicate tracks if the algorithm finds a subset of an already confirmed line.
-     */
     private static boolean isTrackAlreadyFound(List<Track> existingTracks, Track newTrack) {
         for (Track existing : existingTracks) {
-            // If an existing track contains all the points of this new track, it's a duplicate subset
             if (existing.points.containsAll(newTrack.points)) {
                 return true;
             }
@@ -360,12 +365,9 @@ public class TrackLinker {
 
     /**
      * Evaluates if a track maintains a consistent speed, ignoring missing frames.
-     * @param track The track to evaluate.
-     * @param allowedVariance Max allowed deviation from the expected jump distance (e.g., 2.0 or 3.0 px).
-     * @return true if the majority of the track's jumps match the rhythm.
      */
     public static boolean hasSteadyRhythm(Track track, double allowedVariance) {
-        if (track.points.size() < 3) return true; // Need at least 3 points to check rhythm
+        if (track.points.size() < 3) return true;
 
         List<Double> jumps = new ArrayList<>();
         for (int i = 0; i < track.points.size() - 1; i++) {
@@ -374,38 +376,32 @@ public class TrackLinker {
             jumps.add(distance(p1.x, p1.y, p2.x, p2.y));
         }
 
-        // 1. Find the median jump to establish the "base rhythm" (the typical 1-frame jump)
         List<Double> sortedJumps = new ArrayList<>(jumps);
         sortedJumps.sort(Double::compareTo);
         double medianJump = sortedJumps.get(sortedJumps.size() / 2);
 
-        // Safety catch: If the median jump is basically zero, it's a stationary noise artifact
-        if (medianJump < 0.5) return false;
+        // Parameterized threshold
+        if (medianJump < rhythmStationaryThreshold) return false;
 
         int consistentJumps = 0;
 
-        // 2. Evaluate every jump against the base rhythm
         for (double jump : jumps) {
-
-            // Figure out how many "missing frames" this jump represents.
-            // If jump is 31 and median is 15, multiplier is 2 (1 missing frame).
             long multiplier = Math.round(jump / medianJump);
 
-            if (multiplier == 0) continue; // Jump was anomalously small
+            if (multiplier == 0) continue;
 
             double expectedJump = multiplier * medianJump;
 
-            // We scale the variance by the multiplier. A 3-frame gap has 3x the potential seeing jitter.
             if (Math.abs(jump - expectedJump) <= (allowedVariance * multiplier)) {
                 consistentJumps++;
             }
         }
 
-        // 3. Does this rhythm hold true for the majority of the track?
-        // We require at least 70% of the jumps to fit the mathematical rhythm.
+        // Parameterized consistency math
         double consistencyRatio = (double) consistentJumps / jumps.size();
-        return consistencyRatio >= 0.70;
+        return consistencyRatio >= rhythmMinConsistencyRatio;
     }
+
     /**
      * Prints detailed debug information for both Streak Tracks and Point Tracks.
      */
@@ -420,10 +416,10 @@ public class TrackLinker {
         for (TrackLinker.Track track : confirmedTargets) {
 
             if (track.isStreakTrack) {
-                // --- PRINT FAST STREAK TRACKS ---
                 streakCount++;
 
-                if (track.points.size() > 2 && hasSteadyRhythm(track, 5.0)) {
+                // Passed the parameterized variance here too!
+                if (track.points.size() > 2 && hasSteadyRhythm(track, rhythmAllowedVariance)) {
                     System.out.println("\n[STREAK TRACK #" + streakCount + " (STEADY RYTHM!)] (Composed of " + track.points.size() + " sub-streaks):");
                 } else {
                     System.out.println("\n[STREAK TRACK #" + streakCount + "] (Composed of " + track.points.size() + " sub-streaks):");
@@ -437,10 +433,9 @@ public class TrackLinker {
                 }
 
             } else {
-                // --- PRINT SLOW POINT TRACKS ---
                 pointTrackCount++;
 
-                if (hasSteadyRhythm(track, 5.0)) {
+                if (hasSteadyRhythm(track, rhythmAllowedVariance)) {
                     System.out.println("\n[POINT TRACK #" + pointTrackCount + " (STEADY RYTHM!)] (Linked across " + track.points.size() + " frames):");
                 } else {
                     System.out.println("\n[POINT TRACK #" + pointTrackCount + "] (Linked across " + track.points.size() + " frames):");
@@ -451,13 +446,11 @@ public class TrackLinker {
                     SourceExtractor.DetectedObject pt = track.points.get(p);
 
                     if (prevPt == null) {
-                        // First point establishes the origin
                         System.out.println(String.format(
                                 "  -> Point %d: [X: %7.2f, Y: %7.2f] (Origin)",
                                 (p + 1), pt.x, pt.y
                         ));
                     } else {
-                        // Subsequent points show the movement vector
                         double jumpDist = Math.hypot(pt.x - prevPt.x, pt.y - prevPt.y);
                         double trajectoryAngle = Math.atan2(pt.y - prevPt.y, pt.x - prevPt.x);
 
