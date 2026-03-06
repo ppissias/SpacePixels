@@ -18,11 +18,10 @@ import spv.util.ImagePreprocessing;
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class ApplicationWindow {
@@ -34,22 +33,22 @@ public class ApplicationWindow {
     private volatile ImagePreprocessing imagePreProcessing;
 
     private MainApplicationPanel mainApplicationPanel;
-
     private ConfigurationPanel configurationApplicationPanel;
-
     private StretchPanel stretchPanel;
+
+    // --- NEW: The Detection Configuration Panel ---
+    private DetectionConfigurationPanel detectionConfigurationPanel;
+
     //logger
     public static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
 
     private StretchPreviewFrame stretchPreviewFrame;
-
     private FullImageViewFrame fullImagePreviewFrame = new FullImageViewFrame();
 
     private JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
 
     private JMenu fileMenu = new JMenu("File");
     private JMenuItem importMenuItem = new JMenuItem("Import aligned fits files");
-
 
     public void setMenuState(boolean state) {
         importMenuItem.setEnabled(state);
@@ -63,27 +62,22 @@ public class ApplicationWindow {
      * Launch the application.
      */
     public static void main(String[] args) {
-        EventQueue.invokeLater(new Runnable() {
-            public void run() {
-                try {
-                    //FlatLightLaf.setup();
-                    // 1. Enable rounded corners for all inputs
-                    UIManager.put("Component.arc", 10);
+        EventQueue.invokeLater(() -> {
+            try {
+                // 1. Enable rounded corners for all inputs
+                UIManager.put("Component.arc", 10);
+                // 2. Make buttons even rounder
+                UIManager.put("Button.arc", 10);
+                // 3. Change the accent color (using a Hex code)
+                UIManager.put("AccentColor", "#4285f4");
 
-                    // 2. Make buttons even rounder
-                    UIManager.put("Button.arc", 10);
+                // 4. Set the Look and Feel
+                FlatDarkLaf.setup();
 
-                    // 3. Change the accent color (using a Hex code)
-                    UIManager.put("AccentColor", "#4285f4");
-
-                    // 4. Set the Look and Feel
-
-                    FlatDarkLaf.setup();
-                    ApplicationWindow window = new ApplicationWindow();
-                    window.frmIpodImage.setVisible(true);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                ApplicationWindow window = new ApplicationWindow();
+                window.frmIpodImage.setVisible(true);
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Failed to initialize application UI", e);
             }
         });
     }
@@ -102,6 +96,7 @@ public class ApplicationWindow {
         stretchPreviewFrame = new StretchPreviewFrame(this);
         stretchPreviewFrame.setVisible(false);
         fullImagePreviewFrame.setVisible(false);
+
         frmIpodImage = new JFrame();
         frmIpodImage.setTitle("SpacePixels" + " " + version);
         frmIpodImage.setBounds(new Rectangle(50, 50, 1200, 650));
@@ -110,23 +105,25 @@ public class ApplicationWindow {
         frmIpodImage.getContentPane().setLayout(new BorderLayout(0, 0));
 
         //the main tabbed pane
-
-
-        //tabbedPane.addT
         frmIpodImage.getContentPane().add(tabbedPane, BorderLayout.CENTER);
 
         mainApplicationPanel = new MainApplicationPanel(this);
-
         configurationApplicationPanel = new ConfigurationPanel(this);
-
         stretchPanel = new StretchPanel(this);
+
+        // --- NEW: Instantiate the Detection Configuration Panel ---
+        detectionConfigurationPanel = new DetectionConfigurationPanel();
 
         tabbedPane.addTab("Main", mainApplicationPanel);
         tabbedPane.addTab("Configuration", configurationApplicationPanel);
-		tabbedPane.addTab("Stretch Parameters", stretchPanel);
+        tabbedPane.addTab("Stretch Parameters", stretchPanel);
+        // --- NEW: Add the Detection Settings tab ---
+        tabbedPane.addTab("Detection Settings", detectionConfigurationPanel);
 
-		tabbedPane.setEnabledAt(1, false);
-		tabbedPane.setEnabledAt(2, false);
+        // Disable tabs until data is loaded
+        tabbedPane.setEnabledAt(1, false);
+        tabbedPane.setEnabledAt(2, false);
+        tabbedPane.setEnabledAt(3, false); // Disable Detection tab initially
 
         JMenuBar menuBar = new JMenuBar();
         frmIpodImage.setJMenuBar(menuBar);
@@ -134,78 +131,75 @@ public class ApplicationWindow {
         JMenu fileMenu = new JMenu("File");
         menuBar.add(fileMenu);
 
+        importMenuItem.addActionListener(e -> {
+            ApplicationWindow.logger.info("Will try to import fits files!");
 
-        importMenuItem.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent arg0) {
-                ApplicationWindow.logger.info("Will try to import fits files!");
+            mainApplicationPanel.setProgressBarWorking();
 
-                mainApplicationPanel.setProgressBarWorking();
-                //Create a file chooser
-                final JFileChooser fc = new JFileChooser();
-                fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            //Create a file chooser
+            final JFileChooser fc = new JFileChooser();
+            fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            fc.setDialogTitle("Directory containing aligned fits images");
 
-                fc.setDialogTitle("Directory containing aligned fits images");
-                int returnVal = fc.showOpenDialog(frmIpodImage);
+            int returnVal = fc.showOpenDialog(frmIpodImage);
 
-                if (returnVal == JFileChooser.APPROVE_OPTION) {
-                    File file = fc.getSelectedFile();
+            if (returnVal == JFileChooser.APPROVE_OPTION) {
+                File file = fc.getSelectedFile();
 
+                // Modernized thread invocation
+                new Thread(() -> {
+                    try {
+                        imagePreProcessing = ImagePreprocessing.getInstance(file);
+                        final FitsFileInformation[] filesInformation = imagePreProcessing.getFitsfileInformation();
 
-                    new Thread() {
-                        public void run() {
-                            try {
-                                imagePreProcessing = ImagePreprocessing.getInstance(file);
-                                final FitsFileInformation[] filesInformation = imagePreProcessing.getFitsfileInformation();
+                        //update table
+                        final AbstractTableModel tableModel = new FitsFileTableModel(filesInformation);
 
-                                //update table
-                                final AbstractTableModel tableModel = new FitsFileTableModel(filesInformation);
+                        // Update UI on Event Dispatch Thread
+                        EventQueue.invokeLater(() -> {
+                            mainApplicationPanel.setTableModel(tableModel);
 
-                                EventQueue.invokeLater(new Runnable() {
+                            // Enable all tabs now that data is loaded
+                            tabbedPane.setEnabledAt(1, true);
+                            tabbedPane.setEnabledAt(2, true);
+                            tabbedPane.setEnabledAt(3, true); // Enable Detection tab
 
-                                                           @Override
-                                                           public void run() {
-                                                               mainApplicationPanel.setTableModel(tableModel);
-															   tabbedPane.setEnabledAt(1, true);
-															   tabbedPane.setEnabledAt(2, true);
-
-                                                               boolean existsColor = false;
-                                                               for (FitsFileInformation fitsFile: filesInformation) {
-                                                                   if (!fitsFile.isMonochrome()) {
-                                                                       existsColor = true;
-                                                                       break;
-                                                                   }
-                                                               }
-
-                                                               if (!existsColor) {
-                                                                   mainApplicationPanel.setDetectionEnabled();
-                                                               }
-															   configurationApplicationPanel.refreshComponents();
-                                                           }
-                                                       }
-                                );
-
-
-                            } catch (IOException | FitsException | ConfigurationException e) {
-                                e.printStackTrace();
+                            boolean existsColor = false;
+                            for (FitsFileInformation fitsFile: filesInformation) {
+                                if (!fitsFile.isMonochrome()) {
+                                    existsColor = true;
+                                    break;
+                                }
                             }
-                        }
-                    }.start();
-                }
-                EventQueue.invokeLater(new Runnable() {
-                                           @Override
-                                           public void run() {
-                                               mainApplicationPanel.setProgressBarIdle();
-                                           }
-                                       }
-                );
 
+                            if (!existsColor) {
+                                mainApplicationPanel.setDetectionEnabled();
+                            }
+                            configurationApplicationPanel.refreshComponents();
 
+                            // THE FIX: Stop the progress bar ONLY AFTER the load is complete and UI is updated
+                            mainApplicationPanel.setProgressBarIdle();
+                        });
+
+                    } catch (IOException | FitsException | ConfigurationException ex) {
+                        logger.log(Level.SEVERE, "Error loading FITS files", ex);
+
+                        // Stop the progress bar even if it fails!
+                        EventQueue.invokeLater(() -> {
+                            mainApplicationPanel.setProgressBarIdle();
+                            JOptionPane.showMessageDialog(frmIpodImage,
+                                    "Error loading files: " + ex.getMessage(),
+                                    "Import Error", JOptionPane.ERROR_MESSAGE);
+                        });
+                    }
+                }).start();
+            } else {
+                // THE FIX: If the user cancels the dialog, stop the progress bar immediately
+                mainApplicationPanel.setProgressBarIdle();
             }
         });
 
         fileMenu.add(importMenuItem);
-
-        //initialize properties
     }
 
     public ImagePreprocessing getImagePreProcessing() {
@@ -234,6 +228,11 @@ public class ApplicationWindow {
 
     public StretchPanel getStretchPanel() {
         return stretchPanel;
+    }
+
+    // --- NEW: Getter for the Detection Panel (in case you need it elsewhere) ---
+    public DetectionConfigurationPanel getDetectionConfigurationPanel() {
+        return detectionConfigurationPanel;
     }
 
     public void setStretchFrameVisible(boolean visibility) {

@@ -4,9 +4,41 @@ import java.util.List;
 
 public class RawImageAnnotator {
 
-    // In a 16-bit FITS image, pure white is exactly 65535.
-    // In Java's signed short, this is represented as -1.
-    private static final short HIGHLIGHT_VALUE = (short) 65535;
+    // =================================================================
+    // CONFIGURATION PARAMETERS
+    // =================================================================
+
+    /** * The color value used to draw annotations.
+     * In a 16-bit unsigned FITS image, pure white is exactly 65535.
+     * In Java's signed short, this is represented as -1.
+     */
+    public static short highlightValue = (short) 65535;
+
+    /** * The scale factor used to determine how long the drawn streak line should be.
+     * It multiplies the calculated elongation ratio to make the line visible.
+     */
+    public static double streakLineScaleFactor = 5.0;
+
+    /** * The radius (in pixels) of the small, tight box drawn exactly at the
+     * calculated centroid of a fast-moving streak.
+     */
+    public static int streakCentroidBoxRadius = 3;
+
+    /** * The absolute minimum radius (in pixels) for a bounding box drawn around
+     * standard point sources (stars, slow asteroids).
+     */
+    public static int pointSourceMinBoxRadius = 10;
+
+    /** * The number of extra padding pixels added to the dynamically calculated
+     * radius of an object. This ensures the box is drawn outside the glowing core,
+     * resting clearly on the dark sky background.
+     */
+    public static int dynamicBoxPadding = 5;
+
+
+    // =================================================================
+    // ANNOTATION LOGIC
+    // =================================================================
 
     /**
      * Overwrites the raw FITS data to draw boxes around stars and lines over streaks.
@@ -19,31 +51,30 @@ public class RawImageAnnotator {
             int cy = (int) Math.round(obj.y);
 
             if (obj.isStreak) {
-                // Draw a line representing the streak's angle and length
-                double lineLength = obj.elongation * 5.0; // Scale factor for visibility
+                // Draw a line representing the streak's angle and length (Parameterized scale)
+                double lineLength = obj.elongation * streakLineScaleFactor;
                 int x1 = (int) Math.round(cx - (Math.cos(obj.angle) * lineLength));
                 int y1 = (int) Math.round(cy - (Math.sin(obj.angle) * lineLength));
                 int x2 = (int) Math.round(cx + (Math.cos(obj.angle) * lineLength));
                 int y2 = (int) Math.round(cy + (Math.sin(obj.angle) * lineLength));
 
-                drawLine(imageData, x1, y1, x2, y2, HIGHLIGHT_VALUE);
+                drawLine(imageData, x1, y1, x2, y2, highlightValue);
 
-                // Draw a small tight box exactly at the centroid
-                drawBox(imageData, cx, cy, 3, HIGHLIGHT_VALUE);
+                // Draw a small tight box exactly at the centroid (Parameterized radius)
+                drawBox(imageData, cx, cy, streakCentroidBoxRadius, highlightValue);
             } else {
-                // --- NEW: DYNAMIC BOX SIZE ---
-                int boxRadius = 10; // Default minimum size
+                // DYNAMIC BOX SIZE
+                int boxRadius = pointSourceMinBoxRadius; // Parameterized default minimum
 
                 if (obj.pixelArea > 0) {
-                    // Calculate the rough radius of the object and add 5 pixels of padding
-                    // so the box is drawn outside the glowing core, on the dark sky.
-                    int dynamicRadius = (int) Math.round(Math.sqrt(obj.pixelArea / Math.PI)) + 5;
+                    // Calculate the rough radius of the object and add parameterized padding
+                    int dynamicRadius = (int) Math.round(Math.sqrt(obj.pixelArea / Math.PI)) + dynamicBoxPadding;
 
-                    // Use whichever is larger: the default 10, or the new dynamic size
-                    boxRadius = Math.max(10, dynamicRadius);
+                    // Use whichever is larger: the default minimum, or the new dynamic size
+                    boxRadius = Math.max(pointSourceMinBoxRadius, dynamicRadius);
                 }
 
-                drawBox(imageData, cx, cy, boxRadius, HIGHLIGHT_VALUE);
+                drawBox(imageData, cx, cy, boxRadius, highlightValue);
             }
         }
     }

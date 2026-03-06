@@ -223,7 +223,7 @@ public class TrackLinker {
 
         System.out.println("DEBUG: [PHASE 3] Completed. Total pure transients across sequence: " + totalTransientsFound);
 
-        // =================================================================
+// =================================================================
         // PHASE 4: GEOMETRIC COLLINEAR LINKING (Time-Agnostic)
         // =================================================================
 
@@ -236,8 +236,21 @@ public class TrackLinker {
         System.out.println("DEBUG: [PHASE 4] Applying time-agnostic geometric filter...");
         System.out.println("  -> Track confirmation threshold: " + minPointsRequired + " points.");
 
-        List<Track> pointTracks = new ArrayList<>();
+        // --- NEW: TELEMETRY COUNTERS ---
+        long countBaselineJitter = 0;
+        long countBaselineJump = 0;
+        long countBaselineSize = 0;
 
+        long countP3Jump = 0;
+        long countP3NotLine = 0;
+        long countP3WrongDirection = 0;
+        long countP3Size = 0;
+
+        long countTrackTooShort = 0;
+        long countTrackErraticRhythm = 0;
+        long countTrackDuplicate = 0;
+
+        List<Track> pointTracks = new ArrayList<>();
         java.util.Set<SourceExtractor.DetectedObject> usedPoints = new java.util.HashSet<>();
 
         for (int f1 = 0; f1 < numFrames - 2; f1++) {
@@ -252,13 +265,22 @@ public class TrackLinker {
 
                         double dist12 = distance(p1.x, p1.y, p2.x, p2.y);
 
-                        if (dist12 < maxStarJitterArg) continue;
+                        if (dist12 < maxStarJitterArg) {
+                            countBaselineJitter++;
+                            continue;
+                        }
 
                         // Parameterized jump filter
-                        if (dist12 > maxJumpPixels) continue;
+                        if (dist12 > maxJumpPixels) {
+                            countBaselineJump++;
+                            continue;
+                        }
 
                         // Parameterized size ratio
-                        if (!isSizeConsistent(p1, p2, maxSizeRatio)) continue;
+                        if (!isSizeConsistent(p1, p2, maxSizeRatio)) {
+                            countBaselineSize++;
+                            continue;
+                        }
 
                         Track currentTrack = new Track();
                         currentTrack.addPoint(p1);
@@ -276,7 +298,10 @@ public class TrackLinker {
                                 if (usedPoints.contains(p3)) continue;
 
                                 double jumpDist = distance(lastPoint.x, lastPoint.y, p3.x, p3.y);
-                                if (jumpDist > maxJumpPixels) continue;
+                                if (jumpDist > maxJumpPixels) {
+                                    countP3Jump++;
+                                    continue;
+                                }
 
                                 double lineError = distanceToLine(p1, p2, p3);
 
@@ -294,8 +319,14 @@ public class TrackLinker {
                                                 bestError = lineError;
                                                 bestMatch = p3;
                                             }
+                                        } else {
+                                            countP3Size++; // Failed size consistency
                                         }
+                                    } else {
+                                        countP3WrongDirection++; // Moving backward or wrong angle
                                     }
+                                } else {
+                                    countP3NotLine++; // Failed collinearity check
                                 }
                             }
 
@@ -305,6 +336,7 @@ public class TrackLinker {
                             }
                         }
 
+                        // 4. Final confirmation check & Telemetry
                         if (currentTrack.points.size() >= minPointsRequired) {
 
                             // Parameterized variance
@@ -314,16 +346,46 @@ public class TrackLinker {
 
                                     pointTracks.add(currentTrack);
                                     usedPoints.addAll(currentTrack.points);
+                                } else {
+                                    countTrackDuplicate++; // Track was already confirmed
                                 }
+                            } else {
+                                countTrackErraticRhythm++; // Failed kinematic speed check
                             }
+                        } else {
+                            countTrackTooShort++; // Baseline formed, but not enough subsequent points found
                         }
                     }
                 }
             }
         }
 
+        // --- NEW: PRINT TELEMETRY REPORT ---
+        System.out.println("\n--------------------------------------------------");
+        System.out.println(" PHASE 4 TELEMETRY: FILTER REJECTION STATISTICS   ");
+        System.out.println("--------------------------------------------------");
+        System.out.println("1. Baseline Generation (p1 -> p2) Rejections:");
+        System.out.println("   - Stationary / Jitter           : " + countBaselineJitter);
+        System.out.println("   - Exceeded Max Jump Velocity    : " + countBaselineJump);
+        System.out.println("   - Morphological Size Mismatch   : " + countBaselineSize);
+        System.out.println("\n2. Track Search (p3) Point Rejections:");
+        System.out.println("   - Off predicted trajectory line : " + countP3NotLine);
+        System.out.println("   - Wrong direction / angle       : " + countP3WrongDirection);
+        System.out.println("   - Exceeded Max Jump Velocity    : " + countP3Jump);
+        System.out.println("   - Morphological Size Mismatch   : " + countP3Size);
+        System.out.println("\n3. Final Track Rejections:");
+        System.out.println("   - Insufficient track length     : " + countTrackTooShort);
+        System.out.println("   - Erratic kinematic rhythm      : " + countTrackErraticRhythm);
+        System.out.println("   - Duplicate track (Ignored)     : " + countTrackDuplicate);
+        System.out.println("--------------------------------------------------\n");
+
+        // --- THE SUCCESS METRICS ---
+        System.out.println("\n4. Valid Tracks Confirmed:");
+        System.out.println("   - Fast Streak Tracks (Phase 2)  : " + streakTracksFound);
+        System.out.println("   - Slow Point Tracks (Phase 4)   : " + pointTracks.size());
+        System.out.println("   - TOTAL MOVING TARGETS FOUND    : " + (streakTracksFound + pointTracks.size()));
+        System.out.println("--------------------------------------------------\n");
         confirmedTracks.addAll(pointTracks);
-        printAllTracks(confirmedTracks);
 
         return confirmedTracks;
     }
@@ -402,72 +464,5 @@ public class TrackLinker {
         return consistencyRatio >= rhythmMinConsistencyRatio;
     }
 
-    /**
-     * Prints detailed debug information for both Streak Tracks and Point Tracks.
-     */
-    public static void printAllTracks(List<TrackLinker.Track> confirmedTargets) {
-        System.out.println("\n========================================");
-        System.out.println("=== DEBUG: CONFIRMED MOVING TARGETS  ===");
-        System.out.println("========================================");
 
-        int streakCount = 0;
-        int pointTrackCount = 0;
-
-        for (TrackLinker.Track track : confirmedTargets) {
-
-            if (track.isStreakTrack) {
-                streakCount++;
-
-                // Passed the parameterized variance here too!
-                if (track.points.size() > 2 && hasSteadyRhythm(track, rhythmAllowedVariance)) {
-                    System.out.println("\n[STREAK TRACK #" + streakCount + " (STEADY RYTHM!)] (Composed of " + track.points.size() + " sub-streaks):");
-                } else {
-                    System.out.println("\n[STREAK TRACK #" + streakCount + "] (Composed of " + track.points.size() + " sub-streaks):");
-                }
-                for (int p = 0; p < track.points.size(); p++) {
-                    SourceExtractor.DetectedObject pt = track.points.get(p);
-                    System.out.println(String.format(
-                            "  -> Part %d: [X: %7.2f, Y: %7.2f] | Internal Angle: %5.2f rad | Elongation: %5.2f",
-                            (p + 1), pt.x, pt.y, pt.angle, pt.elongation
-                    ));
-                }
-
-            } else {
-                pointTrackCount++;
-
-                if (hasSteadyRhythm(track, rhythmAllowedVariance)) {
-                    System.out.println("\n[POINT TRACK #" + pointTrackCount + " (STEADY RYTHM!)] (Linked across " + track.points.size() + " frames):");
-                } else {
-                    System.out.println("\n[POINT TRACK #" + pointTrackCount + "] (Linked across " + track.points.size() + " frames):");
-                }
-                SourceExtractor.DetectedObject prevPt = null;
-
-                for (int p = 0; p < track.points.size(); p++) {
-                    SourceExtractor.DetectedObject pt = track.points.get(p);
-
-                    if (prevPt == null) {
-                        System.out.println(String.format(
-                                "  -> Point %d: [X: %7.2f, Y: %7.2f] (Origin)",
-                                (p + 1), pt.x, pt.y
-                        ));
-                    } else {
-                        double jumpDist = Math.hypot(pt.x - prevPt.x, pt.y - prevPt.y);
-                        double trajectoryAngle = Math.atan2(pt.y - prevPt.y, pt.x - prevPt.x);
-
-                        System.out.println(String.format(
-                                "  -> Point %d: [X: %7.2f, Y: %7.2f] | Jump: %6.2f px | Vector Angle: %5.2f rad",
-                                (p + 1), pt.x, pt.y, jumpDist, trajectoryAngle
-                        ));
-                    }
-                    prevPt = pt;
-                }
-            }
-        }
-
-        System.out.println("\n----------------------------------------");
-        System.out.println("SUMMARY:");
-        System.out.println("Total Streak Tracks: " + streakCount);
-        System.out.println("Total Point Tracks:  " + pointTrackCount);
-        System.out.println("========================================\n");
-    }
 }

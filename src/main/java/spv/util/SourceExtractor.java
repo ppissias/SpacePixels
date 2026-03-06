@@ -115,8 +115,8 @@ public class SourceExtractor {
         double seedThreshold = bg.median + (bg.sigma * sigmaMultiplier);
         double growThreshold = bg.median + (bg.sigma * growSigmaMultiplier); // Parameterized!
 
-        System.out.println("Background Median: " + bg.median + ", Sigma: " + bg.sigma);
-        System.out.println("Seed Threshold: " + seedThreshold + " | Grow Threshold: " + growThreshold);
+        //System.out.println("Background Median: " + bg.median + ", Sigma: " + bg.sigma);
+        //System.out.println("Seed Threshold: " + seedThreshold + " | Grow Threshold: " + growThreshold);
 
         // 2. Setup for BFS Blob Detection
         List<DetectedObject> detectedObjects = new ArrayList<>();
