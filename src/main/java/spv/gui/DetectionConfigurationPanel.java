@@ -185,20 +185,25 @@ public class DetectionConfigurationPanel extends JPanel {
         row.setBorder(new EmptyBorder(5, 0, 15, 0));
 
         // Left side: Text (Title + Description)
-        JPanel textPanel = new JPanel(new GridLayout(2, 1, 0, 2));
+        JPanel textPanel = new JPanel();
+        textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
 
         JLabel titleLabel = new JLabel(title);
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
+        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel descLabel = new JLabel(description);
+        // Use HTML for automatic word-wrapping
+        JLabel descLabel = new JLabel("<html>" + description + "</html>");
         descLabel.setFont(descLabel.getFont().deriveFont(Font.PLAIN, 12f));
         descLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         textPanel.add(titleLabel);
+        textPanel.add(Box.createVerticalStrut(3));
         textPanel.add(descLabel);
 
         // Lock the width of the text panel so all inputs align perfectly
-        Dimension textDim = new Dimension(450, 40);
+        Dimension textDim = new Dimension(450, 55);
         textPanel.setPreferredSize(textDim);
         textPanel.setMinimumSize(textDim);
         textPanel.setMaximumSize(textDim);
@@ -219,7 +224,6 @@ public class DetectionConfigurationPanel extends JPanel {
 
         return spinner;
     }
-
     // =========================================================================
     // APPLY LOGIC
     // =========================================================================

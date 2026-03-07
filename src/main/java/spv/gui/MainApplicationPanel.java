@@ -75,25 +75,71 @@ public class MainApplicationPanel extends JPanel {
 
         setLayout(new BorderLayout(0, 0));
 
-        JPanel panel = new JPanel();
-        add(panel, BorderLayout.NORTH);
-        panel.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));
+        // ==========================================
+        // TOP CONTROL AREA (Split into two rows for space)
+        // ==========================================
+        JPanel topControlContainer = new JPanel();
+        topControlContainer.setLayout(new BoxLayout(topControlContainer, BoxLayout.Y_AXIS));
+
+        // --- ROW 1: Plate Solving & Viewing ---
+        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
 
         solveButton.setToolTipText("Solve current image");
         solveButton.setEnabled(false);
-        panel.add(solveButton);
+        row1.add(solveButton);
 
         JCheckBox astapSolveCheckbox = new JCheckBox("ASTAP");
         astapSolveCheckbox.setToolTipText("Solve the image using ASTAP");
         astapSolveCheckbox.setSelected(true);
-        panel.add(astapSolveCheckbox);
+        row1.add(astapSolveCheckbox);
 
         JCheckBox astrometrynetSolveCheckbox = new JCheckBox("Astrometry.net (online)");
         astrometrynetSolveCheckbox.setToolTipText("solve the image using the online nova.astrometry.net web services");
-        panel.add(astrometrynetSolveCheckbox);
+        row1.add(astrometrynetSolveCheckbox);
 
         showSolvedImageButton.setToolTipText("Show solved image");
         showSolvedImageButton.setEnabled(false);
+        row1.add(showSolvedImageButton);
+
+        blinkButton.setToolTipText("Blink 3 or more images");
+        blinkButton.setEnabled(false);
+        row1.add(blinkButton);
+
+        // --- ROW 2: Image Processing & Detection ---
+        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+
+        convertMonoButton.setToolTipText("Convert all images to monochrome and save them. If stretch is checked, also stretch them.");
+        convertMonoButton.setEnabled(false);
+        row2.add(convertMonoButton); // <-- Added back to the UI!
+
+        stretchButton.setToolTipText("Stretch all images (color or mono) as specified and save them");
+        stretchButton.setEnabled(false);
+        row2.add(stretchButton);
+
+        detectSingleButton.setToolTipText("Detect objects only in the currently selected monochrome image");
+        detectSingleButton.setEnabled(false);
+        row2.add(detectSingleButton);
+
+        detectBatchButton.setToolTipText("Detect objects in all imported monochrome images");
+        detectBatchButton.setEnabled(false);
+        row2.add(detectBatchButton);
+
+        progressBar.setEnabled(true);
+        progressBar.setPreferredSize(new Dimension(150, 20)); // Give it a fixed visible size
+        row2.add(Box.createHorizontalStrut(10)); // Add a little gap before the progress bar
+        row2.add(progressBar);
+
+        // Add both rows to the top container
+        topControlContainer.add(row1);
+        topControlContainer.add(row2);
+
+        // Add the combined container to the NORTH slot of the main layout
+        add(topControlContainer, BorderLayout.NORTH);
+
+        // ==========================================
+        // ACTION LISTENERS
+        // ==========================================
+
         showSolvedImageButton.addActionListener(e -> {
             FitsFileInformation imageInfo = getSelectedFileInformation();
             if (imageInfo != null) {
@@ -152,10 +198,7 @@ public class MainApplicationPanel extends JPanel {
                 }
             }
         });
-        panel.add(showSolvedImageButton);
 
-        convertMonoButton.setToolTipText("Convert all images to monochrome and save them. If stretch is checked, also stretch them.");
-        convertMonoButton.setEnabled(false);
         convertMonoButton.addActionListener(e -> {
             int stretchFactor = mainAppWindow.getStretchPanel().getStretchSlider().getValue();
             int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
@@ -173,8 +216,6 @@ public class MainApplicationPanel extends JPanel {
             )).start();
         });
 
-        stretchButton.setToolTipText("Stretch all images (color or mono) as specified and save them");
-        stretchButton.setEnabled(false);
         stretchButton.addActionListener(e -> {
             int stretchFactor = mainAppWindow.getStretchPanel().getStretchSlider().getValue();
             int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
@@ -189,10 +230,7 @@ public class MainApplicationPanel extends JPanel {
                     algo
             )).start();
         });
-        panel.add(stretchButton);
 
-        blinkButton.setToolTipText("Blink 3 or more images");
-        blinkButton.setEnabled(false);
         blinkButton.addActionListener(e -> {
             if (!isBlinking) {
                 // START BLINKING
@@ -200,7 +238,6 @@ public class MainApplicationPanel extends JPanel {
                 disableControlsBlinking();
                 blinkButton.setText("stop blinking");
 
-                // We don't change default close operations anymore, the frame handles itself
                 mainAppWindow.getFullImagePreviewFrame().setVisible(true);
 
                 new Thread(() -> {
@@ -250,19 +287,13 @@ public class MainApplicationPanel extends JPanel {
             } else {
                 // USER CLICKED "STOP BLINKING"
                 stopBlinkingProcess();
-                // We programmatically close the frame if they clicked the button
                 mainAppWindow.getFullImagePreviewFrame().dispose();
             }
         });
-        panel.add(blinkButton);
 
-        // --- NEW: Single Detection Button ---
-        detectSingleButton.setToolTipText("Detect objects only in the currently selected monochrome image");
-        detectSingleButton.setEnabled(false);
         detectSingleButton.addActionListener(e -> {
             FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
 
-            // Check if anything is actually selected
             if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0) {
                 JOptionPane.showMessageDialog(this,
                         "Please select an image from the table first.",
@@ -271,7 +302,6 @@ public class MainApplicationPanel extends JPanel {
                 return;
             }
 
-            // Check for multiple selections
             if (selectedFitsFilesInfo.length > 1) {
                 int userChoice = JOptionPane.showConfirmDialog(this,
                         "Multiple files are selected. Quick Detection will only be shown for the first file:\n" +
@@ -285,30 +315,20 @@ public class MainApplicationPanel extends JPanel {
                 }
             }
 
-            // Launch the background task for the single image
             new Thread(new DetectionTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImagePreProcessing(),
                     selectedFitsFilesInfo
             )).start();
         });
-        panel.add(detectSingleButton);
 
-        // --- NEW: Batch Detection Button ---
-        detectBatchButton.setToolTipText("Detect objects in all imported monochrome images");
-        detectBatchButton.setEnabled(false);
         detectBatchButton.addActionListener(e -> {
-            // Explicitly pass null to the task so it runs the batch process
             new Thread(new DetectionTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImagePreProcessing(),
                     null
             )).start();
         });
-        panel.add(detectBatchButton);
-
-        panel.add(progressBar);
-        progressBar.setEnabled(true);
 
         astapSolveCheckbox.addActionListener(e -> {
             if (astapSolveCheckbox.isSelected()) {
@@ -322,8 +342,12 @@ public class MainApplicationPanel extends JPanel {
             }
         });
 
+        // ==========================================
+        // MAIN TABLE AREA
+        // ==========================================
         JScrollPane scrollPane = new JScrollPane();
         add(scrollPane, BorderLayout.CENTER);
+
 
         // 2. Add this right before or after you setup the JScrollPane for the table
         JPanel statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT));

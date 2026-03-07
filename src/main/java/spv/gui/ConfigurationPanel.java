@@ -250,44 +250,52 @@ public class ConfigurationPanel extends JPanel {
         return headerLabel;
     }
 
-    /**
-     * Creates a beautifully aligned row that packs elements to the left.
-     */
+// =========================================================================
+    // UI LAYOUT HELPERS (Standardized across the app)
+    // =========================================================================
+
     private JPanel createConfigRow(String title, String description, JComponent inputControl) {
         JPanel row = new JPanel();
         row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
         row.setBorder(new EmptyBorder(5, 0, 15, 0));
 
         // Left side: Text (Title + Description)
-        JPanel textPanel = new JPanel(new GridLayout(2, 1, 0, 2));
+        JPanel textPanel = new JPanel();
+        textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
 
         JLabel titleLabel = new JLabel(title);
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
+        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel descLabel = new JLabel(description);
+        // Wrapping the description in HTML enables automatic word-wrapping in Swing
+        JLabel descLabel = new JLabel("<html>" + description + "</html>");
         descLabel.setFont(descLabel.getFont().deriveFont(Font.PLAIN, 12f));
         descLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         textPanel.add(titleLabel);
+        textPanel.add(Box.createVerticalStrut(3)); // Small gap between title and desc
         textPanel.add(descLabel);
 
-        // Lock the width of the text panel so all inputs align perfectly in a vertical column
-        Dimension textDim = new Dimension(420, 40);
+        // Lock the width so inputs align vertically, but give it enough height (55) for 2 lines of text
+        Dimension textDim = new Dimension(450, 55);
         textPanel.setPreferredSize(textDim);
         textPanel.setMinimumSize(textDim);
         textPanel.setMaximumSize(textDim);
 
-        // Right side: Input Control (FlowLayout.LEFT stops it from stretching internally)
+        // Right side: Input Control
         JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         if (inputControl instanceof JTextField) {
             inputControl.setPreferredSize(new Dimension(150, 26));
+        } else if (inputControl instanceof JSpinner) {
+            inputControl.setPreferredSize(new Dimension(80, 26));
         }
         inputWrapper.add(inputControl);
 
         row.add(textPanel);
         row.add(Box.createHorizontalStrut(20)); // Spacing between text and input
         row.add(inputWrapper);
-        row.add(Box.createHorizontalGlue()); // THIS pushes everything to the left!
+        row.add(Box.createHorizontalGlue()); // Pushes everything left
 
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
 

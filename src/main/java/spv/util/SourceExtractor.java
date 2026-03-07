@@ -29,6 +29,11 @@ public class SourceExtractor {
      * (e.g., 0.5 means 50% darker), it is assumed to be artificial registration padding. */
     public static double voidThresholdFraction = 0.5;
 
+    // --- NEW: Void Proximity Killer ---
+    /** The distance (in pixels) to look ahead for a void edge.
+     * Defeats interpolation gradients left by image alignment algorithms. */
+    public static int voidProximityRadius = 3;
+
     // --- Shape Classification Parameters ---
 
     /** The minimum elongation ratio (length/width) required to classify a blob as a fast-moving streak. */
@@ -113,10 +118,10 @@ public class SourceExtractor {
 
         // --- DUAL THRESHOLDS (HYSTERESIS) ---
         double seedThreshold = bg.median + (bg.sigma * sigmaMultiplier);
-        double growThreshold = bg.median + (bg.sigma * growSigmaMultiplier); // Parameterized!
+        double growThreshold = bg.median + (bg.sigma * growSigmaMultiplier);
 
-        //System.out.println("Background Median: " + bg.median + ", Sigma: " + bg.sigma);
-        //System.out.println("Seed Threshold: " + seedThreshold + " | Grow Threshold: " + growThreshold);
+        // Pre-calculate the void numeric threshold
+        double voidValueThreshold = bg.median * voidThresholdFraction;
 
         // 2. Setup for BFS Blob Detection
         List<DetectedObject> detectedObjects = new ArrayList<>();
@@ -142,10 +147,7 @@ public class SourceExtractor {
                     queue.add(startPixel);
                     visited[y][x] = true;
 
-                    // THE VOID TRIPWIRE
-                    boolean touchesVoid = false;
-
-                    // BFS Loop
+                    // --- FAST BFS LOOP (No complex proximity logic here) ---
                     while (!queue.isEmpty()) {
                         Pixel p = queue.poll();
                         currentBlob.add(p);
@@ -154,32 +156,16 @@ public class SourceExtractor {
                             int nx = p.x + dx[i];
                             int ny = p.y + dy[i];
 
-                            // 1. Did it touch the literal mathematical array boundary?
-                            if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
-                                touchesVoid = true;
-                                continue;
-                            }
-
-                            int nValue = image[ny][nx] + 32768;
-
-                            // 2. Did it touch the artificial black registration padding?
-                            // Parameterized checking against the void fraction
-                            if (nValue < (bg.median * voidThresholdFraction)) {
-                                touchesVoid = true;
-                            }
-
-                            if (!visited[ny][nx]) {
-                                if (nValue > growThreshold) {
-                                    visited[ny][nx] = true;
-                                    queue.add(new Pixel(nx, ny, nValue));
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                if (!visited[ny][nx]) {
+                                    int nValue = image[ny][nx] + 32768;
+                                    if (nValue > growThreshold) {
+                                        visited[ny][nx] = true;
+                                        queue.add(new Pixel(nx, ny, nValue));
+                                    }
                                 }
                             }
                         }
-                    }
-
-                    // ABORT CORRUPTED BLOBS
-                    if (touchesVoid) {
-                        continue;
                     }
 
                     // 4. Centroiding and Filtering
@@ -195,6 +181,52 @@ public class SourceExtractor {
 
                         if (obj.isNoise) {
                             continue;
+                        }
+
+// ==========================================================
+                        // 5. POST-CLASSIFICATION VOID PROXIMITY CHECK (Streaks Only)
+                        // ==========================================================
+                        if (obj.isStreak) {
+                            int voidTouchingPixels = 0;
+
+                            // Check every pixel in the streak against the void radius
+                            for (Pixel p : currentBlob) {
+                                boolean pixelTouchesVoid = false;
+
+                                for (int vy = -voidProximityRadius; vy <= voidProximityRadius; vy++) {
+                                    for (int vx = -voidProximityRadius; vx <= voidProximityRadius; vx++) {
+                                        int checkX = p.x + vx;
+                                        int checkY = p.y + vy;
+
+                                        // If the radius hits the absolute array boundary
+                                        if (checkX < 0 || checkX >= width || checkY < 0 || checkY >= height) {
+                                            pixelTouchesVoid = true;
+                                            break;
+                                        }
+
+                                        // If the radius hits the black registration padding
+                                        int vValue = image[checkY][checkX] + 32768;
+                                        if (vValue < voidValueThreshold) {
+                                            pixelTouchesVoid = true;
+                                            break;
+                                        }
+                                    }
+                                    if (pixelTouchesVoid) break;
+                                }
+
+                                if (pixelTouchesVoid) {
+                                    voidTouchingPixels++;
+                                }
+                            }
+
+                            // Calculate what percentage of the streak is touching the void
+                            double voidTouchRatio = (double) voidTouchingPixels / currentBlob.size();
+
+                            // If more than 30% of the streak is hugging the edge, it is a registration artifact.
+                            // A real satellite entering the frame will have a very low ratio (e.g., 5%).
+                            if (voidTouchRatio > 0.30) {
+                                continue; // Discard this fake streak artifact!
+                            }
                         }
 
                         // RECORD THE PIXEL AREA
