@@ -48,6 +48,7 @@ public class FrameQualityAnalyzer {
         public int starCount;
         public boolean isRejected = false;
         public String rejectionReason = "OK";
+        public String filename;
     }
 
     // =================================================================

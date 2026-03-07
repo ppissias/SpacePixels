@@ -36,7 +36,7 @@ import com.google.common.eventbus.Subscribe;
 public class MainApplicationPanel extends JPanel {
 
     //link to main window
-    private ApplicationWindow mainAppWindow;
+    private final ApplicationWindow mainAppWindow;
 
     //the table
     private volatile JTable table;
@@ -53,7 +53,9 @@ public class MainApplicationPanel extends JPanel {
 
     private final JButton solveButton = new JButton("Solve");
 
-    private final JButton detectButton = new JButton("Detect Objects");
+    // --- NEW: Split Detection Buttons ---
+    private final JButton detectSingleButton = new JButton("Detect Objects (Single Image)");
+    private final JButton detectBatchButton = new JButton("Detect Objects (Entire Set)");
 
     private final JLabel statusLabel = new JLabel(" Ready");
 
@@ -203,7 +205,7 @@ public class MainApplicationPanel extends JPanel {
 
                 new Thread(() -> {
                     try {
-                        FitsFileInformation[] selectedFitsFilesInfo = mainAppWindow.getSelectedFiles();
+                        FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
                         if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0) {
                             stopBlinkingProcess(); // abort if nothing selected
                             return;
@@ -254,13 +256,23 @@ public class MainApplicationPanel extends JPanel {
         });
         panel.add(blinkButton);
 
-        detectButton.setToolTipText("Detect objects in images (must be monochrome images)");
-        detectButton.setEnabled(false);
-        detectButton.addActionListener(e -> {
-            FitsFileInformation[] selectedFitsFilesInfo = mainAppWindow.getSelectedFiles();
+        // --- NEW: Single Detection Button ---
+        detectSingleButton.setToolTipText("Detect objects only in the currently selected monochrome image");
+        detectSingleButton.setEnabled(false);
+        detectSingleButton.addActionListener(e -> {
+            FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
 
-            // --- NEW LOGIC: Check for multiple selections ---
-            if (selectedFitsFilesInfo != null && selectedFitsFilesInfo.length > 1) {
+            // Check if anything is actually selected
+            if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0) {
+                JOptionPane.showMessageDialog(this,
+                        "Please select an image from the table first.",
+                        "No Image Selected",
+                        JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            // Check for multiple selections
+            if (selectedFitsFilesInfo.length > 1) {
                 int userChoice = JOptionPane.showConfirmDialog(this,
                         "Multiple files are selected. Quick Detection will only be shown for the first file:\n" +
                                 selectedFitsFilesInfo[0].getFileName() + "\n\nDo you want to proceed?",
@@ -268,25 +280,35 @@ public class MainApplicationPanel extends JPanel {
                         JOptionPane.OK_CANCEL_OPTION,
                         JOptionPane.WARNING_MESSAGE);
 
-                // If the user clicks Cancel or closes the dialog, abort the action completely
                 if (userChoice != JOptionPane.OK_OPTION) {
                     return;
                 }
             }
-            // Launch the background task
+
+            // Launch the background task for the single image
             new Thread(new DetectionTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImagePreProcessing(),
                     selectedFitsFilesInfo
             )).start();
         });
+        panel.add(detectSingleButton);
 
-        panel.add(detectButton);
+        // --- NEW: Batch Detection Button ---
+        detectBatchButton.setToolTipText("Detect objects in all imported monochrome images");
+        detectBatchButton.setEnabled(false);
+        detectBatchButton.addActionListener(e -> {
+            // Explicitly pass null to the task so it runs the batch process
+            new Thread(new DetectionTask(
+                    mainAppWindow.getEventBus(),
+                    mainAppWindow.getImagePreProcessing(),
+                    null
+            )).start();
+        });
+        panel.add(detectBatchButton);
 
         panel.add(progressBar);
         progressBar.setEnabled(true);
-        //progressBar.setString("Ready");     // Default idle text
-
 
         astapSolveCheckbox.addActionListener(e -> {
             if (astapSolveCheckbox.isSelected()) {
@@ -337,7 +359,7 @@ public class MainApplicationPanel extends JPanel {
                 }
             }
 
-            FitsFileInformation[] selectedFitsFilesInfo = mainAppWindow.getSelectedFiles();
+            FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
             if (selectedFitsFilesInfo != null && selectedFitsFilesInfo.length >= 3) {
                 blinkButton.setEnabled(true);
             } else {
@@ -412,15 +434,14 @@ public class MainApplicationPanel extends JPanel {
         if (containsColorImages) {
             ApplicationWindow.logger.info("Color images detected. Enabling 'Batch Convert to Mono'.");
             convertMonoButton.setEnabled(true);
-            detectButton.setEnabled(false); // Must convert before detecting
+            detectSingleButton.setEnabled(false);
+            detectBatchButton.setEnabled(false);
         } else {
             ApplicationWindow.logger.info("All images are Monochrome. Enabling 'Detect Objects'.");
-            convertMonoButton.setEnabled(false); // No need to convert
-            detectButton.setEnabled(true);
+            convertMonoButton.setEnabled(false);
+            detectSingleButton.setEnabled(true);
+            detectBatchButton.setEnabled(true);
         }
-
-        // The stretch button is always available once files are loaded
-        //stretchButton.setEnabled(true);
     }
 
     public FitsFileInformation getSelectedFileInformation() {
@@ -436,6 +457,7 @@ public class MainApplicationPanel extends JPanel {
             table.setRowSelectionInterval(0, 0);
         }
     }
+
     public FitsFileInformation[] getSelectedFilesInformation() {
         int[] selected_rows = table.getSelectedRows();
         if (selected_rows != null && selected_rows.length > 0) {
@@ -470,7 +492,9 @@ public class MainApplicationPanel extends JPanel {
         this.convertMonoButton.setEnabled(false);
         this.table.setEnabled(false);
         this.solveButton.setEnabled(false);
-        this.detectButton.setEnabled(false);
+        this.detectSingleButton.setEnabled(false);
+        this.detectBatchButton.setEnabled(false);
+
         mainAppWindow.setMenuState(false);
         mainAppWindow.getTabbedPane().setEnabledAt(1, false);
         mainAppWindow.getTabbedPane().setEnabledAt(2, false);
@@ -484,9 +508,12 @@ public class MainApplicationPanel extends JPanel {
         this.convertMonoButton.setEnabled(true);
         this.table.setEnabled(true);
         this.solveButton.setEnabled(false);
+
         if (!containsColorImages) {
-            this.detectButton.setEnabled(true);
+            this.detectSingleButton.setEnabled(true);
+            this.detectBatchButton.setEnabled(true);
         }
+
         mainAppWindow.setMenuState(true);
         mainAppWindow.getTabbedPane().setEnabledAt(1, true);
         mainAppWindow.getTabbedPane().setEnabledAt(2, true);
@@ -500,7 +527,9 @@ public class MainApplicationPanel extends JPanel {
         this.convertMonoButton.setEnabled(false);
         this.table.setEnabled(false);
         this.solveButton.setEnabled(false);
-        this.detectButton.setEnabled(false);
+        this.detectSingleButton.setEnabled(false);
+        this.detectBatchButton.setEnabled(false);
+
         mainAppWindow.setMenuState(false);
         mainAppWindow.getTabbedPane().setEnabledAt(1, false);
         mainAppWindow.getTabbedPane().setEnabledAt(2, false);
@@ -514,9 +543,12 @@ public class MainApplicationPanel extends JPanel {
         this.convertMonoButton.setEnabled(true);
         this.table.setEnabled(true);
         this.solveButton.setEnabled(false);
+
         if (!containsColorImages) {
-            this.detectButton.setEnabled(true);
+            this.detectSingleButton.setEnabled(true);
+            this.detectBatchButton.setEnabled(true);
         }
+
         mainAppWindow.setMenuState(true);
         mainAppWindow.getTabbedPane().setEnabledAt(1, true);
         mainAppWindow.getTabbedPane().setEnabledAt(2, true);
@@ -529,6 +561,9 @@ public class MainApplicationPanel extends JPanel {
         this.convertMonoButton.setEnabled(false);
         this.table.setEnabled(false);
         this.solveButton.setEnabled(false);
+        this.detectSingleButton.setEnabled(false);
+        this.detectBatchButton.setEnabled(false);
+
         mainAppWindow.setMenuState(false);
         mainAppWindow.getTabbedPane().setEnabledAt(1, false);
         mainAppWindow.getTabbedPane().setEnabledAt(2, false);
@@ -541,6 +576,12 @@ public class MainApplicationPanel extends JPanel {
         this.convertMonoButton.setEnabled(true);
         this.table.setEnabled(true);
         this.solveButton.setEnabled(false);
+
+        if (!containsColorImages) {
+            this.detectSingleButton.setEnabled(true);
+            this.detectBatchButton.setEnabled(true);
+        }
+
         mainAppWindow.setMenuState(true);
         mainAppWindow.getTabbedPane().setEnabledAt(1, true);
         mainAppWindow.getTabbedPane().setEnabledAt(2, true);
@@ -548,7 +589,8 @@ public class MainApplicationPanel extends JPanel {
     }
 
     public void setDetectionEnabled() {
-        detectButton.setEnabled(true);
+        detectSingleButton.setEnabled(true);
+        detectBatchButton.setEnabled(true);
     }
 
     // 2. Add a helper method to handle the UI reset safely
@@ -640,7 +682,6 @@ public class MainApplicationPanel extends JPanel {
         });
     }
 
-
     // 3. Add the Subscriber to catch the frame closing!
     @Subscribe
     public void onFullImageFrameClosed(FullImageViewFrameClosedEvent event) {
@@ -658,7 +699,6 @@ public class MainApplicationPanel extends JPanel {
             disableControlsProcessing();
             statusLabel.setText("Batch conversion started");
         });
-
     }
 
     @Subscribe
@@ -751,7 +791,7 @@ public class MainApplicationPanel extends JPanel {
                 } else {
                     // Handle UI updates for Batch Detection
                     JOptionPane.showMessageDialog(this,
-                            "Batch object detection completed successfully.",
+                            "Batch object detection completed successfully. Please check the detections folder.",
                             "Detection Complete",
                             JOptionPane.INFORMATION_MESSAGE);
                 }

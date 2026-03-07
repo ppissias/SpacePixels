@@ -135,28 +135,27 @@ public class ImagePreprocessing {
         public FrameQualityAnalyzer.FrameMetrics metrics;
     }
 
-    /**
-     * Detects moving objects in images using multi-threading to extract sources in parallel.
-     */
     public void detectObjects() throws IOException {
+        long startTime = System.currentTimeMillis();
+
+        // 0. Initialize the Ledger
+        PipelineTelemetry telemetry = new PipelineTelemetry();
 
         File[] fitsFileInformation = getFitsFilesDetails();
         int numFrames = fitsFileInformation.length;
+        telemetry.totalFramesLoaded = numFrames;
 
         System.out.println("\n--- PHASE 1: Loading & Source Extraction (MULTI-THREADED) ---");
         System.out.println("Spinning up parallel extraction for " + numFrames + " frames...");
 
-        // 1. Prepare a list to hold all the asynchronous tasks
         List<Callable<FrameExtractionResult>> tasks = new ArrayList<>();
 
         for (int i = 0; i < numFrames; i++) {
             final int index = i;
             final File currentFile = fitsFileInformation[i];
 
-            // 2. Define the work each thread will do
             tasks.add(() -> {
                 System.out.println("  [Thread] Processing Frame " + (index + 1) + "...");
-
                 Fits fitsFile = new Fits(currentFile);
                 Object kernel = fitsFile.getHDU(0).getKernel();
 
@@ -167,42 +166,39 @@ public class ImagePreprocessing {
 
                 short[][] imageData = (short[][]) kernel;
 
-                // Extract sources using parameterized thresholds
                 List<SourceExtractor.DetectedObject> objectsInFrame = SourceExtractor.extractSources(
                         imageData,
                         SourceExtractor.detectionSigmaMultiplier,
                         SourceExtractor.minDetectionPixels
                 );
 
-                // Stamp filename and index
                 String fileName = currentFile.getName();
                 for (SourceExtractor.DetectedObject obj : objectsInFrame) {
                     obj.sourceFrameIndex = index;
                     obj.sourceFilename = fileName;
                 }
 
-                // Generate metrics
                 FrameQualityAnalyzer.FrameMetrics metrics = FrameQualityAnalyzer.evaluateFrame(imageData);
                 metrics.medianEccentricity = FrameQualityAnalyzer.calculateFrameEccentricity(objectsInFrame);
 
-                // Package the results
                 FrameExtractionResult result = new FrameExtractionResult();
                 result.frameIndex = index;
                 result.rawImageData = imageData;
                 result.extractedObjects = objectsInFrame;
                 result.metrics = metrics;
 
+                // Store filename for telemetry later
+                result.metrics.filename = fileName;
+
                 fitsFile.close();
                 return result;
             });
         }
 
-        // 3. Execute all tasks concurrently and wait for them to finish!
         List<FrameExtractionResult> completedResults = new ArrayList<>();
         try {
             List<Future<FrameExtractionResult>> futures = executor.invokeAll(tasks);
             for (Future<FrameExtractionResult> future : futures) {
-                // This blocks until the specific thread is finished
                 completedResults.add(future.get());
             }
         } catch (Exception e) {
@@ -210,12 +206,8 @@ public class ImagePreprocessing {
         }
 
         System.out.println("\n[Parallel Extraction Complete] Reassembling data in chronological order...");
-
-        // 4. Sort the results back into chronological order!
-        // Threads finish at different times, so the results list is scrambled.
         completedResults.sort(Comparator.comparingInt(r -> r.frameIndex));
 
-        // 5. Unpack the sorted data into the lists the rest of the pipeline expects
         List<short[][]> rawFrames = new ArrayList<>();
         List<List<SourceExtractor.DetectedObject>> rawExtractedFrames = new ArrayList<>();
         List<FrameQualityAnalyzer.FrameMetrics> sessionMetrics = new ArrayList<>();
@@ -225,11 +217,14 @@ public class ImagePreprocessing {
             rawExtractedFrames.add(result.extractedObjects);
             sessionMetrics.add(result.metrics);
 
-            System.out.println("  -> Frame " + (result.frameIndex + 1) + " unpacked. Objects: " + result.extractedObjects.size() +
-                    " | Eccentricity: " + String.format("%.2f", result.metrics.medianEccentricity));
+            // --- TELEMETRY UPDATE: Phase 1 ---
+            telemetry.totalRawObjectsExtracted += result.extractedObjects.size();
+            PipelineTelemetry.FrameExtractionStat stat = new PipelineTelemetry.FrameExtractionStat();
+            stat.frameIndex = result.frameIndex;
+            stat.filename = result.metrics.filename;
+            stat.objectCount = result.extractedObjects.size();
+            telemetry.frameExtractionStats.add(stat);
         }
-
-        // --- The rest of the pipeline remains exactly the same, but now runs instantly! ---
 
         System.out.println("\n--- PHASE 2: Analyzing Session & Rejecting Outliers ---");
         SessionEvaluator.rejectOutlierFrames(sessionMetrics);
@@ -241,7 +236,17 @@ public class ImagePreprocessing {
             FrameQualityAnalyzer.FrameMetrics metrics = sessionMetrics.get(i);
             if (metrics.isRejected) {
                 System.out.println("⚠️ Skipping Frame " + (i + 1) + ": " + metrics.rejectionReason);
+
+                // --- TELEMETRY UPDATE: Phase 3 (Rejections) ---
+                telemetry.totalFramesRejected++;
+                PipelineTelemetry.FrameRejectionStat rejStat = new PipelineTelemetry.FrameRejectionStat();
+                rejStat.frameIndex = i;
+                rejStat.filename = metrics.filename;
+                rejStat.reason = metrics.rejectionReason;
+                telemetry.rejectedFrames.add(rejStat);
+
             } else {
+                telemetry.totalFramesKept++;
                 allFramesData.add(rawExtractedFrames.get(i));
             }
         }
@@ -254,22 +259,41 @@ public class ImagePreprocessing {
                 TrackLinker.angleToleranceRad
         );
 
+        // --- TELEMETRY UPDATE: Phase 4 (Tracking) ---
+        telemetry.totalMovingTargetsFound = trackResult.tracks.size();
+
+        // *Note: If TrackLinker.TrackingResult holds the star map size, you can add it here:*
+        // telemetry.totalStationaryStarsIdentified = trackResult.telemetry.get("total_stars");
+
         System.out.println("Success! Found " + trackResult.tracks.size() + " moving targets/streaks.");
 
         System.out.println("\n--- PHASE 5: Exporting Visualizations ---");
-        if (fitsFileInformation.length > 0 && !trackResult.tracks.isEmpty()) {
-            File parentDir = fitsFileInformation[0].getParentFile();
-            if (parentDir == null) parentDir = new File(System.getProperty("user.dir"));
 
-            File exportDir = new File(parentDir, "detections");
+        // Calculate total time right before exporting
+        telemetry.processingTimeMs = System.currentTimeMillis() - startTime;
+
+        if (fitsFileInformation.length > 0) {
+            File exportDir = createDetectionsDirectory(fitsFileInformation[0]);
+            telemetry.exportDirectoryPath = exportDir.getAbsolutePath();
 
             try {
-                System.out.println("Preparing to export to: " + exportDir.getAbsolutePath());
-                ImageDisplayUtils.exportTrackVisualizations(trackResult.tracks, trackResult.telemetry, rawFrames, exportDir);            } catch (IOException e) {
+                if (!trackResult.tracks.isEmpty()) {
+                    System.out.println("Preparing to export to: " + exportDir.getAbsolutePath());
+                } else {
+                    System.out.println("No targets found, but generating pipeline report at: " + exportDir.getAbsolutePath());
+                }
+
+                // --- NEW: Pass the telemetry object into your exporter ---
+                ImageDisplayUtils.exportTrackVisualizations(
+                        trackResult.tracks,
+                        trackResult.telemetry,
+                        rawFrames,
+                        exportDir,
+                        telemetry);
+
+            } catch (IOException e) {
                 System.err.println("Failed to export visualizations: " + e.getMessage());
             }
-        } else if (trackResult.tracks.isEmpty()) {
-            System.out.println("No targets found to export.");
         }
     }
 
@@ -1176,7 +1200,13 @@ public class ImagePreprocessing {
             parentDir = new File(System.getProperty("user.dir"));
         }
 
-        File detectionsDir = new File(parentDir, "detections");
+        // Generate a sortable timestamp
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+        String timestamp = java.time.LocalDateTime.now().format(formatter);
+
+        // Create the uniquely named detections directory
+        File detectionsDir = new File(parentDir, "detections_" + timestamp);
+
         if (!detectionsDir.exists()) {
             boolean created = detectionsDir.mkdirs();
             if (created) {
@@ -1185,6 +1215,7 @@ public class ImagePreprocessing {
                 System.err.println("Failed to create export directory. Check folder permissions.");
             }
         }
+
         return detectionsDir;
     }
 }

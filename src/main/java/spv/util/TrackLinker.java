@@ -66,6 +66,17 @@ public class TrackLinker {
         public long countP3NotLine, countP3WrongDirection, countP3Jump, countP3Size, countP3Flux;
         public long countTrackTooShort, countTrackErraticRhythm, countTrackDuplicate;
         public int streakTracksFound, pointTracksFound;
+
+        // --- NEW: Phase 3 Star Map Stats ---
+        public List<FrameStarMapStat> frameStarMapStats = new ArrayList<>();
+        public int totalStationaryStarsPurged = 0;
+
+        public static class FrameStarMapStat {
+            public int frameIndex;
+            public int initialPointSources;
+            public int survivingTransients;
+            public int purgedStars;
+        }
     }
 
     public static class TrackingResult {
@@ -194,7 +205,7 @@ public class TrackLinker {
         }
         System.out.println("DEBUG: [PHASE 2] Completed. Found " + streakTracksFound + " streak track(s).");
 
-        // =================================================================
+// =================================================================
         // PHASE 3: MASTER STAR MAP (Catalog Stacking)
         // =================================================================
         List<List<SourceExtractor.DetectedObject>> transients = new ArrayList<>();
@@ -204,11 +215,15 @@ public class TrackLinker {
 
         System.out.println("DEBUG: [PHASE 3] Building Master Star Map (Catalog Stacking)...");
 
+        // --- NEW: Initialize Telemetry early to catch Phase 3 data ---
+        TelemetryReport telemetry = new TelemetryReport();
+
         double expandedStarJitter = maxStarJitterArg * starJitterExpansionFactor;
         int totalTransientsFound = 0;
 
         for (int i = 0; i < numFrames; i++) {
             List<SourceExtractor.DetectedObject> currentFrame = pointSourcesOnly.get(i);
+            int purgedCount = 0;
 
             for (SourceExtractor.DetectedObject candidateObj : currentFrame) {
                 int spatialMatchCount = 1;
@@ -232,12 +247,24 @@ public class TrackLinker {
 
                 if (spatialMatchCount < requiredDetectionsToBeStar) {
                     transients.get(i).add(candidateObj);
+                } else {
+                    purgedCount++;
                 }
             }
+
             totalTransientsFound += transients.get(i).size();
+            telemetry.totalStationaryStarsPurged += purgedCount;
+
+            // --- NEW: Record Frame Stats ---
+            TelemetryReport.FrameStarMapStat stat = new TelemetryReport.FrameStarMapStat();
+            stat.frameIndex = i;
+            stat.initialPointSources = currentFrame.size();
+            stat.survivingTransients = transients.get(i).size();
+            stat.purgedStars = purgedCount;
+            telemetry.frameStarMapStats.add(stat);
+
             System.out.println("  -> Frame " + i + ": Retained " + transients.get(i).size() + " isolated transients out of " + currentFrame.size() + " point sources.");
         }
-
         System.out.println("DEBUG: [PHASE 3] Completed. Total pure transients across sequence: " + totalTransientsFound);
 
         // =================================================================
@@ -251,8 +278,6 @@ public class TrackLinker {
         System.out.println("DEBUG: [PHASE 4] Applying time-agnostic geometric filter...");
         System.out.println("  -> Track confirmation threshold: " + minPointsRequired + " points.");
 
-        // --- INITIATE TELEMETRY OBJECT ---
-        TelemetryReport telemetry = new TelemetryReport();
 
         List<Track> pointTracks = new ArrayList<>();
         java.util.Set<SourceExtractor.DetectedObject> usedPoints = new java.util.HashSet<>();
