@@ -42,6 +42,8 @@ public class TrackLinker {
     /** If the median jump is smaller than this, the object isn't actually moving (it's an artifact). */
     public static double rhythmStationaryThreshold = 0.5;
 
+    /** Photometric Filter: The maximum allowable ratio in total flux (brightness) between two linked objects. */
+    public static double maxFluxRatio = 3.0;
 
     // =================================================================
     // DATA MODELS
@@ -55,6 +57,24 @@ public class TrackLinker {
 
         public void addPoint(SourceExtractor.DetectedObject obj) {
             points.add(obj);
+        }
+    }
+
+    // --- NEW: Telemetry and Result Wrappers ---
+    public static class TelemetryReport {
+        public long countBaselineJitter, countBaselineJump, countBaselineSize, countBaselineFlux;
+        public long countP3NotLine, countP3WrongDirection, countP3Jump, countP3Size, countP3Flux;
+        public long countTrackTooShort, countTrackErraticRhythm, countTrackDuplicate;
+        public int streakTracksFound, pointTracksFound;
+    }
+
+    public static class TrackingResult {
+        public List<Track> tracks;
+        public TelemetryReport telemetry;
+
+        public TrackingResult(List<Track> tracks, TelemetryReport telemetry) {
+            this.tracks = tracks;
+            this.telemetry = telemetry;
         }
     }
 
@@ -76,7 +96,7 @@ public class TrackLinker {
     /**
      * Master method to find all moving objects (both fast streaks and slow dots).
      */
-    public static List<Track> findMovingObjects(
+    public static TrackingResult findMovingObjects(
             List<List<SourceExtractor.DetectedObject>> allFrames,
             double maxStarJitterArg,
             double predictionToleranceArg,
@@ -87,7 +107,8 @@ public class TrackLinker {
 
         if (numFrames < 3) {
             System.out.println("DEBUG: [ABORT] Less than 3 frames provided. Cannot form point tracks.");
-            return new ArrayList<>();
+            // Return an empty result safely
+            return new TrackingResult(new ArrayList<>(), new TelemetryReport());
         }
 
         List<Track> confirmedTracks = new ArrayList<>();
@@ -122,7 +143,6 @@ public class TrackLinker {
                     continue;
                 }
 
-                // Parameterized threshold
                 if (distance(candidate.x, candidate.y, other.x, other.y) <= stationaryDefectThreshold) {
                     isStationaryDefect = true;
                     break;
@@ -184,9 +204,7 @@ public class TrackLinker {
 
         System.out.println("DEBUG: [PHASE 3] Building Master Star Map (Catalog Stacking)...");
 
-        // Parameterized expansion
         double expandedStarJitter = maxStarJitterArg * starJitterExpansionFactor;
-
         int totalTransientsFound = 0;
 
         for (int i = 0; i < numFrames; i++) {
@@ -207,7 +225,6 @@ public class TrackLinker {
                         }
                     }
 
-                    // Parameterized threshold
                     if (spatialMatchCount >= requiredDetectionsToBeStar) {
                         break;
                     }
@@ -218,16 +235,14 @@ public class TrackLinker {
                 }
             }
             totalTransientsFound += transients.get(i).size();
-            System.out.println("  -> Frame " + i + ": Retained " + transients.get(i).size() + " isolated transients out of "+currentFrame.size()+" point sources.");
+            System.out.println("  -> Frame " + i + ": Retained " + transients.get(i).size() + " isolated transients out of " + currentFrame.size() + " point sources.");
         }
 
         System.out.println("DEBUG: [PHASE 3] Completed. Total pure transients across sequence: " + totalTransientsFound);
 
-// =================================================================
+        // =================================================================
         // PHASE 4: GEOMETRIC COLLINEAR LINKING (Time-Agnostic)
         // =================================================================
-
-        // Parameterized math rules
         int minPointsRequired = Math.max(3, (int) Math.ceil(numFrames / trackMinFrameRatio));
         if (minPointsRequired > absoluteMaxPointsRequired) {
             minPointsRequired = absoluteMaxPointsRequired;
@@ -236,19 +251,8 @@ public class TrackLinker {
         System.out.println("DEBUG: [PHASE 4] Applying time-agnostic geometric filter...");
         System.out.println("  -> Track confirmation threshold: " + minPointsRequired + " points.");
 
-        // --- NEW: TELEMETRY COUNTERS ---
-        long countBaselineJitter = 0;
-        long countBaselineJump = 0;
-        long countBaselineSize = 0;
-
-        long countP3Jump = 0;
-        long countP3NotLine = 0;
-        long countP3WrongDirection = 0;
-        long countP3Size = 0;
-
-        long countTrackTooShort = 0;
-        long countTrackErraticRhythm = 0;
-        long countTrackDuplicate = 0;
+        // --- INITIATE TELEMETRY OBJECT ---
+        TelemetryReport telemetry = new TelemetryReport();
 
         List<Track> pointTracks = new ArrayList<>();
         java.util.Set<SourceExtractor.DetectedObject> usedPoints = new java.util.HashSet<>();
@@ -266,19 +270,22 @@ public class TrackLinker {
                         double dist12 = distance(p1.x, p1.y, p2.x, p2.y);
 
                         if (dist12 < maxStarJitterArg) {
-                            countBaselineJitter++;
+                            telemetry.countBaselineJitter++;
                             continue;
                         }
 
-                        // Parameterized jump filter
                         if (dist12 > maxJumpPixels) {
-                            countBaselineJump++;
+                            telemetry.countBaselineJump++;
                             continue;
                         }
 
-                        // Parameterized size ratio
                         if (!isSizeConsistent(p1, p2, maxSizeRatio)) {
-                            countBaselineSize++;
+                            telemetry.countBaselineSize++;
+                            continue;
+                        }
+
+                        if (!isBrightnessConsistent(p1, p2, maxFluxRatio)) {
+                            telemetry.countBaselineFlux++;
                             continue;
                         }
 
@@ -299,7 +306,7 @@ public class TrackLinker {
 
                                 double jumpDist = distance(lastPoint.x, lastPoint.y, p3.x, p3.y);
                                 if (jumpDist > maxJumpPixels) {
-                                    countP3Jump++;
+                                    telemetry.countP3Jump++;
                                     continue;
                                 }
 
@@ -315,18 +322,24 @@ public class TrackLinker {
 
                                     if (angleDiff <= angleToleranceRadArg) {
                                         if (isSizeConsistent(lastPoint, p3, maxSizeRatio)) {
-                                            if (lineError < bestError) {
-                                                bestError = lineError;
-                                                bestMatch = p3;
+
+                                            if (isBrightnessConsistent(lastPoint, p3, maxFluxRatio)) {
+                                                if (lineError < bestError) {
+                                                    bestError = lineError;
+                                                    bestMatch = p3;
+                                                }
+                                            } else {
+                                                telemetry.countP3Flux++;
                                             }
+
                                         } else {
-                                            countP3Size++; // Failed size consistency
+                                            telemetry.countP3Size++;
                                         }
                                     } else {
-                                        countP3WrongDirection++; // Moving backward or wrong angle
+                                        telemetry.countP3WrongDirection++;
                                     }
                                 } else {
-                                    countP3NotLine++; // Failed collinearity check
+                                    telemetry.countP3NotLine++;
                                 }
                             }
 
@@ -336,60 +349,64 @@ public class TrackLinker {
                             }
                         }
 
-                        // 4. Final confirmation check & Telemetry
                         if (currentTrack.points.size() >= minPointsRequired) {
-
-                            // Parameterized variance
                             if (hasSteadyRhythm(currentTrack, rhythmAllowedVariance)) {
-
                                 if (!isTrackAlreadyFound(pointTracks, currentTrack)) {
-
                                     pointTracks.add(currentTrack);
                                     usedPoints.addAll(currentTrack.points);
                                 } else {
-                                    countTrackDuplicate++; // Track was already confirmed
+                                    telemetry.countTrackDuplicate++;
                                 }
                             } else {
-                                countTrackErraticRhythm++; // Failed kinematic speed check
+                                telemetry.countTrackErraticRhythm++;
                             }
                         } else {
-                            countTrackTooShort++; // Baseline formed, but not enough subsequent points found
+                            telemetry.countTrackTooShort++;
                         }
                     }
                 }
             }
         }
 
-        // --- NEW: PRINT TELEMETRY REPORT ---
+        // --- FINALIZE METRICS ---
+        telemetry.streakTracksFound = streakTracksFound;
+        telemetry.pointTracksFound = pointTracks.size();
+
+        // --- PRINT TELEMETRY REPORT ---
         System.out.println("\n--------------------------------------------------");
         System.out.println(" PHASE 4 TELEMETRY: FILTER REJECTION STATISTICS   ");
         System.out.println("--------------------------------------------------");
         System.out.println("1. Baseline Generation (p1 -> p2) Rejections:");
-        System.out.println("   - Stationary / Jitter           : " + countBaselineJitter);
-        System.out.println("   - Exceeded Max Jump Velocity    : " + countBaselineJump);
-        System.out.println("   - Morphological Size Mismatch   : " + countBaselineSize);
+        System.out.println("   - Stationary / Jitter           : " + telemetry.countBaselineJitter);
+        System.out.println("   - Exceeded Max Jump Velocity    : " + telemetry.countBaselineJump);
+        System.out.println("   - Morphological Size Mismatch   : " + telemetry.countBaselineSize);
+        System.out.println("   - Photometric Flux Mismatch     : " + telemetry.countBaselineFlux);
+
         System.out.println("\n2. Track Search (p3) Point Rejections:");
-        System.out.println("   - Off predicted trajectory line : " + countP3NotLine);
-        System.out.println("   - Wrong direction / angle       : " + countP3WrongDirection);
-        System.out.println("   - Exceeded Max Jump Velocity    : " + countP3Jump);
-        System.out.println("   - Morphological Size Mismatch   : " + countP3Size);
+        System.out.println("   - Off predicted trajectory line : " + telemetry.countP3NotLine);
+        System.out.println("   - Wrong direction / angle       : " + telemetry.countP3WrongDirection);
+        System.out.println("   - Exceeded Max Jump Velocity    : " + telemetry.countP3Jump);
+        System.out.println("   - Morphological Size Mismatch   : " + telemetry.countP3Size);
+        System.out.println("   - Photometric Flux Mismatch     : " + telemetry.countP3Flux);
+
         System.out.println("\n3. Final Track Rejections:");
-        System.out.println("   - Insufficient track length     : " + countTrackTooShort);
-        System.out.println("   - Erratic kinematic rhythm      : " + countTrackErraticRhythm);
-        System.out.println("   - Duplicate track (Ignored)     : " + countTrackDuplicate);
+        System.out.println("   - Insufficient track length     : " + telemetry.countTrackTooShort);
+        System.out.println("   - Erratic kinematic rhythm      : " + telemetry.countTrackErraticRhythm);
+        System.out.println("   - Duplicate track (Ignored)     : " + telemetry.countTrackDuplicate);
         System.out.println("--------------------------------------------------\n");
 
-        // --- THE SUCCESS METRICS ---
         System.out.println("\n4. Valid Tracks Confirmed:");
-        System.out.println("   - Fast Streak Tracks (Phase 2)  : " + streakTracksFound);
-        System.out.println("   - Slow Point Tracks (Phase 4)   : " + pointTracks.size());
-        System.out.println("   - TOTAL MOVING TARGETS FOUND    : " + (streakTracksFound + pointTracks.size()));
+        System.out.println("   - Fast Streak Tracks (Phase 2)  : " + telemetry.streakTracksFound);
+        System.out.println("   - Slow Point Tracks (Phase 4)   : " + telemetry.pointTracksFound);
+        System.out.println("   - TOTAL MOVING TARGETS FOUND    : " + (telemetry.streakTracksFound + telemetry.pointTracksFound));
         System.out.println("--------------------------------------------------\n");
+
         confirmedTracks.addAll(pointTracks);
+        //printAllTracks(confirmedTracks);
 
-        return confirmedTracks;
+        // Return the combined object!
+        return new TrackingResult(confirmedTracks, telemetry);
     }
-
     // =================================================================
     // HELPER METHODS
     // =================================================================
@@ -464,5 +481,16 @@ public class TrackLinker {
         return consistencyRatio >= rhythmMinConsistencyRatio;
     }
 
+    /**
+     * Checks if two objects have roughly the same brightness (flux).
+     * Rejects noise artifacts that wildly flash or spike in brightness between frames.
+     */
+    private static boolean isBrightnessConsistent(SourceExtractor.DetectedObject obj1, SourceExtractor.DetectedObject obj2, double maxRatio) {
+        // Use Math.abs to prevent negative flux edge-cases from breaking the math, and floor it at 1.0
+        double flux1 = Math.max(Math.abs(obj1.totalFlux), 1.0);
+        double flux2 = Math.max(Math.abs(obj2.totalFlux), 1.0);
 
+        double ratio = Math.max(flux1, flux2) / Math.min(flux1, flux2);
+        return ratio <= maxRatio;
+    }
 }

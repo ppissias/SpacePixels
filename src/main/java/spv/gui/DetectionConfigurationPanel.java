@@ -1,4 +1,4 @@
-package spv.gui; // Note: using your updated package name
+package spv.gui;
 
 import spv.util.*;
 
@@ -16,6 +16,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private JSpinner spinStationaryDefect, spinReqDetToStar, spinStarJitterExp;
     private JSpinner spinTrackMinFrameRatio, spinAbsMaxPoints, spinMaxJump, spinMaxSizeRatio;
     private JSpinner spinRhythmVar, spinRhythmMinRatio, spinRhythmStatThresh;
+    private JSpinner spinMaxFluxRatio;
 
     // --- Quality Control Spinners ---
     private JSpinner spinMinFramesAnalysis, spinStarCountSigma, spinFwhmSigma;
@@ -59,7 +60,7 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     // =========================================================================
-    // TAB BUILDERS (Now with Descriptions!)
+    // TAB BUILDERS
     // =========================================================================
 
     private JPanel buildExtractorPanel() {
@@ -102,6 +103,7 @@ public class DetectionConfigurationPanel extends JPanel {
         addSectionHeader(panel, "Phase 4: Geometric Kinematics", gbc, row++);
         spinMaxJump = addRow(panel, "Max Jump Velocity", "The cosmic speed limit! Absolute maximum distance (px) an object can travel between frames.", new SpinnerNumberModel(TrackLinker.maxJumpPixels, 10.0, 2000.0, 10.0), gbc, row++);
         spinMaxSizeRatio = addRow(panel, "Max Morphological Size Ratio", "Maximum allowable ratio in pixel area between two linked objects.", new SpinnerNumberModel(TrackLinker.maxSizeRatio, 1.0, 10.0, 0.5), gbc, row++);
+        spinMaxFluxRatio = addRow(panel, "Max Photometric Flux Ratio", "Maximum allowable ratio in total brightness (flux) between two linked objects.", new SpinnerNumberModel(TrackLinker.maxFluxRatio, 1.0, 10.0, 0.5), gbc, row++);
         spinTrackMinFrameRatio = addRow(panel, "Track Length Min Frame Ratio", "Denominator used to calculate minimum points required (e.g., 20 frames / 3.0 = ~7 points required).", new SpinnerNumberModel(TrackLinker.trackMinFrameRatio, 1.0, 10.0, 0.5), gbc, row++);
         spinAbsMaxPoints = addRow(panel, "Absolute Max Required Points", "Hard cap on min points required so huge batches don't demand mathematically impossible lengths.", new SpinnerNumberModel(TrackLinker.absoluteMaxPointsRequired, 3, 20, 1), gbc, row++);
 
@@ -161,7 +163,7 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     // =========================================================================
-    // APPLY LOGIC (Mapping UI back to the static variables)
+    // APPLY LOGIC
     // =========================================================================
 
     private void applySettings() {
@@ -186,6 +188,7 @@ public class DetectionConfigurationPanel extends JPanel {
             TrackLinker.starJitterExpansionFactor = (double) spinStarJitterExp.getValue();
             TrackLinker.maxJumpPixels = (double) spinMaxJump.getValue();
             TrackLinker.maxSizeRatio = (double) spinMaxSizeRatio.getValue();
+            TrackLinker.maxFluxRatio = (double) spinMaxFluxRatio.getValue();
             TrackLinker.trackMinFrameRatio = (double) spinTrackMinFrameRatio.getValue();
             TrackLinker.absoluteMaxPointsRequired = (int) spinAbsMaxPoints.getValue();
             TrackLinker.rhythmAllowedVariance = (double) spinRhythmVar.getValue();
@@ -238,13 +241,13 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     // =========================================================================
-    // UI LAYOUT HELPERS (Now formatting HTML Labels!)
+    // UI LAYOUT HELPERS
     // =========================================================================
 
     private GridBagConstraints createGbc() {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(8, 5, 8, 15); // Added extra horizontal padding
+        gbc.insets = new Insets(8, 5, 8, 15);
         gbc.anchor = GridBagConstraints.WEST;
         return gbc;
     }
@@ -253,32 +256,27 @@ public class DetectionConfigurationPanel extends JPanel {
         gbc.gridx = 0;
         gbc.gridy = row;
         gbc.gridwidth = 2;
-        gbc.insets = new Insets(20, 5, 5, 5); // Extra space on top of headers
+        gbc.insets = new Insets(20, 5, 5, 5);
         JLabel label = new JLabel(title);
         label.setFont(new Font("Segoe UI", Font.BOLD, 15));
         label.setForeground(new Color(77, 166, 255));
         panel.add(label, gbc);
         gbc.gridwidth = 1;
-        gbc.insets = new Insets(8, 5, 8, 15); // Reset insets
+        gbc.insets = new Insets(8, 5, 8, 15);
     }
 
-    /**
-     * Helper method that uses HTML to stack the bold title and the grayed-out description
-     * cleanly inside a single JLabel.
-     */
     private JSpinner addRow(JPanel panel, String labelText, String description, SpinnerModel model, GridBagConstraints gbc, int row) {
         gbc.gridx = 0;
         gbc.gridy = row;
-        gbc.weightx = 0.7; // Give the text label more horizontal space
+        gbc.weightx = 0.7;
 
-        // Use standard Swing HTML rendering to create a beautiful, descriptive label
         String htmlText = "<html><body style='width: 350px;'>"
                 + "<b>" + labelText + "</b><br>"
                 + "<span style='font-size: 10px; color: #999999;'>" + description + "</span>"
                 + "</body></html>";
 
         JLabel label = new JLabel(htmlText);
-        label.setToolTipText(description); // Backup tooltip
+        label.setToolTipText(description);
         panel.add(label, gbc);
 
         gbc.gridx = 1;

@@ -286,6 +286,7 @@ public class SourceExtractor {
 
         obj.x = m10 / m00;
         obj.y = m01 / m00;
+        obj.totalFlux = m00;
 
         double mu20 = 0, mu02 = 0, mu11 = 0;
         for (Pixel p : blob) {

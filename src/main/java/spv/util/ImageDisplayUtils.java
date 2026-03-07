@@ -274,13 +274,7 @@ public class ImageDisplayUtils {
     }
 
 
-    // =================================================================
-    // EXPORT & REPORT GENERATION
-    // =================================================================
-
-    // Note: Parameterized blinkSpeedMs, trackCropPadding, and targetCircle dimensions apply to all export methods.
-
-    public static void exportTrackVisualizations(List<TrackLinker.Track> tracks, List<short[][]> rawFrames, File exportDir) throws IOException {
+    public static void exportTrackVisualizations(List<TrackLinker.Track> tracks, TrackLinker.TelemetryReport telemetry, List<short[][]> rawFrames, File exportDir) throws IOException {
         if (!exportDir.exists()) exportDir.mkdirs();
 
         int trackCounter = 1;
@@ -290,7 +284,7 @@ public class ImageDisplayUtils {
 
         try (java.io.PrintWriter report = new java.io.PrintWriter(new java.io.FileWriter(reportFile))) {
 
-            // HTML HEADER
+            // --- HTML HEADER & CSS ---
             report.println("<!DOCTYPE html><html><head><title>Detection Report</title><style>");
             report.println("body { font-family: 'Segoe UI', sans-serif; background-color: #1e1e1e; color: #e0e0e0; margin: 40px; }");
             report.println("h1 { color: #ffffff; border-bottom: 2px solid #444; padding-bottom: 10px; }");
@@ -301,8 +295,56 @@ public class ImageDisplayUtils {
             report.println("img { border: 1px solid #555; border-radius: 4px; max-width: 100%; height: auto; }");
             report.println(".source-list { list-style-type: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }");
             report.println(".source-list li { background: #3d3d3d; padding: 5px 10px; border-radius: 4px; font-size: 0.9em; font-family: monospace; }");
+
+            // NEW CSS: Telemetry Table Styling
+            report.println(".telemetry-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 0.95em; }");
+            report.println(".telemetry-table th, .telemetry-table td { padding: 10px; text-align: left; border-bottom: 1px solid #444; }");
+            report.println(".telemetry-table th { color: #4da6ff; background-color: #333; }");
+            report.println(".telemetry-table tr:hover { background-color: #3a3a3a; }");
+            report.println(".telemetry-summary { font-size: 1.1em; font-weight: bold; color: #44ff44; margin-top: 15px; }");
+
             report.println("</style></head><body><h1>Detection Report</h1>");
 
+            // =================================================================
+            // --- NEW: INJECT TELEMETRY HTML BLOCK ---
+            // =================================================================
+            if (telemetry != null) {
+                report.println("<div class='detection-card' style='border-left: 5px solid #4da6ff;'>");
+                report.println("<div class='detection-title'>Tracking Telemetry & Rejection Statistics</div>");
+
+                report.println("<table class='telemetry-table'>");
+                report.println("<tr><th>Filter Phase</th><th>Rejection Reason</th><th>Points Rejected</th></tr>");
+
+                // Baseline Phase
+                report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Stationary / Jitter</td><td>" + telemetry.countBaselineJitter + "</td></tr>");
+                report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Exceeded Max Jump Velocity</td><td>" + telemetry.countBaselineJump + "</td></tr>");
+                report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Morphological Size Mismatch</td><td>" + telemetry.countBaselineSize + "</td></tr>");
+                report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Photometric Flux Mismatch</td><td>" + telemetry.countBaselineFlux + "</td></tr>");
+
+                // Search Phase
+                report.println("<tr><td>2. Track Search (p3)</td><td>Off Predicted Trajectory Line</td><td>" + telemetry.countP3NotLine + "</td></tr>");
+                report.println("<tr><td>2. Track Search (p3)</td><td>Wrong Direction / Angle</td><td>" + telemetry.countP3WrongDirection + "</td></tr>");
+                report.println("<tr><td>2. Track Search (p3)</td><td>Exceeded Max Jump Velocity</td><td>" + telemetry.countP3Jump + "</td></tr>");
+                report.println("<tr><td>2. Track Search (p3)</td><td>Morphological Size Mismatch</td><td>" + telemetry.countP3Size + "</td></tr>");
+                report.println("<tr><td>2. Track Search (p3)</td><td>Photometric Flux Mismatch</td><td>" + telemetry.countP3Flux + "</td></tr>");
+
+                // Final Track Phase
+                report.println("<tr><td>3. Final Track</td><td>Insufficient Track Length</td><td>" + telemetry.countTrackTooShort + "</td></tr>");
+                report.println("<tr><td>3. Final Track</td><td>Erratic Kinematic Rhythm</td><td>" + telemetry.countTrackErraticRhythm + "</td></tr>");
+                report.println("<tr><td>3. Final Track</td><td>Duplicate Track (Ignored)</td><td>" + telemetry.countTrackDuplicate + "</td></tr>");
+                report.println("</table>");
+
+                // Success Summary
+                int totalTargets = telemetry.streakTracksFound + telemetry.pointTracksFound;
+                report.println("<div class='telemetry-summary'>Total Confirmed Targets: " + totalTargets + " </div>");
+                report.println("<div style='font-size:0.9em; color:#aaa; margin-top:5px;'>(" + telemetry.streakTracksFound + " Fast Streaks | " + telemetry.pointTracksFound + " Slow Point Tracks)</div>");
+
+                report.println("</div>");
+            }
+
+            // =================================================================
+            // --- EXISTING VISUALIZATION LOOP ---
+            // =================================================================
             for (TrackLinker.Track track : tracks) {
                 if (track.points == null || track.points.isEmpty()) continue;
 
@@ -310,6 +352,8 @@ public class ImageDisplayUtils {
                 for (SourceExtractor.DetectedObject pt : track.points) {
                     uniqueFrames.add(pt.sourceFrameIndex);
                 }
+
+                // ... [The rest of your exact Case 1 and Case 2 code remains here unchanged] ...
 
                 if (uniqueFrames.size() == 1) {
                     double minX = Double.MAX_VALUE, maxX = Double.MIN_VALUE;
@@ -341,8 +385,6 @@ public class ImageDisplayUtils {
                     String streakFileName = "streak_" + streakCounter + ".png";
                     File streakFile = new File(exportDir, streakFileName);
                     saveTrackImageLossless(streakImg, streakFile);
-
-                    System.out.println("Exported single-frame streak event to: " + streakFileName);
 
                     report.println("<div class='detection-card'>");
                     report.println("<div class='detection-title streak-title'>Single Streak Event #" + streakCounter + "</div>");
@@ -399,7 +441,7 @@ public class ImageDisplayUtils {
                         int localObjY = (int) Math.round(pt.y - startY);
 
                         g2d.setColor(java.awt.Color.WHITE);
-                        g2d.setStroke(new java.awt.BasicStroke(targetCircleStrokeWidth)); // Parameterized
+                        g2d.setStroke(new java.awt.BasicStroke(targetCircleStrokeWidth));
                         g2d.drawOval(localObjX - targetCircleRadius, localObjY - targetCircleRadius, targetCircleRadius * 2, targetCircleRadius * 2);
                         g2d.dispose();
                         starCentricFrames.add(starFrameGray);
@@ -410,7 +452,6 @@ public class ImageDisplayUtils {
                         String starFileName = "streak_track_" + trackCounter + "_star_centric.gif";
                         File starFile = new File(exportDir, starFileName);
                         GifSequenceWriter.saveAnimatedGif(starCentricFrames, starFile, gifBlinkSpeedMs);
-                        System.out.println("Exported animation for streak track " + trackCounter + ".");
 
                         report.println("<div class='detection-title streak-title'>Multi-Frame Streak Track #" + trackCounter + "</div>");
                         report.println("<div class='image-container'><img src='" + starFileName + "' alt='Star Centric Animation' title='Star-Centric' /></div>");
@@ -423,8 +464,6 @@ public class ImageDisplayUtils {
 
                         File starFile = new File(exportDir, starFileName);
                         GifSequenceWriter.saveAnimatedGif(starCentricFrames, starFile, gifBlinkSpeedMs);
-
-                        System.out.println("Exported animations for point track " + trackCounter + ".");
 
                         report.println("<div class='detection-title'>Moving Target Track #" + trackCounter + "</div>");
                         report.println("<div class='image-container'><img src='" + objFileName + "' alt='Object Centric Animation' title='Object-Centric' /><img src='" + starFileName + "' alt='Star Centric Animation' title='Star-Centric' /></div>");

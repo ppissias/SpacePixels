@@ -247,17 +247,17 @@ public class ImagePreprocessing {
         }
 
         System.out.println("\n--- PHASE 4: Track Linking ---");
-        List<TrackLinker.Track> confirmedTargets = TrackLinker.findMovingObjects(
+        TrackLinker.TrackingResult trackResult = TrackLinker.findMovingObjects(
                 allFramesData,
                 TrackLinker.maxStarJitter,
                 TrackLinker.predictionTolerance,
                 TrackLinker.angleToleranceRad
         );
 
-        System.out.println("Success! Found " + confirmedTargets.size() + " moving targets/streaks.");
+        System.out.println("Success! Found " + trackResult.tracks.size() + " moving targets/streaks.");
 
         System.out.println("\n--- PHASE 5: Exporting Visualizations ---");
-        if (fitsFileInformation.length > 0 && !confirmedTargets.isEmpty()) {
+        if (fitsFileInformation.length > 0 && !trackResult.tracks.isEmpty()) {
             File parentDir = fitsFileInformation[0].getParentFile();
             if (parentDir == null) parentDir = new File(System.getProperty("user.dir"));
 
@@ -265,11 +265,10 @@ public class ImagePreprocessing {
 
             try {
                 System.out.println("Preparing to export to: " + exportDir.getAbsolutePath());
-                ImageDisplayUtils.exportTrackVisualizations(confirmedTargets, rawFrames, exportDir);
-            } catch (IOException e) {
+                ImageDisplayUtils.exportTrackVisualizations(trackResult.tracks, trackResult.telemetry, rawFrames, exportDir);            } catch (IOException e) {
                 System.err.println("Failed to export visualizations: " + e.getMessage());
             }
-        } else if (confirmedTargets.isEmpty()) {
+        } else if (trackResult.tracks.isEmpty()) {
             System.out.println("No targets found to export.");
         }
     }
