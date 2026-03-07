@@ -10,158 +10,100 @@
 
 package spv.gui;
 
-import nom.tam.fits.FitsException;
+import com.google.common.eventbus.Subscribe;
+import spv.events.FullSizeGenerationFinishedEvent;
+import spv.events.FullSizeGenerationStartedEvent;
+import spv.events.PreviewGenerationFinishedEvent;
+import spv.tasks.GenerateFullSizeTask;
+import spv.tasks.GeneratePreviewsTask;
+import spv.util.FitsFileInformation;
 import spv.util.StretchAlgorithm;
 
 import javax.swing.*;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.ItemEvent;
-import java.awt.event.ItemListener;
-import java.io.IOException;
+import java.awt.image.BufferedImage;
 
 public class StretchPanel extends JPanel {
-    // link to main window
-    private ApplicationWindow mainAppWindow;
+    private final ApplicationWindow mainAppWindow;
 
-
+    // Controls
     private JSlider stretchSlider;
-
     private JCheckBox stretchCheckbox;
-    private JComboBox<StretchAlgorithm> stretchAlgoCombo = new JComboBox<StretchAlgorithm>();
-
-    public StretchAlgorithm getStretchAlgorithm() {
-        return (StretchAlgorithm) stretchAlgoCombo.getSelectedItem();
-    }
-
-    public boolean isStretchEnabled() {
-        return stretchCheckbox.isSelected();
-    }
-
-    public JSlider getStretchSlider() {
-        return stretchSlider;
-    }
-
+    private JComboBox<StretchAlgorithm> stretchAlgoCombo;
     private JSlider stretchIterationsSlider;
+    private JButton showFullSizeButton;
 
-    public JSlider getStretchIterationsSlider() {
-        return stretchIterationsSlider;
-    }
+    // Dynamic Labels
+    private JLabel stretchIntensityLabel;
+    private JLabel stretchIterationsLabel;
 
-    /**
-     * Create the panel.
-     */
+    // Previews
+    private ImageVisualizerComponent originalImageComponent = new ImageVisualizerComponent();
+    private ImageVisualizerComponent stretchedImageComponent = new ImageVisualizerComponent();
+
+    // The Debouncer Timer
+    private Timer previewDebounceTimer;
+
     public StretchPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
-        GridBagLayout gridBagLayout = new GridBagLayout();
-        gridBagLayout.columnWidths = new int[]{231, 332, 0};
-        gridBagLayout.rowHeights = new int[]{21, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,};
-        gridBagLayout.columnWeights = new double[]{0.0, 1.0, Double.MIN_VALUE};
-        gridBagLayout.rowWeights = new double[]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, Double.MIN_VALUE};
-        setLayout(gridBagLayout);
 
+        // Register for EventBus!
+        this.mainAppWindow.getEventBus().register(this);
 
-        stretchCheckbox = new JCheckBox("Stretch");
-        stretchCheckbox.setToolTipText("if checked the images will also be stretched");
+        setLayout(new BorderLayout());
+        setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        stretchCheckbox.addItemListener(new ItemListener() {
-            public void itemStateChanged(ItemEvent arg0) {
-                //set other controls accordingly
-                mainAppWindow.getMainApplicationPanel().setBatchStretchButtonEnabled(isStretchEnabled());
-                stretchAlgoCombo.setEnabled(isStretchEnabled());
+        // Initialize the Debouncer
+        previewDebounceTimer = new Timer(250, e -> executePreviewTask());
+        previewDebounceTimer.setRepeats(false);
 
-                if (stretchCheckbox.isSelected()) {
-                    // Code to execute when it's selected
-                    stretchSlider.setEnabled(true);
-                    stretchIterationsSlider.setEnabled(true);
+        // ==========================================
+        // MAIN CONTENT CONTAINER
+        // ==========================================
+        JPanel mainContent = new JPanel();
+        mainContent.setLayout(new BoxLayout(mainContent, BoxLayout.Y_AXIS));
 
-                    mainAppWindow.setStretchFrameVisible(true);
-                    try {
-                        mainAppWindow.getMainApplicationPanel().updateImageStretchWindow();
-                    } catch (FitsException | IOException e) {
-                        e.printStackTrace();
-                    }
-                } else {
-                    // Code to execute when not selected
-                    stretchSlider.setEnabled(false);
-                    stretchIterationsSlider.setEnabled(false);
+        // --- SECTION 1: SETTINGS ---
+        mainContent.add(createSectionHeader("Stretch Algorithm & Global Settings"));
 
-                    mainAppWindow.setStretchFrameVisible(false);
+        JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 10));
+        stretchCheckbox = new JCheckBox("Enable Batch Stretching");
+        stretchCheckbox.setToolTipText("If checked, exported images will have these settings applied.");
+        stretchCheckbox.setFont(stretchCheckbox.getFont().deriveFont(Font.BOLD, 13f));
 
-                }
-            }
-        });
-        stretchCheckbox.setFont(new Font("Tahoma", Font.PLAIN, 13));
-        GridBagConstraints gbc_chckbxNewCheckBox = new GridBagConstraints();
-        gbc_chckbxNewCheckBox.anchor = GridBagConstraints.WEST;
-        gbc_chckbxNewCheckBox.insets = new Insets(0, 0, 5, 5);
-        gbc_chckbxNewCheckBox.gridx = 0;
-        gbc_chckbxNewCheckBox.gridy = 15;
-        add(stretchCheckbox, gbc_chckbxNewCheckBox);
-        stretchAlgoCombo.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent arg0) {
-                if (stretchCheckbox.isSelected()) {
-                    try {
-                        mainAppWindow.getMainApplicationPanel().updateImageStretchWindow();
-                    } catch (FitsException | IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        });
-
-
-        stretchAlgoCombo.setEnabled(false);
-        stretchAlgoCombo.setToolTipText("choose stretching algorithm");
-
-        stretchAlgoCombo.setModel(new DefaultComboBoxModel<StretchAlgorithm>(StretchAlgorithm.values()));
+        stretchAlgoCombo = new JComboBox<>(StretchAlgorithm.values());
         stretchAlgoCombo.setSelectedIndex(0);
-        GridBagConstraints gbc_stretchAlgoCombo = new GridBagConstraints();
-        gbc_stretchAlgoCombo.anchor = GridBagConstraints.WEST;
-        gbc_stretchAlgoCombo.insets = new Insets(0, 0, 5, 0);
-        gbc_stretchAlgoCombo.gridx = 1;
-        gbc_stretchAlgoCombo.gridy = 15;
-        add(stretchAlgoCombo, gbc_stretchAlgoCombo);
+        stretchAlgoCombo.setEnabled(false);
 
+        topRow.add(stretchCheckbox);
+        topRow.add(Box.createHorizontalStrut(20));
+        topRow.add(stretchAlgoCombo);
 
-        JLabel stretchIntensityLabel = new JLabel("Intensity");
-        GridBagConstraints gbc_stretchIntensityLabel = new GridBagConstraints();
-        gbc_stretchIntensityLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_stretchIntensityLabel.gridx = 0;
-        gbc_stretchIntensityLabel.gridy = 16;
-        add(stretchIntensityLabel, gbc_stretchIntensityLabel);
+        // Ensure left alignment
+        topRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        mainContent.add(topRow);
+        mainContent.add(Box.createVerticalStrut(10));
 
-        JLabel stretchIterationsLabel = new JLabel("Iterations");
-        GridBagConstraints gbc_stretchIterationsLabel = new GridBagConstraints();
-        gbc_stretchIterationsLabel.anchor = GridBagConstraints.WEST;
-        gbc_stretchIterationsLabel.insets = new Insets(0, 0, 5, 0);
-        gbc_stretchIterationsLabel.gridx = 1;
-        gbc_stretchIterationsLabel.gridy = 16;
-        add(stretchIterationsLabel, gbc_stretchIterationsLabel);
+        // --- SECTION 2: SLIDERS ---
+        mainContent.add(createSectionHeader("Intensity & Iterations"));
 
+        JPanel slidersRow = new JPanel(new GridLayout(1, 2, 40, 0));
+        slidersRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        // Left Slider Container
+        JPanel leftSliderPanel = new JPanel(new BorderLayout(0, 5));
+        stretchIntensityLabel = new JLabel("Intensity Threshold");
+        stretchIntensityLabel.setFont(stretchIntensityLabel.getFont().deriveFont(Font.BOLD, 12f));
         stretchSlider = new JSlider();
-        stretchSlider.setToolTipText("Intensity");
-        stretchSlider.addChangeListener(new ChangeListener() {
-            public void stateChanged(ChangeEvent arg0) {
-                try {
-                    mainAppWindow.getMainApplicationPanel().updateImageStretchWindow();
-                } catch (FitsException | IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        });
         stretchSlider.setEnabled(false);
+        leftSliderPanel.add(stretchIntensityLabel, BorderLayout.NORTH);
+        leftSliderPanel.add(stretchSlider, BorderLayout.CENTER);
 
-        GridBagConstraints gbc_stretchSlider = new GridBagConstraints();
-        gbc_stretchSlider.insets = new Insets(0, 0, 5, 5);
-        gbc_stretchSlider.gridx = 0;
-        gbc_stretchSlider.gridy = 17;
-        add(stretchSlider, gbc_stretchSlider);
-
+        // Right Slider Container
+        JPanel rightSliderPanel = new JPanel(new BorderLayout(0, 5));
+        stretchIterationsLabel = new JLabel("Application Iterations");
+        stretchIterationsLabel.setFont(stretchIterationsLabel.getFont().deriveFont(Font.BOLD, 12f));
         stretchIterationsSlider = new JSlider();
         stretchIterationsSlider.setPaintTicks(true);
         stretchIterationsSlider.setSnapToTicks(true);
@@ -169,56 +111,214 @@ public class StretchPanel extends JPanel {
         stretchIterationsSlider.setMinimum(1);
         stretchIterationsSlider.setValue(1);
         stretchIterationsSlider.setMaximum(20);
-        stretchIterationsSlider.setToolTipText("Iterations");
-
-        stretchIterationsSlider.addChangeListener(new ChangeListener() {
-            public void stateChanged(ChangeEvent arg0) {
-                try {
-                    mainAppWindow.getMainApplicationPanel().updateImageStretchWindow();
-                } catch (FitsException | IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        });
         stretchIterationsSlider.setEnabled(false);
+        rightSliderPanel.add(stretchIterationsLabel, BorderLayout.NORTH);
+        rightSliderPanel.add(stretchIterationsSlider, BorderLayout.CENTER);
 
-        GridBagConstraints gbc_stretchIterationsSlider = new GridBagConstraints();
-        gbc_stretchIterationsSlider.anchor = GridBagConstraints.WEST;
-        gbc_stretchIterationsSlider.insets = new Insets(0, 0, 5, 0);
-        gbc_stretchIterationsSlider.gridx = 1;
-        gbc_stretchIterationsSlider.gridy = 17;
-        add(stretchIterationsSlider, gbc_stretchIterationsSlider);
+        slidersRow.add(leftSliderPanel);
+        slidersRow.add(rightSliderPanel);
+        mainContent.add(slidersRow);
+        mainContent.add(Box.createVerticalStrut(20));
 
-        JLabel importLabel = new JLabel("Import parameters");
-        importLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
-        GridBagConstraints gbc_importLabel = new GridBagConstraints();
-        gbc_importLabel.anchor = GridBagConstraints.WEST;
-        gbc_importLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_importLabel.gridx = 0;
-        gbc_importLabel.gridy = 18;
-        add(importLabel, gbc_importLabel);
+        // Add the top controls to the North area
+        add(mainContent, BorderLayout.NORTH);
 
+        // ==========================================
+        // CENTER AREA: PREVIEWS
+        // ==========================================
+        JPanel previewMainContainer = new JPanel(new BorderLayout());
+        previewMainContainer.add(createSectionHeader("Real-Time Preview"), BorderLayout.NORTH);
 
-        //create action listener to change stretch parameter labels for EXTREME stretching
-        stretchAlgoCombo.addActionListener(new ActionListener() {
+        JPanel previewImagesContainer = new JPanel(new GridLayout(1, 2, 15, 0));
 
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                if (StretchAlgorithm.EXTREME.equals(stretchAlgoCombo.getSelectedItem())) {
-                    //
-                    stretchIntensityLabel.setText("Noise threshold");
-                    stretchIterationsLabel.setText("Intensity");
-                    stretchIterationsSlider.setValue(15);
-                } else {
-                    //other options
-                    stretchIntensityLabel.setText("Intensity");
-                    stretchIterationsLabel.setText("Iterations");
-                }
+        JPanel originalWrapper = new JPanel(new BorderLayout(0, 5));
+        JLabel origTitle = new JLabel("Original Image", SwingConstants.CENTER);
+        origTitle.setForeground(UIManager.getColor("Label.disabledForeground"));
+        originalWrapper.add(origTitle, BorderLayout.NORTH);
+        originalWrapper.add(originalImageComponent, BorderLayout.CENTER);
+
+        JPanel stretchedWrapper = new JPanel(new BorderLayout(0, 5));
+        JLabel stretchTitle = new JLabel("Stretched Preview", SwingConstants.CENTER);
+        stretchTitle.setForeground(UIManager.getColor("Label.disabledForeground"));
+        stretchedWrapper.add(stretchTitle, BorderLayout.NORTH);
+        stretchedWrapper.add(stretchedImageComponent, BorderLayout.CENTER);
+
+        previewImagesContainer.add(originalWrapper);
+        previewImagesContainer.add(stretchedWrapper);
+
+        previewMainContainer.add(previewImagesContainer, BorderLayout.CENTER);
+
+        add(previewMainContainer, BorderLayout.CENTER);
+
+        // ==========================================
+        // 3. BOTTOM AREA: ACTIONS
+        // ==========================================
+        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        actionPanel.setBorder(new EmptyBorder(10, 0, 0, 0));
+
+        showFullSizeButton = new JButton("Show full size");
+        showFullSizeButton.setEnabled(false);
+        actionPanel.add(showFullSizeButton);
+        add(actionPanel, BorderLayout.SOUTH);
+
+        // ==========================================
+        // 4. LISTENERS
+        // ==========================================
+        stretchCheckbox.addItemListener(e -> {
+            boolean enabled = stretchCheckbox.isSelected();
+            mainAppWindow.getMainApplicationPanel().setBatchStretchButtonEnabled(enabled);
+            stretchAlgoCombo.setEnabled(enabled);
+            stretchSlider.setEnabled(enabled);
+            stretchIterationsSlider.setEnabled(enabled);
+            showFullSizeButton.setEnabled(enabled);
+
+            if (enabled) {
+                mainAppWindow.getMainApplicationPanel().selectFirstFileIfNoneSelected();
+                triggerPreviewUpdate();
+            } else {
+                setOriginalImage(null);
+                setStretchedImage(null);
             }
-
         });
 
+        stretchAlgoCombo.addActionListener(e -> {
+            if (StretchAlgorithm.EXTREME.equals(stretchAlgoCombo.getSelectedItem())) {
+                stretchIntensityLabel.setText("Noise Threshold");
+                stretchIterationsLabel.setText("Intensity Factor");
+                stretchIterationsSlider.setValue(15);
+            } else {
+                stretchIntensityLabel.setText("Intensity Threshold");
+                stretchIterationsLabel.setText("Application Iterations");
+            }
+            if (stretchCheckbox.isSelected()) triggerPreviewUpdate();
+        });
+
+        stretchSlider.addChangeListener(e -> {
+            if (stretchCheckbox.isSelected()) triggerPreviewUpdate();
+        });
+
+        stretchIterationsSlider.addChangeListener(e -> {
+            if (stretchCheckbox.isSelected()) triggerPreviewUpdate();
+        });
+
+        // Fire and Forget Background Task
+        showFullSizeButton.addActionListener(e -> {
+            FitsFileInformation selectedFile = mainAppWindow.getMainApplicationPanel().getSelectedFileInformation();
+            if (selectedFile != null) {
+                new Thread(new GenerateFullSizeTask(
+                        mainAppWindow.getEventBus(),
+                        mainAppWindow.getImagePreProcessing(),
+                        selectedFile.getFilePath(),
+                        selectedFile.getSizeWidth(),
+                        selectedFile.getSizeHeight(),
+                        stretchSlider.getValue(),
+                        stretchIterationsSlider.getValue(),
+                        (StretchAlgorithm) stretchAlgoCombo.getSelectedItem()
+                )).start();
+            }
+        });
     }
 
+    // ==========================================
+    // UI HELPER METHODS
+    // ==========================================
 
+    /**
+     * Creates a styled section header matching the FlatLaf Accent color.
+     */
+    private JLabel createSectionHeader(String title) {
+        JLabel headerLabel = new JLabel(title);
+        headerLabel.setFont(headerLabel.getFont().deriveFont(Font.BOLD, 16f));
+
+        Color accentColor = UIManager.getColor("Component.accentColor");
+        if (accentColor == null) {
+            accentColor = Color.decode("#4285f4");
+        }
+        headerLabel.setForeground(accentColor);
+        headerLabel.setBorder(new EmptyBorder(20, 0, 10, 0));
+        headerLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return headerLabel;
+    }
+
+    // ==========================================
+    // TASK EXECUTION & SUBSCRIBERS
+    // ==========================================
+
+    public void triggerPreviewUpdate() {
+        if (previewDebounceTimer.isRunning()) {
+            previewDebounceTimer.restart();
+        } else {
+            previewDebounceTimer.start();
+        }
+    }
+
+    private void executePreviewTask() {
+        FitsFileInformation selected = mainAppWindow.getMainApplicationPanel().getSelectedFileInformation();
+        if (selected == null) return;
+
+        new Thread(new GeneratePreviewsTask(
+                mainAppWindow.getEventBus(),
+                mainAppWindow.getImagePreProcessing(),
+                selected.getFilePath(),
+                stretchSlider.getValue(),
+                stretchIterationsSlider.getValue(),
+                (StretchAlgorithm) stretchAlgoCombo.getSelectedItem()
+        )).start();
+    }
+
+    @Subscribe
+    public void onPreviewGenerationFinished(PreviewGenerationFinishedEvent event) {
+        EventQueue.invokeLater(() -> {
+            if (event.isSuccess()) {
+                setOriginalImage(event.getOriginalImage());
+                setStretchedImage(event.getStretchedImage());
+            } else {
+                setOriginalImage(null);
+                setStretchedImage(null);
+            }
+        });
+    }
+
+    @Subscribe
+    public void onFullSizeGenerationStarted(FullSizeGenerationStartedEvent event) {
+        EventQueue.invokeLater(() -> {
+            showFullSizeButton.setEnabled(false);
+            showFullSizeButton.setText("Processing...");
+        });
+    }
+
+    @Subscribe
+    public void onFullSizeGenerationFinished(FullSizeGenerationFinishedEvent event) {
+        EventQueue.invokeLater(() -> {
+            showFullSizeButton.setEnabled(true);
+            showFullSizeButton.setText("Show full size");
+
+            if (event.isSuccess()) {
+                mainAppWindow.getFullImagePreviewFrame().setImage(event.getFullSizeImage());
+                mainAppWindow.getFullImagePreviewFrame().setVisible(true);
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Cannot show full image: " + event.getErrorMessage(),
+                        "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+    }
+
+    // ==========================================
+    // UTILITIES
+    // ==========================================
+    public StretchAlgorithm getStretchAlgorithm() { return (StretchAlgorithm) stretchAlgoCombo.getSelectedItem(); }
+    public boolean isStretchEnabled() { return stretchCheckbox.isSelected(); }
+    public JSlider getStretchSlider() { return stretchSlider; }
+    public JSlider getStretchIterationsSlider() { return stretchIterationsSlider; }
+
+    private void setOriginalImage(BufferedImage image) {
+        originalImageComponent.setImage(image);
+        originalImageComponent.repaint();
+    }
+
+    private void setStretchedImage(BufferedImage image) {
+        stretchedImageComponent.setImage(image);
+        stretchedImageComponent.repaint();
+    }
 }

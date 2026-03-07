@@ -1,12 +1,3 @@
-/*
- * SpacePixels
- *
- * Copyright (c)2020-2023, Petros Pissias.
- * See the LICENSE file included in this distribution.
- *
- * author: Petros Pissias <petrospis at gmail.com>
- *
- */
 package spv.gui;
 
 import io.github.ppissias.astrolib.PlateSolveResult;
@@ -14,20 +5,32 @@ import spv.util.FitsFileInformation;
 
 import javax.swing.table.AbstractTableModel;
 
-/**
- * The table model showing information from the FITS files
- *
- */
 public class FitsFileTableModel extends AbstractTableModel {
+
+    // 1. Define constants for your visual columns
+    public static final int COL_FILENAME = 0;
+    public static final int COL_COLOR = 1;
+    public static final int COL_WIDTH = 2;
+    public static final int COL_HEIGHT = 3;
+    public static final int COL_SOLVED = 4;
 
     private final FitsFileInformation[] fitsfiles;
 
-    private final String[] columns = {"filename", "moco/color", "width", "length", "header", "solved", "obj"};
+    // "header" and "obj" are removed
+    private final String[] columns = {"filename", "mono/color", "width", "length", "solved"};
 
     public FitsFileTableModel(FitsFileInformation[] fitsfiles) {
         this.fitsfiles = fitsfiles;
     }
 
+    // --- 2. NEW EXPLICIT GETTER ---
+    // This entirely replaces the need for the hidden column 6
+    public FitsFileInformation getFitsFileAt(int rowIndex) {
+        if (rowIndex >= 0 && rowIndex < fitsfiles.length) {
+            return fitsfiles[rowIndex];
+        }
+        return null;
+    }
 
     @Override
     public int getColumnCount() {
@@ -39,7 +42,6 @@ public class FitsFileTableModel extends AbstractTableModel {
         return fitsfiles.length;
     }
 
-
     @Override
     public String getColumnName(int col) {
         return columns[col];
@@ -47,72 +49,42 @@ public class FitsFileTableModel extends AbstractTableModel {
 
     @Override
     public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
-        if (aValue instanceof PlateSolveResult) {
+        if (columnIndex == COL_SOLVED && aValue instanceof PlateSolveResult) {
             fitsfiles[rowIndex].setSolveResult((PlateSolveResult) aValue);
+            fireTableCellUpdated(rowIndex, columnIndex); // Tell UI to redraw this cell
         }
-        super.setValueAt(aValue, rowIndex, columnIndex);
     }
 
     @Override
     public Object getValueAt(int row, int col) {
-        if (row >= 0) {
-            switch (col) {
-                case 0: { //filename
-                    return fitsfiles[row].getFileName();
+        if (row < 0 || row >= fitsfiles.length) return null;
 
-                }
+        FitsFileInformation file = fitsfiles[row];
 
-                case 1: { //moco/color
-                    if (fitsfiles[row].isMonochrome()) {
-                        return "Monochrome";
-                    } else {
-                        return "Color";
-                    }
+        switch (col) {
+            case COL_FILENAME:
+                return file.getFileName();
 
-                }
+            case COL_COLOR:
+                return file.isMonochrome() ? "Monochrome" : "Color";
 
-                case 2: { //width
-                    return "" + fitsfiles[row].getSizeWidth();
-                }
+            case COL_WIDTH:
+                return String.valueOf(file.getSizeWidth());
 
-                case 3: { //length
-                    return "" + fitsfiles[row].getSizeHeight();
-                }
+            case COL_HEIGHT:
+                return String.valueOf(file.getSizeHeight());
 
-                case 4: { //filename
-                    return fitsfiles[row].getFitsHeader().size() + " elements";
-                }
+            case COL_SOLVED:
+                PlateSolveResult solveResult = file.getSolveResult();
+                return (solveResult != null && solveResult.isSuccess()) ? "yes" : "no";
 
-                case 5: { //solved, holds the PlateSolveResult here
-                    PlateSolveResult solveResult = fitsfiles[row].getSolveResult();
-                    if (solveResult != null) {
-                        if (solveResult.isSuccess()) {
-                            return "yes";
-                        } else {
-                            return "no";
-                        }
-                    } else {
-                        return "no";
-                    }
-                }
-
-                case 6: { //entire object (hidden from the GUI)
-                    return fitsfiles[row];
-                }
-                default: {
-                    return "";
-                }
-            }
-        } else {
-            return null;
+            default:
+                return "";
         }
-
     }
 
     @Override
     public boolean isCellEditable(int row, int col) {
         return false;
     }
-
-
 }

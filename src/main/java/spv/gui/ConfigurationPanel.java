@@ -14,400 +14,283 @@ import org.apache.commons.configuration2.ex.ConfigurationException;
 import spv.util.FitsFileInformation;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.IOException;
 
 public class ConfigurationPanel extends JPanel {
     // link to main window
-    private ApplicationWindow mainAppWindow;
+    private final ApplicationWindow mainAppWindow;
 
     private final JLabel astapPathLabel;
-    private JTextField focalLengthTextField;
-    private JTextField pixelSizeTextfield;
-    private JTextField latTextField;
-    private JTextField longTextField;
-    private JTextField raTextfield;
-    private JTextField decTextField;
-
+    private final JTextField focalLengthTextField;
+    private final JTextField pixelSizeTextfield;
+    private final JTextField latTextField;
+    private final JTextField longTextField;
+    private final JTextField raTextfield;
+    private final JTextField decTextField;
 
     /**
      * Create the panel.
      */
     public ConfigurationPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
-        GridBagLayout gridBagLayout = new GridBagLayout();
-        gridBagLayout.columnWidths = new int[]{231, 332, 0};
-        gridBagLayout.rowHeights = new int[]{21, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,};
-        gridBagLayout.columnWeights = new double[]{0.0, 1.0, Double.MIN_VALUE};
-        gridBagLayout.rowWeights = new double[]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, Double.MIN_VALUE};
-        setLayout(gridBagLayout);
 
-        JLabel astapConfigLabel = new JLabel("ASTAP configuration");
-        astapConfigLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
-        GridBagConstraints gbc_astapConfigLabel = new GridBagConstraints();
-        gbc_astapConfigLabel.anchor = GridBagConstraints.WEST;
-        gbc_astapConfigLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_astapConfigLabel.gridx = 0;
-        gbc_astapConfigLabel.gridy = 0;
-        add(astapConfigLabel, gbc_astapConfigLabel);
+        setLayout(new BorderLayout());
+        setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        JButton btnNewButton = new JButton("ASTAP path");
-        btnNewButton.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent arg0) {
-                ApplicationWindow.logger.info("ASTAP settings");
+        // ==========================================
+        // MAIN CONTENT CONTAINER
+        // ==========================================
+        JPanel mainContent = new JPanel();
+        mainContent.setLayout(new BoxLayout(mainContent, BoxLayout.Y_AXIS));
 
-                // Create a file chooser
-                final JFileChooser fc = new JFileChooser();
-                fc.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        // --- SECTION 1: EXTERNAL TOOLS ---
+        mainContent.add(createSectionHeader("External Tools"));
 
-                fc.setDialogTitle("ASTAP executable");
-                int returnVal = fc.showOpenDialog(ConfigurationPanel.this);
+        astapPathLabel = new JLabel("Not set");
+        astapPathLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        JButton astapPathButton = new JButton("Browse...");
 
-                if (returnVal == JFileChooser.APPROVE_OPTION) {
-                    File astapExecutableFilePath = fc.getSelectedFile();
+        // Changed to LEFT alignment
+        JPanel astapControlPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        astapControlPanel.add(astapPathLabel);
+        astapControlPanel.add(Box.createHorizontalStrut(10));
+        astapControlPanel.add(astapPathButton);
 
-                    // do a simple test run of astap
-                    String[] cmdArray = new String[2];
-                    cmdArray[0] = astapExecutableFilePath.getAbsolutePath();
-                    cmdArray[1] = "-h";
+        mainContent.add(createConfigRow(
+                "ASTAP Executable Path",
+                "The local path to the ASTAP solver executable used for plate solving.",
+                astapControlPanel));
 
-                    try {
-                        Runtime.getRuntime().exec(cmdArray, null, astapExecutableFilePath.getParentFile());
-                    } catch (IOException e) {
-                        JOptionPane.showMessageDialog(new JFrame(), "Cannot execute ASTAP:" + e.getMessage(), "Error",
-                                JOptionPane.ERROR_MESSAGE);
-                        astapExecutableFilePath = null;
-                    }
-
-                    if (astapExecutableFilePath != null) {
-                        try {
-                            mainAppWindow.getImagePreProcessing().setProperty("astap",
-                                    astapExecutableFilePath.getAbsolutePath());
-                        } catch (ConfigurationException e) {
-                            JOptionPane.showMessageDialog(new JFrame(),
-                                    "Cannot set configuration file property:" + e.getMessage(), "Error",
-                                    JOptionPane.ERROR_MESSAGE);
-                        }
-                    }
-
-                }
-            }
-        });
-        GridBagConstraints gbc_btnNewButton = new GridBagConstraints();
-        gbc_btnNewButton.anchor = GridBagConstraints.NORTHWEST;
-        gbc_btnNewButton.insets = new Insets(0, 0, 5, 5);
-        gbc_btnNewButton.gridx = 0;
-        gbc_btnNewButton.gridy = 1;
-        add(btnNewButton, gbc_btnNewButton);
-
-        astapPathLabel = new JLabel();
-        astapPathLabel.setHorizontalAlignment(SwingConstants.LEFT);
-        GridBagConstraints gbc_astapPathLabel = new GridBagConstraints();
-        gbc_astapPathLabel.insets = new Insets(0, 0, 5, 0);
-        gbc_astapPathLabel.fill = GridBagConstraints.HORIZONTAL;
-        gbc_astapPathLabel.gridx = 1;
-        gbc_astapPathLabel.gridy = 2;
-        add(astapPathLabel, gbc_astapPathLabel);
-
-        JLabel groupLabel = new JLabel("Parameters used to help with plate solving - NEAR SOLVE NOT IMPLEMENTED CURRENTLY");
-        groupLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
-        GridBagConstraints gbc_groupLabel = new GridBagConstraints();
-        gbc_groupLabel.anchor = GridBagConstraints.WEST;
-        gbc_groupLabel.gridwidth = 2;
-        gbc_groupLabel.insets = new Insets(0, 0, 5, 0);
-        gbc_groupLabel.gridx = 0;
-        gbc_groupLabel.gridy = 3;
-        add(groupLabel, gbc_groupLabel);
-
-        JLabel telescopeParamsLabel = new JLabel("Telescope parameters");
-        telescopeParamsLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
-        GridBagConstraints gbc_telescopeParamsLabel = new GridBagConstraints();
-        gbc_telescopeParamsLabel.anchor = GridBagConstraints.WEST;
-        gbc_telescopeParamsLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_telescopeParamsLabel.gridx = 0;
-        gbc_telescopeParamsLabel.gridy = 4;
-        add(telescopeParamsLabel, gbc_telescopeParamsLabel);
-
-        JLabel focalLengthLabel = new JLabel("Focal length");
-        focalLengthLabel.setToolTipText("focal length of the telescope");
-        GridBagConstraints gbc_focalLengthLabel = new GridBagConstraints();
-        gbc_focalLengthLabel.anchor = GridBagConstraints.EAST;
-        gbc_focalLengthLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_focalLengthLabel.gridx = 0;
-        gbc_focalLengthLabel.gridy = 5;
-        add(focalLengthLabel, gbc_focalLengthLabel);
+        // --- SECTION 2: SOLVING PARAMETERS ---
+        mainContent.add(createSectionHeader("Solving Parameters (Near Solve) [not implemented yet]"));
 
         focalLengthTextField = new JTextField();
-        GridBagConstraints gbc_focalLengthTextField = new GridBagConstraints();
-        gbc_focalLengthTextField.anchor = GridBagConstraints.WEST;
-        gbc_focalLengthTextField.insets = new Insets(0, 0, 5, 0);
-        gbc_focalLengthTextField.gridx = 1;
-        gbc_focalLengthTextField.gridy = 5;
-        add(focalLengthTextField, gbc_focalLengthTextField);
-        focalLengthTextField.setColumns(10);
-
-        JLabel cameraParamsLabel = new JLabel("Camera parameters");
-        cameraParamsLabel.setToolTipText("pixel size in microns");
-        cameraParamsLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
-        GridBagConstraints gbc_cameraParamsLabel = new GridBagConstraints();
-        gbc_cameraParamsLabel.anchor = GridBagConstraints.WEST;
-        gbc_cameraParamsLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_cameraParamsLabel.gridx = 0;
-        gbc_cameraParamsLabel.gridy = 6;
-        add(cameraParamsLabel, gbc_cameraParamsLabel);
-
-        JLabel lblNewLabel = new JLabel("Pixel size");
-        lblNewLabel.setToolTipText("pixel size in microns");
-        GridBagConstraints gbc_lblNewLabel = new GridBagConstraints();
-        gbc_lblNewLabel.anchor = GridBagConstraints.EAST;
-        gbc_lblNewLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_lblNewLabel.gridx = 0;
-        gbc_lblNewLabel.gridy = 7;
-        add(lblNewLabel, gbc_lblNewLabel);
+        mainContent.add(createConfigRow(
+                "Telescope Focal Length",
+                "Focal length of the telescope in millimeters.",
+                focalLengthTextField));
+        focalLengthTextField.setEnabled(false);
 
         pixelSizeTextfield = new JTextField();
-        GridBagConstraints gbc_pixelSizeTextfield = new GridBagConstraints();
-        gbc_pixelSizeTextfield.anchor = GridBagConstraints.WEST;
-        gbc_pixelSizeTextfield.insets = new Insets(0, 0, 5, 0);
-        gbc_pixelSizeTextfield.gridx = 1;
-        gbc_pixelSizeTextfield.gridy = 7;
-        add(pixelSizeTextfield, gbc_pixelSizeTextfield);
-        pixelSizeTextfield.setColumns(10);
+        mainContent.add(createConfigRow(
+                "Camera Pixel Size",
+                "Pixel size of the sensor in microns (\u00B5m).",
+                pixelSizeTextfield));
+        pixelSizeTextfield.setEnabled(false);
 
-        JLabel fieldLabel = new JLabel("Field coordinates (approx)");
-        fieldLabel.setToolTipText("Approx coordinates at the center of the image");
-        fieldLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
-        GridBagConstraints gbc_fieldLabel = new GridBagConstraints();
-        gbc_fieldLabel.anchor = GridBagConstraints.WEST;
-        gbc_fieldLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_fieldLabel.gridx = 0;
-        gbc_fieldLabel.gridy = 8;
-        add(fieldLabel, gbc_fieldLabel);
-
-        JLabel raLabel = new JLabel("RA");
-        raLabel.setToolTipText("HH MM SS.xxx");
-        GridBagConstraints gbc_raLabel = new GridBagConstraints();
-        gbc_raLabel.anchor = GridBagConstraints.EAST;
-        gbc_raLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_raLabel.gridx = 0;
-        gbc_raLabel.gridy = 9;
-        add(raLabel, gbc_raLabel);
 
         raTextfield = new JTextField();
-        GridBagConstraints gbc_raTextfield = new GridBagConstraints();
-        gbc_raTextfield.anchor = GridBagConstraints.WEST;
-        gbc_raTextfield.insets = new Insets(0, 0, 5, 0);
-        gbc_raTextfield.gridx = 1;
-        gbc_raTextfield.gridy = 9;
-        add(raTextfield, gbc_raTextfield);
-        raTextfield.setColumns(10);
-
-        JLabel decLabel = new JLabel("DEC");
-        decLabel.setToolTipText("+HH MM SS.xxx");
-        GridBagConstraints gbc_decLabel = new GridBagConstraints();
-        gbc_decLabel.anchor = GridBagConstraints.EAST;
-        gbc_decLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_decLabel.gridx = 0;
-        gbc_decLabel.gridy = 10;
-        add(decLabel, gbc_decLabel);
+        mainContent.add(createConfigRow(
+                "Approximate Right Ascension (RA)",
+                "Field coordinates at the center of the image (HH MM SS.xxx).",
+                raTextfield));
+        raTextfield.setEnabled(false);
 
         decTextField = new JTextField();
-        GridBagConstraints gbc_decTextField = new GridBagConstraints();
-        gbc_decTextField.anchor = GridBagConstraints.WEST;
-        gbc_decTextField.insets = new Insets(0, 0, 5, 0);
-        gbc_decTextField.gridx = 1;
-        gbc_decTextField.gridy = 10;
-        add(decTextField, gbc_decTextField);
-        decTextField.setColumns(10);
+        mainContent.add(createConfigRow(
+                "Approximate Declination (DEC)",
+                "Field coordinates at the center of the image (+HH MM SS.xxx).",
+                decTextField));
+        decTextField.setEnabled(false);
 
-        JLabel group2Label = new JLabel("Parameters used for object detection and annotation");
-        group2Label.setFont(new Font("Tahoma", Font.PLAIN, 13));
-        GridBagConstraints gbc_group2Label = new GridBagConstraints();
-        gbc_group2Label.anchor = GridBagConstraints.WEST;
-        gbc_group2Label.gridwidth = 2;
-        gbc_group2Label.insets = new Insets(0, 0, 5, 0);
-        gbc_group2Label.gridx = 0;
-        gbc_group2Label.gridy = 11;
-        add(group2Label, gbc_group2Label);
-
-        JLabel siteLabel = new JLabel("Site");
-        siteLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
-        GridBagConstraints gbc_siteLabel = new GridBagConstraints();
-        gbc_siteLabel.anchor = GridBagConstraints.NORTHWEST;
-        gbc_siteLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_siteLabel.gridx = 0;
-        gbc_siteLabel.gridy = 12;
-        add(siteLabel, gbc_siteLabel);
-
-        JLabel latLabel = new JLabel("Latitude (N)");
-        GridBagConstraints gbc_latLabel = new GridBagConstraints();
-        gbc_latLabel.anchor = GridBagConstraints.EAST;
-        gbc_latLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_latLabel.gridx = 0;
-        gbc_latLabel.gridy = 13;
-        add(latLabel, gbc_latLabel);
+        // --- SECTION 3: DETECTION & ANNOTATION ---
+        mainContent.add(createSectionHeader("Detection & Annotation Parameters"));
 
         latTextField = new JTextField();
-        GridBagConstraints gbc_latTextField = new GridBagConstraints();
-        gbc_latTextField.anchor = GridBagConstraints.WEST;
-        gbc_latTextField.insets = new Insets(0, 0, 5, 0);
-        gbc_latTextField.gridx = 1;
-        gbc_latTextField.gridy = 13;
-        add(latTextField, gbc_latTextField);
-        latTextField.setColumns(10);
-
-        JLabel longLabel = new JLabel("Longitude (E)");
-        GridBagConstraints gbc_longLabel = new GridBagConstraints();
-        gbc_longLabel.anchor = GridBagConstraints.EAST;
-        gbc_longLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_longLabel.gridx = 0;
-        gbc_longLabel.gridy = 14;
-        add(longLabel, gbc_longLabel);
+        mainContent.add(createConfigRow(
+                "Site Latitude (N)",
+                "Observation site latitude for accurate celestial annotation.",
+                latTextField));
 
         longTextField = new JTextField();
-        GridBagConstraints gbc_longTextField = new GridBagConstraints();
-        gbc_longTextField.anchor = GridBagConstraints.WEST;
-        gbc_longTextField.insets = new Insets(0, 0, 5, 0);
-        gbc_longTextField.gridx = 1;
-        gbc_longTextField.gridy = 14;
-        add(longTextField, gbc_longTextField);
-        longTextField.setColumns(10);
+        mainContent.add(createConfigRow(
+                "Site Longitude (E)",
+                "Observation site longitude for accurate celestial annotation.",
+                longTextField));
 
+        // Add the scrolling capability just in case the window is resized too small
+        JScrollPane scrollPane = new JScrollPane(mainContent);
+        scrollPane.setBorder(null); // Keep it clean
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16); // Smooth scrolling
+        add(scrollPane, BorderLayout.CENTER);
 
-        JLabel importLabel = new JLabel("Import parameters");
-        importLabel.setFont(new Font("Tahoma", Font.PLAIN, 13));
-        GridBagConstraints gbc_importLabel = new GridBagConstraints();
-        gbc_importLabel.anchor = GridBagConstraints.WEST;
-        gbc_importLabel.insets = new Insets(0, 0, 5, 5);
-        gbc_importLabel.gridx = 0;
-        gbc_importLabel.gridy = 18;
-        add(importLabel, gbc_importLabel);
+        // ==========================================
+        // BOTTOM ACTION BAR
+        // ==========================================
+        JPanel actionContainer = new JPanel(new BorderLayout());
+        actionContainer.setBorder(new EmptyBorder(20, 0, 0, 0)); // Padding from the top
 
-        JButton fitsDeduceButton = new JButton("deduce from FITS header");
+        JButton fitsDeduceButton = new JButton("Deduce from FITS header");
         fitsDeduceButton.setToolTipText("Try to deduce parameters from the selected image FITS header");
-        fitsDeduceButton.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent arg0) {
-                FitsFileInformation selectedFile = mainAppWindow.getSelectedFile();
 
-                if (selectedFile != null) {
-                    // read from FITS header
-                    double pixelScaleX = 0;
-                    double pixelScaleY = 0;
+        JButton saveConfigButton = new JButton("Save Configuration");
+        saveConfigButton.setToolTipText("Saves current configuration to properties");
 
-                    for (String key : selectedFile.getFitsHeader().keySet()) {
-                        switch (key) {
-                            case "XPIXSZ": {
-                                pixelScaleX = Double.parseDouble(selectedFile.getFitsHeader().get(key));
-                                break;
-                            }
+        actionContainer.add(fitsDeduceButton, BorderLayout.WEST);
+        actionContainer.add(saveConfigButton, BorderLayout.EAST);
 
-                            case "YPIXSZ": {
-                                pixelScaleY = Double.parseDouble(selectedFile.getFitsHeader().get(key));
-                                break;
-                            }
+        add(actionContainer, BorderLayout.SOUTH);
 
-                            case "FOCALLEN": {
-                                focalLengthTextField.setText(selectedFile.getFitsHeader().get(key));
-                                break;
-                            }
+        // ==========================================
+        // LISTENERS
+        // ==========================================
+        astapPathButton.addActionListener(e -> {
+            ApplicationWindow.logger.info("ASTAP settings");
+            JFileChooser fc = new JFileChooser();
+            fc.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            fc.setDialogTitle("ASTAP executable");
 
-                            case "SITELAT": {
-                                latTextField.setText(selectedFile.getFitsHeader().get(key));
-                                break;
-                            }
+            if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File astapExecutableFilePath = fc.getSelectedFile();
 
-                            case "SITELONG": {
-                                longTextField.setText(selectedFile.getFitsHeader().get(key));
-                                break;
-                            }
-
-                            case "OBJCTRA": {
-                                raTextfield.setText(selectedFile.getFitsHeader().get(key));
-                                break;
-                            }
-
-                            case "OBJCTDEC": {
-                                decTextField.setText(selectedFile.getFitsHeader().get(key));
-                                break;
-                            }
-
-                            default: {
-
-                            }
-
-                        }
-                    }
-
-                    if (pixelScaleX != 0 && pixelScaleY != 0) {
-                        pixelSizeTextfield.setText("" + (pixelScaleX + pixelScaleY) / 2);
-                    } else if (pixelScaleX != 0) {
-                        pixelSizeTextfield.setText("" + pixelScaleX);
-                    } else if (pixelScaleY != 0) {
-                        pixelSizeTextfield.setText("" + pixelScaleY);
-                    }
-                }
-            }
-        });
-        GridBagConstraints gbc_fitsDeduceButton = new GridBagConstraints();
-        gbc_fitsDeduceButton.insets = new Insets(0, 0, 5, 5);
-        gbc_fitsDeduceButton.gridx = 0;
-        gbc_fitsDeduceButton.gridy = 19;
-        add(fitsDeduceButton, gbc_fitsDeduceButton);
-
-        JLabel saveConfigLabel = new JLabel("Save current configuration");
-        GridBagConstraints gbc_saveConfigLabel = new GridBagConstraints();
-        gbc_saveConfigLabel.insets = new Insets(0, 0, 0, 5);
-        gbc_saveConfigLabel.gridx = 0;
-        gbc_saveConfigLabel.gridy = 20;
-        add(saveConfigLabel, gbc_saveConfigLabel);
-
-        JButton saveConfigButton = new JButton("save");
-        saveConfigButton.setToolTipText("Saves current configuration");
-        saveConfigButton.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent arg0) {
-                // save config
+                String[] cmdArray = { astapExecutableFilePath.getAbsolutePath(), "-h" };
                 try {
-                    mainAppWindow.getImagePreProcessing().setProperty("ImageRA", raTextfield.getText());
-                    mainAppWindow.getImagePreProcessing().setProperty("ImageDEC", decTextField.getText());
-                    mainAppWindow.getImagePreProcessing().setProperty("SiteLat", latTextField.getText());
-                    mainAppWindow.getImagePreProcessing().setProperty("SiteLong", longTextField.getText());
-                    mainAppWindow.getImagePreProcessing().setProperty("PixelSize", pixelSizeTextfield.getText());
-                    mainAppWindow.getImagePreProcessing().setProperty("FocalLength", focalLengthTextField.getText());
-                } catch (ConfigurationException e) {
-                    e.printStackTrace();
-                    JOptionPane.showMessageDialog(ConfigurationPanel.this,
-                            "Cannot save configuration:" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                    Runtime.getRuntime().exec(cmdArray, null, astapExecutableFilePath.getParentFile());
 
+                    mainAppWindow.getImagePreProcessing().setProperty("astap", astapExecutableFilePath.getAbsolutePath());
+                    astapPathLabel.setText(astapExecutableFilePath.getAbsolutePath());
+
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(this,
+                            "Cannot execute ASTAP: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                } catch (ConfigurationException ex) {
+                    JOptionPane.showMessageDialog(this,
+                            "Cannot set configuration property: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
             }
         });
-        GridBagConstraints gbc_saveConfigButton = new GridBagConstraints();
-        gbc_saveConfigButton.anchor = GridBagConstraints.WEST;
-        gbc_saveConfigButton.gridx = 1;
-        gbc_saveConfigButton.gridy = 20;
-        add(saveConfigButton, gbc_saveConfigButton);
 
+        fitsDeduceButton.addActionListener(e -> {
+            FitsFileInformation selectedFile = mainAppWindow.getMainApplicationPanel().getSelectedFileInformation();
 
+            if (selectedFile != null) {
+                double pixelScaleX = 0;
+                double pixelScaleY = 0;
+
+                for (String key : selectedFile.getFitsHeader().keySet()) {
+                    String value = selectedFile.getFitsHeader().get(key);
+                    switch (key) {
+                        case "XPIXSZ": pixelScaleX = Double.parseDouble(value); break;
+                        case "YPIXSZ": pixelScaleY = Double.parseDouble(value); break;
+                        case "FOCALLEN": focalLengthTextField.setText(value); break;
+                        case "SITELAT": latTextField.setText(value); break;
+                        case "SITELONG": longTextField.setText(value); break;
+                        case "OBJCTRA": raTextfield.setText(value); break;
+                        case "OBJCTDEC": decTextField.setText(value); break;
+                    }
+                }
+
+                if (pixelScaleX != 0 && pixelScaleY != 0) {
+                    pixelSizeTextfield.setText(String.valueOf((pixelScaleX + pixelScaleY) / 2));
+                } else if (pixelScaleX != 0) {
+                    pixelSizeTextfield.setText(String.valueOf(pixelScaleX));
+                } else if (pixelScaleY != 0) {
+                    pixelSizeTextfield.setText(String.valueOf(pixelScaleY));
+                }
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Please select an imported FITS file in the Main tab to read its header.",
+                        "No File Selected", JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+
+        saveConfigButton.addActionListener(e -> {
+            try {
+                mainAppWindow.getImagePreProcessing().setProperty("ImageRA", raTextfield.getText());
+                mainAppWindow.getImagePreProcessing().setProperty("ImageDEC", decTextField.getText());
+                mainAppWindow.getImagePreProcessing().setProperty("SiteLat", latTextField.getText());
+                mainAppWindow.getImagePreProcessing().setProperty("SiteLong", longTextField.getText());
+                mainAppWindow.getImagePreProcessing().setProperty("PixelSize", pixelSizeTextfield.getText());
+                mainAppWindow.getImagePreProcessing().setProperty("FocalLength", focalLengthTextField.getText());
+
+                JOptionPane.showMessageDialog(this,
+                        "Configuration saved successfully.", "Success", JOptionPane.INFORMATION_MESSAGE);
+
+            } catch (ConfigurationException ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this,
+                        "Cannot save configuration: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
     }
 
     public void refreshComponents() {
-        // astap path
         if (mainAppWindow.getImagePreProcessing() != null) {
             astapPathLabel.setText(mainAppWindow.getImagePreProcessing().getProperty("astap"));
-
             raTextfield.setText(mainAppWindow.getImagePreProcessing().getProperty("ImageRA"));
             decTextField.setText(mainAppWindow.getImagePreProcessing().getProperty("ImageDEC"));
             latTextField.setText(mainAppWindow.getImagePreProcessing().getProperty("SiteLat"));
             longTextField.setText(mainAppWindow.getImagePreProcessing().getProperty("SiteLong"));
             pixelSizeTextfield.setText(mainAppWindow.getImagePreProcessing().getProperty("PixelSize"));
             focalLengthTextField.setText(mainAppWindow.getImagePreProcessing().getProperty("FocalLength"));
-
         }
-
     }
 
+    // ==========================================
+    // UI HELPER METHODS
+    // ==========================================
+
+    /**
+     * Creates a styled section header matching the FlatLaf Accent color.
+     */
+    private JLabel createSectionHeader(String title) {
+        JLabel headerLabel = new JLabel(title);
+        headerLabel.setFont(headerLabel.getFont().deriveFont(Font.BOLD, 16f));
+
+        Color accentColor = UIManager.getColor("Component.accentColor");
+        if (accentColor == null) {
+            accentColor = Color.decode("#4285f4");
+        }
+        headerLabel.setForeground(accentColor);
+        headerLabel.setBorder(new EmptyBorder(20, 0, 10, 0));
+        headerLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return headerLabel;
+    }
+
+    /**
+     * Creates a beautifully aligned row that packs elements to the left.
+     */
+    private JPanel createConfigRow(String title, String description, JComponent inputControl) {
+        JPanel row = new JPanel();
+        row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
+        row.setBorder(new EmptyBorder(5, 0, 15, 0));
+
+        // Left side: Text (Title + Description)
+        JPanel textPanel = new JPanel(new GridLayout(2, 1, 0, 2));
+
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
+
+        JLabel descLabel = new JLabel(description);
+        descLabel.setFont(descLabel.getFont().deriveFont(Font.PLAIN, 12f));
+        descLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+
+        textPanel.add(titleLabel);
+        textPanel.add(descLabel);
+
+        // Lock the width of the text panel so all inputs align perfectly in a vertical column
+        Dimension textDim = new Dimension(420, 40);
+        textPanel.setPreferredSize(textDim);
+        textPanel.setMinimumSize(textDim);
+        textPanel.setMaximumSize(textDim);
+
+        // Right side: Input Control (FlowLayout.LEFT stops it from stretching internally)
+        JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        if (inputControl instanceof JTextField) {
+            inputControl.setPreferredSize(new Dimension(150, 26));
+        }
+        inputWrapper.add(inputControl);
+
+        row.add(textPanel);
+        row.add(Box.createHorizontalStrut(20)); // Spacing between text and input
+        row.add(inputWrapper);
+        row.add(Box.createHorizontalGlue()); // THIS pushes everything to the left!
+
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        return row;
+    }
 }
