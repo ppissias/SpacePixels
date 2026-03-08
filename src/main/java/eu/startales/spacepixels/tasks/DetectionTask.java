@@ -2,6 +2,11 @@ package eu.startales.spacepixels.tasks;
 
 import com.google.common.eventbus.EventBus;
 import nom.tam.fits.Fits;
+
+// --- NEW IMPORTS ---
+import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.core.SourceExtractor;
+
 import eu.startales.spacepixels.events.DetectionFinishedEvent;
 import eu.startales.spacepixels.events.DetectionStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
@@ -9,7 +14,6 @@ import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageDisplayUtils;
 import eu.startales.spacepixels.util.ImagePreprocessing;
 import eu.startales.spacepixels.util.RawImageAnnotator;
-import eu.startales.spacepixels.util.SourceExtractor;
 
 import java.awt.image.BufferedImage;
 import java.util.List;
@@ -20,10 +24,15 @@ public class DetectionTask implements Runnable {
     private final ImagePreprocessing preProcessing;
     private final FitsFileInformation[] selectedFiles;
 
-    public DetectionTask(EventBus eventBus, ImagePreprocessing preProcessing, FitsFileInformation[] selectedFiles) {
+    // --- NEW: Hold the configuration ---
+    private final DetectionConfig config;
+
+    // --- NEW: Add config to the constructor ---
+    public DetectionTask(EventBus eventBus, ImagePreprocessing preProcessing, FitsFileInformation[] selectedFiles, DetectionConfig config) {
         this.eventBus = eventBus;
         this.preProcessing = preProcessing;
         this.selectedFiles = selectedFiles;
+        this.config = config;
     }
 
     @Override
@@ -45,10 +54,12 @@ public class DetectionTask implements Runnable {
                         System.arraycopy(imageData[x], 0, debugImage[x], 0, imageData[x].length);
                     }
 
+                    // --- NEW: Pass the config values into the extractor ---
                     List<SourceExtractor.DetectedObject> objects = SourceExtractor.extractSources(
                             debugImage,
-                            SourceExtractor.detectionSigmaMultiplier,
-                            SourceExtractor.minDetectionPixels
+                            config.detectionSigmaMultiplier,
+                            config.minDetectionPixels,
+                            config // The 4th argument we added earlier!
                     );
 
                     int streakCount = 0;
@@ -72,7 +83,8 @@ public class DetectionTask implements Runnable {
 
             } else {
                 // --- BATCH DETECTION ---
-                preProcessing.detectObjects();
+                // --- NEW: Pass the config to the preprocessor ---
+                preProcessing.detectObjects(config);
 
                 // Post success for Batch Detection
                 eventBus.post(new DetectionFinishedEvent(true, false, null, null, 0, 0, null));

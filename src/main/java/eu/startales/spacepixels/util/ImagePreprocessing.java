@@ -9,9 +9,10 @@
  */
 package eu.startales.spacepixels.util;
 
-import io.github.ppissias.astrolib.AstrometryDotNet;
-import io.github.ppissias.astrolib.PlateSolveResult;
-import io.github.ppissias.astrolib.SubmitFileRequest;
+import io.github.ppissias.jplatesolve.astap.ASTAPInterface;
+import io.github.ppissias.jplatesolve.astrometrydotnet.AstrometryDotNet;
+import io.github.ppissias.jplatesolve.PlateSolveResult;
+import io.github.ppissias.jplatesolve.astrometrydotnet.SubmitFileRequest;
 import nom.tam.fits.*;
 import nom.tam.util.Cursor;
 import org.apache.commons.configuration2.FileBasedConfiguration;
@@ -20,6 +21,11 @@ import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
 import org.apache.commons.configuration2.builder.fluent.Configurations;
 import org.apache.commons.configuration2.ex.ConfigurationException;
 import eu.startales.spacepixels.gui.ApplicationWindow;
+
+import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.ImageFrame;
+import io.github.ppissias.jtransient.engine.JTransientEngine;
+import io.github.ppissias.jtransient.engine.PipelineResult;
 
 import javax.swing.*;
 import java.awt.*;
@@ -125,178 +131,81 @@ public class ImagePreprocessing {
     // THE MULTI-THREADED DETECTION PIPELINE
     // =========================================================================
 
-    /**
-     * A helper class to hold the output of a single thread's extraction work.
-     */
-    private static class FrameExtractionResult {
-        public int frameIndex;
-        public short[][] rawImageData;
-        public List<SourceExtractor.DetectedObject> extractedObjects;
-        public FrameQualityAnalyzer.FrameMetrics metrics;
-    }
 
-    public void detectObjects() throws IOException {
+    public void detectObjects(DetectionConfig config) throws Exception {
         long startTime = System.currentTimeMillis();
-
-        // 0. Initialize the Ledger
-        PipelineTelemetry telemetry = new PipelineTelemetry();
 
         File[] fitsFileInformation = getFitsFilesDetails();
         int numFrames = fitsFileInformation.length;
-        telemetry.totalFramesLoaded = numFrames;
 
-        System.out.println("\n--- PHASE 1: Loading & Source Extraction (MULTI-THREADED) ---");
-        System.out.println("Spinning up parallel extraction for " + numFrames + " frames...");
+        System.out.println("\n--- Loading " + numFrames + " FITS files for JTransient Engine ---");
 
-        List<Callable<FrameExtractionResult>> tasks = new ArrayList<>();
+        // 1. Prepare the data bridges for JTransient and SpacePixels
+        List<ImageFrame> framesForLibrary = new ArrayList<>();
+        List<short[][]> rawFramesForExport = new ArrayList<>();
 
         for (int i = 0; i < numFrames; i++) {
-            final int index = i;
-            final File currentFile = fitsFileInformation[i];
+            File currentFile = fitsFileInformation[i];
+            Fits fitsFile = new Fits(currentFile);
+            Object kernel = fitsFile.getHDU(0).getKernel();
 
-            tasks.add(() -> {
-                System.out.println("  [Thread] Processing Frame " + (index + 1) + "...");
-                Fits fitsFile = new Fits(currentFile);
-                Object kernel = fitsFile.getHDU(0).getKernel();
-
-                if (!(kernel instanceof short[][])) {
-                    fitsFile.close();
-                    throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString());
-                }
-
-                short[][] imageData = (short[][]) kernel;
-
-                List<SourceExtractor.DetectedObject> objectsInFrame = SourceExtractor.extractSources(
-                        imageData,
-                        SourceExtractor.detectionSigmaMultiplier,
-                        SourceExtractor.minDetectionPixels
-                );
-
-                String fileName = currentFile.getName();
-                for (SourceExtractor.DetectedObject obj : objectsInFrame) {
-                    obj.sourceFrameIndex = index;
-                    obj.sourceFilename = fileName;
-                }
-
-                FrameQualityAnalyzer.FrameMetrics metrics = FrameQualityAnalyzer.evaluateFrame(imageData);
-                metrics.medianEccentricity = FrameQualityAnalyzer.calculateFrameEccentricity(objectsInFrame);
-
-                FrameExtractionResult result = new FrameExtractionResult();
-                result.frameIndex = index;
-                result.rawImageData = imageData;
-                result.extractedObjects = objectsInFrame;
-                result.metrics = metrics;
-
-                // Store filename for telemetry later
-                result.metrics.filename = fileName;
-
+            if (!(kernel instanceof short[][])) {
                 fitsFile.close();
-                return result;
-            });
-        }
-
-        List<FrameExtractionResult> completedResults = new ArrayList<>();
-        try {
-            List<Future<FrameExtractionResult>> futures = executor.invokeAll(tasks);
-            for (Future<FrameExtractionResult> future : futures) {
-                completedResults.add(future.get());
+                throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString());
             }
-        } catch (Exception e) {
-            throw new IOException("Multi-threaded extraction failed: " + e.getMessage(), e);
+
+            short[][] imageData = (short[][]) kernel;
+
+            // Wrap the raw data for the library
+            framesForLibrary.add(new ImageFrame(i, currentFile.getName(), imageData));
+
+            // Keep the raw array for GIF generation later
+            rawFramesForExport.add(imageData);
+
+            fitsFile.close();
         }
 
-        System.out.println("\n[Parallel Extraction Complete] Reassembling data in chronological order...");
-        completedResults.sort(Comparator.comparingInt(r -> r.frameIndex));
+        // =========================================================
+        // 2. HAND OFF TO THE LIBRARY!
+        // =========================================================
+        System.out.println("\n--- Passing data to JTransient Engine ---");
+        JTransientEngine engine = new JTransientEngine();
 
-        List<short[][]> rawFrames = new ArrayList<>();
-        List<List<SourceExtractor.DetectedObject>> rawExtractedFrames = new ArrayList<>();
-        List<FrameQualityAnalyzer.FrameMetrics> sessionMetrics = new ArrayList<>();
+        PipelineResult result = engine.runPipeline(framesForLibrary, config);
 
-        for (FrameExtractionResult result : completedResults) {
-            rawFrames.add(result.rawImageData);
-            rawExtractedFrames.add(result.extractedObjects);
-            sessionMetrics.add(result.metrics);
+        // Shut down the library's internal threads so they don't leak memory
+        engine.shutdown();
+        // =========================================================
 
-            // --- TELEMETRY UPDATE: Phase 1 ---
-            telemetry.totalRawObjectsExtracted += result.extractedObjects.size();
-            PipelineTelemetry.FrameExtractionStat stat = new PipelineTelemetry.FrameExtractionStat();
-            stat.frameIndex = result.frameIndex;
-            stat.filename = result.metrics.filename;
-            stat.objectCount = result.extractedObjects.size();
-            telemetry.frameExtractionStats.add(stat);
-        }
-
-        System.out.println("\n--- PHASE 2: Analyzing Session & Rejecting Outliers ---");
-        SessionEvaluator.rejectOutlierFrames(sessionMetrics);
-
-        System.out.println("\n--- PHASE 3: Filtering Bad Frames ---");
-        List<List<SourceExtractor.DetectedObject>> allFramesData = new ArrayList<>();
-
-        for (int i = 0; i < rawExtractedFrames.size(); i++) {
-            FrameQualityAnalyzer.FrameMetrics metrics = sessionMetrics.get(i);
-            if (metrics.isRejected) {
-                System.out.println("⚠️ Skipping Frame " + (i + 1) + ": " + metrics.rejectionReason);
-
-                // --- TELEMETRY UPDATE: Phase 3 (Rejections) ---
-                telemetry.totalFramesRejected++;
-                PipelineTelemetry.FrameRejectionStat rejStat = new PipelineTelemetry.FrameRejectionStat();
-                rejStat.frameIndex = i;
-                rejStat.filename = metrics.filename;
-                rejStat.reason = metrics.rejectionReason;
-                telemetry.rejectedFrames.add(rejStat);
-
-            } else {
-                telemetry.totalFramesKept++;
-                allFramesData.add(rawExtractedFrames.get(i));
-            }
-        }
-
-        System.out.println("\n--- PHASE 4: Track Linking ---");
-        TrackLinker.TrackingResult trackResult = TrackLinker.findMovingObjects(
-                allFramesData,
-                TrackLinker.maxStarJitter,
-                TrackLinker.predictionTolerance,
-                TrackLinker.angleToleranceRad
-        );
-
-        // --- TELEMETRY UPDATE: Phase 4 (Tracking) ---
-        telemetry.totalMovingTargetsFound = trackResult.tracks.size();
-
-        // *Note: If TrackLinker.TrackingResult holds the star map size, you can add it here:*
-        // telemetry.totalStationaryStarsIdentified = trackResult.telemetry.get("total_stars");
-
-        System.out.println("Success! Found " + trackResult.tracks.size() + " moving targets/streaks.");
-
+        // 3. Handle the results in SpacePixels
         System.out.println("\n--- PHASE 5: Exporting Visualizations ---");
-
-        // Calculate total time right before exporting
-        telemetry.processingTimeMs = System.currentTimeMillis() - startTime;
 
         if (fitsFileInformation.length > 0) {
             File exportDir = createDetectionsDirectory(fitsFileInformation[0]);
-            telemetry.exportDirectoryPath = exportDir.getAbsolutePath();
+
+            System.out.println("Total Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
 
             try {
-                if (!trackResult.tracks.isEmpty()) {
+                if (!result.tracks.isEmpty()) {
                     System.out.println("Preparing to export to: " + exportDir.getAbsolutePath());
                 } else {
                     System.out.println("No targets found, but generating pipeline report at: " + exportDir.getAbsolutePath());
                 }
 
-                // --- NEW: Pass the telemetry object into your exporter ---
+                // Pass the tracks, the telemetry, and the raw frames to the SpacePixels GIF exporter
                 ImageDisplayUtils.exportTrackVisualizations(
-                        trackResult.tracks,
-                        trackResult.telemetry,
-                        rawFrames,
+                        result.tracks,
+                        result.telemetry.trackerTelemetry,
+                        rawFramesForExport,
                         exportDir,
-                        telemetry);
+                        result.telemetry);
+
 
             } catch (IOException e) {
                 System.err.println("Failed to export visualizations: " + e.getMessage());
             }
         }
     }
-
     /**
      * Returns the FITS file information using multi-threaded, header-only extraction for extreme speed.
      */

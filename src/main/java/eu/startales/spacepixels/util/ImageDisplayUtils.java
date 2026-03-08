@@ -1,5 +1,10 @@
 package eu.startales.spacepixels.util;
 
+import io.github.ppissias.jtransient.core.SourceExtractor;
+import io.github.ppissias.jtransient.core.TrackLinker;
+import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
+import io.github.ppissias.jtransient.telemetry.TrackerTelemetry;
+
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -279,7 +284,7 @@ public class ImageDisplayUtils {
     // =================================================================
 
     public static void exportTrackVisualizations(List<TrackLinker.Track> tracks,
-                                                 TrackLinker.TelemetryReport linkerTelemetry,
+                                                 TrackerTelemetry linkerTelemetry,
                                                  List<short[][]> rawFrames,
                                                  File exportDir,
                                                  PipelineTelemetry pipelineTelemetry) throws IOException {
@@ -384,7 +389,7 @@ public class ImageDisplayUtils {
                 report.println("<table><tr><th>Frame Index</th><th>Filename</th><th>Initial Point Sources</th><th>Stars Purged</th><th>Surviving Transients</th></tr>");
 
                 // We need the filenames, so we match the index from linkerTelemetry to pipelineTelemetry
-                for (TrackLinker.TelemetryReport.FrameStarMapStat starStat : linkerTelemetry.frameStarMapStats) {
+                for (TrackerTelemetry.FrameStarMapStat starStat : linkerTelemetry.frameStarMapStats) {
 
                     // Safely get the filename from the Phase 1 extraction stats
                     String fName = "Unknown";

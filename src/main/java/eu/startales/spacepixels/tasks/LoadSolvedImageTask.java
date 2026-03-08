@@ -1,7 +1,7 @@
 package eu.startales.spacepixels.tasks;
 
 import com.google.common.eventbus.EventBus;
-import io.github.ppissias.astrolib.PlateSolveResult;
+import io.github.ppissias.jplatesolve.PlateSolveResult;
 import eu.startales.spacepixels.events.LoadSolvedImageFinishedEvent;
 import eu.startales.spacepixels.events.LoadSolvedImageStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;

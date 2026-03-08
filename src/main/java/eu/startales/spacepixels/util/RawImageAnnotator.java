@@ -1,5 +1,7 @@
 package eu.startales.spacepixels.util;
 
+import io.github.ppissias.jtransient.core.SourceExtractor;
+
 import java.util.List;
 
 public class RawImageAnnotator {

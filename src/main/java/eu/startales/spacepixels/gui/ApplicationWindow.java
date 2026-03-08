@@ -35,10 +35,10 @@ public class ApplicationWindow {
 
     private volatile ImagePreprocessing imagePreProcessing;
 
-    private MainApplicationPanel mainApplicationPanel;
-    private ConfigurationPanel configurationApplicationPanel;
-    private StretchPanel stretchPanel;
-    private DetectionConfigurationPanel detectionConfigurationPanel;
+    private volatile MainApplicationPanel mainApplicationPanel;
+    private volatile ConfigurationPanel configurationApplicationPanel;
+    private volatile StretchPanel stretchPanel;
+    private volatile DetectionConfigurationPanel detectionConfigurationPanel;
 
     public static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
 

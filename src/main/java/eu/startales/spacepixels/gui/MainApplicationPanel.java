@@ -11,7 +11,7 @@ package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.StretchAlgorithm;
-import io.github.ppissias.astrolib.PlateSolveResult;
+import io.github.ppissias.jplatesolve.PlateSolveResult;
 import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
 import eu.startales.spacepixels.events.*;
@@ -319,7 +319,8 @@ public class MainApplicationPanel extends JPanel {
             new Thread(new DetectionTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImagePreProcessing(),
-                    selectedFitsFilesInfo
+                    selectedFitsFilesInfo,
+                    mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
             )).start();
         });
 
@@ -327,7 +328,8 @@ public class MainApplicationPanel extends JPanel {
             new Thread(new DetectionTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImagePreProcessing(),
-                    null
+                    null,
+                    mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
             )).start();
         });
 

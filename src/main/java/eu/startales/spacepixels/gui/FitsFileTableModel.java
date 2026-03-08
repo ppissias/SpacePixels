@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.gui;
 
-import io.github.ppissias.astrolib.PlateSolveResult;
+import io.github.ppissias.jplatesolve.PlateSolveResult;
 import eu.startales.spacepixels.util.FitsFileInformation;
 
 import javax.swing.table.AbstractTableModel;

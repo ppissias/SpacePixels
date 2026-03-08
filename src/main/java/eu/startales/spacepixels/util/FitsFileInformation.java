@@ -9,7 +9,7 @@
  */
 package eu.startales.spacepixels.util;
 
-import io.github.ppissias.astrolib.PlateSolveResult;
+import io.github.ppissias.jplatesolve.PlateSolveResult;
 
 import java.util.HashMap;
 import java.util.Map;

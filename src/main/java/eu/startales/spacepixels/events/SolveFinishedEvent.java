@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.events;
 
-import io.github.ppissias.astrolib.PlateSolveResult;
+import io.github.ppissias.jplatesolve.PlateSolveResult;
 
 public class SolveFinishedEvent {
     private final int rowIndex;
