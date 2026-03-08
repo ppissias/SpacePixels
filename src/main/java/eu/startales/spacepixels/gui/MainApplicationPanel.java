@@ -9,18 +9,17 @@
  */
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.events.*;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import io.github.ppissias.astrolib.PlateSolveResult;
 import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
-import spv.events.*;
+import eu.startales.spacepixels.events.*;
 import eu.startales.spacepixels.tasks.BatchConvertMonoTask;
 import eu.startales.spacepixels.tasks.BatchStretchTask;
 import eu.startales.spacepixels.tasks.DetectionTask;
 import eu.startales.spacepixels.tasks.PlateSolveTask;
-import spv.util.*;
+import eu.startales.spacepixels.util.*;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;

@@ -36,5 +36,5 @@ dependencies {
 }
 
 application {
-    mainClass = 'spv.gui.ApplicationWindow'
+    mainClass = 'eu.startales.spacepixels.gui.ApplicationWindow'
 }

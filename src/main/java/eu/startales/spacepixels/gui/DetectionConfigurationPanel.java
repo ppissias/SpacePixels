@@ -1,7 +1,6 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.util.*;
-import spv.util.*;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
