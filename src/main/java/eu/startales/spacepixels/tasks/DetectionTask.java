@@ -22,23 +22,24 @@ import eu.startales.spacepixels.events.DetectionStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageDisplayUtils;
-import eu.startales.spacepixels.util.ImagePreprocessing;
+import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.RawImageAnnotator;
 
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.util.List;
 import java.util.logging.Level;
 
 public class DetectionTask implements Runnable {
     private final EventBus eventBus;
-    private final ImagePreprocessing preProcessing;
+    private final ImageProcessing preProcessing;
     private final FitsFileInformation[] selectedFiles;
 
     // --- NEW: Hold the configuration ---
     private final DetectionConfig config;
 
     // --- NEW: Add config to the constructor ---
-    public DetectionTask(EventBus eventBus, ImagePreprocessing preProcessing, FitsFileInformation[] selectedFiles, DetectionConfig config) {
+    public DetectionTask(EventBus eventBus, ImageProcessing preProcessing, FitsFileInformation[] selectedFiles, DetectionConfig config) {
         this.eventBus = eventBus;
         this.preProcessing = preProcessing;
         this.selectedFiles = selectedFiles;
@@ -86,7 +87,7 @@ public class DetectionTask implements Runnable {
                     selectedFitsImage.close();
 
                     // Post success for Quick Detection
-                    eventBus.post(new DetectionFinishedEvent(true, true, null, finalImageToDisplay, starCount, streakCount, aSelectedFile.getFileName()));
+                    eventBus.post(new DetectionFinishedEvent(null, true, true, null, finalImageToDisplay, starCount, streakCount, aSelectedFile.getFileName()));
                 } else {
                     throw new Exception("Cannot understand FITS format: expected short[][], got " + kernelData.getClass().getName());
                 }
@@ -94,15 +95,15 @@ public class DetectionTask implements Runnable {
             } else {
                 // --- BATCH DETECTION ---
                 // --- NEW: Pass the config to the preprocessor ---
-                preProcessing.detectObjects(config);
+                File exportDir = preProcessing.detectObjects(config);
 
                 // Post success for Batch Detection
-                eventBus.post(new DetectionFinishedEvent(true, false, null, null, 0, 0, null));
+                eventBus.post(new DetectionFinishedEvent(exportDir, true, false, null, null, 0, 0, null));
             }
         } catch (Exception ex) {
             ApplicationWindow.logger.log(Level.SEVERE, "Detection failed", ex);
             // Post failure
-            eventBus.post(new DetectionFinishedEvent(false, false, ex.getMessage(), null, 0, 0, null));
+            eventBus.post(new DetectionFinishedEvent(null, false, false, ex.getMessage(), null, 0, 0, null));
         }
     }
 }

@@ -509,7 +509,7 @@ public class MainApplicationPanel extends JPanel {
 
     public void setBatchStretchButtonEnabled(boolean state) {
         stretchButton.setEnabled(state);
-        convertMonoButton.setEnabled(state);
+        //convertMonoButton.setEnabled(state);
     }
 
     private void disableControlsSolving() {
@@ -817,10 +817,7 @@ public class MainApplicationPanel extends JPanel {
                     );
                 } else {
                     // Handle UI updates for Batch Detection
-                    JOptionPane.showMessageDialog(this,
-                            "Batch object detection completed successfully. Please check the detections folder.",
-                            "Detection Complete",
-                            JOptionPane.INFORMATION_MESSAGE);
+                    promptUserToOpenReport(event.getReportFilename());
                 }
             } else {
                 JOptionPane.showMessageDialog(this,
@@ -831,5 +828,33 @@ public class MainApplicationPanel extends JPanel {
 
             statusLabel.setText("Object detection completed");
         });
+    }
+
+    private void promptUserToOpenReport(File reportFile) {
+        if (reportFile != null && reportFile.exists()) {
+            int response = JOptionPane.showConfirmDialog(
+                    null, // Replace with your main window/panel reference
+                    "Detection pipeline completed successfully.\n\nWould you like to open the generated HTML report?",
+                    "Pipeline Complete",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE
+            );
+
+            if (response == JOptionPane.YES_OPTION) {
+                openHtmlReport(reportFile);
+            }
+        }
+    }
+
+    private void openHtmlReport(File reportFile) {
+        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+            try {
+                Desktop.getDesktop().browse(reportFile.toURI());
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(null, "Could not open the report: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        } else {
+            JOptionPane.showMessageDialog(null, "Opening files is not supported on your system. Report saved at: " + reportFile.getAbsolutePath(), "Info", JOptionPane.INFORMATION_MESSAGE);
+        }
     }
 }

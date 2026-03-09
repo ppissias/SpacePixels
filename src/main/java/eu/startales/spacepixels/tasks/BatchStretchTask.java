@@ -14,19 +14,19 @@ import com.google.common.eventbus.EventBus;
 import eu.startales.spacepixels.events.BatchStretchFinishedEvent;
 import eu.startales.spacepixels.events.BatchStretchStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
-import eu.startales.spacepixels.util.ImagePreprocessing;
+import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 
 import java.util.logging.Level;
 
 public class BatchStretchTask implements Runnable {
     private final EventBus eventBus;
-    private final ImagePreprocessing preProcessing;
+    private final ImageProcessing preProcessing;
     private final int stretchFactor;
     private final int iterations;
     private final StretchAlgorithm algo;
 
-    public BatchStretchTask(EventBus eventBus, ImagePreprocessing preProcessing,
+    public BatchStretchTask(EventBus eventBus, ImageProcessing preProcessing,
                             int stretchFactor, int iterations, StretchAlgorithm algo) {
         this.eventBus = eventBus;
         this.preProcessing = preProcessing;

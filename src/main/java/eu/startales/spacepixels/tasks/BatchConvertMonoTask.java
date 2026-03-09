@@ -14,20 +14,20 @@ import com.google.common.eventbus.EventBus;
 import eu.startales.spacepixels.events.BatchConvertFinishedEvent;
 import eu.startales.spacepixels.events.BatchConvertStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
-import eu.startales.spacepixels.util.ImagePreprocessing;
+import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 
 import java.util.logging.Level;
 
 public class BatchConvertMonoTask implements Runnable {
     private final EventBus eventBus;
-    private final ImagePreprocessing preProcessing;
+    private final ImageProcessing preProcessing;
     private final boolean stretchEnabled;
     private final int stretchFactor;
     private final int iterations;
     private final StretchAlgorithm algo;
 
-    public BatchConvertMonoTask(EventBus eventBus, ImagePreprocessing preProcessing,
+    public BatchConvertMonoTask(EventBus eventBus, ImageProcessing preProcessing,
                                 boolean stretchEnabled, int stretchFactor,
                                 int iterations, StretchAlgorithm algo) {
         this.eventBus = eventBus;

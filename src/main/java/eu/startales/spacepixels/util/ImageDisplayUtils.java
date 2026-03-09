@@ -64,6 +64,7 @@ public class ImageDisplayUtils {
     /** Stroke width (thickness) of the white targeting circle. */
     public static float targetCircleStrokeWidth = 2.0f;
 
+    public static final String detectionReportName = "detection_report.html";
 
     // =================================================================
     // DATA MODELS
@@ -304,7 +305,7 @@ public class ImageDisplayUtils {
         int trackCounter = 1;
         int streakCounter = 1;
 
-        File reportFile = new File(exportDir, "detection_report.html");
+        File reportFile = new File(exportDir, detectionReportName);
 
         try (java.io.PrintWriter report = new java.io.PrintWriter(new java.io.FileWriter(reportFile))) {
 

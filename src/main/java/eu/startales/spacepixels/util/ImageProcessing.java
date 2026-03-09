@@ -40,7 +40,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 
-public class ImagePreprocessing {
+public class ImageProcessing {
 
     private final File alignedFitsFolderFullPath;
 
@@ -51,17 +51,17 @@ public class ImagePreprocessing {
     private final AstrometryDotNet astrometryNetInterface = new AstrometryDotNet();
     private final SPConfigurationFile configurationFile;
 
-    public static synchronized ImagePreprocessing getInstance(File alignedFitsFolderFullPath) throws IOException, FitsException, ConfigurationException {
+    public static synchronized ImageProcessing getInstance(File alignedFitsFolderFullPath) throws IOException, FitsException, ConfigurationException {
         String userhome = System.getProperty("user.home");
         if (userhome == null) userhome = "";
 
         ApplicationWindow.logger.info("Will use config file:" + new File(userhome + "/spacepixelviewer.config").getAbsolutePath());
         SPConfigurationFile configurationFile = new SPConfigurationFile(userhome + "/spacepixelviewer.config");
 
-        return new ImagePreprocessing(alignedFitsFolderFullPath, configurationFile);
+        return new ImageProcessing(alignedFitsFolderFullPath, configurationFile);
     }
 
-    private ImagePreprocessing(File alignedFitsFolderFullPath, SPConfigurationFile configFile) throws IOException, FitsException {
+    private ImageProcessing(File alignedFitsFolderFullPath, SPConfigurationFile configFile) throws IOException, FitsException {
         this.alignedFitsFolderFullPath = alignedFitsFolderFullPath;
         this.configurationFile = configFile;
     }
@@ -132,7 +132,7 @@ public class ImagePreprocessing {
     // =========================================================================
 
 
-    public void detectObjects(DetectionConfig config) throws Exception {
+    public File detectObjects(DetectionConfig config) throws Exception {
         long startTime = System.currentTimeMillis();
 
         File[] fitsFileInformation = getFitsFilesDetails();
@@ -200,11 +200,12 @@ public class ImagePreprocessing {
                         exportDir,
                         result.telemetry);
 
-
+                return new File(exportDir, ImageDisplayUtils.detectionReportName);
             } catch (IOException e) {
                 System.err.println("Failed to export visualizations: " + e.getMessage());
             }
         }
+        return null;
     }
     /**
      * Returns the FITS file information using multi-threaded, header-only extraction for extreme speed.

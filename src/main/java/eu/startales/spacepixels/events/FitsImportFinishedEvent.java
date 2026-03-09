@@ -1,16 +1,16 @@
 package eu.startales.spacepixels.events;
 
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImagePreprocessing;
+import eu.startales.spacepixels.util.ImageProcessing;
 
 public class FitsImportFinishedEvent {
     private final boolean success;
     private final String errorMessage;
-    private final ImagePreprocessing imagePreProcessing;
+    private final ImageProcessing imagePreProcessing;
     private final FitsFileInformation[] filesInformation;
 
     public FitsImportFinishedEvent(boolean success, String errorMessage,
-                                   ImagePreprocessing imagePreProcessing,
+                                   ImageProcessing imagePreProcessing,
                                    FitsFileInformation[] filesInformation) {
         this.success = success;
         this.errorMessage = errorMessage;
@@ -20,6 +20,6 @@ public class FitsImportFinishedEvent {
 
     public boolean isSuccess() { return success; }
     public String getErrorMessage() { return errorMessage; }
-    public ImagePreprocessing getImagePreProcessing() { return imagePreProcessing; }
+    public ImageProcessing getImagePreProcessing() { return imagePreProcessing; }
     public FitsFileInformation[] getFilesInformation() { return filesInformation; }
 }

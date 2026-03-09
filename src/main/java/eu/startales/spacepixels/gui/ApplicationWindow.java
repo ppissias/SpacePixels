@@ -16,7 +16,7 @@ import eu.startales.spacepixels.events.FitsImportFinishedEvent;
 import eu.startales.spacepixels.events.FitsImportStartedEvent;
 import eu.startales.spacepixels.tasks.FitsImportTask;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImagePreprocessing;
+import eu.startales.spacepixels.util.ImageProcessing;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
@@ -33,7 +33,7 @@ public class ApplicationWindow {
     // --- EVENT BUS INSTANCE ---
     private final EventBus eventBus = new EventBus("SpacePixelsBus");
 
-    private volatile ImagePreprocessing imagePreProcessing;
+    private volatile ImageProcessing imagePreProcessing;
 
     private volatile MainApplicationPanel mainApplicationPanel;
     private volatile ConfigurationPanel configurationApplicationPanel;
@@ -183,7 +183,7 @@ public class ApplicationWindow {
         return fullImagePreviewFrame;
     }
 
-    public ImagePreprocessing getImagePreProcessing() {
+    public ImageProcessing getImagePreProcessing() {
         return imagePreProcessing;
     }
 

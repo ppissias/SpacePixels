@@ -13,7 +13,7 @@ package eu.startales.spacepixels.tasks;
 import com.google.common.eventbus.EventBus;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import eu.startales.spacepixels.gui.ApplicationWindow;
-import eu.startales.spacepixels.util.ImagePreprocessing;
+import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.events.SolveStartedEvent;
 import eu.startales.spacepixels.events.SolveFinishedEvent;
 
@@ -22,13 +22,13 @@ import java.util.logging.Level;
 
 public class PlateSolveTask implements Runnable {
     private final EventBus eventBus;
-    private final ImagePreprocessing preProcessing;
+    private final ImageProcessing preProcessing;
     private final String filePath;
     private final int rowIndex;
     private final boolean useAstap;
     private final boolean useAstrometryNet;
 
-    public PlateSolveTask(EventBus eventBus, ImagePreprocessing preProcessing, String filePath, int rowIndex, boolean useAstap, boolean useAstrometryNet) {
+    public PlateSolveTask(EventBus eventBus, ImageProcessing preProcessing, String filePath, int rowIndex, boolean useAstap, boolean useAstrometryNet) {
         this.eventBus = eventBus;
         this.preProcessing = preProcessing;
         this.filePath = filePath;

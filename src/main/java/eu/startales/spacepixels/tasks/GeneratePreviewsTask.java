@@ -13,20 +13,20 @@ package eu.startales.spacepixels.tasks;
 import com.google.common.eventbus.EventBus;
 import nom.tam.fits.Fits;
 import eu.startales.spacepixels.events.PreviewGenerationFinishedEvent;
-import eu.startales.spacepixels.util.ImagePreprocessing;
+import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 
 import java.awt.image.BufferedImage;
 
 public class GeneratePreviewsTask implements Runnable {
     private final EventBus eventBus;
-    private final ImagePreprocessing preProcessing;
+    private final ImageProcessing preProcessing;
     private final String filePath;
     private final int stretchFactor;
     private final int iterations;
     private final StretchAlgorithm algo;
 
-    public GeneratePreviewsTask(EventBus eventBus, ImagePreprocessing preProcessing, String filePath,
+    public GeneratePreviewsTask(EventBus eventBus, ImageProcessing preProcessing, String filePath,
                                 int stretchFactor, int iterations, StretchAlgorithm algo) {
         this.eventBus = eventBus;
         this.preProcessing = preProcessing;

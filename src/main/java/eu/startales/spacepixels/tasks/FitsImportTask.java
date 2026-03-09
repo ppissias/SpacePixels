@@ -15,7 +15,7 @@ import eu.startales.spacepixels.events.FitsImportFinishedEvent;
 import eu.startales.spacepixels.events.FitsImportStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImagePreprocessing;
+import eu.startales.spacepixels.util.ImageProcessing;
 
 import java.io.File;
 import java.util.logging.Level;
@@ -36,7 +36,7 @@ public class FitsImportTask implements Runnable {
 
         try {
             // 2. Do the heavy lifting
-            ImagePreprocessing preProcessing = ImagePreprocessing.getInstance(directory);
+            ImageProcessing preProcessing = ImageProcessing.getInstance(directory);
             FitsFileInformation[] filesInfo = preProcessing.getFitsfileInformation();
 
             // 3. Post success with the extracted data
