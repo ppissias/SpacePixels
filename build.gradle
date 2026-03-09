@@ -14,6 +14,9 @@ plugins {
 repositories {
     mavenCentral()
 }
+// Add your group and version here
+group = 'eu.startales.spacepixels'
+version = '2026.03-beta1'
 
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
@@ -37,4 +40,5 @@ dependencies {
 
 application {
     mainClass = 'eu.startales.spacepixels.gui.ApplicationWindow'
+    applicationName = 'SpacePixels'
 }
