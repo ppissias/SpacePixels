@@ -1,3 +1,13 @@
+/*
+ * SpacePixels
+ *
+ * Copyright (c)2020-2026, Petros Pissias.
+ * See the LICENSE file included in this distribution.
+ *
+ * author: Petros Pissias <petrospis at gmail.com>
+ *
+ */
+
 package eu.startales.spacepixels.util;
 
 import io.github.ppissias.jtransient.core.SourceExtractor;

@@ -1,7 +1,7 @@
 /*
  * SpacePixels
  *
- * Copyright (c)2020-2023, Petros Pissias.
+ * Copyright (c)2020-2026, Petros Pissias.
  * See the LICENSE file included in this distribution.
  *
  * author: Petros Pissias <petrospis at gmail.com>
@@ -64,7 +64,22 @@ public class ConfigurationPanel extends JPanel {
                 "The local path to the ASTAP solver executable used for plate solving.",
                 astapControlPanel));
 
-        // --- SECTION 2: SOLVING PARAMETERS ---
+        // --- SECTION 2: DETECTION & ANNOTATION ---
+        mainContent.add(createSectionHeader("Detection & Annotation Parameters (Used for object identification) [not implemented yet]"));
+
+        latTextField = new JTextField();
+        mainContent.add(createConfigRow(
+                "Site Latitude (N)",
+                "Observation site latitude for accurate celestial annotation.",
+                latTextField));
+
+        longTextField = new JTextField();
+        mainContent.add(createConfigRow(
+                "Site Longitude (E)",
+                "Observation site longitude for accurate celestial annotation.",
+                longTextField));
+
+        // --- SECTION 3: SOLVING PARAMETERS ---
         mainContent.add(createSectionHeader("Solving Parameters (Near Solve) [not implemented yet]"));
 
         focalLengthTextField = new JTextField();
@@ -96,21 +111,6 @@ public class ConfigurationPanel extends JPanel {
                 decTextField));
         decTextField.setEnabled(false);
 
-        // --- SECTION 3: DETECTION & ANNOTATION ---
-        mainContent.add(createSectionHeader("Detection & Annotation Parameters"));
-
-        latTextField = new JTextField();
-        mainContent.add(createConfigRow(
-                "Site Latitude (N)",
-                "Observation site latitude for accurate celestial annotation.",
-                latTextField));
-
-        longTextField = new JTextField();
-        mainContent.add(createConfigRow(
-                "Site Longitude (E)",
-                "Observation site longitude for accurate celestial annotation.",
-                longTextField));
-
         // Add the scrolling capability just in case the window is resized too small
         JScrollPane scrollPane = new JScrollPane(mainContent);
         scrollPane.setBorder(null); // Keep it clean
@@ -124,7 +124,7 @@ public class ConfigurationPanel extends JPanel {
         actionContainer.setBorder(new EmptyBorder(20, 0, 0, 0)); // Padding from the top
 
         JButton fitsDeduceButton = new JButton("Deduce from FITS header");
-        fitsDeduceButton.setToolTipText("Try to deduce parameters from the selected image FITS header");
+        fitsDeduceButton.setToolTipText("Try to deduce the solving parameters from the selected image FITS header");
 
         JButton saveConfigButton = new JButton("Save Configuration");
         saveConfigButton.setToolTipText("Saves current configuration to properties");
