@@ -40,6 +40,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 
+// --- NEW IMPORT FOR THE CALLBACK ---
+import java.util.function.IntPredicate;
+
 public class ImageProcessing {
 
     private final File alignedFitsFolderFullPath;
@@ -131,8 +134,8 @@ public class ImageProcessing {
     // THE MULTI-THREADED DETECTION PIPELINE
     // =========================================================================
 
-
-    public File detectObjects(DetectionConfig config) throws Exception {
+    // --- UPDATED SIGNATURE: Accepts the UI callback ---
+    public File detectObjects(DetectionConfig config, IntPredicate safetyPrompt) throws Exception {
         long startTime = System.currentTimeMillis();
 
         File[] fitsFileInformation = getFitsFilesDetails();
@@ -177,6 +180,17 @@ public class ImageProcessing {
         engine.shutdown();
         // =========================================================
 
+        // --- NEW: THE SAFETY VALVE CHECK ---
+        if (safetyPrompt != null) {
+            int trackCount = result.tracks.size();
+            // If the UI callback returns false, the user clicked "No". Abort report generation!
+            if (!safetyPrompt.test(trackCount)) {
+                System.out.println("Report generation aborted by UI callback. Track count: " + trackCount);
+                return null;
+            }
+        }
+        // -----------------------------------
+
         // 3. Handle the results in SpacePixels
         System.out.println("\n--- PHASE 5: Exporting Visualizations ---");
 
@@ -207,6 +221,7 @@ public class ImageProcessing {
         }
         return null;
     }
+
     /**
      * Returns the FITS file information using multi-threaded, header-only extraction for extreme speed.
      */
