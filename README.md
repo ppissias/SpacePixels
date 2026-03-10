@@ -34,14 +34,14 @@ Originally built as a pre-processing utility to align and prepare files for othe
 ![Main Interface](https://startales.eu/various_files/SpacePixels-GUI-2026-01.png)  
 *The SpacePixels Main Workspace.*
 
-![Main Interface](https://startales.eu/various_files/track_3_star_centric.gif)  
-*Sample Detection.*
+![Main Interface](https://startales.eu/various_files/track_5_object_centric.gif)  
+*Sample Detection - object centric view.*
 
-![Main Interface](https://startales.eu/various_files/track_1_star_centric.gif)  
-*Sample Detection.*
+![Main Interface](https://startales.eu/various_files/track_5_star_centric.gif)  
+*Sample Detection - star centric view.*
 
-![Main Interface](https://startales.eu/various_files/single-streak.png)  
-*Sample Detection.*
+![Main Interface](https://startales.eu/various_files/streak_track_3_star_centric.gif)  
+*Sample Detection - streak track.*
 
 ---
 
