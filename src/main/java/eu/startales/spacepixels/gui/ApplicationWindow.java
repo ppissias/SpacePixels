@@ -84,7 +84,9 @@ public class ApplicationWindow {
         mainApplicationPanel = new MainApplicationPanel(this);
         configurationApplicationPanel = new ConfigurationPanel(this);
         stretchPanel = new StretchPanel(this);
-        detectionConfigurationPanel = new DetectionConfigurationPanel();
+
+        detectionConfigurationPanel = new DetectionConfigurationPanel(ApplicationWindow.this);
+        eventBus.register(detectionConfigurationPanel);
 
         tabbedPane.addTab("Main", mainApplicationPanel);
         tabbedPane.addTab("Configuration", configurationApplicationPanel);
@@ -183,7 +185,7 @@ public class ApplicationWindow {
         return fullImagePreviewFrame;
     }
 
-    public ImageProcessing getImagePreProcessing() {
+    public ImageProcessing getImageProcessing() {
         return imagePreProcessing;
     }
 
@@ -218,4 +220,6 @@ public class ApplicationWindow {
     public JTabbedPane getTabbedPane() {
         return tabbedPane;
     }
+
+    public Frame getFrame() {return frmIpodImage;}
 }

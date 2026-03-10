@@ -19,7 +19,6 @@ import eu.startales.spacepixels.tasks.BatchConvertMonoTask;
 import eu.startales.spacepixels.tasks.BatchStretchTask;
 import eu.startales.spacepixels.tasks.DetectionTask;
 import eu.startales.spacepixels.tasks.PlateSolveTask;
-import eu.startales.spacepixels.util.*;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -209,7 +208,7 @@ public class MainApplicationPanel extends JPanel {
             // Fire and forget
             new Thread(new BatchConvertMonoTask(
                     mainAppWindow.getEventBus(),
-                    mainAppWindow.getImagePreProcessing(),
+                    mainAppWindow.getImageProcessing(),
                     stretchEnabled,
                     stretchFactor,
                     iterations,
@@ -225,7 +224,7 @@ public class MainApplicationPanel extends JPanel {
             // Fire and forget
             new Thread(new BatchStretchTask(
                     mainAppWindow.getEventBus(),
-                    mainAppWindow.getImagePreProcessing(),
+                    mainAppWindow.getImageProcessing(),
                     stretchFactor,
                     iterations,
                     algo
@@ -257,7 +256,7 @@ public class MainApplicationPanel extends JPanel {
                             Object kernelData = selectedFitsImage.getHDU(0).getKernel();
                             StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-                            images[i] = mainAppWindow.getImagePreProcessing().getStretchedImageFullSize(
+                            images[i] = mainAppWindow.getImageProcessing().getStretchedImageFullSize(
                                     kernelData,
                                     selectedFitsFilesInfo[i].getSizeWidth(),
                                     selectedFitsFilesInfo[i].getSizeHeight(),
@@ -318,7 +317,7 @@ public class MainApplicationPanel extends JPanel {
 
             new Thread(new DetectionTask(
                     mainAppWindow.getEventBus(),
-                    mainAppWindow.getImagePreProcessing(),
+                    mainAppWindow.getImageProcessing(),
                     selectedFitsFilesInfo,
                     mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
             )).start();
@@ -327,7 +326,7 @@ public class MainApplicationPanel extends JPanel {
         detectBatchButton.addActionListener(e -> {
             new Thread(new DetectionTask(
                     mainAppWindow.getEventBus(),
-                    mainAppWindow.getImagePreProcessing(),
+                    mainAppWindow.getImageProcessing(),
                     null,
                     mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
             )).start();
@@ -405,7 +404,7 @@ public class MainApplicationPanel extends JPanel {
             // Fire and forget! The task will handle everything else.
             new Thread(new PlateSolveTask(
                     mainAppWindow.getEventBus(),
-                    mainAppWindow.getImagePreProcessing(),
+                    mainAppWindow.getImageProcessing(),
                     selectedFile.getFilePath(),
                     row,
                     astapSolveCheckbox.isSelected(),

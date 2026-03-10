@@ -150,7 +150,7 @@ public class ConfigurationPanel extends JPanel {
                 try {
                     Runtime.getRuntime().exec(cmdArray, null, astapExecutableFilePath.getParentFile());
 
-                    mainAppWindow.getImagePreProcessing().setProperty("astap", astapExecutableFilePath.getAbsolutePath());
+                    mainAppWindow.getImageProcessing().setProperty("astap", astapExecutableFilePath.getAbsolutePath());
                     astapPathLabel.setText(astapExecutableFilePath.getAbsolutePath());
 
                 } catch (IOException ex) {
@@ -199,12 +199,12 @@ public class ConfigurationPanel extends JPanel {
 
         saveConfigButton.addActionListener(e -> {
             try {
-                mainAppWindow.getImagePreProcessing().setProperty("ImageRA", raTextfield.getText());
-                mainAppWindow.getImagePreProcessing().setProperty("ImageDEC", decTextField.getText());
-                mainAppWindow.getImagePreProcessing().setProperty("SiteLat", latTextField.getText());
-                mainAppWindow.getImagePreProcessing().setProperty("SiteLong", longTextField.getText());
-                mainAppWindow.getImagePreProcessing().setProperty("PixelSize", pixelSizeTextfield.getText());
-                mainAppWindow.getImagePreProcessing().setProperty("FocalLength", focalLengthTextField.getText());
+                mainAppWindow.getImageProcessing().setProperty("ImageRA", raTextfield.getText());
+                mainAppWindow.getImageProcessing().setProperty("ImageDEC", decTextField.getText());
+                mainAppWindow.getImageProcessing().setProperty("SiteLat", latTextField.getText());
+                mainAppWindow.getImageProcessing().setProperty("SiteLong", longTextField.getText());
+                mainAppWindow.getImageProcessing().setProperty("PixelSize", pixelSizeTextfield.getText());
+                mainAppWindow.getImageProcessing().setProperty("FocalLength", focalLengthTextField.getText());
 
                 JOptionPane.showMessageDialog(this,
                         "Configuration saved successfully.", "Success", JOptionPane.INFORMATION_MESSAGE);
@@ -218,14 +218,14 @@ public class ConfigurationPanel extends JPanel {
     }
 
     public void refreshComponents() {
-        if (mainAppWindow.getImagePreProcessing() != null) {
-            astapPathLabel.setText(mainAppWindow.getImagePreProcessing().getProperty("astap"));
-            raTextfield.setText(mainAppWindow.getImagePreProcessing().getProperty("ImageRA"));
-            decTextField.setText(mainAppWindow.getImagePreProcessing().getProperty("ImageDEC"));
-            latTextField.setText(mainAppWindow.getImagePreProcessing().getProperty("SiteLat"));
-            longTextField.setText(mainAppWindow.getImagePreProcessing().getProperty("SiteLong"));
-            pixelSizeTextfield.setText(mainAppWindow.getImagePreProcessing().getProperty("PixelSize"));
-            focalLengthTextField.setText(mainAppWindow.getImagePreProcessing().getProperty("FocalLength"));
+        if (mainAppWindow.getImageProcessing() != null) {
+            astapPathLabel.setText(mainAppWindow.getImageProcessing().getProperty("astap"));
+            raTextfield.setText(mainAppWindow.getImageProcessing().getProperty("ImageRA"));
+            decTextField.setText(mainAppWindow.getImageProcessing().getProperty("ImageDEC"));
+            latTextField.setText(mainAppWindow.getImageProcessing().getProperty("SiteLat"));
+            longTextField.setText(mainAppWindow.getImageProcessing().getProperty("SiteLong"));
+            pixelSizeTextfield.setText(mainAppWindow.getImageProcessing().getProperty("PixelSize"));
+            focalLengthTextField.setText(mainAppWindow.getImageProcessing().getProperty("FocalLength"));
         }
     }
 

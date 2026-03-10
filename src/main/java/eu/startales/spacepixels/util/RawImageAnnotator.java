@@ -12,6 +12,7 @@ package eu.startales.spacepixels.util;
 
 import io.github.ppissias.jtransient.core.SourceExtractor;
 
+import java.awt.image.BufferedImage;
 import java.util.List;
 
 public class RawImageAnnotator {
@@ -146,4 +147,48 @@ public class RawImageAnnotator {
             image[y][x] = value;
         }
     }
-}
+
+    /**
+     * Tints the exact pixel footprint of detected objects.
+     * Streaks are tinted semi-transparent Red, point sources are semi-transparent Green.
+     */
+    public static void drawExactBlobs(BufferedImage image, List<SourceExtractor.DetectedObject> objects) {
+        // Define our semi-transparent overlay colors (ARGB)
+        // Format is (Alpha << 24) | (Red << 16) | (Green << 8) | Blue
+        // Using ~40% opacity (100 out of 255)
+        int streakColor = (100 << 24) | (255 << 16) | (0 << 8) | 0;   // Red
+        int pointColor  = (100 << 24) | (0 << 16)   | (255 << 8) | 0; // Green
+
+        for (SourceExtractor.DetectedObject obj : objects) {
+            if (obj.isNoise) continue;
+
+            int overlayColor = obj.isStreak ? streakColor : pointColor;
+
+            for (SourceExtractor.Pixel p : obj.rawPixels) {
+                // Safety bounds check
+                if (p.x >= 0 && p.x < image.getWidth() && p.y >= 0 && p.y < image.getHeight()) {
+
+                    int basePixel = image.getRGB(p.x, p.y);
+
+                    // Blend the base image pixel with our semi-transparent mask
+                    int blendedPixel = blendARGB(basePixel, overlayColor);
+
+                    image.setRGB(p.x, p.y, blendedPixel);
+                }
+            }
+        }
+    }
+
+    /**
+     * Fast integer math to blend a semi-transparent overlay color onto a base color.
+     */
+    private static int blendARGB(int base, int overlay) {
+        int alphaOverlay = (overlay >> 24) & 0xFF;
+        int alphaBase = 255 - alphaOverlay;
+
+        int r = (((base >> 16) & 0xFF) * alphaBase + ((overlay >> 16) & 0xFF) * alphaOverlay) / 255;
+        int g = (((base >> 8)  & 0xFF) * alphaBase + ((overlay >> 8)  & 0xFF) * alphaOverlay) / 255;
+        int b = ((base         & 0xFF) * alphaBase + (overlay         & 0xFF) * alphaOverlay) / 255;
+
+        return (255 << 24) | (r << 16) | (g << 8) | b;
+    }}

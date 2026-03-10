@@ -300,78 +300,7 @@ public class ImageProcessing {
     // EXISTING HELPER METHODS (Unchanged)
     // =========================================================================
 
-    public FitsFileInformation[] getFitsfileInformationOld() throws IOException, FitsException, ConfigurationException {
-        File[] fitsFileInformation = getFitsFilesDetails();
-        Fits[] fitsFiles = new Fits[fitsFileInformation.length];
-        FitsFileInformation[] ret = new FitsFileInformation[fitsFileInformation.length];
 
-        for (int i = 0; i < fitsFiles.length; i++) {
-            fitsFiles[i] = new Fits(fitsFileInformation[i]);
-            Header fitsHeader = fitsFiles[i].getHDU(0).getHeader();
-            Cursor<String, HeaderCard> iter = fitsHeader.iterator();
-
-            String fpath = fitsFileInformation[i].getAbsolutePath();
-            boolean monochromeImage;
-            int width;
-            int height;
-
-            int[] axes = fitsFiles[i].getHDU(0).getAxes();
-
-            if (axes.length == 2) {
-                monochromeImage = true;
-                Object kernelData = fitsFiles[i].getHDU(0).getKernel();
-                if (kernelData instanceof short[][]) {
-                    short[][] data = (short[][]) fitsFiles[i].getHDU(0).getKernel();
-                    height = data.length;
-                    width = data[0].length;
-                } else if (kernelData instanceof int[][]) {
-                    int[][] data = (int[][]) fitsFiles[i].getHDU(0).getKernel();
-                    height = data.length;
-                    width = data[0].length;
-                } else if (kernelData instanceof float[][]) {
-                    float[][] data = (float[][]) fitsFiles[i].getHDU(0).getKernel();
-                    height = data.length;
-                    width = data[0].length;
-                } else {
-                    throw new FitsException("Cannot understand file, it has a type=" + kernelData.getClass().getName());
-                }
-            } else if (axes.length == 3) {
-                monochromeImage = false;
-                Object kernelData = fitsFiles[i].getHDU(0).getKernel();
-                if (kernelData instanceof short[][][]) {
-                    short[][][] data = (short[][][]) fitsFiles[i].getHDU(0).getKernel();
-                    height = data[0].length;
-                    width = data[0][0].length;
-                } else if (kernelData instanceof int[][][]) {
-                    int[][][] data = (int[][][]) fitsFiles[i].getHDU(0).getKernel();
-                    height = data[0].length;
-                    width = data[0][0].length;
-                } else if (kernelData instanceof float[][][]) {
-                    float[][][] data = (float[][][]) fitsFiles[i].getHDU(0).getKernel();
-                    height = data[0].length;
-                    width = data[0][0].length;
-                } else {
-                    throw new FitsException("Cannot understand file, it has a type=" + kernelData.getClass().getName());
-                }
-            } else {
-                throw new FitsException("Cannot understand file, it has axes length=" + axes.length);
-            }
-
-            ret[i] = new FitsFileInformation(fpath, fitsFileInformation[i].getName(), monochromeImage, width, height);
-
-            while (iter.hasNext()) {
-                HeaderCard fitsHeaderCard = iter.next();
-                ret[i].getFitsHeader().put(fitsHeaderCard.getKey(), fitsHeaderCard.getValue());
-            }
-
-            PlateSolveResult previousSolveresult = readSolveResults(fpath);
-            if (previousSolveresult != null) {
-                ret[i].setSolveResult(previousSolveresult);
-            }
-        }
-        closeFitsFiles(fitsFiles);
-        return ret;
-    }
 
     private File[] getFitsFilesDetails() throws IOException, FitsException {
         File directory = alignedFitsFolderFullPath;

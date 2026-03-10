@@ -207,7 +207,7 @@ public class StretchPanel extends JPanel {
             if (selectedFile != null) {
                 new Thread(new GenerateFullSizeTask(
                         mainAppWindow.getEventBus(),
-                        mainAppWindow.getImagePreProcessing(),
+                        mainAppWindow.getImageProcessing(),
                         selectedFile.getFilePath(),
                         selectedFile.getSizeWidth(),
                         selectedFile.getSizeHeight(),
@@ -258,7 +258,7 @@ public class StretchPanel extends JPanel {
 
         new Thread(new GeneratePreviewsTask(
                 mainAppWindow.getEventBus(),
-                mainAppWindow.getImagePreProcessing(),
+                mainAppWindow.getImageProcessing(),
                 selected.getFilePath(),
                 stretchSlider.getValue(),
                 stretchIterationsSlider.getValue(),
