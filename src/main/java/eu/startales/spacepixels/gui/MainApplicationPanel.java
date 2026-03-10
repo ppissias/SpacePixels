@@ -12,13 +12,8 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
-import nom.tam.fits.Fits;
-import nom.tam.fits.FitsException;
 import eu.startales.spacepixels.events.*;
-import eu.startales.spacepixels.tasks.BatchConvertMonoTask;
-import eu.startales.spacepixels.tasks.BatchStretchTask;
-import eu.startales.spacepixels.tasks.DetectionTask;
-import eu.startales.spacepixels.tasks.PlateSolveTask;
+import eu.startales.spacepixels.tasks.*;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -29,7 +24,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.logging.Level;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.eventbus.Subscribe;
 
@@ -42,46 +37,35 @@ public class MainApplicationPanel extends JPanel {
     private volatile JTable table;
 
     private final JProgressBar progressBar = new JProgressBar();
-
     private final JButton convertMonoButton = new JButton("batch convert to mono");
-
     private final JButton stretchButton = new JButton("batch stretch");
-
     private final JButton blinkButton = new JButton("blink");
-
     private final JButton showSolvedImageButton = new JButton("show solved image");
-
     private final JButton solveButton = new JButton("Solve");
-
-    // --- NEW: Split Detection Buttons ---
     private final JButton detectSingleButton = new JButton("Detect Objects (Single Image)");
     private final JButton detectBatchButton = new JButton("Detect Objects (Entire Set)");
-
     private final JLabel statusLabel = new JLabel(" Ready");
 
     private volatile boolean containsColorImages = true;
 
-    // 1. Add this variable to the top of MainApplicationPanel
-    private volatile boolean isBlinking = false;
+    // --- CHANGED to AtomicBoolean for thread safety ---
+    private final AtomicBoolean isBlinking = new AtomicBoolean(false);
 
-    /**
-     * Create the panel.
-     */
+    private DetectionSequenceFrame detectionSequenceFrame;
+
     public MainApplicationPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
-
-        // Register this panel to listen for events
         this.mainAppWindow.getEventBus().register(this);
 
         setLayout(new BorderLayout(0, 0));
 
         // ==========================================
-        // TOP CONTROL AREA (Split into two rows for space)
+        // TOP CONTROL AREA
         // ==========================================
         JPanel topControlContainer = new JPanel();
         topControlContainer.setLayout(new BoxLayout(topControlContainer, BoxLayout.Y_AXIS));
 
-        // --- ROW 1: Plate Solving & Viewing ---
+        // --- ROW 1 ---
         JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
 
         solveButton.setToolTipText("Solve current image");
@@ -105,12 +89,12 @@ public class MainApplicationPanel extends JPanel {
         blinkButton.setEnabled(false);
         row1.add(blinkButton);
 
-        // --- ROW 2: Image Processing & Detection ---
+        // --- ROW 2 ---
         JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
 
         convertMonoButton.setToolTipText("Convert all images to monochrome and save them. If stretch is checked, also stretch them.");
         convertMonoButton.setEnabled(false);
-        row2.add(convertMonoButton); // <-- Added back to the UI!
+        row2.add(convertMonoButton);
 
         stretchButton.setToolTipText("Stretch all images (color or mono) as specified and save them");
         stretchButton.setEnabled(false);
@@ -125,15 +109,12 @@ public class MainApplicationPanel extends JPanel {
         row2.add(detectBatchButton);
 
         progressBar.setEnabled(true);
-        progressBar.setPreferredSize(new Dimension(150, 20)); // Give it a fixed visible size
-        row2.add(Box.createHorizontalStrut(10)); // Add a little gap before the progress bar
+        progressBar.setPreferredSize(new Dimension(150, 20));
+        row2.add(Box.createHorizontalStrut(10));
         row2.add(progressBar);
 
-        // Add both rows to the top container
         topControlContainer.add(row1);
         topControlContainer.add(row2);
-
-        // Add the combined container to the NORTH slot of the main layout
         add(topControlContainer, BorderLayout.NORTH);
 
         // ==========================================
@@ -143,10 +124,8 @@ public class MainApplicationPanel extends JPanel {
         showSolvedImageButton.addActionListener(e -> {
             FitsFileInformation imageInfo = getSelectedFileInformation();
             if (imageInfo != null) {
-                //check how the image was solved
                 PlateSolveResult result = imageInfo.getSolveResult();
                 if (result != null && result.isSuccess()) {
-                    //sanity check
                     String annotatedImageLink = result.getSolveInformation().get("annotated_image_link");
                     URL annotatedImageURL = null;
 
@@ -175,7 +154,6 @@ public class MainApplicationPanel extends JPanel {
                         }
                     }
 
-                    //load image
                     ApplicationWindow.logger.info("loading image: " + annotatedImageURL.toString());
                     try {
                         BufferedImage image = ImageIO.read(annotatedImageURL);
@@ -205,7 +183,6 @@ public class MainApplicationPanel extends JPanel {
             boolean stretchEnabled = mainAppWindow.getStretchPanel().isStretchEnabled();
             StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-            // Fire and forget
             new Thread(new BatchConvertMonoTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImageProcessing(),
@@ -221,7 +198,6 @@ public class MainApplicationPanel extends JPanel {
             int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
             StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-            // Fire and forget
             new Thread(new BatchStretchTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImageProcessing(),
@@ -231,96 +207,56 @@ public class MainApplicationPanel extends JPanel {
             )).start();
         });
 
+        // --- REFACTORED BLINK ACTION LISTENER ---
         blinkButton.addActionListener(e -> {
-            if (!isBlinking) {
+            if (!isBlinking.get()) {
                 // START BLINKING
-                isBlinking = true;
-                disableControlsBlinking();
-                blinkButton.setText("stop blinking");
+                FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
+                if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0) return;
 
-                mainAppWindow.getFullImagePreviewFrame().setVisible(true);
+                isBlinking.set(true); // Lock the atomic boolean
 
-                new Thread(() -> {
-                    try {
-                        FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
-                        if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0) {
-                            stopBlinkingProcess(); // abort if nothing selected
-                            return;
-                        }
+                int stretchFactor = mainAppWindow.getStretchPanel().getStretchSlider().getValue();
+                int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
+                StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-                        BufferedImage[] images = new BufferedImage[selectedFitsFilesInfo.length];
-
-                        // Load and stretch the images
-                        for (int i = 0; i < selectedFitsFilesInfo.length; i++) {
-                            Fits selectedFitsImage = new Fits(selectedFitsFilesInfo[i].getFilePath());
-                            Object kernelData = selectedFitsImage.getHDU(0).getKernel();
-                            StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
-
-                            images[i] = mainAppWindow.getImageProcessing().getStretchedImageFullSize(
-                                    kernelData,
-                                    selectedFitsFilesInfo[i].getSizeWidth(),
-                                    selectedFitsFilesInfo[i].getSizeHeight(),
-                                    mainAppWindow.getStretchPanel().getStretchSlider().getValue(),
-                                    mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue(), algo);
-                        }
-
-                        // The Animation Loop
-                        int j = 0;
-                        while (isBlinking) { // Controlled by the boolean flag now
-                            BufferedImage image = images[j];
-                            EventQueue.invokeLater(() -> mainAppWindow.getFullImagePreviewFrame().setImage(image));
-
-                            Thread.sleep(500);
-
-                            j++;
-                            if (j == images.length) { j = 0; }
-                        }
-
-                    } catch (FitsException | IOException | InterruptedException ex) {
-                        ApplicationWindow.logger.log(Level.SEVERE, "Error during blinking", ex);
-                        EventQueue.invokeLater(() -> JOptionPane.showMessageDialog(mainAppWindow.getFullImagePreviewFrame(),
-                                "Cannot show full image:" + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE));
-                        stopBlinkingProcess();
-                    }
-                }).start();
+                new Thread(new BlinkImagesTask(
+                        mainAppWindow.getEventBus(),
+                        mainAppWindow.getImageProcessing(),
+                        selectedFitsFilesInfo,
+                        stretchFactor,
+                        iterations,
+                        algo,
+                        isBlinking
+                )).start();
 
             } else {
-                // USER CLICKED "STOP BLINKING"
-                stopBlinkingProcess();
-                mainAppWindow.getFullImagePreviewFrame().dispose();
+                // STOP BLINKING
+                isBlinking.set(false); // Task will see this and exit its loop
             }
         });
 
         detectSingleButton.addActionListener(e -> {
-            FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
+            FitsFileTableModel model = (FitsFileTableModel) table.getModel();
+            if (model == null || model.getRowCount() == 0) return;
 
-            if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0) {
-                JOptionPane.showMessageDialog(this,
-                        "Please select an image from the table first.",
-                        "No Image Selected",
-                        JOptionPane.INFORMATION_MESSAGE);
-                return;
+            FitsFileInformation[] allFiles = new FitsFileInformation[model.getRowCount()];
+            for (int i = 0; i < model.getRowCount(); i++) {
+                allFiles[i] = model.getFitsFileAt(i);
             }
 
-            if (selectedFitsFilesInfo.length > 1) {
-                int userChoice = JOptionPane.showConfirmDialog(this,
-                        "Multiple files are selected. Quick Detection will only be shown for the first file:\n" +
-                                selectedFitsFilesInfo[0].getFileName() + "\n\nDo you want to proceed?",
-                        "Multiple Files Selected",
-                        JOptionPane.OK_CANCEL_OPTION,
-                        JOptionPane.WARNING_MESSAGE);
+            int startIndex = table.getSelectedRow();
+            if (startIndex < 0) startIndex = 0;
 
-                if (userChoice != JOptionPane.OK_OPTION) {
-                    return;
-                }
+            if (detectionSequenceFrame == null) {
+                detectionSequenceFrame = new DetectionSequenceFrame(mainAppWindow);
             }
 
-            new Thread(new DetectionTask(
-                    mainAppWindow.getEventBus(),
-                    mainAppWindow.getImageProcessing(),
-                    selectedFitsFilesInfo,
+            detectionSequenceFrame.openSequence(
+                    allFiles,
+                    startIndex,
                     mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
-            )).start();
+            );
         });
 
         detectBatchButton.addActionListener(e -> {
@@ -350,13 +286,9 @@ public class MainApplicationPanel extends JPanel {
         JScrollPane scrollPane = new JScrollPane();
         add(scrollPane, BorderLayout.CENTER);
 
-
-        // 2. Add this right before or after you setup the JScrollPane for the table
         JPanel statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        statusBar.setBorder(BorderFactory.createEtchedBorder()); // Gives it a nice recessed look
+        statusBar.setBorder(BorderFactory.createEtchedBorder());
         statusBar.add(statusLabel);
-
-        // Add it to the bottom of the MainApplicationPanel
         add(statusBar, BorderLayout.SOUTH);
 
         table = new JTable();
@@ -374,12 +306,10 @@ public class MainApplicationPanel extends JPanel {
                     solveButton.setEnabled(true);
                 }
 
-                // If the stretch panel is active, tell it to update its preview images
                 if (mainAppWindow.getStretchPanel().isStretchEnabled()) {
                     mainAppWindow.getStretchPanel().triggerPreviewUpdate();
                 }
             } else {
-                // If the stretch panel is active but no row is selected, clear the preview
                 if (mainAppWindow.getStretchPanel().isStretchEnabled()) {
                     mainAppWindow.getStretchPanel().triggerPreviewUpdate();
                 }
@@ -401,7 +331,6 @@ public class MainApplicationPanel extends JPanel {
             FitsFileInformation selectedFile = getSelectedFileInformation();
             if (selectedFile == null) return;
 
-            // Fire and forget! The task will handle everything else.
             new Thread(new PlateSolveTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImageProcessing(),
@@ -413,37 +342,28 @@ public class MainApplicationPanel extends JPanel {
         });
     }
 
-    /**
-     * Automatically resizes the columns of a JTable to fit their content and headers.
-     */
     private void resizeTableColumns(JTable table) {
-        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF); // Prevents columns from snapping back to equal sizes
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
         for (int column = 0; column < table.getColumnCount(); column++) {
-            int width = 50; // Minimum width
+            int width = 50;
 
-            // 1. Check the width of the column header
             Component headerComp = table.getTableHeader().getDefaultRenderer().getTableCellRendererComponent(
                     table, table.getColumnModel().getColumn(column).getHeaderValue(), false, false, 0, column);
             width = Math.max(headerComp.getPreferredSize().width, width);
 
-            // 2. Check the width of every row in this column
             for (int row = 0; row < table.getRowCount(); row++) {
                 Component cellComp = table.prepareRenderer(table.getCellRenderer(row, column), row, column);
                 width = Math.max(cellComp.getPreferredSize().width, width);
             }
 
-            // 3. Set the width with a 15-pixel padding
             table.getColumnModel().getColumn(column).setPreferredWidth(width + 15);
         }
     }
 
     public void setTableModel(AbstractTableModel tableModel) {
         table.setModel(tableModel);
-
-        // --- NEW: Resize the columns based on the newly loaded data ---
         resizeTableColumns(table);
-        // Assume false initially, and only set to true if we find one
         containsColorImages = false;
         FitsFileTableModel model = (FitsFileTableModel) tableModel;
 
@@ -456,7 +376,6 @@ public class MainApplicationPanel extends JPanel {
             }
         }
 
-        // Apply the UI Logic
         if (containsColorImages) {
             ApplicationWindow.logger.info("Color images detected. Enabling 'Batch Convert to Mono'.");
             convertMonoButton.setEnabled(true);
@@ -508,7 +427,6 @@ public class MainApplicationPanel extends JPanel {
 
     public void setBatchStretchButtonEnabled(boolean state) {
         stretchButton.setEnabled(state);
-        //convertMonoButton.setEnabled(state);
     }
 
     private void disableControlsSolving() {
@@ -619,14 +537,66 @@ public class MainApplicationPanel extends JPanel {
         detectBatchButton.setEnabled(true);
     }
 
-    // 2. Add a helper method to handle the UI reset safely
-    private void stopBlinkingProcess() {
-        isBlinking = false; // This safely breaks the while loop in the thread
+
+    // ==========================================
+    // NEW: BLINK EVENT SUBSCRIBERS
+    // ==========================================
+
+    @Subscribe
+    public void onBlinkStarted(BlinkStartedEvent event) {
         EventQueue.invokeLater(() -> {
-            blinkButton.setText("blink");
-            enableControlsProcessingBlinkingFinished();
+            disableControlsBlinking();
+            blinkButton.setText("stop blinking");
+            statusLabel.setText("Preparing blink sequence...");
         });
     }
+
+    @Subscribe
+    public void onBlinkFrameUpdate(BlinkFrameUpdateEvent event) {
+        EventQueue.invokeLater(() -> {
+            statusLabel.setText("Blinking...");
+
+            // Show the frame if it's not already visible
+            if (!mainAppWindow.getBlinkFrame().isVisible()) {
+                mainAppWindow.getBlinkFrame().setVisible(true);
+            }
+
+            // Push the new image into the viewer
+            mainAppWindow.getBlinkFrame().setImage(event.getImage());
+        });
+    }
+
+    @Subscribe
+    public void onBlinkFinished(BlinkFinishedEvent event) {
+        EventQueue.invokeLater(() -> {
+            // Restore UI State
+            blinkButton.setText("blink");
+            enableControlsProcessingBlinkingFinished();
+            statusLabel.setText("Blinking stopped.");
+
+            // The isBlinking flag is already false, but ensure the window closes
+            mainAppWindow.getBlinkFrame().dispose();
+
+            if (!event.isSuccess()) {
+                JOptionPane.showMessageDialog(this,
+                        "Blink process failed: " + event.getErrorMessage(),
+                        "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+    }
+
+    @Subscribe
+    public void onBlinkFrameClosed(BlinkFrameClosedEvent event) {
+        if (isBlinking.get()) {
+            ApplicationWindow.logger.info("Blink frame closed by user, signalling blink thread to stop.");
+            isBlinking.set(false);
+        }
+    }
+
+
+    // ==========================================
+    // OTHER EVENT SUBSCRIBERS
+    // ==========================================
 
     @Subscribe
     public void onSolveStarted(SolveStartedEvent event) {
@@ -645,7 +615,6 @@ public class MainApplicationPanel extends JPanel {
                 JOptionPane.showMessageDialog(this, "Image was successfully plate-solved");
                 ApplicationWindow.logger.info(result.toString());
                 statusLabel.setText("Image was successfully plate-solved");
-                // Update the table using the constant
                 table.setValueAt(result, event.getRowIndex(), FitsFileTableModel.COL_SOLVED);
                 ((FitsFileTableModel) table.getModel()).fireTableDataChanged();
             } else {
@@ -653,11 +622,9 @@ public class MainApplicationPanel extends JPanel {
                 JOptionPane.showMessageDialog(this, "Image was not plate-solved successfully: " + errorMsg, "Error", JOptionPane.ERROR_MESSAGE);
             }
 
-            // Restore UI state
             setProgressBarIdle();
             enableControlsSolvingFinished();
 
-            // Re-evaluate button states in case the selection changed while processing
             int selectedRow = table.getSelectedRow();
             if (selectedRow >= 0) {
                 if ("yes".equals(table.getValueAt(selectedRow, FitsFileTableModel.COL_SOLVED))) {
@@ -688,17 +655,10 @@ public class MainApplicationPanel extends JPanel {
             if (event.isSuccess()) {
                 JLabel label = new JLabel(new ImageIcon(event.getImage()));
                 JFrame f = new JFrame("Solved Image Preview");
-
-                // CRITICAL: Ensure the frame is destroyed when closed, not just hidden
                 f.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-
-                // Add a scroll pane just in case the image is larger than the screen
                 JScrollPane scrollPane = new JScrollPane(label);
                 f.getContentPane().add(scrollPane);
-
                 f.pack();
-
-                // Center the new window relative to the main app instead of hardcoding 200,200
                 f.setLocationRelativeTo(this);
                 f.setVisible(true);
                 statusLabel.setText("Showing solved image preview");
@@ -706,16 +666,6 @@ public class MainApplicationPanel extends JPanel {
                 JOptionPane.showMessageDialog(this, "Cannot show image: " + event.getErrorMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
         });
-    }
-
-    // 3. Add the Subscriber to catch the frame closing!
-    @Subscribe
-    public void onFullImageFrameClosed(FullImageViewFrameClosedEvent event) {
-        // If the user clicked the "X" on the frame while blinking was active...
-        if (isBlinking) {
-            ApplicationWindow.logger.info("Full image frame closed by user, stopping blink animation.");
-            stopBlinkingProcess();
-        }
     }
 
     @Subscribe
@@ -794,28 +744,10 @@ public class MainApplicationPanel extends JPanel {
         EventQueue.invokeLater(() -> {
             setProgressBarIdle();
             enableControlsProcessingFinished();
+            statusLabel.setText("Object detection completed");
 
             if (event.isSuccess()) {
-                if (event.isQuickDetection()) {
-                    // Handle UI updates for Quick Detection
-                    mainAppWindow.getFullImagePreviewFrame().setTitle(
-                            "Preview - " + event.getFileName() +
-                                    " | Stars: " + event.getStarCount() +
-                                    " | Streaks: " + event.getStreakCount()
-                    );
-                    mainAppWindow.getFullImagePreviewFrame().setImage(event.getAnnotatedImage());
-                    mainAppWindow.getFullImagePreviewFrame().setVisible(true);
-
-                    JOptionPane.showMessageDialog(
-                            mainAppWindow.getFullImagePreviewFrame(),
-                            "Quick Detection Complete!\n\n" +
-                                    "Stars/Point Sources: " + event.getStarCount() + "\n" +
-                                    "Streaks Detected: " + event.getStreakCount(),
-                            "Detection Summary",
-                            JOptionPane.INFORMATION_MESSAGE
-                    );
-                } else {
-                    // Handle UI updates for Batch Detection
+                if (!event.isQuickDetection()) {
                     promptUserToOpenReport(event.getReportFilename());
                 }
             } else {
@@ -824,15 +756,13 @@ public class MainApplicationPanel extends JPanel {
                         "Error",
                         JOptionPane.ERROR_MESSAGE);
             }
-
-            statusLabel.setText("Object detection completed");
         });
     }
 
     private void promptUserToOpenReport(File reportFile) {
         if (reportFile != null && reportFile.exists()) {
             int response = JOptionPane.showConfirmDialog(
-                    null, // Replace with your main window/panel reference
+                    null,
                     "Detection pipeline completed successfully.\n\nWould you like to open the generated HTML report?",
                     "Pipeline Complete",
                     JOptionPane.YES_NO_OPTION,

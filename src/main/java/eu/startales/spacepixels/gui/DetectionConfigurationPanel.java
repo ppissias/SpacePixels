@@ -30,9 +30,7 @@ public class DetectionConfigurationPanel extends JPanel {
     //link to main window
     private final ApplicationWindow mainAppWindow;
 
-    // --- NEW: Reusable Preview Window State ---
-    private JDialog previewDialog;
-    private JLabel previewImageLabel;
+    private final TuningPreviewManager previewManager;
 
     // --- NEW: JTransient Config State ---
     private volatile DetectionConfig jTransientConfig;
@@ -69,6 +67,8 @@ public class DetectionConfigurationPanel extends JPanel {
         // 1. Load the JTransient config before building the UI
         loadJTransientConfig();
 
+        this.previewManager = new TuningPreviewManager(mainAppWindow);
+
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(10, 10, 10, 10));
 
@@ -98,7 +98,7 @@ public class DetectionConfigurationPanel extends JPanel {
         // --- NEW: PREVIEW BUTTON ---
 
         previewBtn.setToolTipText("Run extraction on the selected frame with current settings and show the exact pixel mask.");
-        previewBtn.addActionListener(e -> showTuningPreview());
+        previewBtn.addActionListener(e -> previewManager.showPreview(getJTransientConfig()));
 
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         bottomPanel.setBorder(new EmptyBorder(10, 0, 0, 0));
@@ -419,132 +419,6 @@ public class DetectionConfigurationPanel extends JPanel {
         }
     }
 
-    /**
-     * Grabs the selected FITS file, runs the Source Extractor with the CURRENT
-     * spinner settings, and pops up a visual mask of the detections.
-     * Re-uses the same window to allow for rapid parameter tuning.
-     */
-    private void showTuningPreview() {
-        // 1. Force the current spinner values into the jTransientConfig object
-        applySettingsToMemory();
-
-        // 2. Figure out which file to process
-        FitsFileInformation targetFile = null;
-        try {
-            targetFile = mainAppWindow.getMainApplicationPanel().getSelectedFileInformation();
-        } catch (Exception ignored) {
-        }
-
-        if (targetFile == null) {
-            try {
-                FitsFileInformation[] allFiles = mainAppWindow.getImageProcessing().getFitsfileInformation();
-                if (allFiles != null && allFiles.length > 0) {
-                    targetFile = allFiles[0];
-                }
-            } catch (Exception ex) {
-                System.err.println("Could not load FITS files for preview: " + ex.getMessage());
-            }
-        }
-
-        if (targetFile == null) {
-            JOptionPane.showMessageDialog(this, "No FITS files are currently loaded to preview!", "No Images", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        final FitsFileInformation finalTarget = targetFile;
-
-        // 3. Run the extraction and render in a background thread
-        new Thread(() -> {
-            try {
-                nom.tam.fits.Fits fitsImage = new nom.tam.fits.Fits(finalTarget.getFilePath());
-                Object kernelData = fitsImage.getHDU(0).getKernel();
-                fitsImage.close();
-
-                if (!(kernelData instanceof short[][])) {
-                    throw new Exception("Expected short[][] FITS format.");
-                }
-
-                short[][] imageData = (short[][]) kernelData;
-                short[][] debugImage = new short[imageData.length][imageData[0].length];
-                for (int x = 0; x < imageData.length; x++) {
-                    System.arraycopy(imageData[x], 0, debugImage[x], 0, imageData[x].length);
-                }
-
-                // EXTRACT
-                java.util.List<io.github.ppissias.jtransient.core.SourceExtractor.DetectedObject> objects =
-                        io.github.ppissias.jtransient.core.SourceExtractor.extractSources(
-                                debugImage,
-                                jTransientConfig.detectionSigmaMultiplier,
-                                jTransientConfig.minDetectionPixels,
-                                jTransientConfig
-                        );
-
-                // --- NEW: Tally the results for the title bar ---
-                int streakCount = 0;
-                int pointCount = 0;
-                for (io.github.ppissias.jtransient.core.SourceExtractor.DetectedObject obj : objects) {
-                    if (obj.isNoise) continue; // Skip noise
-                    if (obj.isStreak) streakCount++;
-                    else pointCount++;
-                }
-
-                String windowTitle = String.format("Tuning Preview: %s [Point Sources: %d | Streaks: %d]",
-                        finalTarget.getFileName(), pointCount, streakCount);
-
-                // DRAW AND CONVERT
-                eu.startales.spacepixels.util.RawImageAnnotator.drawDetections(debugImage, objects);
-                java.awt.image.BufferedImage previewImage = eu.startales.spacepixels.util.ImageDisplayUtils.createDisplayImage(debugImage);
-                eu.startales.spacepixels.util.RawImageAnnotator.drawExactBlobs(previewImage, objects);
-
-                // 4. Update or create the window on the UI Thread
-                SwingUtilities.invokeLater(() -> {
-                    if (previewDialog == null) {
-                        // Build the window for the first time
-                        previewDialog = new JDialog(mainAppWindow.getFrame(), windowTitle, false);
-                        previewDialog.setLayout(new BorderLayout());
-
-                        previewImageLabel = new JLabel(new ImageIcon(previewImage));
-                        JScrollPane scrollPane = new JScrollPane(previewImageLabel);
-                        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
-
-                        previewDialog.add(scrollPane, BorderLayout.CENTER);
-                        previewDialog.setSize(1024, 768);
-                        previewDialog.setLocationRelativeTo(this);
-
-                        // Clean up the memory reference if the user closes the window with the 'X'
-                        previewDialog.addWindowListener(new java.awt.event.WindowAdapter() {
-                            @Override
-                            public void windowClosed(java.awt.event.WindowEvent windowEvent) {
-                                previewDialog = null;
-                                previewImageLabel = null;
-                            }
-                        });
-                        // Dispose on close so the window listener fires
-                        previewDialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-                    } else {
-                        // The window is already open! Just hot-swap the image and title.
-                        previewDialog.setTitle(windowTitle);
-                        previewImageLabel.setIcon(new ImageIcon(previewImage));
-                        // Revalidate to ensure the scrollpane updates if the image size somehow changed
-                        previewImageLabel.revalidate();
-                        previewImageLabel.repaint();
-                    }
-
-                    // Bring the window to the front in case it was hiding behind the main app
-                    if (!previewDialog.isVisible()) {
-                        previewDialog.setVisible(true);
-                    } else {
-                        previewDialog.toFront();
-                    }
-                });
-
-            } catch (Exception ex) {
-                SwingUtilities.invokeLater(() ->
-                        JOptionPane.showMessageDialog(this, "Failed to generate preview: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE)
-                );
-            }
-        }).start();
-    }
 
     @Subscribe
     public void onImportFinished(FitsImportFinishedEvent event) {

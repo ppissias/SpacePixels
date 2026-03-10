@@ -11,10 +11,7 @@
 package eu.startales.spacepixels.gui;
 
 import com.google.common.eventbus.Subscribe;
-import eu.startales.spacepixels.events.FullSizeGenerationFinishedEvent;
-import eu.startales.spacepixels.events.FullSizeGenerationStartedEvent;
 import eu.startales.spacepixels.events.PreviewGenerationFinishedEvent;
-import eu.startales.spacepixels.tasks.GenerateFullSizeTask;
 import eu.startales.spacepixels.tasks.GeneratePreviewsTask;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.StretchAlgorithm;
@@ -28,33 +25,32 @@ public class StretchPanel extends JPanel {
     private final ApplicationWindow mainAppWindow;
 
     // Controls
-    private JSlider stretchSlider;
-    private JCheckBox stretchCheckbox;
-    private JComboBox<StretchAlgorithm> stretchAlgoCombo;
-    private JSlider stretchIterationsSlider;
-    private JButton showFullSizeButton;
+    private final JSlider stretchSlider;
+    private final JCheckBox stretchCheckbox;
+    private final JComboBox<StretchAlgorithm> stretchAlgoCombo;
+    private final JSlider stretchIterationsSlider;
+    private final JButton showFullSizeButton;
 
     // Dynamic Labels
-    private JLabel stretchIntensityLabel;
-    private JLabel stretchIterationsLabel;
+    private final JLabel stretchIntensityLabel;
+    private final JLabel stretchIterationsLabel;
 
     // Previews
-    private ImageVisualizerComponent originalImageComponent = new ImageVisualizerComponent();
-    private ImageVisualizerComponent stretchedImageComponent = new ImageVisualizerComponent();
+    private final ImageVisualizerComponent originalImageComponent = new ImageVisualizerComponent();
+    private final ImageVisualizerComponent stretchedImageComponent = new ImageVisualizerComponent();
 
-    // The Debouncer Timer
-    private Timer previewDebounceTimer;
+    private final Timer previewDebounceTimer;
+
+    // --- NEW: Reference to our specialized frame ---
+    private StretchedSequenceFrame sequenceFrame;
 
     public StretchPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
-
-        // Register for EventBus!
         this.mainAppWindow.getEventBus().register(this);
 
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        // Initialize the Debouncer
         previewDebounceTimer = new Timer(250, e -> executePreviewTask());
         previewDebounceTimer.setRepeats(false);
 
@@ -64,11 +60,10 @@ public class StretchPanel extends JPanel {
         JPanel mainContent = new JPanel();
         mainContent.setLayout(new BoxLayout(mainContent, BoxLayout.Y_AXIS));
 
-        // --- SECTION 1: SETTINGS ---
         mainContent.add(createSectionHeader("Stretch Algorithm & Global Settings"));
 
         JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 10));
-        stretchCheckbox = new JCheckBox("Enable Batch Stretching");
+        stretchCheckbox = new JCheckBox("Enable Stretching (for blinking and batch export)");
         stretchCheckbox.setToolTipText("If checked, exported images will have these settings applied.");
         stretchCheckbox.setFont(stretchCheckbox.getFont().deriveFont(Font.BOLD, 13f));
 
@@ -80,18 +75,15 @@ public class StretchPanel extends JPanel {
         topRow.add(Box.createHorizontalStrut(20));
         topRow.add(stretchAlgoCombo);
 
-        // Ensure left alignment
         topRow.setAlignmentX(Component.LEFT_ALIGNMENT);
         mainContent.add(topRow);
         mainContent.add(Box.createVerticalStrut(10));
 
-        // --- SECTION 2: SLIDERS ---
         mainContent.add(createSectionHeader("Intensity & Iterations"));
 
         JPanel slidersRow = new JPanel(new GridLayout(1, 2, 40, 0));
         slidersRow.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // Left Slider Container
         JPanel leftSliderPanel = new JPanel(new BorderLayout(0, 5));
         stretchIntensityLabel = new JLabel("Intensity Threshold");
         stretchIntensityLabel.setFont(stretchIntensityLabel.getFont().deriveFont(Font.BOLD, 12f));
@@ -100,7 +92,6 @@ public class StretchPanel extends JPanel {
         leftSliderPanel.add(stretchIntensityLabel, BorderLayout.NORTH);
         leftSliderPanel.add(stretchSlider, BorderLayout.CENTER);
 
-        // Right Slider Container
         JPanel rightSliderPanel = new JPanel(new BorderLayout(0, 5));
         stretchIterationsLabel = new JLabel("Application Iterations");
         stretchIterationsLabel.setFont(stretchIterationsLabel.getFont().deriveFont(Font.BOLD, 12f));
@@ -120,7 +111,6 @@ public class StretchPanel extends JPanel {
         mainContent.add(slidersRow);
         mainContent.add(Box.createVerticalStrut(20));
 
-        // Add the top controls to the North area
         add(mainContent, BorderLayout.NORTH);
 
         // ==========================================
@@ -147,7 +137,6 @@ public class StretchPanel extends JPanel {
         previewImagesContainer.add(stretchedWrapper);
 
         previewMainContainer.add(previewImagesContainer, BorderLayout.CENTER);
-
         add(previewMainContainer, BorderLayout.CENTER);
 
         // ==========================================
@@ -201,21 +190,36 @@ public class StretchPanel extends JPanel {
             if (stretchCheckbox.isSelected()) triggerPreviewUpdate();
         });
 
-        // Fire and Forget Background Task
+        // --- UPDATED: Launch the Specialized Frame ---
         showFullSizeButton.addActionListener(e -> {
-            FitsFileInformation selectedFile = mainAppWindow.getMainApplicationPanel().getSelectedFileInformation();
-            if (selectedFile != null) {
-                new Thread(new GenerateFullSizeTask(
-                        mainAppWindow.getEventBus(),
-                        mainAppWindow.getImageProcessing(),
-                        selectedFile.getFilePath(),
-                        selectedFile.getSizeWidth(),
-                        selectedFile.getSizeHeight(),
-                        stretchSlider.getValue(),
-                        stretchIterationsSlider.getValue(),
-                        (StretchAlgorithm) stretchAlgoCombo.getSelectedItem()
-                )).start();
+            FitsFileInformation[] files;
+            try {
+                files = mainAppWindow.getImageProcessing().getFitsfileInformation();
+            } catch (Exception ex) {
+                System.err.println("Could not load FITS files: " + ex.getMessage());
+                return;
             }
+
+            if (files == null || files.length == 0) return;
+
+            // Find current starting point
+            FitsFileInformation selectedFile = mainAppWindow.getMainApplicationPanel().getSelectedFileInformation();
+            int startIndex = 0;
+            if (selectedFile != null) {
+                for (int i = 0; i < files.length; i++) {
+                    if (files[i].getFilePath().equals(selectedFile.getFilePath())) {
+                        startIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            // Lazy initialization of the frame
+            if (sequenceFrame == null) {
+                sequenceFrame = new StretchedSequenceFrame(mainAppWindow, this);
+            }
+
+            sequenceFrame.openSequence(files, startIndex);
         });
     }
 
@@ -223,9 +227,6 @@ public class StretchPanel extends JPanel {
     // UI HELPER METHODS
     // ==========================================
 
-    /**
-     * Creates a styled section header matching the FlatLaf Accent color.
-     */
     private JLabel createSectionHeader(String title) {
         JLabel headerLabel = new JLabel(title);
         headerLabel.setFont(headerLabel.getFont().deriveFont(Font.BOLD, 16f));
@@ -275,31 +276,6 @@ public class StretchPanel extends JPanel {
             } else {
                 setOriginalImage(null);
                 setStretchedImage(null);
-            }
-        });
-    }
-
-    @Subscribe
-    public void onFullSizeGenerationStarted(FullSizeGenerationStartedEvent event) {
-        EventQueue.invokeLater(() -> {
-            showFullSizeButton.setEnabled(false);
-            showFullSizeButton.setText("Processing...");
-        });
-    }
-
-    @Subscribe
-    public void onFullSizeGenerationFinished(FullSizeGenerationFinishedEvent event) {
-        EventQueue.invokeLater(() -> {
-            showFullSizeButton.setEnabled(true);
-            showFullSizeButton.setText("Show full size");
-
-            if (event.isSuccess()) {
-                mainAppWindow.getFullImagePreviewFrame().setImage(event.getFullSizeImage());
-                mainAppWindow.getFullImagePreviewFrame().setVisible(true);
-            } else {
-                JOptionPane.showMessageDialog(this,
-                        "Cannot show full image: " + event.getErrorMessage(),
-                        "Error", JOptionPane.ERROR_MESSAGE);
             }
         });
     }

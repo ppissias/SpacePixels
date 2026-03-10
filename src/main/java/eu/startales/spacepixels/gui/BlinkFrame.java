@@ -11,7 +11,7 @@
 package eu.startales.spacepixels.gui;
 
 import com.google.common.eventbus.EventBus;
-import eu.startales.spacepixels.events.FullImageViewFrameClosedEvent;
+import eu.startales.spacepixels.events.BlinkFrameClosedEvent;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -20,7 +20,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 
-public class FullImageViewFrame extends JFrame {
+public class BlinkFrame extends JFrame {
 
     private final JPanel imagePreviewPanel = new JPanel();
     private ImageVisualizerComponent imageComponent = new ImageVisualizerComponent();
@@ -30,7 +30,7 @@ public class FullImageViewFrame extends JFrame {
     /**
      * Create the frame.
      */
-    public FullImageViewFrame(EventBus eventBus) {
+    public BlinkFrame(EventBus eventBus) {
         this.eventBus = eventBus;
 
         setTitle("Full size");
@@ -64,7 +64,7 @@ public class FullImageViewFrame extends JFrame {
 
                 // Fire the event so MainApplicationPanel knows to stop the Blink thread
                 if (eventBus != null) {
-                    eventBus.post(new FullImageViewFrameClosedEvent());
+                    eventBus.post(new BlinkFrameClosedEvent());
                 }
             }
         });

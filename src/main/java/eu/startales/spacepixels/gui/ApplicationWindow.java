@@ -42,7 +42,7 @@ public class ApplicationWindow {
 
     public static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
 
-    private final FullImageViewFrame fullImagePreviewFrame = new FullImageViewFrame(getEventBus());
+    private final BlinkFrame blinkFrame = new BlinkFrame(getEventBus());
     private final JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
     private final JMenu fileMenu = new JMenu("File");
     private final JMenuItem importMenuItem = new JMenuItem("Import aligned fits files");
@@ -71,7 +71,7 @@ public class ApplicationWindow {
 
     private void initialize() {
 
-        fullImagePreviewFrame.setVisible(false);
+        blinkFrame.setVisible(false);
 
         frmIpodImage = new JFrame();
         frmIpodImage.setTitle("SpacePixels" + " " + version);
@@ -181,8 +181,8 @@ public class ApplicationWindow {
         importMenuItem.setEnabled(state);
     }
 
-    public FullImageViewFrame getFullImagePreviewFrame() {
-        return fullImagePreviewFrame;
+    public BlinkFrame getBlinkFrame() {
+        return blinkFrame;
     }
 
     public ImageProcessing getImageProcessing() {
