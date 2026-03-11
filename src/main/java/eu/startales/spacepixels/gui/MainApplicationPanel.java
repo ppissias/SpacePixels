@@ -389,20 +389,38 @@ public class MainApplicationPanel extends JPanel {
         }
     }
 
-    public FitsFileInformation getSelectedFileInformation() {
-        int row = table.getSelectedRow();
-        if (row < 0) return null;
+    // ==========================================
+    // DATA ACCESS HELPERS (For Auto-Tuner & External Panels)
+    // ==========================================
+
+    /**
+     * Returns the array of ALL successfully imported FITS files currently in the table model.
+     * Useful for the Auto-Tuner to sample the entire sequence.
+     */
+    public FitsFileInformation[] getImportedFiles() {
+        if (table == null || table.getModel() == null) {
+            return null;
+        }
 
         FitsFileTableModel model = (FitsFileTableModel) table.getModel();
-        return model.getFitsFileAt(row);
-    }
+        int rowCount = model.getRowCount();
 
-    public void selectFirstFileIfNoneSelected() {
-        if (table.getRowCount() > 0 && table.getSelectedRow() == -1) {
-            table.setRowSelectionInterval(0, 0);
+        if (rowCount == 0) {
+            return null;
         }
+
+        FitsFileInformation[] allFiles = new FitsFileInformation[rowCount];
+        for (int i = 0; i < rowCount; i++) {
+            allFiles[i] = model.getFitsFileAt(i);
+        }
+
+        return allFiles;
     }
 
+    /**
+     * Returns an array of specifically selected FITS files in the UI table.
+     * If the user selected a block of 5 files, this returns those exact 5.
+     */
     public FitsFileInformation[] getSelectedFilesInformation() {
         int[] selected_rows = table.getSelectedRows();
         if (selected_rows != null && selected_rows.length > 0) {
@@ -415,6 +433,20 @@ public class MainApplicationPanel extends JPanel {
             return ret;
         }
         return null;
+    }
+
+    public FitsFileInformation getSelectedFileInformation() {
+        int row = table.getSelectedRow();
+        if (row < 0) return null;
+
+        FitsFileTableModel model = (FitsFileTableModel) table.getModel();
+        return model.getFitsFileAt(row);
+    }
+
+    public void selectFirstFileIfNoneSelected() {
+        if (table.getRowCount() > 0 && table.getSelectedRow() == -1) {
+            table.setRowSelectionInterval(0, 0);
+        }
     }
 
     public void setProgressBarWorking() {

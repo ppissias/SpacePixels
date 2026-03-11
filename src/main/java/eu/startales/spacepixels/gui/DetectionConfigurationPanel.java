@@ -13,9 +13,15 @@ package eu.startales.spacepixels.gui;
 import com.google.common.eventbus.Subscribe;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import eu.startales.spacepixels.events.AutoTuneFinishedEvent;
+import eu.startales.spacepixels.events.AutoTuneStartedEvent;
 import eu.startales.spacepixels.events.FitsImportFinishedEvent;
+import eu.startales.spacepixels.tasks.AutoTuneTask;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.ImageFrame;
+import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 import eu.startales.spacepixels.util.*;
+import nom.tam.fits.Fits;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -24,6 +30,8 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DetectionConfigurationPanel extends JPanel {
 
@@ -62,6 +70,9 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private final JButton previewBtn = new JButton("Preview Tuning Mask");
 
+    // --- NEW: AUTO-TUNE BUTTON ---
+    private final JButton autoTuneBtn = new JButton("Auto-Tune Settings");
+
     public DetectionConfigurationPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
         // 1. Load the JTransient config before building the UI
@@ -95,18 +106,61 @@ public class DetectionConfigurationPanel extends JPanel {
         saveBtn.setToolTipText("Save these parameters as the default for future startups.");
         saveBtn.addActionListener(e -> saveJTransientConfig());
 
-        // --- NEW: PREVIEW BUTTON ---
-
         previewBtn.setToolTipText("Run extraction on the selected frame with current settings and show the exact pixel mask.");
         previewBtn.addActionListener(e -> previewManager.showPreview(getJTransientConfig()));
 
+        // --- AUTO-TUNE ACTION LISTENER ---
+        autoTuneBtn.setToolTipText("Mathematically sweeps settings to find the optimal signal-to-noise ratio for the current image sequence.");
+        autoTuneBtn.addActionListener(e -> runAutoTuner());
+        // Disabled until files are actually loaded and are monochrome
+        autoTuneBtn.setEnabled(false);
+
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         bottomPanel.setBorder(new EmptyBorder(10, 0, 0, 0));
-        bottomPanel.add(previewBtn); // Added here!
+
+        // Add all buttons
+        bottomPanel.add(autoTuneBtn);
+        bottomPanel.add(previewBtn);
         bottomPanel.add(saveBtn);
         bottomPanel.add(applyBtn);
+
         add(bottomPanel, BorderLayout.SOUTH);
     }
+
+// =========================================================================
+    // JTRANSIENT AUTO-TUNER LOGIC (EventBus Driven)
+    // =========================================================================
+
+    private void runAutoTuner() {
+        // --- THE SMART FALLBACK LOGIC ---
+        // 1. First, see if the user specifically highlighted a range of files in the UI
+        FitsFileInformation[] selectedFiles = mainAppWindow.getMainApplicationPanel().getSelectedFilesInformation();
+        FitsFileInformation[] poolToUse;
+
+        if (selectedFiles != null && selectedFiles.length >= 5) {
+            poolToUse = selectedFiles;
+            System.out.println("Auto-Tuning using user's explicit selection of " + poolToUse.length + " frames.");
+        } else {
+            // 2. If they didn't, fall back to all imported files
+            poolToUse = mainAppWindow.getMainApplicationPanel().getImportedFiles();
+            System.out.println("Auto-Tuning using entire imported sequence.");
+        }
+
+        if (poolToUse == null || poolToUse.length < 5) {
+            JOptionPane.showMessageDialog(this, "You need at least 5 monochrome frames available to run the Auto-Tuner.", "Insufficient Data", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Apply current UI settings to memory to act as the baseline
+        applySettingsToMemory();
+
+        // Dispatch the task to the background thread via the EventBus pattern
+        AutoTuneTask tuneTask = new AutoTuneTask(mainAppWindow.getEventBus(), poolToUse, jTransientConfig);
+        new Thread(tuneTask).start();
+    }
+
+
+
 
     // =========================================================================
     // JTRANSIENT JSON LOAD/SAVE LOGIC
@@ -440,11 +494,82 @@ public class DetectionConfigurationPanel extends JPanel {
 
                 if (!existsColor) {
                     previewBtn.setEnabled(true);
+
+                    // --- NEW: Enable the Auto-Tune button if we have enough frames! ---
+                    if (filesInfo.length >= 5) {
+                        autoTuneBtn.setEnabled(true);
+                    } else {
+                        autoTuneBtn.setEnabled(false);
+                    }
                 } else {
                     previewBtn.setEnabled(false);
+                    autoTuneBtn.setEnabled(false);
                 }
             }
         });
     }
-}
 
+    @Subscribe
+    public void onAutoTuneStarted(AutoTuneStartedEvent event) {
+        EventQueue.invokeLater(() -> {
+            autoTuneBtn.setEnabled(false);
+            autoTuneBtn.setText("Tuning... Please Wait");
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        });
+    }
+
+    @Subscribe
+    public void onAutoTuneFinished(AutoTuneFinishedEvent event) {
+        EventQueue.invokeLater(() -> {
+            // Unlock UI
+            autoTuneBtn.setEnabled(true);
+            autoTuneBtn.setText("Auto-Tune Settings");
+            setCursor(Cursor.getDefaultCursor());
+
+            if (event.isSuccess() && event.getResult() != null) {
+                JTransientAutoTuner.AutoTunerResult result = event.getResult();
+
+                // Physically move the sliders
+                updateSpinnersFromConfig(result.optimizedConfig);
+
+                String summary = String.format(
+                        "Auto-Tuning Complete!\n\n" +
+                                "Winning Settings Found:\n" +
+                                "• Detection Sigma: %.1f\n" +
+                                "• Grow Sigma: %.1f\n" +
+                                "• Min Pixels: %d\n" +
+                                "• Max Star Jitter: %.2f px\n" +
+                                "• Streak Min Elongation: %.2f\n\n" +
+                                "Telemetry: Extracted %d stable stars with a %.1f%% noise ratio.",
+                        result.optimizedConfig.detectionSigmaMultiplier,
+                        result.optimizedConfig.growSigmaMultiplier,
+                        result.optimizedConfig.minDetectionPixels,
+                        result.optimizedConfig.maxStarJitter,
+                        result.optimizedConfig.streakMinElongation,
+                        result.bestStarCount,
+                        (result.bestTransientRatio * 100)
+                );
+
+                JOptionPane.showMessageDialog(DetectionConfigurationPanel.this, summary, "Auto-Tuner Success", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(DetectionConfigurationPanel.this, "Auto-Tuning failed: " + event.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+    }
+
+    /**
+     * Helper method to physically move the UI sliders to match a provided config.
+     */
+    private void updateSpinnersFromConfig(DetectionConfig config) {
+        spinDetectionSigma.setValue(config.detectionSigmaMultiplier);
+        spinGrowSigma.setValue(config.growSigmaMultiplier);
+        spinMinPixels.setValue(config.minDetectionPixels);
+        spinStarJitter.setValue(config.maxStarJitter);
+        spinStreakMinElong.setValue(config.streakMinElongation);
+
+        // Push the visual changes to the underlying memory state immediately
+        applySettingsToMemory();
+    }
+
+
+}
