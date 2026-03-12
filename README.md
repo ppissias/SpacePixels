@@ -68,7 +68,7 @@ Therefore, **SpacePixels requires perfectly aligned (registered) and calibrated 
 
 You can download the latest release from the link below:
 
-[SpacePixels 2026.03-beta-1](https://github.com/ppissias/SpacePixels/releases/tag/2026.03-beta1)
+[SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases)
 
 You need to have Java version 21 installed, simply unzip, go to the bin folder and run the application by executing SpacePixels.bat (Windows) or SpacePixels (Linux / Mac)
 
