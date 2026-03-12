@@ -43,7 +43,9 @@ public class MainApplicationPanel extends JPanel {
     private final JButton showSolvedImageButton = new JButton("show solved image");
     private final JButton solveButton = new JButton("Solve");
     private final JButton detectSingleButton = new JButton("Detect Objects (Single Image)");
-    private final JButton detectBatchButton = new JButton("Detect Objects (Entire Set)");
+    private final JButton detectBatchButton = new JButton("Detect Moving Objects (Entire Set)");
+    private final JButton detectSlowBatchButton = new JButton("Detect Slow Movers (Iterative)");
+
     private final JLabel statusLabel = new JLabel(" Ready");
 
     private volatile boolean containsColorImages = true;
@@ -107,6 +109,11 @@ public class MainApplicationPanel extends JPanel {
         detectBatchButton.setToolTipText("Detect objects in all imported monochrome images");
         detectBatchButton.setEnabled(false);
         row2.add(detectBatchButton);
+
+        // Add the new button to the UI
+        detectSlowBatchButton.setToolTipText("Runs multiple passes with maximally spaced frames to find extremely slow-moving objects.");
+        detectSlowBatchButton.setEnabled(false);
+        row2.add(detectSlowBatchButton);
 
         progressBar.setEnabled(true);
         progressBar.setPreferredSize(new Dimension(150, 20));
@@ -268,6 +275,15 @@ public class MainApplicationPanel extends JPanel {
             )).start();
         });
 
+        // Wire up the new button to the new task
+        detectSlowBatchButton.addActionListener(e -> {
+            new Thread(new IterativeDetectionTask(
+                    mainAppWindow.getEventBus(),
+                    mainAppWindow.getImageProcessing(),
+                    mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
+            )).start();
+        });
+
         astapSolveCheckbox.addActionListener(e -> {
             if (astapSolveCheckbox.isSelected()) {
                 astrometrynetSolveCheckbox.setSelected(false);
@@ -381,11 +397,14 @@ public class MainApplicationPanel extends JPanel {
             convertMonoButton.setEnabled(true);
             detectSingleButton.setEnabled(false);
             detectBatchButton.setEnabled(false);
+            detectSlowBatchButton.setEnabled(false);
         } else {
             ApplicationWindow.logger.info("All images are Monochrome. Enabling 'Detect Objects'.");
             convertMonoButton.setEnabled(false);
             detectSingleButton.setEnabled(true);
             detectBatchButton.setEnabled(true);
+            detectSlowBatchButton.setEnabled(true);
+
         }
     }
 
@@ -470,6 +489,7 @@ public class MainApplicationPanel extends JPanel {
         this.solveButton.setEnabled(false);
         this.detectSingleButton.setEnabled(false);
         this.detectBatchButton.setEnabled(false);
+        this.detectSlowBatchButton.setEnabled(false);
 
         mainAppWindow.setMenuState(false);
         mainAppWindow.getTabbedPane().setEnabledAt(1, false);
@@ -488,6 +508,7 @@ public class MainApplicationPanel extends JPanel {
         if (!containsColorImages) {
             this.detectSingleButton.setEnabled(true);
             this.detectBatchButton.setEnabled(true);
+            this.detectSlowBatchButton.setEnabled(true);
         }
 
         mainAppWindow.setMenuState(true);
@@ -505,6 +526,7 @@ public class MainApplicationPanel extends JPanel {
         this.solveButton.setEnabled(false);
         this.detectSingleButton.setEnabled(false);
         this.detectBatchButton.setEnabled(false);
+        this.detectSlowBatchButton.setEnabled(false);
 
         mainAppWindow.setMenuState(false);
         mainAppWindow.getTabbedPane().setEnabledAt(1, false);
@@ -523,6 +545,8 @@ public class MainApplicationPanel extends JPanel {
         if (!containsColorImages) {
             this.detectSingleButton.setEnabled(true);
             this.detectBatchButton.setEnabled(true);
+            this.detectSlowBatchButton.setEnabled(true);
+
         }
 
         mainAppWindow.setMenuState(true);
@@ -539,6 +563,7 @@ public class MainApplicationPanel extends JPanel {
         this.solveButton.setEnabled(false);
         this.detectSingleButton.setEnabled(false);
         this.detectBatchButton.setEnabled(false);
+        this.detectSlowBatchButton.setEnabled(false);
 
         mainAppWindow.setMenuState(false);
         mainAppWindow.getTabbedPane().setEnabledAt(1, false);
@@ -556,6 +581,7 @@ public class MainApplicationPanel extends JPanel {
         if (!containsColorImages) {
             this.detectSingleButton.setEnabled(true);
             this.detectBatchButton.setEnabled(true);
+            this.detectSlowBatchButton.setEnabled(true);
         }
 
         mainAppWindow.setMenuState(true);
@@ -565,8 +591,9 @@ public class MainApplicationPanel extends JPanel {
     }
 
     public void setDetectionEnabled() {
-        detectSingleButton.setEnabled(true);
-        detectBatchButton.setEnabled(true);
+        this.detectSingleButton.setEnabled(true);
+        this.detectBatchButton.setEnabled(true);
+        this.detectSlowBatchButton.setEnabled(true);
     }
 
 
@@ -793,16 +820,21 @@ public class MainApplicationPanel extends JPanel {
 
     private void promptUserToOpenReport(File reportFile) {
         if (reportFile != null && reportFile.exists()) {
+
+            String message = reportFile.isDirectory()
+                    ? "Iterative pipeline completed.\n\nWould you like to open the results folder to view the separate reports?"
+                    : "Detection pipeline completed successfully.\n\nWould you like to open the generated HTML report?";
+
             int response = JOptionPane.showConfirmDialog(
                     null,
-                    "Detection pipeline completed successfully.\n\nWould you like to open the generated HTML report?",
+                    message,
                     "Pipeline Complete",
                     JOptionPane.YES_NO_OPTION,
                     JOptionPane.QUESTION_MESSAGE
             );
 
             if (response == JOptionPane.YES_OPTION) {
-                openHtmlReport(reportFile);
+                openHtmlReport(reportFile); // This method works for both files and directories!
             }
         }
     }

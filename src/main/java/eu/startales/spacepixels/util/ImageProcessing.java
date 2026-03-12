@@ -222,6 +222,104 @@ public class ImageProcessing {
         return null;
     }
 
+    // =========================================================================
+    // ITERATIVE SLOW-MOVER PIPELINE
+    // =========================================================================
+
+    public File detectSlowObjectsIterative(DetectionConfig config, java.util.function.IntPredicate safetyPrompt) throws Exception {
+        long startTime = System.currentTimeMillis();
+
+        File[] fitsFileInformation = getFitsFilesDetails();
+        int numFrames = fitsFileInformation.length;
+
+        if (numFrames < 5) {
+            System.out.println("Not enough frames for iterative detection. Falling back to standard pipeline.");
+            return detectObjects(config, safetyPrompt);
+        }
+
+        System.out.println("\n--- Loading " + numFrames + " FITS files for ITERATIVE PIPELINE ---");
+
+        // 1. Load all frames into RAM once to save massive Disk I/O
+        List<ImageFrame> allFrames = new ArrayList<>();
+        List<short[][]> rawFramesForExport = new ArrayList<>();
+
+        for (int i = 0; i < numFrames; i++) {
+            File currentFile = fitsFileInformation[i];
+            Fits fitsFile = new Fits(currentFile);
+            Object kernel = fitsFile.getHDU(0).getKernel();
+
+            if (!(kernel instanceof short[][])) {
+                fitsFile.close();
+                throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString());
+            }
+
+            short[][] imageData = (short[][]) kernel;
+            allFrames.add(new ImageFrame(i, currentFile.getName(), imageData));
+            rawFramesForExport.add(imageData);
+            fitsFile.close();
+        }
+
+        // 2. Create the Master Directory for this iterative run
+        File parentDir = fitsFileInformation[0].getParentFile();
+        if (parentDir == null) {
+            parentDir = new File(System.getProperty("user.dir"));
+        }
+        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        File masterDir = new File(parentDir, "iterative_detections_" + timestamp);
+
+        if (!masterDir.exists()) {
+            masterDir.mkdirs();
+        }
+
+        // 3. The Iteration Loop (5, 10, 15... up to numFrames)
+        for (int k = 5; k <= numFrames; k += 5) {
+            System.out.println("\n>>> RUNNING ITERATION: " + k + " Maximally Spaced Frames");
+
+            List<ImageFrame> spacedSubset = new ArrayList<>();
+            for (int i = 0; i < k; i++) {
+                // Calculate the maximally spaced index
+                int index = (int) Math.round(i * (numFrames - 1) / (double) (k - 1));
+                spacedSubset.add(allFrames.get(index));
+            }
+
+            // Run the math for this subset
+            JTransientEngine engine = new JTransientEngine();
+            PipelineResult result = engine.runPipeline(spacedSubset, config);
+            engine.shutdown();
+
+            // Check Safety Valve for this specific run
+            if (safetyPrompt != null && !safetyPrompt.test(result.tracks.size())) {
+                System.out.println("Iteration " + k + " aborted by UI callback due to high track count. Stopping further iterations.");
+                break; // Stop the loop, but keep the master directory with whatever finished previously!
+            }
+
+            // Create a specific sub-directory for this iteration
+            File iterationDir = new File(masterDir, k + "_frames");
+            iterationDir.mkdirs();
+
+            System.out.println("Exporting " + k + "-frame visualization to: " + iterationDir.getName());
+
+            try {
+                // Export this specific run's report into its own folder
+                ImageDisplayUtils.exportTrackVisualizations(
+                        result.tracks,
+                        result.telemetry.trackerTelemetry,
+                        rawFramesForExport, // The exporter will pull the correct original frames!
+                        iterationDir,
+                        result.telemetry);
+
+            } catch (IOException e) {
+                System.err.println("Failed to export visualization for iteration " + k + ": " + e.getMessage());
+            }
+        }
+
+        System.out.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
+
+        // Return the Master Directory.
+        // SpacePixels will naturally open this folder in the OS file explorer!
+        return masterDir;
+    }
+
     /**
      * Returns the FITS file information using multi-threaded, header-only extraction for extreme speed.
      */

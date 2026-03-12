@@ -519,7 +519,7 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     @Subscribe
-    public void onAutoTuneFinished(AutoTuneFinishedEvent event) {
+    public void onAutoTuneFinished(eu.startales.spacepixels.events.AutoTuneFinishedEvent event) {
         EventQueue.invokeLater(() -> {
             // Unlock UI
             autoTuneBtn.setEnabled(true);
@@ -529,30 +529,40 @@ public class DetectionConfigurationPanel extends JPanel {
             if (event.isSuccess() && event.getResult() != null) {
                 JTransientAutoTuner.AutoTunerResult result = event.getResult();
 
-                // Physically move the sliders
-                updateSpinnersFromConfig(result.optimizedConfig);
+                if (result.success) { // <-- Only proceed if the strict math succeeded!
 
-                String summary = String.format(
-                        "Auto-Tuning Complete!\n\n" +
-                                "Winning Settings Found:\n" +
-                                "• Detection Sigma: %.1f\n" +
-                                "• Grow Sigma: %.1f\n" +
-                                "• Min Pixels: %d\n" +
-                                "• Max Star Jitter: %.2f px\n" +
-                                "• Streak Min Elongation: %.2f\n\n" +
-                                "Telemetry: Extracted %d stable stars with a %.1f%% noise ratio.",
-                        result.optimizedConfig.detectionSigmaMultiplier,
-                        result.optimizedConfig.growSigmaMultiplier,
-                        result.optimizedConfig.minDetectionPixels,
-                        result.optimizedConfig.maxStarJitter,
-                        result.optimizedConfig.streakMinElongation,
-                        result.bestStarCount,
-                        (result.bestTransientRatio * 100)
-                );
+                    // Physically move the sliders
+                    updateSpinnersFromConfig(result.optimizedConfig);
 
-                JOptionPane.showMessageDialog(DetectionConfigurationPanel.this, summary, "Auto-Tuner Success", JOptionPane.INFORMATION_MESSAGE);
+                    String summary = String.format(
+                            "Auto-Tuning Complete!\n\n" +
+                                    "Winning Settings Found:\n" +
+                                    "• Detection Sigma: %.1f\n" +
+                                    "• Grow Sigma: %.1f\n" +
+                                    "• Min Pixels: %d\n" +
+                                    "• Max Star Jitter: %.2f px\n" +
+                                    "• Streak Min Elongation: %.2f\n\n" +
+                                    "Telemetry: Extracted %d stable stars with a %.1f%% noise ratio.",
+                            result.optimizedConfig.detectionSigmaMultiplier,
+                            result.optimizedConfig.growSigmaMultiplier,
+                            result.optimizedConfig.minDetectionPixels,
+                            result.optimizedConfig.maxStarJitter,
+                            result.optimizedConfig.streakMinElongation,
+                            result.bestStarCount,
+                            (result.bestTransientRatio * 100)
+                    );
+
+                    JOptionPane.showMessageDialog(DetectionConfigurationPanel.this, summary, "Auto-Tuner Success", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    // Show a helpful warning explaining WHY it didn't change the settings
+                    JOptionPane.showMessageDialog(DetectionConfigurationPanel.this,
+                            "The Auto-Tuner could not find a stable star field that meets the strict noise limits.\n" +
+                                    "This usually happens if the images are too noisy, heavily clouded, or not aligned.\n\n" +
+                                    "Falling back to your current manual settings.",
+                            "Auto-Tuner Failed", JOptionPane.WARNING_MESSAGE);
+                }
             } else {
-                JOptionPane.showMessageDialog(DetectionConfigurationPanel.this, "Auto-Tuning failed: " + event.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(DetectionConfigurationPanel.this, "Auto-Tuning encountered a fatal error: " + event.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
         });
     }
