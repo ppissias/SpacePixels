@@ -27,7 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-public class ImageDisplayUtils {
+public class ImageDisplayUtilsOrig {
 
     // =================================================================
     // CONFIGURATION PARAMETERS
@@ -337,7 +337,7 @@ public class ImageDisplayUtils {
         return cropped;
     }
 
-    // --- SINGLE STREAK SHAPE RENDERER ---
+    // --- NEW: SINGLE STREAK SHAPE RENDERER ---
     public static BufferedImage createSingleStreakShapeImage(List<SourceExtractor.DetectedObject> points, int cropWidth, int cropHeight, int startX, int startY) {
         BufferedImage image = new BufferedImage(cropWidth, cropHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = image.createGraphics();
@@ -662,8 +662,7 @@ public class ImageDisplayUtils {
                     int startX = fixedCenterX - (trackBoxWidth / 2);
                     int startY = fixedCenterY - (trackBoxHeight / 2);
 
-                    SourceExtractor.DetectedObject pt = track.points.get(0);
-                    int frameIndex = pt.sourceFrameIndex;
+                    int frameIndex = track.points.get(0).sourceFrameIndex;
                     short[][] rawImage = rawFrames.get(frameIndex);
 
                     short[][] croppedData = robustEdgeAwareCrop(rawImage, fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
@@ -673,41 +672,10 @@ public class ImageDisplayUtils {
                     File streakFile = new File(exportDir, streakFileName);
                     saveTrackImageLossless(streakImg, streakFile);
 
-                    // --- Create Shape Map specifically for Single Streaks ---
+                    // --- NEW: Create Shape Map specifically for Single Streaks ---
                     String shapeFileName = "streak_" + streakCounter + "_shape.png";
                     BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, trackBoxWidth, trackBoxHeight, startX, startY);
                     saveTrackImageLossless(streakShapeImg, new File(exportDir, shapeFileName));
-
-                    // --- NEW: Generate 3-Frame "Before / Flash / After" GIF for High-Energy Anomalies ---
-                    String anomalyGifFileName = null;
-                    if (track.isAnomaly) {
-                        List<BufferedImage> anomalyFrames = new ArrayList<>();
-                        // Grab the frame before, the actual frame, and the frame after
-                        int[] frameSequence = {frameIndex - 1, frameIndex, frameIndex + 1};
-
-                        for (int idx : frameSequence) {
-                            if (idx >= 0 && idx < rawFrames.size()) {
-                                short[][] cData = robustEdgeAwareCrop(rawFrames.get(idx), fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
-                                BufferedImage aImg = createDisplayImage(cData);
-
-                                // Draw target crosshair so the eye knows exactly where the flash occurs
-                                Graphics2D g2d = aImg.createGraphics();
-                                int localX = (int) Math.round(pt.x - startX);
-                                int localY = (int) Math.round(pt.y - startY);
-                                g2d.setColor(Color.WHITE);
-                                g2d.setStroke(new BasicStroke(targetCircleStrokeWidth));
-                                g2d.drawOval(localX - targetCircleRadius, localY - targetCircleRadius, targetCircleRadius * 2, targetCircleRadius * 2);
-                                g2d.dispose();
-
-                                anomalyFrames.add(aImg);
-                            }
-                        }
-
-                        if (!anomalyFrames.isEmpty()) {
-                            anomalyGifFileName = "anomaly_" + streakCounter + "_anim.gif";
-                            GifSequenceWriter.saveAnimatedGif(anomalyFrames, new File(exportDir, anomalyGifFileName), gifBlinkSpeedMs);
-                        }
-                    }
 
                     String titleText = track.isAnomaly ? "High-Energy Anomaly (Optical Flash)" : "Single Streak Event #" + streakCounter;
                     String colorClass = track.isAnomaly ? "style='border-left-color: #ff3333; color: #ff3333;'" : "";
@@ -715,19 +683,14 @@ public class ImageDisplayUtils {
                     report.println("<div class='detection-card streak-title' " + colorClass + ">");
                     report.println("<div class='detection-title' " + colorClass + ">" + titleText + "</div>");
 
-                    // --- Clickable link for the single streak image, shape map, and anomaly GIF ---
+                    // --- Clickable link for the single streak image and shape map side-by-side ---
                     report.println("<div class='image-container'>");
                     report.println("<a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Streak Image' /></a>");
                     report.println("<a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Streak Shape' title='Streak Footprint' /></a>");
-
-                    // Conditionally render the Animation GIF only if it's an anomaly!
-                    if (track.isAnomaly && anomalyGifFileName != null) {
-                        report.println("<a href='" + anomalyGifFileName + "' target='_blank'><img src='" + anomalyGifFileName + "' alt='Anomaly Context Animation' title='Before / During / After' /></a>");
-                    }
-
                     report.println("</div>");
 
                     // --- Exact Coordinates for the single streak ---
+                    SourceExtractor.DetectedObject pt = track.points.get(0);
                     String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
                     report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span></li></ul></div>");
 
@@ -788,7 +751,7 @@ public class ImageDisplayUtils {
                         starCentricFrames.add(starFrameGray);
                     }
 
-                    // --- Generate the Track Shape Image ---
+                    // --- NEW: Generate the Track Shape Image ---
                     String shapeFileName = "track_" + trackCounter + "_shape.png";
                     BufferedImage shapeImg = createTrackShapeImage(track, trackBoxWidth, trackBoxHeight, startX, startY);
                     saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));

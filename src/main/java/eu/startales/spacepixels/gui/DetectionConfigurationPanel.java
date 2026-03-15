@@ -219,7 +219,6 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Shape Classification"));
         spinStreakMinElong = addRow(panel, "Streak Min Elongation", "Minimum length/width ratio required to classify a blob as a fast-moving streak.", new SpinnerNumberModel(jTransientConfig.streakMinElongation, 1.0, 999.0, 0.5));
         spinStreakMinPix = addRow(panel, "Streak Min Pixels", "Minimum number of pixels required to classify an elongated blob as a streak.", new SpinnerNumberModel(jTransientConfig.streakMinPixels, 1, 99999, 1));
-        spinPointMinPix = addRow(panel, "Point Source Min Pixels", "Minimum number of pixels to classify a blob as a standard point source (star/asteroid).", new SpinnerNumberModel(jTransientConfig.pointSourceMinPixels, 1, 99999, 1));
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Background Statistics"));
@@ -236,7 +235,6 @@ public class DetectionConfigurationPanel extends JPanel {
 
         panel.add(createSectionHeader("Phase 1 & 3: Defects & Stars"));
         spinStationaryDefect = addRow(panel, "Stationary Defect Threshold", "Max movement (px) allowed for a streak to be considered a stationary sensor defect (hot column).", new SpinnerNumberModel(jTransientConfig.stationaryDefectThreshold, 0.0, 999.0, 0.5));
-        spinReqDetToStar = addRow(panel, "Required Detections for Star", "How many frames an object must appear in the exact spot to be classified as a stationary star.", new SpinnerNumberModel(jTransientConfig.requiredDetectionsToBeStar, 2, 9999, 1));
         spinStarJitter = addRow(panel, "Base Star Jitter Radius", "Maximum distance (px) stars can wobble between frames due to seeing.", new SpinnerNumberModel(jTransientConfig.maxStarJitter, 0.5, 999.0, 0.5));
         spinStarJitterExp = addRow(panel, "Star Jitter Expansion Factor", "Multiplier for star jitter to account for long-term atmospheric wobble over the entire session.", new SpinnerNumberModel(jTransientConfig.starJitterExpansionFactor, 1.0, 99.0, 0.1));
 
@@ -394,13 +392,11 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.voidProximityRadius = ((Number) spinVoidRadius.getValue()).intValue();
             jTransientConfig.streakMinElongation = ((Number) spinStreakMinElong.getValue()).doubleValue();
             jTransientConfig.streakMinPixels = ((Number) spinStreakMinPix.getValue()).intValue();
-            jTransientConfig.pointSourceMinPixels = ((Number) spinPointMinPix.getValue()).intValue();
             jTransientConfig.bgClippingIterations = ((Number) spinBgClippingIters.getValue()).intValue();
             jTransientConfig.bgClippingFactor = ((Number) spinBgClippingFactor.getValue()).doubleValue();
 
             // --- Apply Tracker Settings to the POJO ---
             jTransientConfig.stationaryDefectThreshold = ((Number) spinStationaryDefect.getValue()).doubleValue();
-            jTransientConfig.requiredDetectionsToBeStar = ((Number) spinReqDetToStar.getValue()).intValue();
             jTransientConfig.maxStarJitter = ((Number) spinStarJitter.getValue()).doubleValue();
             jTransientConfig.starJitterExpansionFactor = ((Number) spinStarJitterExp.getValue()).doubleValue();
             jTransientConfig.predictionTolerance = ((Number) spinPredTol.getValue()).doubleValue();
@@ -526,6 +522,7 @@ public class DetectionConfigurationPanel extends JPanel {
             autoTuneBtn.setText("Auto-Tune Settings");
             setCursor(Cursor.getDefaultCursor());
 
+            System.out.println(event.getResult().telemetryReport);
             if (event.isSuccess() && event.getResult() != null) {
                 JTransientAutoTuner.AutoTunerResult result = event.getResult();
 

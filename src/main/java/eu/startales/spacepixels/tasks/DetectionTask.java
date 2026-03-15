@@ -83,7 +83,6 @@ public class DetectionTask implements Runnable {
 
                     RawImageAnnotator.drawDetections(debugImage, objects);
                     BufferedImage finalImageToDisplay = ImageDisplayUtils.createDisplayImage(debugImage);
-                    ImageDisplayUtils.analyzeFitsData(imageData);
                     selectedFitsImage.close();
 
                     // Post success for Quick Detection

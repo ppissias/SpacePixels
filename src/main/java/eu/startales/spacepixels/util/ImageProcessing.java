@@ -130,9 +130,9 @@ public class ImageProcessing {
     }
 
 
-    // =========================================================================
-    // THE MULTI-THREADED DETECTION PIPELINE
-    // =========================================================================
+// =========================================================================
+// THE MULTI-THREADED DETECTION PIPELINE
+// =========================================================================
 
     // --- UPDATED SIGNATURE: Accepts the UI callback ---
     public File detectObjects(DetectionConfig config, IntPredicate safetyPrompt) throws Exception {
@@ -173,6 +173,7 @@ public class ImageProcessing {
         // =========================================================
         System.out.println("\n--- Passing data to JTransient Engine ---");
         JTransientEngine engine = new JTransientEngine();
+        JTransientEngine.DEBUG = true;
 
         PipelineResult result = engine.runPipeline(framesForLibrary, config);
 
@@ -206,13 +207,16 @@ public class ImageProcessing {
                     System.out.println("No targets found, but generating pipeline report at: " + exportDir.getAbsolutePath());
                 }
 
-                // Pass the tracks, the telemetry, and the raw frames to the SpacePixels GIF exporter
+                // Pass the tracks, the telemetry, the raw frames, AND the new Master Data to the exporter
                 ImageDisplayUtils.exportTrackVisualizations(
                         result.tracks,
                         result.telemetry.trackerTelemetry,
                         rawFramesForExport,
+                        result.masterStackData, // <--- ADDED MASTER STACK
+                        result.masterStars,     // <--- ADDED MASTER STARS
                         exportDir,
-                        result.telemetry);
+                        result.telemetry,
+                        config);
 
                 return new File(exportDir, ImageDisplayUtils.detectionReportName);
             } catch (IOException e) {
@@ -222,9 +226,9 @@ public class ImageProcessing {
         return null;
     }
 
-    // =========================================================================
-    // ITERATIVE SLOW-MOVER PIPELINE
-    // =========================================================================
+// =========================================================================
+// ITERATIVE SLOW-MOVER PIPELINE
+// =========================================================================
 
     public File detectSlowObjectsIterative(DetectionConfig config, java.util.function.IntPredicate safetyPrompt) throws Exception {
         long startTime = System.currentTimeMillis();
@@ -300,13 +304,16 @@ public class ImageProcessing {
             System.out.println("Exporting " + k + "-frame visualization to: " + iterationDir.getName());
 
             try {
-                // Export this specific run's report into its own folder
+                // Export this specific run's report into its own folder, including Master Data
                 ImageDisplayUtils.exportTrackVisualizations(
                         result.tracks,
                         result.telemetry.trackerTelemetry,
-                        rawFramesForExport, // The exporter will pull the correct original frames!
+                        rawFramesForExport,     // The exporter will pull the correct original frames!
+                        result.masterStackData, // <--- ADDED MASTER STACK
+                        result.masterStars,     // <--- ADDED MASTER STARS
                         iterationDir,
-                        result.telemetry);
+                        result.telemetry,
+                        config);
 
             } catch (IOException e) {
                 System.err.println("Failed to export visualization for iteration " + k + ": " + e.getMessage());
@@ -319,13 +326,52 @@ public class ImageProcessing {
         // SpacePixels will naturally open this folder in the OS file explorer!
         return masterDir;
     }
+// =========================================================================
+    // UPDATED FITS FILE INFORMATION (The Import Gatekeeper)
+    // =========================================================================
 
-    /**
-     * Returns the FITS file information using multi-threaded, header-only extraction for extreme speed.
-     */
-    public FitsFileInformation[] getFitsfileInformation() throws IOException, FitsException, ConfigurationException {
+    public FitsFileInformation[] getFitsfileInformation() throws Exception {
         File[] fitsFileInformation = getFitsFilesDetails();
         int numFiles = fitsFileInformation.length;
+
+        if (numFiles == 0) return new FitsFileInformation[0];
+
+        // --- THE GATEKEEPER: Check the format of the first file ---
+        FitsFormatChecker.FitsFormat format = FitsFormatChecker.checkFormat(fitsFileInformation[0]);
+
+        if (format == FitsFormatChecker.FitsFormat.MONO_32BIT_FLOAT || format == FitsFormatChecker.FitsFormat.MONO_32BIT_INT) {
+            int choice = JOptionPane.showConfirmDialog(null,
+                    "These images appear to be 32-bit.\nSpacePixels' transient detection engine is highly optimized for 16-bit monochrome files.\n\n" +
+                            "Would you like to automatically standardize this sequence to 16-bit Mono?",
+                    "Format Conversion Required",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+
+            if (choice == JOptionPane.YES_OPTION) {
+                ApplicationWindow.logger.info("Starting 32-bit Mono to 16-bit Mono conversion...");
+                batchConvert32BitTo16Bit(fitsFileInformation, false);
+                JOptionPane.showMessageDialog(null, "Conversion Complete!\n\nThe 16-bit files have been saved in a new directory.\nPlease import the newly created directory to continue.", "Success", JOptionPane.INFORMATION_MESSAGE);
+                return new FitsFileInformation[0]; // Stop the current import
+            }
+
+        } else if (format == FitsFormatChecker.FitsFormat.COLOR_32BIT_FLOAT || format == FitsFormatChecker.FitsFormat.COLOR_32BIT_INT) {
+            int choice = JOptionPane.showConfirmDialog(null,
+                    "These images are 32-bit Color.\nSpacePixels' transient detection engine requires 16-bit monochrome files.\n\n" +
+                            "Would you like to extract the Luminance (16-bit Mono) and save a 16-bit Color version?",
+                    "Color Format Conversion Required",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+
+            if (choice == JOptionPane.YES_OPTION) {
+                ApplicationWindow.logger.info("Starting 32-bit Color to 16-bit Mono/Color conversion...");
+                batchConvert32BitTo16Bit(fitsFileInformation, true);
+                JOptionPane.showMessageDialog(null, "Conversion Complete!\n\nThe 16-bit files have been saved in new directories.\nPlease import the '_16bit_mono' directory to run detections.", "Success", JOptionPane.INFORMATION_MESSAGE);
+                return new FitsFileInformation[0]; // Stop the current import
+            }
+        } else if (format == FitsFormatChecker.FitsFormat.UNSUPPORTED) {
+            JOptionPane.showMessageDialog(null, "Unsupported FITS format detected. SpacePixels supports 16-bit and 32-bit FITS files.", "Import Error", JOptionPane.ERROR_MESSAGE);
+            return new FitsFileInformation[0];
+        }
 
         System.out.println("\n--- Fast-Loading Information for " + numFiles + " FITS files ---");
 
@@ -347,9 +393,6 @@ public class ImageProcessing {
                     int width;
                     int height;
 
-                    // --- THE FIX: HEADER-ONLY DIMENSION EXTRACTION ---
-                    // By getting the axes directly from the HDU, we completely avoid
-                    // calling getKernel() and loading gigabytes of raw pixel data into memory!
                     int[] axes = hdu.getAxes();
 
                     if (axes.length == 2) {
@@ -358,7 +401,6 @@ public class ImageProcessing {
                         width = axes[1];
                     } else if (axes.length == 3) {
                         monochromeImage = false;
-                        // In a 3D Java array [depth][height][width], dimensions are at index 1 and 2
                         height = axes[1];
                         width = axes[2];
                     } else {
@@ -367,14 +409,12 @@ public class ImageProcessing {
 
                     FitsFileInformation fileInfo = new FitsFileInformation(fpath, currentFile.getName(), monochromeImage, width, height);
 
-                    // Read the header cards
                     Cursor<String, HeaderCard> iter = fitsHeader.iterator();
                     while (iter.hasNext()) {
                         HeaderCard fitsHeaderCard = iter.next();
                         fileInfo.getFitsHeader().put(fitsHeaderCard.getKey(), fitsHeaderCard.getValue());
                     }
 
-                    // Check for existing plate solve configurations
                     PlateSolveResult previousSolveresult = readSolveResults(fpath);
                     if (previousSolveresult != null) {
                         fileInfo.setSolveResult(previousSolveresult);
@@ -383,7 +423,6 @@ public class ImageProcessing {
                     return fileInfo;
 
                 } finally {
-                    // Always ensure the file stream is closed, even if an exception occurs
                     if (fitsFile != null) {
                         fitsFile.close();
                     }
@@ -394,12 +433,8 @@ public class ImageProcessing {
         FitsFileInformation[] ret = new FitsFileInformation[numFiles];
 
         try {
-            // Execute all tasks concurrently
             List<Future<FitsFileInformation>> futures = executor.invokeAll(tasks);
-
             for (int i = 0; i < futures.size(); i++) {
-                // Since the tasks list and futures list maintain their original order,
-                // we can map them straight back into the array without needing to re-sort!
                 ret[i] = futures.get(i).get();
             }
         } catch (Exception e) {
@@ -409,6 +444,7 @@ public class ImageProcessing {
         System.out.println("Finished loading metadata for " + numFiles + " files instantly.");
         return ret;
     }
+
     // =========================================================================
     // EXISTING HELPER METHODS (Unchanged)
     // =========================================================================
@@ -705,6 +741,277 @@ public class ImageProcessing {
         return newDirFile.getAbsolutePath() + File.separator + currentFile.getName();
     }
 
+// =========================================================================
+    // 32-BIT TO 16-BIT STANDARDIZATION LOGIC
+    // =========================================================================
+
+    private void batchConvert32BitTo16Bit(File[] files, boolean isColor) throws Exception {
+        for (File file : files) {
+            ApplicationWindow.logger.info("Converting 32-bit file: " + file.getName());
+
+            // --- DEBUG: Print Original File ---
+            printFitsDebugInfo("ORIGINAL 32-BIT", file);
+
+            Fits originalFits = new Fits(file);
+            Object kernel = originalFits.getHDU(0).getKernel();
+
+            if (isColor) {
+                // 1. Convert to 16-bit Color
+                short[][][] color16 = standardizeTo16BitColor(kernel);
+                Fits colorFits = createFitsFromData(color16, originalFits);
+                String colorName = addDirectory(file, "_16bit_color");
+                writeFitsWithSuffix(colorFits, colorName, "_16bit_color");
+
+                // --- DEBUG: Print Converted Color File ---
+                String finalColorPath = colorName.substring(0, colorName.lastIndexOf(".")) + "_16bit_color.fit";
+                printFitsDebugInfo("CONVERTED 16-BIT COLOR", new File(finalColorPath));
+
+                // 2. Extract Luminance to 16-bit Mono
+                short[][] mono16 = extractLuminance(color16);
+                Fits monoFits = createFitsFromData(mono16, originalFits);
+
+                // Note: No manual header hacking needed here anymore!
+                // createFitsFromData safely handles NAXIS and NAXIS3 automatically.
+                String monoName = addDirectory(file, "_16bit_mono");
+                writeFitsWithSuffix(monoFits, monoName, "_16bit_mono");
+
+                // --- DEBUG: Print Converted Luminance File ---
+                String finalLuminancePath = monoName.substring(0, monoName.lastIndexOf(".")) + "_16bit_mono.fit";
+                printFitsDebugInfo("CONVERTED 16-BIT LUMINANCE", new File(finalLuminancePath));
+
+            } else {
+                // Convert to 16-bit Mono
+                short[][] mono16 = standardizeTo16BitMono(kernel);
+                Fits monoFits = createFitsFromData(mono16, originalFits);
+                String monoName = addDirectory(file, "_16bit_converted");
+                writeFitsWithSuffix(monoFits, monoName, "_16bit");
+
+                // --- DEBUG: Print Converted Mono File ---
+                String finalMonoPath = monoName.substring(0, monoName.lastIndexOf(".")) + "_16bit.fit";
+                printFitsDebugInfo("CONVERTED 16-BIT MONO", new File(finalMonoPath));
+            }
+            originalFits.close();
+        }
+    }
+
+    private Fits createFitsFromData(Object newData, Fits originalFits) throws FitsException, IOException {
+        Fits updatedFits = new Fits();
+        BasicHDU<?> newHDU = FitsFactory.hduFactory(newData);
+        updatedFits.addHDU(newHDU);
+
+        Header newHeader = newHDU.getHeader();
+        Header originalHeader = originalFits.getHDU(0).getHeader();
+
+        java.util.List<String> structuralKeys = java.util.Arrays.asList(
+                "SIMPLE", "BITPIX", "NAXIS", "NAXIS1", "NAXIS2", "NAXIS3",
+                "EXTEND", "BZERO", "BSCALE"
+        );
+
+        Cursor<String, HeaderCard> originalCursor = originalHeader.iterator();
+        while (originalCursor.hasNext()) {
+            HeaderCard card = originalCursor.next();
+            String key = card.getKey();
+
+            if (key != null && !structuralKeys.contains(key)) {
+                if (!newHeader.containsKey(key)) {
+                    newHeader.addLine(card);
+                }
+            }
+        }
+
+        // --- THE CRITICAL FIX ---
+        // Explicitly tell the FITS format that this signed 16-bit array
+        // actually represents unsigned 0-65535 data!
+        newHeader.addValue("BZERO", 32768.0, "offset data range to that of unsigned short");
+        newHeader.addValue("BSCALE", 1.0, "default scaling factor");
+
+        return updatedFits;
+    }
+
+// =========================================================================
+    // DEBUG: FITS VERIFICATION
+    // =========================================================================
+
+    private void printFitsDebugInfo(String label, File fitsFile) {
+        try (Fits fits = new Fits(fitsFile)) {
+            BasicHDU<?> hdu = fits.getHDU(0);
+            Header header = hdu.getHeader();
+            Object kernel = hdu.getKernel();
+
+            int bitpix = header.getIntValue("BITPIX", 0);
+            double bzero = header.getDoubleValue("BZERO", 0.0);
+            double bscale = header.getDoubleValue("BSCALE", 1.0);
+
+            double min = Double.MAX_VALUE;
+            double max = -Double.MAX_VALUE;
+
+            // Scan 2D arrays (Mono)
+            if (kernel instanceof float[][]) {
+                float[][] data = (float[][]) kernel;
+                for (float[] row : data) {
+                    for (float val : row) {
+                        if (val < min) min = val;
+                        if (val > max) max = val;
+                    }
+                }
+            } else if (kernel instanceof short[][]) {
+                short[][] data = (short[][]) kernel;
+                for (short[] row : data) {
+                    for (short val : row) {
+                        if (val < min) min = val;
+                        if (val > max) max = val;
+                    }
+                }
+            } else if (kernel instanceof int[][]) {
+                int[][] data = (int[][]) kernel;
+                for (int[] row : data) {
+                    for (int val : row) {
+                        if (val < min) min = val;
+                        if (val > max) max = val;
+                    }
+                }
+            }
+
+            System.out.println("\n--- DEBUG: " + label + " ---");
+            System.out.println("File:   " + fitsFile.getName());
+            System.out.println("BITPIX: " + bitpix);
+            System.out.println("BZERO:  " + bzero);
+            System.out.println("BSCALE: " + bscale);
+            if (min != Double.MAX_VALUE) {
+                System.out.println("Raw Min Value: " + min);
+                System.out.println("Raw Max Value: " + max);
+                // Calculate what the true value is after BZERO/BSCALE are applied by a viewer
+                System.out.println("True Visual Min: " + ((min * bscale) + bzero));
+                System.out.println("True Visual Max: " + ((max * bscale) + bzero));
+            } else {
+                System.out.println("(3D Color array, skipping min/max scan for brevity)");
+            }
+            System.out.println("-----------------------------------");
+
+        } catch (Exception e) {
+            System.err.println("Debug read failed for " + fitsFile.getName() + ": " + e.getMessage());
+        }
+    }
+
+    private short[][] standardizeTo16BitMono(Object kernel) throws IOException {
+        if (kernel instanceof float[][]) {
+            float[][] floatData = (float[][]) kernel;
+            int height = floatData.length;
+            int width = floatData[0].length;
+            short[][] shortData = new short[height][width];
+
+            float maxVal = 0.0f;
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    if (floatData[y][x] > maxVal) maxVal = floatData[y][x];
+                }
+            }
+            float scaleFactor = (maxVal <= 1.0f && maxVal > 0.0f) ? 65535.0f : 1.0f;
+
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    float trueVal = floatData[y][x] * scaleFactor;
+                    if (trueVal < 0) trueVal = 0;
+                    if (trueVal > 65535) trueVal = 65535;
+
+                    // The FITS Shift: Map 0...65535 down to -32768...32767
+                    int shiftedVal = Math.round(trueVal) - 32768;
+                    shortData[y][x] = (short) shiftedVal;
+                }
+            }
+            return shortData;
+        } else if (kernel instanceof int[][]) {
+            int[][] intData = (int[][]) kernel;
+            int height = intData.length;
+            int width = intData[0].length;
+            short[][] shortData = new short[height][width];
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int trueVal = intData[y][x];
+                    if (trueVal < 0) trueVal = 0;
+                    if (trueVal > 65535) trueVal = 65535;
+
+                    // The FITS Shift
+                    shortData[y][x] = (short) (trueVal - 32768);
+                }
+            }
+            return shortData;
+        }
+        throw new IOException("Unsupported FITS format for Mono Standardization");
+    }
+
+    private short[][][] standardizeTo16BitColor(Object kernel) throws IOException {
+        if (kernel instanceof float[][][]) {
+            float[][][] floatData = (float[][][]) kernel;
+            int depth = floatData.length;
+            int height = floatData[0].length;
+            int width = floatData[0][0].length;
+            short[][][] shortData = new short[depth][height][width];
+
+            float maxVal = 0.0f;
+            for (int z = 0; z < depth; z++) {
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        if (floatData[z][y][x] > maxVal) maxVal = floatData[z][y][x];
+                    }
+                }
+            }
+            float scaleFactor = (maxVal <= 1.0f && maxVal > 0.0f) ? 65535.0f : 1.0f;
+
+            for (int z = 0; z < depth; z++) {
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        float trueVal = floatData[z][y][x] * scaleFactor;
+                        if (trueVal < 0) trueVal = 0;
+                        if (trueVal > 65535) trueVal = 65535;
+
+                        // The FITS Shift
+                        int shiftedVal = Math.round(trueVal) - 32768;
+                        shortData[z][y][x] = (short) shiftedVal;
+                    }
+                }
+            }
+            return shortData;
+        } else if (kernel instanceof int[][][]) {
+            int[][][] intData = (int[][][]) kernel;
+            int depth = intData.length;
+            int height = intData[0].length;
+            int width = intData[0][0].length;
+            short[][][] shortData = new short[depth][height][width];
+            for (int z = 0; z < depth; z++) {
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        int trueVal = intData[z][y][x];
+                        if (trueVal < 0) trueVal = 0;
+                        if (trueVal > 65535) trueVal = 65535;
+
+                        // The FITS Shift
+                        shortData[z][y][x] = (short) (trueVal - 32768);
+                    }
+                }
+            }
+            return shortData;
+        }
+        throw new IOException("Unsupported FITS format for Color Standardization");
+    }
+
+    private short[][] extractLuminance(short[][][] color16) {
+        int height = color16[0].length;
+        int width = color16[0][0].length;
+        short[][] monoData = new short[height][width];
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int r = color16[0][y][x] & 0xFFFF; // Prevent signed negative issues during math
+                int g = color16[1][y][x] & 0xFFFF;
+                int b = color16[2][y][x] & 0xFFFF;
+                int average = (r + g + b) / 3;
+                monoData[y][x] = (short) average;
+            }
+        }
+        return monoData;
+    }
+
     private Object convertToMono(Object kernelData) throws FitsException {
         if (kernelData instanceof short[][][]) {
             short[][][] data = (short[][][]) kernelData;
@@ -722,40 +1029,8 @@ public class ImageProcessing {
             }
             return monoData;
 
-        } else if (kernelData instanceof int[][][]) {
-            int[][][] data = (int[][][]) kernelData;
-            int[][] monoData = new int[data[0].length][data[0][0].length];
-
-            for (int i = 0; i < data[0].length; i++) {
-                for (int j = 0; j < data[0][i].length; j++) {
-                    int val1 = data[0][i][j];
-                    int val2 = data[1][i][j];
-                    int val3 = data[2][i][j];
-
-                    long average = ((val1 + val2 + val3) / 3);
-                    monoData[i][j] = (int) average;
-                }
-            }
-            return monoData;
-
-        } else if (kernelData instanceof float[][][]) {
-            float[][][] data = (float[][][]) kernelData;
-            float[][] monoData = new float[data[0].length][data[0][0].length];
-
-            for (int i = 0; i < data.length; i++) {
-                for (int j = 0; j < data[i].length; j++) {
-                    float val1 = data[0][i][j];
-                    float val2 = data[1][i][j];
-                    float val3 = data[2][i][j];
-
-                    double average = ((val1 + val2 + val3) / 3);
-                    monoData[i][j] = (float) average;
-                }
-            }
-            return monoData;
-
         } else {
-            throw new FitsException("Cannot understand file, it has a type=" + kernelData.getClass().getName());
+            throw new FitsException("Cannot convert to mono. Expected 16-bit color (short[][][]), but received type=" + kernelData.getClass().getName());
         }
     }
 

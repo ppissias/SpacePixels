@@ -150,17 +150,6 @@ public class ApplicationWindow {
                 tabbedPane.setEnabledAt(2, true);
                 tabbedPane.setEnabledAt(3, true);
 
-                boolean existsColor = false;
-                for (FitsFileInformation fitsFile: filesInfo) {
-                    if (!fitsFile.isMonochrome()) {
-                        existsColor = true;
-                        break;
-                    }
-                }
-
-                if (!existsColor) {
-                    mainApplicationPanel.setDetectionEnabled();
-                }
                 configurationApplicationPanel.refreshComponents();
             } else {
                 // Handle Error

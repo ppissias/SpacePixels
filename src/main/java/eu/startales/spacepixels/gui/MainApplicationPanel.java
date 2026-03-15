@@ -24,6 +24,8 @@ import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.eventbus.Subscribe;
@@ -47,6 +49,8 @@ public class MainApplicationPanel extends JPanel {
     private final JButton detectSlowBatchButton = new JButton("Detect Slow Movers (Iterative)");
 
     private final JLabel statusLabel = new JLabel(" Ready");
+    // Map to hold the state of UI components
+    private final Map<Component, Boolean> savedComponentStates = new HashMap<>();
 
     private volatile boolean containsColorImages = true;
 
@@ -395,16 +399,11 @@ public class MainApplicationPanel extends JPanel {
         if (containsColorImages) {
             ApplicationWindow.logger.info("Color images detected. Enabling 'Batch Convert to Mono'.");
             convertMonoButton.setEnabled(true);
-            detectSingleButton.setEnabled(false);
-            detectBatchButton.setEnabled(false);
-            detectSlowBatchButton.setEnabled(false);
+            setDetectionButtonsDisabled();
         } else {
             ApplicationWindow.logger.info("All images are Monochrome. Enabling 'Detect Objects'.");
             convertMonoButton.setEnabled(false);
-            detectSingleButton.setEnabled(true);
-            detectBatchButton.setEnabled(true);
-            detectSlowBatchButton.setEnabled(true);
-
+            setDetectionButtonsEnabled();
         }
     }
 
@@ -480,123 +479,94 @@ public class MainApplicationPanel extends JPanel {
         stretchButton.setEnabled(state);
     }
 
-    private void disableControlsSolving() {
-        this.blinkButton.setEnabled(false);
-        this.showSolvedImageButton.setEnabled(false);
-        this.stretchButton.setEnabled(false);
-        this.convertMonoButton.setEnabled(false);
-        this.table.setEnabled(false);
-        this.solveButton.setEnabled(false);
-        this.detectSingleButton.setEnabled(false);
-        this.detectBatchButton.setEnabled(false);
-        this.detectSlowBatchButton.setEnabled(false);
 
+
+    /**
+     * Restores all components to their exact state before lockUI() was called.
+     */
+    private void unlockUI() {
+        for (Map.Entry<Component, Boolean> entry : savedComponentStates.entrySet()) {
+            entry.getKey().setEnabled(entry.getValue());
+        }
+        savedComponentStates.clear();
+
+        // Restore external main window controls
+        mainAppWindow.setMenuState(true);
+        mainAppWindow.getTabbedPane().setEnabledAt(1, true);
+        mainAppWindow.getTabbedPane().setEnabledAt(2, true);
+        mainAppWindow.getTabbedPane().setEnabledAt(3, true);
+    }
+
+    /**
+     * Saves the current enabled state of all components in this panel,
+     * then disables them to block user input.
+     */
+    private void lockUI() {
+        savedComponentStates.clear();
+        saveAndDisableRecursive(this);
+
+        // Also handle your external main window controls here
         mainAppWindow.setMenuState(false);
         mainAppWindow.getTabbedPane().setEnabledAt(1, false);
         mainAppWindow.getTabbedPane().setEnabledAt(2, false);
         mainAppWindow.getTabbedPane().setEnabledAt(3, false);
+    }
+
+
+    /**
+     * Recursively traverses the container, saving and disabling components.
+     */
+    private void saveAndDisableRecursive(Container container) {
+        for (Component c : container.getComponents()) {
+            // Save the current state
+            savedComponentStates.put(c, c.isEnabled());
+
+            // Disable the component
+            c.setEnabled(false);
+
+            // If it's a container (like a JPanel), go deeper
+            if (c instanceof Container) {
+                saveAndDisableRecursive((Container) c);
+            }
+        }
+    }
+
+
+    private void disableControlsSolving() {
+        lockUI();
     }
 
     private void enableControlsSolvingFinished() {
-        this.blinkButton.setEnabled(false);
-        this.showSolvedImageButton.setEnabled(false);
-        this.stretchButton.setEnabled(true);
-        this.convertMonoButton.setEnabled(true);
-        this.table.setEnabled(true);
-        this.solveButton.setEnabled(false);
-
-        if (!containsColorImages) {
-            this.detectSingleButton.setEnabled(true);
-            this.detectBatchButton.setEnabled(true);
-            this.detectSlowBatchButton.setEnabled(true);
-        }
-
-        mainAppWindow.setMenuState(true);
-        mainAppWindow.getTabbedPane().setEnabledAt(1, true);
-        mainAppWindow.getTabbedPane().setEnabledAt(2, true);
-        mainAppWindow.getTabbedPane().setEnabledAt(3, true);
+        unlockUI();
     }
 
     private void disableControlsProcessing() {
-        this.blinkButton.setEnabled(false);
-        this.showSolvedImageButton.setEnabled(false);
-        this.stretchButton.setEnabled(false);
-        this.convertMonoButton.setEnabled(false);
-        this.table.setEnabled(false);
-        this.solveButton.setEnabled(false);
-        this.detectSingleButton.setEnabled(false);
-        this.detectBatchButton.setEnabled(false);
-        this.detectSlowBatchButton.setEnabled(false);
-
-        mainAppWindow.setMenuState(false);
-        mainAppWindow.getTabbedPane().setEnabledAt(1, false);
-        mainAppWindow.getTabbedPane().setEnabledAt(2, false);
-        mainAppWindow.getTabbedPane().setEnabledAt(3, false);
+        lockUI();
     }
 
     private void enableControlsProcessingFinished() {
-        this.blinkButton.setEnabled(false);
-        this.showSolvedImageButton.setEnabled(false);
-        this.stretchButton.setEnabled(true);
-        this.convertMonoButton.setEnabled(true);
-        this.table.setEnabled(true);
-        this.solveButton.setEnabled(false);
-
-        if (!containsColorImages) {
-            this.detectSingleButton.setEnabled(true);
-            this.detectBatchButton.setEnabled(true);
-            this.detectSlowBatchButton.setEnabled(true);
-
-        }
-
-        mainAppWindow.setMenuState(true);
-        mainAppWindow.getTabbedPane().setEnabledAt(1, true);
-        mainAppWindow.getTabbedPane().setEnabledAt(2, true);
-        mainAppWindow.getTabbedPane().setEnabledAt(3, true);
+        unlockUI();
     }
 
     private void disableControlsBlinking() {
-        this.showSolvedImageButton.setEnabled(false);
-        this.stretchButton.setEnabled(false);
-        this.convertMonoButton.setEnabled(false);
-        this.table.setEnabled(false);
-        this.solveButton.setEnabled(false);
-        this.detectSingleButton.setEnabled(false);
-        this.detectBatchButton.setEnabled(false);
-        this.detectSlowBatchButton.setEnabled(false);
-
-        mainAppWindow.setMenuState(false);
-        mainAppWindow.getTabbedPane().setEnabledAt(1, false);
-        mainAppWindow.getTabbedPane().setEnabledAt(2, false);
-        mainAppWindow.getTabbedPane().setEnabledAt(3, false);
+        lockUI();
     }
 
     private void enableControlsProcessingBlinkingFinished() {
-        this.showSolvedImageButton.setEnabled(false);
-        this.stretchButton.setEnabled(true);
-        this.convertMonoButton.setEnabled(true);
-        this.table.setEnabled(true);
-        this.solveButton.setEnabled(false);
-
-        if (!containsColorImages) {
-            this.detectSingleButton.setEnabled(true);
-            this.detectBatchButton.setEnabled(true);
-            this.detectSlowBatchButton.setEnabled(true);
-        }
-
-        mainAppWindow.setMenuState(true);
-        mainAppWindow.getTabbedPane().setEnabledAt(1, true);
-        mainAppWindow.getTabbedPane().setEnabledAt(2, true);
-        mainAppWindow.getTabbedPane().setEnabledAt(3, true);
+        unlockUI();
     }
 
-    public void setDetectionEnabled() {
+    public void setDetectionButtonsEnabled() {
         this.detectSingleButton.setEnabled(true);
         this.detectBatchButton.setEnabled(true);
         this.detectSlowBatchButton.setEnabled(true);
     }
 
-
+    public void setDetectionButtonsDisabled() {
+        this.detectSingleButton.setEnabled(false);
+        this.detectBatchButton.setEnabled(false);
+        this.detectSlowBatchButton.setEnabled(false);
+    }
     // ==========================================
     // NEW: BLINK EVENT SUBSCRIBERS
     // ==========================================

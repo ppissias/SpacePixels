@@ -36,11 +36,11 @@ public class FitsImportTask implements Runnable {
 
         try {
             // 2. Do the heavy lifting
-            ImageProcessing preProcessing = ImageProcessing.getInstance(directory);
-            FitsFileInformation[] filesInfo = preProcessing.getFitsfileInformation();
+            ImageProcessing imgProcessing = ImageProcessing.getInstance(directory);
+            FitsFileInformation[] filesInfo = imgProcessing.getFitsfileInformation();
 
             // 3. Post success with the extracted data
-            eventBus.post(new FitsImportFinishedEvent(true, null, preProcessing, filesInfo));
+            eventBus.post(new FitsImportFinishedEvent(true, null, imgProcessing, filesInfo));
 
         } catch (Exception e) {
             ApplicationWindow.logger.log(Level.SEVERE, "Error loading FITS files", e);
