@@ -13,6 +13,8 @@ import io.github.ppissias.jplatesolve.astap.ASTAPInterface;
 import io.github.ppissias.jplatesolve.astrometrydotnet.AstrometryDotNet;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jplatesolve.astrometrydotnet.SubmitFileRequest;
+
+
 import nom.tam.fits.*;
 import nom.tam.util.Cursor;
 import org.apache.commons.configuration2.FileBasedConfiguration;
@@ -26,6 +28,7 @@ import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.PipelineResult;
+import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 
 import javax.swing.*;
 import java.awt.*;
@@ -131,11 +134,11 @@ public class ImageProcessing {
 
 
 // =========================================================================
-// THE MULTI-THREADED DETECTION PIPELINE
-// =========================================================================
+    // THE MULTI-THREADED DETECTION PIPELINE
+    // =========================================================================
 
-    // --- UPDATED SIGNATURE: Accepts the UI callback ---
-    public File detectObjects(DetectionConfig config, IntPredicate safetyPrompt) throws Exception {
+    // --- UPDATED SIGNATURE: Accepts the progressListener ---
+    public File detectObjects(DetectionConfig config, IntPredicate safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
         long startTime = System.currentTimeMillis();
 
         File[] fitsFileInformation = getFitsFilesDetails();
@@ -143,11 +146,17 @@ public class ImageProcessing {
 
         System.out.println("\n--- Loading " + numFrames + " FITS files for JTransient Engine ---");
 
-        // 1. Prepare the data bridges for JTransient and SpacePixels
         List<ImageFrame> framesForLibrary = new ArrayList<>();
         List<short[][]> rawFramesForExport = new ArrayList<>();
 
         for (int i = 0; i < numFrames; i++) {
+
+            // --- PROGRESS UPDATE: FITS Loading (0% to 20%) ---
+            if (progressListener != null) {
+                int percent = (int) (((float) i / numFrames) * 20);
+                progressListener.onProgressUpdate(percent, "Loading frame " + (i + 1) + " of " + numFrames + "...");
+            }
+
             File currentFile = fitsFileInformation[i];
             Fits fitsFile = new Fits(currentFile);
             Object kernel = fitsFile.getHDU(0).getKernel();
@@ -158,13 +167,8 @@ public class ImageProcessing {
             }
 
             short[][] imageData = (short[][]) kernel;
-
-            // Wrap the raw data for the library
             framesForLibrary.add(new ImageFrame(i, currentFile.getName(), imageData));
-
-            // Keep the raw array for GIF generation later
             rawFramesForExport.add(imageData);
-
             fitsFile.close();
         }
 
@@ -172,28 +176,37 @@ public class ImageProcessing {
         // 2. HAND OFF TO THE LIBRARY!
         // =========================================================
         System.out.println("\n--- Passing data to JTransient Engine ---");
+
+        // --- PROGRESS UPDATE: Engine Start ---
+        if (progressListener != null) {
+            progressListener.onProgressUpdate(20, "Initializing JTransient Engine...");
+        }
+
         JTransientEngine engine = new JTransientEngine();
         JTransientEngine.DEBUG = true;
 
-        PipelineResult result = engine.runPipeline(framesForLibrary, config);
+        // --- NEW: PASS THE LISTENER INTO THE ENGINE ---
+        // Note: You will need to update JTransientEngine.runPipeline to accept this 3rd argument!
+        PipelineResult result = engine.runPipeline(framesForLibrary, config, progressListener);
 
-        // Shut down the library's internal threads so they don't leak memory
         engine.shutdown();
         // =========================================================
 
-        // --- NEW: THE SAFETY VALVE CHECK ---
         if (safetyPrompt != null) {
             int trackCount = result.tracks.size();
-            // If the UI callback returns false, the user clicked "No". Abort report generation!
             if (!safetyPrompt.test(trackCount)) {
                 System.out.println("Report generation aborted by UI callback. Track count: " + trackCount);
                 return null;
             }
         }
-        // -----------------------------------
 
         // 3. Handle the results in SpacePixels
         System.out.println("\n--- PHASE 5: Exporting Visualizations ---");
+
+        // --- PROGRESS UPDATE: Exporting ---
+        if (progressListener != null) {
+            progressListener.onProgressUpdate(90, "Exporting tracks and generating HTML report...");
+        }
 
         if (fitsFileInformation.length > 0) {
             File exportDir = createDetectionsDirectory(fitsFileInformation[0]);
@@ -201,22 +214,20 @@ public class ImageProcessing {
             System.out.println("Total Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
 
             try {
-                if (!result.tracks.isEmpty()) {
-                    System.out.println("Preparing to export to: " + exportDir.getAbsolutePath());
-                } else {
-                    System.out.println("No targets found, but generating pipeline report at: " + exportDir.getAbsolutePath());
-                }
-
-                // Pass the tracks, the telemetry, the raw frames, AND the new Master Data to the exporter
                 ImageDisplayUtils.exportTrackVisualizations(
                         result.tracks,
                         result.telemetry.trackerTelemetry,
                         rawFramesForExport,
-                        result.masterStackData, // <--- ADDED MASTER STACK
-                        result.masterStars,     // <--- ADDED MASTER STARS
+                        result.masterStackData,
+                        result.masterStars,
                         exportDir,
                         result.telemetry,
                         config);
+
+                // --- PROGRESS UPDATE: Done! ---
+                if (progressListener != null) {
+                    progressListener.onProgressUpdate(100, "Finished!");
+                }
 
                 return new File(exportDir, ImageDisplayUtils.detectionReportName);
             } catch (IOException e) {
@@ -230,7 +241,8 @@ public class ImageProcessing {
 // ITERATIVE SLOW-MOVER PIPELINE
 // =========================================================================
 
-    public File detectSlowObjectsIterative(DetectionConfig config, java.util.function.IntPredicate safetyPrompt) throws Exception {
+    // --- UPDATED SIGNATURE: Accepts the progressListener ---
+    public File detectSlowObjectsIterative(DetectionConfig config, java.util.function.IntPredicate safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
         long startTime = System.currentTimeMillis();
 
         File[] fitsFileInformation = getFitsFilesDetails();
@@ -238,16 +250,22 @@ public class ImageProcessing {
 
         if (numFrames < 5) {
             System.out.println("Not enough frames for iterative detection. Falling back to standard pipeline.");
-            return detectObjects(config, safetyPrompt);
+            return detectObjects(config, safetyPrompt, progressListener);
         }
 
         System.out.println("\n--- Loading " + numFrames + " FITS files for ITERATIVE PIPELINE ---");
 
-        // 1. Load all frames into RAM once to save massive Disk I/O
         List<ImageFrame> allFrames = new ArrayList<>();
         List<short[][]> rawFramesForExport = new ArrayList<>();
 
         for (int i = 0; i < numFrames; i++) {
+
+            // --- PROGRESS UPDATE: FITS Loading (0% to 10%) ---
+            if (progressListener != null) {
+                int percent = (int) (((float) i / numFrames) * 10);
+                progressListener.onProgressUpdate(percent, "Loading frame " + (i + 1) + " into RAM...");
+            }
+
             File currentFile = fitsFileInformation[i];
             Fits fitsFile = new Fits(currentFile);
             Object kernel = fitsFile.getHDU(0).getKernel();
@@ -263,7 +281,6 @@ public class ImageProcessing {
             fitsFile.close();
         }
 
-        // 2. Create the Master Directory for this iterative run
         File parentDir = fitsFileInformation[0].getParentFile();
         if (parentDir == null) {
             parentDir = new File(System.getProperty("user.dir"));
@@ -275,42 +292,53 @@ public class ImageProcessing {
             masterDir.mkdirs();
         }
 
+        // Calculate total iterations to scale the progress bar properly
+        int totalIterations = numFrames / 5;
+        int currentIteration = 0;
+
         // 3. The Iteration Loop (5, 10, 15... up to numFrames)
         for (int k = 5; k <= numFrames; k += 5) {
             System.out.println("\n>>> RUNNING ITERATION: " + k + " Maximally Spaced Frames");
 
             List<ImageFrame> spacedSubset = new ArrayList<>();
             for (int i = 0; i < k; i++) {
-                // Calculate the maximally spaced index
                 int index = (int) Math.round(i * (numFrames - 1) / (double) (k - 1));
                 spacedSubset.add(allFrames.get(index));
             }
 
-            // Run the math for this subset
+            // --- PROGRESS UPDATE: The SCALED Listener ---
+            // We map the engine's 0-100% output to fit within this specific iteration's window (e.g., 10% to 30%)
+            final int basePercent = 10 + (int) (((float) currentIteration / totalIterations) * 80);
+            final int nextBasePercent = 10 + (int) (((float) (currentIteration + 1) / totalIterations) * 80);
+
+            final int currentK = k;
+            TransientEngineProgressListener scaledListener = (enginePercent, message) -> {
+                if (progressListener != null) {
+                    int scaledPercent = basePercent + (int) ((enginePercent / 100.0f) * (nextBasePercent - basePercent));
+                    progressListener.onProgressUpdate(scaledPercent, "Pass " + currentK + " frames: " + message);
+                }
+            };
+
             JTransientEngine engine = new JTransientEngine();
-            PipelineResult result = engine.runPipeline(spacedSubset, config);
+            // Pass the SCALED listener to the engine
+            PipelineResult result = engine.runPipeline(spacedSubset, config, scaledListener);
             engine.shutdown();
 
-            // Check Safety Valve for this specific run
             if (safetyPrompt != null && !safetyPrompt.test(result.tracks.size())) {
                 System.out.println("Iteration " + k + " aborted by UI callback due to high track count. Stopping further iterations.");
-                break; // Stop the loop, but keep the master directory with whatever finished previously!
+                break;
             }
 
-            // Create a specific sub-directory for this iteration
             File iterationDir = new File(masterDir, k + "_frames");
             iterationDir.mkdirs();
 
-            System.out.println("Exporting " + k + "-frame visualization to: " + iterationDir.getName());
-
             try {
-                // Export this specific run's report into its own folder, including Master Data
                 ImageDisplayUtils.exportTrackVisualizations(
                         result.tracks,
                         result.telemetry.trackerTelemetry,
-                        rawFramesForExport,     // The exporter will pull the correct original frames!
-                        result.masterStackData, // <--- ADDED MASTER STACK
-                        result.masterStars,     // <--- ADDED MASTER STARS
+                        rawFramesForExport,
+                        result.masterStackData,
+                        result.masterStars,
                         iterationDir,
                         result.telemetry,
                         config);
@@ -318,14 +346,19 @@ public class ImageProcessing {
             } catch (IOException e) {
                 System.err.println("Failed to export visualization for iteration " + k + ": " + e.getMessage());
             }
+
+            currentIteration++;
+        }
+
+        // --- PROGRESS UPDATE: Finished! ---
+        if (progressListener != null) {
+            progressListener.onProgressUpdate(100, "All iterative passes complete!");
         }
 
         System.out.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
-
-        // Return the Master Directory.
-        // SpacePixels will naturally open this folder in the OS file explorer!
         return masterDir;
     }
+
 // =========================================================================
     // UPDATED FITS FILE INFORMATION (The Import Gatekeeper)
     // =========================================================================

@@ -35,6 +35,9 @@ public class MainApplicationPanel extends JPanel {
     //link to main window
     private final ApplicationWindow mainAppWindow;
 
+    // --- NEW: PROGRESS DIALOG ---
+    private final ProcessingProgressDialog progressDialog;
+
     //the table
     private volatile JTable table;
 
@@ -62,6 +65,10 @@ public class MainApplicationPanel extends JPanel {
     public MainApplicationPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
         this.mainAppWindow.getEventBus().register(this);
+
+        // --- NEW: PROGRESS DIALOG INITIALIZATION ---
+        // Pass the main app frame so the dialog knows who to lock and where to center itself
+        this.progressDialog = new ProcessingProgressDialog((JFrame) mainAppWindow.getFrame());
 
         setLayout(new BorderLayout(0, 0));
 
@@ -411,10 +418,6 @@ public class MainApplicationPanel extends JPanel {
     // DATA ACCESS HELPERS (For Auto-Tuner & External Panels)
     // ==========================================
 
-    /**
-     * Returns the array of ALL successfully imported FITS files currently in the table model.
-     * Useful for the Auto-Tuner to sample the entire sequence.
-     */
     public FitsFileInformation[] getImportedFiles() {
         if (table == null || table.getModel() == null) {
             return null;
@@ -435,10 +438,6 @@ public class MainApplicationPanel extends JPanel {
         return allFiles;
     }
 
-    /**
-     * Returns an array of specifically selected FITS files in the UI table.
-     * If the user selected a block of 5 files, this returns those exact 5.
-     */
     public FitsFileInformation[] getSelectedFilesInformation() {
         int[] selected_rows = table.getSelectedRows();
         if (selected_rows != null && selected_rows.length > 0) {
@@ -479,82 +478,45 @@ public class MainApplicationPanel extends JPanel {
         stretchButton.setEnabled(state);
     }
 
-
-
-    /**
-     * Restores all components to their exact state before lockUI() was called.
-     */
     private void unlockUI() {
         for (Map.Entry<Component, Boolean> entry : savedComponentStates.entrySet()) {
             entry.getKey().setEnabled(entry.getValue());
         }
         savedComponentStates.clear();
 
-        // Restore external main window controls
         mainAppWindow.setMenuState(true);
         mainAppWindow.getTabbedPane().setEnabledAt(1, true);
         mainAppWindow.getTabbedPane().setEnabledAt(2, true);
         mainAppWindow.getTabbedPane().setEnabledAt(3, true);
     }
 
-    /**
-     * Saves the current enabled state of all components in this panel,
-     * then disables them to block user input.
-     */
     private void lockUI() {
         savedComponentStates.clear();
         saveAndDisableRecursive(this);
 
-        // Also handle your external main window controls here
         mainAppWindow.setMenuState(false);
         mainAppWindow.getTabbedPane().setEnabledAt(1, false);
         mainAppWindow.getTabbedPane().setEnabledAt(2, false);
         mainAppWindow.getTabbedPane().setEnabledAt(3, false);
     }
 
-
-    /**
-     * Recursively traverses the container, saving and disabling components.
-     */
     private void saveAndDisableRecursive(Container container) {
         for (Component c : container.getComponents()) {
-            // Save the current state
             savedComponentStates.put(c, c.isEnabled());
-
-            // Disable the component
             c.setEnabled(false);
 
-            // If it's a container (like a JPanel), go deeper
             if (c instanceof Container) {
                 saveAndDisableRecursive((Container) c);
             }
         }
     }
 
-
-    private void disableControlsSolving() {
-        lockUI();
-    }
-
-    private void enableControlsSolvingFinished() {
-        unlockUI();
-    }
-
-    private void disableControlsProcessing() {
-        lockUI();
-    }
-
-    private void enableControlsProcessingFinished() {
-        unlockUI();
-    }
-
-    private void disableControlsBlinking() {
-        lockUI();
-    }
-
-    private void enableControlsProcessingBlinkingFinished() {
-        unlockUI();
-    }
+    private void disableControlsSolving() { lockUI(); }
+    private void enableControlsSolvingFinished() { unlockUI(); }
+    private void disableControlsProcessing() { lockUI(); }
+    private void enableControlsProcessingFinished() { unlockUI(); }
+    private void disableControlsBlinking() { lockUI(); }
+    private void enableControlsProcessingBlinkingFinished() { unlockUI(); }
 
     public void setDetectionButtonsEnabled() {
         this.detectSingleButton.setEnabled(true);
@@ -567,9 +529,93 @@ public class MainApplicationPanel extends JPanel {
         this.detectBatchButton.setEnabled(false);
         this.detectSlowBatchButton.setEnabled(false);
     }
+
     // ==========================================
-    // NEW: BLINK EVENT SUBSCRIBERS
+    // EVENT SUBSCRIBERS
     // ==========================================
+
+    // --- NEW: PROGRESS DIALOG SUBSCRIBER ---
+    @Subscribe
+    public void onEngineProgressUpdate(EngineProgressUpdateEvent event) {
+        EventQueue.invokeLater(() -> {
+            if (progressDialog != null && progressDialog.isVisible()) {
+                progressDialog.updateProgress(event.getPercentage(), event.getMessage());
+            }
+        });
+    }
+
+    @Subscribe
+    public void onDetectionStarted(DetectionStartedEvent event) {
+        EventQueue.invokeLater(() -> {
+            setProgressBarWorking();
+            disableControlsProcessing();
+
+            statusLabel.setText("Object detection started...");
+
+            // --- NEW: SHOW PROGRESS DIALOG ---
+            // Because JDialog.setVisible(true) is blocking when modal, it acts as its own event loop.
+            // Tasks wrapped in invokeLater() will still execute behind the scenes!
+            progressDialog.updateProgress(0, "Initializing object detection...");
+            progressDialog.setVisible(true);
+        });
+    }
+
+    @Subscribe
+    public void onDetectionFinished(DetectionFinishedEvent event) {
+        EventQueue.invokeLater(() -> {
+
+            // --- NEW: HIDE PROGRESS DIALOG ---
+            progressDialog.setVisible(false);
+
+            setProgressBarIdle();
+            enableControlsProcessingFinished();
+            statusLabel.setText("Object detection completed");
+
+            if (event.isSuccess()) {
+                if (!event.isQuickDetection()) {
+                    promptUserToOpenReport(event.getReportFilename());
+                }
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Detection failed: " + event.getErrorMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE);
+            }
+        });
+    }
+
+    @Subscribe
+    public void onAutoTuneStarted(AutoTuneStartedEvent event) {
+        EventQueue.invokeLater(() -> {
+            setProgressBarWorking();
+            disableControlsProcessing();
+
+            statusLabel.setText("Auto-Tuning mathematical sequence...");
+
+            // --- SHOW PROGRESS DIALOG ---
+            progressDialog.updateProgress(0, "Initializing Auto-Tuner...");
+            progressDialog.setVisible(true);
+        });
+    }
+
+    @Subscribe
+    public void onAutoTuneFinished(AutoTuneFinishedEvent event) {
+        EventQueue.invokeLater(() -> {
+            // --- HIDE PROGRESS DIALOG ---
+            progressDialog.setVisible(false);
+
+            setProgressBarIdle();
+            enableControlsProcessingFinished();
+
+            if (event.isSuccess()) {
+                statusLabel.setText("Auto-Tuning completed successfully.");
+            } else {
+                statusLabel.setText("Auto-Tuning failed or aborted.");
+            }
+        });
+    }
+
+    // ... (The rest of your existing event subscribers like onBlinkStarted, onBatchConvertStarted, etc. remain unchanged)
 
     @Subscribe
     public void onBlinkStarted(BlinkStartedEvent event) {
@@ -584,13 +630,9 @@ public class MainApplicationPanel extends JPanel {
     public void onBlinkFrameUpdate(BlinkFrameUpdateEvent event) {
         EventQueue.invokeLater(() -> {
             statusLabel.setText("Blinking...");
-
-            // Show the frame if it's not already visible
             if (!mainAppWindow.getBlinkFrame().isVisible()) {
                 mainAppWindow.getBlinkFrame().setVisible(true);
             }
-
-            // Push the new image into the viewer
             mainAppWindow.getBlinkFrame().setImage(event.getImage());
         });
     }
@@ -598,12 +640,9 @@ public class MainApplicationPanel extends JPanel {
     @Subscribe
     public void onBlinkFinished(BlinkFinishedEvent event) {
         EventQueue.invokeLater(() -> {
-            // Restore UI State
             blinkButton.setText("blink");
             enableControlsProcessingBlinkingFinished();
             statusLabel.setText("Blinking stopped.");
-
-            // The isBlinking flag is already false, but ensure the window closes
             mainAppWindow.getBlinkFrame().dispose();
 
             if (!event.isSuccess()) {
@@ -621,11 +660,6 @@ public class MainApplicationPanel extends JPanel {
             isBlinking.set(false);
         }
     }
-
-
-    // ==========================================
-    // OTHER EVENT SUBSCRIBERS
-    // ==========================================
 
     @Subscribe
     public void onSolveStarted(SolveStartedEvent event) {
@@ -759,35 +793,6 @@ public class MainApplicationPanel extends JPanel {
         });
     }
 
-    @Subscribe
-    public void onDetectionStarted(DetectionStartedEvent event) {
-        EventQueue.invokeLater(() -> {
-            setProgressBarWorking();
-            disableControlsProcessing();
-            statusLabel.setText("Object detection started");
-        });
-    }
-
-    @Subscribe
-    public void onDetectionFinished(DetectionFinishedEvent event) {
-        EventQueue.invokeLater(() -> {
-            setProgressBarIdle();
-            enableControlsProcessingFinished();
-            statusLabel.setText("Object detection completed");
-
-            if (event.isSuccess()) {
-                if (!event.isQuickDetection()) {
-                    promptUserToOpenReport(event.getReportFilename());
-                }
-            } else {
-                JOptionPane.showMessageDialog(this,
-                        "Detection failed: " + event.getErrorMessage(),
-                        "Error",
-                        JOptionPane.ERROR_MESSAGE);
-            }
-        });
-    }
-
     private void promptUserToOpenReport(File reportFile) {
         if (reportFile != null && reportFile.exists()) {
 
@@ -804,7 +809,7 @@ public class MainApplicationPanel extends JPanel {
             );
 
             if (response == JOptionPane.YES_OPTION) {
-                openHtmlReport(reportFile); // This method works for both files and directories!
+                openHtmlReport(reportFile);
             }
         }
     }

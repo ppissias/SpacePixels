@@ -16,6 +16,9 @@ import nom.tam.fits.Fits;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 
+import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
+import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
+
 import eu.startales.spacepixels.events.DetectionFinishedEvent;
 import eu.startales.spacepixels.events.DetectionStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
@@ -49,11 +52,11 @@ public class DetectionTask implements Runnable {
 
     @Override
     public void run() {
-        eventBus.post(new DetectionStartedEvent());
-
         try {
             if (selectedFiles != null && selectedFiles.length > 0) {
                 // --- QUICK DETECTION ON SINGLE IMAGE ---
+                // (No Progress Dialog triggered here)
+
                 FitsFileInformation aSelectedFile = selectedFiles[0];
                 Fits selectedFitsImage = new Fits(aSelectedFile.getFilePath());
 
@@ -94,16 +97,18 @@ public class DetectionTask implements Runnable {
             } else {
                 // --- BATCH DETECTION ---
 
-                // --- NEW: Define the Safety Valve Callback ---
+                // 1. Trigger the Progress Dialog NOW
+                eventBus.post(new DetectionStartedEvent());
+
+                // Define the Safety Valve Callback
                 IntPredicate safetyPrompt = (trackCount) -> {
-                    int SAFE_TRACK_LIMIT = 50; // Adjust this limit as needed
+                    int SAFE_TRACK_LIMIT = 50;
                     if (trackCount <= SAFE_TRACK_LIMIT) {
                         return true;
                     }
 
                     final boolean[] proceed = {false};
                     try {
-                        // Safely pause the background thread to show a UI prompt
                         SwingUtilities.invokeAndWait(() -> {
                             int choice = JOptionPane.showConfirmDialog(
                                     null,
@@ -118,19 +123,24 @@ public class DetectionTask implements Runnable {
                             proceed[0] = (choice == JOptionPane.YES_OPTION);
                         });
                     } catch (Exception e) {
-                        return false; // Safely abort if interrupted
+                        return false;
                     }
                     return proceed[0];
                 };
 
-                // --- NEW: Pass the callback alongside the config ---
-                File exportDir = preProcessing.detectObjects(config, safetyPrompt);
+                // 2. Define the Progress Callback Bridge
+                TransientEngineProgressListener progressListener = (percentage, message) -> {
+                    // Instantly bridge the pure Java call to the Guava EventBus
+                    eventBus.post(new EngineProgressUpdateEvent(percentage, message));
+                };
+
+                // 3. Pass the progressListener down into preProcessing
+                File exportDir = preProcessing.detectObjects(config, safetyPrompt, progressListener);
 
                 if (exportDir == null) {
-                    // This implies the user clicked "No" and ImageProcessing returned null
                     eventBus.post(new DetectionFinishedEvent(null, false, false, "Report generation aborted by user due to high track count. Try raising your thresholds.", null, 0, 0, null));
                 } else {
-                    // Post success for Batch Detection
+                    eventBus.post(new EngineProgressUpdateEvent(100, "Batch detection complete!"));
                     eventBus.post(new DetectionFinishedEvent(exportDir, true, false, null, null, 0, 0, null));
                 }
             }

@@ -10,6 +10,11 @@
 package eu.startales.spacepixels.tasks;
 
 import com.google.common.eventbus.EventBus;
+
+// --- NEW IMPORTS FOR PROGRESS ---
+import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
+import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
+
 import eu.startales.spacepixels.events.AutoTuneFinishedEvent;
 import eu.startales.spacepixels.events.AutoTuneStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
@@ -62,7 +67,15 @@ public class AutoTuneTask implements Runnable {
 
             List<ScoredFrame> topFrames = new ArrayList<>();
 
+            // ==========================================
+            // PHASE 1: Quality Evaluation (0% to 50%)
+            // ==========================================
             for (int i = 0; i < filesInfo.length; i++) {
+
+                // --- PROGRESS UPDATE ---
+                int percent = (int) (((float) i / filesInfo.length) * 50);
+                eventBus.post(new EngineProgressUpdateEvent(percent, "Evaluating quality of frame " + (i + 1) + " of " + filesInfo.length + "..."));
+
                 FitsFileInformation info = filesInfo[i];
                 try (Fits fitsFile = new Fits(info.getFilePath())) {
                     Object kernel = fitsFile.getHDU(0).getKernel();
@@ -81,7 +94,6 @@ public class AutoTuneTask implements Runnable {
                         topFrames.sort(Comparator.comparingDouble(f -> f.score));
 
                         // 3. If we have more than we need, throw away the worst one!
-                        // This prevents OutOfMemory errors on massive sequences.
                         if (topFrames.size() > JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE) {
                             topFrames.remove(topFrames.size() - 1);
                         }
@@ -103,8 +115,23 @@ public class AutoTuneTask implements Runnable {
 
             ApplicationWindow.logger.info("Quality pass complete. Passing Top " + JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE + " frames to AutoTuner math engine.");
 
-            // Run the math!
-            JTransientAutoTuner.AutoTunerResult result = JTransientAutoTuner.tune(bestFrames, baseConfig);
+            // ==========================================
+            // PHASE 2: Mathematical Tuning (50% to 100%)
+            // ==========================================
+
+            // --- PROGRESS UPDATE: The Scaled Listener ---
+            // Maps the tuner's internal 0-100% to our UI's 50-100%
+            TransientEngineProgressListener autoTuneListener = (enginePercent, message) -> {
+                int scaledPercent = 50 + (int) ((enginePercent / 100.0f) * 50);
+                eventBus.post(new EngineProgressUpdateEvent(scaledPercent, "Tuning: " + message));
+            };
+
+            eventBus.post(new EngineProgressUpdateEvent(50, "Starting mathematical tuning algorithms..."));
+
+            // --- Pass the listener into the tune method ---
+            JTransientAutoTuner.AutoTunerResult result = JTransientAutoTuner.tune(bestFrames, baseConfig, autoTuneListener);
+
+            eventBus.post(new EngineProgressUpdateEvent(100, "Auto-Tuning complete!"));
 
             // Post success
             eventBus.post(new AutoTuneFinishedEvent(true, "Auto-Tuning completed successfully.", result));

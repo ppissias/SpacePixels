@@ -13,6 +13,11 @@ package eu.startales.spacepixels.gui;
 import com.google.common.eventbus.Subscribe;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+
+// --- NEW IMPORTS FOR PROGRESS DIALOG ---
+import eu.startales.spacepixels.events.DetectionStartedEvent;
+import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
+
 import eu.startales.spacepixels.events.AutoTuneFinishedEvent;
 import eu.startales.spacepixels.events.AutoTuneStartedEvent;
 import eu.startales.spacepixels.events.FitsImportFinishedEvent;
@@ -153,6 +158,8 @@ public class DetectionConfigurationPanel extends JPanel {
 
         // Apply current UI settings to memory to act as the baseline
         applySettingsToMemory();
+
+        mainAppWindow.getEventBus().post(new EngineProgressUpdateEvent(0, "Initializing Mathematical Auto-Tuner..."));
 
         // Dispatch the task to the background thread via the EventBus pattern
         AutoTuneTask tuneTask = new AutoTuneTask(mainAppWindow.getEventBus(), poolToUse, jTransientConfig);

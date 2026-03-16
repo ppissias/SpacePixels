@@ -11,6 +11,11 @@ package eu.startales.spacepixels.tasks;
 
 import com.google.common.eventbus.EventBus;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+
+// --- NEW IMPORTS ---
+import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
+import io.github.ppissias.jtransient.engine.TransientEngineProgressListener; // Update to match your actual package
+
 import eu.startales.spacepixels.events.DetectionFinishedEvent;
 import eu.startales.spacepixels.events.DetectionStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
@@ -34,6 +39,7 @@ public class IterativeDetectionTask implements Runnable {
 
     @Override
     public void run() {
+        // 1. Trigger the Progress Dialog NOW
         eventBus.post(new DetectionStartedEvent());
 
         try {
@@ -64,8 +70,14 @@ public class IterativeDetectionTask implements Runnable {
                 return proceed[0];
             };
 
-            // --- CALL THE NEW ITERATIVE METHOD ---
-            File masterDir = preProcessing.detectSlowObjectsIterative(config, safetyPrompt);
+            // --- NEW: Define the Progress Callback Bridge ---
+            TransientEngineProgressListener progressListener = (percentage, message) -> {
+                // Instantly bridge the pure Java call to the Guava EventBus
+                eventBus.post(new EngineProgressUpdateEvent(percentage, message));
+            };
+
+            // --- CALL THE NEW ITERATIVE METHOD WITH LISTENER ---
+            File masterDir = preProcessing.detectSlowObjectsIterative(config, safetyPrompt, progressListener);
 
             if (masterDir == null) {
                 eventBus.post(new DetectionFinishedEvent(null, false, false, "Iterative run aborted by user.", null, 0, 0, null));
