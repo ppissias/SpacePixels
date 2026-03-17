@@ -30,18 +30,27 @@ Please check the [SpacePixels Wiki](https://github.com/ppissias/SpacePixels/wiki
 ---
 
 ## 📸 Screenshots & Output
+***
+Check out a sample report. Many thanks to Mark ([cloudynights user klangwolke](https://www.cloudynights.com/profile/481578-klangwolke/))
+for providing amazing data for this report and for testing the application!  
 
+
+[sample SpacePixels report](https://startales.eu/various_files/detections_20260317_115319/detection_report.html)
+***
 
 ![Main Interface](https://startales.eu/various_files/SpacePixels-GUI-2026-01.png)  
 *The SpacePixels Main Workspace.*
 
-![Main Interface](https://startales.eu/various_files/track_5_object_centric.gif)  
+![Sample Detection](https://startales.eu/various_files/detections_20260317_115319/track_9_full_sequence.gif)  
+*Sample Detection - Unknown Object, (Raw images credit Mark [cloudynights user klangwolke](https://www.cloudynights.com/profile/481578-klangwolke/)) star centric view of all frames in sequence.*
+
+![Sample Detection](https://startales.eu/various_files/track_5_object_centric.gif)  
 *Sample Detection - Apophis asteroid 2021 (Raw images credit Duncan Warren) object centric view.*
 
-![Main Interface](https://startales.eu/various_files/track_5_star_centric.gif)  
+![Sample Detection](https://startales.eu/various_files/track_5_star_centric.gif)  
 *Sample Detection - Apophis asteroid 2021 (Raw images credit Duncan Warren) - star centric view.*
 
-![Main Interface](https://startales.eu/various_files/streak_track_3_star_centric.gif)  
+![Sample Detection](https://startales.eu/various_files/streak_track_3_star_centric.gif)  
 *Sample Detection - streak track.*
 
 ---
