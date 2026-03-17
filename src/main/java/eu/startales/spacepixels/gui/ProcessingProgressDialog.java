@@ -22,26 +22,16 @@ public class ProcessingProgressDialog extends JDialog {
         progressBar = new JProgressBar(0, 100);
         progressBar.setStringPainted(true); // Shows the percentage text
 
-        JButton exitButton = new JButton("Exit Application");
-        exitButton.setForeground(Color.RED);
-
         // --- Layout ---
         JPanel centerPanel = new JPanel(new BorderLayout(5, 5));
         centerPanel.setBorder(BorderFactory.createEmptyBorder(15, 20, 5, 20));
         centerPanel.add(statusLabel, BorderLayout.NORTH);
         centerPanel.add(progressBar, BorderLayout.CENTER);
 
-        JPanel bottomPanel = new JPanel();
-        bottomPanel.add(exitButton);
-
         add(centerPanel, BorderLayout.CENTER);
-        add(bottomPanel, BorderLayout.SOUTH);
 
         // --- Exit Logic ---
-        // 1. When the user clicks our Exit button
-        exitButton.addActionListener(e -> confirmAndExit());
-
-        // 2. When the user clicks the native window 'X' button
+        // When the user clicks the native window 'X' button
         setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
             @Override
@@ -50,7 +40,7 @@ public class ProcessingProgressDialog extends JDialog {
             }
         });
 
-        setSize(400, 150);
+        setSize(400, 90);
         setResizable(false);
         setLocationRelativeTo(parentWindow); // Centers it over the main app
     }

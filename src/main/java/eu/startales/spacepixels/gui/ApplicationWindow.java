@@ -28,7 +28,7 @@ import java.util.logging.Logger;
 public class ApplicationWindow {
 
     private JFrame frmIpodImage;
-    private final String version = "2026.03-beta2";
+    private final String version = "2026.03-beta3";
 
     // --- EVENT BUS INSTANCE ---
     private final EventBus eventBus = new EventBus("SpacePixelsBus");

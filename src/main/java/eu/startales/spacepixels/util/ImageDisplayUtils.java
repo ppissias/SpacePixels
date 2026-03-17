@@ -662,35 +662,44 @@ public class ImageDisplayUtils {
                     int startX = fixedCenterX - (trackBoxWidth / 2);
                     int startY = fixedCenterY - (trackBoxHeight / 2);
 
+                    // --- SPLIT LOGIC: ANOMALY vs. SINGLE STREAK ---
                     SourceExtractor.DetectedObject pt = track.points.get(0);
                     int frameIndex = pt.sourceFrameIndex;
-                    short[][] rawImage = rawFrames.get(frameIndex);
 
-                    short[][] croppedData = robustEdgeAwareCrop(rawImage, fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
-                    BufferedImage streakImg = createDisplayImage(croppedData);
-
-                    String streakFileName = "streak_" + streakCounter + ".png";
-                    File streakFile = new File(exportDir, streakFileName);
-                    saveTrackImageLossless(streakImg, streakFile);
-
-                    // --- Create Shape Map specifically for Single Streaks ---
-                    String shapeFileName = "streak_" + streakCounter + "_shape.png";
-                    BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, trackBoxWidth, trackBoxHeight, startX, startY);
-                    saveTrackImageLossless(streakShapeImg, new File(exportDir, shapeFileName));
-
-                    // --- NEW: Generate 3-Frame "Before / Flash / After" GIF for High-Energy Anomalies ---
-                    String anomalyGifFileName = null;
                     if (track.isAnomaly) {
-                        List<BufferedImage> anomalyFrames = new ArrayList<>();
-                        // Grab the frame before, the actual frame, and the frame after
-                        int[] frameSequence = {frameIndex - 1, frameIndex, frameIndex + 1};
+                        // --- 1. ANOMALY (OPTICAL FLASH) ---
+                        report.println("<div class='detection-card streak-title' style='border-left-color: #ff3333; color: #ff3333;'>");
+                        report.println("<div class='detection-title' style='color: #ff3333;'>High-Energy Anomaly (Optical Flash)</div>");
 
+                        // --- Generate Detection Image (PNG) ---
+                        short[][] rawImage = rawFrames.get(frameIndex);
+                        short[][] croppedData = robustEdgeAwareCrop(rawImage, fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
+                        BufferedImage detectionImg = createDisplayImage(croppedData);
+                        String detectionFileName = "anomaly_" + streakCounter + "_detection.png";
+                        saveTrackImageLossless(detectionImg, new File(exportDir, detectionFileName));
+
+                        // --- Generate Shape Map (PNG) ---
+                        String shapeFileName = "anomaly_" + streakCounter + "_shape.png";
+                        BufferedImage shapeImg = createSingleStreakShapeImage(track.points, trackBoxWidth, trackBoxHeight, startX, startY);
+                        saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
+
+                        // --- Generate Full Sequence GIF ---
+                        String fullSeqFileName = "anomaly_" + streakCounter + "_full_sequence.gif";
+                        List<BufferedImage> fullSequenceFrames = new ArrayList<>();
+                        for (short[][] rImg : rawFrames) {
+                            short[][] cData = robustEdgeAwareCrop(rImg, fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
+                            fullSequenceFrames.add(createDisplayImage(cData));
+                        }
+                        GifSequenceWriter.saveAnimatedGif(fullSequenceFrames, new File(exportDir, fullSeqFileName), gifBlinkSpeedMs);
+
+                        // --- Generate 3-Frame "Context" GIF ---
+                        String contextGifFileName = "anomaly_" + streakCounter + "_context.gif";
+                        List<BufferedImage> contextFrames = new ArrayList<>();
+                        int[] frameSequence = {frameIndex - 1, frameIndex, frameIndex + 1};
                         for (int idx : frameSequence) {
                             if (idx >= 0 && idx < rawFrames.size()) {
                                 short[][] cData = robustEdgeAwareCrop(rawFrames.get(idx), fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
                                 BufferedImage aImg = createDisplayImage(cData);
-
-                                // Draw target crosshair so the eye knows exactly where the flash occurs
                                 Graphics2D g2d = aImg.createGraphics();
                                 int localX = (int) Math.round(pt.x - startX);
                                 int localY = (int) Math.round(pt.y - startY);
@@ -698,36 +707,44 @@ public class ImageDisplayUtils {
                                 g2d.setStroke(new BasicStroke(targetCircleStrokeWidth));
                                 g2d.drawOval(localX - targetCircleRadius, localY - targetCircleRadius, targetCircleRadius * 2, targetCircleRadius * 2);
                                 g2d.dispose();
-
-                                anomalyFrames.add(aImg);
+                                contextFrames.add(aImg);
                             }
                         }
+                        GifSequenceWriter.saveAnimatedGif(contextFrames, new File(exportDir, contextGifFileName), gifBlinkSpeedMs);
 
-                        if (!anomalyFrames.isEmpty()) {
-                            anomalyGifFileName = "anomaly_" + streakCounter + "_anim.gif";
-                            GifSequenceWriter.saveAnimatedGif(anomalyFrames, new File(exportDir, anomalyGifFileName), gifBlinkSpeedMs);
-                        }
+                        // --- Render HTML ---
+                        report.println("<div class='image-container'>");
+                        report.println("<div><a href='" + detectionFileName + "' target='_blank'><img src='" + detectionFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
+                        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' title='Streak Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
+                        report.println("<div><a href='" + fullSeqFileName + "' target='_blank'><img src='" + fullSeqFileName + "' alt='Full Sequence Animation' title='Full Sequence (Unannotated)' /></a><br/><center><small>Full Sequence (Unannotated)</small></center></div>");
+                        report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context Animation' title='Before / During / After' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
+                        report.println("</div>");
+
+                    } else {
+                        // --- 2. STANDARD SINGLE STREAK ---
+                        report.println("<div class='detection-card streak-title'>");
+                        report.println("<div class='detection-title'>Single Streak Event #" + streakCounter + "</div>");
+
+                        // --- Generate Detection Image (PNG) ---
+                        short[][] rawImage = rawFrames.get(frameIndex);
+                        short[][] croppedData = robustEdgeAwareCrop(rawImage, fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
+                        BufferedImage streakImg = createDisplayImage(croppedData);
+                        String streakFileName = "streak_" + streakCounter + ".png";
+                        saveTrackImageLossless(streakImg, new File(exportDir, streakFileName));
+
+                        // --- Generate Shape Map (PNG) ---
+                        String shapeFileName = "streak_" + streakCounter + "_shape.png";
+                        BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, trackBoxWidth, trackBoxHeight, startX, startY);
+                        saveTrackImageLossless(streakShapeImg, new File(exportDir, shapeFileName));
+
+                        // --- Render HTML ---
+                        report.println("<div class='image-container'>");
+                        report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
+                        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' title='Streak Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
+                        report.println("</div>");
                     }
 
-                    String titleText = track.isAnomaly ? "High-Energy Anomaly (Optical Flash)" : "Single Streak Event #" + streakCounter;
-                    String colorClass = track.isAnomaly ? "style='border-left-color: #ff3333; color: #ff3333;'" : "";
-
-                    report.println("<div class='detection-card streak-title' " + colorClass + ">");
-                    report.println("<div class='detection-title' " + colorClass + ">" + titleText + "</div>");
-
-                    // --- Clickable link for the single streak image, shape map, and anomaly GIF ---
-                    report.println("<div class='image-container'>");
-                    report.println("<a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Streak Image' /></a>");
-                    report.println("<a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Streak Shape' title='Streak Footprint' /></a>");
-
-                    // Conditionally render the Animation GIF only if it's an anomaly!
-                    if (track.isAnomaly && anomalyGifFileName != null) {
-                        report.println("<a href='" + anomalyGifFileName + "' target='_blank'><img src='" + anomalyGifFileName + "' alt='Anomaly Context Animation' title='Before / During / After' /></a>");
-                    }
-
-                    report.println("</div>");
-
-                    // --- Exact Coordinates for the single streak ---
+                    // --- COMMON FOOTER FOR BOTH ---
                     String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
                     report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span></li></ul></div>");
 
@@ -759,6 +776,13 @@ public class ImageDisplayUtils {
 
                     int startX = fixedCenterX - (trackBoxWidth / 2);
                     int startY = fixedCenterY - (trackBoxHeight / 2);
+
+                    // --- NEW: Generate Full Sequence Unannotated Star-Centric GIF ---
+                    List<BufferedImage> fullSequenceStarFrames = new ArrayList<>();
+                    for (short[][] rawImage : rawFrames) {
+                        short[][] croppedFullData = robustEdgeAwareCrop(rawImage, fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
+                        fullSequenceStarFrames.add(createDisplayImage(croppedFullData));
+                    }
 
                     java.util.Set<Integer> processedFrames = new java.util.HashSet<>();
 
@@ -810,21 +834,26 @@ public class ImageDisplayUtils {
                     } else {
                         String objFileName = "track_" + trackCounter + "_object_centric.gif";
                         String starFileName = "track_" + trackCounter + "_star_centric.gif";
+                        String fullSeqFileName = "track_" + trackCounter + "_full_sequence.gif";
 
                         File objFile = new File(exportDir, objFileName);
                         GifSequenceWriter.saveAnimatedGif(objectCentricFrames, objFile, gifBlinkSpeedMs);
 
                         File starFile = new File(exportDir, starFileName);
                         GifSequenceWriter.saveAnimatedGif(starCentricFrames, starFile, gifBlinkSpeedMs);
+                        
+                        File fullSeqFile = new File(exportDir, fullSeqFileName);
+                        GifSequenceWriter.saveAnimatedGif(fullSequenceStarFrames, fullSeqFile, gifBlinkSpeedMs);
 
                         report.println("<div class='detection-card'>");
                         report.println("<div class='detection-title'>Moving Target Track #" + trackCounter + "</div>");
 
                         // --- Include Object, Star, and Shape Images ---
                         report.println("<div class='image-container'>");
-                        report.println("<a href='" + objFileName + "' target='_blank'><img src='" + objFileName + "' alt='Object Centric' title='Object-Centric' /></a>");
-                        report.println("<a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric' title='Star-Centric' /></a>");
-                        report.println("<a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Track Shape Map' title='Track Shape Map' /></a>");
+                        report.println("<div><a href='" + objFileName + "' target='_blank'><img src='" + objFileName + "' alt='Object Centric' title='Object-Centric' /></a><br/><center><small>Object Centric</small></center></div>");
+                        report.println("<div><a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric' title='Star-Centric' /></a><br/><center><small>Star Centric</small></center></div>");
+                        report.println("<div><a href='" + fullSeqFileName + "' target='_blank'><img src='" + fullSeqFileName + "' alt='Full Sequence Animation' title='Full Sequence (Unannotated)' /></a><br/><center><small>Full Sequence (Unannotated)</small></center></div>");
+                        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Track Shape Map' title='Track Shape Map' /></a><br/><center><small>Track Shape Map</small></center></div>");
                         report.println("</div>");
                     }
 
