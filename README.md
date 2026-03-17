@@ -35,7 +35,7 @@ Check out a sample report. Many thanks to Mark ([cloudynights user klangwolke](h
 for providing amazing data for this report and for testing the application!  
 
 
-[sample SpacePixels report](https://startales.eu/various_files/detections_20260317_115319/detection_report.html)
+<a href="https://startales.eu/various_files/detections_20260317_115319/detection_report.html" target="_blank">sample SpacePixels report</a>
 ***
 
 ![Main Interface](https://startales.eu/various_files/SpacePixels-GUI-2026-01.png)  
