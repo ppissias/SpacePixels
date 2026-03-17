@@ -369,8 +369,93 @@ public class ImageProcessing {
 
         if (numFiles == 0) return new FitsFileInformation[0];
 
+        // --- PRE-FLIGHT CONSISTENCY CHECK ---
+        ApplicationWindow.logger.info("Performing pre-flight consistency check on " + numFiles + " files...");
+        FitsFormatChecker.FitsFormat refFormat = FitsFormatChecker.checkFormat(fitsFileInformation[0]);
+        int tempRefWidth = -1;
+        int tempRefHeight = -1;
+        boolean tempRefMono = true;
+
+        try {
+            Fits firstFits = new Fits(fitsFileInformation[0]);
+            BasicHDU<?> hdu = firstFits.getHDU(0);
+            int[] axes = hdu.getAxes();
+            if (axes.length == 2) {
+                tempRefHeight = axes[0];
+                tempRefWidth = axes[1];
+                tempRefMono = true;
+            } else if (axes.length == 3) {
+                tempRefHeight = axes[1];
+                tempRefWidth = axes[2];
+                tempRefMono = false;
+            } else {
+                firstFits.close();
+                JOptionPane.showMessageDialog(null, "Unsupported FITS axes length: " + axes.length, "Import Error", JOptionPane.ERROR_MESSAGE);
+                return new FitsFileInformation[0];
+            }
+            firstFits.close();
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(null, "Failed to read the first FITS file: " + e.getMessage(), "Import Error", JOptionPane.ERROR_MESSAGE);
+            return new FitsFileInformation[0];
+        }
+
+        final int refWidth = tempRefWidth;
+        final int refHeight = tempRefHeight;
+        final boolean refMono = tempRefMono;
+
+        List<Callable<String>> validationTasks = new ArrayList<>();
+        for (int i = 1; i < numFiles; i++) {
+            final File f = fitsFileInformation[i];
+            validationTasks.add(() -> {
+                FitsFormatChecker.FitsFormat format = FitsFormatChecker.checkFormat(f);
+                if (format != refFormat) {
+                    return "Inconsistent FITS formats detected!\nFile: " + f.getName() + " has format " + format + " but expected " + refFormat + ".\nAll FITS files in the sequence must be of the exact same type.";
+                }
+                Fits fits = null;
+                try {
+                    fits = new Fits(f);
+                    BasicHDU<?> hdu = fits.getHDU(0);
+                    int[] axes = hdu.getAxes();
+                    boolean mono = (axes.length == 2);
+                    int w = -1, h = -1;
+                    if (mono) {
+                        h = axes[0];
+                        w = axes[1];
+                    } else if (axes.length == 3) {
+                        h = axes[1];
+                        w = axes[2];
+                    }
+
+                    if (mono != refMono || w != refWidth || h != refHeight) {
+                        return "Inconsistent FITS dimensions or color-space detected!\nFile: " + f.getName() + " is " + w + "x" + h + " (Mono: " + mono + ")\nExpected: " + refWidth + "x" + refHeight + " (Mono: " + refMono + ").\nAll files must have the exact same resolution and color space.";
+                    }
+                } catch (Exception e) {
+                    return "Failed to read FITS file " + f.getName() + ": " + e.getMessage();
+                } finally {
+                    if (fits != null) {
+                        try { fits.close(); } catch (Exception ignored) {}
+                    }
+                }
+                return null; // OK
+            });
+        }
+
+        try {
+            List<Future<String>> results = executor.invokeAll(validationTasks);
+            for (Future<String> res : results) {
+                String errorMsg = res.get();
+                if (errorMsg != null) {
+                    JOptionPane.showMessageDialog(null, errorMsg, "Import Error", JOptionPane.ERROR_MESSAGE);
+                    return new FitsFileInformation[0];
+                }
+            }
+        } catch (Exception e) {
+            throw new IOException("Multi-threaded validation failed: " + e.getMessage(), e);
+        }
+        // --- END CONSISTENCY CHECK ---
+
         // --- THE GATEKEEPER: Check the format of the first file ---
-        FitsFormatChecker.FitsFormat format = FitsFormatChecker.checkFormat(fitsFileInformation[0]);
+        FitsFormatChecker.FitsFormat format = refFormat;
 
         if (format == FitsFormatChecker.FitsFormat.MONO_32BIT_FLOAT || format == FitsFormatChecker.FitsFormat.MONO_32BIT_INT) {
             int choice = JOptionPane.showConfirmDialog(null,
