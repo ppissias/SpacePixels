@@ -47,6 +47,7 @@ public class ImageDisplayUtils {
     public static int trackObjectCentricCropSize = 200;
     public static int singleStreakExportPadding = 50;
     public static double streakElongationCropMultiplier = 10.0;
+    public static int maxFullSequenceFrames = 15;
 
     // --- Annotation Tools (For GIFs) ---
     public static int targetCircleRadius = 15;
@@ -81,6 +82,68 @@ public class ImageDisplayUtils {
         public double autoWhitePoint;
     }
 
+    public static class IterationSummary {
+        public int frameCount;
+        public String folderName;
+        public int trackCount;
+        public int anomalyCount;
+
+        public IterationSummary(int frameCount, String folderName, int trackCount, int anomalyCount) {
+            this.frameCount = frameCount;
+            this.folderName = folderName;
+            this.trackCount = trackCount;
+            this.anomalyCount = anomalyCount;
+        }
+    }
+
+    /**
+     * Returns an evenly spaced sample of chronological frame indices while guaranteeing that
+     * mandatory frames (where actual detections occur) are included to never miss a transient.
+     */
+    public static List<Integer> getRepresentativeSequence(int totalFrames, java.util.Set<Integer> mandatoryFrames, int maxFrames) {
+        java.util.TreeSet<Integer> selected = new java.util.TreeSet<>();
+        
+        if (totalFrames <= maxFrames) {
+            for (int i = 0; i < totalFrames; i++) selected.add(i);
+            return new ArrayList<>(selected);
+        }
+        
+        List<Integer> mandatoryList = new ArrayList<>(mandatoryFrames);
+        java.util.Collections.sort(mandatoryList);
+        
+        if (mandatoryList.size() >= maxFrames) {
+            if (maxFrames == 1) {
+                selected.add(mandatoryList.get(0));
+            } else {
+                for (int i = 0; i < maxFrames; i++) {
+                    int idx = (int) Math.round(i * (mandatoryList.size() - 1) / (double) (maxFrames - 1));
+                    selected.add(mandatoryList.get(idx));
+                }
+            }
+            return new ArrayList<>(selected);
+        }
+        
+        selected.addAll(mandatoryList);
+        
+        List<Integer> available = new ArrayList<>();
+        for (int i = 0; i < totalFrames; i++) {
+            if (!mandatoryFrames.contains(i)) available.add(i);
+        }
+        
+        int needed = maxFrames - selected.size();
+        if (needed > 0 && !available.isEmpty()) {
+            if (needed == 1) {
+                selected.add(available.get(available.size() / 2));
+            } else {
+                for (int i = 0; i < needed; i++) {
+                    int idx = (int) Math.round(i * (available.size() - 1) / (double) (needed - 1));
+                    selected.add(available.get(idx));
+                }
+            }
+        }
+        
+        return new ArrayList<>(selected);
+    }
 
     // =================================================================
     // IMAGE RENDERING & CROPPING
@@ -230,7 +293,7 @@ public class ImageDisplayUtils {
 
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                int val = imageData[y][x] & 0xFFFF;
+                int val = imageData[y][x] + 32768;
                 if (val < min) min = val;
                 if (val > max) max = val;
                 sum += val;
@@ -247,7 +310,7 @@ public class ImageDisplayUtils {
 
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                int val = imageData[y][x] & 0xFFFF;
+                int val = imageData[y][x] + 32768;
 
                 double adjustedVal = val - blackPoint;
                 if (adjustedVal < 0) adjustedVal = 0;
@@ -684,10 +747,13 @@ public class ImageDisplayUtils {
                         saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
 
                         // --- Generate Full Sequence GIF ---
-                        String fullSeqFileName = "anomaly_" + streakCounter + "_full_sequence.gif";
+                        String fullSeqFileName = "anomaly_" + streakCounter + "_sampled_sequence.gif";
                         List<BufferedImage> fullSequenceFrames = new ArrayList<>();
-                        for (short[][] rImg : rawFrames) {
-                            short[][] cData = robustEdgeAwareCrop(rImg, fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
+                        java.util.Set<Integer> mandatoryFrames = new java.util.HashSet<>();
+                        mandatoryFrames.add(frameIndex);
+                        List<Integer> sampledIndices = getRepresentativeSequence(rawFrames.size(), mandatoryFrames, maxFullSequenceFrames);
+                        for (int idx : sampledIndices) {
+                            short[][] cData = robustEdgeAwareCrop(rawFrames.get(idx), fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
                             fullSequenceFrames.add(createDisplayImage(cData));
                         }
                         GifSequenceWriter.saveAnimatedGif(fullSequenceFrames, new File(exportDir, fullSeqFileName), gifBlinkSpeedMs);
@@ -716,7 +782,7 @@ public class ImageDisplayUtils {
                         report.println("<div class='image-container'>");
                         report.println("<div><a href='" + detectionFileName + "' target='_blank'><img src='" + detectionFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
                         report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' title='Streak Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
-                        report.println("<div><a href='" + fullSeqFileName + "' target='_blank'><img src='" + fullSeqFileName + "' alt='Full Sequence Animation' title='Full Sequence (Unannotated)' /></a><br/><center><small>Full Sequence (Unannotated)</small></center></div>");
+                        report.println("<div><a href='" + fullSeqFileName + "' target='_blank'><img src='" + fullSeqFileName + "' alt='Sampled Time-Lapse' title='Sampled Time-Lapse (Unannotated)' /></a><br/><center><small>Sampled Time-Lapse (Unannotated)</small></center></div>");
                         report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context Animation' title='Before / During / After' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
                         report.println("</div>");
 
@@ -779,8 +845,13 @@ public class ImageDisplayUtils {
 
                     // --- NEW: Generate Full Sequence Unannotated Star-Centric GIF ---
                     List<BufferedImage> fullSequenceStarFrames = new ArrayList<>();
-                    for (short[][] rawImage : rawFrames) {
-                        short[][] croppedFullData = robustEdgeAwareCrop(rawImage, fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
+                    java.util.Set<Integer> mandatoryFrames = new java.util.HashSet<>();
+                    for (SourceExtractor.DetectedObject pt : track.points) {
+                        mandatoryFrames.add(pt.sourceFrameIndex);
+                    }
+                    List<Integer> sampledIndices = getRepresentativeSequence(rawFrames.size(), mandatoryFrames, maxFullSequenceFrames);
+                    for (int idx : sampledIndices) {
+                        short[][] croppedFullData = robustEdgeAwareCrop(rawFrames.get(idx), fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
                         fullSequenceStarFrames.add(createDisplayImage(croppedFullData));
                     }
 
@@ -834,7 +905,7 @@ public class ImageDisplayUtils {
                     } else {
                         String objFileName = "track_" + trackCounter + "_object_centric.gif";
                         String starFileName = "track_" + trackCounter + "_star_centric.gif";
-                        String fullSeqFileName = "track_" + trackCounter + "_full_sequence.gif";
+                        String fullSeqFileName = "track_" + trackCounter + "_sampled_sequence.gif";
 
                         File objFile = new File(exportDir, objFileName);
                         GifSequenceWriter.saveAnimatedGif(objectCentricFrames, objFile, gifBlinkSpeedMs);
@@ -852,7 +923,7 @@ public class ImageDisplayUtils {
                         report.println("<div class='image-container'>");
                         report.println("<div><a href='" + objFileName + "' target='_blank'><img src='" + objFileName + "' alt='Object Centric' title='Object-Centric' /></a><br/><center><small>Object Centric</small></center></div>");
                         report.println("<div><a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric' title='Star-Centric' /></a><br/><center><small>Star Centric</small></center></div>");
-                        report.println("<div><a href='" + fullSeqFileName + "' target='_blank'><img src='" + fullSeqFileName + "' alt='Full Sequence Animation' title='Full Sequence (Unannotated)' /></a><br/><center><small>Full Sequence (Unannotated)</small></center></div>");
+                        report.println("<div><a href='" + fullSeqFileName + "' target='_blank'><img src='" + fullSeqFileName + "' alt='Sampled Time-Lapse' title='Sampled Time-Lapse (Unannotated)' /></a><br/><center><small>Sampled Time-Lapse (Unannotated)</small></center></div>");
                         report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Track Shape Map' title='Track Shape Map' /></a><br/><center><small>Track Shape Map</small></center></div>");
                         report.println("</div>");
                     }
@@ -873,6 +944,44 @@ public class ImageDisplayUtils {
             report.println("</body></html>");
         }
         System.out.println("\nFinished exporting visualizations and generated HTML report at: " + reportFile.getAbsolutePath());
+    }
+
+    public static void exportIterativeIndexReport(File masterDir, List<IterationSummary> summaries) throws IOException {
+        File indexFile = new File(masterDir, "index.html");
+        try (java.io.PrintWriter report = new java.io.PrintWriter(new java.io.FileWriter(indexFile))) {
+            report.println("<!DOCTYPE html><html><head><title>Iterative Detection Summary</title><style>");
+            report.println("body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #2b2b2b; color: #cccccc; margin: 0; padding: 30px; } ");
+            report.println("h1 { color: #ffffff; border-bottom: 2px solid #4da6ff; padding-bottom: 10px; margin-bottom: 30px; } ");
+            report.println(".panel { background-color: #3c3f41; padding: 25px; margin-bottom: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); } ");
+            report.println("table { border-collapse: collapse; width: 100%; margin-top: 15px; font-size: 14px; background-color: #2b2b2b; border-radius: 5px; overflow: hidden; } ");
+            report.println("th, td { padding: 12px 15px; text-align: left; } ");
+            report.println("th { background-color: #222; color: #4da6ff; font-weight: bold; border-bottom: 2px solid #333; } ");
+            report.println("tr { border-bottom: 1px solid #333; }");
+            report.println("tr:nth-child(even) { background-color: #303030; } ");
+            report.println("tr:hover { background-color: #3a3a3a; } ");
+            report.println("a { color: #4da6ff; text-decoration: none; font-weight: bold; }");
+            report.println("a:hover { text-decoration: underline; }");
+            report.println(".highlight { color: #44ff44; font-weight: bold; }");
+            report.println("</style></head><body>");
+
+            report.println("<h1>SpacePixels Iterative Detection Summary</h1>");
+            report.println("<div class='panel'");
+            report.println("<h2>Iteration Results</h2>");
+            report.println("<table><tr><th>Iteration (Frames Used)</th><th>Total Tracks Found</th><th>Anomalies Found</th><th>Action</th></tr>");
+
+            for (IterationSummary summary : summaries) {
+                report.println("<tr>");
+                report.println("<td>" + summary.frameCount + " Frames</td>");
+                String trackStr = summary.trackCount > 0 ? "<span class='highlight'>" + summary.trackCount + "</span>" : "0";
+                report.println("<td>" + trackStr + "</td>");
+                String anomalyStr = summary.anomalyCount > 0 ? "<span style='color:#ff9933;'>" + summary.anomalyCount + "</span>" : "0";
+                report.println("<td>" + anomalyStr + "</td>");
+                String reportLink = summary.folderName + "/" + detectionReportName;
+                report.println("<td><a href='" + reportLink + "'>View Detailed Report &rarr;</a></td>");
+                report.println("</tr>");
+            }
+            report.println("</table></div></body></html>");
+        }
     }
 
     // =================================================================
@@ -896,7 +1005,7 @@ public class ImageDisplayUtils {
         for (int y = 0; y < data.height; y++) {
             for (int x = 0; x < data.width; x++) {
                 short rawVal = imageData[y][x];
-                int unsignedVal = rawVal & 0xFFFF;
+                int unsignedVal = rawVal + 32768;
 
                 if (rawVal < data.minRaw) data.minRaw = rawVal;
                 if (rawVal > data.maxRaw) data.maxRaw = rawVal;
@@ -919,7 +1028,7 @@ public class ImageDisplayUtils {
         double sumSqDiff = 0;
         for (int y = 0; y < data.height; y++) {
             for (int x = 0; x < data.width; x++) {
-                int unsignedVal = imageData[y][x] & 0xFFFF;
+                int unsignedVal = imageData[y][x] + 32768;
                 double diff = unsignedVal - data.meanUnsigned;
                 sumSqDiff += (diff * diff);
             }

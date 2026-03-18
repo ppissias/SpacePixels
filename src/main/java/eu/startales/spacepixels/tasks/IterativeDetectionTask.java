@@ -39,6 +39,46 @@ public class IterativeDetectionTask implements Runnable {
 
     @Override
     public void run() {
+        // --- NEW: Prompt user for maximum frames before starting ---
+        final int[] maxFrames = {0};
+        final boolean[] cancelled = {false};
+        
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                JPanel panel = new JPanel(new java.awt.BorderLayout(5, 5));
+                panel.add(new JLabel("<html>Enter the maximum number of frames to use for the iterative passes<br>(Leave empty or enter 0 to go up to the total number of frames):</html>"), java.awt.BorderLayout.NORTH);
+                
+                JTextField inputField = new JTextField(10);
+                JPanel fieldPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
+                fieldPanel.add(inputField);
+                panel.add(fieldPanel, java.awt.BorderLayout.CENTER);
+
+                int result = JOptionPane.showConfirmDialog(
+                        null,
+                        panel,
+                        "Limit Iterative Passes",
+                        JOptionPane.OK_CANCEL_OPTION,
+                        JOptionPane.QUESTION_MESSAGE
+                );
+                if (result != JOptionPane.OK_OPTION) {
+                    cancelled[0] = true;
+                } else {
+                    String input = inputField.getText();
+                    if (input != null && !input.trim().isEmpty()) {
+                        try {
+                            maxFrames[0] = Integer.parseInt(input.trim());
+                        } catch (NumberFormatException ignored) {}
+                    }
+                }
+            });
+        } catch (Exception e) {
+            ApplicationWindow.logger.log(Level.WARNING, "Failed to show max frames dialog", e);
+        }
+        
+        if (cancelled[0]) {
+            return; // Exit silently if user clicked cancel
+        }
+
         // 1. Trigger the Progress Dialog NOW
         eventBus.post(new DetectionStartedEvent());
 
@@ -76,8 +116,8 @@ public class IterativeDetectionTask implements Runnable {
                 eventBus.post(new EngineProgressUpdateEvent(percentage, message));
             };
 
-            // --- CALL THE NEW ITERATIVE METHOD WITH LISTENER ---
-            File masterDir = preProcessing.detectSlowObjectsIterative(config, safetyPrompt, progressListener);
+            // --- CALL THE NEW ITERATIVE METHOD WITH THE MAX LIMIT ---
+            File masterDir = preProcessing.detectSlowObjectsIterative(config, safetyPrompt, progressListener, maxFrames[0]);
 
             if (masterDir == null) {
                 eventBus.post(new DetectionFinishedEvent(null, false, false, "Iterative run aborted by user.", null, 0, 0, null));

@@ -75,7 +75,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     // --- Visualization Spinners (SpacePixels Specific) ---
     private JSpinner spinStreakScale, spinStreakCentroidRad, spinPointBoxRad, spinBoxPad;
-    private JSpinner spinAutoBlackSigma, spinAutoWhiteSigma, spinGifBlinkSpeed, spinCropPadding;
+    private JSpinner spinAutoBlackSigma, spinAutoWhiteSigma, spinGifBlinkSpeed, spinCropPadding, spinMaxFullSeqFrames;
 
     private final JButton previewBtn = new JButton("Preview Tuning Mask");
 
@@ -322,6 +322,7 @@ public class DetectionConfigurationPanel extends JPanel {
         spinAutoWhiteSigma = addRow(panel, "Auto Stretch White Sigma", "Additions to mean (in sigmas) to set white point. Faint targets hit this and turn white.", new SpinnerNumberModel(ImageDisplayUtils.autoStretchWhiteSigma, 0.1, 999.0, 0.5));
         spinGifBlinkSpeed = addRow(panel, "GIF Blink Speed (ms)", "Speed of the exported GIF animations in milliseconds per frame.", new SpinnerNumberModel(ImageDisplayUtils.gifBlinkSpeedMs, 10, 60000, 50));
         spinCropPadding = addRow(panel, "Track Crop Border Padding", "Base padding (in pixels) added to the width and height of multi-frame track crops.", new SpinnerNumberModel(ImageDisplayUtils.trackCropPadding, 0, 9999, 10));
+        spinMaxFullSeqFrames = addRow(panel, "Max Full Sequence Frames", "Max frames to include in the full sequence animated GIF to prevent massive files.", new SpinnerNumberModel(ImageDisplayUtils.maxFullSequenceFrames, 2, 999, 1));
 
         return panel;
     }
@@ -503,6 +504,7 @@ public class DetectionConfigurationPanel extends JPanel {
             ImageDisplayUtils.autoStretchWhiteSigma = ((Number) spinAutoWhiteSigma.getValue()).doubleValue();
             ImageDisplayUtils.gifBlinkSpeedMs = ((Number) spinGifBlinkSpeed.getValue()).intValue();
             ImageDisplayUtils.trackCropPadding = ((Number) spinCropPadding.getValue()).intValue();
+            ImageDisplayUtils.maxFullSequenceFrames = ((Number) spinMaxFullSeqFrames.getValue()).intValue();
 
         } catch (Exception ex) {
             System.err.println("Error applying settings to memory: " + ex.getMessage());

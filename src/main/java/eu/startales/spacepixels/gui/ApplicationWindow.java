@@ -28,7 +28,7 @@ import java.util.logging.Logger;
 public class ApplicationWindow {
 
     private JFrame frmIpodImage;
-    private final String version = "2026.03-beta4";
+    private final String version = "2026.03-beta5";
 
     // --- EVENT BUS INSTANCE ---
     private final EventBus eventBus = new EventBus("SpacePixelsBus");
@@ -47,7 +47,46 @@ public class ApplicationWindow {
     private final JMenu fileMenu = new JMenu("File");
     private final JMenuItem importMenuItem = new JMenuItem("Import aligned fits files");
 
+    public static volatile boolean OOM_FLAG = false;
+
     public static void main(String[] args) {
+        // --- Global Uncaught Exception Handler for OutOfMemoryError ---
+        Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
+            Throwable rootCause = e;
+            while (rootCause != null && !(rootCause instanceof OutOfMemoryError)) {
+                if (rootCause == rootCause.getCause()) break;
+                rootCause = rootCause.getCause();
+            }
+            if (rootCause instanceof OutOfMemoryError) {
+                if (!OOM_FLAG) {
+                    OOM_FLAG = true;
+                    logger.log(Level.SEVERE, "Out of Memory on thread " + t.getName(), rootCause);
+                    
+                    // Failsafe exit timer in case the EDT is completely frozen
+                    Thread doomThread = new Thread(() -> {
+                        try { Thread.sleep(10000); } catch (Exception ignore) {}
+                        System.exit(1);
+                    });
+                    doomThread.setDaemon(true);
+                    doomThread.start();
+
+                    SwingUtilities.invokeLater(() -> {
+                        try {
+                            JOptionPane.showMessageDialog(null,
+                                    "SpacePixels has run out of memory and must close.\n" +
+                                    "Please process fewer images or increase the Java heap space (e.g., -Xmx8G).",
+                                    "Fatal Error: Out of Memory", JOptionPane.ERROR_MESSAGE);
+                        } catch (Throwable ignored) {
+                        } finally {
+                            System.exit(1);
+                        }
+                    });
+                }
+            } else {
+                logger.log(Level.SEVERE, "Uncaught Exception on thread " + t.getName(), e);
+            }
+        });
+
         EventQueue.invokeLater(() -> {
             try {
                 UIManager.put("Component.arc", 10);
@@ -151,6 +190,16 @@ public class ApplicationWindow {
                 tabbedPane.setEnabledAt(3, true);
 
                 configurationApplicationPanel.refreshComponents();
+                
+                // --- Issue warning for large datasets ---
+                if (filesInfo != null && filesInfo.length > 100) {
+                    JOptionPane.showMessageDialog(frmIpodImage,
+                            "You have imported a large dataset (" + filesInfo.length + " files).\n" +
+                            "Please be aware that running the standard detection pipeline on the entire dataset at once\n" +
+                            "may cause the application to run out of memory depending on your system's resources.\n\n" +
+                            "Consider using the Iterative Detection option with a safe frame limit.",
+                            "Large Dataset Warning", JOptionPane.WARNING_MESSAGE);
+                }
             } else {
                 // Handle Error
                 JOptionPane.showMessageDialog(frmIpodImage,

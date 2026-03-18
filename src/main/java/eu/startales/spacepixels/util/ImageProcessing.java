@@ -29,6 +29,7 @@ import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
+import io.github.ppissias.jtransient.core.TrackLinker;
 
 import javax.swing.*;
 import java.awt.*;
@@ -242,7 +243,7 @@ public class ImageProcessing {
 // =========================================================================
 
     // --- UPDATED SIGNATURE: Accepts the progressListener ---
-    public File detectSlowObjectsIterative(DetectionConfig config, java.util.function.IntPredicate safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
+    public File detectSlowObjectsIterative(DetectionConfig config, java.util.function.IntPredicate safetyPrompt, TransientEngineProgressListener progressListener, int maxFramesLimit) throws Exception {
         long startTime = System.currentTimeMillis();
 
         File[] fitsFileInformation = getFitsFilesDetails();
@@ -253,33 +254,7 @@ public class ImageProcessing {
             return detectObjects(config, safetyPrompt, progressListener);
         }
 
-        System.out.println("\n--- Loading " + numFrames + " FITS files for ITERATIVE PIPELINE ---");
-
-        List<ImageFrame> allFrames = new ArrayList<>();
-        List<short[][]> rawFramesForExport = new ArrayList<>();
-
-        for (int i = 0; i < numFrames; i++) {
-
-            // --- PROGRESS UPDATE: FITS Loading (0% to 10%) ---
-            if (progressListener != null) {
-                int percent = (int) (((float) i / numFrames) * 10);
-                progressListener.onProgressUpdate(percent, "Loading frame " + (i + 1) + " into RAM...");
-            }
-
-            File currentFile = fitsFileInformation[i];
-            Fits fitsFile = new Fits(currentFile);
-            Object kernel = fitsFile.getHDU(0).getKernel();
-
-            if (!(kernel instanceof short[][])) {
-                fitsFile.close();
-                throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString());
-            }
-
-            short[][] imageData = (short[][]) kernel;
-            allFrames.add(new ImageFrame(i, currentFile.getName(), imageData));
-            rawFramesForExport.add(imageData);
-            fitsFile.close();
-        }
+        System.out.println("\n--- Starting ITERATIVE PIPELINE for " + numFrames + " FITS files (On-Demand Loading) ---");
 
         File parentDir = fitsFileInformation[0].getParentFile();
         if (parentDir == null) {
@@ -292,24 +267,25 @@ public class ImageProcessing {
             masterDir.mkdirs();
         }
 
-        // Calculate total iterations to scale the progress bar properly
-        int totalIterations = numFrames / 5;
-        int currentIteration = 0;
+        // Calculate the absolute highest pass we will perform based on the user limit
+        int targetMaxLimit = (maxFramesLimit > 0 && maxFramesLimit < numFrames) ? maxFramesLimit : numFrames;
+        if (targetMaxLimit < 5) {
+            targetMaxLimit = 5;
+        }
 
-        // 3. The Iteration Loop (5, 10, 15... up to numFrames)
-        for (int k = 5; k <= numFrames; k += 5) {
+        // Calculate total iterations to scale the progress bar properly
+        int totalIterations = (int) Math.ceil((targetMaxLimit - 4.0) / 5.0);
+        int currentIteration = 0;
+        List<ImageDisplayUtils.IterationSummary> summaries = new ArrayList<>();
+
+        // 3. The Iteration Loop (5, 10, 15... up to the user's maximum limit)
+        for (int k = 5; k <= targetMaxLimit; k += 5) {
             System.out.println("\n>>> RUNNING ITERATION: " + k + " Maximally Spaced Frames");
 
-            List<ImageFrame> spacedSubset = new ArrayList<>();
-            for (int i = 0; i < k; i++) {
-                int index = (int) Math.round(i * (numFrames - 1) / (double) (k - 1));
-                spacedSubset.add(allFrames.get(index));
-            }
-
             // --- PROGRESS UPDATE: The SCALED Listener ---
-            // We map the engine's 0-100% output to fit within this specific iteration's window (e.g., 10% to 30%)
-            final int basePercent = 10 + (int) (((float) currentIteration / totalIterations) * 80);
-            final int nextBasePercent = 10 + (int) (((float) (currentIteration + 1) / totalIterations) * 80);
+            // We map the engine's 0-100% output to fit within this specific iteration's window
+            final int basePercent = (int) (((float) currentIteration / totalIterations) * 100);
+            final int nextBasePercent = (int) (((float) (currentIteration + 1) / totalIterations) * 100);
 
             final int currentK = k;
             TransientEngineProgressListener scaledListener = (enginePercent, message) -> {
@@ -318,6 +294,28 @@ public class ImageProcessing {
                     progressListener.onProgressUpdate(scaledPercent, "Pass " + currentK + " frames: " + message);
                 }
             };
+
+            // --- ON-DEMAND LOADING for the engine ---
+            if (progressListener != null) {
+                // Use the scaled listener to show progress within the current iteration's slice
+                scaledListener.onProgressUpdate(0, "Loading " + k + " frames for engine...");
+            }
+
+            List<ImageFrame> spacedSubset = new ArrayList<>();
+            for (int i = 0; i < k; i++) {
+                int index = (int) Math.round(i * (numFrames - 1) / (double) (k - 1));
+
+                File currentFile = fitsFileInformation[index];
+                try (Fits fitsFile = new Fits(currentFile)) {
+                    Object kernel = fitsFile.getHDU(0).getKernel();
+                    if (!(kernel instanceof short[][])) {
+                        throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString() + " in file " + currentFile.getName());
+                    }
+                    short[][] imageData = (short[][]) kernel;
+                    // The ImageFrame needs the original index in the full sequence
+                    spacedSubset.add(new ImageFrame(index, currentFile.getName(), imageData));
+                }
+            }
 
             JTransientEngine engine = new JTransientEngine();
             // Pass the SCALED listener to the engine
@@ -328,6 +326,36 @@ public class ImageProcessing {
                 System.out.println("Iteration " + k + " aborted by UI callback due to high track count. Stopping further iterations.");
                 break;
             }
+
+            // --- ON-DEMAND LOADING for the export ---
+            // This is I/O intensive but perfectly memory-safe for very large datasets!
+            if (progressListener != null) {
+                scaledListener.onProgressUpdate(95, "Generating report (on-demand disk reads)...");
+            }
+            
+            final File[] currentFitsFiles = fitsFileInformation;
+            List<short[][]> rawFramesForExport = new java.util.AbstractList<short[][]>() {
+                @Override
+                public short[][] get(int index) {
+                    try {
+                        File currentFile = currentFitsFiles[index];
+                        try (Fits fitsFile = new Fits(currentFile)) {
+                            Object kernel = fitsFile.getHDU(0).getKernel();
+                            if (!(kernel instanceof short[][])) {
+                                throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString() + " in file " + currentFile.getName());
+                            }
+                            return (short[][]) kernel;
+                        }
+                    } catch (Exception e) {
+                        throw new RuntimeException("Failed to read frame " + index + " on demand: " + e.getMessage(), e);
+                    }
+                }
+
+                @Override
+                public int size() {
+                    return currentFitsFiles.length;
+                }
+            };
 
             File iterationDir = new File(masterDir, k + "_frames");
             iterationDir.mkdirs();
@@ -346,6 +374,12 @@ public class ImageProcessing {
             } catch (IOException e) {
                 System.err.println("Failed to export visualization for iteration " + k + ": " + e.getMessage());
             }
+            
+            int anomalyCount = 0;
+            for (TrackLinker.Track t : result.tracks) {
+                if (t.isAnomaly) anomalyCount++;
+            }
+            summaries.add(new ImageDisplayUtils.IterationSummary(k, k + "_frames", result.tracks.size(), anomalyCount));
 
             currentIteration++;
         }
@@ -355,6 +389,15 @@ public class ImageProcessing {
             progressListener.onProgressUpdate(100, "All iterative passes complete!");
         }
 
+        File indexFile = new File(masterDir, "index.html");
+        try {
+            ImageDisplayUtils.exportIterativeIndexReport(masterDir, summaries);
+            System.out.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
+            return indexFile;
+        } catch (IOException e) {
+            System.err.println("Failed to write iterative index report: " + e.getMessage());
+        }
+        
         System.out.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
         return masterDir;
     }
@@ -559,6 +602,36 @@ public class ImageProcessing {
             throw new IOException("Multi-threaded file loading failed: " + e.getMessage(), e);
         }
 
+        // --- NEW: Sort chronologically based on DATE-OBS FITS header ---
+        Arrays.sort(ret, (a, b) -> {
+            String dateA = a.getFitsHeader().get("DATE-OBS");
+            String dateB = b.getFitsHeader().get("DATE-OBS");
+
+            // Clean up possible FITS string quotes
+            if (dateA != null) dateA = dateA.replace("'", "").trim();
+            if (dateB != null) dateB = dateB.replace("'", "").trim();
+
+            // Fallback to alphabetical filename sorting if dates are missing
+            if (dateA == null && dateB == null) return a.getFileName().compareTo(b.getFileName());
+            if (dateA == null) return 1; // Push missing dates to the end
+            if (dateB == null) return -1;
+
+            // If dates are identical (e.g., date without time), check for TIME-OBS
+            if (dateA.equals(dateB)) {
+                String timeA = a.getFitsHeader().get("TIME-OBS");
+                String timeB = b.getFitsHeader().get("TIME-OBS");
+                if (timeA != null) timeA = timeA.replace("'", "").trim();
+                if (timeB != null) timeB = timeB.replace("'", "").trim();
+
+                if (timeA != null && timeB != null) {
+                    return timeA.compareTo(timeB);
+                }
+            }
+
+            // ISO-8601 string dates sort perfectly chronologically using alphabetical comparison!
+            return dateA.compareTo(dateB);
+        });
+
         System.out.println("Finished loading metadata for " + numFiles + " files instantly.");
         return ret;
     }
@@ -577,7 +650,7 @@ public class ImageProcessing {
 
         List<File> fitsFilesPath = new ArrayList<File>();
         for (File f : directory.listFiles((dir, name) -> {
-            String[] acceptedFileTypes = {"fits", "fit", "fts", "Fits", "Fit", "FIT", "FTS", "Fts", "FITS"};
+            String[] acceptedFileTypes = {"fits", "fit", "fts", "Fits", "Fit", "FIT", "FTS", "Fts", "FITS", "fz", "Fz", "FZ"};
             for (String acceptedFileEnd : acceptedFileTypes) {
                 if (name.endsWith(acceptedFileEnd)) {
                     return true;
@@ -864,51 +937,65 @@ public class ImageProcessing {
     // =========================================================================
 
     private void batchConvert32BitTo16Bit(File[] files, boolean isColor) throws Exception {
-        for (File file : files) {
-            ApplicationWindow.logger.info("Converting 32-bit file: " + file.getName());
+        eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog = 
+                new eu.startales.spacepixels.gui.ProcessingProgressDialog(null);
+        progressDialog.setTitle("Converting 32-bit to 16-bit...");
+        
+        SwingUtilities.invokeLater(() -> progressDialog.setVisible(true));
 
-            // --- DEBUG: Print Original File ---
-            printFitsDebugInfo("ORIGINAL 32-BIT", file);
+        try {
+            for (int i = 0; i < files.length; i++) {
+                File file = files[i];
+                final int percent = (int) (((float) i / files.length) * 100);
+                SwingUtilities.invokeLater(() -> progressDialog.updateProgress(percent, "Converting " + file.getName() + "..."));
 
-            Fits originalFits = new Fits(file);
-            Object kernel = originalFits.getHDU(0).getKernel();
+                ApplicationWindow.logger.info("Converting 32-bit file: " + file.getName());
 
-            if (isColor) {
-                // 1. Convert to 16-bit Color
-                short[][][] color16 = standardizeTo16BitColor(kernel);
-                Fits colorFits = createFitsFromData(color16, originalFits);
-                String colorName = addDirectory(file, "_16bit_color");
-                writeFitsWithSuffix(colorFits, colorName, "_16bit_color");
+                // --- DEBUG: Print Original File ---
+                printFitsDebugInfo("ORIGINAL 32-BIT", file);
 
-                // --- DEBUG: Print Converted Color File ---
-                String finalColorPath = colorName.substring(0, colorName.lastIndexOf(".")) + "_16bit_color.fit";
-                printFitsDebugInfo("CONVERTED 16-BIT COLOR", new File(finalColorPath));
+                Fits originalFits = new Fits(file);
+                Object kernel = originalFits.getHDU(0).getKernel();
 
-                // 2. Extract Luminance to 16-bit Mono
-                short[][] mono16 = extractLuminance(color16);
-                Fits monoFits = createFitsFromData(mono16, originalFits);
+                if (isColor) {
+                    // 1. Convert to 16-bit Color
+                    short[][][] color16 = standardizeTo16BitColor(kernel);
+                    Fits colorFits = createFitsFromData(color16, originalFits);
+                    String colorName = addDirectory(file, "_16bit_color");
+                    writeFitsWithSuffix(colorFits, colorName, "_16bit_color");
 
-                // Note: No manual header hacking needed here anymore!
-                // createFitsFromData safely handles NAXIS and NAXIS3 automatically.
-                String monoName = addDirectory(file, "_16bit_mono");
-                writeFitsWithSuffix(monoFits, monoName, "_16bit_mono");
+                    // --- DEBUG: Print Converted Color File ---
+                    String finalColorPath = colorName.substring(0, colorName.lastIndexOf(".")) + "_16bit_color.fit";
+                    printFitsDebugInfo("CONVERTED 16-BIT COLOR", new File(finalColorPath));
 
-                // --- DEBUG: Print Converted Luminance File ---
-                String finalLuminancePath = monoName.substring(0, monoName.lastIndexOf(".")) + "_16bit_mono.fit";
-                printFitsDebugInfo("CONVERTED 16-BIT LUMINANCE", new File(finalLuminancePath));
+                    // 2. Extract Luminance to 16-bit Mono
+                    short[][] mono16 = extractLuminance(color16);
+                    Fits monoFits = createFitsFromData(mono16, originalFits);
 
-            } else {
-                // Convert to 16-bit Mono
-                short[][] mono16 = standardizeTo16BitMono(kernel);
-                Fits monoFits = createFitsFromData(mono16, originalFits);
-                String monoName = addDirectory(file, "_16bit_converted");
-                writeFitsWithSuffix(monoFits, monoName, "_16bit");
+                    // Note: No manual header hacking needed here anymore!
+                    // createFitsFromData safely handles NAXIS and NAXIS3 automatically.
+                    String monoName = addDirectory(file, "_16bit_mono");
+                    writeFitsWithSuffix(monoFits, monoName, "_16bit_mono");
 
-                // --- DEBUG: Print Converted Mono File ---
-                String finalMonoPath = monoName.substring(0, monoName.lastIndexOf(".")) + "_16bit.fit";
-                printFitsDebugInfo("CONVERTED 16-BIT MONO", new File(finalMonoPath));
+                    // --- DEBUG: Print Converted Luminance File ---
+                    String finalLuminancePath = monoName.substring(0, monoName.lastIndexOf(".")) + "_16bit_mono.fit";
+                    printFitsDebugInfo("CONVERTED 16-BIT LUMINANCE", new File(finalLuminancePath));
+
+                } else {
+                    // Convert to 16-bit Mono
+                    short[][] mono16 = standardizeTo16BitMono(kernel);
+                    Fits monoFits = createFitsFromData(mono16, originalFits);
+                    String monoName = addDirectory(file, "_16bit_converted");
+                    writeFitsWithSuffix(monoFits, monoName, "_16bit");
+
+                    // --- DEBUG: Print Converted Mono File ---
+                    String finalMonoPath = monoName.substring(0, monoName.lastIndexOf(".")) + "_16bit.fit";
+                    printFitsDebugInfo("CONVERTED 16-BIT MONO", new File(finalMonoPath));
+                }
+                originalFits.close();
             }
-            originalFits.close();
+        } finally {
+            SwingUtilities.invokeLater(() -> progressDialog.dispose());
         }
     }
 
@@ -1018,13 +1105,15 @@ public class ImageProcessing {
             int width = floatData[0].length;
             short[][] shortData = new short[height][width];
 
-            float maxVal = 0.0f;
+            float maxVal = -Float.MAX_VALUE;
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
                     if (floatData[y][x] > maxVal) maxVal = floatData[y][x];
                 }
             }
-            float scaleFactor = (maxVal <= 1.0f && maxVal > 0.0f) ? 65535.0f : 1.0f;
+            // Standard FITS floats are 0.0 to 1.0, but hot pixels/bright stars
+            // frequently overshoot to values like 1.14 or 2.5.
+            float scaleFactor = (maxVal <= 10.0f && maxVal > 0.0f) ? 65535.0f : 1.0f;
 
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
@@ -1066,7 +1155,7 @@ public class ImageProcessing {
             int width = floatData[0][0].length;
             short[][][] shortData = new short[depth][height][width];
 
-            float maxVal = 0.0f;
+            float maxVal = -Float.MAX_VALUE;
             for (int z = 0; z < depth; z++) {
                 for (int y = 0; y < height; y++) {
                     for (int x = 0; x < width; x++) {
@@ -1074,7 +1163,9 @@ public class ImageProcessing {
                     }
                 }
             }
-            float scaleFactor = (maxVal <= 1.0f && maxVal > 0.0f) ? 65535.0f : 1.0f;
+            // Standard FITS floats are 0.0 to 1.0, but hot pixels/bright stars
+            // frequently overshoot to values like 1.14 or 2.5.
+            float scaleFactor = (maxVal <= 10.0f && maxVal > 0.0f) ? 65535.0f : 1.0f;
 
             for (int z = 0; z < depth; z++) {
                 for (int y = 0; y < height; y++) {
@@ -1120,11 +1211,11 @@ public class ImageProcessing {
 
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                int r = color16[0][y][x] & 0xFFFF; // Prevent signed negative issues during math
-                int g = color16[1][y][x] & 0xFFFF;
-                int b = color16[2][y][x] & 0xFFFF;
-                int average = (r + g + b) / 3;
-                monoData[y][x] = (short) average;
+                // Standard algebraic average safely maintains the FITS BZERO shift
+                int r = color16[0][y][x];
+                int g = color16[1][y][x];
+                int b = color16[2][y][x];
+                monoData[y][x] = (short) ((r + g + b) / 3);
             }
         }
         return monoData;
