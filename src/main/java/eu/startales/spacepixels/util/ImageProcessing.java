@@ -280,6 +280,43 @@ public class ImageProcessing {
             targetMaxLimit = 5;
         }
 
+        System.out.println("\n--- Extracting Timestamps for Temporal Spacing ---");
+        long[] frameTimestamps = new long[numFrames];
+        boolean hasValidTime = true;
+        for (int i = 0; i < numFrames; i++) {
+            frameTimestamps[i] = getFitsTimestamp(fitsFileInformation[i]);
+            if (frameTimestamps[i] == -1) {
+                hasValidTime = false;
+                break;
+            }
+        }
+
+        System.out.println("\n--- Generating Global Master Map from " + targetMaxLimit + " globally spaced frames ---");
+        TransientEngineProgressListener masterListener = (percent, msg) -> {
+            if (progressListener != null) {
+                progressListener.onProgressUpdate(percent / 5, "Global Master Map: " + msg); // Uses 0-20%
+            }
+        };
+
+        JTransientEngine globalEngine = new JTransientEngine();
+        List<ImageFrame> masterFrames = new ArrayList<>();
+        
+        List<Integer> masterIndices = getSampledIndices(frameTimestamps, hasValidTime, numFrames, targetMaxLimit);
+        for (int idx : masterIndices) {
+            File currentFile = fitsFileInformation[idx];
+            try (Fits fitsFile = new Fits(currentFile)) {
+                Object kernel = fitsFile.getHDU(0).getKernel();
+                if (!(kernel instanceof short[][])) {
+                    throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString() + " in file " + currentFile.getName());
+                }
+                masterFrames.add(new ImageFrame(idx, currentFile.getName(), (short[][]) kernel));
+            }
+        }
+
+        short[][] providedMasterStack = globalEngine.generateMasterStack(masterFrames, config, masterListener);
+        masterFrames.clear(); // Free memory
+        System.gc(); // Encourage GC to reclaim the loaded frames
+
         // Calculate total iterations to scale the progress bar properly
         int totalIterations = (int) Math.ceil((targetMaxLimit - 4.0) / 5.0);
         int currentIteration = 0;
@@ -287,12 +324,12 @@ public class ImageProcessing {
 
         // 3. The Iteration Loop (5, 10, 15... up to the user's maximum limit)
         for (int k = 5; k <= targetMaxLimit; k += 5) {
-            System.out.println("\n>>> RUNNING ITERATION: " + k + " Maximally Spaced Frames");
+            System.out.println("\n>>> RUNNING ITERATION: " + k + " Frames (Time-Spaced)");
 
             // --- PROGRESS UPDATE: The SCALED Listener ---
-            // We map the engine's 0-100% output to fit within this specific iteration's window
-            final int basePercent = (int) (((float) currentIteration / totalIterations) * 100);
-            final int nextBasePercent = (int) (((float) (currentIteration + 1) / totalIterations) * 100);
+            // We map the engine's 0-100% output to fit within this specific iteration's window (20% to 100%)
+            final int basePercent = 20 + (int) (((float) currentIteration / totalIterations) * 80);
+            final int nextBasePercent = 20 + (int) (((float) (currentIteration + 1) / totalIterations) * 80);
 
             final int currentK = k;
             TransientEngineProgressListener scaledListener = (enginePercent, message) -> {
@@ -308,10 +345,10 @@ public class ImageProcessing {
                 scaledListener.onProgressUpdate(0, "Loading " + k + " frames for engine...");
             }
 
-            List<ImageFrame> spacedSubset = new ArrayList<>();
-            for (int i = 0; i < k; i++) {
-                int index = (int) Math.round(i * (numFrames - 1) / (double) (k - 1));
+            List<Integer> sampledIndices = getSampledIndices(frameTimestamps, hasValidTime, numFrames, k);
 
+            List<ImageFrame> spacedSubset = new ArrayList<>();
+            for (int index : sampledIndices) {
                 File currentFile = fitsFileInformation[index];
                 try (Fits fitsFile = new Fits(currentFile)) {
                     Object kernel = fitsFile.getHDU(0).getKernel();
@@ -325,8 +362,8 @@ public class ImageProcessing {
             }
 
             JTransientEngine engine = new JTransientEngine();
-            // Pass the SCALED listener to the engine
-            PipelineResult result = engine.runPipeline(spacedSubset, config, scaledListener);
+            // Pass the SCALED listener and the pre-computed Master Stack to the engine
+            PipelineResult result = engine.runPipeline(spacedSubset, config, scaledListener, providedMasterStack);
             engine.shutdown();
 
             if (safetyPrompt != null && !safetyPrompt.test(result.tracks.size())) {
@@ -407,6 +444,79 @@ public class ImageProcessing {
         
         System.out.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
         return masterDir;
+    }
+
+    private List<Integer> getSampledIndices(long[] times, boolean hasValidTime, int maxLimit, int k) {
+        List<Integer> indices = new ArrayList<>();
+        
+        if (hasValidTime && maxLimit > 1) {
+            long startTime = times[0];
+            long endTime = times[maxLimit - 1];
+            long duration = endTime - startTime;
+            
+            if (duration > 0) {
+                indices.add(0);
+                for (int i = 1; i < k - 1; i++) {
+                    long targetTime = startTime + (long) (i * duration / (double) (k - 1));
+                    int bestIdx = 0;
+                    long minDiff = Long.MAX_VALUE;
+                    for (int j = 0; j < maxLimit; j++) {
+                        long diff = Math.abs(times[j] - targetTime);
+                        if (diff < minDiff) {
+                            minDiff = diff;
+                            bestIdx = j;
+                        }
+                    }
+                    if (!indices.contains(bestIdx)) {
+                        indices.add(bestIdx);
+                    }
+                }
+                if (!indices.contains(maxLimit - 1)) {
+                    indices.add(maxLimit - 1);
+                }
+                Collections.sort(indices);
+                
+                // Valid return only if time-based extraction found enough unique timestamps
+                if (indices.size() == k) {
+                    return indices;
+                }
+            }
+        }
+        
+        // Fallback: Pure array-index spacing
+        indices.clear();
+        for (int i = 0; i < k; i++) {
+            int index = (int) Math.round(i * (maxLimit - 1) / (double) (k - 1));
+            indices.add(index);
+        }
+        return indices;
+    }
+
+    private long getFitsTimestamp(File file) {
+        try (Fits fitsFile = new Fits(file)) {
+            Header header = fitsFile.getHDU(0).getHeader();
+            String dateObs = header.getStringValue("DATE-OBS");
+            if (dateObs == null) return -1;
+            dateObs = dateObs.replace("'", "").trim();
+            
+            if (dateObs.contains("T")) {
+                return java.time.LocalDateTime.parse(dateObs, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                           .atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
+            } else {
+                String timeObs = header.getStringValue("TIME-OBS");
+                if (timeObs != null) {
+                    timeObs = timeObs.replace("'", "").trim();
+                    String combined = dateObs + "T" + timeObs;
+                    return java.time.LocalDateTime.parse(combined, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                               .atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
+                } else {
+                    return java.time.LocalDate.parse(dateObs, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+                               .atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
+                }
+            }
+        } catch (Exception e) {
+            return -1;
+        }
     }
 
 // =========================================================================
