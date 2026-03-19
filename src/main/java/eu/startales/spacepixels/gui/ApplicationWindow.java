@@ -128,8 +128,8 @@ public class ApplicationWindow {
         eventBus.register(detectionConfigurationPanel);
 
         tabbedPane.addTab("Main", mainApplicationPanel);
-        tabbedPane.addTab("Configuration", configurationApplicationPanel);
-        tabbedPane.addTab("Stretch Parameters", stretchPanel);
+        tabbedPane.addTab("Astrometry Config", configurationApplicationPanel);
+        tabbedPane.addTab("Image Stretch", stretchPanel);
         tabbedPane.addTab("Detection Settings", detectionConfigurationPanel);
 
         tabbedPane.setEnabledAt(1, false);

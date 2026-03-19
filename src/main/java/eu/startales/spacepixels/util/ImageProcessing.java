@@ -17,11 +17,9 @@ import io.github.ppissias.jplatesolve.astrometrydotnet.SubmitFileRequest;
 
 import nom.tam.fits.*;
 import nom.tam.util.Cursor;
-import org.apache.commons.configuration2.FileBasedConfiguration;
-import org.apache.commons.configuration2.PropertiesConfiguration;
-import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
-import org.apache.commons.configuration2.builder.fluent.Configurations;
-import org.apache.commons.configuration2.ex.ConfigurationException;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -56,21 +54,30 @@ public class ImageProcessing {
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     private final AstrometryDotNet astrometryNetInterface = new AstrometryDotNet();
-    private final SPConfigurationFile configurationFile;
+    private final AppConfig appConfig;
+    private final File configFile;
+    private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
-    public static synchronized ImageProcessing getInstance(File alignedFitsFolderFullPath) throws IOException, FitsException, ConfigurationException {
-        String userhome = System.getProperty("user.home");
-        if (userhome == null) userhome = "";
-
-        ApplicationWindow.logger.info("Will use config file:" + new File(userhome + "/spacepixelviewer.config").getAbsolutePath());
-        SPConfigurationFile configurationFile = new SPConfigurationFile(userhome + "/spacepixelviewer.config");
-
-        return new ImageProcessing(alignedFitsFolderFullPath, configurationFile);
+    public static synchronized ImageProcessing getInstance(File alignedFitsFolderFullPath) throws IOException, FitsException {
+        return new ImageProcessing(alignedFitsFolderFullPath);
     }
 
-    private ImageProcessing(File alignedFitsFolderFullPath, SPConfigurationFile configFile) throws IOException, FitsException {
+    private ImageProcessing(File alignedFitsFolderFullPath) throws IOException, FitsException {
         this.alignedFitsFolderFullPath = alignedFitsFolderFullPath;
-        this.configurationFile = configFile;
+        
+        String userhome = System.getProperty("user.home");
+        if (userhome == null) userhome = "";
+        this.configFile = new File(userhome, "spacepixels_app.json");
+        
+        AppConfig loadedConfig = null;
+        if (this.configFile.exists()) {
+            try (FileReader reader = new FileReader(this.configFile)) {
+                loadedConfig = gson.fromJson(reader, AppConfig.class);
+            } catch (Exception e) {
+                ApplicationWindow.logger.warning("Failed to load JSON app config: " + e.getMessage());
+            }
+        }
+        this.appConfig = (loadedConfig != null) ? loadedConfig : new AppConfig();
     }
 
     // =========================================================================
@@ -680,7 +687,7 @@ public class ImageProcessing {
         ApplicationWindow.logger.info("trying to solve image astap=" + astap + " astrometry=" + astrometry);
 
         if (astap) {
-            String astapPath = configurationFile.getProperty("astap");
+            String astapPath = appConfig.astapExecutablePath;
             if (astapPath != null && (!"".equals(astapPath))) {
                 File astapPathFile = new File(astapPath);
                 if (astapPathFile.exists()) {
@@ -763,68 +770,62 @@ public class ImageProcessing {
         return totalBytesRead;
     }
 
-    public void writeSolveResults(String fitsFileFullPath, PlateSolveResult result) throws IOException, ConfigurationException {
+    public void writeSolveResults(String fitsFileFullPath, PlateSolveResult result) throws IOException {
         String solveResultFilename = fitsFileFullPath.substring(0, fitsFileFullPath.lastIndexOf(".")) + "_result.ini";
         File solveResultFile = new File(solveResultFilename);
 
-        if (solveResultFile.exists()) {
-            solveResultFile.delete();
-            solveResultFile = new File(solveResultFilename);
-        }
-
-        solveResultFile.createNewFile();
-        Configurations configs = new Configurations();
-        FileBasedConfigurationBuilder<PropertiesConfiguration> configBuilder = configs.propertiesBuilder(solveResultFile);
-        FileBasedConfiguration config = configBuilder.getConfiguration();
-
-        config.setProperty("success", result.isSuccess());
-        config.setProperty("failure_reason", result.getFailureReason());
-        config.setProperty("warning", result.getWarning());
+        Properties props = new Properties();
+        props.setProperty("success", String.valueOf(result.isSuccess()));
+        if (result.getFailureReason() != null) props.setProperty("failure_reason", result.getFailureReason());
+        if (result.getWarning() != null) props.setProperty("warning", result.getWarning());
 
         Map<String, String> solveInformation = result.getSolveInformation();
         if (solveInformation != null) {
-            for (String key : solveInformation.keySet()) {
-                config.setProperty(key, solveInformation.get(key));
+            for (Map.Entry<String, String> entry : solveInformation.entrySet()) {
+                if (entry.getValue() != null) props.setProperty(entry.getKey(), entry.getValue());
             }
         }
-        configBuilder.save();
+        
+        try (FileOutputStream fos = new FileOutputStream(solveResultFile)) {
+            props.store(fos, "SpacePixels Plate Solve Results");
+        }
     }
 
-    public PlateSolveResult readSolveResults(String fitsFileFullPath) throws ConfigurationException {
-        PlateSolveResult ret = null;
+    public PlateSolveResult readSolveResults(String fitsFileFullPath) {
         String solveResultFilename = fitsFileFullPath.substring(0, fitsFileFullPath.lastIndexOf(".")) + "_result.ini";
         File solveResultFile = new File(solveResultFilename);
 
         if (solveResultFile.exists()) {
-            Configurations configs = new Configurations();
-            FileBasedConfigurationBuilder<PropertiesConfiguration> configBuilder = configs.propertiesBuilder(solveResultFile);
-            FileBasedConfiguration config = configBuilder.getConfiguration();
-
-            boolean success = config.getBoolean("success");
-            String failure_reason = config.getString("failure_reason");
-            String warning = config.getString("warning");
-
-            Map<String, String> solveInfo = new HashMap<String, String>();
-            ret = new PlateSolveResult(success, failure_reason, warning, solveInfo);
-
-            Iterator<String> keysIterator = config.getKeys();
-            while (keysIterator.hasNext()) {
-                String key = keysIterator.next();
-                if (!key.equals("success") && !key.equals("failure_reason") && !key.equals("warning")) {
-                    solveInfo.put(key, config.getString(key));
+            Properties props = new Properties();
+            try (FileInputStream fis = new FileInputStream(solveResultFile)) {
+                props.load(fis);
+                
+                boolean success = Boolean.parseBoolean(props.getProperty("success", "false"));
+                String failure_reason = props.getProperty("failure_reason");
+                String warning = props.getProperty("warning");
+                
+                Map<String, String> solveInfo = new HashMap<>();
+                for (String key : props.stringPropertyNames()) {
+                    if (!key.equals("success") && !key.equals("failure_reason") && !key.equals("warning")) {
+                        solveInfo.put(key, props.getProperty(key));
+                    }
                 }
+                return new PlateSolveResult(success, failure_reason, warning, solveInfo);
+            } catch (IOException e) {
+                ApplicationWindow.logger.warning("Could not read solve results: " + e.getMessage());
             }
         }
-        return ret;
+        return null;
     }
 
-    public void setProperty(String key, String value) throws ConfigurationException {
-        configurationFile.setProperty(key, value);
-        configurationFile.save();
+    public AppConfig getAppConfig() {
+        return appConfig;
     }
 
-    public String getProperty(String key) {
-        return configurationFile.getProperty(key);
+    public void saveAppConfig() throws IOException {
+        try (FileWriter writer = new FileWriter(configFile)) {
+            gson.toJson(appConfig, writer);
+        }
     }
 
     private void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, boolean stretch, StretchAlgorithm algo) throws FitsException, IOException {

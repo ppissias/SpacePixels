@@ -10,7 +10,7 @@
 
 package eu.startales.spacepixels.gui;
 
-import org.apache.commons.configuration2.ex.ConfigurationException;
+import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.FitsFileInformation;
 
 import javax.swing.*;
@@ -150,15 +150,13 @@ public class ConfigurationPanel extends JPanel {
                 try {
                     Runtime.getRuntime().exec(cmdArray, null, astapExecutableFilePath.getParentFile());
 
-                    mainAppWindow.getImageProcessing().setProperty("astap", astapExecutableFilePath.getAbsolutePath());
+                    mainAppWindow.getImageProcessing().getAppConfig().astapExecutablePath = astapExecutableFilePath.getAbsolutePath();
+                    mainAppWindow.getImageProcessing().saveAppConfig();
                     astapPathLabel.setText(astapExecutableFilePath.getAbsolutePath());
 
                 } catch (IOException ex) {
                     JOptionPane.showMessageDialog(this,
-                            "Cannot execute ASTAP: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                } catch (ConfigurationException ex) {
-                    JOptionPane.showMessageDialog(this,
-                            "Cannot set configuration property: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                            "Cannot execute ASTAP or save config: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
             }
         });
@@ -199,17 +197,19 @@ public class ConfigurationPanel extends JPanel {
 
         saveConfigButton.addActionListener(e -> {
             try {
-                mainAppWindow.getImageProcessing().setProperty("ImageRA", raTextfield.getText());
-                mainAppWindow.getImageProcessing().setProperty("ImageDEC", decTextField.getText());
-                mainAppWindow.getImageProcessing().setProperty("SiteLat", latTextField.getText());
-                mainAppWindow.getImageProcessing().setProperty("SiteLong", longTextField.getText());
-                mainAppWindow.getImageProcessing().setProperty("PixelSize", pixelSizeTextfield.getText());
-                mainAppWindow.getImageProcessing().setProperty("FocalLength", focalLengthTextField.getText());
+                AppConfig config = mainAppWindow.getImageProcessing().getAppConfig();
+                config.imageRA = raTextfield.getText();
+                config.imageDEC = decTextField.getText();
+                config.siteLat = latTextField.getText();
+                config.siteLong = longTextField.getText();
+                config.pixelSize = pixelSizeTextfield.getText();
+                config.focalLength = focalLengthTextField.getText();
+                mainAppWindow.getImageProcessing().saveAppConfig();
 
                 JOptionPane.showMessageDialog(this,
                         "Configuration saved successfully.", "Success", JOptionPane.INFORMATION_MESSAGE);
 
-            } catch (ConfigurationException ex) {
+            } catch (IOException ex) {
                 ex.printStackTrace();
                 JOptionPane.showMessageDialog(this,
                         "Cannot save configuration: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -219,13 +219,15 @@ public class ConfigurationPanel extends JPanel {
 
     public void refreshComponents() {
         if (mainAppWindow.getImageProcessing() != null) {
-            astapPathLabel.setText(mainAppWindow.getImageProcessing().getProperty("astap"));
-            raTextfield.setText(mainAppWindow.getImageProcessing().getProperty("ImageRA"));
-            decTextField.setText(mainAppWindow.getImageProcessing().getProperty("ImageDEC"));
-            latTextField.setText(mainAppWindow.getImageProcessing().getProperty("SiteLat"));
-            longTextField.setText(mainAppWindow.getImageProcessing().getProperty("SiteLong"));
-            pixelSizeTextfield.setText(mainAppWindow.getImageProcessing().getProperty("PixelSize"));
-            focalLengthTextField.setText(mainAppWindow.getImageProcessing().getProperty("FocalLength"));
+            AppConfig config = mainAppWindow.getImageProcessing().getAppConfig();
+            String astap = config.astapExecutablePath;
+            astapPathLabel.setText(astap == null || astap.isEmpty() ? "Not set" : astap);
+            raTextfield.setText(config.imageRA);
+            decTextField.setText(config.imageDEC);
+            latTextField.setText(config.siteLat);
+            longTextField.setText(config.siteLong);
+            pixelSizeTextfield.setText(config.pixelSize);
+            focalLengthTextField.setText(config.focalLength);
         }
     }
 
