@@ -87,7 +87,7 @@ public class AutoTuneTask implements Runnable {
                         FrameQualityAnalyzer.FrameMetrics metrics = FrameQualityAnalyzer.evaluateFrame(pixelData, baseConfig);
                         double score = metrics.backgroundNoise * metrics.medianFWHM;
 
-                        ImageFrame currentFrame = new ImageFrame(i, info.getFileName(), pixelData);
+                        ImageFrame currentFrame = new ImageFrame(i, info.getFileName(), pixelData, -1);
                         topFrames.add(new ScoredFrame(currentFrame, score));
 
                         // 2. Sort so the lowest score (best quality) is at the top

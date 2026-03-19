@@ -175,7 +175,8 @@ public class ImageProcessing {
             }
 
             short[][] imageData = (short[][]) kernel;
-            framesForLibrary.add(new ImageFrame(i, currentFile.getName(), imageData));
+            long timestamp = getFitsTimestamp(currentFile);
+            framesForLibrary.add(new ImageFrame(i, currentFile.getName(), imageData, timestamp));
             rawFramesForExport.add(imageData);
             fitsFile.close();
         }
@@ -309,7 +310,7 @@ public class ImageProcessing {
                 if (!(kernel instanceof short[][])) {
                     throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString() + " in file " + currentFile.getName());
                 }
-                masterFrames.add(new ImageFrame(idx, currentFile.getName(), (short[][]) kernel));
+                masterFrames.add(new ImageFrame(idx, currentFile.getName(), (short[][]) kernel, frameTimestamps[idx]));
             }
         }
 
@@ -357,7 +358,7 @@ public class ImageProcessing {
                     }
                     short[][] imageData = (short[][]) kernel;
                     // The ImageFrame needs the original index in the full sequence
-                    spacedSubset.add(new ImageFrame(index, currentFile.getName(), imageData));
+                    spacedSubset.add(new ImageFrame(index, currentFile.getName(), imageData, frameTimestamps[index]));
                 }
             }
 
