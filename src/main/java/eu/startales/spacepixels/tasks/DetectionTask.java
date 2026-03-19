@@ -30,6 +30,7 @@ import eu.startales.spacepixels.util.RawImageAnnotator;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.awt.image.BufferedImage;
+import java.awt.Graphics2D;
 import java.io.File;
 import java.util.List;
 import java.util.logging.Level;
@@ -84,8 +85,14 @@ public class DetectionTask implements Runnable {
                         else starCount++;
                     }
 
-                    RawImageAnnotator.drawDetections(debugImage, objects);
-                    BufferedImage finalImageToDisplay = ImageDisplayUtils.createDisplayImage(debugImage);
+                    BufferedImage grayImage = ImageDisplayUtils.createDisplayImage(debugImage);
+                    BufferedImage finalImageToDisplay = new BufferedImage(grayImage.getWidth(), grayImage.getHeight(), BufferedImage.TYPE_INT_RGB);
+                    Graphics2D g2d = finalImageToDisplay.createGraphics();
+                    g2d.drawImage(grayImage, 0, 0, null);
+                    g2d.dispose();
+
+                    RawImageAnnotator.drawExactBlobs(finalImageToDisplay, objects);
+                    RawImageAnnotator.drawDetections(finalImageToDisplay, objects);
                     selectedFitsImage.close();
 
                     // Post success for Quick Detection

@@ -52,11 +52,12 @@ public class DetectionConfigurationPanel extends JPanel {
 
     // --- SourceExtractor Spinners ---
     private JSpinner spinDetectionSigma, spinMinPixels, spinEdgeMargin, spinGrowSigma, spinVoidFraction, spinVoidRadius;
+    private JSpinner spinMasterSigma, spinMasterMinPix;
     private JSpinner spinStreakMinElong, spinStreakMinPix, spinSingleStreakMinPeakSigma, spinPointMinPix;
     private JSpinner spinBgClippingIters, spinBgClippingFactor;
 
     // --- TrackLinker Spinners ---
-    private JSpinner spinStationaryDefect, spinReqDetToStar, spinStarJitterExp, spinStarJitter, spinPredTol, spinAngleTol;
+    private JSpinner spinStationaryDefect, spinReqDetToStar, spinStarJitterExp, spinStarJitter, spinMaxMaskOverlapFraction, spinPredTol, spinAngleTol;
     private JSpinner spinTrackMinFrameRatio, spinAbsMaxPoints, spinMaxJump, spinMaxSizeRatio;
     private JSpinner spinRhythmVar, spinRhythmMinRatio, spinRhythmStatThresh;
     private JSpinner spinMaxFluxRatio;
@@ -73,11 +74,14 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private JSpinner spinQualitySigma, spinQualityMinPix, spinMaxElongFwhm, spinErrorFallback;
 
+    // --- Auto-Tuner Spinners ---
+    private JSpinner spinAutoTransientPenalty, spinAutoSigmaPenalty, spinAutoMinPixPenalty;
+
     // --- Visualization Spinners (SpacePixels Specific) ---
     private JSpinner spinStreakScale, spinStreakCentroidRad, spinPointBoxRad, spinBoxPad;
     private JSpinner spinAutoBlackSigma, spinAutoWhiteSigma, spinGifBlinkSpeed, spinCropPadding, spinMaxFullSeqFrames;
 
-    private final JButton previewBtn = new JButton("Preview Tuning Mask");
+    private final JButton previewBtn = new JButton("Preview Detection Settings");
 
     // --- NEW: AUTO-TUNE BUTTON ---
     private final JButton autoTuneBtn = new JButton("Auto-Tune Settings");
@@ -101,6 +105,9 @@ public class DetectionConfigurationPanel extends JPanel {
         tabbedPane.addTab("Visualization", buildScrollPane(buildVisualizationPanel()));
 
         add(tabbedPane, BorderLayout.CENTER);
+
+        // --- ENFORCE UI CONSTRAINTS ---
+        setupConstraints();
 
         // Apply Button (Updates memory only)
         JButton applyBtn = new JButton("Apply Settings");
@@ -134,6 +141,43 @@ public class DetectionConfigurationPanel extends JPanel {
         bottomPanel.add(applyBtn);
 
         add(bottomPanel, BorderLayout.SOUTH);
+    }
+
+    private void setupConstraints() {
+        // Ensure Detection Sigma >= Master Sigma
+        spinDetectionSigma.addChangeListener(e -> {
+            double detSigma = ((Number) spinDetectionSigma.getValue()).doubleValue();
+            double masterSigma = ((Number) spinMasterSigma.getValue()).doubleValue();
+            if (detSigma < masterSigma) spinDetectionSigma.setValue(masterSigma);
+
+            // Ensure Grow Sigma <= Detection Sigma
+            double growSigma = ((Number) spinGrowSigma.getValue()).doubleValue();
+            if (detSigma < growSigma) spinGrowSigma.setValue(detSigma);
+        });
+        spinMasterSigma.addChangeListener(e -> {
+            double detSigma = ((Number) spinDetectionSigma.getValue()).doubleValue();
+            double masterSigma = ((Number) spinMasterSigma.getValue()).doubleValue();
+            if (masterSigma > detSigma) spinMasterSigma.setValue(detSigma);
+        });
+
+        // Ensure Grow Sigma <= Detection Sigma
+        spinGrowSigma.addChangeListener(e -> {
+            double detSigma = ((Number) spinDetectionSigma.getValue()).doubleValue();
+            double growSigma = ((Number) spinGrowSigma.getValue()).doubleValue();
+            if (growSigma > detSigma) spinGrowSigma.setValue(detSigma);
+        });
+
+        // Ensure Detection Min Pixels >= Master Min Pixels
+        spinMinPixels.addChangeListener(e -> {
+            int detPix = ((Number) spinMinPixels.getValue()).intValue();
+            int masterPix = ((Number) spinMasterMinPix.getValue()).intValue();
+            if (detPix < masterPix) spinMinPixels.setValue(masterPix);
+        });
+        spinMasterMinPix.addChangeListener(e -> {
+            int detPix = ((Number) spinMinPixels.getValue()).intValue();
+            int masterPix = ((Number) spinMasterMinPix.getValue()).intValue();
+            if (masterPix > detPix) spinMasterMinPix.setValue(detPix);
+        });
     }
 
 // =========================================================================
@@ -227,6 +271,11 @@ public class DetectionConfigurationPanel extends JPanel {
         spinVoidRadius = addRow(panel, "Void Proximity Radius", "Distance (px) to look ahead for a void edge to defeat interpolation gradients.", new SpinnerNumberModel(jTransientConfig.voidProximityRadius, 0, 999, 1));
 
         panel.add(Box.createVerticalStrut(10));
+        panel.add(createSectionHeader("Master Map Extraction"));
+        spinMasterSigma = addRow(panel, "Master Sigma Multiplier", "Baseline requirement for extracting stars to build the Master Star Map. Typically lower to ensure faint halos are masked.", new SpinnerNumberModel(jTransientConfig.masterSigmaMultiplier, 0.5, 999.0, 0.25));
+        spinMasterMinPix = addRow(panel, "Master Min Pixels", "Minimum number of pixels a source must have to be considered a star in the Master Star Map.", new SpinnerNumberModel(jTransientConfig.masterMinDetectionPixels, 1, 99999, 1));
+
+        panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Shape Classification"));
         spinStreakMinElong = addRow(panel, "Streak Min Elongation", "Minimum length/width ratio required to classify a blob as a fast-moving streak.", new SpinnerNumberModel(jTransientConfig.streakMinElongation, 1.0, 999.0, 0.5));
         spinStreakMinPix = addRow(panel, "Streak Min Pixels", "Minimum number of pixels required to classify an elongated blob as a streak.", new SpinnerNumberModel(jTransientConfig.streakMinPixels, 1, 99999, 1));
@@ -248,7 +297,7 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Phase 1 & 3: Defects & Stars"));
         spinStationaryDefect = addRow(panel, "Stationary Defect Threshold", "Max movement (px) allowed for a streak to be considered a stationary sensor defect (hot column).", new SpinnerNumberModel(jTransientConfig.stationaryDefectThreshold, 0.0, 999.0, 0.5));
         spinStarJitter = addRow(panel, "Base Star Jitter Radius", "Maximum distance (px) stars can wobble between frames due to seeing.", new SpinnerNumberModel(jTransientConfig.maxStarJitter, 0.5, 999.0, 0.5));
-        spinStarJitterExp = addRow(panel, "Star Jitter Expansion Factor", "Multiplier for star jitter to account for long-term atmospheric wobble over the entire session.", new SpinnerNumberModel(jTransientConfig.starJitterExpansionFactor, 1.0, 99.0, 0.1));
+        spinMaxMaskOverlapFraction = addRow(panel, "Max Mask Overlap Fraction", "Instead of a strict 1-pixel touch, allow a transient to overlap the master mask up to this fraction (e.g., 0.25 = 25%).", new SpinnerNumberModel(jTransientConfig.maxMaskOverlapFraction, 0.0, 1.0, 0.05));
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Phase 4: Geometric Kinematics"));
@@ -301,6 +350,12 @@ public class DetectionConfigurationPanel extends JPanel {
         spinQualityMinPix = addRow(panel, "Quality Min Detection Pixels", "Min pixels a source must have to be considered a valid star during the quality phase.", new SpinnerNumberModel(jTransientConfig.qualityMinDetectionPixels, 1, 99999, 1));
         spinMaxElongFwhm = addRow(panel, "Max Elongation for FWHM", "Max elongation a star can have to be included in focus calculation. Excludes trailed stars.", new SpinnerNumberModel(jTransientConfig.maxElongationForFwhm, 1.0, 999.0, 0.1));
         spinErrorFallback = addRow(panel, "Error Fallback Value", "Value assigned when a frame is completely devoid of valid stars (e.g., thick clouds).", new SpinnerNumberModel(jTransientConfig.errorFallbackValue, 0.0, 999999.0, 10.0));
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createSectionHeader("Auto-Tuner Heuristics"));
+        spinAutoTransientPenalty = addRow(panel, "Transient Penalty Weight", "Weighting penalty for transients used in the Auto-Tuner scoring heuristic.", new SpinnerNumberModel(jTransientConfig.scoreWeightTransientPenalty, 0.0, 999.0, 0.5));
+        spinAutoSigmaPenalty = addRow(panel, "Sigma Penalty Weight", "Weighting penalty for high sigma thresholds. Forces the tuner to prefer the lowest possible clean sigma.", new SpinnerNumberModel(jTransientConfig.scoreWeightSigmaPenalty, 0.0, 999.0, 1.0));
+        spinAutoMinPixPenalty = addRow(panel, "Min Pixels Penalty Weight", "Weighting penalty for high minimum pixel limits.", new SpinnerNumberModel(jTransientConfig.scoreWeightMinPixPenalty, 0.0, 999.0, 0.5));
 
         return panel;
     }
@@ -452,6 +507,8 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.edgeMarginPixels = ((Number) spinEdgeMargin.getValue()).intValue();
             jTransientConfig.voidThresholdFraction = ((Number) spinVoidFraction.getValue()).doubleValue();
             jTransientConfig.voidProximityRadius = ((Number) spinVoidRadius.getValue()).intValue();
+            jTransientConfig.masterSigmaMultiplier = ((Number) spinMasterSigma.getValue()).doubleValue();
+            jTransientConfig.masterMinDetectionPixels = ((Number) spinMasterMinPix.getValue()).intValue();
             jTransientConfig.streakMinElongation = ((Number) spinStreakMinElong.getValue()).doubleValue();
             jTransientConfig.streakMinPixels = ((Number) spinStreakMinPix.getValue()).intValue();
             jTransientConfig.singleStreakMinPeakSigma = ((Number) spinSingleStreakMinPeakSigma.getValue()).doubleValue();
@@ -461,7 +518,7 @@ public class DetectionConfigurationPanel extends JPanel {
             // --- Apply Tracker Settings to the POJO ---
             jTransientConfig.stationaryDefectThreshold = ((Number) spinStationaryDefect.getValue()).doubleValue();
             jTransientConfig.maxStarJitter = ((Number) spinStarJitter.getValue()).doubleValue();
-            jTransientConfig.starJitterExpansionFactor = ((Number) spinStarJitterExp.getValue()).doubleValue();
+            jTransientConfig.maxMaskOverlapFraction = ((Number) spinMaxMaskOverlapFraction.getValue()).doubleValue();
             jTransientConfig.predictionTolerance = ((Number) spinPredTol.getValue()).doubleValue();
             jTransientConfig.angleToleranceDegrees = ((Number) spinAngleTol.getValue()).doubleValue();
             jTransientConfig.maxJumpPixels = ((Number) spinMaxJump.getValue()).doubleValue();
@@ -494,6 +551,10 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.qualityMinDetectionPixels = ((Number) spinQualityMinPix.getValue()).intValue();
             jTransientConfig.maxElongationForFwhm = ((Number) spinMaxElongFwhm.getValue()).doubleValue();
             jTransientConfig.errorFallbackValue = ((Number) spinErrorFallback.getValue()).doubleValue();
+
+            jTransientConfig.scoreWeightTransientPenalty = ((Number) spinAutoTransientPenalty.getValue()).doubleValue();
+            jTransientConfig.scoreWeightSigmaPenalty = ((Number) spinAutoSigmaPenalty.getValue()).doubleValue();
+            jTransientConfig.scoreWeightMinPixPenalty = ((Number) spinAutoMinPixPenalty.getValue()).doubleValue();
 
             // --- Apply Visualization Settings (SpacePixels Static Variables) ---
             RawImageAnnotator.streakLineScaleFactor = ((Number) spinStreakScale.getValue()).doubleValue();
@@ -596,23 +657,32 @@ public class DetectionConfigurationPanel extends JPanel {
 
                 if (result.success) { // <-- Only proceed if the strict math succeeded!
 
+                    boolean growSigmaAdjusted = false;
+                    if (result.optimizedConfig.growSigmaMultiplier > result.optimizedConfig.detectionSigmaMultiplier) {
+                        result.optimizedConfig.growSigmaMultiplier = result.optimizedConfig.detectionSigmaMultiplier;
+                        growSigmaAdjusted = true;
+                    }
+
                     // Physically move the sliders
                     updateSpinnersFromConfig(result.optimizedConfig);
+
+                    String adjustedMsg = growSigmaAdjusted ? 
+                            String.format("• Grow Sigma: %.1f (capped to Detection Sigma)\n", result.optimizedConfig.growSigmaMultiplier) : "";
 
                     String summary = String.format(
                             "Auto-Tuning Complete!\n\n" +
                                     "Winning Settings Found:\n" +
                                     "• Detection Sigma: %.1f\n" +
-                                    "• Grow Sigma: %.1f\n" +
                                     "• Min Pixels: %d\n" +
                                     "• Max Star Jitter: %.2f px\n" +
-                                    "• Streak Min Elongation: %.2f\n\n" +
+                                    "• Streak Min Elongation: %.2f\n" +
+                                    "%s\n" +
                                     "Telemetry: Extracted %d stable stars with a %.1f%% noise ratio.",
                             result.optimizedConfig.detectionSigmaMultiplier,
-                            result.optimizedConfig.growSigmaMultiplier,
                             result.optimizedConfig.minDetectionPixels,
                             result.optimizedConfig.maxStarJitter,
                             result.optimizedConfig.streakMinElongation,
+                            adjustedMsg,
                             result.bestStarCount,
                             (result.bestTransientRatio * 100)
                     );
@@ -636,6 +706,8 @@ public class DetectionConfigurationPanel extends JPanel {
      * Helper method to physically move the UI sliders to match a provided config.
      */
     private void updateSpinnersFromConfig(DetectionConfig config) {
+        spinMasterSigma.setValue(config.masterSigmaMultiplier);
+        spinMasterMinPix.setValue(config.masterMinDetectionPixels);
         spinDetectionSigma.setValue(config.detectionSigmaMultiplier);
         spinGrowSigma.setValue(config.growSigmaMultiplier);
         spinMinPixels.setValue(config.minDetectionPixels);

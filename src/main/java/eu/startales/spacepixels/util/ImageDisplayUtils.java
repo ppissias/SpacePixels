@@ -218,55 +218,11 @@ public class ImageDisplayUtils {
         // Create an RGB image so we can paint the mask in color
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
 
-        // Calculate stretch for background
-        long sum = 0;
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                sum += (masterStackData[y][x] + 32768);
-            }
-        }
-        double mean = (double) sum / (width * height);
-
-        double sumSqDiff = 0;
-        int actualMax = 0;
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int val = masterStackData[y][x] + 32768;
-                if (val > actualMax) actualMax = val;
-                double diff = val - mean;
-                sumSqDiff += (diff * diff);
-            }
-        }
-        double sigma = Math.sqrt(sumSqDiff / (width * height));
-        double blackPoint = mean - (autoStretchBlackSigma * sigma);
-        double whitePoint = mean + (autoStretchWhiteSigma * sigma);
-
-        if (blackPoint < 0) blackPoint = 0;
-        if (whitePoint > actualMax) whitePoint = actualMax;
-        double range = whitePoint - blackPoint;
-        if (range <= 0) range = 1.0;
-
-        // Draw the grayscale stretched background
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int val = masterStackData[y][x] + 32768;
-                double adjustedVal = val - blackPoint;
-                if (adjustedVal < 0) adjustedVal = 0;
-                if (adjustedVal > range) adjustedVal = range;
-
-                double normalized = adjustedVal / range;
-                double stretched = Math.sqrt(normalized);
-                int displayValue = (int) (stretched * 255.0);
-                if (displayValue > 255) displayValue = 255;
-                if (displayValue < 0) displayValue = 0;
-
-                int rgb = (displayValue << 16) | (displayValue << 8) | displayValue;
-                image.setRGB(x, y, rgb);
-            }
-        }
+        // The BufferedImage is entirely black by default (RGB 0,0,0)
+        // We only need to paint the exact veto pixels
 
         // PAINT THE MASTER MASK IN BRIGHT RED
-        int redColor = new Color(255, 0, 0, 150).getRGB(); // Semi-transparent red
+        int redColor = new Color(255, 0, 0).getRGB(); // Solid red
         for (SourceExtractor.DetectedObject star : masterStars) {
             if (star.rawPixels != null) {
                 for (SourceExtractor.Pixel p : star.rawPixels) {
@@ -482,6 +438,163 @@ public class ImageDisplayUtils {
         return image;
     }
 
+    // =================================================================
+    // DITHER & DRIFT DIAGNOSTICS
+    // =================================================================
+
+    public static Point getFrameDriftOffset(short[][] frame) {
+        int height = frame.length;
+        int width = frame[0].length;
+        int minX = 0, maxX = width - 1;
+        int minY = 0, maxY = height - 1;
+
+        // threshold: at least 5% of pixels are valid to ignore noise/artifacts
+        int xThreshold = height / 20;
+        int yThreshold = width / 20;
+
+        // Find Top (minY)
+        for (int y = 0; y < height; y++) {
+            int validCount = 0;
+            for (int x = 0; x < width; x++) if (frame[y][x] > -32760) validCount++;
+            if (validCount > yThreshold) { minY = y; break; }
+        }
+
+        // Find Bottom (maxY)
+        for (int y = height - 1; y >= 0; y--) {
+            int validCount = 0;
+            for (int x = 0; x < width; x++) if (frame[y][x] > -32760) validCount++;
+            if (validCount > yThreshold) { maxY = y; break; }
+        }
+
+        // Find Left (minX)
+        for (int x = 0; x < width; x++) {
+            int validCount = 0;
+            for (int y = 0; y < height; y++) if (frame[y][x] > -32760) validCount++;
+            if (validCount > xThreshold) { minX = x; break; }
+        }
+
+        // Find Right (maxX)
+        for (int x = width - 1; x >= 0; x--) {
+            int validCount = 0;
+            for (int y = 0; y < height; y++) if (frame[y][x] > -32760) validCount++;
+            if (validCount > xThreshold) { maxX = x; break; }
+        }
+
+        // True geometric drift relative to the master canvas
+        int dx = minX - ((width - 1) - maxX);
+        int dy = minY - ((height - 1) - maxY);
+
+        return new Point(dx, dy);
+    }
+
+    public static BufferedImage createDriftMap(List<Point> path, int outSize) {
+        BufferedImage img = new BufferedImage(outSize, outSize, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = img.createGraphics();
+        g2d.setColor(new Color(35, 35, 35));
+        g2d.fillRect(0, 0, outSize, outSize);
+
+        if (path == null || path.isEmpty()) {
+            g2d.dispose();
+            return img;
+        }
+
+        int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
+        int minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
+        for (Point p : path) {
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.y > maxY) maxY = p.y;
+        }
+
+        int rangeX = maxX - minX;
+        int rangeY = maxY - minY;
+        int maxRange = Math.max(Math.max(rangeX, rangeY), 15); // Ensure map scale doesn't explode on 0 drift
+
+        int pad = 40;
+        double scale = (double) (outSize - 2 * pad) / maxRange;
+
+        int centerX = (maxX + minX) / 2;
+        int centerY = (maxY + minY) / 2;
+
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        // Draw Grid Outline
+        g2d.setColor(new Color(70, 70, 70));
+        g2d.setStroke(new BasicStroke(1));
+        g2d.drawRect(pad, pad, outSize - 2 * pad, outSize - 2 * pad);
+
+        // Draw Trajectory Path
+        g2d.setStroke(new BasicStroke(2.0f));
+        for (int i = 0; i < path.size() - 1; i++) {
+            Point p1 = path.get(i);
+            Point p2 = path.get(i + 1);
+
+            int x1 = (outSize / 2) + (int) Math.round((p1.x - centerX) * scale);
+            int y1 = (outSize / 2) + (int) Math.round((p1.y - centerY) * scale);
+            int x2 = (outSize / 2) + (int) Math.round((p2.x - centerX) * scale);
+            int y2 = (outSize / 2) + (int) Math.round((p2.y - centerY) * scale);
+
+            // Draw color gradient to denote time (Blue -> Red)
+            float ratio = (float) i / (path.size() - 1);
+            g2d.setColor(new Color(ratio, 0.4f, 1.0f - ratio));
+            g2d.drawLine(x1, y1, x2, y2);
+            g2d.fillOval(x1 - 2, y1 - 2, 4, 4);
+        }
+
+        // Render Map Points
+        Point pFirst = path.get(0);
+        int xf = (outSize / 2) + (int) Math.round((pFirst.x - centerX) * scale);
+        int yf = (outSize / 2) + (int) Math.round((pFirst.y - centerY) * scale);
+        g2d.setColor(new Color(80, 150, 255)); // Blue = Start
+        g2d.fillOval(xf - 5, yf - 5, 10, 10);
+
+        Point pLast = path.get(path.size() - 1);
+        int xl = (outSize / 2) + (int) Math.round((pLast.x - centerX) * scale);
+        int yl = (outSize / 2) + (int) Math.round((pLast.y - centerY) * scale);
+        g2d.setColor(new Color(255, 80, 80)); // Red = End
+        g2d.fillOval(xl - 5, yl - 5, 10, 10);
+
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        g2d.drawString("Max Drift: " + rangeX + "x" + rangeY + " px", 10, 20);
+
+        g2d.dispose();
+        return img;
+    }
+
+    public static BufferedImage createFourCornerMosaic(short[][] frame, int targetCropSize) {
+        int height = frame.length;
+        int width = frame[0].length;
+        int cropX = Math.min(targetCropSize, width / 2);
+        int cropY = Math.min(targetCropSize, height / 2);
+
+        short[][] tl = robustEdgeAwareCrop(frame, cropX / 2, cropY / 2, cropX, cropY);
+        short[][] tr = robustEdgeAwareCrop(frame, width - (cropX / 2), cropY / 2, cropX, cropY);
+        short[][] bl = robustEdgeAwareCrop(frame, cropX / 2, height - (cropY / 2), cropX, cropY);
+        short[][] br = robustEdgeAwareCrop(frame, width - (cropX / 2), height - (cropY / 2), cropX, cropY);
+
+        BufferedImage imgTL = createDisplayImage(tl);
+        BufferedImage imgTR = createDisplayImage(tr);
+        BufferedImage imgBL = createDisplayImage(bl);
+        BufferedImage imgBR = createDisplayImage(br);
+
+        BufferedImage out = new BufferedImage(cropX * 2, cropY * 2, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = out.createGraphics();
+        g.drawImage(imgTL, 0, 0, null);
+        g.drawImage(imgTR, cropX, 0, null);
+        g.drawImage(imgBL, 0, cropY, null);
+        g.drawImage(imgBR, cropX, cropY, null);
+
+        // Draw central crosshairs to separate the corners visually
+        g.setColor(new Color(255, 80, 80, 200));
+        g.setStroke(new BasicStroke(2));
+        g.drawLine(cropX, 0, cropX, cropY * 2);
+        g.drawLine(0, cropY, cropX * 2, cropY);
+        g.dispose();
+
+        return out;
+    }
 
     // =================================================================
     // HTML EXPORT
@@ -618,6 +731,49 @@ public class ImageDisplayUtils {
                 report.println("</div>");
                 report.println("</div>");
 
+                // --- NEW: DITHER & DRIFT DIAGNOSTICS ---
+                if (rawFrames != null && !rawFrames.isEmpty()) {
+                    List<Point> driftPath = new ArrayList<>();
+                    List<BufferedImage> cornerFrames = new ArrayList<>();
+
+                    // Use the existing down-sampler to keep memory, disk I/O, and GIF size completely safe
+                    List<Integer> sampledCornerIndices = getRepresentativeSequence(rawFrames.size(), new java.util.HashSet<>(), maxFullSequenceFrames);
+                    for (int idx : sampledCornerIndices) {
+                        short[][] frame = rawFrames.get(idx);
+                        driftPath.add(getFrameDriftOffset(frame));
+                    }
+
+                    boolean hasDrift = false;
+                    Point firstP = driftPath.get(0);
+                    for (Point p : driftPath) {
+                        if (p.x != firstP.x || p.y != firstP.y) {
+                            hasDrift = true;
+                            break;
+                        }
+                    }
+
+                    if (hasDrift) {
+                        for (int idx : sampledCornerIndices) {
+                            cornerFrames.add(createFourCornerMosaic(rawFrames.get(idx), 150));
+                        }
+
+                        BufferedImage driftImg = createDriftMap(driftPath, 300);
+                        saveTrackImageLossless(driftImg, new File(exportDir, "dither_drift_map.png"));
+
+                        String cornerGifFile = "dither_corners_sampled.gif";
+                        GifSequenceWriter.saveAnimatedGif(cornerFrames, new File(exportDir, cornerGifFile), gifBlinkSpeedMs);
+
+                        report.println("<div class='panel'>");
+                        report.println("<h2>Dither & Sensor Drift Diagnostics</h2>");
+                        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
+                        report.println("Shows how the image frame drifted across the session. Sensor dust or hot pixels move exactly along this trajectory, potentially creating false moving targets.</p>");
+                        report.println("<div class='image-container'>");
+                        report.println("<div><a href='dither_drift_map.png' target='_blank'><img src='dither_drift_map.png' style='max-width: 300px;' alt='Drift Trajectory' /></a><br/><center><small>Drift Trajectory Map (Blue = Start, Red = End)</small></center></div>");
+                        report.println("<div><a href='" + cornerGifFile + "' target='_blank'><img src='" + cornerGifFile + "' style='max-width: 300px;' alt='Corners Sampled Time-Lapse' /></a><br/><center><small>4-Corners Sampled Time-Lapse</small></center></div>");
+                        report.println("</div>");
+                        report.println("</div>");
+                    }
+                }
 
                 // --- Extraction Stats Table ---
                 report.println("<div class='panel'>");

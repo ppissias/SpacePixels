@@ -41,4 +41,8 @@ dependencies {
 application {
     mainClass = 'eu.startales.spacepixels.gui.ApplicationWindow'
     applicationName = 'SpacePixels'
+
+    // Dynamically allocate up to 80% of the host system's total memory at runtime.
+    // This applies to both `./gradlew run` and the generated distribution start scripts.
+    applicationDefaultJvmArgs = ["-XX:MaxRAMPercentage=80.0", "-XX:+UseG1GC"]
 }

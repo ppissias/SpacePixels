@@ -13,6 +13,10 @@ package eu.startales.spacepixels.util;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 
 import java.awt.image.BufferedImage;
+import java.awt.Graphics2D;
+import java.awt.Color;
+import java.awt.BasicStroke;
+import java.awt.RenderingHints;
 import java.util.List;
 
 public class RawImageAnnotator {
@@ -20,12 +24,6 @@ public class RawImageAnnotator {
     // =================================================================
     // CONFIGURATION PARAMETERS
     // =================================================================
-
-    /** * The color value used to draw annotations.
-     * In a 16-bit unsigned FITS image, pure white is exactly 65535.
-     * In Java's signed short, this is represented as -1.
-     */
-    public static short highlightValue = (short) 65535;
 
     /** * The scale factor used to determine how long the drawn streak line should be.
      * It multiplies the calculated elongation ratio to make the line visible.
@@ -54,16 +52,24 @@ public class RawImageAnnotator {
     // =================================================================
 
     /**
-     * Overwrites the raw FITS data to draw boxes around stars and lines over streaks.
+     * Draws anti-aliased colored boxes around stars and lines over streaks natively on the UI canvas.
      */
-    public static void drawDetections(short[][] imageData, List<SourceExtractor.DetectedObject> objects) {
+    public static void drawDetections(BufferedImage image, List<SourceExtractor.DetectedObject> objects) {
         if (objects == null || objects.isEmpty()) return;
 
+        Graphics2D g2d = image.createGraphics();
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
         for (SourceExtractor.DetectedObject obj : objects) {
+            if (obj.isNoise) continue;
+
             int cx = (int) Math.round(obj.x);
             int cy = (int) Math.round(obj.y);
 
             if (obj.isStreak) {
+                g2d.setColor(new Color(255, 50, 50)); // Bright Red
+                g2d.setStroke(new BasicStroke(1.5f));
+
                 // Draw a line representing the streak's angle and length (Parameterized scale)
                 double lineLength = obj.elongation * streakLineScaleFactor;
                 int x1 = (int) Math.round(cx - (Math.cos(obj.angle) * lineLength));
@@ -71,12 +77,14 @@ public class RawImageAnnotator {
                 int x2 = (int) Math.round(cx + (Math.cos(obj.angle) * lineLength));
                 int y2 = (int) Math.round(cy + (Math.sin(obj.angle) * lineLength));
 
-                drawLine(imageData, x1, y1, x2, y2, highlightValue);
+                g2d.drawLine(x1, y1, x2, y2);
 
                 // Draw a small tight box exactly at the centroid (Parameterized radius)
-                drawBox(imageData, cx, cy, streakCentroidBoxRadius, highlightValue);
+                g2d.drawRect(cx - streakCentroidBoxRadius, cy - streakCentroidBoxRadius, streakCentroidBoxRadius * 2, streakCentroidBoxRadius * 2);
             } else {
-                // DYNAMIC BOX SIZE
+                g2d.setColor(new Color(50, 255, 50)); // Bright Green
+                g2d.setStroke(new BasicStroke(1.5f));
+
                 int boxRadius = pointSourceMinBoxRadius; // Parameterized default minimum
 
                 if (obj.pixelArea > 0) {
@@ -87,65 +95,10 @@ public class RawImageAnnotator {
                     boxRadius = Math.max(pointSourceMinBoxRadius, dynamicRadius);
                 }
 
-                drawBox(imageData, cx, cy, boxRadius, highlightValue);
+                g2d.drawRect(cx - boxRadius, cy - boxRadius, boxRadius * 2, boxRadius * 2);
             }
         }
-    }
-
-    /**
-     * Draws a hollow square bounding box centered at (cx, cy).
-     */
-    private static void drawBox(short[][] image, int cx, int cy, int radius, short value) {
-        // Top and Bottom edges
-        for (int x = cx - radius; x <= cx + radius; x++) {
-            setPixelSafe(image, x, cy - radius, value);
-            setPixelSafe(image, x, cy + radius, value);
-        }
-        // Left and Right edges
-        for (int y = cy - radius; y <= cy + radius; y++) {
-            setPixelSafe(image, cx - radius, y, value);
-            setPixelSafe(image, cx + radius, y, value);
-        }
-    }
-
-    /**
-     * Implementation of Bresenham's Line Algorithm to draw angled lines on a 2D grid.
-     */
-    private static void drawLine(short[][] image, int x1, int y1, int x2, int y2, short value) {
-        int dx = Math.abs(x2 - x1);
-        int dy = Math.abs(y2 - y1);
-        int sx = x1 < x2 ? 1 : -1;
-        int sy = y1 < y2 ? 1 : -1;
-        int err = dx - dy;
-
-        while (true) {
-            setPixelSafe(image, x1, y1, value);
-
-            if (x1 == x2 && y1 == y2) break;
-
-            int e2 = 2 * err;
-            if (e2 > -dy) {
-                err -= dy;
-                x1 += sx;
-            }
-            if (e2 < dx) {
-                err += dx;
-                y1 += sy;
-            }
-        }
-    }
-
-    /**
-     * Safely sets a pixel value, preventing OutOfBoundsExceptions if a detection
-     * is right on the edge of the image.
-     */
-    private static void setPixelSafe(short[][] image, int x, int y, short value) {
-        // Because image is row-major [height][width], image.length is the Height (Y axis)
-        // and image[0].length is the Width (X axis).
-        if (y >= 0 && y < image.length && x >= 0 && x < image[0].length) {
-            // Write to the array in the proper [y][x] format
-            image[y][x] = value;
-        }
+        g2d.dispose();
     }
 
     /**
@@ -155,9 +108,9 @@ public class RawImageAnnotator {
     public static void drawExactBlobs(BufferedImage image, List<SourceExtractor.DetectedObject> objects) {
         // Define our semi-transparent overlay colors (ARGB)
         // Format is (Alpha << 24) | (Red << 16) | (Green << 8) | Blue
-        // Using ~40% opacity (100 out of 255)
-        int streakColor = (100 << 24) | (255 << 16) | (0 << 8) | 0;   // Red
-        int pointColor  = (100 << 24) | (0 << 16)   | (255 << 8) | 0; // Green
+        // Increased opacity to ~70% (180 out of 255) for much more vivid visibility
+        int streakColor = (180 << 24) | (255 << 16) | (0 << 8) | 0;   // Red
+        int pointColor  = (180 << 24) | (0 << 16)   | (255 << 8) | 0; // Green
 
         for (SourceExtractor.DetectedObject obj : objects) {
             if (obj.isNoise) continue;

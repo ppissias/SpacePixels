@@ -11,6 +11,7 @@ import io.github.ppissias.jtransient.core.SourceExtractor;
 import nom.tam.fits.Fits;
 
 import java.awt.image.BufferedImage;
+import java.awt.Graphics2D;
 import java.util.List;
 
 public class TuningPreviewTask implements Runnable {
@@ -69,9 +70,16 @@ public class TuningPreviewTask implements Runnable {
                     targetFile.getFileName(), displayIndex, totalFiles, pointCount, streakCount);
 
             // Render
-            RawImageAnnotator.drawDetections(debugImage, objects);
-            BufferedImage previewImage = ImageDisplayUtils.createDisplayImage(debugImage);
+            BufferedImage grayImage = ImageDisplayUtils.createDisplayImage(debugImage);
+            
+            // Convert the Grayscale canvas to an RGB canvas so colored overlays actually show up!
+            BufferedImage previewImage = new BufferedImage(grayImage.getWidth(), grayImage.getHeight(), BufferedImage.TYPE_INT_RGB);
+            Graphics2D g2d = previewImage.createGraphics();
+            g2d.drawImage(grayImage, 0, 0, null);
+            g2d.dispose();
+
             RawImageAnnotator.drawExactBlobs(previewImage, objects);
+            RawImageAnnotator.drawDetections(previewImage, objects);
 
             // Post success
             eventBus.post(new TuningPreviewFinishedEvent(true, previewImage, windowTitle, null));
