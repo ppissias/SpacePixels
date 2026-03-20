@@ -34,15 +34,20 @@ Please check the [SpacePixels Wiki](https://github.com/ppissias/SpacePixels/wiki
 Check out a sample report. Many thanks to [cloudynights user klangwolke](https://www.cloudynights.com/profile/481578-klangwolke/)
 for providing amazing data for this report and for testing the application!  
 
+<a href="https://startales.eu/various_files/detections_20260320_220004/detection_report.html" target="_blank">sample SpacePixels report</a>
 
-<a href="https://startales.eu/various_files/detections_20260317_115319/detection_report.html" target="_blank">sample SpacePixels report</a>
+Also many thanks to [cloudynights user Thestarsabove](https://www.cloudynights.com/profile/484042-thestarsabove/) for providing data and for testing the application.
+
 ***
 
-![Main Interface](https://startales.eu/various_files/SpacePixels-GUI-2026-01.png)  
+![Main Interface](https://startales.eu/various_files/Screenshot2026-03-20215405.png)  
 *The SpacePixels Main Workspace.*
 
-![Sample Detection](https://startales.eu/various_files/detections_20260317_115319/track_9_full_sequence.gif)  
-*Sample Detection - Unknown Object, (Raw images credit [cloudynights user klangwolke](https://www.cloudynights.com/profile/481578-klangwolke/)) star centric view of all frames in sequence.*
+![Sample Detection](https://startales.eu/various_files/aptrack_1_star_centric.gif)  
+*Sample Detection - Comet Africano 2019*
+
+![Sample Detection](https://startales.eu/various_files/aptrack_1_object_centric.gif)  
+*Sample Detection -  Comet Africano 2019*
 
 ![Sample Detection](https://startales.eu/various_files/track_5_object_centric.gif)  
 *Sample Detection - Apophis asteroid 2021 (Raw images credit Duncan Warren) object centric view.*
@@ -52,6 +57,10 @@ for providing amazing data for this report and for testing the application!
 
 ![Sample Detection](https://startales.eu/various_files/streak_track_3_star_centric.gif)  
 *Sample Detection - streak track.*
+
+![Sample Detection](https://startales.eu/various_files/anomaly_17_context.gif)  
+*Sample Detection - High energy anomaly, data credit [cloudynights user Thestarsabove](https://www.cloudynights.com/profile/484042-thestarsabove/)*
+
 
 ---
 
