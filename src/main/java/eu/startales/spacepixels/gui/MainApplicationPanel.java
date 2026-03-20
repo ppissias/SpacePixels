@@ -179,10 +179,18 @@ public class MainApplicationPanel extends JPanel {
                             throw new IOException("cannot show image: " + annotatedImageURL.toString());
                         }
                         JLabel label = new JLabel(new ImageIcon(image));
-                        JFrame f = new JFrame();
-                        f.getContentPane().add(label);
+                        JFrame f = new JFrame("Solved Image Preview");
+                        f.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+                        JScrollPane scrollPane = new JScrollPane(label);
+                        
+                        // Constrain the window size so massive images don't take over the screen
+                        int width = Math.min(image.getWidth(), 1024);
+                        int height = Math.min(image.getHeight(), 768);
+                        scrollPane.setPreferredSize(new Dimension(width, height));
+                        
+                        f.getContentPane().add(scrollPane);
                         f.pack();
-                        f.setLocation(200, 200);
+                        f.setLocationRelativeTo(MainApplicationPanel.this);
                         f.setVisible(true);
                     } catch (IOException ex) {
                         JOptionPane.showMessageDialog(MainApplicationPanel.this, "Cannot show image :" + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -325,12 +333,13 @@ public class MainApplicationPanel extends JPanel {
             int selectedRow = table.getSelectedRow();
             if (selectedRow >= 0 && table.getValueAt(selectedRow, FitsFileTableModel.COL_FILENAME) != null) {
 
-                if ("yes".equals(table.getValueAt(selectedRow, FitsFileTableModel.COL_SOLVED))) {
-                    showSolvedImageButton.setEnabled(true);
-                    solveButton.setEnabled(false);
-                } else {
-                    showSolvedImageButton.setEnabled(false);
-                    solveButton.setEnabled(true);
+                FitsFileInformation fileInfo = getSelectedFileInformation();
+                if (fileInfo != null) {
+                    boolean isSolved = "Yes".equalsIgnoreCase(String.valueOf(table.getValueAt(selectedRow, FitsFileTableModel.COL_SOLVED)));
+                    solveButton.setEnabled(!isSolved);
+
+                    PlateSolveResult result = fileInfo.getSolveResult();
+                    showSolvedImageButton.setEnabled(result != null && result.isSuccess());
                 }
 
                 if (mainAppWindow.getStretchPanel().isStretchEnabled()) {
@@ -675,11 +684,31 @@ public class MainApplicationPanel extends JPanel {
             PlateSolveResult result = event.getResult();
 
             if (result != null && result.isSuccess()) {
-                JOptionPane.showMessageDialog(this, "Image was successfully plate-solved");
                 ApplicationWindow.logger.info(result.toString());
                 statusLabel.setText("Image was successfully plate-solved");
-                table.setValueAt(result, event.getRowIndex(), FitsFileTableModel.COL_SOLVED);
-                ((FitsFileTableModel) table.getModel()).fireTableDataChanged();
+
+                int choice = JOptionPane.showConfirmDialog(this,
+                        "Image was successfully plate-solved.\n\nWould you like to write the WCS coordinate solution directly into the FITS header?\n(This permanently modifies the file)",
+                        "Update FITS Header",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.QUESTION_MESSAGE);
+
+                if (choice == JOptionPane.YES_OPTION) {
+                    FitsFileInformation fileInfo = ((FitsFileTableModel) table.getModel()).getFitsFileAt(event.getRowIndex());
+                    if (fileInfo != null) {
+                        try {
+                            mainAppWindow.getImageProcessing().updateFitsHeaderWithWCS(fileInfo.getFilePath(), result.getSolveInformation());
+                            // Apply the WCS data to the memory cache so internal table logic registers it immediately
+                            fileInfo.getFitsHeader().putAll(result.getSolveInformation());
+                            JOptionPane.showMessageDialog(this, "FITS header successfully updated.", "Success", JOptionPane.INFORMATION_MESSAGE);
+                        } catch (Exception ex) {
+                            JOptionPane.showMessageDialog(this, "Failed to update FITS header: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                        }
+                    }
+                }
+
+                // Bypass JTable's edit-check by updating the Model directly
+                table.getModel().setValueAt(result, event.getRowIndex(), FitsFileTableModel.COL_SOLVED);
             } else {
                 String errorMsg = (result != null) ? (result.getFailureReason() + " " + result.getWarning()) : "Internal Error";
                 JOptionPane.showMessageDialog(this, "Image was not plate-solved successfully: " + errorMsg, "Error", JOptionPane.ERROR_MESSAGE);
@@ -690,12 +719,13 @@ public class MainApplicationPanel extends JPanel {
 
             int selectedRow = table.getSelectedRow();
             if (selectedRow >= 0) {
-                if ("yes".equals(table.getValueAt(selectedRow, FitsFileTableModel.COL_SOLVED))) {
-                    showSolvedImageButton.setEnabled(true);
-                    solveButton.setEnabled(false);
-                } else {
-                    showSolvedImageButton.setEnabled(false);
-                    solveButton.setEnabled(true);
+                FitsFileInformation fileInfo = getSelectedFileInformation();
+                if (fileInfo != null) {
+                    boolean isSolved = "Yes".equalsIgnoreCase(String.valueOf(table.getValueAt(selectedRow, FitsFileTableModel.COL_SOLVED)));
+                    solveButton.setEnabled(!isSolved);
+
+                    PlateSolveResult res = fileInfo.getSolveResult();
+                    showSolvedImageButton.setEnabled(res != null && res.isSuccess());
                 }
             }
         });
@@ -716,10 +746,17 @@ public class MainApplicationPanel extends JPanel {
             enableControlsProcessingFinished();
 
             if (event.isSuccess()) {
-                JLabel label = new JLabel(new ImageIcon(event.getImage()));
+                BufferedImage image = event.getImage();
+                JLabel label = new JLabel(new ImageIcon(image));
                 JFrame f = new JFrame("Solved Image Preview");
                 f.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
                 JScrollPane scrollPane = new JScrollPane(label);
+                
+                // Constrain the window size so massive images don't take over the screen
+                int width = Math.min(image.getWidth(), 1024);
+                int height = Math.min(image.getHeight(), 768);
+                scrollPane.setPreferredSize(new Dimension(width, height));
+                
                 f.getContentPane().add(scrollPane);
                 f.pack();
                 f.setLocationRelativeTo(this);

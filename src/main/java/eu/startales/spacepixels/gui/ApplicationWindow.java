@@ -132,9 +132,9 @@ public class ApplicationWindow {
         tabbedPane.addTab("Image Stretch", stretchPanel);
         tabbedPane.addTab("Detection Settings", detectionConfigurationPanel);
 
-        tabbedPane.setEnabledAt(1, false);
-        tabbedPane.setEnabledAt(2, false);
-        tabbedPane.setEnabledAt(3, false);
+        setTabEnabled(configurationApplicationPanel, false);
+        setTabEnabled(stretchPanel, false);
+        setTabEnabled(detectionConfigurationPanel, false);
 
         JMenuBar menuBar = new JMenuBar();
         frmIpodImage.setJMenuBar(menuBar);
@@ -164,9 +164,9 @@ public class ApplicationWindow {
         EventQueue.invokeLater(() -> {
             mainApplicationPanel.setProgressBarWorking();
             setMenuState(false);
-            tabbedPane.setEnabledAt(1, false);
-            tabbedPane.setEnabledAt(2, false);
-            tabbedPane.setEnabledAt(3, false);
+            setTabEnabled(configurationApplicationPanel, false);
+            setTabEnabled(stretchPanel, false);
+            setTabEnabled(detectionConfigurationPanel, false);
         });
     }
 
@@ -185,9 +185,9 @@ public class ApplicationWindow {
                 AbstractTableModel tableModel = new FitsFileTableModel(filesInfo);
                 mainApplicationPanel.setTableModel(tableModel);
 
-                tabbedPane.setEnabledAt(1, true);
-                tabbedPane.setEnabledAt(2, true);
-                tabbedPane.setEnabledAt(3, true);
+                setTabEnabled(configurationApplicationPanel, true);
+                setTabEnabled(stretchPanel, true);
+                setTabEnabled(detectionConfigurationPanel, true);
 
                 configurationApplicationPanel.refreshComponents();
                 
@@ -207,6 +207,15 @@ public class ApplicationWindow {
                         "Import Error", JOptionPane.ERROR_MESSAGE);
             }
         });
+    }
+
+    // --- HELPER METHODS ---
+
+    private void setTabEnabled(Component component, boolean state) {
+        int index = tabbedPane.indexOfComponent(component);
+        if (index >= 0) {
+            tabbedPane.setEnabledAt(index, state);
+        }
     }
 
     // --- GETTERS AND SETTERS ---
@@ -252,7 +261,7 @@ public class ApplicationWindow {
     }
 
     public void setMainViewEnabled(boolean state) {
-        tabbedPane.setEnabledAt(0, state);
+        setTabEnabled(mainApplicationPanel, state);
     }
 
     public JTabbedPane getTabbedPane() {

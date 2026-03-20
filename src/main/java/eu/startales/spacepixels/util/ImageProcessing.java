@@ -58,6 +58,8 @@ public class ImageProcessing {
     private final File configFile;
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
+    private FitsFileInformation[] cachedFileInfo;
+
     public static synchronized ImageProcessing getInstance(File alignedFitsFolderFullPath) throws IOException, FitsException {
         return new ImageProcessing(alignedFitsFolderFullPath);
     }
@@ -149,8 +151,8 @@ public class ImageProcessing {
     public File detectObjects(DetectionConfig config, IntPredicate safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
         long startTime = System.currentTimeMillis();
 
-        File[] fitsFileInformation = getFitsFilesDetails();
-        int numFrames = fitsFileInformation.length;
+        if (this.cachedFileInfo == null) getFitsfileInformation();
+        int numFrames = this.cachedFileInfo.length;
 
         System.out.println("\n--- Loading " + numFrames + " FITS files for JTransient Engine ---");
 
@@ -165,7 +167,7 @@ public class ImageProcessing {
                 progressListener.onProgressUpdate(percent, "Loading frame " + (i + 1) + " of " + numFrames + "...");
             }
 
-            File currentFile = fitsFileInformation[i];
+            File currentFile = new File(this.cachedFileInfo[i].getFilePath());
             Fits fitsFile = new Fits(currentFile);
             Object kernel = fitsFile.getHDU(0).getKernel();
 
@@ -175,7 +177,7 @@ public class ImageProcessing {
             }
 
             short[][] imageData = (short[][]) kernel;
-            long timestamp = getFitsTimestamp(currentFile);
+            long timestamp = this.cachedFileInfo[i].getObservationTimestamp();
             framesForLibrary.add(new ImageFrame(i, currentFile.getName(), imageData, timestamp));
             rawFramesForExport.add(imageData);
             fitsFile.close();
@@ -217,8 +219,8 @@ public class ImageProcessing {
             progressListener.onProgressUpdate(90, "Exporting tracks and generating HTML report...");
         }
 
-        if (fitsFileInformation.length > 0) {
-            File exportDir = createDetectionsDirectory(fitsFileInformation[0]);
+        if (numFrames > 0) {
+            File exportDir = createDetectionsDirectory(new File(this.cachedFileInfo[0].getFilePath()));
 
             System.out.println("Total Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
 
@@ -254,8 +256,8 @@ public class ImageProcessing {
     public File detectSlowObjectsIterative(DetectionConfig config, java.util.function.IntPredicate safetyPrompt, TransientEngineProgressListener progressListener, int maxFramesLimit) throws Exception {
         long startTime = System.currentTimeMillis();
 
-        File[] fitsFileInformation = getFitsFilesDetails();
-        int numFrames = fitsFileInformation.length;
+        if (this.cachedFileInfo == null) getFitsfileInformation();
+        int numFrames = this.cachedFileInfo.length;
 
         if (numFrames < 5) {
             System.out.println("Not enough frames for iterative detection. Falling back to standard pipeline.");
@@ -264,7 +266,7 @@ public class ImageProcessing {
 
         System.out.println("\n--- Starting ITERATIVE PIPELINE for " + numFrames + " FITS files (On-Demand Loading) ---");
 
-        File parentDir = fitsFileInformation[0].getParentFile();
+        File parentDir = new File(this.cachedFileInfo[0].getFilePath()).getParentFile();
         if (parentDir == null) {
             parentDir = new File(System.getProperty("user.dir"));
         }
@@ -285,7 +287,7 @@ public class ImageProcessing {
         long[] frameTimestamps = new long[numFrames];
         boolean hasValidTime = true;
         for (int i = 0; i < numFrames; i++) {
-            frameTimestamps[i] = getFitsTimestamp(fitsFileInformation[i]);
+            frameTimestamps[i] = this.cachedFileInfo[i].getObservationTimestamp();
             if (frameTimestamps[i] == -1) {
                 hasValidTime = false;
                 break;
@@ -304,7 +306,7 @@ public class ImageProcessing {
         
         List<Integer> masterIndices = getSampledIndices(frameTimestamps, hasValidTime, numFrames, targetMaxLimit);
         for (int idx : masterIndices) {
-            File currentFile = fitsFileInformation[idx];
+            File currentFile = new File(this.cachedFileInfo[idx].getFilePath());
             try (Fits fitsFile = new Fits(currentFile)) {
                 Object kernel = fitsFile.getHDU(0).getKernel();
                 if (!(kernel instanceof short[][])) {
@@ -350,7 +352,7 @@ public class ImageProcessing {
 
             List<ImageFrame> spacedSubset = new ArrayList<>();
             for (int index : sampledIndices) {
-                File currentFile = fitsFileInformation[index];
+                File currentFile = new File(this.cachedFileInfo[index].getFilePath());
                 try (Fits fitsFile = new Fits(currentFile)) {
                     Object kernel = fitsFile.getHDU(0).getKernel();
                     if (!(kernel instanceof short[][])) {
@@ -378,12 +380,12 @@ public class ImageProcessing {
                 scaledListener.onProgressUpdate(95, "Generating report (on-demand disk reads)...");
             }
             
-            final File[] currentFitsFiles = fitsFileInformation;
+            final FitsFileInformation[] currentFitsFiles = this.cachedFileInfo;
             List<short[][]> rawFramesForExport = new java.util.AbstractList<short[][]>() {
                 @Override
                 public short[][] get(int index) {
                     try {
-                        File currentFile = currentFitsFiles[index];
+                        File currentFile = new File(currentFitsFiles[index].getFilePath());
                         try (Fits fitsFile = new Fits(currentFile)) {
                             Object kernel = fitsFile.getHDU(0).getKernel();
                             if (!(kernel instanceof short[][])) {
@@ -491,33 +493,6 @@ public class ImageProcessing {
             indices.add(index);
         }
         return indices;
-    }
-
-    private long getFitsTimestamp(File file) {
-        try (Fits fitsFile = new Fits(file)) {
-            Header header = fitsFile.getHDU(0).getHeader();
-            String dateObs = header.getStringValue("DATE-OBS");
-            if (dateObs == null) return -1;
-            dateObs = dateObs.replace("'", "").trim();
-            
-            if (dateObs.contains("T")) {
-                return java.time.LocalDateTime.parse(dateObs, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-                           .atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
-            } else {
-                String timeObs = header.getStringValue("TIME-OBS");
-                if (timeObs != null) {
-                    timeObs = timeObs.replace("'", "").trim();
-                    String combined = dateObs + "T" + timeObs;
-                    return java.time.LocalDateTime.parse(combined, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-                               .atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
-                } else {
-                    return java.time.LocalDate.parse(dateObs, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
-                               .atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
-                }
-            }
-        } catch (Exception e) {
-            return -1;
-        }
     }
 
 // =========================================================================
@@ -722,34 +697,16 @@ public class ImageProcessing {
 
         // --- NEW: Sort chronologically based on DATE-OBS FITS header ---
         Arrays.sort(ret, (a, b) -> {
-            String dateA = a.getFitsHeader().get("DATE-OBS");
-            String dateB = b.getFitsHeader().get("DATE-OBS");
-
-            // Clean up possible FITS string quotes
-            if (dateA != null) dateA = dateA.replace("'", "").trim();
-            if (dateB != null) dateB = dateB.replace("'", "").trim();
-
-            // Fallback to alphabetical filename sorting if dates are missing
-            if (dateA == null && dateB == null) return a.getFileName().compareTo(b.getFileName());
-            if (dateA == null) return 1; // Push missing dates to the end
-            if (dateB == null) return -1;
-
-            // If dates are identical (e.g., date without time), check for TIME-OBS
-            if (dateA.equals(dateB)) {
-                String timeA = a.getFitsHeader().get("TIME-OBS");
-                String timeB = b.getFitsHeader().get("TIME-OBS");
-                if (timeA != null) timeA = timeA.replace("'", "").trim();
-                if (timeB != null) timeB = timeB.replace("'", "").trim();
-
-                if (timeA != null && timeB != null) {
-                    return timeA.compareTo(timeB);
-                }
+            long t1 = a.getObservationTimestamp();
+            long t2 = b.getObservationTimestamp();
+            if (t1 != -1 && t2 != -1) {
+                return Long.compare(t1, t2);
             }
-
-            // ISO-8601 string dates sort perfectly chronologically using alphabetical comparison!
-            return dateA.compareTo(dateB);
+            // Fallback to alphabetical if time isn't present
+            return a.getFileName().compareTo(b.getFileName());
         });
 
+        this.cachedFileInfo = ret;
         System.out.println("Finished loading metadata for " + numFiles + " files instantly.");
         return ret;
     }
@@ -927,6 +884,54 @@ public class ImageProcessing {
             }
         }
         return null;
+    }
+
+    /**
+     * Safely injects Plate Solve WCS coordinates directly into the original FITS header.
+     * Uses a temporary file swap to prevent data corruption.
+     */
+    public void updateFitsHeaderWithWCS(String fitsFileFullPath, Map<String, String> wcsData) throws Exception {
+        File originalFile = new File(fitsFileFullPath);
+        File tempFile = new File(fitsFileFullPath + ".tmp");
+
+        try (Fits fits = new Fits(originalFile)) {
+            Header header = fits.getHDU(0).getHeader();
+
+            for (Map.Entry<String, String> entry : wcsData.entrySet()) {
+                String key = entry.getKey().toUpperCase();
+                String value = entry.getValue();
+
+                // Standard FITS keys cannot exceed 8 chars.
+                // This cleanly filters out internal JPlateSolve keys like 'annotated_image_link' or 'success'
+                if (key.length() > 8 || value == null) {
+                    continue;
+                }
+
+                // Infer types to write proper FITS header values
+                try {
+                    if (value.contains(".")) {
+                        header.addValue(key, Double.parseDouble(value), "SpacePixels WCS");
+                    } else {
+                        header.addValue(key, Integer.parseInt(value), "SpacePixels WCS");
+                    }
+                } catch (NumberFormatException e) {
+                    String cleanValue = value;
+                    if (cleanValue.startsWith("'") && cleanValue.endsWith("'")) {
+                        cleanValue = cleanValue.substring(1, cleanValue.length() - 1).trim();
+                    }
+                    header.addValue(key, cleanValue, "SpacePixels WCS");
+                }
+            }
+            fits.write(tempFile);
+        }
+
+        if (originalFile.delete()) {
+            if (!tempFile.renameTo(originalFile)) {
+                throw new IOException("Failed to rename temporary FITS file back to original.");
+            }
+        } else {
+            throw new IOException("Failed to delete original FITS file to overwrite it.");
+        }
     }
 
     public AppConfig getAppConfig() {

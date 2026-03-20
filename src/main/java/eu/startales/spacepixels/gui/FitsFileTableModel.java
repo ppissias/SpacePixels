@@ -21,12 +21,15 @@ public class FitsFileTableModel extends AbstractTableModel {
     public static final int COL_COLOR = 1;
     public static final int COL_WIDTH = 2;
     public static final int COL_HEIGHT = 3;
-    public static final int COL_SOLVED = 4;
+    public static final int COL_DATE = 4;
+    public static final int COL_EXPOSURE = 5;
+    public static final int COL_LOCATION = 6;
+    public static final int COL_SOLVED = 7;
 
     private final FitsFileInformation[] fitsfiles;
 
-    // "header" and "obj" are removed
-    private final String[] columns = {"filename", "mono/color", "width", "length", "solved"};
+    // Formatted with nice capitalization
+    private final String[] columns = {"Filename", "Mono/Color", "Width", "Height", "Date", "Exposure", "Location", "Solved"};
 
     public FitsFileTableModel(FitsFileInformation[] fitsfiles) {
         this.fitsfiles = fitsfiles;
@@ -83,9 +86,21 @@ public class FitsFileTableModel extends AbstractTableModel {
             case COL_HEIGHT:
                 return String.valueOf(file.getSizeHeight());
 
+            case COL_DATE:
+                return file.getObservationDate();
+
+            case COL_EXPOSURE:
+                return file.getExposure();
+
+            case COL_LOCATION:
+                return file.getLocation();
+
             case COL_SOLVED:
+                // It is solved if it has a saved ASTAP .ini result OR if it inherently has WCS headers
                 PlateSolveResult solveResult = file.getSolveResult();
-                return (solveResult != null && solveResult.isSuccess()) ? "yes" : "no";
+                boolean hasIniResult = (solveResult != null && solveResult.isSuccess());
+                boolean hasWcsHeader = file.isWcsSolved();
+                return (hasIniResult || hasWcsHeader) ? "Yes" : "No";
 
             default:
                 return "";
