@@ -1050,7 +1050,8 @@ public class ImageDisplayUtils {
                         GifSequenceWriter.saveAnimatedGif(starCentricFrames, starFile, gifBlinkSpeedMs);
 
                         report.println("<div class='detection-card streak-title'>");
-                        report.println("<div class='detection-title'>Multi-Frame Streak Track #" + trackCounter + "</div>");
+                        String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
+                        report.println("<div class='detection-title'>Multi-Frame Streak Track #" + trackCounter + timeBadge + "</div>");
 
                         // --- Include both Star Centric and Shape Images ---
                         report.println("<div class='image-container'>");
@@ -1073,7 +1074,8 @@ public class ImageDisplayUtils {
                         GifSequenceWriter.saveAnimatedGif(fullSequenceStarFrames, fullSeqFile, gifBlinkSpeedMs);
 
                         report.println("<div class='detection-card'>");
-                        report.println("<div class='detection-title'>Moving Target Track #" + trackCounter + "</div>");
+                        String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
+                        report.println("<div class='detection-title'>Moving Target Track #" + trackCounter + timeBadge + "</div>");
 
                         // --- Include Object, Star, and Shape Images ---
                         report.println("<div class='image-container'>");
