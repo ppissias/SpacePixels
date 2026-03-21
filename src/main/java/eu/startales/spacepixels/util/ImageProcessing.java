@@ -225,17 +225,7 @@ public class ImageProcessing {
             System.out.println("Total Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
 
             try {
-                ImageDisplayUtils.exportTrackVisualizations(
-                        result.tracks,
-                        result.telemetry.trackerTelemetry,
-                        rawFramesForExport,
-                        result.masterStackData,
-                        result.masterStars,
-                        result.slowMoverStackData,
-                        result.slowMoverCandidates,
-                        exportDir,
-                        result.telemetry,
-                        config);
+                ImageDisplayUtils.exportTrackVisualizations(result, rawFramesForExport, exportDir, config);
 
                 // --- PROGRESS UPDATE: Done! ---
                 if (progressListener != null) {
@@ -410,17 +400,7 @@ public class ImageProcessing {
             iterationDir.mkdirs();
 
             try {
-                ImageDisplayUtils.exportTrackVisualizations(
-                        result.tracks,
-                        result.telemetry.trackerTelemetry,
-                        rawFramesForExport,
-                        result.masterStackData,
-                        result.masterStars,
-                        result.slowMoverStackData,
-                        result.slowMoverCandidates,
-                        iterationDir,
-                        result.telemetry,
-                        config);
+                ImageDisplayUtils.exportTrackVisualizations(result, rawFramesForExport, iterationDir, config);
 
             } catch (IOException e) {
                 System.err.println("Failed to export visualization for iteration " + k + ": " + e.getMessage());

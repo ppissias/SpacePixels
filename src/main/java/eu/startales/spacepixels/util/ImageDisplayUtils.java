@@ -14,6 +14,7 @@ import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.core.TrackLinker;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
+import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.telemetry.TrackerTelemetry;
 
 import javax.imageio.ImageIO;
@@ -595,21 +596,104 @@ public class ImageDisplayUtils {
         return out;
     }
 
+    // --- GLOBAL TRANSIENT MAP RENDERER ---
+    public static BufferedImage createGlobalTransientMap(short[][] backgroundData, List<List<SourceExtractor.DetectedObject>> allTransients) {
+        int width = backgroundData[0].length;
+        int height = backgroundData.length;
+        
+        BufferedImage grayBg = createDisplayImage(backgroundData);
+        BufferedImage rgbMap = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = rgbMap.createGraphics();
+        
+        // Draw a dark, "ghostly" background (20% opacity) so the colorful transients pop
+        // while still giving the user spatial context of the star field!
+        g2d.setColor(Color.BLACK);
+        g2d.fillRect(0, 0, width, height);
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.2f));
+        g2d.drawImage(grayBg, 0, 0, null);
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        int totalFrames = allTransients.size();
+        for (int i = 0; i < totalFrames; i++) {
+            List<SourceExtractor.DetectedObject> frameTransients = allTransients.get(i);
+            if (frameTransients == null || frameTransients.isEmpty()) continue;
+
+            // Map time to a color gradient: Blue (Start) -> Green -> Yellow -> Red (End)
+            float ratio = totalFrames > 1 ? (float) i / (totalFrames - 1) : 0f;
+            // Hue ranges from 0.66 (Blue) down to 0.0 (Red)
+            Color timeColor = Color.getHSBColor(0.66f - (0.66f * ratio), 1.0f, 1.0f);
+            int timeRgb = timeColor.getRGB();
+            
+            for (SourceExtractor.DetectedObject pt : frameTransients) {
+                if (pt.rawPixels != null && !pt.rawPixels.isEmpty()) {
+                    // Draw the exact pixel footprint to accurately represent size and shape
+                    for (SourceExtractor.Pixel p : pt.rawPixels) {
+                        if (p.x >= 0 && p.x < width && p.y >= 0 && p.y < height) {
+                            rgbMap.setRGB(p.x, p.y, timeRgb);
+                        }
+                    }
+                } else {
+                    // Fallback to a single pixel just in case
+                    int cx = (int) Math.round(pt.x);
+                    int cy = (int) Math.round(pt.y);
+                    if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                        rgbMap.setRGB(cx, cy, timeRgb);
+                    }
+                }
+            }
+        }
+
+        // --- Draw Legend ---
+        int legendWidth = 250;
+        int legendHeight = 15;
+        int lx = 20;
+        int ly = rgbMap.getHeight() - 40;
+        
+        // Background for legend to make it visible against noisy backgrounds
+        g2d.setColor(new Color(0, 0, 0, 180));
+        g2d.fillRect(lx - 10, ly - 30, legendWidth + 20, legendHeight + 40);
+
+        for (int x = 0; x < legendWidth; x++) {
+            float ratio = (float) x / legendWidth;
+            Color timeColor = Color.getHSBColor(0.66f - (0.66f * ratio), 1.0f, 1.0f);
+            g2d.setColor(timeColor);
+            g2d.drawLine(lx + x, ly, lx + x, ly + legendHeight);
+        }
+        
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        g2d.drawString("Start", lx, ly - 5);
+        g2d.drawString("End", lx + legendWidth - 25, ly - 5);
+        g2d.drawString("Time-Mapped Transients", lx, ly - 18);
+
+        g2d.dispose();
+        return rgbMap;
+    }
+
     // =================================================================
     // HTML EXPORT
     // =================================================================
 
-    // --- UPDATED SIGNATURE TO ACCEPT CONFIG ---
-    public static void exportTrackVisualizations(List<TrackLinker.Track> tracks,
-                                                 TrackerTelemetry linkerTelemetry,
+    /**
+     * The master HTML generator.
+     * Consumes the full engine result, config settings, and raw FITS frames to crop targets,
+     * render animated GIFs, and layout the final diagnostic dashboard.
+     */
+    public static void exportTrackVisualizations(PipelineResult result,
                                                  List<short[][]> rawFrames,
-                                                 short[][] masterStackData,
-                                                 List<SourceExtractor.DetectedObject> masterStars,
-                                                 short[][] slowMoverStackData,
-                                                 List<SourceExtractor.DetectedObject> slowMoverCandidates,
                                                  File exportDir,
-                                                 PipelineTelemetry pipelineTelemetry,
                                                  DetectionConfig config) throws IOException {
+
+        // Extract variables from the PipelineResult to keep the rendering logic unchanged
+        List<TrackLinker.Track> tracks = result.tracks;
+        TrackerTelemetry linkerTelemetry = result.telemetry != null ? result.telemetry.trackerTelemetry : null;
+        short[][] masterStackData = result.masterStackData;
+        List<SourceExtractor.DetectedObject> masterStars = result.masterStars;
+        short[][] slowMoverStackData = result.slowMoverStackData;
+        List<SourceExtractor.DetectedObject> slowMoverCandidates = result.slowMoverCandidates;
+        PipelineTelemetry pipelineTelemetry = result.telemetry;
+        List<List<SourceExtractor.DetectedObject>> allTransients = result.allTransients;
 
         if (!exportDir.exists()) exportDir.mkdirs();
 
@@ -1134,6 +1218,26 @@ public class ImageDisplayUtils {
                     smCounter++;
                 }
                 report.println("</div>");
+            }
+
+            // =================================================================
+            // 5. GLOBAL TRANSIENT MAP (Overall Summary)
+            // =================================================================
+            if (allTransients != null && !allTransients.isEmpty()) {
+                short[][] bgData = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
+                if (bgData != null) {
+                    BufferedImage transientMap = createGlobalTransientMap(bgData, allTransients);
+                    saveTrackImageLossless(transientMap, new File(exportDir, "global_transient_map.png"));
+
+                    report.println("<div class='panel'>");
+                    report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Transient Map</h3>");
+                    report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
+                    report.println("Shows all raw transients detected across the entire session. Colors map to time (Blue = Start, Red = End). This helps visualize noise floors, hot columns, and unlinked moving targets.</p>");
+                    report.println("<div class='image-container'>");
+                    report.println("<a href='global_transient_map.png' target='_blank'><img src='global_transient_map.png' style='width: 100%; border: 1px solid #555; border-radius: 4px;' alt='Global Transient Map' /></a>");
+                    report.println("</div>");
+                    report.println("</div>");
+                }
             }
 
             report.println("</body></html>");

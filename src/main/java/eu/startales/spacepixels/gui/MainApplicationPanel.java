@@ -48,6 +48,7 @@ public class MainApplicationPanel extends JPanel {
     private final JButton showSolvedImageButton = new JButton("show solved image");
     private final JButton solveButton = new JButton("Solve");
     private final JButton detectSingleButton = new JButton("Detect Objects (Single Image)");
+    private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
     private final JButton detectBatchButton = new JButton("Detect Moving Objects (Entire Set)");
     private final JButton detectSlowBatchButton = new JButton("Detect Slow Movers (Iterative)");
 
@@ -116,6 +117,10 @@ public class MainApplicationPanel extends JPanel {
         detectSingleButton.setToolTipText("Detect objects only in the currently selected monochrome image");
         detectSingleButton.setEnabled(false);
         row2.add(detectSingleButton);
+
+        manualTransientInspectionButton.setToolTipText("Extract transients from all frames using the master stack and manually inspect them step-by-step.");
+        manualTransientInspectionButton.setEnabled(false);
+        row2.add(manualTransientInspectionButton);
 
         detectBatchButton.setToolTipText("Detect objects in all imported monochrome images");
         detectBatchButton.setEnabled(false);
@@ -283,6 +288,14 @@ public class MainApplicationPanel extends JPanel {
                     startIndex,
                     mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
             );
+        });
+
+        manualTransientInspectionButton.addActionListener(e -> {
+            new Thread(new ManualTransientInspectionTask(
+                    mainAppWindow.getEventBus(),
+                    mainAppWindow.getImageProcessing(),
+                    mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
+            )).start();
         });
 
         detectBatchButton.addActionListener(e -> {
@@ -529,12 +542,14 @@ public class MainApplicationPanel extends JPanel {
 
     public void setDetectionButtonsEnabled() {
         this.detectSingleButton.setEnabled(true);
+        this.manualTransientInspectionButton.setEnabled(true);
         this.detectBatchButton.setEnabled(true);
         this.detectSlowBatchButton.setEnabled(true);
     }
 
     public void setDetectionButtonsDisabled() {
         this.detectSingleButton.setEnabled(false);
+        this.manualTransientInspectionButton.setEnabled(false);
         this.detectBatchButton.setEnabled(false);
         this.detectSlowBatchButton.setEnabled(false);
     }
