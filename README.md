@@ -36,7 +36,7 @@ for providing amazing data for this report and for testing the application!
 
 <a href="https://startales.eu/various_files/detections_20260320_220004/detection_report.html" target="_blank">sample SpacePixels report</a>
 
-Also many thanks to [cloudynights user Thestarsabove](https://www.cloudynights.com/profile/484042-thestarsabove/) for providing data and for testing the application.
+Also many thanks to cloudynights user TheStarsabove for providing data and for testing the application.
 
 ***
 
@@ -59,7 +59,7 @@ Also many thanks to [cloudynights user Thestarsabove](https://www.cloudynights.c
 *Sample Detection - streak track.*
 
 ![Sample Detection](https://startales.eu/various_files/anomaly_17_context.gif)  
-*Sample Detection - High energy anomaly, data credit [cloudynights user Thestarsabove](https://www.cloudynights.com/profile/484042-thestarsabove/)*
+*Sample Detection - High energy anomaly, data credit cloudynights user TheStarsabove*
 
 
 ---
