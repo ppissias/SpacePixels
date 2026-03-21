@@ -52,7 +52,8 @@ public class DetectionConfigurationPanel extends JPanel {
 
     // --- SourceExtractor Spinners ---
     private JSpinner spinDetectionSigma, spinMinPixels, spinEdgeMargin, spinGrowSigma, spinVoidFraction, spinVoidRadius;
-    private JSpinner spinMasterSigma, spinMasterMinPix;
+    private JCheckBox chkEnableSlowMovers;
+    private JSpinner spinMasterSigma, spinMasterMinPix, spinMasterSlowMoverMinElongation, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma;
     private JSpinner spinStreakMinElong, spinStreakMinPix, spinSingleStreakMinPeakSigma, spinPointMinPix;
     private JSpinner spinBgClippingIters, spinBgClippingFactor;
 
@@ -79,7 +80,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     // --- Visualization Spinners (SpacePixels Specific) ---
     private JSpinner spinStreakScale, spinStreakCentroidRad, spinPointBoxRad, spinBoxPad;
-    private JSpinner spinAutoBlackSigma, spinAutoWhiteSigma, spinGifBlinkSpeed, spinCropPadding, spinMaxFullSeqFrames;
+    private JSpinner spinAutoBlackSigma, spinAutoWhiteSigma, spinGifBlinkSpeed, spinCropPadding;
 
     private final JButton previewBtn = new JButton("Preview Detection Settings");
 
@@ -178,6 +179,19 @@ public class DetectionConfigurationPanel extends JPanel {
             int detPix = ((Number) spinMinPixels.getValue()).intValue();
             int masterPix = ((Number) spinMasterMinPix.getValue()).intValue();
             if (masterPix > detPix) spinMasterMinPix.setValue(detPix);
+        });
+
+        // Ensure Master Slow Mover Grow Sigma <= Master Slow Mover Detection Sigma
+        spinMasterSlowMoverSigma.addChangeListener(e -> {
+            double detSigma = ((Number) spinMasterSlowMoverSigma.getValue()).doubleValue();
+            double growSigma = ((Number) spinMasterSlowMoverGrowSigma.getValue()).doubleValue();
+            if (detSigma < growSigma) spinMasterSlowMoverGrowSigma.setValue(detSigma);
+        });
+
+        spinMasterSlowMoverGrowSigma.addChangeListener(e -> {
+            double detSigma = ((Number) spinMasterSlowMoverSigma.getValue()).doubleValue();
+            double growSigma = ((Number) spinMasterSlowMoverGrowSigma.getValue()).doubleValue();
+            if (growSigma > detSigma) spinMasterSlowMoverGrowSigma.setValue(detSigma);
         });
     }
 
@@ -288,7 +302,6 @@ public class DetectionConfigurationPanel extends JPanel {
         spinAutoBlackSigma = addRow(panel, "Auto Stretch Black Sigma", "Subtractions from mean (in sigmas) to set the black point. Ensures dark sky.", new SpinnerNumberModel(ImageDisplayUtils.autoStretchBlackSigma, -99.0, 999.0, 0.1));
         spinAutoWhiteSigma = addRow(panel, "Auto Stretch White Sigma", "Additions to mean (in sigmas) to set white point. Faint targets hit this and turn white.", new SpinnerNumberModel(ImageDisplayUtils.autoStretchWhiteSigma, 0.1, 999.0, 0.5));
         spinGifBlinkSpeed = addRow(panel, "GIF Blink Speed (ms)", "Speed of the exported GIF animations in milliseconds per frame.", new SpinnerNumberModel(ImageDisplayUtils.gifBlinkSpeedMs, 10, 60000, 50));
-        spinMaxFullSeqFrames = addRow(panel, "Max Full Sequence Frames", "Max frames to include in the full sequence animated GIF to prevent massive files.", new SpinnerNumberModel(ImageDisplayUtils.maxFullSequenceFrames, 2, 999, 1));
 
         return panel;
     }
@@ -299,8 +312,13 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
         panel.add(createSectionHeader("Master Map Extraction"));
+        chkEnableSlowMovers = addCheckboxRow(panel, "Enable Deep Stack Anomalies", "Scan the master median stack for ultra-slow moving targets (e.g., distant KBOs).", jTransientConfig.enableSlowMoverDetection);
         spinMasterSigma = addRow(panel, "Master Sigma Multiplier", "Baseline requirement for extracting stars to build the Master Star Map. Typically lower to ensure faint halos are masked.", new SpinnerNumberModel(jTransientConfig.masterSigmaMultiplier, 0.5, 999.0, 0.25));
         spinMasterMinPix = addRow(panel, "Master Min Pixels", "Minimum number of pixels a source must have to be considered a star in the Master Star Map.", new SpinnerNumberModel(jTransientConfig.masterMinDetectionPixels, 1, 99999, 1));
+        spinMasterSlowMoverSigma = addRow(panel, "Master Slow-Mover Sigma", "Detection sigma used exclusively for finding ultra-slow movers in the master stack.", new SpinnerNumberModel(jTransientConfig.masterSlowMoverSigmaMultiplier, 1.0, 999.0, 0.5));
+        spinMasterSlowMoverGrowSigma = addRow(panel, "Master Slow-Mover Grow Sigma", "Grow sigma (hysteresis) used exclusively for finding ultra-slow movers in the master stack.", new SpinnerNumberModel(jTransientConfig.masterSlowMoverGrowSigmaMultiplier, 0.5, 999.0, 0.1));
+        spinMasterSlowMoverMinElongation = addRow(panel, "Master Slow-Mover Min Elongation", "Minimum elongation in the master stack to flag an object as an ultra-slow mover candidate. Use 0 to disable.", new SpinnerNumberModel(jTransientConfig.masterSlowMoverMinElongation, 0.0, 99.0, 0.5));
+        spinMasterSlowMoverMinPixels = addRow(panel, "Master Slow-Mover Min Pixels", "Minimum pixel area required to flag an elongated object in the master stack as a slow mover candidate.", new SpinnerNumberModel(jTransientConfig.masterSlowMoverMinPixels, 1, 99999, 1));
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Advanced Shape & Edge Classification"));
@@ -538,8 +556,13 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.edgeMarginPixels = ((Number) spinEdgeMargin.getValue()).intValue();
             jTransientConfig.voidThresholdFraction = ((Number) spinVoidFraction.getValue()).doubleValue();
             jTransientConfig.voidProximityRadius = ((Number) spinVoidRadius.getValue()).intValue();
+            jTransientConfig.enableSlowMoverDetection = chkEnableSlowMovers.isSelected();
             jTransientConfig.masterSigmaMultiplier = ((Number) spinMasterSigma.getValue()).doubleValue();
             jTransientConfig.masterMinDetectionPixels = ((Number) spinMasterMinPix.getValue()).intValue();
+            jTransientConfig.masterSlowMoverSigmaMultiplier = ((Number) spinMasterSlowMoverSigma.getValue()).doubleValue();
+            jTransientConfig.masterSlowMoverGrowSigmaMultiplier = ((Number) spinMasterSlowMoverGrowSigma.getValue()).doubleValue();
+            jTransientConfig.masterSlowMoverMinElongation = ((Number) spinMasterSlowMoverMinElongation.getValue()).doubleValue();
+            jTransientConfig.masterSlowMoverMinPixels = ((Number) spinMasterSlowMoverMinPixels.getValue()).intValue();
             jTransientConfig.streakMinElongation = ((Number) spinStreakMinElong.getValue()).doubleValue();
             jTransientConfig.streakMinPixels = ((Number) spinStreakMinPix.getValue()).intValue();
             jTransientConfig.singleStreakMinPeakSigma = ((Number) spinSingleStreakMinPeakSigma.getValue()).doubleValue();
@@ -597,7 +620,6 @@ public class DetectionConfigurationPanel extends JPanel {
             ImageDisplayUtils.autoStretchWhiteSigma = ((Number) spinAutoWhiteSigma.getValue()).doubleValue();
             ImageDisplayUtils.gifBlinkSpeedMs = ((Number) spinGifBlinkSpeed.getValue()).intValue();
             ImageDisplayUtils.trackCropPadding = ((Number) spinCropPadding.getValue()).intValue();
-            ImageDisplayUtils.maxFullSequenceFrames = ((Number) spinMaxFullSeqFrames.getValue()).intValue();
 
         } catch (Exception ex) {
             System.err.println("Error applying settings to memory: " + ex.getMessage());
@@ -738,8 +760,7 @@ public class DetectionConfigurationPanel extends JPanel {
      * Helper method to physically move the UI sliders to match a provided config.
      */
     private void updateSpinnersFromConfig(DetectionConfig config) {
-        spinMasterSigma.setValue(config.masterSigmaMultiplier);
-        spinMasterMinPix.setValue(config.masterMinDetectionPixels);
+
         spinDetectionSigma.setValue(config.detectionSigmaMultiplier);
         spinGrowSigma.setValue(config.growSigmaMultiplier);
         spinMinPixels.setValue(config.minDetectionPixels);

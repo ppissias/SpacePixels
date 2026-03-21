@@ -231,6 +231,8 @@ public class ImageProcessing {
                         rawFramesForExport,
                         result.masterStackData,
                         result.masterStars,
+                        result.slowMoverStackData,
+                        result.slowMoverCandidates,
                         exportDir,
                         result.telemetry,
                         config);
@@ -414,6 +416,8 @@ public class ImageProcessing {
                         rawFramesForExport,
                         result.masterStackData,
                         result.masterStars,
+                        result.slowMoverStackData,
+                        result.slowMoverCandidates,
                         iterationDir,
                         result.telemetry,
                         config);

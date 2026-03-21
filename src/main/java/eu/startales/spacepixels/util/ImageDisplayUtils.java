@@ -47,7 +47,6 @@ public class ImageDisplayUtils {
     public static int trackObjectCentricCropSize = 200;
     public static int singleStreakExportPadding = 50;
     public static double streakElongationCropMultiplier = 10.0;
-    public static int maxFullSequenceFrames = 15;
 
     // --- Annotation Tools (For GIFs) ---
     public static int targetCircleRadius = 15;
@@ -606,6 +605,8 @@ public class ImageDisplayUtils {
                                                  List<short[][]> rawFrames,
                                                  short[][] masterStackData,
                                                  List<SourceExtractor.DetectedObject> masterStars,
+                                                 short[][] slowMoverStackData,
+                                                 List<SourceExtractor.DetectedObject> slowMoverCandidates,
                                                  File exportDir,
                                                  PipelineTelemetry pipelineTelemetry,
                                                  DetectionConfig config) throws IOException {
@@ -737,7 +738,7 @@ public class ImageDisplayUtils {
                     List<BufferedImage> cornerFrames = new ArrayList<>();
 
                     // Use the existing down-sampler to keep memory, disk I/O, and GIF size completely safe
-                    List<Integer> sampledCornerIndices = getRepresentativeSequence(rawFrames.size(), new java.util.HashSet<>(), maxFullSequenceFrames);
+                    List<Integer> sampledCornerIndices = getRepresentativeSequence(rawFrames.size(), new java.util.HashSet<>(), 15);
                     for (int idx : sampledCornerIndices) {
                         short[][] frame = rawFrames.get(idx);
                         driftPath.add(getFrameDriftOffset(frame));
@@ -902,18 +903,6 @@ public class ImageDisplayUtils {
                         BufferedImage shapeImg = createSingleStreakShapeImage(track.points, trackBoxWidth, trackBoxHeight, startX, startY);
                         saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
 
-                        // --- Generate Full Sequence GIF ---
-                        String fullSeqFileName = "anomaly_" + streakCounter + "_sampled_sequence.gif";
-                        List<BufferedImage> fullSequenceFrames = new ArrayList<>();
-                        java.util.Set<Integer> mandatoryFrames = new java.util.HashSet<>();
-                        mandatoryFrames.add(frameIndex);
-                        List<Integer> sampledIndices = getRepresentativeSequence(rawFrames.size(), mandatoryFrames, maxFullSequenceFrames);
-                        for (int idx : sampledIndices) {
-                            short[][] cData = robustEdgeAwareCrop(rawFrames.get(idx), fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
-                            fullSequenceFrames.add(createDisplayImage(cData));
-                        }
-                        GifSequenceWriter.saveAnimatedGif(fullSequenceFrames, new File(exportDir, fullSeqFileName), gifBlinkSpeedMs);
-
                         // --- Generate 3-Frame "Context" GIF ---
                         String contextGifFileName = "anomaly_" + streakCounter + "_context.gif";
                         List<BufferedImage> contextFrames = new ArrayList<>();
@@ -938,7 +927,6 @@ public class ImageDisplayUtils {
                         report.println("<div class='image-container'>");
                         report.println("<div><a href='" + detectionFileName + "' target='_blank'><img src='" + detectionFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
                         report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' title='Streak Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
-                        report.println("<div><a href='" + fullSeqFileName + "' target='_blank'><img src='" + fullSeqFileName + "' alt='Sampled Time-Lapse' title='Sampled Time-Lapse (Unannotated)' /></a><br/><center><small>Sampled Time-Lapse (Unannotated)</small></center></div>");
                         report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context Animation' title='Before / During / After' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
                         report.println("</div>");
 
@@ -999,18 +987,6 @@ public class ImageDisplayUtils {
                     int startX = fixedCenterX - (trackBoxWidth / 2);
                     int startY = fixedCenterY - (trackBoxHeight / 2);
 
-                    // --- NEW: Generate Full Sequence Unannotated Star-Centric GIF ---
-                    List<BufferedImage> fullSequenceStarFrames = new ArrayList<>();
-                    java.util.Set<Integer> mandatoryFrames = new java.util.HashSet<>();
-                    for (SourceExtractor.DetectedObject pt : track.points) {
-                        mandatoryFrames.add(pt.sourceFrameIndex);
-                    }
-                    List<Integer> sampledIndices = getRepresentativeSequence(rawFrames.size(), mandatoryFrames, maxFullSequenceFrames);
-                    for (int idx : sampledIndices) {
-                        short[][] croppedFullData = robustEdgeAwareCrop(rawFrames.get(idx), fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
-                        fullSequenceStarFrames.add(createDisplayImage(croppedFullData));
-                    }
-
                     java.util.Set<Integer> processedFrames = new java.util.HashSet<>();
 
                     for (SourceExtractor.DetectedObject pt : track.points) {
@@ -1062,16 +1038,12 @@ public class ImageDisplayUtils {
                     } else {
                         String objFileName = "track_" + trackCounter + "_object_centric.gif";
                         String starFileName = "track_" + trackCounter + "_star_centric.gif";
-                        String fullSeqFileName = "track_" + trackCounter + "_sampled_sequence.gif";
 
                         File objFile = new File(exportDir, objFileName);
                         GifSequenceWriter.saveAnimatedGif(objectCentricFrames, objFile, gifBlinkSpeedMs);
 
                         File starFile = new File(exportDir, starFileName);
                         GifSequenceWriter.saveAnimatedGif(starCentricFrames, starFile, gifBlinkSpeedMs);
-                        
-                        File fullSeqFile = new File(exportDir, fullSeqFileName);
-                        GifSequenceWriter.saveAnimatedGif(fullSequenceStarFrames, fullSeqFile, gifBlinkSpeedMs);
 
                         report.println("<div class='detection-card'>");
                         String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
@@ -1081,7 +1053,6 @@ public class ImageDisplayUtils {
                         report.println("<div class='image-container'>");
                         report.println("<div><a href='" + objFileName + "' target='_blank'><img src='" + objFileName + "' alt='Object Centric' title='Object-Centric' /></a><br/><center><small>Object Centric</small></center></div>");
                         report.println("<div><a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric' title='Star-Centric' /></a><br/><center><small>Star Centric</small></center></div>");
-                        report.println("<div><a href='" + fullSeqFileName + "' target='_blank'><img src='" + fullSeqFileName + "' alt='Sampled Time-Lapse' title='Sampled Time-Lapse (Unannotated)' /></a><br/><center><small>Sampled Time-Lapse (Unannotated)</small></center></div>");
                         report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Track Shape Map' title='Track Shape Map' /></a><br/><center><small>Track Shape Map</small></center></div>");
                         report.println("</div>");
                     }
@@ -1099,10 +1070,78 @@ public class ImageDisplayUtils {
                     trackCounter++;
                 }
             }
+            
+            // =================================================================
+            // 4. DEEP STACK ANOMALIES (ULTRA-SLOW MOVERS)
+            // =================================================================
+            if (config.enableSlowMoverDetection && slowMoverStackData != null && slowMoverCandidates != null && !slowMoverCandidates.isEmpty()) {
+                report.println("<h2>Deep Stack Anomalies (Ultra-Slow Mover Candidates)</h2>");
+                report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets (like distant KBOs) that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
+                report.println("<div class='flex-container'>");
+                
+                int smCounter = 1;
+                for (SourceExtractor.DetectedObject sm : slowMoverCandidates) {
+                    int cx = (int) Math.round(sm.x);
+                    int cy = (int) Math.round(sm.y);
+                    
+                    // Dynamically scale the crop box to ensure we capture the entire elongated footprint plus padding
+                    double objectRadius = sm.pixelArea > 0 ? Math.sqrt((sm.pixelArea * sm.elongation) / Math.PI) : 0;
+                    int cropSize = Math.max(150, (int) Math.round(objectRadius * 2) + 100);
+                    int startX = cx - (cropSize / 2);
+                    int startY = cy - (cropSize / 2);
+                    
+                    // Crop from slowMoverStackData
+                    short[][] croppedSlowData = robustEdgeAwareCrop(slowMoverStackData, cx, cy, cropSize, cropSize);
+                    BufferedImage smImg = createDisplayImage(croppedSlowData);
+                    String smFileName = "slow_mover_" + smCounter + "_sm_stack.png";
+                    saveTrackImageLossless(smImg, new File(exportDir, smFileName));
+                    
+                    // Crop from masterStackData (Median Stack)
+                    String masterFileName = "slow_mover_" + smCounter + "_master_stack.png";
+                    if (masterStackData != null) {
+                        short[][] croppedMasterData = robustEdgeAwareCrop(masterStackData, cx, cy, cropSize, cropSize);
+                        BufferedImage masterImg = createDisplayImage(croppedMasterData);
+                        saveTrackImageLossless(masterImg, new File(exportDir, masterFileName));
+                    }
+                    
+                    // Generate the Shape Footprint Image
+                    BufferedImage shapeImg = createSingleStreakShapeImage(java.util.Collections.singletonList(sm), cropSize, cropSize, startX, startY);
+                    String shapeFileName = "slow_mover_" + smCounter + "_shape.png";
+                    saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
+                    
+                    // Generate Animated GIF (Max 10 Frames)
+                    List<Integer> sampledIndices = getRepresentativeSequence(rawFrames.size(), new java.util.HashSet<>(), 10);
+                    List<BufferedImage> gifFrames = new ArrayList<>();
+                    for (int idx : sampledIndices) {
+                        short[][] frameData = robustEdgeAwareCrop(rawFrames.get(idx), cx, cy, cropSize, cropSize);
+                        gifFrames.add(createDisplayImage(frameData));
+                    }
+                    String gifFileName = "slow_mover_" + smCounter + "_anim.gif";
+                    GifSequenceWriter.saveAnimatedGif(gifFrames, new File(exportDir, gifFileName), gifBlinkSpeedMs);
+                    
+                    report.println("<div class='detection-card' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");
+                    report.println("<div class='detection-title' style='color: #ff66ff; font-size: 1.1em; margin-bottom: 10px;'>Candidate #" + smCounter + "</div>");
+                    report.println("<div class='image-container' style='margin-bottom: 10px;'>");
+                    if (masterStackData != null) {
+                        report.println("<div><a href='" + masterFileName + "' target='_blank'><img src='" + masterFileName + "' style='max-width: 150px;' alt='Median Stack Crop' /></a><br/><center><small>Median Stack</small></center></div>");
+                    }
+                    report.println("<div><a href='" + smFileName + "' target='_blank'><img src='" + smFileName + "' style='max-width: 150px;' alt='Slow Mover Stack Crop' /></a><br/><center><small>Slow Mover Stack</small></center></div>");
+                    report.println("<div><a href='" + gifFileName + "' target='_blank'><img src='" + gifFileName + "' style='max-width: 150px;' alt='Sampled Time-Lapse' /></a><br/><center><small>Animation (Sampled)</small></center></div>");
+                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' style='max-width: 150px;' alt='Slow Mover Shape' /></a><br/><center><small>Shape</small></center></div>");
+                    report.println("</div>");
+                    report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>X: " + String.format(Locale.US, "%.1f", sm.x) + " | Y: " + String.format(Locale.US, "%.1f", sm.y) + "<br>Elongation: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f", sm.elongation) + "</span><br>Pixels: <span style='color:#fff;'>" + sm.pixelArea + "</span></div></div>");
+                    
+                    smCounter++;
+                }
+                report.println("</div>");
+            }
+
             report.println("</body></html>");
         }
         System.out.println("\nFinished exporting visualizations and generated HTML report at: " + reportFile.getAbsolutePath());
     }
+
+
 
     public static void exportIterativeIndexReport(File masterDir, List<IterationSummary> summaries) throws IOException {
         File indexFile = new File(masterDir, "index.html");
