@@ -1015,55 +1015,6 @@ public class ImageDisplayUtils {
                 report.println("<div class='panel'><p>No moving targets were detected in this session.</p></div>");
             }
 
-            if (!anomalies.isEmpty()) {
-                report.println("<h3 style='color: #ff3333; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>High-Energy Anomalies (Optical Flashes)</h3>");
-                int counter = 1;
-                for (TrackLinker.Track track : anomalies) {
-                    CropBounds cb = new CropBounds(track, trackCropPadding);
-                    SourceExtractor.DetectedObject pt = track.points.get(0);
-                    int frameIndex = pt.sourceFrameIndex;
-
-                    report.println("<div class='detection-card streak-title' style='border-left-color: #ff3333; color: #ff3333;'>");
-                    report.println("<div class='detection-title' style='color: #ff3333;'>Anomaly Event A" + counter + "</div>");
-
-                    short[][] croppedData = robustEdgeAwareCrop(rawFrames.get(frameIndex), cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
-                    BufferedImage detectionImg = createDisplayImage(croppedData);
-                    String detectionFileName = "anomaly_" + counter + "_detection.png";
-                    saveTrackImageLossless(detectionImg, new File(exportDir, detectionFileName));
-
-                    String shapeFileName = "anomaly_" + counter + "_shape.png";
-                    BufferedImage shapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY);
-                    saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
-
-                    String contextGifFileName = "anomaly_" + counter + "_context.gif";
-                    List<BufferedImage> contextFrames = new ArrayList<>();
-                    int[] frameSequence = {frameIndex - 1, frameIndex, frameIndex + 1};
-                    for (int idx : frameSequence) {
-                        if (idx >= 0 && idx < rawFrames.size()) {
-                            short[][] cData = robustEdgeAwareCrop(rawFrames.get(idx), cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
-                            BufferedImage aImg = createDisplayImage(cData);
-                            Graphics2D g2d = aImg.createGraphics();
-                            int localX = (int) Math.round(pt.x - cb.startX);
-                            int localY = (int) Math.round(pt.y - cb.startY);
-                            g2d.setColor(Color.WHITE); g2d.setStroke(new BasicStroke(targetCircleStrokeWidth));
-                            g2d.drawOval(localX - targetCircleRadius, localY - targetCircleRadius, targetCircleRadius * 2, targetCircleRadius * 2);
-                            g2d.dispose();
-                            contextFrames.add(aImg);
-                        }
-                    }
-                    GifSequenceWriter.saveAnimatedGif(contextFrames, new File(exportDir, contextGifFileName), gifBlinkSpeedMs);
-
-                    report.println("<div class='image-container'>");
-                    report.println("<div><a href='" + detectionFileName + "' target='_blank'><img src='" + detectionFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
-                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
-                    report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
-                    report.println("</div>");
-                    String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
-                    String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d", pt.totalFlux, (int) pt.pixelArea);
-                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li></ul></div>");
-                    counter++;
-                }
-            }
 
             if (!singleStreaks.isEmpty()) {
                 report.println("<h3 style='color: #ff9933; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single Streaks</h3>");
@@ -1213,6 +1164,56 @@ public class ImageDisplayUtils {
                 }
             }
 
+            if (!anomalies.isEmpty()) {
+                report.println("<h3 style='color: #ff3333; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>High-Energy Anomalies (Optical Flashes)</h3>");
+                int counter = 1;
+                for (TrackLinker.Track track : anomalies) {
+                    CropBounds cb = new CropBounds(track, trackCropPadding);
+                    SourceExtractor.DetectedObject pt = track.points.get(0);
+                    int frameIndex = pt.sourceFrameIndex;
+
+                    report.println("<div class='detection-card streak-title' style='border-left-color: #ff3333; color: #ff3333;'>");
+                    report.println("<div class='detection-title' style='color: #ff3333;'>Anomaly Event A" + counter + "</div>");
+
+                    short[][] croppedData = robustEdgeAwareCrop(rawFrames.get(frameIndex), cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
+                    BufferedImage detectionImg = createDisplayImage(croppedData);
+                    String detectionFileName = "anomaly_" + counter + "_detection.png";
+                    saveTrackImageLossless(detectionImg, new File(exportDir, detectionFileName));
+
+                    String shapeFileName = "anomaly_" + counter + "_shape.png";
+                    BufferedImage shapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY);
+                    saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
+
+                    String contextGifFileName = "anomaly_" + counter + "_context.gif";
+                    List<BufferedImage> contextFrames = new ArrayList<>();
+                    int[] frameSequence = {frameIndex - 1, frameIndex, frameIndex + 1};
+                    for (int idx : frameSequence) {
+                        if (idx >= 0 && idx < rawFrames.size()) {
+                            short[][] cData = robustEdgeAwareCrop(rawFrames.get(idx), cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
+                            BufferedImage aImg = createDisplayImage(cData);
+                            Graphics2D g2d = aImg.createGraphics();
+                            int localX = (int) Math.round(pt.x - cb.startX);
+                            int localY = (int) Math.round(pt.y - cb.startY);
+                            g2d.setColor(Color.WHITE); g2d.setStroke(new BasicStroke(targetCircleStrokeWidth));
+                            g2d.drawOval(localX - targetCircleRadius, localY - targetCircleRadius, targetCircleRadius * 2, targetCircleRadius * 2);
+                            g2d.dispose();
+                            contextFrames.add(aImg);
+                        }
+                    }
+                    GifSequenceWriter.saveAnimatedGif(contextFrames, new File(exportDir, contextGifFileName), gifBlinkSpeedMs);
+
+                    report.println("<div class='image-container'>");
+                    report.println("<div><a href='" + detectionFileName + "' target='_blank'><img src='" + detectionFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
+                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
+                    report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
+                    report.println("</div>");
+                    String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
+                    String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d", pt.totalFlux, (int) pt.pixelArea);
+                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li></ul></div>");
+                    counter++;
+                }
+            }
+
             // =================================================================
             // 4. DEEP STACK ANOMALIES (ULTRA-SLOW MOVERS)
             // =================================================================
@@ -1222,7 +1223,7 @@ public class ImageDisplayUtils {
 
                 if (hasCandidates || hasTelemetry) {
                     report.println("<h2>Deep Stack Anomalies (Ultra-Slow Mover Candidates)</h2>");
-                    report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets (like distant KBOs) that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
+                    report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
 
                     if (hasTelemetry) {
                         report.println("<div class='flex-container' style='margin-bottom: 25px;'>");

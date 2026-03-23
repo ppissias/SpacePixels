@@ -44,3 +44,15 @@ application {
     // This applies to both `./gradlew run` and the generated distribution start scripts.
     applicationDefaultJvmArgs = ["-XX:MaxRAMPercentage=80.0", "-XX:+UseG1GC"]
 }
+
+tasks.register('injectStars', JavaExec) {
+    group = 'application'
+    description = 'Run the Artificial Star Injector tool. Usage: gradlew injectStars -PinjArgs="<dir> <num> <move> <peak> <fwhm>"'
+    mainClass = 'eu.startales.spacepixels.tools.ArtificialStarInjector'
+    classpath = sourceSets.main.runtimeClasspath
+    jvmArgs = ["-XX:MaxRAMPercentage=80.0", "-XX:+UseG1GC"]
+
+    if (project.hasProperty('injArgs')) {
+        args project.getProperty('injArgs').split(' ')
+    }
+}
