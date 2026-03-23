@@ -26,7 +26,7 @@ Because SpacePixels looks for tiny pixel movements between frames, it needs the 
 Simply load your aligned images, configure your detection thresholds, and let the multi-threaded pipeline find the transients for you!
 
 * **Dynamic Target Tracking:** Automatically links faint moving targets across sub-exposures to identify asteroids, comets, and satellites.
-* **Ultra-Slow Mover Detection:** Scans the highly integrated master median stack for "Deep Stack Anomalies"—elongated capsule shapes indicative of distant, ultra-slow targets like Kuiper Belt Objects (KBOs).
+* **Ultra-Slow Mover Detection:** Scans the highly integrated master median stack for "Deep Stack Anomalies"—elongated capsule shapes indicative of distant, ultra-slow targets.
 * **High-Energy Anomaly Catching:** Identifies bright, single-frame optical flashes or meteors that failed to form a multi-frame track.
 * **Interactive HTML Reports:** Generates a comprehensive dark-themed dashboard complete with animated GIFs, track geometries, Dither/Drift diagnostics, and Global Transient Maps plotting every detection across the session.
 

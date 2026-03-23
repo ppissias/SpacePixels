@@ -38,13 +38,16 @@ The software utilizes a custom tracking engine (`JTransient`) to find moving obj
 
 ### System Requirements
 *   **Operating System**: Windows, macOS, or Linux.
-*   **Java Runtime**: Java 8 or higher (Java 11+ recommended).
+*   **Java Runtime**: Java 21 or higher
 *   **Memory**: A minimum of 4GB RAM is recommended. Large FITS sequences may require significantly more memory.
 *   **Optional Software**: ASTAP (for local plate-solving).
 
 ### Installation and Running
-SpacePixels is distributed as a Gradle project. To build and run the application:
-1. Ensure Java is installed and in your system\u0027s PATH.
+You can download the latest release, unzip, go to the bin folder and run 
+`SpacePixels.bat` (Windows) or `SpacePixels` (Linux / Mac).
+
+You can also download the Gradle project. To build and run the application:
+1. Ensure Java is installed and in your system PATH.
 2. Open a terminal/command prompt in the project root directory.
 3. Run the application using the Gradle wrapper:
    *   **Windows**: `gradlew run`
@@ -62,8 +65,8 @@ The main application window is divided into a few key areas:
 
 ### Importing FITS Files
 To begin working, you must load a directory containing a sequence of aligned FITS files.
-1. Click **File -\u003e Load Directory**.
-2. Select a folder. The application will scan for files ending in `.fits`, `.fit`, `.fts` (and their compressed `.fz` variants).
+1. Click **File => Load Directory**.
+2. Select a folder. The application will scan for files ending in `.fits`, `.fit`, `.fts` (support for `.fz` is coming).
 3. **Format Enforcement**: SpacePixels expects all files in a sequence to have the exact same dimensions and color space (e.g., all 16-bit Mono, or all 16-bit Color).
 4. **32-Bit Conversion**: If 32-bit images are detected, the application will prompt you to automatically standardize them down to 16-bit, which is required by the detection engine.
 
