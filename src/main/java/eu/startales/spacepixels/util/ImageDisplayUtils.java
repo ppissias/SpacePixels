@@ -272,9 +272,22 @@ public class ImageDisplayUtils {
 
         // PAINT THE MASTER MASK IN BRIGHT RED
         int redColor = new Color(255, 0, 0).getRGB(); // Solid red
+
+        // Safety check: Detect if the mask was accidentally transposed in the library [width][height]
+        boolean transposed = (masterMask.length == width && masterMask[0].length == height && width != height);
+
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                if (masterMask[y][x]) {
+                boolean isMasked = false;
+
+                // Safely extract the mask value without crashing if the array dimensions don't perfectly match
+                if (transposed) {
+                    if (x < masterMask.length && y < masterMask[x].length) isMasked = masterMask[x][y];
+                } else {
+                    if (y < masterMask.length && x < masterMask[y].length) isMasked = masterMask[y][x];
+                }
+
+                if (isMasked) {
                     image.setRGB(x, y, redColor);
                 }
             }
@@ -404,7 +417,7 @@ public class ImageDisplayUtils {
     }
 
     // --- SINGLE STREAK SHAPE RENDERER ---
-    public static BufferedImage createSingleStreakShapeImage(List<SourceExtractor.DetectedObject> points, int cropWidth, int cropHeight, int startX, int startY) {
+    public static BufferedImage createSingleStreakShapeImage(List<SourceExtractor.DetectedObject> points, int cropWidth, int cropHeight, int startX, int startY, boolean drawCentroid) {
         BufferedImage image = new BufferedImage(cropWidth, cropHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = image.createGraphics();
 
@@ -422,16 +435,19 @@ public class ImageDisplayUtils {
                         image.setRGB(x, y, new Color(255, 80, 80).getRGB()); // Bright red/pink footprint
                     }
                 }
+                if (drawCentroid) {
+                    // 3. Mark the Centroid with a white target
+                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    int cx = (int) Math.round(pt.x - startX);
+                    int cy = (int) Math.round(pt.y - startY);
+                    g2d.setColor(Color.WHITE);
+                    g2d.setStroke(new BasicStroke(1.5f));
+                    g2d.drawOval(cx - 3, cy - 3, 6, 6);
+                }
             }
 
-            // 3. Mark the Centroid with a white target
-            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            int cx = (int) Math.round(pt.x - startX);
-            int cy = (int) Math.round(pt.y - startY);
-            g2d.setColor(Color.WHITE);
-            g2d.setStroke(new BasicStroke(1.5f));
-            g2d.drawOval(cx - 3, cy - 3, 6, 6);
         }
+
 
         g2d.dispose();
         return image;
@@ -1033,7 +1049,7 @@ public class ImageDisplayUtils {
                     saveTrackImageLossless(streakImg, new File(exportDir, streakFileName));
 
                     String shapeFileName = "single_streak_" + counter + "_shape.png";
-                    BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY);
+                    BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY, true);
                     saveTrackImageLossless(streakShapeImg, new File(exportDir, shapeFileName));
 
                     report.println("<div class='image-container'>");
@@ -1041,7 +1057,7 @@ public class ImageDisplayUtils {
                     report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
                     report.println("</div>");
                     String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
-                    String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d", pt.totalFlux, (int) pt.pixelArea);
+                    String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
                     report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li></ul></div>");
 
                     counter++;
@@ -1095,7 +1111,7 @@ public class ImageDisplayUtils {
                     for (int i = 0; i < track.points.size(); i++) {
                         SourceExtractor.DetectedObject pt = track.points.get(i);
                         String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
-                        String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d", pt.totalFlux, (int) pt.pixelArea);
+                        String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
                         report.println("<li>[" + (i + 1) + "] " + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li>");
                     }
                     report.println("</ul></div>");
@@ -1156,7 +1172,7 @@ public class ImageDisplayUtils {
                     for (int i = 0; i < track.points.size(); i++) {
                         SourceExtractor.DetectedObject pt = track.points.get(i);
                         String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
-                        String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d", pt.totalFlux, (int) pt.pixelArea);
+                        String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
                         report.println("<li>[" + (i + 1) + "] " + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li>");
                     }
                     report.println("</ul></div>");
@@ -1181,7 +1197,7 @@ public class ImageDisplayUtils {
                     saveTrackImageLossless(detectionImg, new File(exportDir, detectionFileName));
 
                     String shapeFileName = "anomaly_" + counter + "_shape.png";
-                    BufferedImage shapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY);
+                    BufferedImage shapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY, false);
                     saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
 
                     String contextGifFileName = "anomaly_" + counter + "_context.gif";
@@ -1208,7 +1224,7 @@ public class ImageDisplayUtils {
                     report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
                     report.println("</div>");
                     String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
-                    String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d", pt.totalFlux, (int) pt.pixelArea);
+                    String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
                     report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li></ul></div>");
                     counter++;
                 }
@@ -1262,7 +1278,7 @@ public class ImageDisplayUtils {
                             }
 
                             // Generate the Shape Footprint Image
-                            BufferedImage shapeImg = createSingleStreakShapeImage(java.util.Collections.singletonList(sm), cropSize, cropSize, startX, startY);
+                            BufferedImage shapeImg = createSingleStreakShapeImage(java.util.Collections.singletonList(sm), cropSize, cropSize, startX, startY, false);
                             String shapeFileName = "slow_mover_" + smCounter + "_shape.png";
                             saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
 

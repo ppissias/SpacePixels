@@ -62,7 +62,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private JSpinner spinTrackMinFrameRatio, spinAbsMaxPoints, spinMaxJump;
     private JSpinner spinRhythmVar, spinRhythmMinRatio, spinRhythmStatThresh, spinTimeBasedVelocityTolerance;
     private JSpinner spinMaxFwhmRatio, spinMaxSurfaceBrightnessRatio;
-    
+
     // --- Anomaly Rescue ---
     private JCheckBox chkEnableAnomalyRescue;
     private JSpinner spinAnomalyMinPeakSigma, spinAnomalyMinPixels;
@@ -228,9 +228,6 @@ public class DetectionConfigurationPanel extends JPanel {
         AutoTuneTask tuneTask = new AutoTuneTask(mainAppWindow.getEventBus(), poolToUse, jTransientConfig);
         new Thread(tuneTask).start();
     }
-
-
-
 
     // =========================================================================
     // JTRANSIENT JSON LOAD/SAVE LOGIC
@@ -474,6 +471,7 @@ public class DetectionConfigurationPanel extends JPanel {
         textPanel.add(Box.createVerticalStrut(3));
         textPanel.add(descLabel);
 
+        // Increased height to 85px to safely accommodate multiple lines of description text
         Dimension textDim = new Dimension(480, 85);
         textPanel.setPreferredSize(textDim);
         textPanel.setMinimumSize(textDim);
@@ -516,6 +514,7 @@ public class DetectionConfigurationPanel extends JPanel {
         textPanel.add(Box.createVerticalStrut(3));
         textPanel.add(descLabel);
 
+        // Increased height to 85px to safely accommodate multiple lines of description text
         Dimension textDim = new Dimension(480, 85);
         textPanel.setPreferredSize(textDim);
         textPanel.setMinimumSize(textDim);
@@ -581,7 +580,7 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.rhythmMinConsistencyRatio = ((Number) spinRhythmMinRatio.getValue()).doubleValue();
             jTransientConfig.rhythmStationaryThreshold = ((Number) spinRhythmStatThresh.getValue()).doubleValue();
             jTransientConfig.timeBasedVelocityTolerance = ((Number) spinTimeBasedVelocityTolerance.getValue()).doubleValue();
-            
+
             jTransientConfig.enableAnomalyRescue = chkEnableAnomalyRescue.isSelected();
             jTransientConfig.anomalyMinPeakSigma = ((Number) spinAnomalyMinPeakSigma.getValue()).doubleValue();
             jTransientConfig.anomalyMinPixels = ((Number) spinAnomalyMinPixels.getValue()).intValue();
@@ -717,7 +716,7 @@ public class DetectionConfigurationPanel extends JPanel {
                     // Physically move the sliders
                     updateSpinnersFromConfig(result.optimizedConfig);
 
-                    String adjustedMsg = growSigmaAdjusted ? 
+                    String adjustedMsg = growSigmaAdjusted ?
                             String.format("• Grow Sigma: %.1f (capped to Detection Sigma)\n", result.optimizedConfig.growSigmaMultiplier) : "";
 
                     String summary = String.format(
@@ -767,6 +766,4 @@ public class DetectionConfigurationPanel extends JPanel {
         // Push the visual changes to the underlying memory state immediately
         applySettingsToMemory();
     }
-
-
 }
