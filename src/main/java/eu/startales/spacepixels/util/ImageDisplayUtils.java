@@ -96,21 +96,53 @@ public class ImageDisplayUtils {
         }
     }
 
+    public static class CropBounds {
+        public final int trackBoxWidth, trackBoxHeight, fixedCenterX, fixedCenterY, startX, startY;
+
+        public CropBounds(TrackLinker.Track track, int padding) {
+            double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
+            double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+
+            for (SourceExtractor.DetectedObject pt : track.points) {
+                double objectRadius = 0;
+                if (pt.pixelArea > 0) {
+                    if (pt.isStreak) objectRadius = Math.sqrt((pt.pixelArea * pt.elongation) / Math.PI);
+                    else objectRadius = Math.sqrt(pt.pixelArea / Math.PI);
+                }
+                if (pt.x - objectRadius < minX) minX = pt.x - objectRadius;
+                if (pt.x + objectRadius > maxX) maxX = pt.x + objectRadius;
+                if (pt.y - objectRadius < minY) minY = pt.y - objectRadius;
+                if (pt.y + objectRadius > maxY) maxY = pt.y + objectRadius;
+            }
+
+            if (minX == Double.MAX_VALUE) minX = 0; if (maxX == -Double.MAX_VALUE) maxX = 0;
+            if (minY == Double.MAX_VALUE) minY = 0; if (maxY == -Double.MAX_VALUE) maxY = 0;
+
+            trackBoxWidth = (int) Math.round(maxX - minX) + padding;
+            trackBoxHeight = (int) Math.round(maxY - minY) + padding;
+            fixedCenterX = (int) Math.round((minX + maxX) / 2.0);
+            fixedCenterY = (int) Math.round((minY + maxY) / 2.0);
+
+            startX = fixedCenterX - (trackBoxWidth / 2);
+            startY = fixedCenterY - (trackBoxHeight / 2);
+        }
+    }
+
     /**
      * Returns an evenly spaced sample of chronological frame indices while guaranteeing that
      * mandatory frames (where actual detections occur) are included to never miss a transient.
      */
     public static List<Integer> getRepresentativeSequence(int totalFrames, java.util.Set<Integer> mandatoryFrames, int maxFrames) {
         java.util.TreeSet<Integer> selected = new java.util.TreeSet<>();
-        
+
         if (totalFrames <= maxFrames) {
             for (int i = 0; i < totalFrames; i++) selected.add(i);
             return new ArrayList<>(selected);
         }
-        
+
         List<Integer> mandatoryList = new ArrayList<>(mandatoryFrames);
         java.util.Collections.sort(mandatoryList);
-        
+
         if (mandatoryList.size() >= maxFrames) {
             if (maxFrames == 1) {
                 selected.add(mandatoryList.get(0));
@@ -122,14 +154,14 @@ public class ImageDisplayUtils {
             }
             return new ArrayList<>(selected);
         }
-        
+
         selected.addAll(mandatoryList);
-        
+
         List<Integer> available = new ArrayList<>();
         for (int i = 0; i < totalFrames; i++) {
             if (!mandatoryFrames.contains(i)) available.add(i);
         }
-        
+
         int needed = maxFrames - selected.size();
         if (needed > 0 && !available.isEmpty()) {
             if (needed == 1) {
@@ -141,7 +173,7 @@ public class ImageDisplayUtils {
                 }
             }
         }
-        
+
         return new ArrayList<>(selected);
     }
 
@@ -453,56 +485,67 @@ public class ImageDisplayUtils {
         return image;
     }
 
-    // =================================================================
-    // DITHER & DRIFT DIAGNOSTICS
-    // =================================================================
+    // --- REFACTORED: GLOBAL TRACK MAP RENDERER ---
+    public static BufferedImage createGlobalTrackMap(short[][] backgroundData,
+                                                     List<TrackLinker.Track> anomalies,
+                                                     List<TrackLinker.Track> singleStreaks,
+                                                     List<TrackLinker.Track> streakTracks,
+                                                     List<TrackLinker.Track> movingTargets) {
+        BufferedImage grayBg = createDisplayImage(backgroundData);
+        BufferedImage rgbMap = new BufferedImage(grayBg.getWidth(), grayBg.getHeight(), BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = rgbMap.createGraphics();
+        g2d.drawImage(grayBg, 0, 0, null);
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-    public static Point getFrameDriftOffset(short[][] frame) {
-        int height = frame.length;
-        int width = frame[0].length;
-        int minX = 0, maxX = width - 1;
-        int minY = 0, maxY = height - 1;
-
-        // threshold: at least 5% of pixels are valid to ignore noise/artifacts
-        int xThreshold = height / 20;
-        int yThreshold = width / 20;
-
-        // Find Top (minY)
-        for (int y = 0; y < height; y++) {
-            int validCount = 0;
-            for (int x = 0; x < width; x++) if (frame[y][x] > -32760) validCount++;
-            if (validCount > yThreshold) { minY = y; break; }
+        int aCounter = 1;
+        for (TrackLinker.Track t : anomalies) {
+            SourceExtractor.DetectedObject pt = t.points.get(0);
+            int cx = (int) Math.round(pt.x), cy = (int) Math.round(pt.y);
+            g2d.setColor(new Color(255, 51, 255)); g2d.setStroke(new BasicStroke(2.5f));
+            g2d.drawOval(cx - 20, cy - 20, 40, 40);
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 18)); g2d.drawString("A" + aCounter, cx + 25, cy - 25);
+            aCounter++;
         }
 
-        // Find Bottom (maxY)
-        for (int y = height - 1; y >= 0; y--) {
-            int validCount = 0;
-            for (int x = 0; x < width; x++) if (frame[y][x] > -32760) validCount++;
-            if (validCount > yThreshold) { maxY = y; break; }
+        int sCounter = 1;
+        for (TrackLinker.Track t : singleStreaks) {
+            SourceExtractor.DetectedObject pt = t.points.get(0);
+            int cx = (int) Math.round(pt.x), cy = (int) Math.round(pt.y);
+            g2d.setColor(new Color(255, 153, 51)); g2d.setStroke(new BasicStroke(2.5f));
+            g2d.drawOval(cx - 20, cy - 20, 40, 40);
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 18)); g2d.drawString("S" + sCounter, cx + 25, cy - 25);
+            sCounter++;
         }
-
-        // Find Left (minX)
-        for (int x = 0; x < width; x++) {
-            int validCount = 0;
-            for (int y = 0; y < height; y++) if (frame[y][x] > -32760) validCount++;
-            if (validCount > xThreshold) { minX = x; break; }
+        int stCounter = 1;
+        for (TrackLinker.Track t : streakTracks) {
+            drawMultiFrameTrack(g2d, t, new Color(255, 204, 51), "ST" + stCounter);
+            stCounter++;
         }
-
-        // Find Right (maxX)
-        for (int x = width - 1; x >= 0; x--) {
-            int validCount = 0;
-            for (int y = 0; y < height; y++) if (frame[y][x] > -32760) validCount++;
-            if (validCount > xThreshold) { maxX = x; break; }
+        int tCounter = 1;
+        for (TrackLinker.Track t : movingTargets) {
+            drawMultiFrameTrack(g2d, t, new Color(77, 166, 255), "T" + tCounter);
+            tCounter++;
         }
-
-        // True geometric drift relative to the master canvas
-        int dx = minX - ((width - 1) - maxX);
-        int dy = minY - ((height - 1) - maxY);
-
-        return new Point(dx, dy);
+        g2d.dispose();
+        return rgbMap;
     }
 
-    public static BufferedImage createDriftMap(List<Point> path, int outSize) {
+    private static void drawMultiFrameTrack(Graphics2D g2d, TrackLinker.Track track, Color lineColor, String label) {
+        g2d.setColor(lineColor); g2d.setStroke(new BasicStroke(2.0f));
+        for (int i = 0; i < track.points.size() - 1; i++) {
+            SourceExtractor.DetectedObject p1 = track.points.get(i);
+            SourceExtractor.DetectedObject p2 = track.points.get(i + 1);
+            g2d.drawLine((int) Math.round(p1.x), (int) Math.round(p1.y), (int) Math.round(p2.x), (int) Math.round(p2.y));
+        }
+        g2d.setColor(new Color(255, 80, 80));
+        for (SourceExtractor.DetectedObject pt : track.points) {
+            g2d.fillOval((int) Math.round(pt.x) - 4, (int) Math.round(pt.y) - 4, 8, 8);
+        }
+        g2d.setColor(Color.WHITE); g2d.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        g2d.drawString(label, (int) Math.round(track.points.get(0).x) + 15, (int) Math.round(track.points.get(0).y) - 15);
+    }
+
+    public static BufferedImage createDriftMap(List<SourceExtractor.Pixel> path, int outSize) {
         BufferedImage img = new BufferedImage(outSize, outSize, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = img.createGraphics();
         g2d.setColor(new Color(35, 35, 35));
@@ -515,7 +558,7 @@ public class ImageDisplayUtils {
 
         int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
         int minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
-        for (Point p : path) {
+        for (SourceExtractor.Pixel p : path) {
             if (p.x < minX) minX = p.x;
             if (p.x > maxX) maxX = p.x;
             if (p.y < minY) minY = p.y;
@@ -542,8 +585,8 @@ public class ImageDisplayUtils {
         // Draw Trajectory Path
         g2d.setStroke(new BasicStroke(2.0f));
         for (int i = 0; i < path.size() - 1; i++) {
-            Point p1 = path.get(i);
-            Point p2 = path.get(i + 1);
+            SourceExtractor.Pixel p1 = path.get(i);
+            SourceExtractor.Pixel p2 = path.get(i + 1);
 
             int x1 = (outSize / 2) + (int) Math.round((p1.x - centerX) * scale);
             int y1 = (outSize / 2) + (int) Math.round((p1.y - centerY) * scale);
@@ -558,13 +601,13 @@ public class ImageDisplayUtils {
         }
 
         // Render Map Points
-        Point pFirst = path.get(0);
+        SourceExtractor.Pixel pFirst = path.get(0);
         int xf = (outSize / 2) + (int) Math.round((pFirst.x - centerX) * scale);
         int yf = (outSize / 2) + (int) Math.round((pFirst.y - centerY) * scale);
         g2d.setColor(new Color(80, 150, 255)); // Blue = Start
         g2d.fillOval(xf - 5, yf - 5, 10, 10);
 
-        Point pLast = path.get(path.size() - 1);
+        SourceExtractor.Pixel pLast = path.get(path.size() - 1);
         int xl = (outSize / 2) + (int) Math.round((pLast.x - centerX) * scale);
         int yl = (outSize / 2) + (int) Math.round((pLast.y - centerY) * scale);
         g2d.setColor(new Color(255, 80, 80)); // Red = End
@@ -573,6 +616,7 @@ public class ImageDisplayUtils {
         g2d.setColor(Color.WHITE);
         g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
         g2d.drawString("Max Drift: " + rangeX + "x" + rangeY + " px", 10, 20);
+        g2d.drawString("Points on path: " + path.size(), 10, 35);
 
         g2d.dispose();
         return img;
@@ -615,11 +659,11 @@ public class ImageDisplayUtils {
     public static BufferedImage createGlobalTransientMap(short[][] backgroundData, List<List<SourceExtractor.DetectedObject>> allTransients) {
         int width = backgroundData[0].length;
         int height = backgroundData.length;
-        
+
         BufferedImage grayBg = createDisplayImage(backgroundData);
         BufferedImage rgbMap = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
-        
+
         // Draw a dark, "ghostly" background (20% opacity) so the colorful transients pop
         // while still giving the user spatial context of the star field!
         g2d.setColor(Color.BLACK);
@@ -639,7 +683,7 @@ public class ImageDisplayUtils {
             // Hue ranges from 0.66 (Blue) down to 0.0 (Red)
             Color timeColor = Color.getHSBColor(0.66f - (0.66f * ratio), 1.0f, 1.0f);
             int timeRgb = timeColor.getRGB();
-            
+
             for (SourceExtractor.DetectedObject pt : frameTransients) {
                 if (pt.rawPixels != null && !pt.rawPixels.isEmpty()) {
                     // Draw the exact pixel footprint to accurately represent size and shape
@@ -664,7 +708,7 @@ public class ImageDisplayUtils {
         int legendHeight = 15;
         int lx = 20;
         int ly = rgbMap.getHeight() - 40;
-        
+
         // Background for legend to make it visible against noisy backgrounds
         g2d.setColor(new Color(0, 0, 0, 180));
         g2d.fillRect(lx - 10, ly - 30, legendWidth + 20, legendHeight + 40);
@@ -675,7 +719,7 @@ public class ImageDisplayUtils {
             g2d.setColor(timeColor);
             g2d.drawLine(lx + x, ly, lx + x, ly + legendHeight);
         }
-        
+
         g2d.setColor(Color.WHITE);
         g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
         g2d.drawString("Start", lx, ly - 5);
@@ -711,9 +755,6 @@ public class ImageDisplayUtils {
         List<List<SourceExtractor.DetectedObject>> allTransients = result.allTransients;
 
         if (!exportDir.exists()) exportDir.mkdirs();
-
-        int trackCounter = 1;
-        int streakCounter = 1;
 
         // --- EXPORT MASTER DIAGNOSTICS ---
         if (masterStackData != null && masterMask != null) {
@@ -825,9 +866,9 @@ public class ImageDisplayUtils {
                 report.println("<h2>Master Shield & Veto Mask</h2>");
                 report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
                 report.println("The raw median stack (Left) and the extracted Binary Veto Mask painted in red (Right). " +
-                               "These are the detected objects in the master map extended by a max star jitter of <strong>" + config.maxStarJitter + "</strong> pixels. " +
-                               "During Phase 3, we calculate the overlap fraction of each transient against this mask to determine if it should be deleted (purged as a stationary star) or allowed to survive. " +
-                               "The maximum allowed overlap fraction is currently set to <strong>" + config.maxMaskOverlapFraction + "</strong> (" + (int)(config.maxMaskOverlapFraction * 100) + "%).</p>");
+                        "These are the detected objects in the master map extended by a max star jitter of <strong>" + config.maxStarJitter + "</strong> pixels. " +
+                        "During Phase 3, we calculate the overlap fraction of each transient against this mask to determine if it should be deleted (purged as a stationary star) or allowed to survive. " +
+                        "The maximum allowed overlap fraction is currently set to <strong>" + config.maxMaskOverlapFraction + "</strong> (" + (int)(config.maxMaskOverlapFraction * 100) + "%).</p>");
                 report.println("<div class='image-container'>");
                 report.println("<div><a href='master_stack.png' target='_blank'><img src='master_stack.png' style='max-width: 400px;' alt='Master Stack' /></a><br/><center><small>Deep Median Stack</small></center></div>");
                 report.println("<div><a href='master_mask_overlay.png' target='_blank'><img src='master_mask_overlay.png' style='max-width: 400px;' alt='Mask Overlay' /></a><br/><center><small>Binary Footprint Mask (Red)</small></center></div>");
@@ -835,20 +876,13 @@ public class ImageDisplayUtils {
                 report.println("</div>");
 
                 // --- NEW: DITHER & DRIFT DIAGNOSTICS ---
-                if (rawFrames != null && !rawFrames.isEmpty()) {
-                    List<Point> driftPath = new ArrayList<>();
+                if (rawFrames != null && !rawFrames.isEmpty() && result.driftPoints != null && !result.driftPoints.isEmpty()) {
+                    List<SourceExtractor.Pixel> driftPath = result.driftPoints;
                     List<BufferedImage> cornerFrames = new ArrayList<>();
 
-                    // Use the existing down-sampler to keep memory, disk I/O, and GIF size completely safe
-                    List<Integer> sampledCornerIndices = getRepresentativeSequence(rawFrames.size(), new java.util.HashSet<>(), 15);
-                    for (int idx : sampledCornerIndices) {
-                        short[][] frame = rawFrames.get(idx);
-                        driftPath.add(getFrameDriftOffset(frame));
-                    }
-
                     boolean hasDrift = false;
-                    Point firstP = driftPath.get(0);
-                    for (Point p : driftPath) {
+                    SourceExtractor.Pixel firstP = driftPath.get(0);
+                    for (SourceExtractor.Pixel p : driftPath) {
                         if (p.x != firstP.x || p.y != firstP.y) {
                             hasDrift = true;
                             break;
@@ -856,6 +890,9 @@ public class ImageDisplayUtils {
                     }
 
                     if (hasDrift) {
+                        // Use the existing down-sampler to keep memory, disk I/O, and GIF size completely safe
+                        List<Integer> sampledCornerIndices = getRepresentativeSequence(rawFrames.size(), new java.util.HashSet<>(), 15);
+
                         for (int idx : sampledCornerIndices) {
                             cornerFrames.add(createFourCornerMosaic(rawFrames.get(idx), 150));
                         }
@@ -873,6 +910,16 @@ public class ImageDisplayUtils {
                         report.println("<div class='image-container'>");
                         report.println("<div><a href='dither_drift_map.png' target='_blank'><img src='dither_drift_map.png' style='max-width: 300px;' alt='Drift Trajectory' /></a><br/><center><small>Drift Trajectory Map (Blue = Start, Red = End)</small></center></div>");
                         report.println("<div><a href='" + cornerGifFile + "' target='_blank'><img src='" + cornerGifFile + "' style='max-width: 300px;' alt='Corners Sampled Time-Lapse' /></a><br/><center><small>4-Corners Sampled Time-Lapse</small></center></div>");
+
+                        // --- Print Coordinates Table ---
+                        report.println("<div style='min-width: 200px; flex-grow: 1;'><div class='scroll-box' style='max-height: 325px; border-color: #333;'>");
+                        report.println("<table style='margin-top: 0;'><tr><th>Frame Index</th><th>dX (px)</th><th>dY (px)</th></tr>");
+                        for (int i = 0; i < driftPath.size(); i++) {
+                            SourceExtractor.Pixel p = driftPath.get(i);
+                            report.println("<tr><td>" + (i + 1) + "</td><td style='font-family: monospace; color: #4da6ff;'>" + p.x + "</td><td style='font-family: monospace; color: #4da6ff;'>" + p.y + "</td></tr>");
+                        }
+                        report.println("</table></div></div>");
+
                         report.println("</div>");
                         report.println("</div>");
                     }
@@ -926,13 +973,11 @@ public class ImageDisplayUtils {
                 report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Stationary / Jitter</td><td>" + linkerTelemetry.countBaselineJitter + "</td></tr>");
                 report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Exceeded Max Jump Velocity</td><td>" + linkerTelemetry.countBaselineJump + "</td></tr>");
                 report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Morphological Size Mismatch</td><td>" + linkerTelemetry.countBaselineSize + "</td></tr>");
-                report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Photometric Flux Mismatch</td><td>" + linkerTelemetry.countBaselineFlux + "</td></tr>");
 
                 report.println("<tr><td>2. Track Search (p3)</td><td>Off Predicted Trajectory Line</td><td>" + linkerTelemetry.countP3NotLine + "</td></tr>");
                 report.println("<tr><td>2. Track Search (p3)</td><td>Wrong Direction / Angle</td><td>" + linkerTelemetry.countP3WrongDirection + "</td></tr>");
                 report.println("<tr><td>2. Track Search (p3)</td><td>Exceeded Max Jump Velocity</td><td>" + linkerTelemetry.countP3Jump + "</td></tr>");
                 report.println("<tr><td>2. Track Search (p3)</td><td>Morphological Size Mismatch</td><td>" + linkerTelemetry.countP3Size + "</td></tr>");
-                report.println("<tr><td>2. Track Search (p3)</td><td>Photometric Flux Mismatch</td><td>" + linkerTelemetry.countP3Flux + "</td></tr>");
 
                 report.println("<tr><td>3. Final Track</td><td>Insufficient Track Length</td><td>" + linkerTelemetry.countTrackTooShort + "</td></tr>");
                 report.println("<tr><td>3. Final Track</td><td>Erratic Kinematic Rhythm</td><td>" + linkerTelemetry.countTrackErraticRhythm + "</td></tr>");
@@ -945,150 +990,119 @@ public class ImageDisplayUtils {
             // =================================================================
             // 3. TARGET VISUALIZATIONS
             // =================================================================
+            List<TrackLinker.Track> anomalies = new ArrayList<>();
+            List<TrackLinker.Track> singleStreaks = new ArrayList<>();
+            List<TrackLinker.Track> streakTracks = new ArrayList<>();
+            List<TrackLinker.Track> movingTargets = new ArrayList<>();
+
+            for (TrackLinker.Track track : tracks) {
+                if (track.points == null || track.points.isEmpty()) continue;
+                java.util.Set<Integer> uniqueFrames = new java.util.HashSet<>();
+                for (SourceExtractor.DetectedObject pt : track.points) uniqueFrames.add(pt.sourceFrameIndex);
+
+                if (uniqueFrames.size() == 1) {
+                    if (track.isAnomaly) anomalies.add(track);
+                    else singleStreaks.add(track);
+                } else {
+                    if (track.isStreakTrack) streakTracks.add(track);
+                    else movingTargets.add(track);
+                }
+            }
+
             report.println("<h2>Target Visualizations</h2>");
 
             if (tracks.isEmpty()) {
                 report.println("<div class='panel'><p>No moving targets were detected in this session.</p></div>");
             }
 
-            for (TrackLinker.Track track : tracks) {
-                if (track.points == null || track.points.isEmpty()) continue;
-
-                java.util.Set<Integer> uniqueFrames = new java.util.HashSet<>();
-                for (SourceExtractor.DetectedObject pt : track.points) {
-                    uniqueFrames.add(pt.sourceFrameIndex);
-                }
-
-                if (uniqueFrames.size() == 1) {
-                    double minX = Double.MAX_VALUE, maxX = Double.MIN_VALUE;
-                    double minY = Double.MAX_VALUE, maxY = Double.MIN_VALUE;
-
-                    for (SourceExtractor.DetectedObject pt : track.points) {
-                        double objectRadius = 0;
-                        if (pt.pixelArea > 0) {
-                            if (pt.isStreak) objectRadius = Math.sqrt((pt.pixelArea * pt.elongation) / Math.PI);
-                            else objectRadius = Math.sqrt(pt.pixelArea / Math.PI);
-                        }
-                        if (pt.x - objectRadius < minX) minX = pt.x - objectRadius;
-                        if (pt.x + objectRadius > maxX) maxX = pt.x + objectRadius;
-                        if (pt.y - objectRadius < minY) minY = pt.y - objectRadius;
-                        if (pt.y + objectRadius > maxY) maxY = pt.y + objectRadius;
-                    }
-
-                    int trackBoxWidth = (int) Math.round(maxX - minX) + trackCropPadding;
-                    int trackBoxHeight = (int) Math.round(maxY - minY) + trackCropPadding;
-                    int fixedCenterX = (int) Math.round((minX + maxX) / 2.0);
-                    int fixedCenterY = (int) Math.round((minY + maxY) / 2.0);
-
-                    // Needed for coordinate offsets when rendering shape images
-                    int startX = fixedCenterX - (trackBoxWidth / 2);
-                    int startY = fixedCenterY - (trackBoxHeight / 2);
-
-                    // --- SPLIT LOGIC: ANOMALY vs. SINGLE STREAK ---
+            if (!anomalies.isEmpty()) {
+                report.println("<h3 style='color: #ff3333; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>High-Energy Anomalies (Optical Flashes)</h3>");
+                int counter = 1;
+                for (TrackLinker.Track track : anomalies) {
+                    CropBounds cb = new CropBounds(track, trackCropPadding);
                     SourceExtractor.DetectedObject pt = track.points.get(0);
                     int frameIndex = pt.sourceFrameIndex;
 
-                    if (track.isAnomaly) {
-                        // --- 1. ANOMALY (OPTICAL FLASH) ---
-                        report.println("<div class='detection-card streak-title' style='border-left-color: #ff3333; color: #ff3333;'>");
-                        report.println("<div class='detection-title' style='color: #ff3333;'>High-Energy Anomaly (Optical Flash)</div>");
+                    report.println("<div class='detection-card streak-title' style='border-left-color: #ff3333; color: #ff3333;'>");
+                    report.println("<div class='detection-title' style='color: #ff3333;'>Anomaly Event A" + counter + "</div>");
 
-                        // --- Generate Detection Image (PNG) ---
-                        short[][] rawImage = rawFrames.get(frameIndex);
-                        short[][] croppedData = robustEdgeAwareCrop(rawImage, fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
-                        BufferedImage detectionImg = createDisplayImage(croppedData);
-                        String detectionFileName = "anomaly_" + streakCounter + "_detection.png";
-                        saveTrackImageLossless(detectionImg, new File(exportDir, detectionFileName));
+                    short[][] croppedData = robustEdgeAwareCrop(rawFrames.get(frameIndex), cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
+                    BufferedImage detectionImg = createDisplayImage(croppedData);
+                    String detectionFileName = "anomaly_" + counter + "_detection.png";
+                    saveTrackImageLossless(detectionImg, new File(exportDir, detectionFileName));
 
-                        // --- Generate Shape Map (PNG) ---
-                        String shapeFileName = "anomaly_" + streakCounter + "_shape.png";
-                        BufferedImage shapeImg = createSingleStreakShapeImage(track.points, trackBoxWidth, trackBoxHeight, startX, startY);
-                        saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
+                    String shapeFileName = "anomaly_" + counter + "_shape.png";
+                    BufferedImage shapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY);
+                    saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
 
-                        // --- Generate 3-Frame "Context" GIF ---
-                        String contextGifFileName = "anomaly_" + streakCounter + "_context.gif";
-                        List<BufferedImage> contextFrames = new ArrayList<>();
-                        int[] frameSequence = {frameIndex - 1, frameIndex, frameIndex + 1};
-                        for (int idx : frameSequence) {
-                            if (idx >= 0 && idx < rawFrames.size()) {
-                                short[][] cData = robustEdgeAwareCrop(rawFrames.get(idx), fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
-                                BufferedImage aImg = createDisplayImage(cData);
-                                Graphics2D g2d = aImg.createGraphics();
-                                int localX = (int) Math.round(pt.x - startX);
-                                int localY = (int) Math.round(pt.y - startY);
-                                g2d.setColor(Color.WHITE);
-                                g2d.setStroke(new BasicStroke(targetCircleStrokeWidth));
-                                g2d.drawOval(localX - targetCircleRadius, localY - targetCircleRadius, targetCircleRadius * 2, targetCircleRadius * 2);
-                                g2d.dispose();
-                                contextFrames.add(aImg);
-                            }
+                    String contextGifFileName = "anomaly_" + counter + "_context.gif";
+                    List<BufferedImage> contextFrames = new ArrayList<>();
+                    int[] frameSequence = {frameIndex - 1, frameIndex, frameIndex + 1};
+                    for (int idx : frameSequence) {
+                        if (idx >= 0 && idx < rawFrames.size()) {
+                            short[][] cData = robustEdgeAwareCrop(rawFrames.get(idx), cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
+                            BufferedImage aImg = createDisplayImage(cData);
+                            Graphics2D g2d = aImg.createGraphics();
+                            int localX = (int) Math.round(pt.x - cb.startX);
+                            int localY = (int) Math.round(pt.y - cb.startY);
+                            g2d.setColor(Color.WHITE); g2d.setStroke(new BasicStroke(targetCircleStrokeWidth));
+                            g2d.drawOval(localX - targetCircleRadius, localY - targetCircleRadius, targetCircleRadius * 2, targetCircleRadius * 2);
+                            g2d.dispose();
+                            contextFrames.add(aImg);
                         }
-                        GifSequenceWriter.saveAnimatedGif(contextFrames, new File(exportDir, contextGifFileName), gifBlinkSpeedMs);
-
-                        // --- Render HTML ---
-                        report.println("<div class='image-container'>");
-                        report.println("<div><a href='" + detectionFileName + "' target='_blank'><img src='" + detectionFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
-                        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' title='Streak Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
-                        report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context Animation' title='Before / During / After' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
-                        report.println("</div>");
-
-                    } else {
-                        // --- 2. STANDARD SINGLE STREAK ---
-                        report.println("<div class='detection-card streak-title'>");
-                        report.println("<div class='detection-title'>Single Streak Event #" + streakCounter + "</div>");
-
-                        // --- Generate Detection Image (PNG) ---
-                        short[][] rawImage = rawFrames.get(frameIndex);
-                        short[][] croppedData = robustEdgeAwareCrop(rawImage, fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
-                        BufferedImage streakImg = createDisplayImage(croppedData);
-                        String streakFileName = "streak_" + streakCounter + ".png";
-                        saveTrackImageLossless(streakImg, new File(exportDir, streakFileName));
-
-                        // --- Generate Shape Map (PNG) ---
-                        String shapeFileName = "streak_" + streakCounter + "_shape.png";
-                        BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, trackBoxWidth, trackBoxHeight, startX, startY);
-                        saveTrackImageLossless(streakShapeImg, new File(exportDir, shapeFileName));
-
-                        // --- Render HTML ---
-                        report.println("<div class='image-container'>");
-                        report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
-                        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' title='Streak Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
-                        report.println("</div>");
                     }
+                    GifSequenceWriter.saveAnimatedGif(contextFrames, new File(exportDir, contextGifFileName), gifBlinkSpeedMs);
 
-                    // --- COMMON FOOTER FOR BOTH ---
+                    report.println("<div class='image-container'>");
+                    report.println("<div><a href='" + detectionFileName + "' target='_blank'><img src='" + detectionFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
+                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
+                    report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
+                    report.println("</div>");
                     String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
-                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span></li></ul></div>");
+                    String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d", pt.totalFlux, (int) pt.pixelArea);
+                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li></ul></div>");
+                    counter++;
+                }
+            }
 
-                    streakCounter++;
+            if (!singleStreaks.isEmpty()) {
+                report.println("<h3 style='color: #ff9933; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single Streaks</h3>");
+                int counter = 1;
+                for (TrackLinker.Track track : singleStreaks) {
+                    CropBounds cb = new CropBounds(track, trackCropPadding);
+                    SourceExtractor.DetectedObject pt = track.points.get(0);
+                    int frameIndex = pt.sourceFrameIndex;
 
-                } else {
-                    List<BufferedImage> objectCentricFrames = new ArrayList<>();
+                    report.println("<div class='detection-card streak-title'>");
+                    report.println("<div class='detection-title'>Single Streak Event S" + counter + "</div>");
+
+                    short[][] croppedData = robustEdgeAwareCrop(rawFrames.get(frameIndex), cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
+                    BufferedImage streakImg = createDisplayImage(croppedData);
+                    String streakFileName = "single_streak_" + counter + ".png";
+                    saveTrackImageLossless(streakImg, new File(exportDir, streakFileName));
+
+                    String shapeFileName = "single_streak_" + counter + "_shape.png";
+                    BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY);
+                    saveTrackImageLossless(streakShapeImg, new File(exportDir, shapeFileName));
+
+                    report.println("<div class='image-container'>");
+                    report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
+                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
+                    report.println("</div>");
+                    String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
+                    String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d", pt.totalFlux, (int) pt.pixelArea);
+                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li></ul></div>");
+
+                    counter++;
+                }
+            }
+
+            if (!streakTracks.isEmpty()) {
+                report.println("<h3 style='color: #ffcc33; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Multi-Frame Streak Tracks</h3>");
+                int counter = 1;
+                for (TrackLinker.Track track : streakTracks) {
+                    CropBounds cb = new CropBounds(track, trackCropPadding);
                     List<BufferedImage> starCentricFrames = new ArrayList<>();
-
-                    double minX = Double.MAX_VALUE, maxX = Double.MIN_VALUE;
-                    double minY = Double.MAX_VALUE, maxY = Double.MIN_VALUE;
-
-                    for (SourceExtractor.DetectedObject pt : track.points) {
-                        double objectRadius = 0;
-                        if (pt.pixelArea > 0) {
-                            if (pt.isStreak) objectRadius = Math.sqrt((pt.pixelArea * pt.elongation) / Math.PI);
-                            else objectRadius = Math.sqrt(pt.pixelArea / Math.PI);
-                        }
-                        if (pt.x - objectRadius < minX) minX = pt.x - objectRadius;
-                        if (pt.x + objectRadius > maxX) maxX = pt.x + objectRadius;
-                        if (pt.y - objectRadius < minY) minY = pt.y - objectRadius;
-                        if (pt.y + objectRadius > maxY) maxY = pt.y + objectRadius;
-                    }
-
-                    int trackBoxWidth = (int) Math.round(maxX - minX) + trackCropPadding;
-                    int trackBoxHeight = (int) Math.round(maxY - minY) + trackCropPadding;
-                    int fixedCenterX = (int) Math.round((minX + maxX) / 2.0);
-                    int fixedCenterY = (int) Math.round((minY + maxY) / 2.0);
-
-                    int startX = fixedCenterX - (trackBoxWidth / 2);
-                    int startY = fixedCenterY - (trackBoxHeight / 2);
-
                     java.util.Set<Integer> processedFrames = new java.util.HashSet<>();
 
                     for (SourceExtractor.DetectedObject pt : track.points) {
@@ -1096,146 +1110,208 @@ public class ImageDisplayUtils {
                         processedFrames.add(pt.sourceFrameIndex);
 
                         short[][] rawImage = rawFrames.get(pt.sourceFrameIndex);
-
-                        if (!track.isStreakTrack) {
-                            short[][] croppedObjData = robustEdgeAwareCrop(rawImage, (int) pt.x, (int) pt.y, trackObjectCentricCropSize, trackObjectCentricCropSize);
-                            BufferedImage objFrame = createDisplayImage(croppedObjData);
-                            objectCentricFrames.add(objFrame);
-                        }
-
-                        short[][] croppedStarData = robustEdgeAwareCrop(rawImage, fixedCenterX, fixedCenterY, trackBoxWidth, trackBoxHeight);
+                        short[][] croppedStarData = robustEdgeAwareCrop(rawImage, cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
                         BufferedImage starFrameGray = createDisplayImage(croppedStarData);
 
                         Graphics2D g2d = starFrameGray.createGraphics();
-                        int localObjX = (int) Math.round(pt.x - startX);
-                        int localObjY = (int) Math.round(pt.y - startY);
+                        int localObjX = (int) Math.round(pt.x - cb.startX);
+                        int localObjY = (int) Math.round(pt.y - cb.startY);
 
-                        g2d.setColor(java.awt.Color.WHITE);
-                        g2d.setStroke(new java.awt.BasicStroke(targetCircleStrokeWidth));
+                        g2d.setColor(java.awt.Color.WHITE); g2d.setStroke(new java.awt.BasicStroke(targetCircleStrokeWidth));
                         g2d.drawOval(localObjX - targetCircleRadius, localObjY - targetCircleRadius, targetCircleRadius * 2, targetCircleRadius * 2);
                         g2d.dispose();
                         starCentricFrames.add(starFrameGray);
                     }
 
-                    // --- Generate the Track Shape Image ---
-                    String shapeFileName = "track_" + trackCounter + "_shape.png";
-                    BufferedImage shapeImg = createTrackShapeImage(track, trackBoxWidth, trackBoxHeight, startX, startY);
+                    String shapeFileName = "streak_track_" + counter + "_shape.png";
+                    BufferedImage shapeImg = createTrackShapeImage(track, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY);
                     saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
 
-                    if (track.isStreakTrack) {
-                        String starFileName = "streak_track_" + trackCounter + "_star_centric.gif";
-                        File starFile = new File(exportDir, starFileName);
-                        GifSequenceWriter.saveAnimatedGif(starCentricFrames, starFile, gifBlinkSpeedMs);
+                    String starFileName = "streak_track_" + counter + "_star_centric.gif";
+                    File starFile = new File(exportDir, starFileName);
+                    GifSequenceWriter.saveAnimatedGif(starCentricFrames, starFile, gifBlinkSpeedMs);
 
-                        report.println("<div class='detection-card streak-title'>");
-                        String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
-                        report.println("<div class='detection-title'>Multi-Frame Streak Track #" + trackCounter + timeBadge + "</div>");
+                    report.println("<div class='detection-card streak-title' style='border-left-color: #ffcc33;'>");
+                    String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
+                    report.println("<div class='detection-title' style='color: #ffcc33;'>Multi-Frame Streak Track ST" + counter + timeBadge + "</div>");
 
-                        // --- Include both Star Centric and Shape Images ---
-                        report.println("<div class='image-container'>");
-                        report.println("<a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric Animation' title='Star-Centric' /></a>");
-                        report.println("<a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Track Shape Map' title='Track Shape Map' /></a>");
-                        report.println("</div>");
+                    report.println("<div class='image-container'>");
+                    report.println("<div><a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric Animation' /></a><br/><center><small>Star Centric</small></center></div>");
+                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Track Shape Map' /></a><br/><center><small>Track Shape Map</small></center></div>");
+                    report.println("</div>");
 
-                    } else {
-                        String objFileName = "track_" + trackCounter + "_object_centric.gif";
-                        String starFileName = "track_" + trackCounter + "_star_centric.gif";
-
-                        File objFile = new File(exportDir, objFileName);
-                        GifSequenceWriter.saveAnimatedGif(objectCentricFrames, objFile, gifBlinkSpeedMs);
-
-                        File starFile = new File(exportDir, starFileName);
-                        GifSequenceWriter.saveAnimatedGif(starCentricFrames, starFile, gifBlinkSpeedMs);
-
-                        report.println("<div class='detection-card'>");
-                        String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
-                        report.println("<div class='detection-title'>Moving Target Track #" + trackCounter + timeBadge + "</div>");
-
-                        // --- Include Object, Star, and Shape Images ---
-                        report.println("<div class='image-container'>");
-                        report.println("<div><a href='" + objFileName + "' target='_blank'><img src='" + objFileName + "' alt='Object Centric' title='Object-Centric' /></a><br/><center><small>Object Centric</small></center></div>");
-                        report.println("<div><a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric' title='Star-Centric' /></a><br/><center><small>Star Centric</small></center></div>");
-                        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Track Shape Map' title='Track Shape Map' /></a><br/><center><small>Track Shape Map</small></center></div>");
-                        report.println("</div>");
-                    }
-
-                    // --- Exact Coordinates for every point in the Track ---
                     report.println("<strong>Detection Coordinates & Frames:</strong><ul class='source-list'>");
                     for (int i = 0; i < track.points.size(); i++) {
                         SourceExtractor.DetectedObject pt = track.points.get(i);
                         String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
-                        // We put the index number [1], [2], etc., so the user can easily map it to the red dots on the Shape Image
-                        report.println("<li>[" + (i + 1) + "] " + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span></li>");
+                        String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d", pt.totalFlux, (int) pt.pixelArea);
+                        report.println("<li>[" + (i + 1) + "] " + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li>");
                     }
                     report.println("</ul></div>");
-
-                    trackCounter++;
+                    counter++;
                 }
             }
-            
+
+            if (!movingTargets.isEmpty()) {
+                report.println("<h3 style='color: #4da6ff; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Moving Target Tracks</h3>");
+                int counter = 1;
+                for (TrackLinker.Track track : movingTargets) {
+                    CropBounds cb = new CropBounds(track, trackCropPadding);
+                    List<BufferedImage> objectCentricFrames = new ArrayList<>();
+                    List<BufferedImage> starCentricFrames = new ArrayList<>();
+                    java.util.Set<Integer> processedFrames = new java.util.HashSet<>();
+
+                    for (SourceExtractor.DetectedObject pt : track.points) {
+                        if (processedFrames.contains(pt.sourceFrameIndex)) continue;
+                        processedFrames.add(pt.sourceFrameIndex);
+                        short[][] rawImage = rawFrames.get(pt.sourceFrameIndex);
+
+                        short[][] croppedObjData = robustEdgeAwareCrop(rawImage, (int) Math.round(pt.x), (int) Math.round(pt.y), trackObjectCentricCropSize, trackObjectCentricCropSize);
+                        BufferedImage objFrame = createDisplayImage(croppedObjData);
+                        objectCentricFrames.add(objFrame);
+
+                        short[][] croppedStarData = robustEdgeAwareCrop(rawImage, cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
+                        BufferedImage starFrameGray = createDisplayImage(croppedStarData);
+
+                        Graphics2D g2d = starFrameGray.createGraphics();
+                        int localObjX = (int) Math.round(pt.x - cb.startX);
+                        int localObjY = (int) Math.round(pt.y - cb.startY);
+                        g2d.setColor(java.awt.Color.WHITE); g2d.setStroke(new java.awt.BasicStroke(targetCircleStrokeWidth));
+                        g2d.drawOval(localObjX - targetCircleRadius, localObjY - targetCircleRadius, targetCircleRadius * 2, targetCircleRadius * 2);
+                        g2d.dispose();
+                        starCentricFrames.add(starFrameGray);
+                    }
+
+                    String shapeFileName = "moving_track_" + counter + "_shape.png";
+                    BufferedImage shapeImg = createTrackShapeImage(track, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY);
+                    saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
+
+                    String objFileName = "moving_track_" + counter + "_object_centric.gif";
+                    String starFileName = "moving_track_" + counter + "_star_centric.gif";
+                    GifSequenceWriter.saveAnimatedGif(objectCentricFrames, new File(exportDir, objFileName), gifBlinkSpeedMs);
+                    GifSequenceWriter.saveAnimatedGif(starCentricFrames, new File(exportDir, starFileName), gifBlinkSpeedMs);
+
+                    report.println("<div class='detection-card'>");
+                    String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
+                    report.println("<div class='detection-title'>Moving Target Track T" + counter + timeBadge + "</div>");
+
+                    report.println("<div class='image-container'>");
+                    report.println("<div><a href='" + objFileName + "' target='_blank'><img src='" + objFileName + "' alt='Object Centric' /></a><br/><center><small>Object Centric</small></center></div>");
+                    report.println("<div><a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric' /></a><br/><center><small>Star Centric</small></center></div>");
+                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Track Shape Map' /></a><br/><center><small>Track Shape Map</small></center></div>");
+                    report.println("</div>");
+
+                    report.println("<strong>Detection Coordinates & Frames:</strong><ul class='source-list'>");
+                    for (int i = 0; i < track.points.size(); i++) {
+                        SourceExtractor.DetectedObject pt = track.points.get(i);
+                        String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
+                        String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d", pt.totalFlux, (int) pt.pixelArea);
+                        report.println("<li>[" + (i + 1) + "] " + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li>");
+                    }
+                    report.println("</ul></div>");
+                    counter++;
+                }
+            }
+
             // =================================================================
             // 4. DEEP STACK ANOMALIES (ULTRA-SLOW MOVERS)
             // =================================================================
-            if (config.enableSlowMoverDetection && slowMoverStackData != null && slowMoverCandidates != null && !slowMoverCandidates.isEmpty()) {
-                report.println("<h2>Deep Stack Anomalies (Ultra-Slow Mover Candidates)</h2>");
-                report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets (like distant KBOs) that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
-                report.println("<div class='flex-container'>");
-                
-                int smCounter = 1;
-                for (SourceExtractor.DetectedObject sm : slowMoverCandidates) {
-                    int cx = (int) Math.round(sm.x);
-                    int cy = (int) Math.round(sm.y);
-                    
-                    // Dynamically scale the crop box to ensure we capture the entire elongated footprint plus padding
-                    double objectRadius = sm.pixelArea > 0 ? Math.sqrt((sm.pixelArea * sm.elongation) / Math.PI) : 0;
-                    int cropSize = Math.max(150, (int) Math.round(objectRadius * 2) + 100);
-                    int startX = cx - (cropSize / 2);
-                    int startY = cy - (cropSize / 2);
-                    
-                    // Crop from slowMoverStackData
-                    short[][] croppedSlowData = robustEdgeAwareCrop(slowMoverStackData, cx, cy, cropSize, cropSize);
-                    BufferedImage smImg = createDisplayImage(croppedSlowData);
-                    String smFileName = "slow_mover_" + smCounter + "_sm_stack.png";
-                    saveTrackImageLossless(smImg, new File(exportDir, smFileName));
-                    
-                    // Crop from masterStackData (Median Stack)
-                    String masterFileName = "slow_mover_" + smCounter + "_master_stack.png";
-                    if (masterStackData != null) {
-                        short[][] croppedMasterData = robustEdgeAwareCrop(masterStackData, cx, cy, cropSize, cropSize);
-                        BufferedImage masterImg = createDisplayImage(croppedMasterData);
-                        saveTrackImageLossless(masterImg, new File(exportDir, masterFileName));
+            if (config.enableSlowMoverDetection && slowMoverStackData != null) {
+                boolean hasCandidates = slowMoverCandidates != null && !slowMoverCandidates.isEmpty();
+                boolean hasTelemetry = result.slowMoverTelemetry != null;
+
+                if (hasCandidates || hasTelemetry) {
+                    report.println("<h2>Deep Stack Anomalies (Ultra-Slow Mover Candidates)</h2>");
+                    report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets (like distant KBOs) that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
+
+                    if (hasTelemetry) {
+                        report.println("<div class='flex-container' style='margin-bottom: 25px;'>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + result.slowMoverTelemetry.candidatesDetected + "</span><span class='metric-label'>Raw Candidates</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + String.format(Locale.US, "%.2f", result.slowMoverTelemetry.medianElongation) + "</span><span class='metric-label'>Median Background Elongation</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + String.format(Locale.US, "%.2f", result.slowMoverTelemetry.dynamicElongationThreshold) + "</span><span class='metric-label'>Dynamic Threshold</span></div>");
+                        report.println("</div>");
                     }
-                    
-                    // Generate the Shape Footprint Image
-                    BufferedImage shapeImg = createSingleStreakShapeImage(java.util.Collections.singletonList(sm), cropSize, cropSize, startX, startY);
-                    String shapeFileName = "slow_mover_" + smCounter + "_shape.png";
-                    saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
-                    
-                    // Generate Animated GIF (Max 10 Frames)
-                    List<Integer> sampledIndices = getRepresentativeSequence(rawFrames.size(), new java.util.HashSet<>(), 10);
-                    List<BufferedImage> gifFrames = new ArrayList<>();
-                    for (int idx : sampledIndices) {
-                        short[][] frameData = robustEdgeAwareCrop(rawFrames.get(idx), cx, cy, cropSize, cropSize);
-                        gifFrames.add(createDisplayImage(frameData));
+
+                    if (hasCandidates) {
+                        report.println("<div class='flex-container'>");
+
+                        int smCounter = 1;
+                        for (SourceExtractor.DetectedObject sm : slowMoverCandidates) {
+                            int cx = (int) Math.round(sm.x);
+                            int cy = (int) Math.round(sm.y);
+
+                            // Dynamically scale the crop box to ensure we capture the entire elongated footprint plus padding
+                            double objectRadius = sm.pixelArea > 0 ? Math.sqrt((sm.pixelArea * sm.elongation) / Math.PI) : 0;
+                            int cropSize = Math.max(150, (int) Math.round(objectRadius * 2) + 100);
+                            int startX = cx - (cropSize / 2);
+                            int startY = cy - (cropSize / 2);
+
+                            // Crop from slowMoverStackData
+                            short[][] croppedSlowData = robustEdgeAwareCrop(slowMoverStackData, cx, cy, cropSize, cropSize);
+                            BufferedImage smImg = createDisplayImage(croppedSlowData);
+                            String smFileName = "slow_mover_" + smCounter + "_sm_stack.png";
+                            saveTrackImageLossless(smImg, new File(exportDir, smFileName));
+
+                            // Crop from masterStackData (Median Stack)
+                            String masterFileName = "slow_mover_" + smCounter + "_master_stack.png";
+                            if (masterStackData != null) {
+                                short[][] croppedMasterData = robustEdgeAwareCrop(masterStackData, cx, cy, cropSize, cropSize);
+                                BufferedImage masterImg = createDisplayImage(croppedMasterData);
+                                saveTrackImageLossless(masterImg, new File(exportDir, masterFileName));
+                            }
+
+                            // Generate the Shape Footprint Image
+                            BufferedImage shapeImg = createSingleStreakShapeImage(java.util.Collections.singletonList(sm), cropSize, cropSize, startX, startY);
+                            String shapeFileName = "slow_mover_" + smCounter + "_shape.png";
+                            saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
+
+                            // Generate Animated GIF (Max 10 Frames)
+                            List<Integer> sampledIndices = getRepresentativeSequence(rawFrames.size(), new java.util.HashSet<>(), 10);
+                            List<BufferedImage> gifFrames = new ArrayList<>();
+                            for (int idx : sampledIndices) {
+                                short[][] frameData = robustEdgeAwareCrop(rawFrames.get(idx), cx, cy, cropSize, cropSize);
+                                gifFrames.add(createDisplayImage(frameData));
+                            }
+                            String gifFileName = "slow_mover_" + smCounter + "_anim.gif";
+                            GifSequenceWriter.saveAnimatedGif(gifFrames, new File(exportDir, gifFileName), gifBlinkSpeedMs);
+
+                            report.println("<div class='detection-card' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");
+                            report.println("<div class='detection-title' style='color: #ff66ff; font-size: 1.1em; margin-bottom: 10px;'>Candidate #" + smCounter + "</div>");
+                            report.println("<div class='image-container' style='margin-bottom: 10px;'>");
+                            if (masterStackData != null) {
+                                report.println("<div><a href='" + masterFileName + "' target='_blank'><img src='" + masterFileName + "' style='max-width: 150px;' alt='Median Stack Crop' /></a><br/><center><small>Median Stack</small></center></div>");
+                            }
+                            report.println("<div><a href='" + smFileName + "' target='_blank'><img src='" + smFileName + "' style='max-width: 150px;' alt='Slow Mover Stack Crop' /></a><br/><center><small>Slow Mover Stack</small></center></div>");
+                            report.println("<div><a href='" + gifFileName + "' target='_blank'><img src='" + gifFileName + "' style='max-width: 150px;' alt='Sampled Time-Lapse' /></a><br/><center><small>Animation (Sampled)</small></center></div>");
+                            report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' style='max-width: 150px;' alt='Slow Mover Shape' /></a><br/><center><small>Shape</small></center></div>");
+                            report.println("</div>");
+                            report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>X: " + String.format(Locale.US, "%.1f", sm.x) + " | Y: " + String.format(Locale.US, "%.1f", sm.y) + "<br>Elongation: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f", sm.elongation) + "</span><br>Pixels: <span style='color:#fff;'>" + (int) sm.pixelArea + "</span></div></div>");
+
+                            smCounter++;
+                        }
+                        report.println("</div>");
+                    } else {
+                        report.println("<div class='panel'><p>No ultra-slow movers were detected that exceeded the dynamic threshold.</p></div>");
                     }
-                    String gifFileName = "slow_mover_" + smCounter + "_anim.gif";
-                    GifSequenceWriter.saveAnimatedGif(gifFrames, new File(exportDir, gifFileName), gifBlinkSpeedMs);
-                    
-                    report.println("<div class='detection-card' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");
-                    report.println("<div class='detection-title' style='color: #ff66ff; font-size: 1.1em; margin-bottom: 10px;'>Candidate #" + smCounter + "</div>");
-                    report.println("<div class='image-container' style='margin-bottom: 10px;'>");
-                    if (masterStackData != null) {
-                        report.println("<div><a href='" + masterFileName + "' target='_blank'><img src='" + masterFileName + "' style='max-width: 150px;' alt='Median Stack Crop' /></a><br/><center><small>Median Stack</small></center></div>");
-                    }
-                    report.println("<div><a href='" + smFileName + "' target='_blank'><img src='" + smFileName + "' style='max-width: 150px;' alt='Slow Mover Stack Crop' /></a><br/><center><small>Slow Mover Stack</small></center></div>");
-                    report.println("<div><a href='" + gifFileName + "' target='_blank'><img src='" + gifFileName + "' style='max-width: 150px;' alt='Sampled Time-Lapse' /></a><br/><center><small>Animation (Sampled)</small></center></div>");
-                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' style='max-width: 150px;' alt='Slow Mover Shape' /></a><br/><center><small>Shape</small></center></div>");
-                    report.println("</div>");
-                    report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>X: " + String.format(Locale.US, "%.1f", sm.x) + " | Y: " + String.format(Locale.US, "%.1f", sm.y) + "<br>Elongation: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f", sm.elongation) + "</span><br>Pixels: <span style='color:#fff;'>" + sm.pixelArea + "</span></div></div>");
-                    
-                    smCounter++;
                 }
-                report.println("</div>");
+            }
+
+            // =================================================================
+            // 4.5 GLOBAL TRAJECTORY MAP
+            // =================================================================
+            if (!tracks.isEmpty()) {
+                short[][] bgData = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
+                if (bgData != null) {
+                    BufferedImage globalMap = createGlobalTrackMap(bgData, anomalies, singleStreaks, streakTracks, movingTargets);
+                    saveTrackImageLossless(globalMap, new File(exportDir, "global_track_map.png"));
+                    report.println("<div class='panel'>");
+                    report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Trajectory Map</h3>");
+                    report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
+                    report.println("An overview of all detected transients and moving targets plotted over the master background. " +
+                            "Multi-frame tracks are connected with lines (<strong>T#</strong> for targets, <strong>ST#</strong> for streaks), while single-frame anomalies and single streaks are circled (<strong>A#</strong> and <strong>S#</strong>).</p>");
+                    report.println("<a href='global_track_map.png' target='_blank'><img src='global_track_map.png' style='width: 100%; border: 1px solid #555; border-radius: 4px;' alt='Global Track Map' /></a>");
+                    report.println("</div>");
+                }
             }
 
             // =================================================================
