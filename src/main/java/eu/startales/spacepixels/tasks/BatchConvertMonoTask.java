@@ -13,9 +13,11 @@ package eu.startales.spacepixels.tasks;
 import com.google.common.eventbus.EventBus;
 import eu.startales.spacepixels.events.BatchConvertFinishedEvent;
 import eu.startales.spacepixels.events.BatchConvertStartedEvent;
+import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
+import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 
 import java.util.logging.Level;
 
@@ -45,7 +47,11 @@ public class BatchConvertMonoTask implements Runnable {
         try {
             ApplicationWindow.logger.info("Will batch convert all images to mono");
 
-            preProcessing.batchConvertToMono(stretchEnabled, stretchFactor, iterations, algo);
+            TransientEngineProgressListener progressListener = (percentage, message) -> {
+                eventBus.post(new EngineProgressUpdateEvent(percentage, message));
+            };
+
+            preProcessing.batchConvertToMono(stretchEnabled, stretchFactor, iterations, algo, progressListener);
 
             eventBus.post(new BatchConvertFinishedEvent(true, null));
         } catch (Exception ex) {

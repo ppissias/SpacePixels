@@ -90,10 +90,17 @@ public class ImageProcessing {
      * Converts all images in the folder to monochrome.
      * If stretch is true, it also stretches the newly created monochrome images.
      */
-    public void batchConvertToMono(boolean stretch, int stretchFactor, int iterations, StretchAlgorithm algo) throws IOException, FitsException {
+    public void batchConvertToMono(boolean stretch, int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
         File[] fitsFileInformation = getFitsFilesDetails();
 
-        for (File fileInfo : fitsFileInformation) {
+        int total = fitsFileInformation.length;
+        for (int i = 0; i < total; i++) {
+            File fileInfo = fitsFileInformation[i];
+            if (progressListener != null) {
+                int percent = (int) (((float) i / total) * 100);
+                progressListener.onProgressUpdate(percent, "Converting " + fileInfo.getName() + "...");
+            }
+
             Fits originalFits = new Fits(fileInfo);
 
             // Check if it's already mono to save time
@@ -123,10 +130,17 @@ public class ImageProcessing {
     /**
      * Stretches all images in the folder, regardless of whether they are color or mono.
      */
-    public void batchStretch(int stretchFactor, int iterations, StretchAlgorithm algo) throws IOException, FitsException {
+    public void batchStretch(int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
         File[] fitsFileInformation = getFitsFilesDetails();
 
-        for (File fileInfo : fitsFileInformation) {
+        int total = fitsFileInformation.length;
+        for (int i = 0; i < total; i++) {
+            File fileInfo = fitsFileInformation[i];
+            if (progressListener != null) {
+                int percent = (int) (((float) i / total) * 100);
+                progressListener.onProgressUpdate(percent, "Stretching " + fileInfo.getName() + "...");
+            }
+
             Fits originalFits = new Fits(fileInfo);
 
             ApplicationWindow.logger.info("Stretching image: " + fileInfo.getName());

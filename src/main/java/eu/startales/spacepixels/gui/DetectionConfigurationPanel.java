@@ -294,6 +294,7 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Tracking & Anomalies"));
         spinStarJitter = addRow(panel, "Base Star Jitter Radius", "Maximum distance (px) stars can wobble between frames due to seeing.", new SpinnerNumberModel(jTransientConfig.maxStarJitter, 0.5, 999.0, 0.5));
+        spinMaxMaskOverlapFraction = addRow(panel, "Max Mask Overlap Fraction", "Instead of a strict 1-pixel touch, allow a transient to overlap the master mask up to this fraction (e.g., 0.25 = 25%).", new SpinnerNumberModel(jTransientConfig.maxMaskOverlapFraction, 0.0, 1.0, 0.05));
         spinMaxJump = addRow(panel, "Max Jump Velocity", "The cosmic speed limit! Absolute maximum distance (px) an object can travel between frames.", new SpinnerNumberModel(jTransientConfig.maxJumpPixels, 10.0, 99999.0, 10.0));
         chkEnableAnomalyRescue = addCheckboxRow(panel, "Enable Anomaly Rescue", "Enable the rescue of single-frame, ultra-bright point sources that failed to form a multi-frame track.", jTransientConfig.enableAnomalyRescue);
 
@@ -343,7 +344,6 @@ public class DetectionConfigurationPanel extends JPanel {
 
         panel.add(createSectionHeader("Phase 1 & 3: Defects & Stars"));
         spinStationaryDefect = addRow(panel, "Stationary Defect Threshold", "Max movement (px) allowed for a streak to be considered a stationary sensor defect (hot column).", new SpinnerNumberModel(jTransientConfig.stationaryDefectThreshold, 0.0, 999.0, 0.5));
-        spinMaxMaskOverlapFraction = addRow(panel, "Max Mask Overlap Fraction", "Instead of a strict 1-pixel touch, allow a transient to overlap the master mask up to this fraction (e.g., 0.25 = 25%).", new SpinnerNumberModel(jTransientConfig.maxMaskOverlapFraction, 0.0, 1.0, 0.05));
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Phase 4: Geometric Kinematics"));

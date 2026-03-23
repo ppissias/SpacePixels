@@ -42,15 +42,15 @@ public class MainApplicationPanel extends JPanel {
     private volatile JTable table;
 
     private final JProgressBar progressBar = new JProgressBar();
-    private final JButton convertMonoButton = new JButton("batch convert to mono");
-    private final JButton stretchButton = new JButton("batch stretch");
-    private final JButton blinkButton = new JButton("blink");
-    private final JButton showSolvedImageButton = new JButton("show solved image");
-    private final JButton solveButton = new JButton("Solve");
-    private final JButton detectSingleButton = new JButton("Detect Objects (Single Image)");
+    private final JButton convertMonoButton = new JButton("Batch Convert to Mono");
+    private final JButton stretchButton = new JButton("Batch Stretch");
+    private final JButton blinkButton = new JButton("Blink Selected");
+    private final JButton showSolvedImageButton = new JButton("Show Solved Preview");
+    private final JButton solveButton = new JButton("Plate Solve");
+    private final JButton detectSingleButton = new JButton("Detect on Selected Frame");
     private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
-    private final JButton detectBatchButton = new JButton("Detect Moving Objects (Entire Set)");
-    private final JButton detectSlowBatchButton = new JButton("Detect Slow Movers (Iterative)");
+    private final JButton detectBatchButton = new JButton("Detect Moving Targets (Standard Pipeline)");
+    private final JButton detectSlowBatchButton = new JButton("Detect Slow Movers (Iterative Pipeline)");
 
     private final JLabel statusLabel = new JLabel(" Ready");
     // Map to hold the state of UI components
@@ -82,7 +82,7 @@ public class MainApplicationPanel extends JPanel {
         // --- ROW 1 ---
         JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
 
-        solveButton.setToolTipText("Solve current image");
+        solveButton.setToolTipText("Calculate the celestial coordinates (WCS) for the selected image.");
         solveButton.setEnabled(false);
         row1.add(solveButton);
 
@@ -92,42 +92,42 @@ public class MainApplicationPanel extends JPanel {
         row1.add(astapSolveCheckbox);
 
         JCheckBox astrometrynetSolveCheckbox = new JCheckBox("Astrometry.net (online)");
-        astrometrynetSolveCheckbox.setToolTipText("solve the image using the online nova.astrometry.net web services");
+        astrometrynetSolveCheckbox.setToolTipText("Solve the image using the online nova.astrometry.net web services.");
         row1.add(astrometrynetSolveCheckbox);
 
-        showSolvedImageButton.setToolTipText("Show solved image");
+        showSolvedImageButton.setToolTipText("Display the annotated astrometry preview for the selected solved image.");
         showSolvedImageButton.setEnabled(false);
         row1.add(showSolvedImageButton);
 
-        blinkButton.setToolTipText("Blink 3 or more images");
+        blinkButton.setToolTipText("Animate the selected frames in a new window for manual visual inspection.");
         blinkButton.setEnabled(false);
         row1.add(blinkButton);
 
         // --- ROW 2 ---
         JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
 
-        convertMonoButton.setToolTipText("Convert all images to monochrome and save them. If stretch is checked, also stretch them.");
+        convertMonoButton.setToolTipText("Extract luminance and convert all loaded FITS files to 16-bit monochrome. Applies stretch if enabled.");
         convertMonoButton.setEnabled(false);
         row2.add(convertMonoButton);
 
-        stretchButton.setToolTipText("Stretch all images (color or mono) as specified and save them");
+        stretchButton.setToolTipText("Apply the current non-linear stretch settings to all imported FITS files and save as new files.");
         stretchButton.setEnabled(false);
         row2.add(stretchButton);
 
-        detectSingleButton.setToolTipText("Detect objects only in the currently selected monochrome image");
+        detectSingleButton.setToolTipText("Run the extraction engine on the currently selected frame to preview detected sources and streaks.");
         detectSingleButton.setEnabled(false);
         row2.add(detectSingleButton);
 
-        manualTransientInspectionButton.setToolTipText("Extract transients from all frames using the master stack and manually inspect them step-by-step.");
+        manualTransientInspectionButton.setToolTipText("Extract purified transients from all frames against the master background and navigate through them using arrow keys.");
         manualTransientInspectionButton.setEnabled(false);
         row2.add(manualTransientInspectionButton);
 
-        detectBatchButton.setToolTipText("Detect objects in all imported monochrome images");
+        detectBatchButton.setToolTipText("Run the fully automated multi-threaded pipeline to detect, link, and report moving objects across the entire sequence.");
         detectBatchButton.setEnabled(false);
         row2.add(detectBatchButton);
 
         // Add the new button to the UI
-        detectSlowBatchButton.setToolTipText("Runs multiple passes with maximally spaced frames to find extremely slow-moving objects.");
+        detectSlowBatchButton.setToolTipText("Run multiple temporally spaced passes across the sequence to detect extremely slow-moving targets.");
         detectSlowBatchButton.setEnabled(false);
         row2.add(detectSlowBatchButton);
 
@@ -214,14 +214,19 @@ public class MainApplicationPanel extends JPanel {
             boolean stretchEnabled = mainAppWindow.getStretchPanel().isStretchEnabled();
             StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-            new Thread(new BatchConvertMonoTask(
-                    mainAppWindow.getEventBus(),
-                    mainAppWindow.getImageProcessing(),
-                    stretchEnabled,
-                    stretchFactor,
-                    iterations,
-                    algo
-            )).start();
+            new Thread(() -> {
+                mainAppWindow.getEventBus().post(new BatchConvertStartedEvent());
+                try {
+                    io.github.ppissias.jtransient.engine.TransientEngineProgressListener progressListener = (percentage, message) -> {
+                        mainAppWindow.getEventBus().post(new EngineProgressUpdateEvent(percentage, message));
+                    };
+                    mainAppWindow.getImageProcessing().batchConvertToMono(stretchEnabled, stretchFactor, iterations, algo, progressListener);
+                    mainAppWindow.getEventBus().post(new BatchConvertFinishedEvent(true, null));
+                } catch (Exception ex) {
+                    ApplicationWindow.logger.log(java.util.logging.Level.SEVERE, "Batch convert failed", ex);
+                    mainAppWindow.getEventBus().post(new BatchConvertFinishedEvent(false, ex.getMessage()));
+                }
+            }).start();
         });
 
         stretchButton.addActionListener(e -> {
@@ -229,13 +234,19 @@ public class MainApplicationPanel extends JPanel {
             int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
             StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-            new Thread(new BatchStretchTask(
-                    mainAppWindow.getEventBus(),
-                    mainAppWindow.getImageProcessing(),
-                    stretchFactor,
-                    iterations,
-                    algo
-            )).start();
+            new Thread(() -> {
+                mainAppWindow.getEventBus().post(new BatchStretchStartedEvent());
+                try {
+                    io.github.ppissias.jtransient.engine.TransientEngineProgressListener progressListener = (percentage, message) -> {
+                        mainAppWindow.getEventBus().post(new EngineProgressUpdateEvent(percentage, message));
+                    };
+                    mainAppWindow.getImageProcessing().batchStretch(stretchFactor, iterations, algo, progressListener);
+                    mainAppWindow.getEventBus().post(new BatchStretchFinishedEvent(true, null));
+                } catch (Exception ex) {
+                    ApplicationWindow.logger.log(java.util.logging.Level.SEVERE, "Batch stretch failed", ex);
+                    mainAppWindow.getEventBus().post(new BatchStretchFinishedEvent(false, ex.getMessage()));
+                }
+            }).start();
         });
 
         // --- REFACTORED BLINK ACTION LISTENER ---
@@ -789,12 +800,16 @@ public class MainApplicationPanel extends JPanel {
             setProgressBarWorking();
             disableControlsProcessing();
             statusLabel.setText("Batch conversion started");
+            
+            progressDialog.updateProgress(0, "Initializing batch conversion...");
+            progressDialog.setVisible(true);
         });
     }
 
     @Subscribe
     public void onBatchConvertFinished(BatchConvertFinishedEvent event) {
         EventQueue.invokeLater(() -> {
+            progressDialog.setVisible(false);
             setProgressBarIdle();
             enableControlsProcessingFinished();
 
@@ -820,12 +835,16 @@ public class MainApplicationPanel extends JPanel {
             setProgressBarWorking();
             disableControlsProcessing();
             statusLabel.setText("Batch stretch started");
+            
+            progressDialog.updateProgress(0, "Initializing batch stretch...");
+            progressDialog.setVisible(true);
         });
     }
 
     @Subscribe
     public void onBatchStretchFinished(BatchStretchFinishedEvent event) {
         EventQueue.invokeLater(() -> {
+            progressDialog.setVisible(false);
             setProgressBarIdle();
             enableControlsProcessingFinished();
 

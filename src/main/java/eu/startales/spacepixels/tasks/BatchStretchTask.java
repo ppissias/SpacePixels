@@ -13,9 +13,11 @@ package eu.startales.spacepixels.tasks;
 import com.google.common.eventbus.EventBus;
 import eu.startales.spacepixels.events.BatchStretchFinishedEvent;
 import eu.startales.spacepixels.events.BatchStretchStartedEvent;
+import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
+import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 
 import java.util.logging.Level;
 
@@ -43,8 +45,12 @@ public class BatchStretchTask implements Runnable {
         try {
             ApplicationWindow.logger.info("Will stretch all images (color or mono)");
 
+            TransientEngineProgressListener progressListener = (percentage, message) -> {
+                eventBus.post(new EngineProgressUpdateEvent(percentage, message));
+            };
+
             // 2. Perform the heavy lifting
-            preProcessing.batchStretch(stretchFactor, iterations, algo);
+            preProcessing.batchStretch(stretchFactor, iterations, algo, progressListener);
 
             // 3. Report Success
             eventBus.post(new BatchStretchFinishedEvent(true, null));

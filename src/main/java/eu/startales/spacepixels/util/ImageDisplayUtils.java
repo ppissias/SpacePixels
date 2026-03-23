@@ -211,24 +211,39 @@ public class ImageDisplayUtils {
     }
 
     // --- DIAGNOSTIC MASK RENDERER ---
-    public static BufferedImage createMasterMaskOverlay(short[][] masterStackData, List<SourceExtractor.DetectedObject> masterStars) {
+    public static BufferedImage createMasterMaskOverlay(short[][] masterStackData, boolean[][] masterMask) {
         int height = masterStackData.length;
         int width = masterStackData[0].length;
 
+        // --- DEBUG TRACE FOR JTRANSIENT ---
+        System.out.println("\n--- DEBUG: Master Mask Array Bounds ---");
+        System.out.println("masterStackData dimensions: " + width + "x" + height + " (W x H)");
+        if (masterMask == null) {
+            System.out.println("masterMask is null!");
+        } else {
+            int maskY = masterMask.length;
+            int maskX = maskY > 0 && masterMask[0] != null ? masterMask[0].length : 0;
+            System.out.println("masterMask dimensions: " + maskX + "x" + maskY + " (W x H)");
+            if (maskY != height || maskX != width) {
+                System.err.println("CRITICAL: masterMask dimensions do NOT match masterStackData dimensions!");
+            }
+        }
+        System.out.println("---------------------------------------\n");
+
         // Create an RGB image so we can paint the mask in color
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+
+        if (masterMask == null || masterMask.length == 0) return image;
 
         // The BufferedImage is entirely black by default (RGB 0,0,0)
         // We only need to paint the exact veto pixels
 
         // PAINT THE MASTER MASK IN BRIGHT RED
         int redColor = new Color(255, 0, 0).getRGB(); // Solid red
-        for (SourceExtractor.DetectedObject star : masterStars) {
-            if (star.rawPixels != null) {
-                for (SourceExtractor.Pixel p : star.rawPixels) {
-                    if (p.x >= 0 && p.x < width && p.y >= 0 && p.y < height) {
-                        image.setRGB(p.x, p.y, redColor);
-                    }
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (masterMask[y][x]) {
+                    image.setRGB(x, y, redColor);
                 }
             }
         }
@@ -689,7 +704,7 @@ public class ImageDisplayUtils {
         List<TrackLinker.Track> tracks = result.tracks;
         TrackerTelemetry linkerTelemetry = result.telemetry != null ? result.telemetry.trackerTelemetry : null;
         short[][] masterStackData = result.masterStackData;
-        List<SourceExtractor.DetectedObject> masterStars = result.masterStars;
+        boolean[][] masterMask = result.masterMask;
         short[][] slowMoverStackData = result.slowMoverStackData;
         List<SourceExtractor.DetectedObject> slowMoverCandidates = result.slowMoverCandidates;
         PipelineTelemetry pipelineTelemetry = result.telemetry;
@@ -701,11 +716,11 @@ public class ImageDisplayUtils {
         int streakCounter = 1;
 
         // --- EXPORT MASTER DIAGNOSTICS ---
-        if (masterStackData != null && masterStars != null) {
+        if (masterStackData != null && masterMask != null) {
             BufferedImage masterImg = createDisplayImage(masterStackData);
             saveTrackImageLossless(masterImg, new File(exportDir, "master_stack.png"));
 
-            BufferedImage masterMaskImg = createMasterMaskOverlay(masterStackData, masterStars);
+            BufferedImage masterMaskImg = createMasterMaskOverlay(masterStackData, masterMask);
             saveTrackImageLossless(masterMaskImg, new File(exportDir, "master_mask_overlay.png"));
         }
 
@@ -809,7 +824,10 @@ public class ImageDisplayUtils {
                 report.println("<div class='panel'>");
                 report.println("<h2>Master Shield & Veto Mask</h2>");
                 report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
-                report.println("The raw median stack (Left) and the extracted Binary Veto Mask painted in red (Right). Any transient touching a red pixel is destroyed in Phase 3.</p>");
+                report.println("The raw median stack (Left) and the extracted Binary Veto Mask painted in red (Right). " +
+                               "These are the detected objects in the master map extended by a max star jitter of <strong>" + config.maxStarJitter + "</strong> pixels. " +
+                               "During Phase 3, we calculate the overlap fraction of each transient against this mask to determine if it should be deleted (purged as a stationary star) or allowed to survive. " +
+                               "The maximum allowed overlap fraction is currently set to <strong>" + config.maxMaskOverlapFraction + "</strong> (" + (int)(config.maxMaskOverlapFraction * 100) + "%).</p>");
                 report.println("<div class='image-container'>");
                 report.println("<div><a href='master_stack.png' target='_blank'><img src='master_stack.png' style='max-width: 400px;' alt='Master Stack' /></a><br/><center><small>Deep Median Stack</small></center></div>");
                 report.println("<div><a href='master_mask_overlay.png' target='_blank'><img src='master_mask_overlay.png' style='max-width: 400px;' alt='Mask Overlay' /></a><br/><center><small>Binary Footprint Mask (Red)</small></center></div>");
