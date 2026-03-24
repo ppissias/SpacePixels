@@ -45,12 +45,17 @@ Beyond automated detection, SpacePixels provides a suite of tools for manual ins
 
 ## 📸 Screenshots & Output
 ***
-Check out a sample report. Many thanks to [cloudynights user klangwolke](https://www.cloudynights.com/profile/481578-klangwolke/)
-for providing amazing data for this report and for testing the application!  
+Many thanks to [cloudynights user klangwolke](https://www.cloudynights.com/profile/481578-klangwolke/) for providing amazing data for this report!
 
-<a href="https://startales.eu/various_files/detections_20260324_125211/detection_report.html" target="_blank">sample SpacePixels report</a>
+Many thanks to cloudynights user TheStarsabove for providing data! 
 
-Also many thanks to cloudynights user TheStarsabove for providing data and for testing the application.
+Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data!!  
+
+***
+**Check out a sample report.** 
+
+<a href="https://startales.eu/various_files/detections_20260324_125211/detection_report.html" target="_blank">==> Sample SpacePixels report</a>
+***
 
 ***
 
