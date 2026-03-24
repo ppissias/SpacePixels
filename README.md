@@ -48,7 +48,7 @@ Beyond automated detection, SpacePixels provides a suite of tools for manual ins
 Check out a sample report. Many thanks to [cloudynights user klangwolke](https://www.cloudynights.com/profile/481578-klangwolke/)
 for providing amazing data for this report and for testing the application!  
 
-<a href="https://startales.eu/various_files/detections_20260320_220004/detection_report.html" target="_blank">sample SpacePixels report</a>
+<a href="https://startales.eu/various_files/detections_20260324_125211/detection_report.html" target="_blank">sample SpacePixels report</a>
 
 Also many thanks to cloudynights user TheStarsabove for providing data and for testing the application.
 
