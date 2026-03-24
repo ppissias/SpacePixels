@@ -42,6 +42,10 @@ public class FitsImportTask implements Runnable {
             // 3. Post success with the extracted data
             eventBus.post(new FitsImportFinishedEvent(true, null, imgProcessing, filesInfo));
 
+        } catch (ImageProcessing.RedirectImportException e) {
+            // The user opted to automatically load the newly converted directory!
+            ApplicationWindow.logger.info("Redirecting import to newly created directory: " + e.getNewDirectory().getAbsolutePath());
+            new FitsImportTask(eventBus, e.getNewDirectory()).run();
         } catch (Exception e) {
             ApplicationWindow.logger.log(Level.SEVERE, "Error loading FITS files", e);
             // 3. Post failure

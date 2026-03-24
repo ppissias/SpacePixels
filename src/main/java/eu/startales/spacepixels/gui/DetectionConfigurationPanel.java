@@ -86,6 +86,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     // --- NEW: AUTO-TUNE BUTTON ---
     private final JButton autoTuneBtn = new JButton("Auto-Tune Settings");
+    private final JComboBox<JTransientAutoTuner.AutoTuneProfile> autoTuneProfileCombo = new JComboBox<>(JTransientAutoTuner.AutoTuneProfile.values());
 
     public DetectionConfigurationPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
@@ -133,10 +134,16 @@ public class DetectionConfigurationPanel extends JPanel {
         // Disabled until files are actually loaded and are monochrome
         autoTuneBtn.setEnabled(false);
 
+        autoTuneProfileCombo.setSelectedItem(JTransientAutoTuner.AutoTuneProfile.BALANCED);
+        autoTuneProfileCombo.setToolTipText("Select the tuning strategy (Conservative = lower noise, Aggressive = faint targets).");
+        autoTuneProfileCombo.setEnabled(false);
+
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         bottomPanel.setBorder(new EmptyBorder(10, 0, 0, 0));
 
         // Add all buttons
+        bottomPanel.add(new JLabel("Tuning Profile: "));
+        bottomPanel.add(autoTuneProfileCombo);
         bottomPanel.add(autoTuneBtn);
         bottomPanel.add(previewBtn);
         bottomPanel.add(saveBtn);
@@ -225,7 +232,8 @@ public class DetectionConfigurationPanel extends JPanel {
         mainAppWindow.getEventBus().post(new EngineProgressUpdateEvent(0, "Initializing Mathematical Auto-Tuner..."));
 
         // Dispatch the task to the background thread via the EventBus pattern
-        AutoTuneTask tuneTask = new AutoTuneTask(mainAppWindow.getEventBus(), poolToUse, jTransientConfig);
+        JTransientAutoTuner.AutoTuneProfile selectedProfile = (JTransientAutoTuner.AutoTuneProfile) autoTuneProfileCombo.getSelectedItem();
+        AutoTuneTask tuneTask = new AutoTuneTask(mainAppWindow.getEventBus(), poolToUse, jTransientConfig, selectedProfile);
         new Thread(tuneTask).start();
     }
 
@@ -390,19 +398,6 @@ public class DetectionConfigurationPanel extends JPanel {
         spinMaxElongFwhm = addRow(panel, "Max Elongation for FWHM", "Trailed stars artificially inflate FWHM measurements. Only stars with an elongation below this value are used to calculate the frame's median focus.", new SpinnerNumberModel(jTransientConfig.maxElongationForFwhm, 1.0, 999.0, 0.1));
         spinErrorFallback = addRow(panel, "Error Fallback Value", "If a frame is a total washout (zero reference stars), the engine assigns this terrible score so it is guaranteed to be rejected by the session evaluator.", new SpinnerNumberModel(jTransientConfig.errorFallbackValue, 0.0, 999999.0, 10.0));
 
-        panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Auto-Tuner Heuristics"));
-
-        JLabel autoTuneDescLabel = new JLabel("<html><div style='color: #999999; font-size: 12px; padding-bottom: 10px; width: 450px;'>" +
-                "The Auto-Tuner ranks settings to maximize this equation:<br>" +
-                "<span style='color: #4da6ff; font-family: monospace; font-size: 13px;'>Score = Stars - (Noise &times; W<sub>t</sub>) - (Sigma &times; W<sub>s</sub>) - (MinPix &times; W<sub>m</sub>)</span>" +
-                "</div></html>");
-        autoTuneDescLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        panel.add(autoTuneDescLabel);
-
-        spinAutoTransientPenalty = addRow(panel, "Transient Noise Penalty (Wt)", "Weighting penalty for transients used in the Auto-Tuner scoring heuristic.", new SpinnerNumberModel(jTransientConfig.scoreWeightTransientPenalty, 0.0, 999.0, 0.5));
-        spinAutoSigmaPenalty = addRow(panel, "Sigma Penalty Weight (Ws)", "Weighting penalty for high sigma thresholds. Forces the tuner to prefer the lowest possible sigma that remains clean.", new SpinnerNumberModel(jTransientConfig.scoreWeightSigmaPenalty, 0.0, 999.0, 1.0));
-        spinAutoMinPixPenalty = addRow(panel, "Min Pixels Penalty Weight (Wm)", "Weighting penalty for high minimum pixel limits.", new SpinnerNumberModel(jTransientConfig.scoreWeightMinPixPenalty, 0.0, 999.0, 0.5));
 
         return panel;
     }
@@ -603,10 +598,6 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.maxElongationForFwhm = ((Number) spinMaxElongFwhm.getValue()).doubleValue();
             jTransientConfig.errorFallbackValue = ((Number) spinErrorFallback.getValue()).doubleValue();
 
-            jTransientConfig.scoreWeightTransientPenalty = ((Number) spinAutoTransientPenalty.getValue()).doubleValue();
-            jTransientConfig.scoreWeightSigmaPenalty = ((Number) spinAutoSigmaPenalty.getValue()).doubleValue();
-            jTransientConfig.scoreWeightMinPixPenalty = ((Number) spinAutoMinPixPenalty.getValue()).doubleValue();
-
             // --- Apply Visualization Settings (SpacePixels Static Variables) ---
             RawImageAnnotator.streakLineScaleFactor = ((Number) spinStreakScale.getValue()).doubleValue();
             RawImageAnnotator.streakCentroidBoxRadius = ((Number) spinStreakCentroidRad.getValue()).intValue();
@@ -673,12 +664,15 @@ public class DetectionConfigurationPanel extends JPanel {
                     // --- NEW: Enable the Auto-Tune button if we have enough frames! ---
                     if (filesInfo.length >= 5) {
                         autoTuneBtn.setEnabled(true);
+                        autoTuneProfileCombo.setEnabled(true);
                     } else {
                         autoTuneBtn.setEnabled(false);
+                        autoTuneProfileCombo.setEnabled(false);
                     }
                 } else {
                     previewBtn.setEnabled(false);
                     autoTuneBtn.setEnabled(false);
+                    autoTuneProfileCombo.setEnabled(false);
                 }
             }
         });
@@ -689,6 +683,7 @@ public class DetectionConfigurationPanel extends JPanel {
         EventQueue.invokeLater(() -> {
             autoTuneBtn.setEnabled(false);
             autoTuneBtn.setText("Tuning... Please Wait");
+            autoTuneProfileCombo.setEnabled(false);
             setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         });
     }
@@ -699,6 +694,7 @@ public class DetectionConfigurationPanel extends JPanel {
             // Unlock UI
             autoTuneBtn.setEnabled(true);
             autoTuneBtn.setText("Auto-Tune Settings");
+            autoTuneProfileCombo.setEnabled(true);
             setCursor(Cursor.getDefaultCursor());
             
             System.out.println(event.getResult().telemetryReport);

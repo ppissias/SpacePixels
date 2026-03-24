@@ -27,6 +27,8 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 public class ImageDisplayUtils {
 
@@ -809,6 +811,11 @@ public class ImageDisplayUtils {
             report.println("tr:hover { background-color: #3a3a3a; } ");
             report.println(".alert { color: #ff6b6b; font-weight: bold; }");
 
+            // Configuration Grid
+            report.println(".config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; font-size: 12px; }");
+            report.println(".config-item { background: #333; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #4da6ff; display: flex; justify-content: space-between; }");
+            report.println(".config-item .val { font-family: monospace; color: #4da6ff; font-weight: bold; }");
+
             // Scrollable section for config
             report.println(".scroll-box { max-height: 300px; overflow-y: auto; border: 1px solid #444; border-radius: 4px; }");
 
@@ -859,22 +866,30 @@ public class ImageDisplayUtils {
                 // 2. PIPELINE CONFIGURATION SECTION
                 // =================================================================
                 if (config != null) {
+                    // Export JSON Profile File
+                    File jsonConfigFile = new File(exportDir, "detection_config.json");
+                    try (java.io.FileWriter writer = new java.io.FileWriter(jsonConfigFile)) {
+                        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+                        gson.toJson(config, writer);
+                    } catch (Exception e) {
+                        System.err.println("Failed to write config JSON: " + e.getMessage());
+                    }
+
                     report.println("<div class='panel'>");
                     report.println("<h2>Pipeline Configuration</h2>");
-                    report.println("<p style='font-size: 13px; color: #888; margin-top: -10px;'>Active tuning parameters used during this session:</p>");
-                    report.println("<div class='scroll-box'><table>");
-                    report.println("<tr><th>Parameter</th><th>Value</th></tr>");
+                    report.println("<p style='font-size: 13px; color: #888; margin-top: -10px;'>Active tuning parameters used during this session. <a href='detection_config.json' target='_blank' style='color: #4da6ff; text-decoration: none;'>[View / Download JSON Profile]</a></p>");
+                    report.println("<div class='scroll-box' style='padding: 10px;'><div class='config-grid'>");
 
                     for (Field field : config.getClass().getDeclaredFields()) {
                         try {
                             field.setAccessible(true);
                             Object value = field.get(config);
-                            report.println("<tr><td>" + field.getName() + "</td><td style='font-family: monospace; color: #4da6ff;'>" + value + "</td></tr>");
+                            report.println("<div class='config-item'><span>" + field.getName() + "</span> <span class='val'>" + value + "</span></div>");
                         } catch (IllegalAccessException e) {
                             // Silently ignore fields that cannot be accessed
                         }
                     }
-                    report.println("</table></div></div>");
+                    report.println("</div></div></div>");
                 }
 
                 // --- DIAGNOSTIC MASK RENDER ---
@@ -928,13 +943,13 @@ public class ImageDisplayUtils {
                         report.println("<div><a href='" + cornerGifFile + "' target='_blank'><img src='" + cornerGifFile + "' style='max-width: 300px;' alt='Corners Sampled Time-Lapse' /></a><br/><center><small>4-Corners Sampled Time-Lapse</small></center></div>");
 
                         // --- Print Coordinates Table ---
-                        report.println("<div style='min-width: 200px; flex-grow: 1;'><div class='scroll-box' style='max-height: 325px; border-color: #333;'>");
-                        report.println("<table style='margin-top: 0;'><tr><th>Frame Index</th><th>dX (px)</th><th>dY (px)</th></tr>");
+                        report.println("<div style='min-width: 200px; flex-grow: 1;'><div class='scroll-box' style='max-height: 325px; border-color: #333; padding: 10px;'>");
+                        report.println("<div class='config-grid' style='grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));'>");
                         for (int i = 0; i < driftPath.size(); i++) {
                             SourceExtractor.Pixel p = driftPath.get(i);
-                            report.println("<tr><td>" + (i + 1) + "</td><td style='font-family: monospace; color: #4da6ff;'>" + p.x + "</td><td style='font-family: monospace; color: #4da6ff;'>" + p.y + "</td></tr>");
+                            report.println("<div class='config-item'><span style='color: #aaa;'>Frame " + (i + 1) + "</span> <span class='val'>[" + p.x + ", " + p.y + "]</span></div>");
                         }
-                        report.println("</table></div></div>");
+                        report.println("</div></div></div>");
 
                         report.println("</div>");
                         report.println("</div>");
@@ -1167,6 +1182,43 @@ public class ImageDisplayUtils {
                     report.println("<div><a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric' /></a><br/><center><small>Star Centric</small></center></div>");
                     report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Track Shape Map' /></a><br/><center><small>Track Shape Map</small></center></div>");
                     report.println("</div>");
+
+                    // --- NEW: EVOLUTION (TIGHT CROPS) ---
+                    report.println("<div style='margin-bottom: 20px;'>");
+                    report.println("<strong style='color: #ccc;'>Pixel Evolution (Tight Crops):</strong>");
+                    report.println("<div style='display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; align-items: flex-end;'>");
+                    
+                    StringBuilder shapeEvolutionHtml = new StringBuilder();
+                    shapeEvolutionHtml.append("<div style='margin-bottom: 20px;'>\n");
+                    shapeEvolutionHtml.append("<strong style='color: #ccc;'>Shape Evolution (Detected Pixels):</strong>\n");
+                    shapeEvolutionHtml.append("<div style='display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; align-items: flex-end;'>\n");
+
+                    for (int i = 0; i < track.points.size(); i++) {
+                        SourceExtractor.DetectedObject pt = track.points.get(i);
+                        double objectRadius = 0;
+                        if (pt.pixelArea > 0) {
+                            objectRadius = pt.isStreak ? Math.sqrt((pt.pixelArea * pt.elongation) / Math.PI) : Math.sqrt(pt.pixelArea / Math.PI);
+                        }
+                        int tightCropSize = Math.max(50, (int) Math.round(objectRadius * 2) + 24); // Diameter + 24px padding
+                        short[][] tightCropData = robustEdgeAwareCrop(rawFrames.get(pt.sourceFrameIndex), (int) Math.round(pt.x), (int) Math.round(pt.y), tightCropSize, tightCropSize);
+                        BufferedImage tightImg = createDisplayImage(tightCropData);
+                        String tightFileName = "moving_track_" + counter + "_pt_" + (i + 1) + "_tight.png";
+                        saveTrackImageLossless(tightImg, new File(exportDir, tightFileName));
+                        report.println("<div><a href='" + tightFileName + "' target='_blank'><img src='" + tightFileName + "' alt='Pt " + (i + 1) + "' style='max-width: none; min-width: 50px;' /></a><br/><center><small>[" + (i + 1) + "]</small></center></div>");
+                        
+                        // Generate the matching shape evolution crop
+                        int startX = (int) Math.round(pt.x) - (tightCropSize / 2);
+                        int startY = (int) Math.round(pt.y) - (tightCropSize / 2);
+                        BufferedImage tightShapeImg = createSingleStreakShapeImage(java.util.Collections.singletonList(pt), tightCropSize, tightCropSize, startX, startY, false);
+                        String tightShapeFileName = "moving_track_" + counter + "_pt_" + (i + 1) + "_shape.png";
+                        saveTrackImageLossless(tightShapeImg, new File(exportDir, tightShapeFileName));
+                        
+                        shapeEvolutionHtml.append("<div><a href='").append(tightShapeFileName).append("' target='_blank'><img src='").append(tightShapeFileName).append("' alt='Shape ").append(i + 1).append("' style='max-width: none; min-width: 50px;' /></a><br/><center><small>[").append(i + 1).append("]</small></center></div>\n");
+                    }
+                    report.println("</div></div>");
+
+                    shapeEvolutionHtml.append("</div></div>\n");
+                    report.print(shapeEvolutionHtml.toString());
 
                     report.println("<strong>Detection Coordinates & Frames:</strong><ul class='source-list'>");
                     for (int i = 0; i < track.points.size(); i++) {

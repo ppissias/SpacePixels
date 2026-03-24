@@ -14,9 +14,10 @@ import io.github.ppissias.jplatesolve.astrometrydotnet.AstrometryDotNet;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jplatesolve.astrometrydotnet.SubmitFileRequest;
 
-
 import nom.tam.fits.*;
 import nom.tam.util.Cursor;
+import nom.tam.image.compression.hdu.CompressedImageHDU;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import eu.startales.spacepixels.config.AppConfig;
@@ -47,6 +48,20 @@ import java.util.function.IntPredicate;
 
 public class ImageProcessing {
 
+    // --- NEW: Custom Exception for Automatic Redirection ---
+    public static class RedirectImportException extends Exception {
+        private final File newDirectory;
+
+        public RedirectImportException(File newDirectory) {
+            super("Redirecting import to new directory");
+            this.newDirectory = newDirectory;
+        }
+
+        public File getNewDirectory() {
+            return newDirectory;
+        }
+    }
+
     private final File alignedFitsFolderFullPath;
 
     // --- NEW: Multi-threading Executor! ---
@@ -66,11 +81,11 @@ public class ImageProcessing {
 
     private ImageProcessing(File alignedFitsFolderFullPath) throws IOException, FitsException {
         this.alignedFitsFolderFullPath = alignedFitsFolderFullPath;
-        
+
         String userhome = System.getProperty("user.home");
         if (userhome == null) userhome = "";
         this.configFile = new File(userhome, "spacepixels_app.json");
-        
+
         AppConfig loadedConfig = null;
         if (this.configFile.exists()) {
             try (FileReader reader = new FileReader(this.configFile)) {
@@ -80,6 +95,72 @@ public class ImageProcessing {
             }
         }
         this.appConfig = (loadedConfig != null) ? loadedConfig : new AppConfig();
+    }
+
+    // =========================================================================
+    // HDU HELPER METHODS (Immune to empty primary HDUs and Compression)
+    // =========================================================================
+
+    /**
+     * Iterates through the FITS structure to find the actual Image HDU.
+     * Safely decompresses .fz files and skips empty primary headers.
+     */
+    public static BasicHDU<?> getImageHDU(Fits fits) throws FitsException, IOException {
+        BasicHDU<?> hdu;
+        BasicHDU<?> fallback = null;
+        
+        // 1. If the Fits object already read HDUs into memory, use them directly
+        int numHdus = fits.getNumberOfHDUs();
+        for (int i = 0; i < numHdus; i++) {
+            hdu = fits.getHDU(i);
+            if (fallback == null) fallback = hdu;
+            
+            if (hdu instanceof CompressedImageHDU) {
+                return ((CompressedImageHDU) hdu).asImageHDU();
+            }
+            int[] axes = hdu.getAxes();
+            if (axes != null && axes.length >= 2) {
+                boolean hasData = true;
+                for (int axis : axes) if (axis <= 0) hasData = false;
+                if (hasData) return hdu;
+            }
+        }
+
+        // 2. Otherwise, safely stream through the file to find the target HDU
+        while ((hdu = fits.readHDU()) != null) {
+            if (fallback == null) fallback = hdu; // Store the dummy Primary HDU just in case
+
+            if (hdu instanceof CompressedImageHDU) {
+                return ((CompressedImageHDU) hdu).asImageHDU();
+            }
+            
+            int[] axes = hdu.getAxes();
+            if (axes != null && axes.length >= 2) {
+                boolean hasData = true;
+                for (int axis : axes) {
+                    if (axis <= 0) hasData = false;
+                }
+                if (hasData) return hdu;
+            }
+        }
+        return fallback;
+    }
+
+    private boolean isCompressedFits(Fits fits) throws FitsException, IOException {
+        int numHdus = fits.getNumberOfHDUs();
+        for (int i = 0; i < numHdus; i++) {
+            if (fits.getHDU(i) instanceof CompressedImageHDU || fits.getHDU(i).getHeader().getBooleanValue("ZIMAGE", false)) {
+                return true;
+            }
+        }
+        
+        BasicHDU<?> hdu;
+        while ((hdu = fits.readHDU()) != null) {
+            if (hdu instanceof CompressedImageHDU || hdu.getHeader().getBooleanValue("ZIMAGE", false)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // =========================================================================
@@ -102,9 +183,10 @@ public class ImageProcessing {
             }
 
             Fits originalFits = new Fits(fileInfo);
+            BasicHDU<?> imageHDU = getImageHDU(originalFits);
 
             // Check if it's already mono to save time
-            int naxis = originalFits.getHDU(0).getHeader().getIntValue("NAXIS");
+            int naxis = imageHDU.getHeader().getIntValue("NAXIS");
             if (naxis == 3) { // It's a color image
                 ApplicationWindow.logger.info("Converting color image to mono: " + fileInfo.getName());
                 Fits monochromeFits = convertToMono(originalFits);
@@ -161,7 +243,6 @@ public class ImageProcessing {
     // THE MULTI-THREADED DETECTION PIPELINE
     // =========================================================================
 
-    // --- UPDATED SIGNATURE: Accepts the progressListener ---
     public File detectObjects(DetectionConfig config, IntPredicate safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
         long startTime = System.currentTimeMillis();
 
@@ -183,7 +264,8 @@ public class ImageProcessing {
 
             File currentFile = new File(this.cachedFileInfo[i].getFilePath());
             Fits fitsFile = new Fits(currentFile);
-            Object kernel = fitsFile.getHDU(0).getKernel();
+            BasicHDU<?> hdu = getImageHDU(fitsFile);
+            Object kernel = hdu.getKernel();
 
             if (!(kernel instanceof short[][])) {
                 fitsFile.close();
@@ -202,7 +284,6 @@ public class ImageProcessing {
         // =========================================================
         System.out.println("\n--- Passing data to JTransient Engine ---");
 
-        // --- PROGRESS UPDATE: Engine Start ---
         if (progressListener != null) {
             progressListener.onProgressUpdate(20, "Initializing JTransient Engine...");
         }
@@ -210,8 +291,6 @@ public class ImageProcessing {
         JTransientEngine engine = new JTransientEngine();
         JTransientEngine.DEBUG = true;
 
-        // --- NEW: PASS THE LISTENER INTO THE ENGINE ---
-        // Note: You will need to update JTransientEngine.runPipeline to accept this 3rd argument!
         PipelineResult result = engine.runPipeline(framesForLibrary, config, progressListener);
 
         engine.shutdown();
@@ -228,7 +307,6 @@ public class ImageProcessing {
         // 3. Handle the results in SpacePixels
         System.out.println("\n--- PHASE 5: Exporting Visualizations ---");
 
-        // --- PROGRESS UPDATE: Exporting ---
         if (progressListener != null) {
             progressListener.onProgressUpdate(90, "Exporting tracks and generating HTML report...");
         }
@@ -241,7 +319,6 @@ public class ImageProcessing {
             try {
                 ImageDisplayUtils.exportTrackVisualizations(result, rawFramesForExport, exportDir, config);
 
-                // --- PROGRESS UPDATE: Done! ---
                 if (progressListener != null) {
                     progressListener.onProgressUpdate(100, "Finished!");
                 }
@@ -258,7 +335,6 @@ public class ImageProcessing {
 // ITERATIVE SLOW-MOVER PIPELINE
 // =========================================================================
 
-    // --- UPDATED SIGNATURE: Accepts the progressListener ---
     public File detectSlowObjectsIterative(DetectionConfig config, java.util.function.IntPredicate safetyPrompt, TransientEngineProgressListener progressListener, int maxFramesLimit) throws Exception {
         long startTime = System.currentTimeMillis();
 
@@ -309,12 +385,13 @@ public class ImageProcessing {
 
         JTransientEngine globalEngine = new JTransientEngine();
         List<ImageFrame> masterFrames = new ArrayList<>();
-        
+
         List<Integer> masterIndices = getSampledIndices(frameTimestamps, hasValidTime, numFrames, targetMaxLimit);
         for (int idx : masterIndices) {
             File currentFile = new File(this.cachedFileInfo[idx].getFilePath());
             try (Fits fitsFile = new Fits(currentFile)) {
-                Object kernel = fitsFile.getHDU(0).getKernel();
+                BasicHDU<?> hdu = getImageHDU(fitsFile);
+                Object kernel = hdu.getKernel();
                 if (!(kernel instanceof short[][])) {
                     throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString() + " in file " + currentFile.getName());
                 }
@@ -360,7 +437,8 @@ public class ImageProcessing {
             for (int index : sampledIndices) {
                 File currentFile = new File(this.cachedFileInfo[index].getFilePath());
                 try (Fits fitsFile = new Fits(currentFile)) {
-                    Object kernel = fitsFile.getHDU(0).getKernel();
+                    BasicHDU<?> hdu = getImageHDU(fitsFile);
+                    Object kernel = hdu.getKernel();
                     if (!(kernel instanceof short[][])) {
                         throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString() + " in file " + currentFile.getName());
                     }
@@ -385,7 +463,7 @@ public class ImageProcessing {
             if (progressListener != null) {
                 scaledListener.onProgressUpdate(95, "Generating report (on-demand disk reads)...");
             }
-            
+
             final FitsFileInformation[] currentFitsFiles = this.cachedFileInfo;
             List<short[][]> rawFramesForExport = new java.util.AbstractList<short[][]>() {
                 @Override
@@ -393,7 +471,8 @@ public class ImageProcessing {
                     try {
                         File currentFile = new File(currentFitsFiles[index].getFilePath());
                         try (Fits fitsFile = new Fits(currentFile)) {
-                            Object kernel = fitsFile.getHDU(0).getKernel();
+                            BasicHDU<?> hdu = getImageHDU(fitsFile);
+                            Object kernel = hdu.getKernel();
                             if (!(kernel instanceof short[][])) {
                                 throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString() + " in file " + currentFile.getName());
                             }
@@ -419,7 +498,7 @@ public class ImageProcessing {
             } catch (IOException e) {
                 System.err.println("Failed to export visualization for iteration " + k + ": " + e.getMessage());
             }
-            
+
             int anomalyCount = 0;
             for (TrackLinker.Track t : result.tracks) {
                 if (t.isAnomaly) anomalyCount++;
@@ -442,19 +521,19 @@ public class ImageProcessing {
         } catch (IOException e) {
             System.err.println("Failed to write iterative index report: " + e.getMessage());
         }
-        
+
         System.out.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
         return masterDir;
     }
 
     private List<Integer> getSampledIndices(long[] times, boolean hasValidTime, int maxLimit, int k) {
         List<Integer> indices = new ArrayList<>();
-        
+
         if (hasValidTime && maxLimit > 1) {
             long startTime = times[0];
             long endTime = times[maxLimit - 1];
             long duration = endTime - startTime;
-            
+
             if (duration > 0) {
                 indices.add(0);
                 for (int i = 1; i < k - 1; i++) {
@@ -476,14 +555,14 @@ public class ImageProcessing {
                     indices.add(maxLimit - 1);
                 }
                 Collections.sort(indices);
-                
+
                 // Valid return only if time-based extraction found enough unique timestamps
                 if (indices.size() == k) {
                     return indices;
                 }
             }
         }
-        
+
         // Fallback: Pure array-index spacing
         indices.clear();
         for (int i = 0; i < k; i++) {
@@ -503,17 +582,54 @@ public class ImageProcessing {
 
         if (numFiles == 0) return new FitsFileInformation[0];
 
+        // --- NEW: COMPRESSION GATEKEEPER ---
+        try (Fits firstFits = new Fits(fitsFileInformation[0])) {
+            if (isCompressedFits(firstFits)) {
+                int choice = JOptionPane.showConfirmDialog(null,
+                        "These images appear to be compressed (.fz format).\nSpacePixels requires uncompressed FITS files for optimal tracking and plate-solving.\n\n" +
+                                "Would you like to automatically decompress this sequence into a new directory?",
+                        "Decompression Required",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.QUESTION_MESSAGE);
+
+                if (choice == JOptionPane.YES_OPTION) {
+                    ApplicationWindow.logger.info("Starting decompression...");
+                    File newDir = batchDecompress(fitsFileInformation);
+                    
+                    int loadChoice = JOptionPane.showConfirmDialog(null, 
+                            "Decompression Complete!\n\nWould you like to automatically load the new uncompressed directory?", 
+                            "Success", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+                    
+                    if (loadChoice == JOptionPane.YES_OPTION && newDir != null) {
+                        throw new RedirectImportException(newDir);
+                    }
+                }
+                return new FitsFileInformation[0]; // Stop the current import
+            }
+        } catch (RedirectImportException re) {
+            throw re;
+        } catch (Exception e) {
+            ApplicationWindow.logger.warning("Failed to read first FITS for compression check: " + e.getMessage());
+        }
+
+
         // --- PRE-FLIGHT CONSISTENCY CHECK ---
         ApplicationWindow.logger.info("Performing pre-flight consistency check on " + numFiles + " files...");
-        FitsFormatChecker.FitsFormat refFormat = FitsFormatChecker.checkFormat(fitsFileInformation[0]);
+        FitsFormatChecker.FitsFormat refFormat = FitsFormatChecker.FitsFormat.UNSUPPORTED;
+        try {
+            refFormat = FitsFormatChecker.checkFormat(fitsFileInformation[0]);
+        } catch (Exception ignore) {}
+
         int tempRefWidth = -1;
         int tempRefHeight = -1;
         boolean tempRefMono = true;
 
         try {
             Fits firstFits = new Fits(fitsFileInformation[0]);
-            BasicHDU<?> hdu = firstFits.getHDU(0);
+            BasicHDU<?> hdu = getImageHDU(firstFits);
             int[] axes = hdu.getAxes();
+            if (axes == null) throw new FitsException("No image axes found");
+
             if (axes.length == 2) {
                 tempRefHeight = axes[0];
                 tempRefWidth = axes[1];
@@ -536,20 +652,25 @@ public class ImageProcessing {
         final int refWidth = tempRefWidth;
         final int refHeight = tempRefHeight;
         final boolean refMono = tempRefMono;
+        final FitsFormatChecker.FitsFormat finalRefFormat = refFormat;
 
         List<Callable<String>> validationTasks = new ArrayList<>();
         for (int i = 1; i < numFiles; i++) {
             final File f = fitsFileInformation[i];
             validationTasks.add(() -> {
-                FitsFormatChecker.FitsFormat format = FitsFormatChecker.checkFormat(f);
-                if (format != refFormat) {
-                    return "Inconsistent FITS formats detected!\nFile: " + f.getName() + " has format " + format + " but expected " + refFormat + ".\nAll FITS files in the sequence must be of the exact same type.";
+                FitsFormatChecker.FitsFormat format = FitsFormatChecker.FitsFormat.UNSUPPORTED;
+                try { format = FitsFormatChecker.checkFormat(f); } catch (Exception ignore) {}
+
+                if (format != finalRefFormat) {
+                    return "Inconsistent FITS formats detected!\nFile: " + f.getName() + " has format " + format + " but expected " + finalRefFormat + ".\nAll FITS files in the sequence must be of the exact same type.";
                 }
                 Fits fits = null;
                 try {
                     fits = new Fits(f);
-                    BasicHDU<?> hdu = fits.getHDU(0);
+                    BasicHDU<?> hdu = getImageHDU(fits);
                     int[] axes = hdu.getAxes();
+                    if (axes == null) return "No valid image HDU found in " + f.getName();
+
                     boolean mono = (axes.length == 2);
                     int w = -1, h = -1;
                     if (mono) {
@@ -601,8 +722,14 @@ public class ImageProcessing {
 
             if (choice == JOptionPane.YES_OPTION) {
                 ApplicationWindow.logger.info("Starting 32-bit Mono to 16-bit Mono conversion...");
-                batchConvert32BitTo16Bit(fitsFileInformation, false);
-                JOptionPane.showMessageDialog(null, "Conversion Complete!\n\nThe 16-bit files have been saved in a new directory.\nPlease import the newly created directory to continue.", "Success", JOptionPane.INFORMATION_MESSAGE);
+                File newDir = batchConvert32BitTo16Bit(fitsFileInformation, false);
+                
+                int loadChoice = JOptionPane.showConfirmDialog(null, 
+                        "Conversion Complete!\n\nWould you like to automatically load the newly created 16-bit directory?", 
+                        "Success", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+                if (loadChoice == JOptionPane.YES_OPTION && newDir != null) {
+                    throw new RedirectImportException(newDir);
+                }
                 return new FitsFileInformation[0]; // Stop the current import
             }
 
@@ -616,8 +743,14 @@ public class ImageProcessing {
 
             if (choice == JOptionPane.YES_OPTION) {
                 ApplicationWindow.logger.info("Starting 32-bit Color to 16-bit Mono/Color conversion...");
-                batchConvert32BitTo16Bit(fitsFileInformation, true);
-                JOptionPane.showMessageDialog(null, "Conversion Complete!\n\nThe 16-bit files have been saved in new directories.\nPlease import the '_16bit_mono' directory to run detections.", "Success", JOptionPane.INFORMATION_MESSAGE);
+                File newDir = batchConvert32BitTo16Bit(fitsFileInformation, true);
+                
+                int loadChoice = JOptionPane.showConfirmDialog(null, 
+                        "Conversion Complete!\n\nWould you like to automatically load the newly created 16-bit Mono directory to run detections?", 
+                        "Success", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+                if (loadChoice == JOptionPane.YES_OPTION && newDir != null) {
+                    throw new RedirectImportException(newDir);
+                }
                 return new FitsFileInformation[0]; // Stop the current import
             }
         } else if (format == FitsFormatChecker.FitsFormat.UNSUPPORTED) {
@@ -637,7 +770,7 @@ public class ImageProcessing {
                 Fits fitsFile = null;
                 try {
                     fitsFile = new Fits(currentFile);
-                    BasicHDU<?> hdu = fitsFile.getHDU(0);
+                    BasicHDU<?> hdu = getImageHDU(fitsFile);
                     Header fitsHeader = hdu.getHeader();
 
                     String fpath = currentFile.getAbsolutePath();
@@ -783,11 +916,11 @@ public class ImageProcessing {
         }
 
         Fits wcsHeaderFITS = new Fits(wcsHeaderFile);
-        Header wcsHeaderFITSHeader = wcsHeaderFITS.getHDU(0).getHeader();
+        Header wcsHeaderFITSHeader = getImageHDU(wcsHeaderFITS).getHeader();
         String[] wcsHeaderElements = {"CTYPE", "CUNIT1", "CUNIT2", "WCSAXES", "IMAGEW", "IMAGEH", "A_ORDER", "B_ORDER", "AP_ORDER", "BP_ORDER", "CRPIX", "CRVAL", "CDELT", "CROTA", "CD1_", "CD2_", "EQUINOX", "LONPOLE", "LATPOLE", "A_", "B_", "AP_", "BP_"};
 
         for (int i = 0; i < fitsFiles.length; i++) {
-            Header headerHDU = fitsFiles[i].getHDU(0).getHeader();
+            Header headerHDU = getImageHDU(fitsFiles[i]).getHeader();
             Cursor<String, HeaderCard> wcsHeaderFITSHeaderIter = wcsHeaderFITSHeader.iterator();
 
             while (wcsHeaderFITSHeaderIter.hasNext()) {
@@ -851,7 +984,7 @@ public class ImageProcessing {
                 if (entry.getValue() != null) props.setProperty(entry.getKey(), entry.getValue());
             }
         }
-        
+
         try (FileOutputStream fos = new FileOutputStream(solveResultFile)) {
             props.store(fos, "SpacePixels Plate Solve Results");
         }
@@ -865,11 +998,11 @@ public class ImageProcessing {
             Properties props = new Properties();
             try (FileInputStream fis = new FileInputStream(solveResultFile)) {
                 props.load(fis);
-                
+
                 boolean success = Boolean.parseBoolean(props.getProperty("success", "false"));
                 String failure_reason = props.getProperty("failure_reason");
                 String warning = props.getProperty("warning");
-                
+
                 Map<String, String> solveInfo = new HashMap<>();
                 for (String key : props.stringPropertyNames()) {
                     if (!key.equals("success") && !key.equals("failure_reason") && !key.equals("warning")) {
@@ -893,7 +1026,8 @@ public class ImageProcessing {
         File tempFile = new File(fitsFileFullPath + ".tmp");
 
         try (Fits fits = new Fits(originalFile)) {
-            Header header = fits.getHDU(0).getHeader();
+            BasicHDU<?> hdu = getImageHDU(fits);
+            Header header = hdu.getHeader();
 
             for (Map.Entry<String, String> entry : wcsData.entrySet()) {
                 String key = entry.getKey().toUpperCase();
@@ -943,7 +1077,7 @@ public class ImageProcessing {
     }
 
     private void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, boolean stretch, StretchAlgorithm algo) throws FitsException, IOException {
-        int naxis = originalFits.getHDU(0).getHeader().getIntValue("NAXIS");
+        int naxis = getImageHDU(originalFits).getHeader().getIntValue("NAXIS");
         boolean isColor = false;
         if (naxis == 3) {
             isColor = true;
@@ -973,7 +1107,7 @@ public class ImageProcessing {
     }
 
     private void writeOnlyStretchedFitsFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException, IOException {
-        int naxis = originalFits.getHDU(0).getHeader().getIntValue("NAXIS");
+        int naxis = getImageHDU(originalFits).getHeader().getIntValue("NAXIS");
         boolean isColor = false;
         if (naxis == 3) {
             isColor = true;
@@ -996,7 +1130,8 @@ public class ImageProcessing {
     }
 
     private Fits convertToMono(Fits colorFITSImage) throws FitsException, IOException {
-        Object monoKernelData = convertToMono(colorFITSImage.getHDU(0).getKernel());
+        BasicHDU<?> originalHDU = getImageHDU(colorFITSImage);
+        Object monoKernelData = convertToMono(originalHDU.getKernel());
         Fits updatedFits = new Fits();
         updatedFits.addHDU(FitsFactory.hduFactory(monoKernelData));
 
@@ -1006,7 +1141,7 @@ public class ImageProcessing {
             updatedFitsHeaderIterator.remove();
         }
 
-        Cursor<String, HeaderCard> originalHeader = colorFITSImage.getHDU(0).getHeader().iterator();
+        Cursor<String, HeaderCard> originalHeader = originalHDU.getHeader().iterator();
         while (originalHeader.hasNext()) {
             HeaderCard originalHeaderCard = originalHeader.next();
             updatedFits.getHDU(0).getHeader().addLine(originalHeaderCard);
@@ -1051,13 +1186,53 @@ public class ImageProcessing {
     // 32-BIT TO 16-BIT STANDARDIZATION LOGIC
     // =========================================================================
 
-    private void batchConvert32BitTo16Bit(File[] files, boolean isColor) throws Exception {
-        eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog = 
+    private File batchDecompress(File[] files) throws Exception {
+        eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog =
                 new eu.startales.spacepixels.gui.ProcessingProgressDialog(null);
-        progressDialog.setTitle("Converting 32-bit to 16-bit...");
-        
+        progressDialog.setTitle("Decompressing FITS files...");
+
         SwingUtilities.invokeLater(() -> progressDialog.setVisible(true));
 
+        File targetDir = null;
+        try {
+            for (int i = 0; i < files.length; i++) {
+                File file = files[i];
+                final int percent = (int) (((float) i / files.length) * 100);
+                SwingUtilities.invokeLater(() -> progressDialog.updateProgress(percent, "Decompressing " + file.getName() + "..."));
+
+                Fits originalFits = new Fits(file);
+                BasicHDU<?> imageHDU = getImageHDU(originalFits);
+
+                if (imageHDU != null) {
+                    Fits decompressedFits = new Fits();
+                    decompressedFits.addHDU(imageHDU);
+
+                    String outName = addDirectory(file, "_uncompressed");
+                    if (outName.toLowerCase().endsWith(".fz")) {
+                        outName = outName.substring(0, outName.length() - 3);
+                    }
+
+                    if (targetDir == null) targetDir = new File(outName).getParentFile();
+                    File outFile = new File(outName);
+                    if (outFile.exists()) outFile.delete();
+                    decompressedFits.write(outFile);
+                }
+                originalFits.close();
+            }
+        } finally {
+            SwingUtilities.invokeLater(() -> progressDialog.dispose());
+        }
+        return targetDir;
+    }
+
+    private File batchConvert32BitTo16Bit(File[] files, boolean isColor) throws Exception {
+        eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog =
+                new eu.startales.spacepixels.gui.ProcessingProgressDialog(null);
+        progressDialog.setTitle("Converting 32-bit to 16-bit...");
+
+        SwingUtilities.invokeLater(() -> progressDialog.setVisible(true));
+
+        File targetDir = null;
         try {
             for (int i = 0; i < files.length; i++) {
                 File file = files[i];
@@ -1070,12 +1245,14 @@ public class ImageProcessing {
                 printFitsDebugInfo("ORIGINAL 32-BIT", file);
 
                 Fits originalFits = new Fits(file);
-                Object kernel = originalFits.getHDU(0).getKernel();
+                BasicHDU<?> imageHDU = getImageHDU(originalFits);
+                Header origHeader = imageHDU.getHeader();
+                Object kernel = imageHDU.getKernel();
 
                 if (isColor) {
                     // 1. Convert to 16-bit Color
                     short[][][] color16 = standardizeTo16BitColor(kernel);
-                    Fits colorFits = createFitsFromData(color16, originalFits);
+                    Fits colorFits = createFitsFromData(color16, origHeader);
                     String colorName = addDirectory(file, "_16bit_color");
                     writeFitsWithSuffix(colorFits, colorName, "_16bit_color");
 
@@ -1085,11 +1262,12 @@ public class ImageProcessing {
 
                     // 2. Extract Luminance to 16-bit Mono
                     short[][] mono16 = extractLuminance(color16);
-                    Fits monoFits = createFitsFromData(mono16, originalFits);
+                    Fits monoFits = createFitsFromData(mono16, origHeader);
 
                     // Note: No manual header hacking needed here anymore!
                     // createFitsFromData safely handles NAXIS and NAXIS3 automatically.
                     String monoName = addDirectory(file, "_16bit_mono");
+                    if (targetDir == null) targetDir = new File(monoName).getParentFile();
                     writeFitsWithSuffix(monoFits, monoName, "_16bit_mono");
 
                     // --- DEBUG: Print Converted Luminance File ---
@@ -1099,8 +1277,9 @@ public class ImageProcessing {
                 } else {
                     // Convert to 16-bit Mono
                     short[][] mono16 = standardizeTo16BitMono(kernel);
-                    Fits monoFits = createFitsFromData(mono16, originalFits);
+                    Fits monoFits = createFitsFromData(mono16, origHeader);
                     String monoName = addDirectory(file, "_16bit_converted");
+                    if (targetDir == null) targetDir = new File(monoName).getParentFile();
                     writeFitsWithSuffix(monoFits, monoName, "_16bit");
 
                     // --- DEBUG: Print Converted Mono File ---
@@ -1112,15 +1291,15 @@ public class ImageProcessing {
         } finally {
             SwingUtilities.invokeLater(() -> progressDialog.dispose());
         }
+        return targetDir;
     }
 
-    private Fits createFitsFromData(Object newData, Fits originalFits) throws FitsException, IOException {
+    private Fits createFitsFromData(Object newData, Header originalHeader) throws FitsException, IOException {
         Fits updatedFits = new Fits();
         BasicHDU<?> newHDU = FitsFactory.hduFactory(newData);
         updatedFits.addHDU(newHDU);
 
         Header newHeader = newHDU.getHeader();
-        Header originalHeader = originalFits.getHDU(0).getHeader();
 
         java.util.List<String> structuralKeys = java.util.Arrays.asList(
                 "SIMPLE", "BITPIX", "NAXIS", "NAXIS1", "NAXIS2", "NAXIS3",
@@ -1154,7 +1333,7 @@ public class ImageProcessing {
 
     private void printFitsDebugInfo(String label, File fitsFile) {
         try (Fits fits = new Fits(fitsFile)) {
-            BasicHDU<?> hdu = fits.getHDU(0);
+            BasicHDU<?> hdu = getImageHDU(fits);
             Header header = hdu.getHeader();
             Object kernel = hdu.getKernel();
 
@@ -1359,7 +1538,8 @@ public class ImageProcessing {
     }
 
     public void stretchFITSImage(Fits fitsImage, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException, IOException {
-        Object kernelData = fitsImage.getHDU(0).getKernel();
+        BasicHDU<?> hdu = getImageHDU(fitsImage);
+        Object kernelData = hdu.getKernel();
 
         if (kernelData instanceof short[][]) {
             short[][] data = (short[][]) kernelData;

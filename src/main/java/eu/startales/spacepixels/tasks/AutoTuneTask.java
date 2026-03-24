@@ -36,6 +36,7 @@ public class AutoTuneTask implements Runnable {
     private final EventBus eventBus;
     private final FitsFileInformation[] filesInfo;
     private final DetectionConfig baseConfig;
+    private final JTransientAutoTuner.AutoTuneProfile profile;
 
     // Helper class to track the top frames in memory
     private static class ScoredFrame {
@@ -48,10 +49,11 @@ public class AutoTuneTask implements Runnable {
         }
     }
 
-    public AutoTuneTask(EventBus eventBus, FitsFileInformation[] filesInfo, DetectionConfig baseConfig) {
+    public AutoTuneTask(EventBus eventBus, FitsFileInformation[] filesInfo, DetectionConfig baseConfig, JTransientAutoTuner.AutoTuneProfile profile) {
         this.eventBus = eventBus;
         this.filesInfo = filesInfo;
         this.baseConfig = baseConfig;
+        this.profile = profile;
     }
 
     @Override
@@ -129,7 +131,7 @@ public class AutoTuneTask implements Runnable {
             eventBus.post(new EngineProgressUpdateEvent(50, "Starting mathematical tuning algorithms..."));
 
             // --- Pass the listener into the tune method ---
-            JTransientAutoTuner.AutoTunerResult result = JTransientAutoTuner.tune(bestFrames, baseConfig, autoTuneListener);
+            JTransientAutoTuner.AutoTunerResult result = JTransientAutoTuner.tune(bestFrames, baseConfig, profile, autoTuneListener);
 
             eventBus.post(new EngineProgressUpdateEvent(100, "Auto-Tuning complete!"));
 
