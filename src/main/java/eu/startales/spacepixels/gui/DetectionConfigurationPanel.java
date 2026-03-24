@@ -700,7 +700,7 @@ public class DetectionConfigurationPanel extends JPanel {
             autoTuneBtn.setEnabled(true);
             autoTuneBtn.setText("Auto-Tune Settings");
             setCursor(Cursor.getDefaultCursor());
-
+            
             System.out.println(event.getResult().telemetryReport);
             if (event.isSuccess() && event.getResult() != null) {
                 JTransientAutoTuner.AutoTunerResult result = event.getResult();
@@ -717,27 +717,34 @@ public class DetectionConfigurationPanel extends JPanel {
                     updateSpinnersFromConfig(result.optimizedConfig);
 
                     String adjustedMsg = growSigmaAdjusted ?
-                            String.format("• Grow Sigma: %.1f (capped to Detection Sigma)\n", result.optimizedConfig.growSigmaMultiplier) : "";
+                            String.format("• Grow Sigma: %.1f (capped to Detection Sigma)", result.optimizedConfig.growSigmaMultiplier) : 
+                            String.format("• Grow Sigma: %.1f", result.optimizedConfig.growSigmaMultiplier);
 
                     String summary = String.format(
                             "Auto-Tuning Complete!\n\n" +
                                     "Winning Settings Found:\n" +
                                     "• Detection Sigma: %.1f\n" +
+                                    "%s\n" +
                                     "• Min Pixels: %d\n" +
                                     "• Max Star Jitter: %.2f px\n" +
-                                    "• Streak Min Elongation: %.2f\n" +
-                                    "%s\n" +
-                                    "Telemetry: Extracted %d stable stars with a %.1f%% noise ratio.",
+                                    "• Max Mask Overlap Fraction: %.2f\n" +
+                                    "• Streak Min Elongation: %.2f\n\n" +
+                                    "Telemetry: Extracted %d stable stars with a %.1f%% noise ratio.\n\n" +
+                                    "Would you like to view the detailed mathematical evaluation report?",
                             result.optimizedConfig.detectionSigmaMultiplier,
+                            adjustedMsg,
                             result.optimizedConfig.minDetectionPixels,
                             result.optimizedConfig.maxStarJitter,
+                            result.optimizedConfig.maxMaskOverlapFraction,
                             result.optimizedConfig.streakMinElongation,
-                            adjustedMsg,
                             result.bestStarCount,
                             (result.bestTransientRatio * 100)
                     );
 
-                    JOptionPane.showMessageDialog(DetectionConfigurationPanel.this, summary, "Auto-Tuner Success", JOptionPane.INFORMATION_MESSAGE);
+                    int choice = JOptionPane.showConfirmDialog(DetectionConfigurationPanel.this, summary, "Auto-Tuner Success", JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE);
+                    if (choice == JOptionPane.YES_OPTION) {
+                        showTelemetryReportWindow(result.telemetryReport);
+                    }
                 } else {
                     // Show a helpful warning explaining WHY it didn't change the settings
                     JOptionPane.showMessageDialog(DetectionConfigurationPanel.this,
@@ -761,9 +768,26 @@ public class DetectionConfigurationPanel extends JPanel {
         spinGrowSigma.setValue(config.growSigmaMultiplier);
         spinMinPixels.setValue(config.minDetectionPixels);
         spinStarJitter.setValue(config.maxStarJitter);
+        spinMaxMaskOverlapFraction.setValue(config.maxMaskOverlapFraction);
         spinStreakMinElong.setValue(config.streakMinElongation);
 
         // Push the visual changes to the underlying memory state immediately
         applySettingsToMemory();
+    }
+
+    private void showTelemetryReportWindow(String reportText) {
+        JTextArea textArea = new JTextArea(reportText);
+        textArea.setEditable(false);
+        textArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        textArea.setMargin(new java.awt.Insets(10, 10, 10, 10));
+
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setPreferredSize(new Dimension(800, 600));
+
+        JDialog dialog = new JDialog(mainAppWindow.getFrame(), "Auto-Tuner Telemetry Report", true);
+        dialog.getContentPane().add(scrollPane);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
     }
 }

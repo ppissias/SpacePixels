@@ -67,14 +67,14 @@ The main application window is divided into a few key areas:
 To begin working, you must load a directory containing a sequence of aligned FITS files.
 1. Click **File => Load Directory**.
 2. Select a folder. The application will scan for files ending in `.fits`, `.fit`, `.fts` (support for `.fz` is coming).
-3. **Format Enforcement**: SpacePixels expects all files in a sequence to have the exact same dimensions and color space (e.g., all 16-bit Mono, or all 16-bit Color).
+3. **Format Enforcement**: SpacePixels expects all files in a sequence to have consistent dimensions and color space (e.g., all 16-bit Mono, or all 16-bit Color).
 4. **32-Bit Conversion**: If 32-bit images are detected, the application will prompt you to automatically standardize them down to 16-bit, which is required by the detection engine.
 
 ### File Information Table
 Once loaded, the table displays metadata for each file:
 *   **Filename**: The name of the FITS file.
 *   **Color**: Indicates whether the image is Monochrome or Color.
-*   **Date & Time**: The extracted `DATE-OBS` and `TIME-OBS` combined. Used by the engine for precise time-based kinematics.
+*   **Date & Time**: The extracted `DATE-OBS` and `TIME-OBS` combined. Used by the engine to robustly calculate time-based kinematics.
 *   **Duration**: The exposure time extracted from the `EXPTIME` or `EXPOSURE` header.
 *   **Location**: The observatory location, if available in the headers (`SITELAT`, `SITELONG`).
 *   **Solved**: Indicates if the image has been successfully plate-solved (either via an existing WCS header or a cached `.ini` result).
@@ -110,7 +110,7 @@ If you want to quickly inspect the raw, purified transients extracted by the eng
 1. Ensure your sequence is loaded.
 2. Click the **Manual Transient Inspection** button on the main panel.
 3. The engine will extract all valid transients from every frame using the master background stack.
-4. A new resizable window will open displaying the exact pixel footprints of the transients overlaid on the image.
+4. A new resizable window will open displaying the extracted pixel footprints of the transients overlaid on the image.
 5. Use the **Arrow Keys (Left/Right/Up/Down)** to rapidly cycle through the frames and visually trace moving targets or identify noise.
 
 ## 7. Automated Transient Detection
@@ -138,10 +138,10 @@ The parameters driving the detection engine can be heavily customized via the **
 1. **Basic Tuning**: The most frequently adjusted settings, including your primary Detection Sigma, Min Pixels, Streak constraints, and Export preferences.
 2. **Advanced Extractor**: Settings for building the Master Map and extracting Deep Stack Anomalies, as well as background modeling (Sigma Clipping).
 3. **Advanced Kinematics**: Deep mathematical thresholds for trajectory prediction, geometric shape matching, and Time-Based Velocity tracking.
-4. **Quality Control**: Strict Median Absolute Deviation (MAD) limits to reject bad frames caused by clouds, wind, or tracking errors. Also houses the Auto-Tuner scoring weights.
+4. **Quality Control**: Median Absolute Deviation (MAD) limits designed to reject bad frames caused by clouds, wind, or tracking errors. Also houses the Auto-Tuner scoring weights.
 5. **Advanced Visualization**: Fine-tune the sizes of the bounding boxes, masks, and crop padding generated in the HTML report.
 
-**Auto-Tune**: If you are unsure what values to use, click **Auto-Tune Settings**. The engine sweeps through mathematical combinations to find the optimal signal-to-noise ratio for your specific dataset, balancing sensitivity and noise rejection. You can use **Preview Detection Settings** to visually verify the exact pixel footprints the current settings will extract.
+**Auto-Tune**: If you are unsure what values to use, click **Auto-Tune Settings**. The engine sweeps through mathematical combinations to find a robust signal-to-noise ratio for your specific dataset, balancing sensitivity and noise rejection. You can use **Preview Detection Settings** to visually verify the extracted pixel footprints the current settings produce.
 
 ### Understanding the HTML Report
 The final output is an interactive HTML dashboard containing:
@@ -172,4 +172,4 @@ If ASTAP is not available or fails, SpacePixels can fall back to the online Astr
 *   It is generally slower than local solving via ASTAP.
 *   The results are pulled down and saved alongside the image in a `.ini` file and update in the FITS headers.
 
-**Updating FITS Headers**: When an image is successfully solved (either via ASTAP or Astrometry.net), SpacePixels will prompt you to permanently inject the WCS coordinate solutions back into the original FITS header. This makes your files universally compatible with other astronomical software without relying on external `.ini` files!
+**Updating FITS Headers**: When an image is successfully solved (either via ASTAP or Astrometry.net), SpacePixels will prompt you to optionally write the WCS coordinate solutions back into the original FITS header. This makes your files universally compatible with other astronomical software without relying on external `.ini` files.
