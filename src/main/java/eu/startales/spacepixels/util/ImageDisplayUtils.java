@@ -855,6 +855,60 @@ public class ImageDisplayUtils {
         return rgbMap;
     }
 
+    // --- NEW: SLOW MOVER DIFFERENCE MAP RENDERER ---
+    public static BufferedImage createSlowMoverDifferenceMap(short[][] slowMover, short[][] master) {
+        int width = master[0].length;
+        int height = master.length;
+
+        BufferedImage rgbMap = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+
+        int[][] diff = new int[height][width];
+        long sum = 0;
+        int maxDiff = 0;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int smVal = slowMover[y][x] + 32768;
+                int mVal = master[y][x] + 32768;
+                int d = smVal - mVal;
+                if (d < 0) d = 0;
+                diff[y][x] = d;
+                sum += d;
+                if (d > maxDiff) maxDiff = d;
+            }
+        }
+
+        double mean = (double) sum / (width * height);
+        double sumSq = 0;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                double d = diff[y][x] - mean;
+                sumSq += d * d;
+            }
+        }
+        double stdDev = Math.sqrt(sumSq / (width * height));
+
+        // Use 2-sigma threshold to capture structurally brighter anomalies without extreme noise
+        double threshold = mean + (2.0 * stdDev);
+        double range = maxDiff - threshold;
+        if (range <= 0) range = 1.0;
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (diff[y][x] > threshold) {
+                    double intensity = (diff[y][x] - threshold) / range;
+                    intensity = Math.sqrt(intensity); // Non-linear stretch
+                    if (intensity > 1.0) intensity = 1.0;
+
+                    // Draw directly as bright red over the purely black background
+                    int r = (int) Math.min(255, intensity * 255);
+                    rgbMap.setRGB(x, y, (255 << 24) | (r << 16) | (0 << 8) | 0);
+                }
+            }
+        }
+
+        return rgbMap;
+    }
+
     // =================================================================
     // HTML EXPORT
     // =================================================================
@@ -1403,6 +1457,20 @@ public class ImageDisplayUtils {
                 if (hasCandidates || hasTelemetry) {
                     report.println("<h2>Deep Stack Anomalies (Ultra-Slow Mover Candidates)</h2>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
+
+                    if (masterStackData != null) {
+                        BufferedImage diffMap = createSlowMoverDifferenceMap(slowMoverStackData, masterStackData);
+                        saveTrackImageLossless(diffMap, new File(exportDir, "slow_mover_diff_map.png"));
+
+                        report.println("<div class='panel' style='margin-bottom: 25px; max-width: 500px;'>");
+                        report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Slow Mover Difference Map</h3>");
+                        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
+                        report.println("The mathematical subtraction of the Master Median Stack from the specialized Slow Mover Stack. Positive differences are stretched and tinted red over the background, making hidden slow-mover tracks stand out.</p>");
+                        report.println("<div class='image-container'>");
+                        report.println("<div><a href='slow_mover_diff_map.png' target='_blank'><img src='slow_mover_diff_map.png' style='max-width: 400px;' alt='Slow Mover Difference Map' /></a></div>");
+                        report.println("</div>");
+                        report.println("</div>");
+                    }
 
                     if (hasTelemetry) {
                         report.println("<div class='flex-container' style='margin-bottom: 25px;'>");

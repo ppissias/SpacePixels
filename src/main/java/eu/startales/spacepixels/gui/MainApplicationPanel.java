@@ -50,7 +50,7 @@ public class MainApplicationPanel extends JPanel {
     private final JButton detectSingleButton = new JButton("Detect on Selected Frame");
     private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
     private final JButton detectBatchButton = new JButton("Detect Moving Targets (Standard Pipeline)");
-    private final JButton detectSlowBatchButton = new JButton("Detect Slow Movers (Iterative Pipeline)");
+    private final JButton detectIterativelyButton = new JButton("Detect Iteratively (Large Datasets)");
 
     private final JLabel statusLabel = new JLabel(" Ready");
     // Map to hold the state of UI components
@@ -127,9 +127,9 @@ public class MainApplicationPanel extends JPanel {
         row2.add(detectBatchButton);
 
         // Add the new button to the UI
-        detectSlowBatchButton.setToolTipText("Run multiple temporally spaced passes across the sequence to detect extremely slow-moving targets.");
-        detectSlowBatchButton.setEnabled(false);
-        row2.add(detectSlowBatchButton);
+        detectIterativelyButton.setToolTipText("In case the dataset is too large to perform the standard detection, run multiple temporally spaced passes across the sequence");
+        detectIterativelyButton.setEnabled(false);
+        row2.add(detectIterativelyButton);
 
         progressBar.setEnabled(true);
         progressBar.setPreferredSize(new Dimension(150, 20));
@@ -319,7 +319,7 @@ public class MainApplicationPanel extends JPanel {
         });
 
         // Wire up the new button to the new task
-        detectSlowBatchButton.addActionListener(e -> {
+        detectIterativelyButton.addActionListener(e -> {
             new Thread(new IterativeDetectionTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImageProcessing(),
@@ -555,14 +555,14 @@ public class MainApplicationPanel extends JPanel {
         this.detectSingleButton.setEnabled(true);
         this.manualTransientInspectionButton.setEnabled(true);
         this.detectBatchButton.setEnabled(true);
-        this.detectSlowBatchButton.setEnabled(true);
+        this.detectIterativelyButton.setEnabled(true);
     }
 
     public void setDetectionButtonsDisabled() {
         this.detectSingleButton.setEnabled(false);
         this.manualTransientInspectionButton.setEnabled(false);
         this.detectBatchButton.setEnabled(false);
-        this.detectSlowBatchButton.setEnabled(false);
+        this.detectIterativelyButton.setEnabled(false);
     }
 
     // ==========================================
