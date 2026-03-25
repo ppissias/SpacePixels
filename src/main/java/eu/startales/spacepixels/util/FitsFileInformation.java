@@ -165,6 +165,26 @@ public class FitsFileInformation {
         return "N/A";
     }
 
+    /**
+     * Extracts and parses the EXPTIME or EXPOSURE header into milliseconds.
+     * @return Exposure time in milliseconds, or -1 if missing.
+     */
+    public long getExposureDurationMillis() {
+        String exp = fitsHeader.get("EXPTIME");
+        if (exp == null) exp = fitsHeader.get("EXPOSURE"); // Fallback for older FITS standard
+        
+        if (exp != null) {
+            exp = exp.replace("'", "").trim();
+            try {
+                double val = Double.parseDouble(exp);
+                return (long) (val * 1000.0);
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
     public String getLocation() {
         String lat = fitsHeader.get("SITELAT");
         String lon = fitsHeader.get("SITELONG");

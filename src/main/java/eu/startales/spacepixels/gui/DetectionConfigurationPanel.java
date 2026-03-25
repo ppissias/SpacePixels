@@ -58,6 +58,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private JSpinner spinBgClippingIters, spinBgClippingFactor;
 
     // --- TrackLinker Spinners ---
+    private JCheckBox chkStrictExposureKinematics;
     private JSpinner spinReqDetToStar, spinStarJitterExp, spinStarJitter, spinMaxMaskOverlapFraction, spinPredTol, spinAngleTol;
     private JSpinner spinTrackMinFrameRatio, spinAbsMaxPoints, spinMaxJump;
     private JSpinner spinRhythmVar, spinRhythmMinRatio, spinRhythmStatThresh, spinTimeBasedVelocityTolerance;
@@ -73,7 +74,7 @@ public class DetectionConfigurationPanel extends JPanel {
     // NEW: Absolute minimum tolerance spinners
     private JSpinner spinMinBgDevAdu, spinMinEccEnvelope, spinMinFwhmEnvelope;
 
-    private JSpinner spinQualitySigma, spinQualityMinPix, spinMaxElongFwhm, spinErrorFallback;
+    private JSpinner spinQualitySigma, spinQualityMinPix, spinMaxElongFwhm;
 
     // --- Auto-Tuner Spinners ---
     private JSpinner spinAutoTransientPenalty, spinAutoSigmaPenalty, spinAutoMinPixPenalty;
@@ -301,6 +302,7 @@ public class DetectionConfigurationPanel extends JPanel {
         spinStarJitter = addRow(panel, "Base Star Jitter Radius", "Expected Star Jitter (pixels). Represents the maximum atmospheric wobble (seeing). Used to dilate the Master Star Mask and as the minimum speed limit for moving objects.", new SpinnerNumberModel(jTransientConfig.maxStarJitter, 0.5, 999.0, 0.5));
         spinMaxMaskOverlapFraction = addRow(panel, "Max Mask Overlap Fraction", "Instead of a strict 1-pixel touch destroying a transient, allow it to overlap the master star mask up to this fraction (e.g., 0.25 = 25%). Rescues objects grazing star halos.", new SpinnerNumberModel(jTransientConfig.maxMaskOverlapFraction, 0.0, 1.0, 0.05));
         spinMaxJump = addRow(panel, "Max Jump Velocity", "The cosmic speed limit. When looking for the next point in a track, any transient located further than this distance is ignored.", new SpinnerNumberModel(jTransientConfig.maxJumpPixels, 10.0, 99999.0, 10.0));
+        chkStrictExposureKinematics = addCheckboxRow(panel, "Strict Exposure Kinematics", "Mathematically bounds maximum jump distance between frames based on object footprint and exposure time. Turn ON if you receive many false positive tracks.", jTransientConfig.strictExposureKinematics);
         chkEnableAnomalyRescue = addCheckboxRow(panel, "Enable Anomaly Rescue", "Enable the rescue of single-frame, ultra-bright point sources that failed to form a multi-frame track.", jTransientConfig.enableAnomalyRescue);
 
         panel.add(Box.createVerticalStrut(10));
@@ -396,8 +398,6 @@ public class DetectionConfigurationPanel extends JPanel {
         spinQualitySigma = addRow(panel, "Quality Eval Sigma Multiplier", "Sigma multiplier used to extract only strong, undeniable stars specifically for frame quality evaluation, bypassing standard extraction parameters.", new SpinnerNumberModel(jTransientConfig.qualitySigmaMultiplier, 1.0, 999.0, 0.5));
         spinQualityMinPix = addRow(panel, "Quality Min Detection Pixels", "Minimum number of contiguous pixels a source must have to be evaluated as a valid reference star for frame quality.", new SpinnerNumberModel(jTransientConfig.qualityMinDetectionPixels, 1, 99999, 1));
         spinMaxElongFwhm = addRow(panel, "Max Elongation for FWHM", "Trailed stars artificially inflate FWHM measurements. Only stars with an elongation below this value are used to calculate the frame's median focus.", new SpinnerNumberModel(jTransientConfig.maxElongationForFwhm, 1.0, 999.0, 0.1));
-        spinErrorFallback = addRow(panel, "Error Fallback Value", "If a frame is a total washout (zero reference stars), the engine assigns this terrible score so it is guaranteed to be rejected by the session evaluator.", new SpinnerNumberModel(jTransientConfig.errorFallbackValue, 0.0, 999999.0, 10.0));
-
 
         return panel;
     }
@@ -567,6 +567,7 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.predictionTolerance = ((Number) spinPredTol.getValue()).doubleValue();
             jTransientConfig.angleToleranceDegrees = ((Number) spinAngleTol.getValue()).doubleValue();
             jTransientConfig.maxJumpPixels = ((Number) spinMaxJump.getValue()).doubleValue();
+            jTransientConfig.strictExposureKinematics = chkStrictExposureKinematics.isSelected();
             jTransientConfig.maxFwhmRatio = ((Number) spinMaxFwhmRatio.getValue()).doubleValue();
             jTransientConfig.maxSurfaceBrightnessRatio = ((Number) spinMaxSurfaceBrightnessRatio.getValue()).doubleValue();
             jTransientConfig.trackMinFrameRatio = ((Number) spinTrackMinFrameRatio.getValue()).doubleValue();
@@ -596,7 +597,6 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.qualitySigmaMultiplier = ((Number) spinQualitySigma.getValue()).doubleValue();
             jTransientConfig.qualityMinDetectionPixels = ((Number) spinQualityMinPix.getValue()).intValue();
             jTransientConfig.maxElongationForFwhm = ((Number) spinMaxElongFwhm.getValue()).doubleValue();
-            jTransientConfig.errorFallbackValue = ((Number) spinErrorFallback.getValue()).doubleValue();
 
             // --- Apply Visualization Settings (SpacePixels Static Variables) ---
             RawImageAnnotator.streakLineScaleFactor = ((Number) spinStreakScale.getValue()).doubleValue();
@@ -713,13 +713,13 @@ public class DetectionConfigurationPanel extends JPanel {
                     updateSpinnersFromConfig(result.optimizedConfig);
 
                     String adjustedMsg = growSigmaAdjusted ?
-                            String.format("• Grow Sigma: %.1f (capped to Detection Sigma)", result.optimizedConfig.growSigmaMultiplier) : 
-                            String.format("• Grow Sigma: %.1f", result.optimizedConfig.growSigmaMultiplier);
+                            String.format("• Grow Sigma: %.2f (capped to Detection Sigma)", result.optimizedConfig.growSigmaMultiplier) : 
+                            String.format("• Grow Sigma: %.2f", result.optimizedConfig.growSigmaMultiplier);
 
                     String summary = String.format(
                             "Auto-Tuning Complete!\n\n" +
                                     "Winning Settings Found:\n" +
-                                    "• Detection Sigma: %.1f\n" +
+                                    "• Detection Sigma: %.2f\n" +
                                     "%s\n" +
                                     "• Min Pixels: %d\n" +
                                     "• Max Star Jitter: %.2f px\n" +
@@ -765,6 +765,7 @@ public class DetectionConfigurationPanel extends JPanel {
         spinMinPixels.setValue(config.minDetectionPixels);
         spinStarJitter.setValue(config.maxStarJitter);
         spinMaxMaskOverlapFraction.setValue(config.maxMaskOverlapFraction);
+        chkStrictExposureKinematics.setSelected(config.strictExposureKinematics);
         spinStreakMinElong.setValue(config.streakMinElongation);
 
         // Push the visual changes to the underlying memory state immediately

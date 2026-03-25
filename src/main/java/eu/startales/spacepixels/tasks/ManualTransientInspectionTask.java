@@ -55,7 +55,8 @@ public class ManualTransientInspectionTask implements Runnable {
                         throw new Exception("Cannot process: Expected short[][]");
                     }
                     long timestamp = filesInfo[i].getObservationTimestamp();
-                    framesForLibrary.add(new ImageFrame(i, currentFile.getName(), (short[][]) kernel, timestamp));
+                    long exposure = filesInfo[i].getExposureDurationMillis();
+                    framesForLibrary.add(new ImageFrame(i, currentFile.getName(), (short[][]) kernel, timestamp, exposure));
                 }
             }
 

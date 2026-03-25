@@ -748,6 +748,113 @@ public class ImageDisplayUtils {
         return rgbMap;
     }
 
+    // --- NEW: RAINBOW CLUSTER MAP RENDERER ---
+    public static BufferedImage createRainbowClusterMap(short[][] backgroundData, List<List<SourceExtractor.DetectedObject>> allTransients) {
+        int imgWidth = backgroundData[0].length;
+        int imgHeight = backgroundData.length;
+
+        int minX = imgWidth, maxX = 0;
+        int minY = imgHeight, maxY = 0;
+        int count = 0;
+
+        // 1. Find the exact bounding box of the activity
+        for (List<SourceExtractor.DetectedObject> frameTransients : allTransients) {
+            if (frameTransients == null) continue;
+            for (SourceExtractor.DetectedObject pt : frameTransients) {
+                int cx = (int) Math.round(pt.x);
+                int cy = (int) Math.round(pt.y);
+                if (cx < minX) minX = cx;
+                if (cx > maxX) maxX = cx;
+                if (cy < minY) minY = cy;
+                if (cy > maxY) maxY = cy;
+                count++;
+            }
+        }
+
+        if (count == 0) return new BufferedImage(100, 100, BufferedImage.TYPE_INT_RGB);
+
+        // Add padding and calculate dimensions
+        int pad = 100;
+        minX = Math.max(0, minX - pad);
+        minY = Math.max(0, minY - pad);
+        maxX = Math.min(imgWidth - 1, maxX + pad);
+        maxY = Math.min(imgHeight - 1, maxY + pad);
+
+        int cropW = maxX - minX + 1;
+        int cropH = maxY - minY + 1;
+
+        // 2. Downscale the map so it fits nicely on a screen without immense scrolling
+        double scale = 1.0;
+        int maxDim = Math.max(cropW, cropH);
+        if (maxDim > 1200) {
+            scale = 1200.0 / maxDim;
+        }
+
+        int scaledW = (int) Math.round(cropW * scale);
+        int scaledH = (int) Math.round(cropH * scale);
+
+        // Extract and softly scale the background
+        short[][] croppedBg = robustEdgeAwareCrop(backgroundData, minX + (cropW / 2), minY + (cropH / 2), cropW, cropH);
+        BufferedImage grayBg = createDisplayImage(croppedBg);
+
+        BufferedImage rgbMap = new BufferedImage(scaledW, scaledH, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = rgbMap.createGraphics();
+
+        g2d.setColor(Color.BLACK);
+        g2d.fillRect(0, 0, scaledW, scaledH);
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.2f));
+        g2d.drawImage(grayBg, 0, 0, scaledW, scaledH, null); // Natively downscales the background
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        int totalFrames = allTransients.size();
+        for (int i = 0; i < totalFrames; i++) {
+            List<SourceExtractor.DetectedObject> frameTransients = allTransients.get(i);
+            if (frameTransients == null || frameTransients.isEmpty()) continue;
+
+            float ratio = totalFrames > 1 ? (float) i / (totalFrames - 1) : 0f;
+            Color timeColor = Color.getHSBColor(0.66f - (0.66f * ratio), 1.0f, 1.0f);
+            
+            // Create a glowing halo to thicken the line for maximum visibility
+            Color haloColor = new Color(timeColor.getRed(), timeColor.getGreen(), timeColor.getBlue(), 80);
+
+            for (SourceExtractor.DetectedObject pt : frameTransients) {
+                int x = (int) Math.round((pt.x - minX) * scale);
+                int y = (int) Math.round((pt.y - minY) * scale);
+
+                g2d.setColor(haloColor);
+                g2d.fillOval(x - 6, y - 6, 12, 12);
+                g2d.setColor(timeColor);
+                g2d.fillOval(x - 3, y - 3, 6, 6);
+            }
+        }
+
+        // --- Draw Legend ---
+        int legendWidth = 200;
+        int legendHeight = 12;
+        int lx = 15;
+        int ly = scaledH - 35;
+
+        g2d.setColor(new Color(0, 0, 0, 180));
+        g2d.fillRect(lx - 10, ly - 25, legendWidth + 20, legendHeight + 35);
+
+        for (int x = 0; x < legendWidth; x++) {
+            float ratio = (float) x / legendWidth;
+            Color timeColor = Color.getHSBColor(0.66f - (0.66f * ratio), 1.0f, 1.0f);
+            g2d.setColor(timeColor);
+            g2d.drawLine(lx + x, ly, lx + x, ly + legendHeight);
+        }
+
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        g2d.drawString("Start", lx, ly - 4);
+        g2d.drawString("End", lx + legendWidth - 20, ly - 4);
+        g2d.drawString("Rainbow Cluster Map", lx, ly - 15);
+
+        g2d.dispose();
+        return rgbMap;
+    }
+
     // =================================================================
     // HTML EXPORT
     // =================================================================
@@ -959,11 +1066,15 @@ public class ImageDisplayUtils {
                 // --- Extraction Stats Table ---
                 report.println("<div class='panel'>");
                 report.println("<h2>Frame Extraction Statistics</h2>");
-                report.println("<table><tr><th>Frame Index</th><th>Filename</th><th>Objects Extracted</th></tr>");
+                report.println("<table><tr><th>Frame Index</th><th>Filename</th><th>Objects Extracted</th><th>Bg Median</th><th>Bg Sigma</th><th>Seed Threshold</th><th>Grow Threshold</th></tr>");
                 for (PipelineTelemetry.FrameExtractionStat stat : pipelineTelemetry.frameExtractionStats) {
                     report.println("<tr><td>" + (stat.frameIndex + 1) + "</td>");
                     report.println("<td>" + stat.filename + "</td>");
-                    report.println("<td>" + stat.objectCount + "</td></tr>");
+                    report.println("<td>" + stat.objectCount + "</td>");
+                    report.println("<td>" + String.format(Locale.US, "%.2f", stat.bgMedian) + "</td>");
+                    report.println("<td>" + String.format(Locale.US, "%.2f", stat.bgSigma) + "</td>");
+                    report.println("<td>" + String.format(Locale.US, "%.2f", stat.seedThreshold) + "</td>");
+                    report.println("<td>" + String.format(Locale.US, "%.2f", stat.growThreshold) + "</td></tr>");
                 }
                 report.println("</table>");
                 report.println("</div>");
@@ -1391,13 +1502,26 @@ public class ImageDisplayUtils {
                 if (bgData != null) {
                     BufferedImage transientMap = createGlobalTransientMap(bgData, allTransients);
                     saveTrackImageLossless(transientMap, new File(exportDir, "global_transient_map.png"));
+                    
+                    BufferedImage rainbowMap = createRainbowClusterMap(bgData, allTransients);
+                    saveTrackImageLossless(rainbowMap, new File(exportDir, "rainbow_cluster_map.png"));
 
                     report.println("<div class='panel'>");
-                    report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Transient Map</h3>");
+                    report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Transient Maps</h3>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
                     report.println("Shows all raw transients detected across the entire session. Colors map to time (Blue = Start, Red = End). This helps visualize noise floors, hot columns, and unlinked moving targets.</p>");
-                    report.println("<div class='image-container'>");
-                    report.println("<a href='global_transient_map.png' target='_blank'><img src='global_transient_map.png' style='width: 100%; border: 1px solid #555; border-radius: 4px;' alt='Global Transient Map' /></a>");
+                    
+                    report.println("<div class='image-container' style='flex-wrap: wrap;'>");
+                    
+                    report.println("<div style='flex: 1; min-width: 400px;'>");
+                    report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Exact Footprint Map</h4>");
+                    report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Plots the exact raw pixels at a 1:1 scale. Both objects and streaks</p>");
+                    report.println("<a href='global_transient_map.png' target='_blank'><img src='global_transient_map.png' style='width: 100%; border: 1px solid #555; border-radius: 4px;' alt='Global Transient Map' /></a></div>");
+                    
+                    report.println("<div style='flex: 1; min-width: 400px;'>");
+                    report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Transient Cluster Map</h4>");
+                    report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Cropped, downscaled, and dilated to make 'rainbows' (closely moving unlinked objects) highly visible. This map shows only point transients and not streaks. </p>");
+                    report.println("<a href='rainbow_cluster_map.png' target='_blank'><img src='rainbow_cluster_map.png' style='width: 100%; border: 1px solid #555; border-radius: 4px;' alt='Rainbow Cluster Map' /></a></div>");
                     report.println("</div>");
                     report.println("</div>");
                 }

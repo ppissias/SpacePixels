@@ -75,7 +75,7 @@ public class DetectionTask implements Runnable {
                             config.detectionSigmaMultiplier,
                             config.minDetectionPixels,
                             config
-                    );
+                    ).objects;
 
                     int streakCount = 0;
                     int starCount = 0;

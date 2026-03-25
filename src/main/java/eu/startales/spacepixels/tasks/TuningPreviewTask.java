@@ -55,7 +55,7 @@ public class TuningPreviewTask implements Runnable {
                     config.detectionSigmaMultiplier,
                     config.minDetectionPixels,
                     config
-            );
+            ).objects;
 
             // Tally Results
             int streakCount = 0;

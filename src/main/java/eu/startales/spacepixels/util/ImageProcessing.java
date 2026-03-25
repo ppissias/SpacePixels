@@ -274,7 +274,8 @@ public class ImageProcessing {
 
             short[][] imageData = (short[][]) kernel;
             long timestamp = this.cachedFileInfo[i].getObservationTimestamp();
-            framesForLibrary.add(new ImageFrame(i, currentFile.getName(), imageData, timestamp));
+            long exposure = this.cachedFileInfo[i].getExposureDurationMillis();
+            framesForLibrary.add(new ImageFrame(i, currentFile.getName(), imageData, timestamp, exposure));
             rawFramesForExport.add(imageData);
             fitsFile.close();
         }
@@ -365,14 +366,15 @@ public class ImageProcessing {
             targetMaxLimit = 5;
         }
 
-        System.out.println("\n--- Extracting Timestamps for Temporal Spacing ---");
+        System.out.println("\n--- Extracting Timestamps & Exposures for Temporal Spacing ---");
         long[] frameTimestamps = new long[numFrames];
+        long[] frameExposures = new long[numFrames];
         boolean hasValidTime = true;
         for (int i = 0; i < numFrames; i++) {
             frameTimestamps[i] = this.cachedFileInfo[i].getObservationTimestamp();
+            frameExposures[i] = this.cachedFileInfo[i].getExposureDurationMillis();
             if (frameTimestamps[i] == -1) {
                 hasValidTime = false;
-                break;
             }
         }
 
@@ -395,7 +397,7 @@ public class ImageProcessing {
                 if (!(kernel instanceof short[][])) {
                     throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString() + " in file " + currentFile.getName());
                 }
-                masterFrames.add(new ImageFrame(idx, currentFile.getName(), (short[][]) kernel, frameTimestamps[idx]));
+                masterFrames.add(new ImageFrame(idx, currentFile.getName(), (short[][]) kernel, frameTimestamps[idx], frameExposures[idx]));
             }
         }
 
@@ -444,7 +446,7 @@ public class ImageProcessing {
                     }
                     short[][] imageData = (short[][]) kernel;
                     // The ImageFrame needs the original index in the full sequence
-                    spacedSubset.add(new ImageFrame(index, currentFile.getName(), imageData, frameTimestamps[index]));
+                    spacedSubset.add(new ImageFrame(index, currentFile.getName(), imageData, frameTimestamps[index], frameExposures[index]));
                 }
             }
 

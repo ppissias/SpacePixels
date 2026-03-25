@@ -47,11 +47,11 @@ public class ArtificialStarInjector {
             System.out.println("  SpacePixels - Artificial Star Injector");
             System.out.println("==================================================================");
             System.out.println("Usage:");
-            System.out.println("  java ArtificialStarInjector <directory> <num_stars> <total_pixels_moved> <peak_brightness_adu> <star_fwhm_pixels>");
+            System.out.println("  java ArtificialStarInjector <directory> <num_stars> <total_pixels_moved> <peak_adu_above_bg> <star_fwhm_pixels>");
             System.out.println("\nExample:");
             System.out.println("  java ArtificialStarInjector C:\\astro\\m101 15 10.0 4500 4.0");
             System.out.println("    (Injects 15 stars into the sequence, each moving a total of 10 pixels");
-            System.out.println("     across the entire sequence, with a peak added brightness of 4500 ADU,");
+            System.out.println("     across the entire sequence. The peak of each star will be 4500 ADU above the local background,");
             System.out.println("     and a star size (FWHM) of 4.0 pixels)");
             return;
         }
@@ -126,7 +126,11 @@ public class ArtificialStarInjector {
         }
 
         // 4. Create output directory
-        File outDir = new File(dir, "injected_stars");
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+        String timestamp = java.time.LocalDateTime.now().format(formatter);
+        String dirName = String.format(java.util.Locale.US, "injected_stars_%ds_%.1fpx_%.0fadu_%s", 
+                numStars, totalMovement, peakBrightness, timestamp);
+        File outDir = new File(dir, dirName);
         if (!outDir.exists()) outDir.mkdirs();
 
         // 5. Process sequence frame by frame
@@ -143,6 +147,9 @@ public class ArtificialStarInjector {
                 }
                 short[][] data = (short[][]) kernel;
 
+                double medianBg = calculateMedianBackground(data);
+                System.out.printf("    => Detected Median Background: %.1f ADU\n", medianBg);
+
                 // Calculate temporal fraction (0.0 at first frame, 1.0 at last frame)
                 double timeFraction = numFrames > 1 ? (double) i / (numFrames - 1) : 0.0;
 
@@ -153,7 +160,8 @@ public class ArtificialStarInjector {
                     double currentY = star.startY + (Math.sin(star.angleRad) * star.totalMovementPx * timeFraction);
                     
                     int pixelCount = drawGaussianStar(data, currentX, currentY, star.peakAdu, star.sigma);
-                    System.out.printf("    -> Injecting Star %d at X: %.2f, Y: %.2f (Footprint: %d px)\n", starIndex, currentX, currentY, pixelCount);
+                    System.out.printf("    -> Injecting Star %d at X: %.2f, Y: %.2f (Added ADU: %.1f, Total Peak: ~%.1f ADU, Footprint: %d px)\n", 
+                            starIndex, currentX, currentY, star.peakAdu, medianBg + star.peakAdu, pixelCount);
                     starIndex++;
                 }
 
@@ -201,5 +209,24 @@ public class ArtificialStarInjector {
             }
         }
         return pixelCount;
+    }
+
+    private static double calculateMedianBackground(short[][] data) {
+        int height = data.length;
+        int width = data[0].length;
+        int step = 10; // Rapid sampling: read 1 in every 100 pixels
+        int estSize = (height / step + 1) * (width / step + 1);
+        int[] samples = new int[estSize];
+        int count = 0;
+
+        for (int y = 0; y < height; y += step) {
+            for (int x = 0; x < width; x += step) {
+                if (count < samples.length) {
+                    samples[count++] = data[y][x] + 32768; // Convert FITS signed short to unsigned ADU
+                }
+            }
+        }
+        Arrays.sort(samples, 0, count);
+        return count > 0 ? samples[count / 2] : 0;
     }
 }
