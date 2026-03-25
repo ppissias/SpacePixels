@@ -16,7 +16,7 @@ repositories {
 }
 // Add your group and version here
 group = 'eu.startales.spacepixels'
-version = '2026.03-02'
+version = '2026.03-03'
 
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
