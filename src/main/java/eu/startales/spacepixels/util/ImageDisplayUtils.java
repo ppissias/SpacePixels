@@ -2101,11 +2101,6 @@ public class ImageDisplayUtils {
         html.append("<a class='id-link' href='")
                 .append(buildStellariumWebUrl(astrometryContext, queryTarget, skyCoordinate, wideFovDegrees))
                 .append("' target='_blank' rel='noopener noreferrer'>Stellarium Web Wide</a>");
-        if (astrometryContext.observerSite != null) {
-            html.append("<a class='id-link' href='")
-                    .append(buildInTheSkyUrl(astrometryContext, queryTarget))
-                    .append("' target='_blank' rel='noopener noreferrer'>In-The-Sky Planetarium</a>");
-        }
         html.append("</div>");
 
         html.append("<div class='astro-note' style='margin-top: 6px;'>")
@@ -2114,13 +2109,6 @@ public class ImageDisplayUtils {
                 .append(" with FOV ")
                 .append(escapeHtml(String.format(Locale.US, "%.2f° / %.2f°", tightFovDegrees, wideFovDegrees)))
                 .append(".");
-        if (astrometryContext.observerSite != null) {
-            html.append(" In-The-Sky uses UTC time and site coordinates from ")
-                    .append(escapeHtml(astrometryContext.observerSite.sourceLabel))
-                    .append(".");
-        } else {
-            html.append(" In-The-Sky link is omitted because no observer site coordinates were found.");
-        }
         if (epochLabel != null && !epochLabel.isEmpty()) {
             html.append(" ").append(escapeHtml(epochLabel)).append(": ")
                     .append(escapeHtml(formatUtcTimestamp(queryTarget.timestampMillis)))
@@ -2145,27 +2133,6 @@ public class ImageDisplayUtils {
             url.append("&lng=").append(urlEncode(formatDecimal(astrometryContext.observerSite.longitudeDeg, 5)));
             url.append("&elev=").append(urlEncode(formatDecimal(astrometryContext.observerSite.altitudeMeters, 1)));
         }
-        return url.toString();
-    }
-
-    private static String buildInTheSkyUrl(ReportAstrometryContext astrometryContext,
-                                           SolarSystemQueryTarget queryTarget) {
-        if (astrometryContext == null || astrometryContext.observerSite == null || queryTarget == null || queryTarget.timestampMillis <= 0L) {
-            return null;
-        }
-
-        Instant instant = Instant.ofEpochMilli(queryTarget.timestampMillis);
-        java.time.OffsetDateTime utc = instant.atOffset(ZoneOffset.UTC);
-
-        StringBuilder url = new StringBuilder("https://in-the-sky.org/skymap.php?");
-        url.append("year=").append(utc.getYear());
-        url.append("&month=").append(utc.getMonthValue());
-        url.append("&day=").append(utc.getDayOfMonth());
-        url.append("&hour=").append(utc.getHour());
-        url.append("&min=").append(utc.getMinute());
-        url.append("&latitude=").append(urlEncode(formatDecimal(astrometryContext.observerSite.latitudeDeg, 5)));
-        url.append("&longitude=").append(urlEncode(formatDecimal(astrometryContext.observerSite.longitudeDeg, 5)));
-        url.append("&timezone=0.00");
         return url.toString();
     }
 
