@@ -134,7 +134,7 @@ public class ImageDisplayUtils {
      * Returns an evenly spaced sample of chronological frame indices while guaranteeing that
      * mandatory frames (where actual detections occur) are included to never miss a transient.
      */
-    public static List<Integer> getRepresentativeSequence(int totalFrames, java.util.Set<Integer> mandatoryFrames, int maxFrames) {
+    private static List<Integer> getRepresentativeSequence(int totalFrames, java.util.Set<Integer> mandatoryFrames, int maxFrames) {
         java.util.TreeSet<Integer> selected = new java.util.TreeSet<>();
 
         if (totalFrames <= maxFrames) {
@@ -245,7 +245,7 @@ public class ImageDisplayUtils {
     }
 
     // --- DIAGNOSTIC MASK RENDERER ---
-    public static BufferedImage createMasterMaskOverlay(short[][] masterStackData, boolean[][] masterMask) {
+    private static BufferedImage createMasterMaskOverlay(short[][] masterStackData, boolean[][] masterMask) {
         int height = masterStackData.length;
         int width = masterStackData[0].length;
 
@@ -298,7 +298,7 @@ public class ImageDisplayUtils {
         return image;
     }
 
-    public static BufferedImage createDisplayImageSoft(short[][] imageData) {
+    private static BufferedImage createDisplayImageSoft(short[][] imageData) {
         int height = imageData.length;
         int width = imageData[0].length;
 
@@ -348,7 +348,7 @@ public class ImageDisplayUtils {
         return image;
     }
 
-    public static BufferedImage cropRegionToImage(short[][] fullImage, int cx, int cy, int cropWidth, int cropHeight) {
+    private static BufferedImage cropRegionToImage(short[][] fullImage, int cx, int cy, int cropWidth, int cropHeight) {
         int halfWidth = cropWidth / 2;
         int halfHeight = cropHeight / 2;
 
@@ -372,7 +372,7 @@ public class ImageDisplayUtils {
         return createDisplayImage(croppedData);
     }
 
-    public static BufferedImage exportSingleStreak(short[][] rawImage, SourceExtractor.DetectedObject streak) {
+    private static BufferedImage exportSingleStreak(short[][] rawImage, SourceExtractor.DetectedObject streak) {
         int estimatedLength = (int) (streak.elongation * streakElongationCropMultiplier) + singleStreakExportPadding;
         int cropSize = Math.min(estimatedLength, Math.max(rawImage.length, rawImage[0].length));
 
@@ -382,7 +382,7 @@ public class ImageDisplayUtils {
         return cropRegionToImage(rawImage, cx, cy, cropSize, cropSize);
     }
 
-    public static void saveTrackImageLossless(BufferedImage image, File outputFile) throws IOException {
+    private static void saveTrackImageLossless(BufferedImage image, File outputFile) throws IOException {
         if (image == null) {
             System.err.println("Warning: Attempted to save a null image. Skipping.");
             return;
@@ -395,7 +395,7 @@ public class ImageDisplayUtils {
         }
     }
 
-    public static short[][] robustEdgeAwareCrop(short[][] fullImage, int cx, int cy, int cropWidth, int cropHeight) {
+    private static short[][] robustEdgeAwareCrop(short[][] fullImage, int cx, int cy, int cropWidth, int cropHeight) {
         int halfWidth = cropWidth / 2;
         int halfHeight = cropHeight / 2;
         short[][] cropped = new short[cropHeight][cropWidth];
@@ -419,7 +419,7 @@ public class ImageDisplayUtils {
     }
 
     // --- SINGLE STREAK SHAPE RENDERER ---
-    public static BufferedImage createSingleStreakShapeImage(List<SourceExtractor.DetectedObject> points, int cropWidth, int cropHeight, int startX, int startY, boolean drawCentroid) {
+    private static BufferedImage createSingleStreakShapeImage(List<SourceExtractor.DetectedObject> points, int cropWidth, int cropHeight, int startX, int startY, boolean drawCentroid) {
         BufferedImage image = new BufferedImage(cropWidth, cropHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = image.createGraphics();
 
@@ -456,7 +456,7 @@ public class ImageDisplayUtils {
     }
 
     // --- TRACK SHAPE RENDERER ---
-    public static BufferedImage createTrackShapeImage(TrackLinker.Track track, int cropWidth, int cropHeight, int startX, int startY) {
+    private static BufferedImage createTrackShapeImage(TrackLinker.Track track, int cropWidth, int cropHeight, int startX, int startY) {
         BufferedImage image = new BufferedImage(cropWidth, cropHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = image.createGraphics();
 
@@ -504,7 +504,7 @@ public class ImageDisplayUtils {
     }
 
     // --- REFACTORED: GLOBAL TRACK MAP RENDERER ---
-    public static BufferedImage createGlobalTrackMap(short[][] backgroundData,
+    private static BufferedImage createGlobalTrackMap(short[][] backgroundData,
                                                      List<TrackLinker.Track> anomalies,
                                                      List<TrackLinker.Track> singleStreaks,
                                                      List<TrackLinker.Track> streakTracks,
@@ -563,7 +563,7 @@ public class ImageDisplayUtils {
         g2d.drawString(label, (int) Math.round(track.points.get(0).x) + 15, (int) Math.round(track.points.get(0).y) - 15);
     }
 
-    public static BufferedImage createDriftMap(List<SourceExtractor.Pixel> path, int outSize) {
+    private static BufferedImage createDriftMap(List<SourceExtractor.Pixel> path, int outSize) {
         BufferedImage img = new BufferedImage(outSize, outSize, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = img.createGraphics();
         g2d.setColor(new Color(35, 35, 35));
@@ -640,7 +640,7 @@ public class ImageDisplayUtils {
         return img;
     }
 
-    public static BufferedImage createFourCornerMosaic(short[][] frame, int targetCropSize) {
+    private static BufferedImage createFourCornerMosaic(short[][] frame, int targetCropSize) {
         int height = frame.length;
         int width = frame[0].length;
         int cropX = Math.min(targetCropSize, width / 2);
@@ -674,7 +674,7 @@ public class ImageDisplayUtils {
     }
 
     // --- GLOBAL TRANSIENT MAP RENDERER ---
-    public static BufferedImage createGlobalTransientMap(short[][] backgroundData, List<List<SourceExtractor.DetectedObject>> allTransients) {
+    private static BufferedImage createGlobalTransientMap(short[][] backgroundData, List<List<SourceExtractor.DetectedObject>> allTransients) {
         int width = backgroundData[0].length;
         int height = backgroundData.length;
 
@@ -749,7 +749,7 @@ public class ImageDisplayUtils {
     }
 
     // --- NEW: RAINBOW CLUSTER MAP RENDERER ---
-    public static BufferedImage createRainbowClusterMap(short[][] backgroundData, List<List<SourceExtractor.DetectedObject>> allTransients) {
+    private static BufferedImage createRainbowClusterMap(short[][] backgroundData, List<List<SourceExtractor.DetectedObject>> allTransients) {
         int imgWidth = backgroundData[0].length;
         int imgHeight = backgroundData.length;
 
@@ -856,7 +856,7 @@ public class ImageDisplayUtils {
     }
 
     // --- NEW: SLOW MOVER DIFFERENCE MAP RENDERER ---
-    public static BufferedImage createSlowMoverDifferenceMap(short[][] slowMover, short[][] master) {
+    private static BufferedImage createSlowMoverDifferenceMap(short[][] slowMover, short[][] master) {
         int width = master[0].length;
         int height = master.length;
 
@@ -927,6 +927,7 @@ public class ImageDisplayUtils {
         List<TrackLinker.Track> tracks = result.tracks;
         TrackerTelemetry linkerTelemetry = result.telemetry != null ? result.telemetry.trackerTelemetry : null;
         short[][] masterStackData = result.masterStackData;
+        short[][] masterMaximumStackData = result.masterMaximumStackData;
         boolean[][] masterMask = result.masterMask;
         short[][] slowMoverStackData = result.slowMoverStackData;
         List<SourceExtractor.DetectedObject> slowMoverCandidates = result.slowMoverCandidates;
@@ -1458,20 +1459,6 @@ public class ImageDisplayUtils {
                     report.println("<h2>Deep Stack Anomalies (Ultra-Slow Mover Candidates)</h2>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
 
-                    if (masterStackData != null) {
-                        BufferedImage diffMap = createSlowMoverDifferenceMap(slowMoverStackData, masterStackData);
-                        saveTrackImageLossless(diffMap, new File(exportDir, "slow_mover_diff_map.png"));
-
-                        report.println("<div class='panel' style='margin-bottom: 25px; max-width: 500px;'>");
-                        report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Slow Mover Difference Map</h3>");
-                        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
-                        report.println("The mathematical subtraction of the Master Median Stack from the specialized Slow Mover Stack. Positive differences are stretched and tinted red over the background, making hidden slow-mover tracks stand out.</p>");
-                        report.println("<div class='image-container'>");
-                        report.println("<div><a href='slow_mover_diff_map.png' target='_blank'><img src='slow_mover_diff_map.png' style='max-width: 400px;' alt='Slow Mover Difference Map' /></a></div>");
-                        report.println("</div>");
-                        report.println("</div>");
-                    }
-
                     if (hasTelemetry) {
                         report.println("<div class='flex-container' style='margin-bottom: 25px;'>");
                         report.println("<div class='metric-box'><span class='metric-value'>" + result.slowMoverTelemetry.candidatesDetected + "</span><span class='metric-label'>Raw Candidates</span></div>");
@@ -1502,10 +1489,22 @@ public class ImageDisplayUtils {
 
                             // Crop from masterStackData (Median Stack)
                             String masterFileName = "slow_mover_" + smCounter + "_master_stack.png";
+                            String diffFileName = "slow_mover_" + smCounter + "_diff.png";
                             if (masterStackData != null) {
                                 short[][] croppedMasterData = robustEdgeAwareCrop(masterStackData, cx, cy, cropSize, cropSize);
                                 BufferedImage masterImg = createDisplayImage(croppedMasterData);
                                 saveTrackImageLossless(masterImg, new File(exportDir, masterFileName));
+
+                                BufferedImage diffImg = createSlowMoverDifferenceMap(croppedSlowData, croppedMasterData);
+                                saveTrackImageLossless(diffImg, new File(exportDir, diffFileName));
+                            }
+
+                            // Crop from masterMaximumStackData (Maximum Stack)
+                            String maximumFileName = "slow_mover_" + smCounter + "_maximum_stack.png";
+                            if (masterMaximumStackData != null) {
+                                short[][] croppedMaximumData = robustEdgeAwareCrop(masterMaximumStackData, cx, cy, cropSize, cropSize);
+                                BufferedImage maximumImg = createDisplayImage(croppedMaximumData);
+                                saveTrackImageLossless(maximumImg, new File(exportDir, maximumFileName));
                             }
 
                             // Generate the Shape Footprint Image
@@ -1528,6 +1527,10 @@ public class ImageDisplayUtils {
                             report.println("<div class='image-container' style='margin-bottom: 10px;'>");
                             if (masterStackData != null) {
                                 report.println("<div><a href='" + masterFileName + "' target='_blank'><img src='" + masterFileName + "' style='max-width: 150px;' alt='Median Stack Crop' /></a><br/><center><small>Median Stack</small></center></div>");
+                                report.println("<div><a href='" + diffFileName + "' target='_blank'><img src='" + diffFileName + "' style='max-width: 150px;' alt='Slow Mover Difference Crop' /></a><br/><center><small>Slow Mover Diff</small></center></div>");
+                            }
+                            if (masterMaximumStackData != null) {
+                                report.println("<div><a href='" + maximumFileName + "' target='_blank'><img src='" + maximumFileName + "' style='max-width: 150px;' alt='Maximum Stack Crop' /></a><br/><center><small>Maximum Stack</small></center></div>");
                             }
                             report.println("<div><a href='" + smFileName + "' target='_blank'><img src='" + smFileName + "' style='max-width: 150px;' alt='Slow Mover Stack Crop' /></a><br/><center><small>Slow Mover Stack</small></center></div>");
                             report.println("<div><a href='" + gifFileName + "' target='_blank'><img src='" + gifFileName + "' style='max-width: 150px;' alt='Sampled Time-Lapse' /></a><br/><center><small>Animation (Sampled)</small></center></div>");
@@ -1644,7 +1647,7 @@ public class ImageDisplayUtils {
     // ANALYTICS & DIAGNOSTICS (Unchanged)
     // =================================================================
 
-    public static FitsDataAnalysis analyzeFitsData(short[][] imageData) {
+    private static FitsDataAnalysis analyzeFitsData(short[][] imageData) {
         FitsDataAnalysis data = new FitsDataAnalysis();
 
         data.height = imageData.length;

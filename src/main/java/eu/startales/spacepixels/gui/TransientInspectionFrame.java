@@ -98,7 +98,7 @@ public class TransientInspectionFrame extends JFrame {
         // Find the corresponding original ImageFrame using the filename provided by the engine
         ImageFrame frame = null;
         for (ImageFrame f : frames) {
-            if (f.identifier != null && f.identifier.equals(ft.filename)) {
+            if (f.filename != null && f.filename.equals(ft.filename)) {
                 frame = f;
                 break;
             }
