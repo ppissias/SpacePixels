@@ -26,6 +26,7 @@ public class ConfigurationPanel extends JPanel {
     private final JLabel astapPathLabel;
     private final JTextField focalLengthTextField;
     private final JTextField pixelSizeTextfield;
+    private final JTextField observatoryCodeTextField;
     private final JTextField latTextField;
     private final JTextField longTextField;
     private final JTextField raTextfield;
@@ -66,6 +67,12 @@ public class ConfigurationPanel extends JPanel {
 
         // --- SECTION 2: DETECTION & ANNOTATION ---
         mainContent.add(createSectionHeader("Detection & Annotation Parameters (Used for object identification) [not implemented yet]"));
+
+        observatoryCodeTextField = new JTextField();
+        mainContent.add(createConfigRow(
+                "IAU Observatory Code",
+                "Optional 3-character observatory code for SkyBoT and other topocentric services. If not set, SpacePixels will fall back to geocenter-based lookups.",
+                observatoryCodeTextField));
 
         latTextField = new JTextField();
         mainContent.add(createConfigRow(
@@ -198,6 +205,7 @@ public class ConfigurationPanel extends JPanel {
         saveConfigButton.addActionListener(e -> {
             try {
                 AppConfig config = mainAppWindow.getImageProcessing().getAppConfig();
+                config.observatoryCode = observatoryCodeTextField.getText();
                 config.imageRA = raTextfield.getText();
                 config.imageDEC = decTextField.getText();
                 config.siteLat = latTextField.getText();
@@ -222,6 +230,7 @@ public class ConfigurationPanel extends JPanel {
             AppConfig config = mainAppWindow.getImageProcessing().getAppConfig();
             String astap = config.astapExecutablePath;
             astapPathLabel.setText(astap == null || astap.isEmpty() ? "Not set" : astap);
+            observatoryCodeTextField.setText(config.observatoryCode);
             raTextfield.setText(config.imageRA);
             decTextField.setText(config.imageDEC);
             latTextField.setText(config.siteLat);

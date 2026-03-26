@@ -2,6 +2,7 @@ package eu.startales.spacepixels.config;
 
 public class AppConfig {
     public String astapExecutablePath = "";
+    public String observatoryCode = "";
     public String imageRA = "";
     public String imageDEC = "";
     public String siteLat = "";
