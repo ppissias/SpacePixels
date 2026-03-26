@@ -40,7 +40,7 @@ public class GeneratePreviewsTask implements Runnable {
     public void run() {
         try {
             Fits fitsImage = new Fits(filePath);
-            Object kernelData = fitsImage.getHDU(0).getKernel();
+            Object kernelData = ImageProcessing.getImageHDU(fitsImage).getKernel();
 
             BufferedImage orig = preProcessing.getImagePreview(kernelData);
             BufferedImage stretched = preProcessing.getStretchedImagePreview(kernelData, stretchFactor, iterations, algo);

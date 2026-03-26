@@ -79,7 +79,7 @@ public class StretchPanel extends JPanel {
         mainContent.add(topRow);
         mainContent.add(Box.createVerticalStrut(10));
 
-        mainContent.add(createSectionHeader("Intensity & Iterations"));
+        mainContent.add(createSectionHeader("Stretch Parameters"));
 
         JPanel slidersRow = new JPanel(new GridLayout(1, 2, 40, 0));
         slidersRow.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -88,6 +88,9 @@ public class StretchPanel extends JPanel {
         stretchIntensityLabel = new JLabel("Intensity Threshold");
         stretchIntensityLabel.setFont(stretchIntensityLabel.getFont().deriveFont(Font.BOLD, 12f));
         stretchSlider = new JSlider();
+        stretchSlider.setMinimum(0);
+        stretchSlider.setMaximum(100);
+        stretchSlider.setValue(50);
         stretchSlider.setEnabled(false);
         leftSliderPanel.add(stretchIntensityLabel, BorderLayout.NORTH);
         leftSliderPanel.add(stretchSlider, BorderLayout.CENTER);
@@ -150,6 +153,8 @@ public class StretchPanel extends JPanel {
         actionPanel.add(showFullSizeButton);
         add(actionPanel, BorderLayout.SOUTH);
 
+        applySelectedAlgorithmConfiguration(true);
+
         // ==========================================
         // 4. LISTENERS
         // ==========================================
@@ -171,14 +176,7 @@ public class StretchPanel extends JPanel {
         });
 
         stretchAlgoCombo.addActionListener(e -> {
-            if (StretchAlgorithm.EXTREME.equals(stretchAlgoCombo.getSelectedItem())) {
-                stretchIntensityLabel.setText("Noise Threshold");
-                stretchIterationsLabel.setText("Intensity Factor");
-                stretchIterationsSlider.setValue(15);
-            } else {
-                stretchIntensityLabel.setText("Intensity Threshold");
-                stretchIterationsLabel.setText("Application Iterations");
-            }
+            applySelectedAlgorithmConfiguration(true);
             if (stretchCheckbox.isSelected()) triggerPreviewUpdate();
         });
 
@@ -287,6 +285,27 @@ public class StretchPanel extends JPanel {
     public boolean isStretchEnabled() { return stretchCheckbox.isSelected(); }
     public JSlider getStretchSlider() { return stretchSlider; }
     public JSlider getStretchIterationsSlider() { return stretchIterationsSlider; }
+
+    private void applySelectedAlgorithmConfiguration(boolean resetValues) {
+        StretchAlgorithm algorithm = (StretchAlgorithm) stretchAlgoCombo.getSelectedItem();
+        if (algorithm == null) {
+            return;
+        }
+
+        stretchIntensityLabel.setText(algorithm.getPrimaryParameterLabel());
+        stretchSlider.setMinimum(algorithm.getPrimaryMinimum());
+        stretchSlider.setMaximum(algorithm.getPrimaryMaximum());
+        if (resetValues || stretchSlider.getValue() < algorithm.getPrimaryMinimum() || stretchSlider.getValue() > algorithm.getPrimaryMaximum()) {
+            stretchSlider.setValue(algorithm.getPrimaryDefault());
+        }
+
+        stretchIterationsLabel.setText(algorithm.getSecondaryParameterLabel());
+        stretchIterationsSlider.setMinimum(algorithm.getSecondaryMinimum());
+        stretchIterationsSlider.setMaximum(algorithm.getSecondaryMaximum());
+        if (resetValues || stretchIterationsSlider.getValue() < algorithm.getSecondaryMinimum() || stretchIterationsSlider.getValue() > algorithm.getSecondaryMaximum()) {
+            stretchIterationsSlider.setValue(algorithm.getSecondaryDefault());
+        }
+    }
 
     private void setOriginalImage(BufferedImage image) {
         originalImageComponent.setImage(image);

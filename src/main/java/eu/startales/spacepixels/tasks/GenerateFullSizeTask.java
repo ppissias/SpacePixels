@@ -47,7 +47,7 @@ public class GenerateFullSizeTask implements Runnable {
 
         try {
             Fits fitsImage = new Fits(filePath);
-            Object kernelData = fitsImage.getHDU(0).getKernel();
+            Object kernelData = ImageProcessing.getImageHDU(fitsImage).getKernel();
 
             BufferedImage fullSize = preProcessing.getStretchedImageFullSize(kernelData, width, height, stretchFactor, iterations, algo);
             fitsImage.close();

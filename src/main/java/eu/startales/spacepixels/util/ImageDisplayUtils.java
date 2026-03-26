@@ -909,6 +909,94 @@ public class ImageDisplayUtils {
         return rgbMap;
     }
 
+    private static void exportDeepStackDetectionCard(java.io.PrintWriter report,
+                                                     File exportDir,
+                                                     List<short[][]> rawFrames,
+                                                     SourceExtractor.DetectedObject detection,
+                                                     short[][] primaryStackData,
+                                                     String primaryStackLabel,
+                                                     String primaryStackFileName,
+                                                     short[][] masterStackData,
+                                                     short[][] secondaryStackData,
+                                                     String secondaryStackLabel,
+                                                     String secondaryStackFileName,
+                                                     String diffLabel,
+                                                     String diffFileName,
+                                                     String gifFileName,
+                                                     String shapeFileName,
+                                                     String detectionTitle,
+                                                     String accentColor) throws IOException {
+        int cx = (int) Math.round(detection.x);
+        int cy = (int) Math.round(detection.y);
+
+        // Dynamically scale the crop box to ensure we capture the entire elongated footprint plus padding
+        double objectRadius = detection.pixelArea > 0 ? Math.sqrt((detection.pixelArea * detection.elongation) / Math.PI) : 0;
+        int cropSize = Math.max(150, (int) Math.round(objectRadius * 2) + 100);
+        int startX = cx - (cropSize / 2);
+        int startY = cy - (cropSize / 2);
+
+        short[][] croppedPrimaryData = null;
+        if (primaryStackData != null && primaryStackFileName != null) {
+            croppedPrimaryData = robustEdgeAwareCrop(primaryStackData, cx, cy, cropSize, cropSize);
+            BufferedImage primaryImg = createDisplayImage(croppedPrimaryData);
+            saveTrackImageLossless(primaryImg, new File(exportDir, primaryStackFileName));
+        }
+
+        String masterFileName = null;
+        if (masterStackData != null) {
+            short[][] croppedMasterData = robustEdgeAwareCrop(masterStackData, cx, cy, cropSize, cropSize);
+            BufferedImage masterImg = createDisplayImage(croppedMasterData);
+            masterFileName = primaryStackFileName.replace(".png", "_master_stack.png");
+            saveTrackImageLossless(masterImg, new File(exportDir, masterFileName));
+
+            if (croppedPrimaryData != null && diffFileName != null) {
+                BufferedImage diffImg = createSlowMoverDifferenceMap(croppedPrimaryData, croppedMasterData);
+                saveTrackImageLossless(diffImg, new File(exportDir, diffFileName));
+            }
+        }
+
+        if (secondaryStackData != null && secondaryStackFileName != null) {
+            short[][] croppedSecondaryData = robustEdgeAwareCrop(secondaryStackData, cx, cy, cropSize, cropSize);
+            BufferedImage secondaryImg = createDisplayImage(croppedSecondaryData);
+            saveTrackImageLossless(secondaryImg, new File(exportDir, secondaryStackFileName));
+        }
+
+        BufferedImage shapeImg = createSingleStreakShapeImage(java.util.Collections.singletonList(detection), cropSize, cropSize, startX, startY, false);
+        saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
+
+        if (rawFrames != null && !rawFrames.isEmpty() && gifFileName != null) {
+            List<Integer> sampledIndices = getRepresentativeSequence(rawFrames.size(), new java.util.HashSet<>(), 10);
+            List<BufferedImage> gifFrames = new ArrayList<>();
+            for (int idx : sampledIndices) {
+                short[][] frameData = robustEdgeAwareCrop(rawFrames.get(idx), cx, cy, cropSize, cropSize);
+                gifFrames.add(createDisplayImage(frameData));
+            }
+            GifSequenceWriter.saveAnimatedGif(gifFrames, new File(exportDir, gifFileName), gifBlinkSpeedMs);
+        }
+
+        report.println("<div class='detection-card' style='border-left-color: " + accentColor + "; padding: 15px; margin-bottom: 0;'>");
+        report.println("<div class='detection-title' style='color: " + accentColor + "; font-size: 1.1em; margin-bottom: 10px;'>" + detectionTitle + "</div>");
+        report.println("<div class='image-container' style='margin-bottom: 10px;'>");
+        if (masterFileName != null) {
+            report.println("<div><a href='" + masterFileName + "' target='_blank'><img src='" + masterFileName + "' style='max-width: 150px;' alt='Median Stack Crop' /></a><br/><center><small>Median Stack</small></center></div>");
+        }
+        if (diffFileName != null && croppedPrimaryData != null && masterStackData != null) {
+            report.println("<div><a href='" + diffFileName + "' target='_blank'><img src='" + diffFileName + "' style='max-width: 150px;' alt='" + diffLabel + " Crop' /></a><br/><center><small>" + diffLabel + "</small></center></div>");
+        }
+        if (secondaryStackFileName != null && secondaryStackData != null) {
+            report.println("<div><a href='" + secondaryStackFileName + "' target='_blank'><img src='" + secondaryStackFileName + "' style='max-width: 150px;' alt='" + secondaryStackLabel + " Crop' /></a><br/><center><small>" + secondaryStackLabel + "</small></center></div>");
+        }
+        if (primaryStackFileName != null && primaryStackData != null) {
+            report.println("<div><a href='" + primaryStackFileName + "' target='_blank'><img src='" + primaryStackFileName + "' style='max-width: 150px;' alt='" + primaryStackLabel + " Crop' /></a><br/><center><small>" + primaryStackLabel + "</small></center></div>");
+        }
+        if (gifFileName != null && rawFrames != null && !rawFrames.isEmpty()) {
+            report.println("<div><a href='" + gifFileName + "' target='_blank'><img src='" + gifFileName + "' style='max-width: 150px;' alt='Sampled Time-Lapse' /></a><br/><center><small>Animation (Sampled)</small></center></div>");
+        }
+        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' style='max-width: 150px;' alt='Shape Footprint' /></a><br/><center><small>Shape</small></center></div>");
+        report.println("</div>");
+        report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>X: " + String.format(Locale.US, "%.1f", detection.x) + " | Y: " + String.format(Locale.US, "%.1f", detection.y) + "<br>Elongation: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f", detection.elongation) + "</span><br>Pixels: <span style='color:#fff;'>" + (int) detection.pixelArea + "</span></div></div>");
+    }
+
     // =================================================================
     // HTML EXPORT
     // =================================================================
@@ -931,6 +1019,7 @@ public class ImageDisplayUtils {
         boolean[][] masterMask = result.masterMask;
         short[][] slowMoverStackData = result.slowMoverStackData;
         List<SourceExtractor.DetectedObject> slowMoverCandidates = result.slowMoverCandidates;
+        List<SourceExtractor.DetectedObject> masterMaximumStackTransientStreaks = result.masterMaximumStackTransientStreaks;
         PipelineTelemetry pipelineTelemetry = result.telemetry;
         List<List<SourceExtractor.DetectedObject>> allTransients = result.allTransients;
 
@@ -1451,11 +1540,12 @@ public class ImageDisplayUtils {
             // =================================================================
             // 4. DEEP STACK ANOMALIES (ULTRA-SLOW MOVERS)
             // =================================================================
-            if (config.enableSlowMoverDetection && slowMoverStackData != null) {
+            if (config.enableSlowMoverDetection) {
                 boolean hasCandidates = slowMoverCandidates != null && !slowMoverCandidates.isEmpty();
+                boolean hasMaximumStackTransientStreaks = masterMaximumStackTransientStreaks != null && !masterMaximumStackTransientStreaks.isEmpty();
                 boolean hasTelemetry = result.slowMoverTelemetry != null;
 
-                if (hasCandidates || hasTelemetry) {
+                if (hasCandidates || hasTelemetry || hasMaximumStackTransientStreaks) {
                     report.println("<h2>Deep Stack Anomalies (Ultra-Slow Mover Candidates)</h2>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
 
@@ -1467,82 +1557,65 @@ public class ImageDisplayUtils {
                         report.println("</div>");
                     }
 
-                    if (hasCandidates) {
+                    if (hasCandidates && slowMoverStackData != null) {
                         report.println("<div class='flex-container'>");
 
                         int smCounter = 1;
                         for (SourceExtractor.DetectedObject sm : slowMoverCandidates) {
-                            int cx = (int) Math.round(sm.x);
-                            int cy = (int) Math.round(sm.y);
-
-                            // Dynamically scale the crop box to ensure we capture the entire elongated footprint plus padding
-                            double objectRadius = sm.pixelArea > 0 ? Math.sqrt((sm.pixelArea * sm.elongation) / Math.PI) : 0;
-                            int cropSize = Math.max(150, (int) Math.round(objectRadius * 2) + 100);
-                            int startX = cx - (cropSize / 2);
-                            int startY = cy - (cropSize / 2);
-
-                            // Crop from slowMoverStackData
-                            short[][] croppedSlowData = robustEdgeAwareCrop(slowMoverStackData, cx, cy, cropSize, cropSize);
-                            BufferedImage smImg = createDisplayImage(croppedSlowData);
-                            String smFileName = "slow_mover_" + smCounter + "_sm_stack.png";
-                            saveTrackImageLossless(smImg, new File(exportDir, smFileName));
-
-                            // Crop from masterStackData (Median Stack)
-                            String masterFileName = "slow_mover_" + smCounter + "_master_stack.png";
-                            String diffFileName = "slow_mover_" + smCounter + "_diff.png";
-                            if (masterStackData != null) {
-                                short[][] croppedMasterData = robustEdgeAwareCrop(masterStackData, cx, cy, cropSize, cropSize);
-                                BufferedImage masterImg = createDisplayImage(croppedMasterData);
-                                saveTrackImageLossless(masterImg, new File(exportDir, masterFileName));
-
-                                BufferedImage diffImg = createSlowMoverDifferenceMap(croppedSlowData, croppedMasterData);
-                                saveTrackImageLossless(diffImg, new File(exportDir, diffFileName));
-                            }
-
-                            // Crop from masterMaximumStackData (Maximum Stack)
-                            String maximumFileName = "slow_mover_" + smCounter + "_maximum_stack.png";
-                            if (masterMaximumStackData != null) {
-                                short[][] croppedMaximumData = robustEdgeAwareCrop(masterMaximumStackData, cx, cy, cropSize, cropSize);
-                                BufferedImage maximumImg = createDisplayImage(croppedMaximumData);
-                                saveTrackImageLossless(maximumImg, new File(exportDir, maximumFileName));
-                            }
-
-                            // Generate the Shape Footprint Image
-                            BufferedImage shapeImg = createSingleStreakShapeImage(java.util.Collections.singletonList(sm), cropSize, cropSize, startX, startY, false);
-                            String shapeFileName = "slow_mover_" + smCounter + "_shape.png";
-                            saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
-
-                            // Generate Animated GIF (Max 10 Frames)
-                            List<Integer> sampledIndices = getRepresentativeSequence(rawFrames.size(), new java.util.HashSet<>(), 10);
-                            List<BufferedImage> gifFrames = new ArrayList<>();
-                            for (int idx : sampledIndices) {
-                                short[][] frameData = robustEdgeAwareCrop(rawFrames.get(idx), cx, cy, cropSize, cropSize);
-                                gifFrames.add(createDisplayImage(frameData));
-                            }
-                            String gifFileName = "slow_mover_" + smCounter + "_anim.gif";
-                            GifSequenceWriter.saveAnimatedGif(gifFrames, new File(exportDir, gifFileName), gifBlinkSpeedMs);
-
-                            report.println("<div class='detection-card' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");
-                            report.println("<div class='detection-title' style='color: #ff66ff; font-size: 1.1em; margin-bottom: 10px;'>Candidate #" + smCounter + "</div>");
-                            report.println("<div class='image-container' style='margin-bottom: 10px;'>");
-                            if (masterStackData != null) {
-                                report.println("<div><a href='" + masterFileName + "' target='_blank'><img src='" + masterFileName + "' style='max-width: 150px;' alt='Median Stack Crop' /></a><br/><center><small>Median Stack</small></center></div>");
-                                report.println("<div><a href='" + diffFileName + "' target='_blank'><img src='" + diffFileName + "' style='max-width: 150px;' alt='Slow Mover Difference Crop' /></a><br/><center><small>Slow Mover Diff</small></center></div>");
-                            }
-                            if (masterMaximumStackData != null) {
-                                report.println("<div><a href='" + maximumFileName + "' target='_blank'><img src='" + maximumFileName + "' style='max-width: 150px;' alt='Maximum Stack Crop' /></a><br/><center><small>Maximum Stack</small></center></div>");
-                            }
-                            report.println("<div><a href='" + smFileName + "' target='_blank'><img src='" + smFileName + "' style='max-width: 150px;' alt='Slow Mover Stack Crop' /></a><br/><center><small>Slow Mover Stack</small></center></div>");
-                            report.println("<div><a href='" + gifFileName + "' target='_blank'><img src='" + gifFileName + "' style='max-width: 150px;' alt='Sampled Time-Lapse' /></a><br/><center><small>Animation (Sampled)</small></center></div>");
-                            report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' style='max-width: 150px;' alt='Slow Mover Shape' /></a><br/><center><small>Shape</small></center></div>");
-                            report.println("</div>");
-                            report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>X: " + String.format(Locale.US, "%.1f", sm.x) + " | Y: " + String.format(Locale.US, "%.1f", sm.y) + "<br>Elongation: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f", sm.elongation) + "</span><br>Pixels: <span style='color:#fff;'>" + (int) sm.pixelArea + "</span></div></div>");
-
+                            exportDeepStackDetectionCard(
+                                    report,
+                                    exportDir,
+                                    rawFrames,
+                                    sm,
+                                    slowMoverStackData,
+                                    "Slow Mover Stack",
+                                    "slow_mover_" + smCounter + "_sm_stack.png",
+                                    masterStackData,
+                                    masterMaximumStackData,
+                                    "Maximum Stack",
+                                    "slow_mover_" + smCounter + "_maximum_stack.png",
+                                    "Slow Mover Diff",
+                                    "slow_mover_" + smCounter + "_diff.png",
+                                    "slow_mover_" + smCounter + "_anim.gif",
+                                    "slow_mover_" + smCounter + "_shape.png",
+                                    "Candidate #" + smCounter,
+                                    "#ff66ff"
+                            );
                             smCounter++;
                         }
                         report.println("</div>");
                     } else {
                         report.println("<div class='panel'><p>No ultra-slow movers were detected that exceeded the dynamic threshold.</p></div>");
+                    }
+                    if (hasMaximumStackTransientStreaks) {
+                        report.println("<h3 style='color: #ffcc66; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Master Maximum Stack Transient Streaks</h3>");
+                        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Streaks detected in the master maximum stack that were not matched to previously identified single-frame streaks. These may represent very slow movers, stack-enhanced movers, or artifacts worth manual inspection.</p>");
+                        report.println("<div class='flex-container'>");
+
+                        int streakCounter = 1;
+                        for (SourceExtractor.DetectedObject streak : masterMaximumStackTransientStreaks) {
+                            exportDeepStackDetectionCard(
+                                    report,
+                                    exportDir,
+                                    rawFrames,
+                                    streak,
+                                    masterMaximumStackData,
+                                    "Maximum Stack",
+                                    "master_max_streak_" + streakCounter + "_maximum_stack.png",
+                                    masterStackData,
+                                    null,
+                                    null,
+                                    null,
+                                    "Maximum Stack Diff",
+                                    "master_max_streak_" + streakCounter + "_diff.png",
+                                    "master_max_streak_" + streakCounter + "_anim.gif",
+                                    "master_max_streak_" + streakCounter + "_shape.png",
+                                    "Streak #" + streakCounter,
+                                    "#ffcc66"
+                            );
+                            streakCounter++;
+                        }
+                        report.println("</div>");
                     }
                 }
             }

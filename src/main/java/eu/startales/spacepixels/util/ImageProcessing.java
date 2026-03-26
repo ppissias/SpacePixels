@@ -1751,6 +1751,8 @@ public class ImageProcessing {
                 return stretchImageEnhanceLow(kernelData, intensity, iterations, width, height);
             case EXTREME:
                 return stretchImageEnhanceExtreme(kernelData, intensity, iterations, width, height);
+            case ASINH:
+                return stretchImageAsinh(kernelData, intensity, iterations, width, height);
             default:
                 return stretchImageEnhanceLow(kernelData, intensity, iterations, width, height);
         }
@@ -1925,6 +1927,88 @@ public class ImageProcessing {
         } else {
             throw new FitsException("Cannot understand file, it has a type=" + kernelData.getClass().getName());
         }
+    }
+
+    private Object stretchImageAsinh(Object kernelData, int blackPointPercent, int stretchStrength, int width, int height) throws FitsException {
+        if (kernelData instanceof short[][]) {
+            short[][] data = (short[][]) kernelData;
+            short[][] returnData = new short[height][width];
+
+            int sourceHeight = data.length;
+            int sourceWidth = data[0].length;
+            int[] histogram = new int[(2 * Short.MAX_VALUE) + 2];
+
+            for (int i = 0; i < sourceHeight; i++) {
+                for (int j = 0; j < sourceWidth; j++) {
+                    histogram[data[i][j] - Short.MIN_VALUE]++;
+                }
+            }
+
+            long totalPixels = (long) sourceHeight * sourceWidth;
+            int blackPointValue = percentileFromHistogram(histogram, totalPixels, blackPointPercent / 100.0);
+            int whitePointValue = percentileFromHistogram(histogram, totalPixels, 0.999);
+
+            if (whitePointValue <= blackPointValue) {
+                whitePointValue = blackPointValue + 1;
+            }
+
+            double usableRange = whitePointValue - blackPointValue;
+            double stretchScale = Math.max(1.0, stretchStrength);
+            double normalization = asinh(stretchScale);
+
+            for (int i = 0; i < height; i++) {
+                for (int j = 0; j < width; j++) {
+                    double absValue = data[i][j] - Short.MIN_VALUE;
+                    double normalizedValue = (absValue - blackPointValue) / usableRange;
+                    if (normalizedValue < 0.0) {
+                        normalizedValue = 0.0;
+                    } else if (normalizedValue > 1.0) {
+                        normalizedValue = 1.0;
+                    }
+
+                    double stretchedValue = asinh(normalizedValue * stretchScale) / normalization;
+                    int unsignedValue = (int) Math.round(stretchedValue * ((2.0 * Short.MAX_VALUE) + 1.0));
+                    if (unsignedValue < 0) {
+                        unsignedValue = 0;
+                    } else if (unsignedValue > (2 * Short.MAX_VALUE) + 1) {
+                        unsignedValue = (2 * Short.MAX_VALUE) + 1;
+                    }
+
+                    returnData[i][j] = (short) (unsignedValue + Short.MIN_VALUE);
+                }
+            }
+            return returnData;
+        } else if (kernelData instanceof int[][]) {
+            int[][] data = (int[][]) kernelData;
+            return null;
+        } else if (kernelData instanceof float[][]) {
+            float[][] data = (float[][]) kernelData;
+            return null;
+        } else {
+            throw new FitsException("Cannot understand file, it has a type=" + kernelData.getClass().getName());
+        }
+    }
+
+    private static double asinh(double value) {
+        return Math.log(value + Math.sqrt((value * value) + 1.0));
+    }
+
+    private static int percentileFromHistogram(int[] histogram, long totalPixels, double percentile) {
+        if (totalPixels <= 0) {
+            return 0;
+        }
+
+        long targetCount = Math.max(0L, Math.min(totalPixels - 1, (long) Math.floor((totalPixels - 1) * percentile)));
+        long runningCount = 0;
+
+        for (int value = 0; value < histogram.length; value++) {
+            runningCount += histogram[value];
+            if (runningCount > targetCount) {
+                return value;
+            }
+        }
+
+        return histogram.length - 1;
     }
 
     public static File createDetectionsDirectory(File anyFitsFile) {
