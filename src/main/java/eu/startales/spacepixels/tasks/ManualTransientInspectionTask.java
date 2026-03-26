@@ -70,7 +70,7 @@ public class ManualTransientInspectionTask implements Runnable {
             engine.shutdown();
 
             SwingUtilities.invokeLater(() -> {
-                TransientInspectionFrame frame = new TransientInspectionFrame(framesForLibrary, cleanTransients);
+                TransientInspectionFrame frame = new TransientInspectionFrame(framesForLibrary, cleanTransients, filesInfo);
                 frame.setVisible(true);
             });
 

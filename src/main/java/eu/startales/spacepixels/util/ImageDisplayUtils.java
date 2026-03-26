@@ -130,6 +130,44 @@ public class ImageDisplayUtils {
         }
     }
 
+    private static class CreativeTributeLayout {
+        public final int cropX;
+        public final int cropY;
+        public final int cropWidth;
+        public final int cropHeight;
+        public final int outputWidth;
+        public final int outputHeight;
+        public final int headerHeight;
+        public final int canvasHeight;
+        public final int plotOffsetY;
+        public final double scale;
+
+        public CreativeTributeLayout(int cropX, int cropY, int cropWidth, int cropHeight, int outputWidth, int outputHeight, int headerHeight, int canvasHeight, int plotOffsetY, double scale) {
+            this.cropX = cropX;
+            this.cropY = cropY;
+            this.cropWidth = cropWidth;
+            this.cropHeight = cropHeight;
+            this.outputWidth = outputWidth;
+            this.outputHeight = outputHeight;
+            this.headerHeight = headerHeight;
+            this.canvasHeight = canvasHeight;
+            this.plotOffsetY = plotOffsetY;
+            this.scale = scale;
+        }
+    }
+
+    private static class MaskOverlapStats {
+        public final int overlappingPixels;
+        public final int totalPixels;
+        public final double fraction;
+
+        public MaskOverlapStats(int overlappingPixels, int totalPixels) {
+            this.overlappingPixels = overlappingPixels;
+            this.totalPixels = totalPixels;
+            this.fraction = totalPixels > 0 ? (double) overlappingPixels / totalPixels : 0.0;
+        }
+    }
+
     /**
      * Returns an evenly spaced sample of chronological frame indices while guaranteeing that
      * mandatory frames (where actual detections occur) are included to never miss a transient.
@@ -296,6 +334,96 @@ public class ImageDisplayUtils {
         }
 
         return image;
+    }
+
+    private static BufferedImage createCroppedMasterMaskOverlay(short[][] masterStackData,
+                                                                boolean[][] masterMask,
+                                                                int cx,
+                                                                int cy,
+                                                                int cropWidth,
+                                                                int cropHeight,
+                                                                SourceExtractor.DetectedObject highlightDetection) {
+        short[][] croppedMasterData = robustEdgeAwareCrop(masterStackData, cx, cy, cropWidth, cropHeight);
+        BufferedImage grayImage = createDisplayImage(croppedMasterData);
+        BufferedImage image = new BufferedImage(cropWidth, cropHeight, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = image.createGraphics();
+        g2d.drawImage(grayImage, 0, 0, null);
+
+        boolean transposed = isMasterMaskTransposed(masterMask, masterStackData[0].length, masterStackData.length);
+        int halfWidth = cropWidth / 2;
+        int halfHeight = cropHeight / 2;
+
+        for (int y = 0; y < cropHeight; y++) {
+            int sourceY = cy - halfHeight + y;
+            for (int x = 0; x < cropWidth; x++) {
+                int sourceX = cx - halfWidth + x;
+                if (isMasterMaskSet(masterMask, sourceX, sourceY, transposed)) {
+                    image.setRGB(x, y, new Color(255, 32, 32).getRGB());
+                }
+            }
+        }
+
+        if (highlightDetection != null) {
+            int localX = (int) Math.round(highlightDetection.x) - (cx - halfWidth);
+            int localY = (int) Math.round(highlightDetection.y) - (cy - halfHeight);
+            g2d.setColor(Color.WHITE);
+            g2d.setStroke(new BasicStroke(targetCircleStrokeWidth));
+            g2d.drawOval(localX - targetCircleRadius, localY - targetCircleRadius, targetCircleRadius * 2, targetCircleRadius * 2);
+        }
+
+        g2d.dispose();
+        return image;
+    }
+
+    private static boolean isMasterMaskTransposed(boolean[][] masterMask, int refWidth, int refHeight) {
+        return masterMask != null
+                && masterMask.length > 0
+                && masterMask[0] != null
+                && masterMask.length == refWidth
+                && masterMask[0].length == refHeight
+                && refWidth != refHeight;
+    }
+
+    private static boolean isMasterMaskSet(boolean[][] masterMask, int x, int y, boolean transposed) {
+        if (masterMask == null || x < 0 || y < 0) {
+            return false;
+        }
+
+        if (transposed) {
+            return x < masterMask.length && y < masterMask[x].length && masterMask[x][y];
+        }
+        return y < masterMask.length && x < masterMask[y].length && masterMask[y][x];
+    }
+
+    private static MaskOverlapStats computeMaskOverlapStats(SourceExtractor.DetectedObject detection,
+                                                            boolean[][] masterMask,
+                                                            int refWidth,
+                                                            int refHeight) {
+        if (detection == null || masterMask == null || refWidth <= 0 || refHeight <= 0) {
+            return new MaskOverlapStats(0, 0);
+        }
+
+        boolean transposed = isMasterMaskTransposed(masterMask, refWidth, refHeight);
+        int overlappingPixels = 0;
+        int totalPixels = 0;
+
+        if (detection.rawPixels != null && !detection.rawPixels.isEmpty()) {
+            for (SourceExtractor.Pixel pixel : detection.rawPixels) {
+                totalPixels++;
+                if (isMasterMaskSet(masterMask, pixel.x, pixel.y, transposed)) {
+                    overlappingPixels++;
+                }
+            }
+        } else {
+            int x = (int) Math.round(detection.x);
+            int y = (int) Math.round(detection.y);
+            totalPixels = 1;
+            if (isMasterMaskSet(masterMask, x, y, transposed)) {
+                overlappingPixels = 1;
+            }
+        }
+
+        return new MaskOverlapStats(overlappingPixels, totalPixels);
     }
 
     private static BufferedImage createDisplayImageSoft(short[][] imageData) {
@@ -814,7 +942,7 @@ public class ImageDisplayUtils {
 
             float ratio = totalFrames > 1 ? (float) i / (totalFrames - 1) : 0f;
             Color timeColor = Color.getHSBColor(0.66f - (0.66f * ratio), 1.0f, 1.0f);
-            
+
             // Create a glowing halo to thicken the line for maximum visibility
             Color haloColor = new Color(timeColor.getRed(), timeColor.getGreen(), timeColor.getBlue(), 80);
 
@@ -918,78 +1046,109 @@ public class ImageDisplayUtils {
                                                             List<SourceExtractor.DetectedObject> slowMoverCandidates,
                                                             List<SourceExtractor.DetectedObject> masterMaximumStackTransientStreaks,
                                                             PipelineTelemetry pipelineTelemetry) {
-        int width = backgroundData[0].length;
-        int height = backgroundData.length;
+        CreativeTributeLayout layout = createCreativeTributeLayout(
+                backgroundData,
+                allTransients,
+                anomalies,
+                singleStreaks,
+                streakTracks,
+                movingTargets,
+                slowMoverCandidates,
+                masterMaximumStackTransientStreaks
+        );
 
-        BufferedImage grayBg = createDisplayImage(backgroundData);
-        BufferedImage tribute = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        short[][] croppedBackground = robustEdgeAwareCrop(
+                backgroundData,
+                layout.cropX + (layout.cropWidth / 2),
+                layout.cropY + (layout.cropHeight / 2),
+                layout.cropWidth,
+                layout.cropHeight
+        );
+        BufferedImage grayBg = createDisplayImage(croppedBackground);
+        BufferedImage tribute = new BufferedImage(layout.outputWidth, layout.canvasHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = tribute.createGraphics();
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
         g2d.setColor(new Color(5, 8, 14));
-        g2d.fillRect(0, 0, width, height);
-        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.20f));
-        g2d.drawImage(grayBg, 0, 0, null);
+        g2d.fillRect(0, 0, layout.outputWidth, layout.canvasHeight);
+        g2d.setPaint(new GradientPaint(
+                0, 0, new Color(12, 15, 24),
+                0, layout.headerHeight, new Color(18, 22, 32)
+        ));
+        g2d.fillRect(0, 0, layout.outputWidth, layout.headerHeight);
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.28f));
+        g2d.drawImage(grayBg, 0, layout.plotOffsetY, layout.outputWidth, layout.outputHeight, null);
         g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
 
         g2d.setPaint(new GradientPaint(
-                0, 0, new Color(32, 58, 96, 90),
-                width, height, new Color(96, 28, 72, 20)
+                0, layout.plotOffsetY, new Color(32, 58, 96, 90),
+                layout.outputWidth, layout.canvasHeight, new Color(96, 28, 72, 20)
         ));
-        g2d.fillRect(0, 0, width, height);
+        g2d.fillRect(0, layout.plotOffsetY, layout.outputWidth, layout.outputHeight);
 
-        drawCreativeTransientDust(g2d, allTransients);
+        drawCreativeTransientDust(g2d, allTransients, layout);
 
         for (TrackLinker.Track track : movingTargets) {
-            drawGlowingTrack(g2d, track, new Color(77, 166, 255), 2.6f, 8.5f);
+            drawGlowingTrack(g2d, track, layout, new Color(77, 166, 255), 2.6f, 8.5f);
         }
         for (TrackLinker.Track track : streakTracks) {
-            drawGlowingTrack(g2d, track, new Color(255, 204, 102), 2.8f, 9.5f);
+            drawGlowingTrack(g2d, track, layout, new Color(255, 204, 102), 2.8f, 9.5f);
         }
         for (TrackLinker.Track track : anomalies) {
             if (track.points != null && !track.points.isEmpty()) {
-                drawCreativePulse(g2d, track.points.get(0), new Color(255, 102, 204));
+                drawCreativePulse(g2d, track.points.get(0), layout, new Color(255, 102, 204));
             }
         }
         for (TrackLinker.Track track : singleStreaks) {
             if (track.points != null && !track.points.isEmpty()) {
-                drawCreativeMeasuredStreak(g2d, track.points.get(0), new Color(255, 153, 51), 1.10);
+                drawCreativeMeasuredStreak(g2d, track.points.get(0), layout, new Color(255, 153, 51), 1.10);
             }
         }
         if (slowMoverCandidates != null) {
             for (SourceExtractor.DetectedObject candidate : slowMoverCandidates) {
-                drawCreativeDiamond(g2d, candidate, new Color(186, 122, 255), 16);
+                drawCreativeDiamond(g2d, candidate, layout, new Color(186, 122, 255), 16);
             }
         }
         if (masterMaximumStackTransientStreaks != null) {
             for (SourceExtractor.DetectedObject streak : masterMaximumStackTransientStreaks) {
-                drawCreativeMeasuredStreak(g2d, streak, new Color(255, 214, 112), 1.35);
+                drawCreativeMeasuredStreak(g2d, streak, layout, new Color(255, 214, 112), 1.35);
             }
         }
 
-        float vignetteRadius = (float) (Math.max(width, height) * 0.82);
+        float vignetteRadius = (float) (Math.max(layout.outputWidth, layout.outputHeight) * 0.82);
         RadialGradientPaint vignette = new RadialGradientPaint(
-                new Point(width / 2, height / 2),
+                new Point(layout.outputWidth / 2, layout.plotOffsetY + (layout.outputHeight / 2)),
                 vignetteRadius,
                 new float[]{0.0f, 0.70f, 1.0f},
                 new Color[]{new Color(0, 0, 0, 0), new Color(0, 0, 0, 55), new Color(0, 0, 0, 180)}
         );
         g2d.setPaint(vignette);
-        g2d.fillRect(0, 0, width, height);
+        g2d.fillRect(0, layout.plotOffsetY, layout.outputWidth, layout.outputHeight);
 
-        int panelPadding = Math.max(24, Math.min(40, width / 45));
-        int leftPanelWidth = Math.min(Math.max(430, width / 3), Math.max(430, width - (panelPadding * 2)));
-        int leftPanelHeight = Math.min(Math.max(210, height / 4), 250);
+        g2d.setColor(new Color(76, 96, 132, 70));
+        g2d.setStroke(new BasicStroke(1.2f));
+        g2d.drawLine(0, layout.plotOffsetY, layout.outputWidth, layout.plotOffsetY);
+
+        int panelPadding = Math.max(18, Math.min(34, layout.outputWidth / 35));
+        int interPanelGap = Math.max(14, panelPadding / 2);
+        int leftPanelWidth = Math.max(340, (int) Math.round(layout.outputWidth * 0.50));
+        int maxLegendWidth = layout.outputWidth - leftPanelWidth - (panelPadding * 2) - interPanelGap;
+        int legendWidth = Math.max(250, Math.min((int) Math.round(layout.outputWidth * 0.28), maxLegendWidth));
+        if (legendWidth > maxLegendWidth) {
+            legendWidth = maxLegendWidth;
+            leftPanelWidth = layout.outputWidth - legendWidth - (panelPadding * 2) - interPanelGap;
+        }
+        int leftPanelHeight = layout.headerHeight - (panelPadding * 2);
         g2d.setColor(new Color(10, 10, 16, 190));
         g2d.fillRoundRect(panelPadding, panelPadding, leftPanelWidth, leftPanelHeight, 24, 24);
         g2d.setColor(new Color(150, 120, 255, 140));
         g2d.setStroke(new BasicStroke(1.6f));
         g2d.drawRoundRect(panelPadding, panelPadding, leftPanelWidth, leftPanelHeight, 24, 24);
 
-        Font titleFont = new Font("Segoe UI", Font.BOLD, Math.max(24, Math.min(36, width / 52)));
-        Font subtitleFont = new Font("Segoe UI", Font.PLAIN, Math.max(13, Math.min(18, width / 90)));
-        Font detailFont = new Font("Consolas", Font.PLAIN, Math.max(12, Math.min(16, width / 110)));
+        Font titleFont = new Font("Segoe UI", Font.BOLD, Math.max(26, Math.min(38, layout.outputWidth / 34)));
+        Font subtitleFont = new Font("Segoe UI", Font.PLAIN, Math.max(13, Math.min(19, layout.outputWidth / 75)));
+        Font detailFont = new Font("Consolas", Font.PLAIN, Math.max(12, Math.min(17, layout.outputWidth / 90)));
 
         int textX = panelPadding + 24;
         int y = panelPadding + 42;
@@ -1026,21 +1185,20 @@ public class ImageDisplayUtils {
         y += 24;
         g2d.drawString("Dominant motion: " + dominantMotion + " | Longest linked path: " + String.format(Locale.US, "%.1f px", longestPath), textX, y);
 
-        int legendWidth = Math.min(Math.max(260, width / 5), Math.max(260, width - (panelPadding * 2)));
-        int legendHeight = 170;
-        int legendX = Math.max(panelPadding, width - legendWidth - panelPadding);
-        int legendY = Math.max(panelPadding, height - legendHeight - panelPadding);
+        int legendHeight = Math.min(layout.headerHeight - (panelPadding * 2), 170);
+        int legendX = panelPadding + leftPanelWidth + interPanelGap;
+        int legendY = panelPadding;
         g2d.setColor(new Color(10, 10, 16, 175));
         g2d.fillRoundRect(legendX, legendY, legendWidth, legendHeight, 22, 22);
         g2d.setColor(new Color(77, 166, 255, 120));
         g2d.drawRoundRect(legendX, legendY, legendWidth, legendHeight, 22, 22);
 
-        g2d.setFont(new Font("Segoe UI", Font.BOLD, Math.max(14, Math.min(18, width / 90))));
+        g2d.setFont(new Font("Segoe UI", Font.BOLD, Math.max(14, Math.min(18, layout.outputWidth / 85))));
         g2d.setColor(Color.WHITE);
         g2d.drawString("What the colors mean", legendX + 18, legendY + 28);
 
         int legendRowY = legendY + 58;
-        Font legendFont = new Font("Segoe UI", Font.PLAIN, Math.max(12, Math.min(15, width / 110)));
+        Font legendFont = new Font("Segoe UI", Font.PLAIN, Math.max(12, Math.min(15, layout.outputWidth / 95)));
         drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(66, 210, 255), "Linked point-target tracks", legendFont);
         legendRowY += 24;
         drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 204, 102), "Multi-frame streak tracks", legendFont);
@@ -1055,7 +1213,7 @@ public class ImageDisplayUtils {
         return tribute;
     }
 
-    private static void drawCreativeTransientDust(Graphics2D g2d, List<List<SourceExtractor.DetectedObject>> allTransients) {
+    private static void drawCreativeTransientDust(Graphics2D g2d, List<List<SourceExtractor.DetectedObject>> allTransients, CreativeTributeLayout layout) {
         if (allTransients == null || allTransients.isEmpty()) {
             return;
         }
@@ -1085,68 +1243,76 @@ public class ImageDisplayUtils {
                     continue;
                 }
 
-                int x = (int) Math.round(transientPoint.x);
-                int y = (int) Math.round(transientPoint.y);
+                if (!isInsideCreativeLayout(transientPoint.x, transientPoint.y, layout)) {
+                    continue;
+                }
+
+                int x = creativeX(transientPoint.x, layout);
+                int y = creativeY(transientPoint.y, layout);
                 g2d.setColor(haloColor);
                 g2d.fillOval(x - 2, y - 2, 6, 6);
                 g2d.setColor(coreColor);
-                g2d.fillOval(x, y, 2, 2);
+                g2d.fillOval(x - 1, y - 1, 3, 3);
             }
         }
     }
 
-    private static void drawGlowingTrack(Graphics2D g2d, TrackLinker.Track track, Color color, float coreWidth, float glowWidth) {
+    private static void drawGlowingTrack(Graphics2D g2d, TrackLinker.Track track, CreativeTributeLayout layout, Color color, float coreWidth, float glowWidth) {
         if (track == null || track.points == null || track.points.isEmpty()) {
             return;
         }
 
+        float strokeScale = (float) Math.max(0.9, Math.min(1.8, layout.scale));
         Color glowColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), 60);
-        g2d.setStroke(new BasicStroke(glowWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.setStroke(new BasicStroke(glowWidth * strokeScale, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g2d.setColor(glowColor);
         for (int i = 0; i < track.points.size() - 1; i++) {
             SourceExtractor.DetectedObject p1 = track.points.get(i);
             SourceExtractor.DetectedObject p2 = track.points.get(i + 1);
-            g2d.drawLine((int) Math.round(p1.x), (int) Math.round(p1.y), (int) Math.round(p2.x), (int) Math.round(p2.y));
+            g2d.drawLine(creativeX(p1.x, layout), creativeY(p1.y, layout), creativeX(p2.x, layout), creativeY(p2.y, layout));
         }
 
-        g2d.setStroke(new BasicStroke(coreWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.setStroke(new BasicStroke(coreWidth * strokeScale, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g2d.setColor(color);
         for (int i = 0; i < track.points.size() - 1; i++) {
             SourceExtractor.DetectedObject p1 = track.points.get(i);
             SourceExtractor.DetectedObject p2 = track.points.get(i + 1);
-            g2d.drawLine((int) Math.round(p1.x), (int) Math.round(p1.y), (int) Math.round(p2.x), (int) Math.round(p2.y));
+            g2d.drawLine(creativeX(p1.x, layout), creativeY(p1.y, layout), creativeX(p2.x, layout), creativeY(p2.y, layout));
         }
 
+        int markerRadius = Math.max(4, (int) Math.round(5 * strokeScale));
         for (SourceExtractor.DetectedObject point : track.points) {
-            int x = (int) Math.round(point.x);
-            int y = (int) Math.round(point.y);
+            int x = creativeX(point.x, layout);
+            int y = creativeY(point.y, layout);
             g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 80));
-            g2d.fillOval(x - 5, y - 5, 10, 10);
+            g2d.fillOval(x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
             g2d.setColor(Color.WHITE);
             g2d.fillOval(x - 2, y - 2, 4, 4);
         }
     }
 
-    private static void drawCreativePulse(Graphics2D g2d, SourceExtractor.DetectedObject detection, Color color) {
-        int cx = (int) Math.round(detection.x);
-        int cy = (int) Math.round(detection.y);
+    private static void drawCreativePulse(Graphics2D g2d, SourceExtractor.DetectedObject detection, CreativeTributeLayout layout, Color color) {
+        int cx = creativeX(detection.x, layout);
+        int cy = creativeY(detection.y, layout);
+        int outerRadius = Math.max(22, (int) Math.round(30 * Math.max(0.9, Math.min(1.7, layout.scale))));
+        int innerRadius = Math.max(14, (int) Math.round(18 * Math.max(0.9, Math.min(1.7, layout.scale))));
 
         g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 42));
-        g2d.fillOval(cx - 30, cy - 30, 60, 60);
+        g2d.fillOval(cx - outerRadius, cy - outerRadius, outerRadius * 2, outerRadius * 2);
         g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 145));
         g2d.setStroke(new BasicStroke(2.0f));
-        g2d.drawOval(cx - 18, cy - 18, 36, 36);
-        g2d.drawLine(cx - 28, cy, cx + 28, cy);
-        g2d.drawLine(cx, cy - 28, cx, cy + 28);
+        g2d.drawOval(cx - innerRadius, cy - innerRadius, innerRadius * 2, innerRadius * 2);
+        g2d.drawLine(cx - outerRadius + 2, cy, cx + outerRadius - 2, cy);
+        g2d.drawLine(cx, cy - outerRadius + 2, cx, cy + outerRadius - 2);
         g2d.setColor(Color.WHITE);
         g2d.fillOval(cx - 3, cy - 3, 6, 6);
     }
 
-    private static void drawCreativeMeasuredStreak(Graphics2D g2d, SourceExtractor.DetectedObject detection, Color color, double lengthScale) {
-        int cx = (int) Math.round(detection.x);
-        int cy = (int) Math.round(detection.y);
+    private static void drawCreativeMeasuredStreak(Graphics2D g2d, SourceExtractor.DetectedObject detection, CreativeTributeLayout layout, Color color, double lengthScale) {
+        int cx = creativeX(detection.x, layout);
+        int cy = creativeY(detection.y, layout);
         double baseLength = Math.max(18.0, Math.sqrt(Math.max(1.0, detection.pixelArea)) * Math.max(2.0, detection.elongation));
-        double length = baseLength * lengthScale * 2.4;
+        double length = baseLength * lengthScale * 2.4 * Math.max(0.9, Math.min(1.6, layout.scale));
         double angleRad = Math.toRadians(detection.angle);
         int dx = (int) Math.round(Math.cos(angleRad) * length * 0.5);
         int dy = (int) Math.round(Math.sin(angleRad) * length * 0.5);
@@ -1162,13 +1328,14 @@ public class ImageDisplayUtils {
         g2d.fillOval(cx - 2, cy - 2, 4, 4);
     }
 
-    private static void drawCreativeDiamond(Graphics2D g2d, SourceExtractor.DetectedObject detection, Color color, int radius) {
-        int cx = (int) Math.round(detection.x);
-        int cy = (int) Math.round(detection.y);
+    private static void drawCreativeDiamond(Graphics2D g2d, SourceExtractor.DetectedObject detection, CreativeTributeLayout layout, Color color, int radius) {
+        int cx = creativeX(detection.x, layout);
+        int cy = creativeY(detection.y, layout);
+        int scaledRadius = Math.max(12, (int) Math.round(radius * Math.max(0.9, Math.min(1.5, layout.scale))));
 
         Polygon diamond = new Polygon(
-                new int[]{cx, cx + radius, cx, cx - radius},
-                new int[]{cy - radius, cy, cy + radius, cy},
+                new int[]{cx, cx + scaledRadius, cx, cx - scaledRadius},
+                new int[]{cy - scaledRadius, cy, cy + scaledRadius, cy},
                 4
         );
 
@@ -1179,6 +1346,139 @@ public class ImageDisplayUtils {
         g2d.drawPolygon(diamond);
         g2d.setColor(Color.WHITE);
         g2d.fillOval(cx - 2, cy - 2, 4, 4);
+    }
+
+    private static CreativeTributeLayout createCreativeTributeLayout(short[][] backgroundData,
+                                                                     List<List<SourceExtractor.DetectedObject>> allTransients,
+                                                                     List<TrackLinker.Track> anomalies,
+                                                                     List<TrackLinker.Track> singleStreaks,
+                                                                     List<TrackLinker.Track> streakTracks,
+                                                                     List<TrackLinker.Track> movingTargets,
+                                                                     List<SourceExtractor.DetectedObject> slowMoverCandidates,
+                                                                     List<SourceExtractor.DetectedObject> masterMaximumStackTransientStreaks) {
+        int imageWidth = backgroundData[0].length;
+        int imageHeight = backgroundData.length;
+
+        double[] bounds = new double[]{Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE};
+        includeCreativeTrackBounds(bounds, anomalies);
+        includeCreativeTrackBounds(bounds, singleStreaks);
+        includeCreativeTrackBounds(bounds, streakTracks);
+        includeCreativeTrackBounds(bounds, movingTargets);
+        includeCreativeDetectionBounds(bounds, slowMoverCandidates);
+        includeCreativeDetectionBounds(bounds, masterMaximumStackTransientStreaks);
+
+        if (bounds[0] == Double.MAX_VALUE) {
+            includeCreativeTransientBounds(bounds, allTransients);
+        }
+
+        int cropX = 0;
+        int cropY = 0;
+        int cropWidth = imageWidth;
+        int cropHeight = imageHeight;
+
+        if (bounds[0] != Double.MAX_VALUE) {
+            int minX = Math.max(0, (int) Math.floor(bounds[0]));
+            int minY = Math.max(0, (int) Math.floor(bounds[1]));
+            int maxX = Math.min(imageWidth - 1, (int) Math.ceil(bounds[2]));
+            int maxY = Math.min(imageHeight - 1, (int) Math.ceil(bounds[3]));
+            int spanWidth = Math.max(1, maxX - minX + 1);
+            int spanHeight = Math.max(1, maxY - minY + 1);
+            int padding = Math.max(140, (int) Math.round(Math.max(spanWidth, spanHeight) * 0.28));
+
+            cropX = Math.max(0, minX - padding);
+            cropY = Math.max(0, minY - padding);
+            int cropMaxX = Math.min(imageWidth - 1, maxX + padding);
+            int cropMaxY = Math.min(imageHeight - 1, maxY + padding);
+            cropWidth = Math.max(1, cropMaxX - cropX + 1);
+            cropHeight = Math.max(1, cropMaxY - cropY + 1);
+        }
+
+        int maxDim = Math.max(cropWidth, cropHeight);
+        double scale = maxDim > 1600 ? (1600.0 / maxDim) : 1.0;
+        if (maxDim < 1000) {
+            scale = Math.min(2.1, 1000.0 / maxDim);
+        }
+
+        int outputWidth = Math.max(720, (int) Math.round(cropWidth * scale));
+        int outputHeight = Math.max(480, (int) Math.round(cropHeight * scale));
+        scale = Math.min((double) outputWidth / cropWidth, (double) outputHeight / cropHeight);
+        outputWidth = Math.max(1, (int) Math.round(cropWidth * scale));
+        outputHeight = Math.max(1, (int) Math.round(cropHeight * scale));
+        int headerHeight = Math.max(230, Math.min(280, outputWidth / 4));
+        int canvasHeight = outputHeight + headerHeight;
+        int plotOffsetY = headerHeight;
+
+        return new CreativeTributeLayout(cropX, cropY, cropWidth, cropHeight, outputWidth, outputHeight, headerHeight, canvasHeight, plotOffsetY, scale);
+    }
+
+    private static void includeCreativeTrackBounds(double[] bounds, List<TrackLinker.Track> tracks) {
+        if (tracks == null) {
+            return;
+        }
+
+        for (TrackLinker.Track track : tracks) {
+            if (track == null || track.points == null) {
+                continue;
+            }
+            for (SourceExtractor.DetectedObject point : track.points) {
+                includeCreativePoint(bounds, point.x, point.y);
+            }
+        }
+    }
+
+    private static void includeCreativeDetectionBounds(double[] bounds, List<SourceExtractor.DetectedObject> detections) {
+        if (detections == null) {
+            return;
+        }
+
+        for (SourceExtractor.DetectedObject detection : detections) {
+            includeCreativePoint(bounds, detection.x, detection.y);
+        }
+    }
+
+    private static void includeCreativeTransientBounds(double[] bounds, List<List<SourceExtractor.DetectedObject>> allTransients) {
+        if (allTransients == null) {
+            return;
+        }
+
+        for (List<SourceExtractor.DetectedObject> frameTransients : allTransients) {
+            if (frameTransients == null) {
+                continue;
+            }
+            for (SourceExtractor.DetectedObject transientPoint : frameTransients) {
+                includeCreativePoint(bounds, transientPoint.x, transientPoint.y);
+            }
+        }
+    }
+
+    private static void includeCreativePoint(double[] bounds, double x, double y) {
+        if (x < bounds[0]) {
+            bounds[0] = x;
+        }
+        if (y < bounds[1]) {
+            bounds[1] = y;
+        }
+        if (x > bounds[2]) {
+            bounds[2] = x;
+        }
+        if (y > bounds[3]) {
+            bounds[3] = y;
+        }
+    }
+
+    private static boolean isInsideCreativeLayout(double x, double y, CreativeTributeLayout layout) {
+        return x >= layout.cropX
+                && x < layout.cropX + layout.cropWidth
+                && y >= layout.cropY
+                && y < layout.cropY + layout.cropHeight;
+    }
+
+    private static int creativeX(double x, CreativeTributeLayout layout) {
+        return (int) Math.round((x - layout.cropX) * layout.scale);
+    }
+
+    private static int creativeY(double y, CreativeTributeLayout layout) {
+        return layout.plotOffsetY + (int) Math.round((y - layout.cropY) * layout.scale);
     }
 
     private static void drawCreativeLegendRow(Graphics2D g2d, int x, int y, Color color, String label, Font font) {
@@ -1834,7 +2134,7 @@ public class ImageDisplayUtils {
                     report.println("<div style='margin-bottom: 20px;'>");
                     report.println("<strong style='color: #ccc;'>Pixel Evolution (Tight Crops):</strong>");
                     report.println("<div style='display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; align-items: flex-end;'>");
-                    
+
                     StringBuilder shapeEvolutionHtml = new StringBuilder();
                     shapeEvolutionHtml.append("<div style='margin-bottom: 20px;'>\n");
                     shapeEvolutionHtml.append("<strong style='color: #ccc;'>Shape Evolution (Detected Pixels):</strong>\n");
@@ -1852,14 +2152,14 @@ public class ImageDisplayUtils {
                         String tightFileName = "moving_track_" + counter + "_pt_" + (i + 1) + "_tight.png";
                         saveTrackImageLossless(tightImg, new File(exportDir, tightFileName));
                         report.println("<div><a href='" + tightFileName + "' target='_blank'><img src='" + tightFileName + "' alt='Pt " + (i + 1) + "' style='max-width: none; min-width: 50px;' /></a><br/><center><small>[" + (i + 1) + "]</small></center></div>");
-                        
+
                         // Generate the matching shape evolution crop
                         int startX = (int) Math.round(pt.x) - (tightCropSize / 2);
                         int startY = (int) Math.round(pt.y) - (tightCropSize / 2);
                         BufferedImage tightShapeImg = createSingleStreakShapeImage(java.util.Collections.singletonList(pt), tightCropSize, tightCropSize, startX, startY, false);
                         String tightShapeFileName = "moving_track_" + counter + "_pt_" + (i + 1) + "_shape.png";
                         saveTrackImageLossless(tightShapeImg, new File(exportDir, tightShapeFileName));
-                        
+
                         shapeEvolutionHtml.append("<div><a href='").append(tightShapeFileName).append("' target='_blank'><img src='").append(tightShapeFileName).append("' alt='Shape ").append(i + 1).append("' style='max-width: none; min-width: 50px;' /></a><br/><center><small>[").append(i + 1).append("]</small></center></div>\n");
                     }
                     report.println("</div></div>");
@@ -1899,6 +2199,23 @@ public class ImageDisplayUtils {
                     BufferedImage shapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY, false);
                     saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
 
+                    String maskFileName = null;
+                    MaskOverlapStats maskOverlapStats = new MaskOverlapStats(0, 0);
+                    if (masterStackData != null && masterMask != null) {
+                        BufferedImage maskOverlayImg = createCroppedMasterMaskOverlay(
+                                masterStackData,
+                                masterMask,
+                                cb.fixedCenterX,
+                                cb.fixedCenterY,
+                                cb.trackBoxWidth,
+                                cb.trackBoxHeight,
+                                pt
+                        );
+                        maskFileName = "anomaly_" + counter + "_master_mask.png";
+                        saveTrackImageLossless(maskOverlayImg, new File(exportDir, maskFileName));
+                        maskOverlapStats = computeMaskOverlapStats(pt, masterMask, masterStackData[0].length, masterStackData.length);
+                    }
+
                     String contextGifFileName = "anomaly_" + counter + "_context.gif";
                     List<BufferedImage> contextFrames = new ArrayList<>();
                     int[] frameSequence = {frameIndex - 1, frameIndex, frameIndex + 1};
@@ -1920,11 +2237,32 @@ public class ImageDisplayUtils {
                     report.println("<div class='image-container'>");
                     report.println("<div><a href='" + detectionFileName + "' target='_blank'><img src='" + detectionFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
                     report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
+                    if (maskFileName != null) {
+                        report.println("<div><a href='" + maskFileName + "' target='_blank'><img src='" + maskFileName + "' alt='Master Veto Mask' /></a><br/><center><small>Master Veto Mask</small></center></div>");
+                    }
                     report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
                     report.println("</div>");
                     String coordStr = String.format(Locale.US, "X: %.1f, Y: %.1f", pt.x, pt.y);
                     String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
-                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li></ul></div>");
+                    String overlapColor = "#aaaaaa";
+                    String overlapAssessment = "n/a";
+                    if (maskOverlapStats.totalPixels > 0) {
+                        if (maskOverlapStats.fraction > config.maxMaskOverlapFraction) {
+                            overlapColor = "#ff6b6b";
+                            overlapAssessment = "above configured limit";
+                        } else if (maskOverlapStats.fraction > config.maxMaskOverlapFraction * 0.8) {
+                            overlapColor = "#ffcc66";
+                            overlapAssessment = "near configured limit";
+                        } else {
+                            overlapColor = "#66d9a3";
+                            overlapAssessment = "comfortably below limit";
+                        }
+                    }
+                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + coordStr + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li></ul>");
+                    if (maskOverlapStats.totalPixels > 0) {
+                        report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>Veto-mask overlap: <span style='color:" + overlapColor + "; font-weight: bold;'>" + String.format(Locale.US, "%.1f%%", maskOverlapStats.fraction * 100.0) + "</span> (" + maskOverlapStats.overlappingPixels + " / " + maskOverlapStats.totalPixels + " detection pixels) | Limit: " + String.format(Locale.US, "%.1f%%", config.maxMaskOverlapFraction * 100.0) + " <span style='color:" + overlapColor + ";'>[" + overlapAssessment + "]</span></div>");
+                    }
+                    report.println("</div>");
                     counter++;
                 }
             }
@@ -2038,7 +2376,7 @@ public class ImageDisplayUtils {
                 if (bgData != null) {
                     BufferedImage transientMap = createGlobalTransientMap(bgData, allTransients);
                     saveTrackImageLossless(transientMap, new File(exportDir, "global_transient_map.png"));
-                    
+
                     BufferedImage rainbowMap = createRainbowClusterMap(bgData, allTransients);
                     saveTrackImageLossless(rainbowMap, new File(exportDir, "rainbow_cluster_map.png"));
 
@@ -2046,14 +2384,14 @@ public class ImageDisplayUtils {
                     report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Transient Maps</h3>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
                     report.println("Shows all raw transients detected across the entire session. Colors map to time (Blue = Start, Red = End). This helps visualize noise floors, hot columns, and unlinked moving targets.</p>");
-                    
+
                     report.println("<div class='image-container' style='flex-wrap: wrap;'>");
-                    
+
                     report.println("<div style='flex: 1; min-width: 400px;'>");
                     report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Exact Footprint Map</h4>");
                     report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Plots the exact raw pixels at a 1:1 scale. Both objects and streaks</p>");
                     report.println("<a href='global_transient_map.png' target='_blank'><img src='global_transient_map.png' style='width: 100%; border: 1px solid #555; border-radius: 4px;' alt='Global Transient Map' /></a></div>");
-                    
+
                     report.println("<div style='flex: 1; min-width: 400px;'>");
                     report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Transient Cluster Map</h4>");
                     report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Cropped, downscaled, and dilated to make 'rainbows' (closely moving unlinked objects) highly visible. This map shows only point transients and not streaks. </p>");
