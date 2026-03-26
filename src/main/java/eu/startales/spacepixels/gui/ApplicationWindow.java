@@ -12,6 +12,8 @@ package eu.startales.spacepixels.gui;
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import eu.startales.spacepixels.events.FitsImportFinishedEvent;
 import eu.startales.spacepixels.events.FitsImportStartedEvent;
 import eu.startales.spacepixels.tasks.FitsImportTask;
@@ -21,11 +23,36 @@ import eu.startales.spacepixels.util.ImageProcessing;
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ApplicationWindow {
+
+    private static class ReleaseInfo {
+        private final String versionTag;
+        private final String htmlUrl;
+
+        private ReleaseInfo(String versionTag, String htmlUrl) {
+            this.versionTag = versionTag;
+            this.htmlUrl = htmlUrl;
+        }
+    }
+
+    private static final String RELEASES_PAGE_URL = "https://github.com/ppissias/SpacePixels/releases";
+    private static final String LATEST_RELEASE_API_URL = "https://api.github.com/repos/ppissias/SpacePixels/releases/latest";
+    private static final int RELEASE_CHECK_TIMEOUT_MS = 4000;
 
     private JFrame frmIpodImage;
     private final String version = "2026.03-03";
@@ -46,6 +73,7 @@ public class ApplicationWindow {
     private final JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
     private final JMenu fileMenu = new JMenu("File");
     private final JMenuItem importMenuItem = new JMenuItem("Import aligned fits files");
+    private final JLabel updateNoticeLabel = new JLabel();
 
     public static volatile boolean OOM_FLAG = false;
 
@@ -139,6 +167,12 @@ public class ApplicationWindow {
         JMenuBar menuBar = new JMenuBar();
         frmIpodImage.setJMenuBar(menuBar);
         menuBar.add(fileMenu);
+        menuBar.add(Box.createHorizontalGlue());
+        updateNoticeLabel.setFont(updateNoticeLabel.getFont().deriveFont(Font.PLAIN, 11f));
+        updateNoticeLabel.setForeground(new Color(155, 155, 155));
+        updateNoticeLabel.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 10));
+        updateNoticeLabel.setVisible(false);
+        menuBar.add(updateNoticeLabel);
 
         // --- REFACTORED MENU LISTENER ---
         importMenuItem.addActionListener(e -> {
@@ -155,6 +189,7 @@ public class ApplicationWindow {
         });
 
         fileMenu.add(importMenuItem);
+        startReleaseCheck();
     }
 
     // --- EVENT BUS SUBSCRIBERS ---
@@ -269,4 +304,101 @@ public class ApplicationWindow {
     }
 
     public Frame getFrame() {return frmIpodImage;}
+
+    private void startReleaseCheck() {
+        Thread releaseCheckThread = new Thread(() -> {
+            try {
+                ReleaseInfo latestRelease = fetchLatestReleaseInfo();
+                if (latestRelease != null && isVersionNewer(latestRelease.versionTag, version)) {
+                    SwingUtilities.invokeLater(() -> showUpdateNotice(latestRelease));
+                }
+            } catch (Exception e) {
+                logger.fine("Release check skipped: " + e.getMessage());
+            }
+        }, "SpacePixels-ReleaseCheck");
+        releaseCheckThread.setDaemon(true);
+        releaseCheckThread.start();
+    }
+
+    private ReleaseInfo fetchLatestReleaseInfo() throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(LATEST_RELEASE_API_URL).openConnection();
+        connection.setConnectTimeout(RELEASE_CHECK_TIMEOUT_MS);
+        connection.setReadTimeout(RELEASE_CHECK_TIMEOUT_MS);
+        connection.setRequestMethod("GET");
+        connection.setRequestProperty("Accept", "application/vnd.github+json");
+        connection.setRequestProperty("User-Agent", "SpacePixels/" + version);
+
+        int responseCode = connection.getResponseCode();
+        if (responseCode != HttpURLConnection.HTTP_OK) {
+            throw new IllegalStateException("GitHub release API returned HTTP " + responseCode);
+        }
+
+        try (InputStreamReader reader = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
+            JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
+            String latestTag = root.has("tag_name") && !root.get("tag_name").isJsonNull() ? root.get("tag_name").getAsString() : null;
+            String latestUrl = root.has("html_url") && !root.get("html_url").isJsonNull() ? root.get("html_url").getAsString() : RELEASES_PAGE_URL;
+
+            if (latestTag == null || latestTag.isBlank()) {
+                return null;
+            }
+            return new ReleaseInfo(latestTag, latestUrl);
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private boolean isVersionNewer(String candidateVersion, String currentVersion) {
+        List<Integer> candidateParts = extractVersionNumbers(candidateVersion);
+        List<Integer> currentParts = extractVersionNumbers(currentVersion);
+
+        if (!candidateParts.isEmpty() && !currentParts.isEmpty()) {
+            int maxParts = Math.max(candidateParts.size(), currentParts.size());
+            for (int i = 0; i < maxParts; i++) {
+                int candidatePart = i < candidateParts.size() ? candidateParts.get(i) : 0;
+                int currentPart = i < currentParts.size() ? currentParts.get(i) : 0;
+                if (candidatePart != currentPart) {
+                    return candidatePart > currentPart;
+                }
+            }
+            return false;
+        }
+
+        return !candidateVersion.equalsIgnoreCase(currentVersion);
+    }
+
+    private List<Integer> extractVersionNumbers(String versionText) {
+        List<Integer> numbers = new ArrayList<>();
+        Matcher matcher = Pattern.compile("(\\d+)").matcher(versionText);
+        while (matcher.find()) {
+            numbers.add(Integer.parseInt(matcher.group(1)));
+        }
+        return numbers;
+    }
+
+    private void showUpdateNotice(ReleaseInfo latestRelease) {
+        logger.info("New SpacePixels release available: " + latestRelease.versionTag);
+
+        updateNoticeLabel.setText("New version: " + latestRelease.versionTag);
+        updateNoticeLabel.setToolTipText("A newer SpacePixels release is available. Click to open the releases page.");
+        updateNoticeLabel.setForeground(new Color(202, 162, 72));
+        updateNoticeLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        updateNoticeLabel.setVisible(true);
+        updateNoticeLabel.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                openReleasePage(latestRelease.htmlUrl);
+            }
+        });
+    }
+
+    private void openReleasePage(String releaseUrl) {
+        if (!Desktop.isDesktopSupported()) {
+            return;
+        }
+        try {
+            Desktop.getDesktop().browse(URI.create(releaseUrl));
+        } catch (Exception e) {
+            logger.warning("Failed to open releases page: " + e.getMessage());
+        }
+    }
 }

@@ -48,6 +48,20 @@ import java.util.function.IntPredicate;
 
 public class ImageProcessing {
 
+    private static class FitsMetadataLoadResult {
+        private final FitsFileInformation fileInfo;
+        private final int width;
+        private final int height;
+        private final int bitpix;
+
+        private FitsMetadataLoadResult(FitsFileInformation fileInfo, int width, int height, int bitpix) {
+            this.fileInfo = fileInfo;
+            this.width = width;
+            this.height = height;
+            this.bitpix = bitpix;
+        }
+    }
+
     // --- NEW: Custom Exception for Automatic Redirection ---
     public static class RedirectImportException extends Exception {
         private final File newDirectory;
@@ -844,9 +858,130 @@ public class ImageProcessing {
         return ret;
     }
 
+    public FitsFileInformation[] getFitsfileInformationHeadless() throws Exception {
+        File[] fitsFiles = getFitsFilesDetails();
+        int numFiles = fitsFiles.length;
+
+        if (numFiles == 0) {
+            this.cachedFileInfo = new FitsFileInformation[0];
+            return this.cachedFileInfo;
+        }
+
+        System.out.println("\n--- Validating " + numFiles + " FITS files for headless batch detection ---");
+
+        List<Callable<FitsMetadataLoadResult>> tasks = new ArrayList<>();
+        for (File currentFile : fitsFiles) {
+            tasks.add(() -> loadFitsMetadataHeadless(currentFile));
+        }
+
+        FitsMetadataLoadResult[] loadedResults = new FitsMetadataLoadResult[numFiles];
+        try {
+            List<Future<FitsMetadataLoadResult>> futures = executor.invokeAll(tasks);
+            for (int i = 0; i < futures.size(); i++) {
+                loadedResults[i] = futures.get(i).get();
+            }
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception) {
+                throw (Exception) cause;
+            }
+            throw new IOException("Headless FITS validation failed.", cause);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Headless FITS validation was interrupted.", e);
+        }
+
+        FitsMetadataLoadResult reference = loadedResults[0];
+        for (int i = 1; i < loadedResults.length; i++) {
+            validateHeadlessFitsConsistency(reference, loadedResults[i]);
+        }
+
+        FitsFileInformation[] ret = new FitsFileInformation[numFiles];
+        for (int i = 0; i < loadedResults.length; i++) {
+            ret[i] = loadedResults[i].fileInfo;
+        }
+
+        Arrays.sort(ret, (a, b) -> {
+            long t1 = a.getObservationTimestamp();
+            long t2 = b.getObservationTimestamp();
+            if (t1 != -1 && t2 != -1) {
+                return Long.compare(t1, t2);
+            }
+            return a.getFileName().compareTo(b.getFileName());
+        });
+
+        this.cachedFileInfo = ret;
+        System.out.println("Validated and loaded metadata for " + numFiles + " FITS files.");
+        return ret;
+    }
+
     // =========================================================================
     // EXISTING HELPER METHODS (Unchanged)
     // =========================================================================
+
+    private FitsMetadataLoadResult loadFitsMetadataHeadless(File currentFile) throws Exception {
+        Fits fitsFile = null;
+        try {
+            fitsFile = new Fits(currentFile);
+            if (isCompressedFits(fitsFile)) {
+                throw new IOException("Compressed FITS files are not supported in batch mode: " + currentFile.getName());
+            }
+
+            BasicHDU<?> hdu = getImageHDU(fitsFile);
+            if (hdu == null) {
+                throw new FitsException("No valid image HDU found in " + currentFile.getName());
+            }
+
+            int[] axes = hdu.getAxes();
+            if (axes == null || axes.length != 2) {
+                throw new FitsException("Expected uncompressed 16-bit monochrome FITS files. File " + currentFile.getName() + " has axes length " + (axes == null ? 0 : axes.length) + ".");
+            }
+
+            Header fitsHeader = hdu.getHeader();
+            int bitpix = fitsHeader.getIntValue("BITPIX", 0);
+            if (bitpix != 16) {
+                throw new FitsException("Expected uncompressed 16-bit monochrome FITS files. File " + currentFile.getName() + " has BITPIX=" + bitpix + ".");
+            }
+
+            int height = axes[0];
+            int width = axes[1];
+            if (width <= 0 || height <= 0) {
+                throw new FitsException("Invalid image dimensions in " + currentFile.getName() + ": " + width + "x" + height);
+            }
+
+            FitsFileInformation fileInfo = new FitsFileInformation(currentFile.getAbsolutePath(), currentFile.getName(), true, width, height);
+
+            Cursor<String, HeaderCard> iter = fitsHeader.iterator();
+            while (iter.hasNext()) {
+                HeaderCard fitsHeaderCard = iter.next();
+                fileInfo.getFitsHeader().put(fitsHeaderCard.getKey(), fitsHeaderCard.getValue());
+            }
+
+            PlateSolveResult previousSolveresult = readSolveResults(currentFile.getAbsolutePath());
+            if (previousSolveresult != null) {
+                fileInfo.setSolveResult(previousSolveresult);
+            }
+
+            return new FitsMetadataLoadResult(fileInfo, width, height, bitpix);
+        } finally {
+            if (fitsFile != null) {
+                fitsFile.close();
+            }
+        }
+    }
+
+    private void validateHeadlessFitsConsistency(FitsMetadataLoadResult reference, FitsMetadataLoadResult candidate) throws IOException {
+        if (candidate.bitpix != reference.bitpix) {
+            throw new IOException("Inconsistent FITS bit depth detected. File " + candidate.fileInfo.getFileName() +
+                    " has BITPIX=" + candidate.bitpix + " but " + reference.fileInfo.getFileName() + " has BITPIX=" + reference.bitpix + ".");
+        }
+
+        if (candidate.width != reference.width || candidate.height != reference.height) {
+            throw new IOException("Inconsistent FITS dimensions detected. File " + candidate.fileInfo.getFileName() +
+                    " is " + candidate.width + "x" + candidate.height + " but " + reference.fileInfo.getFileName() +
+                    " is " + reference.width + "x" + reference.height + ".");
+        }
+    }
 
 
 

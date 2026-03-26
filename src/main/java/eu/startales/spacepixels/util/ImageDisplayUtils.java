@@ -909,6 +909,398 @@ public class ImageDisplayUtils {
         return rgbMap;
     }
 
+    private static BufferedImage createCreativeTributeImage(short[][] backgroundData,
+                                                            List<List<SourceExtractor.DetectedObject>> allTransients,
+                                                            List<TrackLinker.Track> anomalies,
+                                                            List<TrackLinker.Track> singleStreaks,
+                                                            List<TrackLinker.Track> streakTracks,
+                                                            List<TrackLinker.Track> movingTargets,
+                                                            List<SourceExtractor.DetectedObject> slowMoverCandidates,
+                                                            List<SourceExtractor.DetectedObject> masterMaximumStackTransientStreaks,
+                                                            PipelineTelemetry pipelineTelemetry) {
+        int width = backgroundData[0].length;
+        int height = backgroundData.length;
+
+        BufferedImage grayBg = createDisplayImage(backgroundData);
+        BufferedImage tribute = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = tribute.createGraphics();
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+        g2d.setColor(new Color(5, 8, 14));
+        g2d.fillRect(0, 0, width, height);
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.20f));
+        g2d.drawImage(grayBg, 0, 0, null);
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+
+        g2d.setPaint(new GradientPaint(
+                0, 0, new Color(32, 58, 96, 90),
+                width, height, new Color(96, 28, 72, 20)
+        ));
+        g2d.fillRect(0, 0, width, height);
+
+        drawCreativeTransientDust(g2d, allTransients);
+
+        for (TrackLinker.Track track : movingTargets) {
+            drawGlowingTrack(g2d, track, new Color(77, 166, 255), 2.6f, 8.5f);
+        }
+        for (TrackLinker.Track track : streakTracks) {
+            drawGlowingTrack(g2d, track, new Color(255, 204, 102), 2.8f, 9.5f);
+        }
+        for (TrackLinker.Track track : anomalies) {
+            if (track.points != null && !track.points.isEmpty()) {
+                drawCreativePulse(g2d, track.points.get(0), new Color(255, 102, 204));
+            }
+        }
+        for (TrackLinker.Track track : singleStreaks) {
+            if (track.points != null && !track.points.isEmpty()) {
+                drawCreativeMeasuredStreak(g2d, track.points.get(0), new Color(255, 153, 51), 1.10);
+            }
+        }
+        if (slowMoverCandidates != null) {
+            for (SourceExtractor.DetectedObject candidate : slowMoverCandidates) {
+                drawCreativeDiamond(g2d, candidate, new Color(186, 122, 255), 16);
+            }
+        }
+        if (masterMaximumStackTransientStreaks != null) {
+            for (SourceExtractor.DetectedObject streak : masterMaximumStackTransientStreaks) {
+                drawCreativeMeasuredStreak(g2d, streak, new Color(255, 214, 112), 1.35);
+            }
+        }
+
+        float vignetteRadius = (float) (Math.max(width, height) * 0.82);
+        RadialGradientPaint vignette = new RadialGradientPaint(
+                new Point(width / 2, height / 2),
+                vignetteRadius,
+                new float[]{0.0f, 0.70f, 1.0f},
+                new Color[]{new Color(0, 0, 0, 0), new Color(0, 0, 0, 55), new Color(0, 0, 0, 180)}
+        );
+        g2d.setPaint(vignette);
+        g2d.fillRect(0, 0, width, height);
+
+        int panelPadding = Math.max(24, Math.min(40, width / 45));
+        int leftPanelWidth = Math.min(Math.max(430, width / 3), Math.max(430, width - (panelPadding * 2)));
+        int leftPanelHeight = Math.min(Math.max(210, height / 4), 250);
+        g2d.setColor(new Color(10, 10, 16, 190));
+        g2d.fillRoundRect(panelPadding, panelPadding, leftPanelWidth, leftPanelHeight, 24, 24);
+        g2d.setColor(new Color(150, 120, 255, 140));
+        g2d.setStroke(new BasicStroke(1.6f));
+        g2d.drawRoundRect(panelPadding, panelPadding, leftPanelWidth, leftPanelHeight, 24, 24);
+
+        Font titleFont = new Font("Segoe UI", Font.BOLD, Math.max(24, Math.min(36, width / 52)));
+        Font subtitleFont = new Font("Segoe UI", Font.PLAIN, Math.max(13, Math.min(18, width / 90)));
+        Font detailFont = new Font("Consolas", Font.PLAIN, Math.max(12, Math.min(16, width / 110)));
+
+        int textX = panelPadding + 24;
+        int y = panelPadding + 42;
+        g2d.setFont(titleFont);
+        g2d.setColor(Color.WHITE);
+        g2d.drawString("Skyprint of the Session", textX, y);
+
+        y += 28;
+        g2d.setFont(subtitleFont);
+        g2d.setColor(new Color(210, 190, 255));
+        g2d.drawString("Creative tribute by Codex", textX, y);
+
+        int rawTransientCount = countTotalTransientDetections(allTransients);
+        int confirmedTrackCount = movingTargets.size() + streakTracks.size();
+        int deepStackHintCount = (slowMoverCandidates == null ? 0 : slowMoverCandidates.size())
+                + (masterMaximumStackTransientStreaks == null ? 0 : masterMaximumStackTransientStreaks.size());
+        double longestPath = computeLongestTrackPathPx(streakTracks, movingTargets);
+        String dominantMotion = computeDominantMotionLabel(movingTargets, streakTracks);
+
+        y += 32;
+        g2d.setFont(detailFont);
+        g2d.setColor(new Color(220, 220, 220));
+        String framesLine;
+        if (pipelineTelemetry != null) {
+            framesLine = "Frames kept/rejected: " + pipelineTelemetry.totalFramesKept + " / " + pipelineTelemetry.totalFramesRejected;
+        } else {
+            framesLine = "Frames kept/rejected: n/a";
+        }
+        g2d.drawString(framesLine, textX, y);
+        y += 24;
+        g2d.drawString("Raw transients: " + rawTransientCount + " | Confirmed tracks: " + confirmedTrackCount, textX, y);
+        y += 24;
+        g2d.drawString("Flashes: " + anomalies.size() + " | Single streaks: " + singleStreaks.size() + " | Deep-stack hints: " + deepStackHintCount, textX, y);
+        y += 24;
+        g2d.drawString("Dominant motion: " + dominantMotion + " | Longest linked path: " + String.format(Locale.US, "%.1f px", longestPath), textX, y);
+
+        int legendWidth = Math.min(Math.max(260, width / 5), Math.max(260, width - (panelPadding * 2)));
+        int legendHeight = 170;
+        int legendX = Math.max(panelPadding, width - legendWidth - panelPadding);
+        int legendY = Math.max(panelPadding, height - legendHeight - panelPadding);
+        g2d.setColor(new Color(10, 10, 16, 175));
+        g2d.fillRoundRect(legendX, legendY, legendWidth, legendHeight, 22, 22);
+        g2d.setColor(new Color(77, 166, 255, 120));
+        g2d.drawRoundRect(legendX, legendY, legendWidth, legendHeight, 22, 22);
+
+        g2d.setFont(new Font("Segoe UI", Font.BOLD, Math.max(14, Math.min(18, width / 90))));
+        g2d.setColor(Color.WHITE);
+        g2d.drawString("What the colors mean", legendX + 18, legendY + 28);
+
+        int legendRowY = legendY + 58;
+        Font legendFont = new Font("Segoe UI", Font.PLAIN, Math.max(12, Math.min(15, width / 110)));
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(66, 210, 255), "Linked point-target tracks", legendFont);
+        legendRowY += 24;
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 204, 102), "Multi-frame streak tracks", legendFont);
+        legendRowY += 24;
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 102, 204), "Optical flashes and anomalies", legendFont);
+        legendRowY += 24;
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(186, 122, 255), "Deep-stack slow-mover hints", legendFont);
+        legendRowY += 24;
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(150, 220, 255), "Faint time-mapped transient dust", legendFont);
+
+        g2d.dispose();
+        return tribute;
+    }
+
+    private static void drawCreativeTransientDust(Graphics2D g2d, List<List<SourceExtractor.DetectedObject>> allTransients) {
+        if (allTransients == null || allTransients.isEmpty()) {
+            return;
+        }
+
+        int totalTransientCount = countTotalTransientDetections(allTransients);
+        if (totalTransientCount == 0) {
+            return;
+        }
+
+        int stride = Math.max(1, totalTransientCount / 9000);
+        int sampledIndex = 0;
+        int totalFrames = allTransients.size();
+
+        for (int frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+            List<SourceExtractor.DetectedObject> frameTransients = allTransients.get(frameIndex);
+            if (frameTransients == null || frameTransients.isEmpty()) {
+                continue;
+            }
+
+            float ratio = totalFrames > 1 ? (float) frameIndex / (float) (totalFrames - 1) : 0f;
+            Color timeColor = Color.getHSBColor(0.62f - (0.55f * ratio), 0.85f, 1.0f);
+            Color haloColor = new Color(timeColor.getRed(), timeColor.getGreen(), timeColor.getBlue(), 42);
+            Color coreColor = new Color(timeColor.getRed(), timeColor.getGreen(), timeColor.getBlue(), 78);
+
+            for (SourceExtractor.DetectedObject transientPoint : frameTransients) {
+                if ((sampledIndex++ % stride) != 0) {
+                    continue;
+                }
+
+                int x = (int) Math.round(transientPoint.x);
+                int y = (int) Math.round(transientPoint.y);
+                g2d.setColor(haloColor);
+                g2d.fillOval(x - 2, y - 2, 6, 6);
+                g2d.setColor(coreColor);
+                g2d.fillOval(x, y, 2, 2);
+            }
+        }
+    }
+
+    private static void drawGlowingTrack(Graphics2D g2d, TrackLinker.Track track, Color color, float coreWidth, float glowWidth) {
+        if (track == null || track.points == null || track.points.isEmpty()) {
+            return;
+        }
+
+        Color glowColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), 60);
+        g2d.setStroke(new BasicStroke(glowWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.setColor(glowColor);
+        for (int i = 0; i < track.points.size() - 1; i++) {
+            SourceExtractor.DetectedObject p1 = track.points.get(i);
+            SourceExtractor.DetectedObject p2 = track.points.get(i + 1);
+            g2d.drawLine((int) Math.round(p1.x), (int) Math.round(p1.y), (int) Math.round(p2.x), (int) Math.round(p2.y));
+        }
+
+        g2d.setStroke(new BasicStroke(coreWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.setColor(color);
+        for (int i = 0; i < track.points.size() - 1; i++) {
+            SourceExtractor.DetectedObject p1 = track.points.get(i);
+            SourceExtractor.DetectedObject p2 = track.points.get(i + 1);
+            g2d.drawLine((int) Math.round(p1.x), (int) Math.round(p1.y), (int) Math.round(p2.x), (int) Math.round(p2.y));
+        }
+
+        for (SourceExtractor.DetectedObject point : track.points) {
+            int x = (int) Math.round(point.x);
+            int y = (int) Math.round(point.y);
+            g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 80));
+            g2d.fillOval(x - 5, y - 5, 10, 10);
+            g2d.setColor(Color.WHITE);
+            g2d.fillOval(x - 2, y - 2, 4, 4);
+        }
+    }
+
+    private static void drawCreativePulse(Graphics2D g2d, SourceExtractor.DetectedObject detection, Color color) {
+        int cx = (int) Math.round(detection.x);
+        int cy = (int) Math.round(detection.y);
+
+        g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 42));
+        g2d.fillOval(cx - 30, cy - 30, 60, 60);
+        g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 145));
+        g2d.setStroke(new BasicStroke(2.0f));
+        g2d.drawOval(cx - 18, cy - 18, 36, 36);
+        g2d.drawLine(cx - 28, cy, cx + 28, cy);
+        g2d.drawLine(cx, cy - 28, cx, cy + 28);
+        g2d.setColor(Color.WHITE);
+        g2d.fillOval(cx - 3, cy - 3, 6, 6);
+    }
+
+    private static void drawCreativeMeasuredStreak(Graphics2D g2d, SourceExtractor.DetectedObject detection, Color color, double lengthScale) {
+        int cx = (int) Math.round(detection.x);
+        int cy = (int) Math.round(detection.y);
+        double baseLength = Math.max(18.0, Math.sqrt(Math.max(1.0, detection.pixelArea)) * Math.max(2.0, detection.elongation));
+        double length = baseLength * lengthScale * 2.4;
+        double angleRad = Math.toRadians(detection.angle);
+        int dx = (int) Math.round(Math.cos(angleRad) * length * 0.5);
+        int dy = (int) Math.round(Math.sin(angleRad) * length * 0.5);
+
+        g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 55));
+        g2d.setStroke(new BasicStroke(9.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawLine(cx - dx, cy - dy, cx + dx, cy + dy);
+
+        g2d.setColor(color);
+        g2d.setStroke(new BasicStroke(2.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawLine(cx - dx, cy - dy, cx + dx, cy + dy);
+        g2d.setColor(Color.WHITE);
+        g2d.fillOval(cx - 2, cy - 2, 4, 4);
+    }
+
+    private static void drawCreativeDiamond(Graphics2D g2d, SourceExtractor.DetectedObject detection, Color color, int radius) {
+        int cx = (int) Math.round(detection.x);
+        int cy = (int) Math.round(detection.y);
+
+        Polygon diamond = new Polygon(
+                new int[]{cx, cx + radius, cx, cx - radius},
+                new int[]{cy - radius, cy, cy + radius, cy},
+                4
+        );
+
+        g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 34));
+        g2d.fillPolygon(diamond);
+        g2d.setColor(color);
+        g2d.setStroke(new BasicStroke(2.2f));
+        g2d.drawPolygon(diamond);
+        g2d.setColor(Color.WHITE);
+        g2d.fillOval(cx - 2, cy - 2, 4, 4);
+    }
+
+    private static void drawCreativeLegendRow(Graphics2D g2d, int x, int y, Color color, String label, Font font) {
+        g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 120));
+        g2d.fillOval(x, y - 9, 14, 14);
+        g2d.setColor(color);
+        g2d.fillOval(x + 4, y - 5, 6, 6);
+        g2d.setFont(font);
+        g2d.setColor(new Color(225, 225, 225));
+        g2d.drawString(label, x + 24, y + 2);
+    }
+
+    private static int countTotalTransientDetections(List<List<SourceExtractor.DetectedObject>> allTransients) {
+        if (allTransients == null || allTransients.isEmpty()) {
+            return 0;
+        }
+
+        int total = 0;
+        for (List<SourceExtractor.DetectedObject> frameTransients : allTransients) {
+            if (frameTransients != null) {
+                total += frameTransients.size();
+            }
+        }
+        return total;
+    }
+
+    private static double computeLongestTrackPathPx(List<TrackLinker.Track> streakTracks, List<TrackLinker.Track> movingTargets) {
+        double longest = 0.0;
+
+        if (movingTargets != null) {
+            for (TrackLinker.Track track : movingTargets) {
+                double pathLength = computeTrackPathLength(track);
+                if (pathLength > longest) {
+                    longest = pathLength;
+                }
+            }
+        }
+        if (streakTracks != null) {
+            for (TrackLinker.Track track : streakTracks) {
+                double pathLength = computeTrackPathLength(track);
+                if (pathLength > longest) {
+                    longest = pathLength;
+                }
+            }
+        }
+
+        return longest;
+    }
+
+    private static double computeTrackPathLength(TrackLinker.Track track) {
+        if (track == null || track.points == null || track.points.size() < 2) {
+            return 0.0;
+        }
+
+        double total = 0.0;
+        for (int i = 0; i < track.points.size() - 1; i++) {
+            SourceExtractor.DetectedObject p1 = track.points.get(i);
+            SourceExtractor.DetectedObject p2 = track.points.get(i + 1);
+            total += Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        }
+        return total;
+    }
+
+    private static String computeDominantMotionLabel(List<TrackLinker.Track> movingTargets, List<TrackLinker.Track> streakTracks) {
+        double sumDx = 0.0;
+        double sumDy = 0.0;
+        int contributors = 0;
+
+        if (movingTargets != null) {
+            for (TrackLinker.Track track : movingTargets) {
+                if (track != null && track.points != null && track.points.size() >= 2) {
+                    SourceExtractor.DetectedObject first = track.points.get(0);
+                    SourceExtractor.DetectedObject last = track.points.get(track.points.size() - 1);
+                    sumDx += last.x - first.x;
+                    sumDy += last.y - first.y;
+                    contributors++;
+                }
+            }
+        }
+        if (streakTracks != null) {
+            for (TrackLinker.Track track : streakTracks) {
+                if (track != null && track.points != null && track.points.size() >= 2) {
+                    SourceExtractor.DetectedObject first = track.points.get(0);
+                    SourceExtractor.DetectedObject last = track.points.get(track.points.size() - 1);
+                    sumDx += last.x - first.x;
+                    sumDy += last.y - first.y;
+                    contributors++;
+                }
+            }
+        }
+
+        if (contributors == 0) {
+            return "not established";
+        }
+
+        String vertical = "";
+        String horizontal = "";
+
+        if (sumDy < -5.0) {
+            vertical = "north";
+        } else if (sumDy > 5.0) {
+            vertical = "south";
+        }
+
+        if (sumDx > 5.0) {
+            horizontal = "east";
+        } else if (sumDx < -5.0) {
+            horizontal = "west";
+        }
+
+        if (!vertical.isEmpty() && !horizontal.isEmpty()) {
+            return vertical + "-" + horizontal;
+        }
+        if (!horizontal.isEmpty()) {
+            return horizontal;
+        }
+        if (!vertical.isEmpty()) {
+            return vertical;
+        }
+        return "mixed / stationary";
+    }
+
     private static void exportDeepStackDetectionCard(java.io.PrintWriter report,
                                                      File exportDir,
                                                      List<short[][]> rawFrames,
@@ -1669,6 +2061,40 @@ public class ImageDisplayUtils {
                     report.println("</div>");
                     report.println("</div>");
                 }
+            }
+
+            // =================================================================
+            // 6. CREATIVE TRIBUTE
+            // =================================================================
+            short[][] creativeBgData = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
+            if (creativeBgData != null) {
+                String creativeFileName = "creative_tribute_skyprint.png";
+                BufferedImage creativeTributeImage = createCreativeTributeImage(
+                        creativeBgData,
+                        allTransients,
+                        anomalies,
+                        singleStreaks,
+                        streakTracks,
+                        movingTargets,
+                        slowMoverCandidates,
+                        masterMaximumStackTransientStreaks,
+                        pipelineTelemetry
+                );
+                saveTrackImageLossless(creativeTributeImage, new File(exportDir, creativeFileName));
+
+                int rawTransientCount = countTotalTransientDetections(allTransients);
+                int confirmedTrackCount = movingTargets.size() + streakTracks.size();
+                int deepStackHintCount = (slowMoverCandidates == null ? 0 : slowMoverCandidates.size())
+                        + (masterMaximumStackTransientStreaks == null ? 0 : masterMaximumStackTransientStreaks.size());
+                double longestPath = computeLongestTrackPathPx(streakTracks, movingTargets);
+                String dominantMotion = computeDominantMotionLabel(movingTargets, streakTracks);
+
+                report.println("<div class='panel' style='background: linear-gradient(180deg, #453049 0%, #2b2b2b 100%); border: 1px solid #5f536a;'>");
+                report.println("<h2>Creative Tribute: Skyprint of the Session</h2>");
+                report.println("<p style='color: #c7bfd6; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>I asked my AI helper to have its own section at the end of the report. This is what it came up with: A creative tribute by Codex. This poster compresses the whole run into one image: faint time-mapped transient dust for everything that flashed through the extractor, brighter paths for linked movers, and separate markers for deep-stack hints that deserve a second look.</p>");
+                report.println("<a href='" + creativeFileName + "' target='_blank'><img src='" + creativeFileName + "' style='width: 100%; border: 1px solid #666; border-radius: 6px;' alt='Creative Tribute Skyprint' /></a>");
+                report.println("<p style='font-size: 13px; color: #b8b0c7; margin-bottom: 0;'>This session stitched together <strong style='color:#ffffff;'>" + rawTransientCount + "</strong> raw transients, produced <strong style='color:#ffffff;'>" + confirmedTrackCount + "</strong> linked tracks, surfaced <strong style='color:#ffffff;'>" + anomalies.size() + "</strong> optical flashes, and left <strong style='color:#ffffff;'>" + deepStackHintCount + "</strong> deep-stack hints on the table. The dominant linked motion trends toward <strong style='color:#ffffff;'>" + dominantMotion + "</strong>, and the longest confirmed path spans <strong style='color:#ffffff;'>" + String.format(Locale.US, "%.1f px", longestPath) + "</strong>.</p>");
+                report.println("</div>");
             }
 
             report.println("</body></html>");

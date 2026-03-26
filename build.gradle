@@ -11,6 +11,9 @@ plugins {
     id 'application'
 }
 
+def sharedJvmArgs = ["-XX:MaxRAMPercentage=80.0", "-XX:+UseG1GC"]
+def batchDetectJvmArgs = sharedJvmArgs + ["-Djava.awt.headless=true"]
+
 repositories {
     mavenCentral()
 }
@@ -42,7 +45,42 @@ application {
 
     // Dynamically allocate up to 80% of the host system's total memory at runtime.
     // This applies to both `./gradlew run` and the generated distribution start scripts.
-    applicationDefaultJvmArgs = ["-XX:MaxRAMPercentage=80.0", "-XX:+UseG1GC"]
+    applicationDefaultJvmArgs = sharedJvmArgs
+}
+
+def registerToolStartScripts = { String taskName, String launcherName, String toolMainClass, List<String> launcherJvmArgs ->
+    tasks.register(taskName, CreateStartScripts) {
+        applicationName = launcherName
+        mainClass = toolMainClass
+        classpath = files(tasks.named('jar')) + configurations.runtimeClasspath
+        defaultJvmOpts = launcherJvmArgs
+        outputDir = layout.buildDirectory.dir("generated-scripts/${launcherName}").get().asFile
+    }
+}
+
+def injectStarsStartScripts = registerToolStartScripts(
+        'injectStarsStartScripts',
+        'injectStars',
+        'eu.startales.spacepixels.tools.ArtificialStarInjector',
+        sharedJvmArgs
+)
+
+def batchDetectStartScripts = registerToolStartScripts(
+        'batchDetectStartScripts',
+        'batchDetect',
+        'eu.startales.spacepixels.tools.BatchDetectionTool',
+        batchDetectJvmArgs
+)
+
+distributions {
+    main {
+        contents {
+            into('bin') {
+                from(injectStarsStartScripts)
+                from(batchDetectStartScripts)
+            }
+        }
+    }
 }
 
 tasks.register('injectStars', JavaExec) {
@@ -50,9 +88,21 @@ tasks.register('injectStars', JavaExec) {
     description = 'Run the Artificial Star Injector tool. Usage: gradlew injectStars -PinjArgs="<dir> <num> <move> <peak> <fwhm>"'
     mainClass = 'eu.startales.spacepixels.tools.ArtificialStarInjector'
     classpath = sourceSets.main.runtimeClasspath
-    jvmArgs = ["-XX:MaxRAMPercentage=80.0", "-XX:+UseG1GC"]
+    jvmArgs = sharedJvmArgs
 
     if (project.hasProperty('injArgs')) {
-        args project.getProperty('injArgs').split(' ')
+        args org.apache.tools.ant.types.Commandline.translateCommandline(project.getProperty('injArgs'))
+    }
+}
+
+tasks.register('batchDetect', JavaExec) {
+    group = 'application'
+    description = 'Run the headless batch detection tool. Usage: gradlew batchDetect -PbatchArgs="\\"<fits_dir>\\" \\"<config.json>\\" [--auto-tune balanced]"'
+    mainClass = 'eu.startales.spacepixels.tools.BatchDetectionTool'
+    classpath = sourceSets.main.runtimeClasspath
+    jvmArgs = batchDetectJvmArgs
+
+    if (project.hasProperty('batchArgs')) {
+        args org.apache.tools.ant.types.Commandline.translateCommandline(project.getProperty('batchArgs'))
     }
 }
