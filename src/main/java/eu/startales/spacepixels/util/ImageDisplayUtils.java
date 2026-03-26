@@ -1877,6 +1877,20 @@ public class ImageDisplayUtils {
                 "SkyBoT search radius");
     }
 
+    private static String buildSingleFrameSkyViewerHtml(ReportAstrometryContext astrometryContext,
+                                                        SourceExtractor.DetectedObject detection,
+                                                        String epochLabel) {
+        SolarSystemQueryTarget queryTarget = buildFrameDetectionQueryTarget(astrometryContext, detection);
+        return buildSkyViewerLinksHtml(astrometryContext, queryTarget, epochLabel);
+    }
+
+    private static String buildTrackSkyViewerHtml(ReportAstrometryContext astrometryContext,
+                                                  TrackLinker.Track track,
+                                                  String epochLabel) {
+        SolarSystemQueryTarget queryTarget = buildTrackQueryTarget(astrometryContext, track);
+        return buildSkyViewerLinksHtml(astrometryContext, queryTarget, epochLabel);
+    }
+
     private static String buildSolarSystemIdentificationHtml(ReportAstrometryContext astrometryContext,
                                                              SolarSystemQueryTarget queryTarget,
                                                              String epochLabel,
@@ -1956,6 +1970,8 @@ public class ImageDisplayUtils {
                     .append(" (asteroids + comets).</div>");
         }
 
+        html.append(buildSkyViewerLinksHtml(astrometryContext, queryTarget, epochLabel));
+
         html.append("</div>");
         return html.toString();
     }
@@ -1969,6 +1985,21 @@ public class ImageDisplayUtils {
         long timestampMillis = astrometryContext.sessionMidpointTimestampMillis;
         double radiusDegrees = estimateSkybotSearchRadiusDegrees(astrometryContext, detection.x, detection.y, detection.pixelArea, detection.elongation);
         return new SolarSystemQueryTarget(detection.x, detection.y, timestampMillis, radiusDegrees, null);
+    }
+
+    private static SolarSystemQueryTarget buildFrameDetectionQueryTarget(ReportAstrometryContext astrometryContext,
+                                                                         SourceExtractor.DetectedObject detection) {
+        if (astrometryContext == null || detection == null) {
+            return null;
+        }
+
+        long timestampMillis = astrometryContext.getFrameTimestampMillis(detection.sourceFrameIndex);
+        if (timestampMillis <= 0L) {
+            timestampMillis = astrometryContext.sessionMidpointTimestampMillis;
+        }
+
+        double radiusDegrees = estimateSkybotSearchRadiusDegrees(astrometryContext, detection.x, detection.y, detection.pixelArea, detection.elongation);
+        return new SolarSystemQueryTarget(detection.x, detection.y, timestampMillis, radiusDegrees, "Single-frame detection");
     }
 
     private static SolarSystemQueryTarget buildTrackQueryTarget(ReportAstrometryContext astrometryContext,
@@ -2037,6 +2068,104 @@ public class ImageDisplayUtils {
         url.append("&-observer=").append(urlEncode(observer));
         url.append("&-objFilter=101");
         url.append("&-from=SpacePixels");
+        return url.toString();
+    }
+
+    private static String buildSkyViewerLinksHtml(ReportAstrometryContext astrometryContext,
+                                                  SolarSystemQueryTarget queryTarget,
+                                                  String epochLabel) {
+        StringBuilder html = new StringBuilder();
+        html.append("<div class='astro-note' style='margin-top: 8px;'>");
+
+        if (astrometryContext == null || !astrometryContext.hasAstrometricSolution()) {
+            html.append("Interactive sky-viewer links unavailable: no reusable aligned-frame WCS solution was found for this session.");
+            html.append("</div>");
+            return html.toString();
+        }
+
+        if (queryTarget == null || queryTarget.timestampMillis <= 0L) {
+            html.append("Interactive sky-viewer links unavailable: no valid timestamp could be resolved for this detection.");
+            html.append("</div>");
+            return html.toString();
+        }
+
+        WcsCoordinateTransformer.SkyCoordinate skyCoordinate = astrometryContext.getTransformer().pixelToSky(queryTarget.pixelX, queryTarget.pixelY);
+        double tightFovDegrees = clampFieldOfViewDegrees(queryTarget.searchRadiusDegrees * 8.0, 0.5, 12.0);
+        double wideFovDegrees = clampFieldOfViewDegrees(queryTarget.searchRadiusDegrees * 22.0, 4.0, 60.0);
+
+        html.append("Interactive sky viewers:");
+        html.append("<div class='id-links'>");
+        html.append("<a class='id-link' href='")
+                .append(buildStellariumWebUrl(astrometryContext, queryTarget, skyCoordinate, tightFovDegrees))
+                .append("' target='_blank' rel='noopener noreferrer'>Stellarium Web (RA/Dec)</a>");
+        html.append("<a class='id-link' href='")
+                .append(buildStellariumWebUrl(astrometryContext, queryTarget, skyCoordinate, wideFovDegrees))
+                .append("' target='_blank' rel='noopener noreferrer'>Stellarium Web Wide</a>");
+        if (astrometryContext.observerSite != null) {
+            html.append("<a class='id-link' href='")
+                    .append(buildInTheSkyUrl(astrometryContext, queryTarget))
+                    .append("' target='_blank' rel='noopener noreferrer'>In-The-Sky Planetarium</a>");
+        }
+        html.append("</div>");
+
+        html.append("<div class='astro-note' style='margin-top: 6px;'>")
+                .append("Stellarium links use best-effort RA/Dec URL parameters at ")
+                .append(escapeHtml(formatUtcTimestamp(queryTarget.timestampMillis)))
+                .append(" with FOV ")
+                .append(escapeHtml(String.format(Locale.US, "%.2f° / %.2f°", tightFovDegrees, wideFovDegrees)))
+                .append(".");
+        if (astrometryContext.observerSite != null) {
+            html.append(" In-The-Sky uses UTC time and site coordinates from ")
+                    .append(escapeHtml(astrometryContext.observerSite.sourceLabel))
+                    .append(".");
+        } else {
+            html.append(" In-The-Sky link is omitted because no observer site coordinates were found.");
+        }
+        if (epochLabel != null && !epochLabel.isEmpty()) {
+            html.append(" ").append(escapeHtml(epochLabel)).append(": ")
+                    .append(escapeHtml(formatUtcTimestamp(queryTarget.timestampMillis)))
+                    .append(".");
+        }
+        html.append("</div>");
+        html.append("</div>");
+        return html.toString();
+    }
+
+    private static String buildStellariumWebUrl(ReportAstrometryContext astrometryContext,
+                                                SolarSystemQueryTarget queryTarget,
+                                                WcsCoordinateTransformer.SkyCoordinate skyCoordinate,
+                                                double fovDegrees) {
+        StringBuilder url = new StringBuilder("https://stellarium-web.org/?");
+        url.append("date=").append(urlEncode(formatStellariumTimestamp(queryTarget.timestampMillis)));
+        url.append("&ra=").append(urlEncode(formatDecimal(skyCoordinate.getRaDegrees(), 6)));
+        url.append("&dec=").append(urlEncode(formatDecimal(skyCoordinate.getDecDegrees(), 6)));
+        url.append("&fov=").append(urlEncode(formatDecimal(fovDegrees, 4)));
+        if (astrometryContext != null && astrometryContext.observerSite != null) {
+            url.append("&lat=").append(urlEncode(formatDecimal(astrometryContext.observerSite.latitudeDeg, 5)));
+            url.append("&lng=").append(urlEncode(formatDecimal(astrometryContext.observerSite.longitudeDeg, 5)));
+            url.append("&elev=").append(urlEncode(formatDecimal(astrometryContext.observerSite.altitudeMeters, 1)));
+        }
+        return url.toString();
+    }
+
+    private static String buildInTheSkyUrl(ReportAstrometryContext astrometryContext,
+                                           SolarSystemQueryTarget queryTarget) {
+        if (astrometryContext == null || astrometryContext.observerSite == null || queryTarget == null || queryTarget.timestampMillis <= 0L) {
+            return null;
+        }
+
+        Instant instant = Instant.ofEpochMilli(queryTarget.timestampMillis);
+        java.time.OffsetDateTime utc = instant.atOffset(ZoneOffset.UTC);
+
+        StringBuilder url = new StringBuilder("https://in-the-sky.org/skymap.php?");
+        url.append("year=").append(utc.getYear());
+        url.append("&month=").append(utc.getMonthValue());
+        url.append("&day=").append(utc.getDayOfMonth());
+        url.append("&hour=").append(utc.getHour());
+        url.append("&min=").append(utc.getMinute());
+        url.append("&latitude=").append(urlEncode(formatDecimal(astrometryContext.observerSite.latitudeDeg, 5)));
+        url.append("&longitude=").append(urlEncode(formatDecimal(astrometryContext.observerSite.longitudeDeg, 5)));
+        url.append("&timezone=0.00");
         return url.toString();
     }
 
@@ -2150,6 +2279,12 @@ public class ImageDisplayUtils {
                 .format(Instant.ofEpochMilli(timestampMillis));
     }
 
+    private static String formatStellariumTimestamp(long timestampMillis) {
+        return DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+                .withZone(ZoneOffset.UTC)
+                .format(Instant.ofEpochMilli(timestampMillis));
+    }
+
     private static String formatUtcTimestamp(long timestampMillis) {
         if (timestampMillis <= 0L) {
             return "Unknown";
@@ -2172,6 +2307,10 @@ public class ImageDisplayUtils {
             return "+0";
         }
         return formatDecimal(value, decimals);
+    }
+
+    private static double clampFieldOfViewDegrees(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private static String formatPixelCoordinateWithSky(ReportAstrometryContext astrometryContext, double pixelX, double pixelY) {
@@ -2577,7 +2716,9 @@ public class ImageDisplayUtils {
                     report.println("</div>");
                     String coordStr = formatPixelCoordinateWithSky(astrometryContext, pt.x, pt.y);
                     String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
-                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + escapeHtml(coordStr) + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li></ul></div>");
+                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + escapeHtml(coordStr) + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li></ul>");
+                    report.print(buildSingleFrameSkyViewerHtml(astrometryContext, pt, "Reference epoch for streak lookup"));
+                    report.println("</div>");
 
                     counter++;
                 }
@@ -2633,7 +2774,9 @@ public class ImageDisplayUtils {
                         String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
                         report.println("<li>[" + (i + 1) + "] " + pt.sourceFilename + " | <span class='coord-highlight'>" + escapeHtml(coordStr) + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li>");
                     }
-                    report.println("</ul></div>");
+                    report.println("</ul>");
+                    report.print(buildTrackSkyViewerHtml(astrometryContext, track, "Reference epoch for streak-track lookup"));
+                    report.println("</div>");
                     counter++;
                 }
             }
