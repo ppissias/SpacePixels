@@ -16,6 +16,42 @@ But what exactly are we throwing away? Those rejected pixels and artifacts are o
 
 **SpacePixels is the exact opposite of a stacking tool.** It was built to mine that discarded data. Instead of averaging out movement to hide it, SpacePixels actively hunts for movement across your sub-exposures to reveal the hidden transients you captured while you were focused on the deep-sky target.
 
+## 📸 Screenshots & Output
+
+Many thanks to [cloudynights user klangwolke](https://www.cloudynights.com/profile/481578-klangwolke/) for providing amazing data for this report.
+
+Many thanks to cloudynights user TheStarsabove for providing data.
+
+Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
+
+**Check out sample reports.**
+
+<a href="https://startales.eu/various_files/detections_20260327_105248/detection_report.html" target="_blank">Sample SpacePixels report</a> <br/>
+<a href="https://startales.eu/various_files/detections_20260327_104057/detection_report.html" target="_blank">Sample SpacePixels report (Apophis)</a> <br/>
+<a href="https://startales.eu/various_files/detections_20260327_104830/detection_report.html" target="_blank">Sample SpacePixels report</a> <br/>
+<a href="https://startales.eu/various_files/detections_20260327_104437/detection_report.html" target="_blank">Sample SpacePixels report (artificial slow mover injected)</a> <br/>
+
+![Main Interface](https://startales.eu/various_files/Screenshot2026-03-20215405.png)
+*The SpacePixels Main Workspace.*
+
+![Sample Detection](https://startales.eu/various_files/aptrack_1_star_centric.gif)
+*Sample Detection - Comet Africano 2019*
+
+![Sample Detection](https://startales.eu/various_files/aptrack_1_object_centric.gif)
+*Sample Detection - Comet Africano 2019*
+
+![Sample Detection](https://startales.eu/various_files/track_5_object_centric.gif)
+*Sample Detection - Apophis asteroid 2021 (raw images credit Duncan Warren), object-centric view.*
+
+![Sample Detection](https://startales.eu/various_files/track_5_star_centric.gif)
+*Sample Detection - Apophis asteroid 2021 (raw images credit Duncan Warren), star-centric view.*
+
+![Sample Detection](https://startales.eu/various_files/streak_track_3_star_centric.gif)
+*Sample Detection - streak track.*
+
+![Sample Detection](https://startales.eu/various_files/anomaly_17_context.gif)
+*Sample Detection - high-energy anomaly, data credit cloudynights user TheStarsabove.*
+
 ## JTransient engine documentation
 
 SpacePixels uses the [JTransient Engine](https://github.com/ppissias/JTransient) for the core extraction, purification, and track-linking pipeline.
@@ -105,41 +141,6 @@ The standard pipeline exports an HTML session report plus PNG and GIF assets. De
 
 The AI creative sections are controlled by a session-only checkbox in `Detection Settings -> Advanced Visualization -> Optional Report Sections`. They are off by default and are not persisted with the saved detection profile.
 
-## 📸 Screenshots & Output
-
-Many thanks to [cloudynights user klangwolke](https://www.cloudynights.com/profile/481578-klangwolke/) for providing amazing data for this report.
-
-Many thanks to cloudynights user TheStarsabove for providing data.
-
-Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
-
-**Check out sample reports.**
-
-<a href="https://startales.eu/various_files/detections_20260327_105248/detection_report.html" target="_blank">Sample SpacePixels report</a> <br/>
-<a href="https://startales.eu/various_files/detections_20260327_104057/detection_report.html" target="_blank">Sample SpacePixels report (Apophis)</a> <br/>
-<a href="https://startales.eu/various_files/detections_20260327_104830/detection_report.html" target="_blank">Sample SpacePixels report</a> <br/>
-<a href="https://startales.eu/various_files/detections_20260327_104437/detection_report.html" target="_blank">Sample SpacePixels report (artificial slow mover injected)</a> <br/>
-
-![Main Interface](https://startales.eu/various_files/Screenshot2026-03-20215405.png)
-*The SpacePixels Main Workspace.*
-
-![Sample Detection](https://startales.eu/various_files/aptrack_1_star_centric.gif)
-*Sample Detection - Comet Africano 2019*
-
-![Sample Detection](https://startales.eu/various_files/aptrack_1_object_centric.gif)
-*Sample Detection - Comet Africano 2019*
-
-![Sample Detection](https://startales.eu/various_files/track_5_object_centric.gif)
-*Sample Detection - Apophis asteroid 2021 (raw images credit Duncan Warren), object-centric view.*
-
-![Sample Detection](https://startales.eu/various_files/track_5_star_centric.gif)
-*Sample Detection - Apophis asteroid 2021 (raw images credit Duncan Warren), star-centric view.*
-
-![Sample Detection](https://startales.eu/various_files/streak_track_3_star_centric.gif)
-*Sample Detection - streak track.*
-
-![Sample Detection](https://startales.eu/various_files/anomaly_17_context.gif)
-*Sample Detection - high-energy anomaly, data credit cloudynights user TheStarsabove.*
 
 ## Command-line utilities
 
