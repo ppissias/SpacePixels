@@ -38,6 +38,14 @@ import com.google.gson.GsonBuilder;
 
 public class ImageDisplayUtils {
 
+    private enum CreativeLegendGlyph {
+        TRACK,
+        STREAK,
+        PULSE,
+        DIAMOND,
+        DUST
+    }
+
     // =================================================================
     // CONFIGURATION PARAMETERS
     // =================================================================
@@ -56,6 +64,7 @@ public class ImageDisplayUtils {
     public static int trackObjectCentricCropSize = 200;
     public static int singleStreakExportPadding = 50;
     public static double streakElongationCropMultiplier = 10.0;
+    public static boolean includeAiCreativeReportSections = false;
 
     // --- Annotation Tools (For GIFs) ---
     public static int targetCircleRadius = 15;
@@ -1135,6 +1144,134 @@ public class ImageDisplayUtils {
         return rgbMap;
     }
 
+    // --- NEW: KINEMATIC COMPASS RENDERER (Creative Tribute) ---
+    private static BufferedImage createKinematicCompass(List<TrackLinker.Track> targets, List<TrackLinker.Track> streaks) {
+        int size = 600;
+        int cx = size / 2;
+        int cy = size / 2;
+        BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = img.createGraphics();
+
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+        g2d.setColor(new Color(15, 15, 18));
+        g2d.fillRect(0, 0, size, size);
+
+        List<double[]> vectors = new ArrayList<>();
+        double maxSpeed = 1.0;
+
+        List<List<TrackLinker.Track>> sets = java.util.Arrays.asList(targets, streaks);
+        for (int i = 0; i < sets.size(); i++) {
+            List<TrackLinker.Track> trackSet = sets.get(i);
+            if (trackSet == null) continue;
+
+            for (TrackLinker.Track t : trackSet) {
+                if (t.points == null || t.points.size() < 2) continue;
+                SourceExtractor.DetectedObject p1 = t.points.get(0);
+                SourceExtractor.DetectedObject p2 = t.points.get(t.points.size() - 1);
+                int frames = Math.max(1, p2.sourceFrameIndex - p1.sourceFrameIndex);
+                double dx = (p2.x - p1.x) / frames;
+                double dy = (p2.y - p1.y) / frames;
+                double speed = Math.hypot(dx, dy);
+                if (speed > maxSpeed) maxSpeed = speed;
+                vectors.add(new double[]{dx, dy, i}); // 0 = Target, 1 = Streak
+            }
+        }
+
+        maxSpeed *= 1.1; // Add 10% breathing room to the radar
+        int padding = 45;
+        double maxRadius = (size / 2.0) - padding;
+        double logMaxSpeed = Math.log1p(maxSpeed);
+
+        g2d.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[]{4f, 4f}, 0.0f));
+        for (int i = 1; i <= 4; i++) {
+            g2d.setColor(i == 4 ? new Color(70, 70, 85) : new Color(50, 50, 60));
+            int r = (int) (maxRadius * (i / 4.0));
+            g2d.drawOval(cx - r, cy - r, r * 2, r * 2);
+        }
+
+        g2d.setColor(new Color(60, 60, 70));
+        g2d.drawLine(cx, padding - 10, cx, size - padding + 10);
+        g2d.drawLine(padding - 10, cy, size - padding + 10, cy);
+
+        g2d.setColor(new Color(130, 130, 140));
+        g2d.setFont(new Font("Consolas", Font.BOLD, 12));
+        g2d.drawString("N (-Y)", cx - 18, padding - 20);
+        g2d.drawString("S (+Y)", cx - 18, size - padding + 30);
+        g2d.drawString("W (-X)", padding - 35, cy + 4);
+        g2d.drawString("E (+X)", size - padding + 15, cy + 4);
+
+        g2d.setFont(new Font("Consolas", Font.PLAIN, 10));
+        // Draw labels for 50% and 100% rings dynamically using the inverse log scale
+        for (int i = 2; i <= 4; i += 2) {
+            double mappedS = logMaxSpeed * (i / 4.0);
+            double ringSpeed = Math.expm1(mappedS);
+            int r = (int) (maxRadius * (i / 4.0));
+            g2d.drawString(String.format(Locale.US, "%.1f px/f", ringSpeed), cx + r + 4, cy - 4);
+        }
+
+        for (double[] v : vectors) {
+            double speed = Math.hypot(v[0], v[1]);
+            double mappedSpeed = Math.log1p(speed);
+            double drawScale = speed > 0 ? (mappedSpeed / speed) * (maxRadius / logMaxSpeed) : 0;
+
+            int endX = cx + (int) Math.round(v[0] * drawScale);
+            int endY = cy + (int) Math.round(v[1] * drawScale);
+
+            Color coreColor = v[2] == 1.0 ? new Color(255, 204, 102) : new Color(77, 166, 255);
+            Color glowColor = new Color(coreColor.getRed(), coreColor.getGreen(), coreColor.getBlue(), 60);
+
+            g2d.setColor(glowColor);
+            g2d.setStroke(new BasicStroke(5.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g2d.drawLine(cx, cy, endX, endY);
+
+            g2d.setColor(coreColor);
+            g2d.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g2d.drawLine(cx, cy, endX, endY);
+
+            g2d.fillOval(endX - 3, endY - 3, 6, 6);
+            g2d.setColor(Color.WHITE);
+            g2d.fillOval(endX - 1, endY - 1, 2, 2);
+        }
+
+        // --- Draw Legend & Title ---
+        g2d.setFont(new Font("Consolas", Font.BOLD, 16));
+        g2d.setColor(new Color(220, 220, 230));
+        g2d.drawString("Kinematic Compass", 20, 30);
+        g2d.setFont(new Font("Consolas", Font.PLAIN, 12));
+        g2d.setColor(new Color(150, 150, 160));
+        g2d.drawString("Velocity (Log Scale) & Heading", 20, 48);
+
+        int legendX = size - 150;
+        int legendY = 30;
+        g2d.setColor(new Color(20, 20, 25, 200));
+        g2d.fillRoundRect(legendX - 10, legendY - 20, 145, 60, 10, 10);
+        g2d.setColor(new Color(100, 100, 110));
+        g2d.setStroke(new BasicStroke(1.0f));
+        g2d.drawRoundRect(legendX - 10, legendY - 20, 145, 60, 10, 10);
+
+        g2d.setFont(new Font("Consolas", Font.BOLD, 12));
+        
+        // Target legend
+        g2d.setColor(new Color(77, 166, 255));
+        g2d.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawLine(legendX, legendY, legendX + 20, legendY);
+        g2d.fillOval(legendX + 17, legendY - 3, 6, 6);
+        g2d.setColor(Color.WHITE);
+        g2d.drawString("Point Targets", legendX + 30, legendY + 4);
+        
+        // Streak legend
+        g2d.setColor(new Color(255, 204, 102));
+        g2d.drawLine(legendX, legendY + 20, legendX + 20, legendY + 20);
+        g2d.fillOval(legendX + 17, legendY + 17, 6, 6);
+        g2d.setColor(Color.WHITE);
+        g2d.drawString("Streak Targets", legendX + 30, legendY + 24);
+
+        g2d.dispose();
+        return img;
+    }
+
     private static BufferedImage createCreativeTributeImage(short[][] backgroundData,
                                                             List<List<SourceExtractor.DetectedObject>> allTransients,
                                                             List<TrackLinker.Track> anomalies,
@@ -1283,7 +1420,7 @@ public class ImageDisplayUtils {
         y += 24;
         g2d.drawString("Dominant motion: " + dominantMotion + " | Longest linked path: " + String.format(Locale.US, "%.1f px", longestPath), textX, y);
 
-        int legendHeight = Math.min(layout.headerHeight - (panelPadding * 2), 170);
+        int legendHeight = Math.min(layout.headerHeight - (panelPadding * 2), 186);
         int legendX = panelPadding + leftPanelWidth + interPanelGap;
         int legendY = panelPadding;
         g2d.setColor(new Color(10, 10, 16, 175));
@@ -1293,19 +1430,19 @@ public class ImageDisplayUtils {
 
         g2d.setFont(new Font("Segoe UI", Font.BOLD, Math.max(14, Math.min(18, layout.outputWidth / 85))));
         g2d.setColor(Color.WHITE);
-        g2d.drawString("What the colors mean", legendX + 18, legendY + 28);
+        g2d.drawString("What the colors and symbols mean", legendX + 18, legendY + 28);
 
         int legendRowY = legendY + 58;
         Font legendFont = new Font("Segoe UI", Font.PLAIN, Math.max(12, Math.min(15, layout.outputWidth / 95)));
-        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(66, 210, 255), "Linked point-target tracks", legendFont);
-        legendRowY += 24;
-        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 204, 102), "Multi-frame streak tracks", legendFont);
-        legendRowY += 24;
-        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 102, 204), "Optical flashes and anomalies", legendFont);
-        legendRowY += 24;
-        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(186, 122, 255), "Deep-stack slow-mover hints", legendFont);
-        legendRowY += 24;
-        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(150, 220, 255), "Faint time-mapped transient dust", legendFont);
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(66, 210, 255), "Linked mover track (line + nodes)", legendFont, CreativeLegendGlyph.TRACK);
+        legendRowY += 26;
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 204, 102), "Streak paths / streak markers", legendFont, CreativeLegendGlyph.STREAK);
+        legendRowY += 26;
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 102, 204), "Anomaly pulse (circle + crosshair)", legendFont, CreativeLegendGlyph.PULSE);
+        legendRowY += 26;
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(186, 122, 255), "Deep-stack hint (diamond)", legendFont, CreativeLegendGlyph.DIAMOND);
+        legendRowY += 26;
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(150, 220, 255), "Transient dust time map (cyan -> magenta)", legendFont, CreativeLegendGlyph.DUST);
 
         g2d.dispose();
         return tribute;
@@ -1407,11 +1544,21 @@ public class ImageDisplayUtils {
     }
 
     private static void drawCreativeMeasuredStreak(Graphics2D g2d, SourceExtractor.DetectedObject detection, CreativeTributeLayout layout, Color color, double lengthScale) {
+        if (detection == null || !isInsideCreativeLayout(detection.x, detection.y, layout)) {
+            return;
+        }
+
         int cx = creativeX(detection.x, layout);
         int cy = creativeY(detection.y, layout);
-        double baseLength = Math.max(18.0, Math.sqrt(Math.max(1.0, detection.pixelArea)) * Math.max(2.0, detection.elongation));
-        double length = baseLength * lengthScale * 2.4 * Math.max(0.9, Math.min(1.6, layout.scale));
-        double angleRad = Math.toRadians(detection.angle);
+        double elongation = Math.max(1.0, detection.elongation);
+        double semiMajorAxis = detection.pixelArea > 0
+                ? Math.sqrt((detection.pixelArea * elongation) / Math.PI)
+                : 9.0;
+        double measuredLength = Math.max(18.0, semiMajorAxis * 2.0);
+        double length = measuredLength * lengthScale * Math.max(0.95, Math.min(1.25, layout.scale));
+        double maxLength = Math.max(42.0, Math.min(layout.outputWidth, layout.outputHeight) * 0.10);
+        length = Math.min(length, maxLength);
+        double angleRad = Double.isFinite(detection.angle) ? detection.angle : 0.0;
         int dx = (int) Math.round(Math.cos(angleRad) * length * 0.5);
         int dy = (int) Math.round(Math.sin(angleRad) * length * 0.5);
 
@@ -1579,14 +1726,99 @@ public class ImageDisplayUtils {
         return layout.plotOffsetY + (int) Math.round((y - layout.cropY) * layout.scale);
     }
 
-    private static void drawCreativeLegendRow(Graphics2D g2d, int x, int y, Color color, String label, Font font) {
-        g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 120));
-        g2d.fillOval(x, y - 9, 14, 14);
-        g2d.setColor(color);
-        g2d.fillOval(x + 4, y - 5, 6, 6);
+    private static void drawCreativeLegendRow(Graphics2D g2d,
+                                              int x,
+                                              int y,
+                                              Color color,
+                                              String label,
+                                              Font font,
+                                              CreativeLegendGlyph glyph) {
+        switch (glyph) {
+            case TRACK -> drawCreativeLegendTrackGlyph(g2d, x, y, color);
+            case STREAK -> drawCreativeLegendStreakGlyph(g2d, x, y, color);
+            case PULSE -> drawCreativeLegendPulseGlyph(g2d, x, y, color);
+            case DIAMOND -> drawCreativeLegendDiamondGlyph(g2d, x, y, color);
+            case DUST -> drawCreativeLegendDustGlyph(g2d, x, y);
+        }
         g2d.setFont(font);
         g2d.setColor(new Color(225, 225, 225));
-        g2d.drawString(label, x + 24, y + 2);
+        g2d.drawString(label, x + 34, y + 2);
+    }
+
+    private static void drawCreativeLegendTrackGlyph(Graphics2D g2d, int x, int y, Color color) {
+        Stroke previousStroke = g2d.getStroke();
+        g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 70));
+        g2d.setStroke(new BasicStroke(6.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawLine(x, y, x + 18, y - 3);
+        g2d.setColor(color);
+        g2d.setStroke(new BasicStroke(2.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawLine(x, y, x + 18, y - 3);
+        g2d.setColor(Color.WHITE);
+        g2d.fillOval(x - 2, y - 2, 4, 4);
+        g2d.fillOval(x + 16, y - 5, 4, 4);
+        g2d.setStroke(previousStroke);
+    }
+
+    private static void drawCreativeLegendStreakGlyph(Graphics2D g2d, int x, int y, Color color) {
+        Stroke previousStroke = g2d.getStroke();
+        g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 60));
+        g2d.setStroke(new BasicStroke(8.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawLine(x, y + 4, x + 18, y - 4);
+        g2d.setColor(color);
+        g2d.setStroke(new BasicStroke(2.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2d.drawLine(x, y + 4, x + 18, y - 4);
+        g2d.setColor(Color.WHITE);
+        g2d.fillOval(x + 8, y - 2, 4, 4);
+        g2d.setStroke(previousStroke);
+    }
+
+    private static void drawCreativeLegendPulseGlyph(Graphics2D g2d, int x, int y, Color color) {
+        Stroke previousStroke = g2d.getStroke();
+        g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 38));
+        g2d.fillOval(x - 2, y - 10, 20, 20);
+        g2d.setColor(color);
+        g2d.setStroke(new BasicStroke(1.8f));
+        g2d.drawOval(x + 1, y - 7, 14, 14);
+        g2d.drawLine(x - 1, y, x + 17, y);
+        g2d.drawLine(x + 8, y - 9, x + 8, y + 9);
+        g2d.setColor(Color.WHITE);
+        g2d.fillOval(x + 6, y - 2, 4, 4);
+        g2d.setStroke(previousStroke);
+    }
+
+    private static void drawCreativeLegendDiamondGlyph(Graphics2D g2d, int x, int y, Color color) {
+        Polygon diamond = new Polygon(
+                new int[]{x + 8, x + 16, x + 8, x},
+                new int[]{y - 8, y, y + 8, y},
+                4
+        );
+        Stroke previousStroke = g2d.getStroke();
+        g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 34));
+        g2d.fillPolygon(diamond);
+        g2d.setColor(color);
+        g2d.setStroke(new BasicStroke(2.0f));
+        g2d.drawPolygon(diamond);
+        g2d.setColor(Color.WHITE);
+        g2d.fillOval(x + 6, y - 2, 4, 4);
+        g2d.setStroke(previousStroke);
+    }
+
+    private static void drawCreativeLegendDustGlyph(Graphics2D g2d, int x, int y) {
+        Color[] dustColors = new Color[]{
+                new Color(150, 220, 255),
+                new Color(100, 255, 190),
+                new Color(255, 214, 112),
+                new Color(255, 120, 210)
+        };
+        int[] offsets = new int[]{0, 6, 12, 18};
+        for (int i = 0; i < dustColors.length; i++) {
+            Color color = dustColors[i];
+            int cx = x + offsets[i];
+            g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 42));
+            g2d.fillOval(cx - 3, y - 3, 8, 8);
+            g2d.setColor(color);
+            g2d.fillOval(cx - 1, y - 1, 4, 4);
+        }
     }
 
     private static int countTotalTransientDetections(List<List<SourceExtractor.DetectedObject>> allTransients) {
@@ -2292,6 +2524,44 @@ public class ImageDisplayUtils {
         return sky == null ? pixel : pixel + " | " + sky;
     }
 
+    private static String formatPixelCoordinateOnly(int pixelX, int pixelY) {
+        return String.format(Locale.US, "[%d, %d]", pixelX, pixelY);
+    }
+
+    private static String formatPixelCoordinateBlockHtml(ReportAstrometryContext astrometryContext, double pixelX, double pixelY) {
+        StringBuilder html = new StringBuilder();
+        html.append("<span class='coord-highlight coord-stack'>");
+        html.append("<span class='coord-line'>")
+                .append(escapeHtml(String.format(Locale.US, "X: %.1f, Y: %.1f", pixelX, pixelY)))
+                .append("</span>");
+        if (astrometryContext != null && astrometryContext.hasAstrometricSolution()) {
+            WcsCoordinateTransformer.SkyCoordinate skyCoordinate = astrometryContext.getTransformer().pixelToSky(pixelX, pixelY);
+            html.append("<span class='coord-line'>RA ")
+                    .append(escapeHtml(WcsCoordinateTransformer.formatRa(skyCoordinate.getRaDegrees())))
+                    .append(" | Dec ")
+                    .append(escapeHtml(WcsCoordinateTransformer.formatDec(skyCoordinate.getDecDegrees())))
+                    .append("</span>");
+        }
+        html.append("</span>");
+        return html.toString();
+    }
+
+    private static String buildSourceCoordinateListEntry(String fileLabel,
+                                                         ReportAstrometryContext astrometryContext,
+                                                         double pixelX,
+                                                         double pixelY,
+                                                         String metricsText) {
+        StringBuilder html = new StringBuilder();
+        html.append("<li>");
+        html.append("<div class='source-file'>").append(escapeHtml(fileLabel)).append("</div>");
+        html.append(formatPixelCoordinateBlockHtml(astrometryContext, pixelX, pixelY));
+        if (metricsText != null && !metricsText.isEmpty()) {
+            html.append("<div class='source-metrics'>").append(escapeHtml(metricsText)).append("</div>");
+        }
+        html.append("</li>");
+        return html.toString();
+    }
+
     private static String formatSkyCoordinateInline(ReportAstrometryContext astrometryContext, double pixelX, double pixelY) {
         if (astrometryContext == null || !astrometryContext.hasAstrometricSolution()) {
             return null;
@@ -2401,12 +2671,17 @@ public class ImageDisplayUtils {
             report.println("a img:hover { border-color: #4da6ff; cursor: pointer; }");
             report.println(".image-container { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 15px; }");
             report.println(".source-list { list-style-type: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }");
-            report.println(".source-list li { background: #3d3d3d; padding: 5px 10px; border-radius: 4px; font-size: 0.9em; font-family: monospace; color: #aaa; border: 1px solid #555; }");
+            report.println(".source-list li { background: #3d3d3d; padding: 8px 10px; border-radius: 4px; font-size: 0.9em; font-family: monospace; color: #aaa; border: 1px solid #555; flex: 1 1 360px; max-width: 520px; line-height: 1.4; }");
+            report.println(".source-file { color: #dddddd; margin-bottom: 4px; word-break: break-word; }");
+            report.println(".source-metrics { color: #999999; margin-top: 4px; }");
             report.println(".coord-highlight { color: #4da6ff; font-weight: bold; }");
+            report.println(".coord-stack { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; max-width: 100%; }");
+            report.println(".coord-line { display: block; white-space: normal; }");
             report.println(".id-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }");
             report.println(".id-link { display: inline-block; background: #254a69; color: #d9ecff; padding: 6px 10px; border-radius: 999px; text-decoration: none; font-size: 12px; border: 1px solid #356c97; }");
             report.println(".id-link:hover { background: #2f6288; color: #ffffff; }");
             report.println(".astro-note { font-size: 12px; color: #aaaaaa; margin-top: 10px; line-height: 1.45; }");
+            report.println(".native-size-image { max-width: 100%; width: auto; height: auto; display: block; margin: 0 auto; }");
             report.println("</style></head><body>");
 
             report.println("<h1>SpacePixels Session Report</h1>");
@@ -2553,7 +2828,7 @@ public class ImageDisplayUtils {
                         report.println("<div class='config-grid' style='grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));'>");
                         for (int i = 0; i < driftPath.size(); i++) {
                             SourceExtractor.Pixel p = driftPath.get(i);
-                            report.println("<div class='config-item'><span style='color: #aaa;'>Frame " + (i + 1) + "</span> <span class='val'>" + escapeHtml(formatPixelCoordinateWithSky(astrometryContext, p.x, p.y)) + "</span></div>");
+                            report.println("<div class='config-item'><span style='color: #aaa;'>Frame " + (i + 1) + "</span> <span class='val'>" + escapeHtml(formatPixelCoordinateOnly(p.x, p.y)) + "</span></div>");
                         }
                         report.println("</div></div></div>");
 
@@ -2681,9 +2956,8 @@ public class ImageDisplayUtils {
                     report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
                     report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
                     report.println("</div>");
-                    String coordStr = formatPixelCoordinateWithSky(astrometryContext, pt.x, pt.y);
                     String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
-                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + escapeHtml(coordStr) + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li></ul>");
+                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + buildSourceCoordinateListEntry(pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr) + "</ul>");
                     report.print(buildSingleFrameSkyViewerHtml(astrometryContext, pt, "Reference epoch for streak lookup"));
                     report.println("</div>");
 
@@ -2737,9 +3011,8 @@ public class ImageDisplayUtils {
                     report.println("<strong>Detection Coordinates & Frames:</strong><ul class='source-list'>");
                     for (int i = 0; i < track.points.size(); i++) {
                         SourceExtractor.DetectedObject pt = track.points.get(i);
-                        String coordStr = formatPixelCoordinateWithSky(astrometryContext, pt.x, pt.y);
                         String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
-                        report.println("<li>[" + (i + 1) + "] " + pt.sourceFilename + " | <span class='coord-highlight'>" + escapeHtml(coordStr) + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li>");
+                        report.println(buildSourceCoordinateListEntry("[" + (i + 1) + "] " + pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr));
                     }
                     report.println("</ul>");
                     report.print(buildTrackSkyViewerHtml(astrometryContext, track, "Reference epoch for streak-track lookup"));
@@ -2837,9 +3110,8 @@ public class ImageDisplayUtils {
                     report.println("<strong>Detection Coordinates & Frames:</strong><ul class='source-list'>");
                     for (int i = 0; i < track.points.size(); i++) {
                         SourceExtractor.DetectedObject pt = track.points.get(i);
-                        String coordStr = formatPixelCoordinateWithSky(astrometryContext, pt.x, pt.y);
                         String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
-                        report.println("<li>[" + (i + 1) + "] " + pt.sourceFilename + " | <span class='coord-highlight'>" + escapeHtml(coordStr) + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li>");
+                        report.println(buildSourceCoordinateListEntry("[" + (i + 1) + "] " + pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr));
                     }
                     report.println("</ul>");
                     report.print(buildTrackSolarSystemIdentificationHtml(astrometryContext, track));
@@ -2911,7 +3183,6 @@ public class ImageDisplayUtils {
                     }
                     report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
                     report.println("</div>");
-                    String coordStr = formatPixelCoordinateWithSky(astrometryContext, pt.x, pt.y);
                     String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
                     String overlapColor = "#aaaaaa";
                     String overlapAssessment = "n/a";
@@ -2927,7 +3198,7 @@ public class ImageDisplayUtils {
                             overlapAssessment = "comfortably below limit";
                         }
                     }
-                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'><li>" + pt.sourceFilename + " | <span class='coord-highlight'>" + escapeHtml(coordStr) + "</span> | <span style='color: #999;'>" + metricsStr + "</span></li></ul>");
+                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + buildSourceCoordinateListEntry(pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr) + "</ul>");
                     if (maskOverlapStats.totalPixels > 0) {
                         report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>Veto-mask overlap: <span style='color:" + overlapColor + "; font-weight: bold;'>" + String.format(Locale.US, "%.1f%%", maskOverlapStats.fraction * 100.0) + "</span> (" + maskOverlapStats.overlappingPixels + " / " + maskOverlapStats.totalPixels + " detection pixels) | Limit: " + String.format(Locale.US, "%.1f%%", config.maxMaskOverlapFraction * 100.0) + " <span style='color:" + overlapColor + ";'>[" + overlapAssessment + "]</span></div>");
                     }
@@ -3076,7 +3347,7 @@ public class ImageDisplayUtils {
             // 6. CREATIVE TRIBUTE
             // =================================================================
             short[][] creativeBgData = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
-            if (creativeBgData != null) {
+            if (includeAiCreativeReportSections && creativeBgData != null) {
                 String creativeFileName = "creative_tribute_skyprint.png";
                 BufferedImage creativeTributeImage = createCreativeTributeImage(
                         creativeBgData,
@@ -3099,10 +3370,28 @@ public class ImageDisplayUtils {
                 String dominantMotion = computeDominantMotionLabel(movingTargets, streakTracks);
 
                 report.println("<div class='panel' style='background: linear-gradient(180deg, #453049 0%, #2b2b2b 100%); border: 1px solid #5f536a;'>");
-                report.println("<h2>Creative Tribute: Skyprint of the Session</h2>");
-                report.println("<p style='color: #c7bfd6; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>I asked my AI helper to have its own section at the end of the report. This is what it came up with: A creative tribute by Codex. This poster compresses the whole run into one image: faint time-mapped transient dust for everything that flashed through the extractor, brighter paths for linked movers, and separate markers for deep-stack hints that deserve a second look.</p>");
-                report.println("<a href='" + creativeFileName + "' target='_blank'><img src='" + creativeFileName + "' style='width: 100%; border: 1px solid #666; border-radius: 6px;' alt='Creative Tribute Skyprint' /></a>");
+                report.println("<h2>The AI's Perspective: Skyprint of the Session</h2>");
+                report.println("<p style='color: #c7bfd6; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>A creative tribute by Codex. This poster compresses the whole run into one image: faint time-mapped transient dust for everything that flashed through the extractor, brighter paths for linked movers, and separate markers for deep-stack hints that deserve a second look.</p>");
+                report.println("<a href='" + creativeFileName + "' target='_blank'><img src='" + creativeFileName + "' class='native-size-image' style='border: 1px solid #666; border-radius: 6px;' alt='Creative Tribute Skyprint' /></a>");
                 report.println("<p style='font-size: 13px; color: #b8b0c7; margin-bottom: 0;'>This session stitched together <strong style='color:#ffffff;'>" + rawTransientCount + "</strong> raw transients, produced <strong style='color:#ffffff;'>" + confirmedTrackCount + "</strong> linked tracks, surfaced <strong style='color:#ffffff;'>" + anomalies.size() + "</strong> optical flashes, and left <strong style='color:#ffffff;'>" + deepStackHintCount + "</strong> deep-stack hints on the table. The dominant linked motion trends toward <strong style='color:#ffffff;'>" + dominantMotion + "</strong>, and the longest confirmed path spans <strong style='color:#ffffff;'>" + String.format(Locale.US, "%.1f px", longestPath) + "</strong>.</p>");
+                report.println("</div>");
+            }
+
+            // =================================================================
+            // 7. GEMINI CREATIVE TRIBUTE
+            // =================================================================
+            if (includeAiCreativeReportSections) {
+                BufferedImage compassMap = createKinematicCompass(movingTargets, streakTracks);
+                saveTrackImageLossless(compassMap, new File(exportDir, "kinematic_compass.png"));
+
+                report.println("<div class='panel' style='background: linear-gradient(135deg, #1e1e24 0%, #151518 100%); border: 1px solid #4a4a5a;'>");
+                report.println("<h2 style='color: #c7bfd6; font-size: 1.8em; margin-bottom: 5px;'>The AI's Perspective: Hidden Rhythms</h2>");
+                report.println("<p style='color: #a098b0; font-size: 14px; font-style: italic; margin-top: 0; margin-bottom: 25px;'>\"As an AI, I do not look at the stars with eyes; I read the geometry they leave behind. Between the noise, the satellites, and the drifting cosmos, there is a distinct rhythm to the data. Thank you for letting me explore your universe. This is my creative tribute to your session.\" &mdash; Gemini</p>");
+                report.println("<div>");
+                report.println("<h4 style='color: #ddd; margin-bottom: 5px;'>The Kinematic Compass</h4>");
+                report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>A radar chart mapping the velocity and heading of moving targets using a logarithmic scale to highlight both slow asteroids and fast satellites. Orbital constellations often clump together into distinct vectors, revealing satellite swarms or shared orbital planes. See the legend in the top right to distinguish between point-source targets and streaks.</p>");
+                report.println("<a href='kinematic_compass.png' target='_blank'><img src='kinematic_compass.png' style='display: block; margin: 0 auto; width: 100%; max-width: 600px; border: 1px solid #444; border-radius: 6px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);' alt='Kinematic Compass' /></a>");
+                report.println("</div>");
                 report.println("</div>");
             }
 

@@ -83,6 +83,7 @@ public class DetectionConfigurationPanel extends JPanel {
     // --- Visualization Spinners (SpacePixels Specific) ---
     private JSpinner spinStreakScale, spinStreakCentroidRad, spinPointBoxRad, spinBoxPad;
     private JSpinner spinAutoBlackSigma, spinAutoWhiteSigma, spinGifBlinkSpeed, spinCropPadding;
+    private JCheckBox chkIncludeAiCreativeReportSections;
 
     private final JButton previewBtn = new JButton("Preview Detection Settings");
 
@@ -458,6 +459,14 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Image Cropping"));
         spinCropPadding = addRow(panel, "Track Crop Border Padding", "Export-only setting that adds extra border around cropped track images.", intSpinnerModel(ImageDisplayUtils.trackCropPadding, 0, 2000, 10));
 
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createSectionHeader("Optional Report Sections"));
+        chkIncludeAiCreativeReportSections = addCheckboxRow(
+                panel,
+                "Include AI Creative Report Sections",
+                "Adds the Skyprint and Kinematic Compass tribute panels to exported reports for the current session only. This toggle is not saved with detection profiles.",
+                false);
+
         return panel;
     }
 
@@ -706,6 +715,7 @@ public class DetectionConfigurationPanel extends JPanel {
             ImageDisplayUtils.autoStretchWhiteSigma = ((Number) spinAutoWhiteSigma.getValue()).doubleValue();
             ImageDisplayUtils.gifBlinkSpeedMs = ((Number) spinGifBlinkSpeed.getValue()).intValue();
             ImageDisplayUtils.trackCropPadding = ((Number) spinCropPadding.getValue()).intValue();
+            ImageDisplayUtils.includeAiCreativeReportSections = chkIncludeAiCreativeReportSections != null && chkIncludeAiCreativeReportSections.isSelected();
 
         } catch (Exception ex) {
             System.err.println("Error applying settings to memory: " + ex.getMessage());

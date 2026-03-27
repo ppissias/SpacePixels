@@ -66,7 +66,7 @@ public class ConfigurationPanel extends JPanel {
                 astapControlPanel));
 
         // --- SECTION 2: DETECTION & ANNOTATION ---
-        mainContent.add(createSectionHeader("Detection & Annotation Parameters (Used for object identification) [not implemented yet]"));
+        mainContent.add(createSectionHeader("Detection & Annotation Parameters (Used for object identification)"));
 
         observatoryCodeTextField = new JTextField();
         mainContent.add(createConfigRow(
