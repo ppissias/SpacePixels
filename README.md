@@ -84,8 +84,8 @@ To generate a local distribution with launch scripts:
 6. Adjust detection settings or use `Auto-Tune Settings` in the `Detection Settings` tab.
 7. Run either:
    - `Detect Moving Targets (Standard Pipeline)`, or
-   - `Detect Iteratively (Large Datasets)` for large or slow-moving datasets.
-8. Open the generated HTML report in the new `detections_YYYYMMDD_HHMMSS` export folder.
+   - `Detect Iteratively (Large Datasets)` for large datasets where the standard full run may be too heavy.
+8. When the run finishes, SpacePixels prompts you to open the generated HTML report or, for iterative runs, the results folder containing the per-pass reports.
 
 ## Report output
 
@@ -140,9 +140,32 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 
 ## Command-line utilities
 
+`build.gradle` generates dedicated launcher scripts for the command-line tools and adds them to the distribution `bin` folder alongside the main `SpacePixels` launcher.
+
+After building or unpacking a distribution, you should find:
+
+- Windows:
+  - `bin\\SpacePixels.bat`
+  - `bin\\batchDetect.bat`
+  - `bin\\injectStars.bat`
+- Linux/macOS:
+  - `bin/SpacePixels`
+  - `bin/batchDetect`
+  - `bin/injectStars`
+
 ### Headless batch detection
 
-Use the bundled `batchDetect` launcher or the Gradle task:
+Use either the packaged `batchDetect` launcher or the Gradle task.
+
+Packaged launcher examples:
+
+- Windows:
+  - `bin\\batchDetect.bat "C:\\astro\\sequence" "C:\\astro\\detection_config.json"`
+  - `bin\\batchDetect.bat "C:\\astro\\sequence" "C:\\astro\\detection_config.json" --auto-tune balanced`
+- Linux/macOS:
+  - `bin/batchDetect "/data/sequence" "/data/detection_config.json" --auto-tune balanced`
+
+Gradle task examples:
 
 - Windows:
   - `gradlew.bat batchDetect -PbatchArgs="\"C:\\astro\\sequence\" \"C:\\astro\\detection_config.json\""`
@@ -154,7 +177,16 @@ Use the bundled `batchDetect` launcher or the Gradle task:
 
 ### Artificial star injection
 
-Use the bundled `injectStars` launcher or the Gradle task:
+Use either the packaged `injectStars` launcher or the Gradle task.
+
+Packaged launcher examples:
+
+- Windows:
+  - `bin\\injectStars.bat C:\\astro\\sequence 15 10.0 4500 4.0`
+- Linux/macOS:
+  - `bin/injectStars /data/sequence 15 10.0 4500 4.0`
+
+Gradle task examples:
 
 - Windows:
   - `gradlew.bat injectStars -PinjArgs="C:\\astro\\sequence 15 10.0 4500 4.0"`

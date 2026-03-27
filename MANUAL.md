@@ -227,7 +227,7 @@ Runs the full standard multi-frame detection and HTML export pipeline.
 
 ### Detect Iteratively (Large Datasets)
 
-Runs the multi-pass iterative workflow intended for large datasets and very slow movers.
+Runs the multi-pass iterative workflow intended for large datasets where the standard full run may be too memory-heavy.
 
 ---
 
@@ -452,7 +452,6 @@ This covers:
 The iterative pipeline is designed for:
 
 - very large datasets
-- very slow movers
 - datasets where the standard full-baseline run may be too memory-heavy
 
 Workflow:
@@ -530,6 +529,11 @@ These are optional visual summaries and are off by default.
 ### Iterative summary report
 
 The iterative workflow exports a separate index report that lists each pass, the number of tracks found, the anomaly count, and a link to the corresponding sub-report.
+
+When processing finishes, SpacePixels prompts you to open:
+
+- the generated HTML report for the standard pipeline, or
+- the results folder for the iterative pipeline
 
 ---
 
