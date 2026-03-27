@@ -113,9 +113,12 @@ Many thanks to cloudynights user TheStarsabove for providing data.
 
 Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 
-**Check out a sample report.**
+**Check out sample reports.**
 
-<a href="https://startales.eu/various_files/detections_20260324_125211/detection_report.html" target="_blank">==&gt; Sample SpacePixels report</a>
+<a href="https://startales.eu/various_files/detections_20260327_105248/detection_report.html" target="_blank">==&gt; Sample SpacePixels report</a>
+<a href="https://startales.eu/various_files/detections_20260327_104057/detection_report.html" target="_blank">==&gt; Sample SpacePixels report (Apophis)</a>
+<a href="https://startales.eu/various_files/detections_20260327_104830/detection_report.html" target="_blank">==&gt; Sample SpacePixels report</a>
+<a href="https://startales.eu/various_files/detections_20260327_104437/detection_report.html" target="_blank">==&gt; Sample SpacePixels report (artificial slow mover injected)</a>
 
 ![Main Interface](https://startales.eu/various_files/Screenshot2026-03-20215405.png)
 *The SpacePixels Main Workspace.*
