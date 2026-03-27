@@ -115,10 +115,10 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 
 **Check out sample reports.**
 
-<a href="https://startales.eu/various_files/detections_20260327_105248/detection_report.html" target="_blank">==&gt; Sample SpacePixels report</a>
-<a href="https://startales.eu/various_files/detections_20260327_104057/detection_report.html" target="_blank">==&gt; Sample SpacePixels report (Apophis)</a>
-<a href="https://startales.eu/various_files/detections_20260327_104830/detection_report.html" target="_blank">==&gt; Sample SpacePixels report</a>
-<a href="https://startales.eu/various_files/detections_20260327_104437/detection_report.html" target="_blank">==&gt; Sample SpacePixels report (artificial slow mover injected)</a>
+<a href="https://startales.eu/various_files/detections_20260327_105248/detection_report.html" target="_blank">Sample SpacePixels report</a> <br/>
+<a href="https://startales.eu/various_files/detections_20260327_104057/detection_report.html" target="_blank">Sample SpacePixels report (Apophis)</a> <br/>
+<a href="https://startales.eu/various_files/detections_20260327_104830/detection_report.html" target="_blank">Sample SpacePixels report</a> <br/>
+<a href="https://startales.eu/various_files/detections_20260327_104437/detection_report.html" target="_blank">Sample SpacePixels report (artificial slow mover injected)</a> <br/>
 
 ![Main Interface](https://startales.eu/various_files/Screenshot2026-03-20215405.png)
 *The SpacePixels Main Workspace.*
