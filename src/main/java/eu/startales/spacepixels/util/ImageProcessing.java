@@ -42,10 +42,40 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 
-// --- NEW IMPORT FOR THE CALLBACK ---
-import java.util.function.IntPredicate;
-
 public class ImageProcessing {
+
+    @FunctionalInterface
+    public interface DetectionSafetyPrompt {
+        boolean shouldProceed(DetectionSummary summary);
+    }
+
+    public static final class DetectionSummary {
+        public final int totalDetections;
+        public final int singleStreaks;
+        public final int streakTracks;
+        public final int movingTargets;
+        public final int anomalies;
+        public final int slowMoverCandidates;
+        public final int maximumStackTransientStreaks;
+        public final int potentialSlowMovers;
+
+        private DetectionSummary(int totalDetections,
+                                 int singleStreaks,
+                                 int streakTracks,
+                                 int movingTargets,
+                                 int anomalies,
+                                 int slowMoverCandidates,
+                                 int maximumStackTransientStreaks) {
+            this.totalDetections = totalDetections;
+            this.singleStreaks = singleStreaks;
+            this.streakTracks = streakTracks;
+            this.movingTargets = movingTargets;
+            this.anomalies = anomalies;
+            this.slowMoverCandidates = slowMoverCandidates;
+            this.maximumStackTransientStreaks = maximumStackTransientStreaks;
+            this.potentialSlowMovers = slowMoverCandidates + maximumStackTransientStreaks;
+        }
+    }
 
     private static class FitsMetadataLoadResult {
         private final FitsFileInformation fileInfo;
@@ -255,7 +285,7 @@ public class ImageProcessing {
     // THE MULTI-THREADED DETECTION PIPELINE
     // =========================================================================
 
-    public File detectObjects(DetectionConfig config, IntPredicate safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
+    public File detectObjects(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
         long startTime = System.currentTimeMillis();
 
         if (this.cachedFileInfo == null) getFitsfileInformation();
@@ -310,9 +340,9 @@ public class ImageProcessing {
         // =========================================================
 
         if (safetyPrompt != null) {
-            int trackCount = result.tracks.size();
-            if (!safetyPrompt.test(trackCount)) {
-                System.out.println("Report generation aborted by UI callback. Track count: " + trackCount);
+            DetectionSummary detectionSummary = summarizeDetections(result);
+            if (!safetyPrompt.shouldProceed(detectionSummary)) {
+                System.out.println("Report generation aborted by UI callback. Detection count: " + detectionSummary.totalDetections);
                 return null;
             }
         }
@@ -348,7 +378,7 @@ public class ImageProcessing {
 // ITERATIVE SLOW-MOVER PIPELINE
 // =========================================================================
 
-    public File detectSlowObjectsIterative(DetectionConfig config, java.util.function.IntPredicate safetyPrompt, TransientEngineProgressListener progressListener, int maxFramesLimit) throws Exception {
+    public File detectSlowObjectsIterative(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener, int maxFramesLimit) throws Exception {
         long startTime = System.currentTimeMillis();
 
         if (this.cachedFileInfo == null) getFitsfileInformation();
@@ -467,8 +497,9 @@ public class ImageProcessing {
             PipelineResult result = engine.runPipeline(spacedSubset, config, scaledListener, providedMasterStack);
             engine.shutdown();
 
-            if (safetyPrompt != null && !safetyPrompt.test(result.tracks.size())) {
-                System.out.println("Iteration " + k + " aborted by UI callback due to high track count. Stopping further iterations.");
+            DetectionSummary detectionSummary = summarizeDetections(result);
+            if (safetyPrompt != null && !safetyPrompt.shouldProceed(detectionSummary)) {
+                System.out.println("Iteration " + k + " aborted by UI callback due to high detection count. Stopping further iterations.");
                 break;
             }
 
@@ -538,6 +569,40 @@ public class ImageProcessing {
 
         System.out.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
         return masterDir;
+    }
+
+    private static DetectionSummary summarizeDetections(PipelineResult result) {
+        List<TrackLinker.Track> tracks = result.tracks;
+        int anomalies = 0;
+        int singleStreaks = 0;
+        int streakTracks = 0;
+        int movingTargets = 0;
+
+        for (TrackLinker.Track track : tracks) {
+            if (track.points.size() == 1) {
+                if (track.isAnomaly) {
+                    anomalies++;
+                } else {
+                    singleStreaks++;
+                }
+            } else if (track.isStreakTrack) {
+                streakTracks++;
+            } else {
+                movingTargets++;
+            }
+        }
+
+        int slowMoverCandidates = result.slowMoverCandidates == null ? 0 : result.slowMoverCandidates.size();
+        int maximumStackTransientStreaks = result.masterMaximumStackTransientStreaks == null ? 0 : result.masterMaximumStackTransientStreaks.size();
+
+        return new DetectionSummary(
+                tracks.size(),
+                singleStreaks,
+                streakTracks,
+                movingTargets,
+                anomalies,
+                slowMoverCandidates,
+                maximumStackTransientStreaks);
     }
 
     private List<Integer> getSampledIndices(long[] times, boolean hasValidTime, int maxLimit, int k) {

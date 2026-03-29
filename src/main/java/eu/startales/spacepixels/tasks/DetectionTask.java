@@ -34,7 +34,6 @@ import java.awt.Graphics2D;
 import java.io.File;
 import java.util.List;
 import java.util.logging.Level;
-import java.util.function.IntPredicate;
 
 public class DetectionTask implements Runnable {
     private final EventBus eventBus;
@@ -108,9 +107,9 @@ public class DetectionTask implements Runnable {
                 eventBus.post(new DetectionStartedEvent());
 
                 // Define the Safety Valve Callback
-                IntPredicate safetyPrompt = (trackCount) -> {
-                    int SAFE_TRACK_LIMIT = 50;
-                    if (trackCount <= SAFE_TRACK_LIMIT) {
+                ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) -> {
+                    int safeDetectionLimit = 50;
+                    if (summary.totalDetections <= safeDetectionLimit) {
                         return true;
                     }
 
@@ -119,11 +118,17 @@ public class DetectionTask implements Runnable {
                         SwingUtilities.invokeAndWait(() -> {
                             int choice = JOptionPane.showConfirmDialog(
                                     null,
-                                    "The engine found an unusually high number of moving tracks (" + trackCount + ").\n\n" +
+                                    "The engine found an unusually high number of detections (" + summary.totalDetections + ").\n\n" +
+                                            "Breakdown:\n" +
+                                            " - Moving target tracks: " + summary.movingTargets + "\n" +
+                                            " - Multi-frame streak tracks: " + summary.streakTracks + "\n" +
+                                            " - Single streaks: " + summary.singleStreaks + "\n" +
+                                            " - High-energy anomalies: " + summary.anomalies + "\n" +
+                                            " - Potential slow movers: " + summary.potentialSlowMovers + " (" + summary.slowMoverCandidates + " deep-stack candidates, " + summary.maximumStackTransientStreaks + " unmatched maximum-stack streaks)\n\n" +
                                             "Generating image crops, GIFs, and an HTML report for this many objects will take a long time and consume significant disk space.\n" +
                                             "This usually indicates the Detection Sigma was set too low and the engine linked background noise.\n\n" +
                                             "Do you want to proceed with generating the report anyway?",
-                                    "High Track Count Warning",
+                                    "High Detection Count Warning",
                                     JOptionPane.YES_NO_OPTION,
                                     JOptionPane.WARNING_MESSAGE
                             );

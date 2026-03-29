@@ -2493,6 +2493,137 @@ public class ImageDisplayUtils {
                 .format(Instant.ofEpochMilli(timestampMillis));
     }
 
+    private static String formatDuration(long durationMillis) {
+        if (durationMillis < 0L) {
+            return "Unknown";
+        }
+        if (durationMillis < 1000L) {
+            return durationMillis + " ms";
+        }
+
+        double durationSeconds = durationMillis / 1000.0d;
+        if (durationSeconds < 60.0d) {
+            return formatDecimal(durationSeconds, 1) + " s";
+        }
+
+        double durationMinutes = durationSeconds / 60.0d;
+        if (durationMinutes < 60.0d) {
+            return formatDecimal(durationMinutes, 1) + " min";
+        }
+
+        return formatDecimal(durationMinutes / 60.0d, 2) + " h";
+    }
+
+    private static String formatAxisAngleDegrees(double angleRadians) {
+        double degrees = Math.toDegrees(angleRadians);
+        while (degrees < 0.0d) {
+            degrees += 180.0d;
+        }
+        while (degrees >= 180.0d) {
+            degrees -= 180.0d;
+        }
+        return formatDecimal(degrees, 1) + "°";
+    }
+
+    private static String formatDirectionDegrees(double dx, double dy) {
+        double degrees = Math.toDegrees(Math.atan2(dy, dx));
+        while (degrees < 0.0d) {
+            degrees += 360.0d;
+        }
+        while (degrees >= 360.0d) {
+            degrees -= 360.0d;
+        }
+        return formatDecimal(degrees, 1) + "°";
+    }
+
+    private static String formatTrackSpeed(double distancePixels, long durationMillis) {
+        if (durationMillis <= 0L) {
+            return "n/a";
+        }
+
+        double pixelsPerSecond = distancePixels / (durationMillis / 1000.0d);
+        if (durationMillis >= 60_000L) {
+            return formatDecimal(pixelsPerSecond * 60.0d, 2) + " px/min";
+        }
+        return formatDecimal(pixelsPerSecond, 2) + " px/s";
+    }
+
+    private static String buildStreakMetricsText(SourceExtractor.DetectedObject detection) {
+        return String.format(
+                Locale.US,
+                "Flux: %.1f, Pixels: %d, Elongation: %.2f, Angle: %s, Peak Sigma: %.2f",
+                detection.totalFlux,
+                (int) detection.pixelArea,
+                detection.elongation,
+                formatAxisAngleDegrees(detection.angle),
+                detection.peakSigma);
+    }
+
+    private static String buildMovingTrackMetricsText(SourceExtractor.DetectedObject detection) {
+        return String.format(
+                Locale.US,
+                "Flux: %.1f, Pixels: %d, Elongation: %.2f, FWHM: %.2f, Peak Sigma: %.2f, UTC: %s",
+                detection.totalFlux,
+                (int) detection.pixelArea,
+                detection.elongation,
+                detection.fwhm,
+                detection.peakSigma,
+                formatUtcTimestamp(detection.timestamp));
+    }
+
+    private static String buildAnomalyMetricsText(SourceExtractor.DetectedObject detection) {
+        return String.format(
+                Locale.US,
+                "Peak Sigma: %.2f, Flux: %.1f, Pixels: %d, Elongation: %.2f",
+                detection.peakSigma,
+                detection.totalFlux,
+                (int) detection.pixelArea,
+                detection.elongation);
+    }
+
+    private static String buildTrackTimingSummaryHtml(TrackLinker.Track track) {
+        if (track == null || track.points == null || track.points.isEmpty()) {
+            return "";
+        }
+
+        SourceExtractor.DetectedObject firstPoint = track.points.get(0);
+        SourceExtractor.DetectedObject lastPoint = track.points.get(track.points.size() - 1);
+        double dx = lastPoint.x - firstPoint.x;
+        double dy = lastPoint.y - firstPoint.y;
+        double displacementPixels = Math.hypot(dx, dy);
+
+        long firstStartTimestamp = -1L;
+        long lastEndTimestamp = -1L;
+        for (SourceExtractor.DetectedObject point : track.points) {
+            if (point.timestamp <= 0L) {
+                continue;
+            }
+            long startTimestamp = point.timestamp;
+            long endTimestamp = point.timestamp + Math.max(point.exposureDuration, 0L);
+            if (firstStartTimestamp < 0L) {
+                firstStartTimestamp = startTimestamp;
+            }
+            lastEndTimestamp = Math.max(lastEndTimestamp, endTimestamp);
+        }
+
+        long durationMillis = (firstStartTimestamp > 0L && lastEndTimestamp >= firstStartTimestamp)
+                ? lastEndTimestamp - firstStartTimestamp
+                : -1L;
+
+        StringBuilder html = new StringBuilder();
+        html.append("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 15px;'>");
+        html.append("First UTC: <span style='color:#fff;'>").append(escapeHtml(formatUtcTimestamp(firstStartTimestamp))).append("</span><br>");
+        html.append("Last UTC: <span style='color:#fff;'>").append(escapeHtml(formatUtcTimestamp(lastEndTimestamp))).append("</span><br>");
+        html.append("Track Duration: <span style='color:#fff;'>").append(escapeHtml(formatDuration(durationMillis))).append("</span><br>");
+        html.append("Mean Speed: <span style='color:#fff;'>").append(escapeHtml(formatTrackSpeed(displacementPixels, durationMillis))).append("</span><br>");
+        html.append("Start-End Motion: <span style='color:#fff;'>")
+                .append(escapeHtml(formatDecimal(displacementPixels, 1)))
+                .append(" px @ ")
+                .append(escapeHtml(formatDirectionDegrees(dx, dy)))
+                .append("</span></div>");
+        return html.toString();
+    }
+
     private static String formatDecimal(double value, int decimals) {
         return String.format(Locale.US, "%." + decimals + "f", value);
     }
@@ -2608,6 +2739,7 @@ public class ImageDisplayUtils {
         short[][] masterStackData = result.masterStackData;
         short[][] masterMaximumStackData = result.masterMaximumStackData;
         boolean[][] masterMask = result.masterMask;
+        List<SourceExtractor.DetectedObject> masterStars = result.masterStars;
         short[][] slowMoverStackData = result.slowMoverStackData;
         List<SourceExtractor.DetectedObject> slowMoverCandidates = result.slowMoverCandidates;
         List<SourceExtractor.DetectedObject> masterMaximumStackTransientStreaks = result.masterMaximumStackTransientStreaks;
@@ -2823,6 +2955,9 @@ public class ImageDisplayUtils {
                         "These are the detected objects in the master map extended by a max star jitter of <strong>" + config.maxStarJitter + "</strong> pixels. " +
                         "During Phase 3, we calculate the overlap fraction of each transient against this mask to determine if it should be deleted (purged as a stationary star) or allowed to survive. " +
                         "The maximum allowed overlap fraction is currently set to <strong>" + config.maxMaskOverlapFraction + "</strong> (" + (int)(config.maxMaskOverlapFraction * 100) + "%).</p>");
+                report.println("<div class='flex-container' style='margin-bottom: 15px;'>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + (masterStars != null ? masterStars.size() : 0) + "</span><span class='metric-label'>Master Map Objects</span></div>");
+                report.println("</div>");
                 report.println("<div class='image-container'>");
                 report.println("<div><a href='master_stack.png' target='_blank'><img src='master_stack.png' style='max-width: 400px;' alt='Master Stack' /></a><br/><center><small>Deep Median Stack</small></center></div>");
                 report.println("<div><a href='master_mask_overlay.png' target='_blank'><img src='master_mask_overlay.png' style='max-width: 400px;' alt='Mask Overlay' /></a><br/><center><small>Binary Footprint Mask (Red)</small></center></div>");
@@ -2941,6 +3076,10 @@ public class ImageDisplayUtils {
                 report.println("<tr><td>3. Final Track</td><td>Erratic Kinematic Rhythm</td><td>" + linkerTelemetry.countTrackErraticRhythm + "</td></tr>");
                 report.println("<tr><td>3. Final Track</td><td>Duplicate Track (Ignored)</td><td>" + linkerTelemetry.countTrackDuplicate + "</td></tr>");
                 report.println("</table>");
+                report.println("<p class='astro-note' style='margin-top: 12px;'>");
+                report.println("Phase outputs: <strong>" + linkerTelemetry.streakTracksFound + "</strong> accepted streak tracks and <strong>" + linkerTelemetry.pointTracksFound + "</strong> accepted point/anomaly tracks. ");
+                report.println("The point/anomaly total includes anomaly-rescue outputs and is not identical to the final moving-target bucket.");
+                report.println("</p>");
 
                 report.println("</div>");
             }
@@ -2979,7 +3118,7 @@ public class ImageDisplayUtils {
                     report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
                     report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
                     report.println("</div>");
-                    String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
+                    String metricsStr = buildStreakMetricsText(pt);
                     report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + buildSourceCoordinateListEntry(pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr) + "</ul>");
                     report.print(buildSingleFrameSkyViewerHtml(astrometryContext, pt, "Reference epoch for streak lookup"));
                     report.println("</div>");
@@ -3034,7 +3173,7 @@ public class ImageDisplayUtils {
                     report.println("<strong>Detection Coordinates & Frames:</strong><ul class='source-list'>");
                     for (int i = 0; i < track.points.size(); i++) {
                         SourceExtractor.DetectedObject pt = track.points.get(i);
-                        String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
+                        String metricsStr = buildStreakMetricsText(pt);
                         report.println(buildSourceCoordinateListEntry("[" + (i + 1) + "] " + pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr));
                     }
                     report.println("</ul>");
@@ -3086,6 +3225,7 @@ public class ImageDisplayUtils {
                     report.println("<div class='detection-card'>");
                     String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
                     report.println("<div class='detection-title'>Moving Target Track T" + counter + timeBadge + "</div>");
+                    report.print(buildTrackTimingSummaryHtml(track));
 
                     report.println("<div class='image-container'>");
                     report.println("<div><a href='" + objFileName + "' target='_blank'><img src='" + objFileName + "' alt='Object Centric' /></a><br/><center><small>Object Centric</small></center></div>");
@@ -3133,7 +3273,7 @@ public class ImageDisplayUtils {
                     report.println("<strong>Detection Coordinates & Frames:</strong><ul class='source-list'>");
                     for (int i = 0; i < track.points.size(); i++) {
                         SourceExtractor.DetectedObject pt = track.points.get(i);
-                        String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
+                        String metricsStr = buildMovingTrackMetricsText(pt);
                         report.println(buildSourceCoordinateListEntry("[" + (i + 1) + "] " + pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr));
                     }
                     report.println("</ul>");
@@ -3206,7 +3346,7 @@ public class ImageDisplayUtils {
                     }
                     report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
                     report.println("</div>");
-                    String metricsStr = String.format(Locale.US, "Flux: %.1f, Pixels: %d, Elongation: %.2f", pt.totalFlux, (int) pt.pixelArea, pt.elongation);
+                    String metricsStr = buildAnomalyMetricsText(pt);
                     String overlapColor = "#aaaaaa";
                     String overlapAssessment = "n/a";
                     if (maskOverlapStats.totalPixels > 0) {

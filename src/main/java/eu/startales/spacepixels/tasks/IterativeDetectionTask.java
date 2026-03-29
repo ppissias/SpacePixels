@@ -24,7 +24,6 @@ import eu.startales.spacepixels.util.ImageProcessing;
 import javax.swing.*;
 import java.io.File;
 import java.util.logging.Level;
-import java.util.function.IntPredicate;
 
 public class IterativeDetectionTask implements Runnable {
     private final EventBus eventBus;
@@ -84,9 +83,9 @@ public class IterativeDetectionTask implements Runnable {
 
         try {
             // Define the Safety Valve Callback
-            IntPredicate safetyPrompt = (trackCount) -> {
-                int SAFE_TRACK_LIMIT = 100; // Increased limit slightly since iterative runs aggregate tracks
-                if (trackCount <= SAFE_TRACK_LIMIT) {
+            ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) -> {
+                int safeDetectionLimit = 100; // Increased limit slightly since iterative runs aggregate detections
+                if (summary.totalDetections <= safeDetectionLimit) {
                     return true;
                 }
 
@@ -95,10 +94,16 @@ public class IterativeDetectionTask implements Runnable {
                     SwingUtilities.invokeAndWait(() -> {
                         int choice = JOptionPane.showConfirmDialog(
                                 null,
-                                "The iterative engine found a very high number of combined tracks (" + trackCount + ").\n\n" +
+                                "The iterative engine found a very high number of detections in this pass (" + summary.totalDetections + ").\n\n" +
+                                        "Breakdown:\n" +
+                                        " - Moving target tracks: " + summary.movingTargets + "\n" +
+                                        " - Multi-frame streak tracks: " + summary.streakTracks + "\n" +
+                                        " - Single streaks: " + summary.singleStreaks + "\n" +
+                                        " - High-energy anomalies: " + summary.anomalies + "\n" +
+                                        " - Potential slow movers: " + summary.potentialSlowMovers + " (" + summary.slowMoverCandidates + " deep-stack candidates, " + summary.maximumStackTransientStreaks + " unmatched maximum-stack streaks)\n\n" +
                                         "Generating the HTML report will take a long time.\n" +
                                         "Do you want to proceed?",
-                                "High Track Count Warning",
+                                "High Detection Count Warning",
                                 JOptionPane.YES_NO_OPTION,
                                 JOptionPane.WARNING_MESSAGE
                         );
