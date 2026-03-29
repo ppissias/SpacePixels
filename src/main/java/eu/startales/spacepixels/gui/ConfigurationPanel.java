@@ -71,19 +71,19 @@ public class ConfigurationPanel extends JPanel {
         observatoryCodeTextField = new JTextField();
         mainContent.add(createConfigRow(
                 "IAU Observatory Code",
-                "Optional 3-character observatory code for SkyBoT and other topocentric services. If not set, SpacePixels will fall back to geocenter-based lookups.",
+                "Optional 3-character observatory code for SkyBoT and other topocentric services. If not set, SpacePixels will fall back to geocenter-based lookups.<br><b>Format:</b> MPC/IAU code such as <code>500</code> or <code>J95</code>.",
                 observatoryCodeTextField));
 
         latTextField = new JTextField();
         mainContent.add(createConfigRow(
                 "Site Latitude (N)",
-                "Observation site latitude for accurate celestial annotation.",
+                "Observation site latitude for accurate celestial annotation.<br><b>Format:</b> signed decimal degrees. Use positive values for north and negative values for south, e.g. <code>37.9838</code> or <code>-24.6272</code>.",
                 latTextField));
 
         longTextField = new JTextField();
         mainContent.add(createConfigRow(
                 "Site Longitude (E)",
-                "Observation site longitude for accurate celestial annotation.",
+                "Observation site longitude for accurate celestial annotation.<br><b>Format:</b> signed decimal degrees. Use positive values for east and negative values for west, e.g. <code>23.7275</code> or <code>-70.4030</code>.",
                 longTextField));
 
         // --- SECTION 3: SOLVING PARAMETERS ---
@@ -107,14 +107,14 @@ public class ConfigurationPanel extends JPanel {
         raTextfield = new JTextField();
         mainContent.add(createConfigRow(
                 "Approximate Right Ascension (RA)",
-                "Field coordinates at the center of the image (HH MM SS.xxx).",
+                "Field coordinates at the center of the image.<br><b>Format:</b> <code>HH MM SS.xxx</code> with hours 00-23, e.g. <code>12 34 56.789</code>. FITS-style colon-separated values such as <code>12:34:56.789</code> are also common.",
                 raTextfield));
         raTextfield.setEnabled(false);
 
         decTextField = new JTextField();
         mainContent.add(createConfigRow(
                 "Approximate Declination (DEC)",
-                "Field coordinates at the center of the image (+HH MM SS.xxx).",
+                "Field coordinates at the center of the image.<br><b>Format:</b> <code>+DD MM SS.xxx</code> or <code>-DD MM SS.xxx</code>, e.g. <code>+12 34 56.78</code> or <code>-05 12 08.4</code>. Include the sign.",
                 decTextField));
         decTextField.setEnabled(false);
 
@@ -288,8 +288,8 @@ public class ConfigurationPanel extends JPanel {
         textPanel.add(Box.createVerticalStrut(3)); // Small gap between title and desc
         textPanel.add(descLabel);
 
-        // Lock the width so inputs align vertically, but give it enough height (55) for 2 lines of text
-        Dimension textDim = new Dimension(450, 55);
+        // Give the descriptions enough room for the format guidance without clipping.
+        Dimension textDim = new Dimension(450, 80);
         textPanel.setPreferredSize(textDim);
         textPanel.setMinimumSize(textDim);
         textPanel.setMaximumSize(textDim);

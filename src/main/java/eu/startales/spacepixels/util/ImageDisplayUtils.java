@@ -11,6 +11,7 @@
 package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.core.TrackLinker;
@@ -33,8 +34,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 
 public class ImageDisplayUtils {
 
@@ -2615,6 +2614,29 @@ public class ImageDisplayUtils {
         PipelineTelemetry pipelineTelemetry = result.telemetry;
         List<List<SourceExtractor.DetectedObject>> allTransients = result.allTransients;
         ReportAstrometryContext astrometryContext = buildReportAstrometryContext(fitsFiles, appConfig);
+        List<TrackLinker.Track> anomalies = new ArrayList<>();
+        List<TrackLinker.Track> singleStreaks = new ArrayList<>();
+        List<TrackLinker.Track> streakTracks = new ArrayList<>();
+        List<TrackLinker.Track> movingTargets = new ArrayList<>();
+
+        for (TrackLinker.Track track : tracks) {
+            if (track.points == null || track.points.isEmpty()) continue;
+            java.util.Set<Integer> uniqueFrames = new java.util.HashSet<>();
+            for (SourceExtractor.DetectedObject pt : track.points) uniqueFrames.add(pt.sourceFrameIndex);
+
+            if (uniqueFrames.size() == 1) {
+                if (track.isAnomaly) anomalies.add(track);
+                else singleStreaks.add(track);
+            } else {
+                if (track.isStreakTrack) streakTracks.add(track);
+                else movingTargets.add(track);
+            }
+        }
+
+        int slowMoverCandidateCount = slowMoverCandidates == null ? 0 : slowMoverCandidates.size();
+        int maximumStackTransientStreakCount = masterMaximumStackTransientStreaks == null ? 0 : masterMaximumStackTransientStreaks.size();
+        int potentialSlowMoverCount = slowMoverCandidateCount + maximumStackTransientStreakCount;
+        int linkedTrackCount = movingTargets.size() + streakTracks.size();
 
         if (!exportDir.exists()) exportDir.mkdirs();
 
@@ -2697,8 +2719,26 @@ public class ImageDisplayUtils {
                 report.println("<div class='metric-box'><span class='metric-value'>" + pipelineTelemetry.totalFramesLoaded + "</span><span class='metric-label'>Total Frames</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + pipelineTelemetry.totalFramesKept + " <span style='color:#555; font-size: 16px;'>/ " + pipelineTelemetry.totalFramesRejected + "</span></span><span class='metric-label'>Kept / Rejected</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + pipelineTelemetry.totalRawObjectsExtracted + "</span><span class='metric-label'>Raw Objects Extracted</span></div>");
-                report.println("<div class='metric-box'><span class='metric-value'>" + pipelineTelemetry.totalMovingTargetsFound + "</span><span class='metric-label'>Confirmed Targets</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + linkedTrackCount + "</span><span class='metric-label'>Linked Tracks</span></div>");
                 report.println("</div>");
+                report.println("</div>");
+
+                report.println("<div class='panel'>");
+                report.println("<h2>Detection Breakdown</h2>");
+                report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Final report sections summarized up front so linked targets, anomalies, and potential slow movers are visible immediately.</p>");
+                report.println("<div class='flex-container'>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + singleStreaks.size() + "</span><span class='metric-label'>Streaks</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + streakTracks.size() + "</span><span class='metric-label'>Streak Tracks</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + movingTargets.size() + "</span><span class='metric-label'>Moving Object Tracks</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + anomalies.size() + "</span><span class='metric-label'>High-Energy Anomalies</span></div>");
+                String potentialSlowMoverMetric = config.enableSlowMoverDetection ? String.valueOf(potentialSlowMoverCount) : "Off";
+                report.println("<div class='metric-box'><span class='metric-value'>" + potentialSlowMoverMetric + "</span><span class='metric-label'>Potential Slow Movers</span></div>");
+                report.println("</div>");
+                if (config.enableSlowMoverDetection) {
+                    report.println("<div class='astro-note'>Potential slow movers include " + slowMoverCandidateCount + " deep-stack candidates and " + maximumStackTransientStreakCount + " unmatched maximum-stack streaks.</div>");
+                } else {
+                    report.println("<div class='astro-note'>Potential slow mover analysis was disabled for this session.</div>");
+                }
                 report.println("</div>");
 
                 report.println("<div class='panel'>");
@@ -2750,8 +2790,10 @@ public class ImageDisplayUtils {
                     // Export JSON Profile File
                     File jsonConfigFile = new File(exportDir, "detection_config.json");
                     try (java.io.FileWriter writer = new java.io.FileWriter(jsonConfigFile)) {
-                        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-                        gson.toJson(config, writer);
+                        SpacePixelsDetectionProfileIO.write(
+                                writer,
+                                config,
+                                SpacePixelsDetectionProfileIO.getActiveAutoTuneMaxCandidateFrames());
                     } catch (Exception e) {
                         System.err.println("Failed to write config JSON: " + e.getMessage());
                     }
@@ -2906,25 +2948,6 @@ public class ImageDisplayUtils {
             // =================================================================
             // 3. TARGET VISUALIZATIONS
             // =================================================================
-            List<TrackLinker.Track> anomalies = new ArrayList<>();
-            List<TrackLinker.Track> singleStreaks = new ArrayList<>();
-            List<TrackLinker.Track> streakTracks = new ArrayList<>();
-            List<TrackLinker.Track> movingTargets = new ArrayList<>();
-
-            for (TrackLinker.Track track : tracks) {
-                if (track.points == null || track.points.isEmpty()) continue;
-                java.util.Set<Integer> uniqueFrames = new java.util.HashSet<>();
-                for (SourceExtractor.DetectedObject pt : track.points) uniqueFrames.add(pt.sourceFrameIndex);
-
-                if (uniqueFrames.size() == 1) {
-                    if (track.isAnomaly) anomalies.add(track);
-                    else singleStreaks.add(track);
-                } else {
-                    if (track.isStreakTrack) streakTracks.add(track);
-                    else movingTargets.add(track);
-                }
-            }
-
             report.println("<h2>Target Visualizations</h2>");
 
             if (tracks.isEmpty()) {
@@ -3337,7 +3360,7 @@ public class ImageDisplayUtils {
                     report.println("<div style='flex: 1; min-width: 400px;'>");
                     report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Transient Cluster Map</h4>");
                     report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Cropped, downscaled, and dilated to make 'rainbows' (closely moving unlinked objects) highly visible. This map shows only point transients and not streaks. </p>");
-                    report.println("<a href='rainbow_cluster_map.png' target='_blank'><img src='rainbow_cluster_map.png' style='width: 100%; border: 1px solid #555; border-radius: 4px;' alt='Rainbow Cluster Map' /></a></div>");
+                    report.println("<div style='overflow-x: auto;'><a href='rainbow_cluster_map.png' target='_blank'><img src='rainbow_cluster_map.png' style='display: block; width: auto; max-width: none; height: auto; border: 1px solid #555; border-radius: 4px;' alt='Rainbow Cluster Map' /></a></div></div>");
                     report.println("</div>");
                     report.println("</div>");
                 }

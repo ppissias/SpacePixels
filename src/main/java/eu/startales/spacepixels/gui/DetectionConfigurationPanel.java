@@ -11,22 +11,19 @@
 package eu.startales.spacepixels.gui;
 
 import com.google.common.eventbus.Subscribe;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-
-// --- NEW IMPORTS FOR PROGRESS DIALOG ---
 import eu.startales.spacepixels.events.DetectionStartedEvent;
 import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
-
 import eu.startales.spacepixels.events.AutoTuneFinishedEvent;
 import eu.startales.spacepixels.events.AutoTuneStartedEvent;
 import eu.startales.spacepixels.events.FitsImportFinishedEvent;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
+import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
+import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.tasks.AutoTuneTask;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 import eu.startales.spacepixels.util.*;
-import nom.tam.fits.Fits;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -46,12 +43,12 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private final TuningPreviewManager previewManager;
 
-    // --- NEW: JTransient Config State ---
     private volatile DetectionConfig jTransientConfig;
-    private final File jTransientConfigFile = new File(System.getProperty("user.home"), "spacepixels_jtransient.json");
-    private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    private volatile int autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
+    private final File detectionProfileFile = new File(System.getProperty("user.home"), SpacePixelsDetectionProfileIO.DEFAULT_FILENAME);
+    private final File legacyDetectionProfileFile = new File(System.getProperty("user.home"), SpacePixelsDetectionProfileIO.LEGACY_FILENAME);
+    private final File visualizationPreferencesFile = new File(System.getProperty("user.home"), SpacePixelsVisualizationPreferencesIO.DEFAULT_FILENAME);
 
-    // --- SourceExtractor Spinners ---
     private JSpinner spinDetectionSigma, spinMinPixels, spinEdgeMargin, spinGrowSigma, spinVoidFraction, spinVoidRadius;
     private JCheckBox chkEnableSlowMovers;
     private JSpinner spinMasterSigma, spinMasterMinPix, spinMasterSlowMoverMinElongation, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma, spinSlowMoverBaselineMadMultiplier, spinSlowMoverStackMiddleFraction;
@@ -75,26 +72,21 @@ public class DetectionConfigurationPanel extends JPanel {
     // NEW: Absolute minimum tolerance spinners
     private JSpinner spinMinBgDevAdu, spinMinEccEnvelope, spinMinFwhmEnvelope;
 
-    private JSpinner spinQualitySigma, spinQualityMinPix, spinMaxElongFwhm;
+    private JSpinner spinQualitySigma, spinQualityGrowSigma, spinQualityMinPix, spinMaxElongFwhm;
 
-    // --- Auto-Tuner Spinners ---
-    private JSpinner spinAutoTransientPenalty, spinAutoSigmaPenalty, spinAutoMinPixPenalty;
+    private JSpinner spinAutoTuneMaxCandidateFrames;
 
-    // --- Visualization Spinners (SpacePixels Specific) ---
     private JSpinner spinStreakScale, spinStreakCentroidRad, spinPointBoxRad, spinBoxPad;
     private JSpinner spinAutoBlackSigma, spinAutoWhiteSigma, spinGifBlinkSpeed, spinCropPadding;
     private JCheckBox chkIncludeAiCreativeReportSections;
 
     private final JButton previewBtn = new JButton("Preview Detection Settings");
-
-    // --- NEW: AUTO-TUNE BUTTON ---
     private final JButton autoTuneBtn = new JButton("Auto-Tune Settings");
     private final JComboBox<JTransientAutoTuner.AutoTuneProfile> autoTuneProfileCombo = new JComboBox<>(JTransientAutoTuner.AutoTuneProfile.values());
 
     public DetectionConfigurationPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
-        // 1. Load the JTransient config before building the UI
-        loadJTransientConfig();
+        loadPersistedSettings();
 
         this.previewManager = new TuningPreviewManager(mainAppWindow);
 
@@ -112,10 +104,8 @@ public class DetectionConfigurationPanel extends JPanel {
 
         add(tabbedPane, BorderLayout.CENTER);
 
-        // --- ENFORCE UI CONSTRAINTS ---
         setupConstraints();
 
-        // Apply Button (Updates memory only)
         JButton applyBtn = new JButton("Apply Settings");
         applyBtn.setToolTipText("Apply these parameters to the current detection engine session.");
         applyBtn.addActionListener(e -> {
@@ -123,18 +113,15 @@ public class DetectionConfigurationPanel extends JPanel {
             JOptionPane.showMessageDialog(this, "Settings Applied Successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
         });
 
-        // Save Button (Updates memory AND saves to JSON)
         JButton saveBtn = new JButton("Save Configuration");
-        saveBtn.setToolTipText("Save these parameters as the default for future startups.");
-        saveBtn.addActionListener(e -> saveJTransientConfig());
+        saveBtn.setToolTipText("Save detection-profile and visualization preferences as the defaults for future startups.");
+        saveBtn.addActionListener(e -> savePersistedSettings());
 
         previewBtn.setToolTipText("Run extraction on the selected frame with current settings and show the exact pixel mask.");
         previewBtn.addActionListener(e -> previewManager.showPreview(getJTransientConfig()));
 
-        // --- AUTO-TUNE ACTION LISTENER ---
         autoTuneBtn.setToolTipText("Mathematically sweeps settings to find the optimal signal-to-noise ratio for the current image sequence.");
         autoTuneBtn.addActionListener(e -> runAutoTuner());
-        // Disabled until files are actually loaded and are monochrome
         autoTuneBtn.setEnabled(false);
 
         autoTuneProfileCombo.setSelectedItem(JTransientAutoTuner.AutoTuneProfile.BALANCED);
@@ -144,7 +131,6 @@ public class DetectionConfigurationPanel extends JPanel {
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         bottomPanel.setBorder(new EmptyBorder(10, 0, 0, 0));
 
-        // Add all buttons
         bottomPanel.add(new JLabel("Tuning Profile: "));
         bottomPanel.add(autoTuneProfileCombo);
         bottomPanel.add(autoTuneBtn);
@@ -237,69 +223,95 @@ public class DetectionConfigurationPanel extends JPanel {
         });
     }
 
-// =========================================================================
-    // JTRANSIENT AUTO-TUNER LOGIC (EventBus Driven)
-    // =========================================================================
-
     private void runAutoTuner() {
-        // --- THE SMART FALLBACK LOGIC ---
-        // 1. First, see if the user specifically highlighted a range of files in the UI
         FitsFileInformation[] selectedFiles = mainAppWindow.getMainApplicationPanel().getSelectedFilesInformation();
         FitsFileInformation[] poolToUse;
 
-        if (selectedFiles != null && selectedFiles.length >= 5) {
+        if (selectedFiles != null && selectedFiles.length >= SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
             poolToUse = selectedFiles;
             System.out.println("Auto-Tuning using user's explicit selection of " + poolToUse.length + " frames.");
         } else {
-            // 2. If they didn't, fall back to all imported files
             poolToUse = mainAppWindow.getMainApplicationPanel().getImportedFiles();
             System.out.println("Auto-Tuning using entire imported sequence.");
         }
 
-        if (poolToUse == null || poolToUse.length < 5) {
-            JOptionPane.showMessageDialog(this, "You need at least 5 monochrome frames available to run the Auto-Tuner.", "Insufficient Data", JOptionPane.WARNING_MESSAGE);
+        if (poolToUse == null || poolToUse.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
+            JOptionPane.showMessageDialog(this,
+                    "You need at least " + SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES + " monochrome frames available to run the Auto-Tuner.",
+                    "Insufficient Data",
+                    JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        // Apply current UI settings to memory to act as the baseline
         applySettingsToMemory();
 
         mainAppWindow.getEventBus().post(new EngineProgressUpdateEvent(0, "Initializing Mathematical Auto-Tuner..."));
 
-        // Dispatch the task to the background thread via the EventBus pattern
         JTransientAutoTuner.AutoTuneProfile selectedProfile = (JTransientAutoTuner.AutoTuneProfile) autoTuneProfileCombo.getSelectedItem();
-        AutoTuneTask tuneTask = new AutoTuneTask(mainAppWindow.getEventBus(), poolToUse, jTransientConfig, selectedProfile);
+        AutoTuneTask tuneTask = new AutoTuneTask(
+                mainAppWindow.getEventBus(),
+                poolToUse,
+                jTransientConfig,
+                autoTuneMaxCandidateFrames,
+                selectedProfile);
         new Thread(tuneTask).start();
     }
 
-    // =========================================================================
-    // JTRANSIENT JSON LOAD/SAVE LOGIC
-    // =========================================================================
-
-    private void loadJTransientConfig() {
-        if (jTransientConfigFile.exists()) {
-            try (FileReader reader = new FileReader(jTransientConfigFile)) {
-                DetectionConfig loadedConfig = gson.fromJson(reader, DetectionConfig.class);
-                if (loadedConfig != null) {
-                    jTransientConfig = loadedConfig;
-                    return; // Success
-                }
-            } catch (Exception e) {
-                System.err.println("Failed to load JTransient config, falling back to defaults: " + e.getMessage());
-            }
-        }
-        // Fallback: Instantiate a fresh one with default values if file doesn't exist
-        jTransientConfig = new DetectionConfig();
+    private void loadPersistedSettings() {
+        loadDetectionProfile();
+        loadVisualizationPreferences();
     }
 
-    private void saveJTransientConfig() {
-        applySettingsToMemory(); // Ensure memory is synced with UI first
+    private void loadDetectionProfile() {
+        File profileToLoad = detectionProfileFile.exists() ? detectionProfileFile : (legacyDetectionProfileFile.exists() ? legacyDetectionProfileFile : null);
+        if (profileToLoad != null) {
+            try (FileReader reader = new FileReader(profileToLoad)) {
+                SpacePixelsDetectionProfile detectionProfile = SpacePixelsDetectionProfileIO.load(reader);
+                jTransientConfig = detectionProfile.getDetectionConfig();
+                autoTuneMaxCandidateFrames = detectionProfile.getAutoTuneMaxCandidateFrames();
+                return;
+            } catch (Exception e) {
+                System.err.println("Failed to load detection profile, falling back to defaults: " + e.getMessage());
+            }
+        }
+        jTransientConfig = new DetectionConfig();
+        autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
+        SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
+    }
 
-        try (FileWriter writer = new FileWriter(jTransientConfigFile)) {
-            gson.toJson(jTransientConfig, writer);
-            JOptionPane.showMessageDialog(this, "Configuration saved successfully to:\n" + jTransientConfigFile.getAbsolutePath(), "Save Success", JOptionPane.INFORMATION_MESSAGE);
+    private void loadVisualizationPreferences() {
+        if (!visualizationPreferencesFile.exists()) {
+            return;
+        }
+
+        try (FileReader reader = new FileReader(visualizationPreferencesFile)) {
+            SpacePixelsVisualizationPreferences preferences = SpacePixelsVisualizationPreferencesIO.load(reader);
+            preferences.applyToRuntime();
+        } catch (Exception e) {
+            System.err.println("Failed to load visualization preferences, falling back to defaults: " + e.getMessage());
+        }
+    }
+
+    private void savePersistedSettings() {
+        applySettingsToMemory();
+
+        try (FileWriter detectionWriter = new FileWriter(detectionProfileFile);
+             FileWriter visualizationWriter = new FileWriter(visualizationPreferencesFile)) {
+            SpacePixelsDetectionProfileIO.write(
+                    detectionWriter,
+                    new SpacePixelsDetectionProfile(jTransientConfig, autoTuneMaxCandidateFrames));
+            SpacePixelsVisualizationPreferencesIO.write(
+                    visualizationWriter,
+                    SpacePixelsVisualizationPreferences.captureCurrent());
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Configuration saved successfully to:\n" +
+                            detectionProfileFile.getAbsolutePath() + "\n" +
+                            visualizationPreferencesFile.getAbsolutePath(),
+                    "Save Success",
+                    JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(this, "Failed to write JTransient JSON: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Failed to write configuration JSON: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -307,10 +319,6 @@ public class DetectionConfigurationPanel extends JPanel {
         applySettingsToMemory();
         return jTransientConfig;
     }
-
-    // =========================================================================
-    // TAB BUILDERS
-    // =========================================================================
 
     private JPanel buildBasicTuningPanel() {
         JPanel panel = new JPanel();
@@ -421,6 +429,14 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
+        panel.add(createSectionHeader("Auto-Tuner Candidate Pool"));
+        spinAutoTuneMaxCandidateFrames = addRow(
+                panel,
+                "Max Frames For Auto-Tuner",
+                "Maximum number of frames SpacePixels will hand to the JTransient Auto-Tuner. When the sequence is longer than this, SpacePixels builds a deterministic pool using best-quality, median-quality, and evenly spaced frames.",
+                intSpinnerModel(autoTuneMaxCandidateFrames, SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES, 5000, 1));
+
+        panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Session Outlier Rejection (MAD)"));
         spinMinFramesAnalysis = addRow(panel, "Min Frames for Analysis", "Minimum number of frames required before session-level outlier rejection is applied.", intSpinnerModel(jTransientConfig.minFramesForAnalysis, 2, 500, 1));
         spinStarCountSigma = addRow(panel, "Star Count Drop Sigma", "Rejects frames whose star count falls too far below the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.starCountSigmaDeviation, 0.0, 10.0, 0.1));
@@ -438,8 +454,9 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Single Frame Analytics"));
         spinQualitySigma = addRow(panel, "Quality Eval Sigma Multiplier", "Detection threshold used only for extracting stars for frame quality analysis, not for transient detection.", doubleSpinnerModel(jTransientConfig.qualitySigmaMultiplier, 1.0, 15.0, 0.1));
+        spinQualityGrowSigma = addRow(panel, "Quality Grow Sigma", "Secondary hysteresis threshold used only while growing stars for frame quality analysis and auto-tune frame sampling.", doubleSpinnerModel(jTransientConfig.qualityGrowSigmaMultiplier, 0.1, 20.0, 0.1));
         spinQualityMinPix = addRow(panel, "Quality Min Detection Pixels", "Minimum source size required for a star to be used in frame quality analysis.", intSpinnerModel(jTransientConfig.qualityMinDetectionPixels, 1, 500, 1));
-        spinMaxElongFwhm = addRow(panel, "Max Elongation for FWHM", "Only stars with elongation below this value are used when measuring median FWHM for frame quality.", doubleSpinnerModel(jTransientConfig.maxElongationForFwhm, 1.0, 10.0, 0.05));
+        spinMaxElongFwhm = addRow(panel, "Quality Max Elongation for FWHM", "Only stars with elongation below this value are used when measuring median FWHM for frame quality.", doubleSpinnerModel(jTransientConfig.qualityMaxElongationForFwhm, 1.0, 10.0, 0.05));
 
         return panel;
     }
@@ -464,15 +481,11 @@ public class DetectionConfigurationPanel extends JPanel {
         chkIncludeAiCreativeReportSections = addCheckboxRow(
                 panel,
                 "Include AI Creative Report Sections",
-                "Adds the Skyprint and Kinematic Compass tribute panels to exported reports for the current session only. This toggle is not saved with detection profiles.",
-                false);
+                "Adds the Skyprint and Kinematic Compass tribute panels to exported reports. This toggle is saved with visualization preferences, not with detection profiles.",
+                ImageDisplayUtils.includeAiCreativeReportSections);
 
         return panel;
     }
-
-    // =========================================================================
-    // UI LAYOUT HELPERS (Standardized across the app)
-    // =========================================================================
 
     private JScrollPane buildScrollPane(JPanel content) {
         JScrollPane scrollPane = new JScrollPane(content);
@@ -502,6 +515,7 @@ public class DetectionConfigurationPanel extends JPanel {
         double min = ((Number) model.getMinimum()).doubleValue();
         double max = ((Number) model.getMaximum()).doubleValue();
         spinner.setValue(clampDouble(value, min, max));
+        configureSpinnerEditor(spinner);
     }
 
     private void setSpinnerValueClamped(JSpinner spinner, int value) {
@@ -509,6 +523,7 @@ public class DetectionConfigurationPanel extends JPanel {
         int min = ((Number) model.getMinimum()).intValue();
         int max = ((Number) model.getMaximum()).intValue();
         spinner.setValue(clampInt(value, min, max));
+        configureSpinnerEditor(spinner);
     }
 
     private int numberScale(Number number) {
@@ -521,7 +536,7 @@ public class DetectionConfigurationPanel extends JPanel {
         return Math.max(0, BigDecimal.valueOf(number.doubleValue()).stripTrailingZeros().scale());
     }
 
-    private void configureSpinnerEditor(JSpinner spinner) {
+    private int spinnerDecimalPlaces(JSpinner spinner) {
         SpinnerNumberModel model = (SpinnerNumberModel) spinner.getModel();
         Number step = (Number) model.getStepSize();
         Number value = (Number) model.getValue();
@@ -529,11 +544,24 @@ public class DetectionConfigurationPanel extends JPanel {
         if ((value instanceof Double || value instanceof Float || step instanceof Double || step instanceof Float) && decimals == 0) {
             decimals = 1;
         }
+        return decimals;
+    }
 
+    private void configureSpinnerEditor(JSpinner spinner) {
+        int decimals = spinnerDecimalPlaces(spinner);
         String pattern = decimals == 0 ? "#0" : "#0." + "0".repeat(decimals);
         spinner.setEditor(new JSpinner.NumberEditor(spinner, pattern));
         JFormattedTextField textField = ((JSpinner.NumberEditor) spinner.getEditor()).getTextField();
-        textField.setColumns(decimals == 0 ? 5 : 7);
+        textField.setColumns(Math.max(5, decimals + 5));
+    }
+
+    private String formatSpinnerValue(JSpinner spinner) {
+        Number value = (Number) spinner.getValue();
+        int decimals = spinnerDecimalPlaces(spinner);
+        if (decimals == 0) {
+            return Long.toString(value.longValue());
+        }
+        return String.format("%." + decimals + "f", value.doubleValue());
     }
 
     private JLabel createSectionHeader(String title) {
@@ -581,6 +609,7 @@ public class DetectionConfigurationPanel extends JPanel {
         JSpinner spinner = new JSpinner(model);
         if (model instanceof SpinnerNumberModel) {
             configureSpinnerEditor(spinner);
+            spinner.addChangeListener(e -> configureSpinnerEditor(spinner));
         }
         spinner.setPreferredSize(new Dimension(80, 26));
         inputWrapper.add(spinner);
@@ -640,16 +669,11 @@ public class DetectionConfigurationPanel extends JPanel {
         return checkBox;
     }
 
-    // =========================================================================
-    // APPLY LOGIC
-    // =========================================================================
-
     private void applySettingsToMemory() {
         try {
             commitAllSpinners();
             normalizeDependentSpinners();
 
-            // --- Apply Extractor Settings to the POJO ---
             jTransientConfig.detectionSigmaMultiplier = ((Number) spinDetectionSigma.getValue()).doubleValue();
             jTransientConfig.growSigmaMultiplier = ((Number) spinGrowSigma.getValue()).doubleValue();
             jTransientConfig.minDetectionPixels = ((Number) spinMinPixels.getValue()).intValue();
@@ -690,23 +714,24 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.anomalyMinPeakSigma = ((Number) spinAnomalyMinPeakSigma.getValue()).doubleValue();
             jTransientConfig.anomalyMinPixels = ((Number) spinAnomalyMinPixels.getValue()).intValue();
 
-            // --- Apply Quality Settings to the POJO ---
+            autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
+            SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
+
             jTransientConfig.minFramesForAnalysis = ((Number) spinMinFramesAnalysis.getValue()).intValue();
             jTransientConfig.starCountSigmaDeviation = ((Number) spinStarCountSigma.getValue()).doubleValue();
             jTransientConfig.fwhmSigmaDeviation = ((Number) spinFwhmSigma.getValue()).doubleValue();
             jTransientConfig.eccentricitySigmaDeviation = ((Number) spinEccentricitySigma.getValue()).doubleValue();
             jTransientConfig.backgroundSigmaDeviation = ((Number) spinBackgroundSigma.getValue()).doubleValue();
 
-            // --- NEW: ABSOLUTE MINIMUMS ---
             jTransientConfig.minBackgroundDeviationADU = ((Number) spinMinBgDevAdu.getValue()).doubleValue();
             jTransientConfig.minEccentricityEnvelope = ((Number) spinMinEccEnvelope.getValue()).doubleValue();
             jTransientConfig.minFwhmEnvelope = ((Number) spinMinFwhmEnvelope.getValue()).doubleValue();
 
             jTransientConfig.qualitySigmaMultiplier = ((Number) spinQualitySigma.getValue()).doubleValue();
+            jTransientConfig.qualityGrowSigmaMultiplier = ((Number) spinQualityGrowSigma.getValue()).doubleValue();
             jTransientConfig.qualityMinDetectionPixels = ((Number) spinQualityMinPix.getValue()).intValue();
-            jTransientConfig.maxElongationForFwhm = ((Number) spinMaxElongFwhm.getValue()).doubleValue();
+            jTransientConfig.qualityMaxElongationForFwhm = ((Number) spinMaxElongFwhm.getValue()).doubleValue();
 
-            // --- Apply Visualization Settings (SpacePixels Static Variables) ---
             RawImageAnnotator.streakLineScaleFactor = ((Number) spinStreakScale.getValue()).doubleValue();
             RawImageAnnotator.streakCentroidBoxRadius = ((Number) spinStreakCentroidRad.getValue()).intValue();
             RawImageAnnotator.pointSourceMinBoxRadius = ((Number) spinPointBoxRad.getValue()).intValue();
@@ -785,12 +810,9 @@ public class DetectionConfigurationPanel extends JPanel {
 
     @Subscribe
     public void onImportFinished(FitsImportFinishedEvent event) {
-
-        //if images are color disable the preview settings button
         EventQueue.invokeLater(() -> {
 
             if (event.isSuccess()) {
-                // Update internal state
                 FitsFileInformation[] filesInfo = event.getFilesInformation();
 
                 boolean existsColor = false;
@@ -804,11 +826,10 @@ public class DetectionConfigurationPanel extends JPanel {
                 if (!existsColor) {
                     previewBtn.setEnabled(true);
 
-                    // --- NEW: Enable the Auto-Tune button if we have enough frames! ---
-                    if (filesInfo.length >= 5) {
-                        autoTuneBtn.setEnabled(true);
-                        autoTuneProfileCombo.setEnabled(true);
-                    } else {
+                if (filesInfo.length >= SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
+                    autoTuneBtn.setEnabled(true);
+                    autoTuneProfileCombo.setEnabled(true);
+                } else {
                         autoTuneBtn.setEnabled(false);
                         autoTuneProfileCombo.setEnabled(false);
                     }
@@ -834,18 +855,18 @@ public class DetectionConfigurationPanel extends JPanel {
     @Subscribe
     public void onAutoTuneFinished(eu.startales.spacepixels.events.AutoTuneFinishedEvent event) {
         EventQueue.invokeLater(() -> {
-            // Unlock UI
             autoTuneBtn.setEnabled(true);
             autoTuneBtn.setText("Auto-Tune Settings");
             autoTuneProfileCombo.setEnabled(true);
             setCursor(Cursor.getDefaultCursor());
-            
-            System.out.println(event.getResult().telemetryReport);
+
+            if (event.getResult() != null && event.getResult().telemetryReport != null) {
+                System.out.println(event.getResult().telemetryReport);
+            }
             if (event.isSuccess() && event.getResult() != null) {
                 JTransientAutoTuner.AutoTunerResult result = event.getResult();
 
-                if (result.success) { // <-- Only proceed if the strict math succeeded!
-                    // Physically move the sliders
+                if (result.success) {
                     updateSpinnersFromConfig(result.optimizedConfig);
 
                     DetectionConfig appliedConfig = getJTransientConfig();
@@ -854,17 +875,17 @@ public class DetectionConfigurationPanel extends JPanel {
                     boolean growSigmaAdjusted = Math.abs(appliedConfig.growSigmaMultiplier - result.optimizedConfig.growSigmaMultiplier) > 1e-9;
 
                     String detectionMsg = detectionSigmaAdjusted
-                            ? String.format("• Detection Sigma: %.2f (raised to respect Master Sigma)", appliedConfig.detectionSigmaMultiplier)
-                            : String.format("• Detection Sigma: %.2f", appliedConfig.detectionSigmaMultiplier);
+                            ? String.format("• Detection Sigma: %s (raised to respect Master Sigma)", formatSpinnerValue(spinDetectionSigma))
+                            : String.format("• Detection Sigma: %s", formatSpinnerValue(spinDetectionSigma));
 
                     String growMsg;
                     if (growSigmaAdjusted) {
                         String growAdjustmentReason = appliedConfig.growSigmaMultiplier > result.optimizedConfig.growSigmaMultiplier
                                 ? "raised to Master Sigma"
                                 : "capped to Detection Sigma";
-                        growMsg = String.format("• Grow Sigma: %.2f (%s)", appliedConfig.growSigmaMultiplier, growAdjustmentReason);
+                        growMsg = String.format("• Grow Sigma: %s (%s)", formatSpinnerValue(spinGrowSigma), growAdjustmentReason);
                     } else {
-                        growMsg = String.format("• Grow Sigma: %.2f", appliedConfig.growSigmaMultiplier);
+                        growMsg = String.format("• Grow Sigma: %s", formatSpinnerValue(spinGrowSigma));
                     }
 
                     String summary = String.format(
@@ -873,17 +894,17 @@ public class DetectionConfigurationPanel extends JPanel {
                                     "%s\n" +
                                     "%s\n" +
                                     "• Min Pixels: %d\n" +
-                                    "• Max Star Jitter: %.2f px\n" +
-                                    "• Max Mask Overlap Fraction: %.2f\n" +
-                                    "• Streak Min Elongation: %.2f\n\n" +
+                                    "• Max Star Jitter: %s px\n" +
+                                    "• Max Mask Overlap Fraction: %s\n" +
+                                    "• Streak Min Elongation: %s\n\n" +
                                     "Telemetry: Extracted %d stable stars with a %.1f%% noise ratio.\n\n" +
                                     "Would you like to view the detailed mathematical evaluation report?",
                             detectionMsg,
                             growMsg,
                             appliedConfig.minDetectionPixels,
-                            appliedConfig.maxStarJitter,
-                            appliedConfig.maxMaskOverlapFraction,
-                            appliedConfig.streakMinElongation,
+                            formatSpinnerValue(spinStarJitter),
+                            formatSpinnerValue(spinMaxMaskOverlapFraction),
+                            formatSpinnerValue(spinStreakMinElong),
                             result.bestStarCount,
                             (result.bestTransientRatio * 100)
                     );
@@ -893,7 +914,6 @@ public class DetectionConfigurationPanel extends JPanel {
                         showTelemetryReportWindow(result.telemetryReport);
                     }
                 } else {
-                    // Show a helpful warning explaining WHY it didn't change the settings
                     JOptionPane.showMessageDialog(DetectionConfigurationPanel.this,
                             "The Auto-Tuner could not find a stable star field that meets the strict noise limits.\n" +
                                     "This usually happens if the images are too noisy, heavily clouded, or not aligned.\n\n" +

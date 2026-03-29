@@ -18,9 +18,8 @@ import nom.tam.fits.*;
 import nom.tam.util.Cursor;
 import nom.tam.image.compression.hdu.CompressedImageHDU;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.SpacePixelsAppConfigIO;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -84,8 +83,7 @@ public class ImageProcessing {
 
     private final AstrometryDotNet astrometryNetInterface = new AstrometryDotNet();
     private final AppConfig appConfig;
-    private final File configFile;
-    private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    private final File appConfigFile;
 
     private FitsFileInformation[] cachedFileInfo;
 
@@ -98,12 +96,12 @@ public class ImageProcessing {
 
         String userhome = System.getProperty("user.home");
         if (userhome == null) userhome = "";
-        this.configFile = new File(userhome, "spacepixels_app.json");
+        this.appConfigFile = new File(userhome, SpacePixelsAppConfigIO.DEFAULT_FILENAME);
 
         AppConfig loadedConfig = null;
-        if (this.configFile.exists()) {
-            try (FileReader reader = new FileReader(this.configFile)) {
-                loadedConfig = gson.fromJson(reader, AppConfig.class);
+        if (this.appConfigFile.exists()) {
+            try {
+                loadedConfig = SpacePixelsAppConfigIO.load(this.appConfigFile);
             } catch (Exception e) {
                 ApplicationWindow.logger.warning("Failed to load JSON app config: " + e.getMessage());
             }
@@ -1208,9 +1206,7 @@ public class ImageProcessing {
     }
 
     public void saveAppConfig() throws IOException {
-        try (FileWriter writer = new FileWriter(configFile)) {
-            gson.toJson(appConfig, writer);
-        }
+        SpacePixelsAppConfigIO.write(appConfigFile, appConfig);
     }
 
     private void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, boolean stretch, StretchAlgorithm algo) throws FitsException, IOException {

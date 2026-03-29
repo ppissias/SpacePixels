@@ -8,22 +8,21 @@
 
 package eu.startales.spacepixels.tools;
 
-import com.google.gson.Gson;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
+import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
+import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
+import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
-import io.github.ppissias.jtransient.quality.FrameQualityAnalyzer;
-import nom.tam.fits.BasicHDU;
-import nom.tam.fits.Fits;
 
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -39,21 +38,14 @@ public class BatchDetectionTool {
         private final JTransientAutoTuner.AutoTuneProfile autoTuneProfile;
         private final boolean showHelp;
 
-        private CliArguments(File inputDir, File configFile, JTransientAutoTuner.AutoTuneProfile autoTuneProfile, boolean showHelp) {
+        private CliArguments(File inputDir,
+                             File configFile,
+                             JTransientAutoTuner.AutoTuneProfile autoTuneProfile,
+                             boolean showHelp) {
             this.inputDir = inputDir;
             this.configFile = configFile;
             this.autoTuneProfile = autoTuneProfile;
             this.showHelp = showHelp;
-        }
-    }
-
-    private static class ScoredFrame {
-        private final ImageFrame frame;
-        private final double score;
-
-        private ScoredFrame(ImageFrame frame, double score) {
-            this.frame = frame;
-            this.score = score;
         }
     }
 
@@ -92,13 +84,20 @@ public class BatchDetectionTool {
             throw new IOException("Configuration JSON file not found: " + cliArguments.configFile.getAbsolutePath());
         }
 
-        DetectionConfig baseConfig = loadDetectionConfig(cliArguments.configFile);
+        SpacePixelsDetectionProfile detectionProfile = loadDetectionConfig(cliArguments.configFile);
+        DetectionConfig baseConfig = detectionProfile.getDetectionConfig();
+        SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(detectionProfile.getAutoTuneMaxCandidateFrames());
+        loadVisualizationPreferences();
         ImageProcessing imageProcessing = ImageProcessing.getInstance(cliArguments.inputDir);
         FitsFileInformation[] filesInfo = imageProcessing.getFitsfileInformationHeadless();
 
         DetectionConfig effectiveConfig = baseConfig;
         if (cliArguments.autoTuneProfile != null) {
-            effectiveConfig = runAutoTune(filesInfo, baseConfig.clone(), cliArguments.autoTuneProfile);
+            effectiveConfig = runAutoTune(
+                    filesInfo,
+                    baseConfig.clone(),
+                    detectionProfile.getAutoTuneMaxCandidateFrames(),
+                    cliArguments.autoTuneProfile);
         }
 
         File reportFile = imageProcessing.detectObjects(effectiveConfig, null, createConsoleProgressListener("Pipeline"));
@@ -112,60 +111,47 @@ public class BatchDetectionTool {
         System.out.println("Report file: " + reportFile.getAbsolutePath());
     }
 
-    private static DetectionConfig loadDetectionConfig(File configFile) throws IOException {
+    private static SpacePixelsDetectionProfile loadDetectionConfig(File configFile) throws IOException {
         try (FileReader reader = new FileReader(configFile)) {
-            DetectionConfig config = new Gson().fromJson(reader, DetectionConfig.class);
-            if (config == null) {
-                throw new IOException("Configuration file did not contain a DetectionConfig object: " + configFile.getAbsolutePath());
-            }
-            return config;
+            return SpacePixelsDetectionProfileIO.load(reader);
         }
     }
 
-    private static DetectionConfig runAutoTune(FitsFileInformation[] filesInfo, DetectionConfig baseConfig, JTransientAutoTuner.AutoTuneProfile profile) throws Exception {
-        if (filesInfo.length < JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE) {
-            throw new IOException("Auto-Tune requires at least " + JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE +
+    private static void loadVisualizationPreferences() {
+        File visualizationPreferencesFile = new File(System.getProperty("user.home"), SpacePixelsVisualizationPreferencesIO.DEFAULT_FILENAME);
+        if (!visualizationPreferencesFile.exists()) {
+            return;
+        }
+
+        try (FileReader reader = new FileReader(visualizationPreferencesFile)) {
+            SpacePixelsVisualizationPreferences preferences = SpacePixelsVisualizationPreferencesIO.load(reader);
+            preferences.applyToRuntime();
+        } catch (IOException e) {
+            System.err.println("Failed to load visualization preferences: " + e.getMessage());
+        }
+    }
+
+    private static DetectionConfig runAutoTune(FitsFileInformation[] filesInfo,
+                                               DetectionConfig baseConfig,
+                                               int autoTuneMaxCandidateFrames,
+                                               JTransientAutoTuner.AutoTuneProfile profile) throws Exception {
+        if (filesInfo.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
+            throw new IOException("Auto-Tune requires at least " + SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES +
                     " frames, but only " + filesInfo.length + " were available.");
         }
 
         System.out.println();
         System.out.println("Running Auto-Tune with profile: " + profile.name().toLowerCase(Locale.ROOT));
+        System.out.println("Building candidate pool with up to " + autoTuneMaxCandidateFrames + " frames.");
 
-        List<ScoredFrame> topFrames = new ArrayList<>();
-        for (int i = 0; i < filesInfo.length; i++) {
-            int percent = (int) (((i + 1) / (double) filesInfo.length) * 50);
-            System.out.printf(Locale.US, "[Auto-Tune %3d%%] Evaluating frame %d of %d...%n", percent, i + 1, filesInfo.length);
-
-            FitsFileInformation info = filesInfo[i];
-            try (Fits fitsFile = new Fits(info.getFilePath())) {
-                BasicHDU<?> hdu = ImageProcessing.getImageHDU(fitsFile);
-                Object kernel = hdu.getKernel();
-                if (!(kernel instanceof short[][])) {
-                    throw new IOException("FITS file is not 16-bit monochrome: " + info.getFileName());
-                }
-
-                short[][] pixelData = (short[][]) kernel;
-                FrameQualityAnalyzer.FrameMetrics metrics = FrameQualityAnalyzer.evaluateFrame(pixelData, baseConfig);
-                double score = metrics.backgroundNoise * metrics.medianFWHM;
-
-                ImageFrame currentFrame = new ImageFrame(i, info.getFileName(), pixelData, info.getObservationTimestamp(), info.getExposureDurationMillis());
-                topFrames.add(new ScoredFrame(currentFrame, score));
-                topFrames.sort(Comparator.comparingDouble(frame -> frame.score));
-
-                if (topFrames.size() > JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE) {
-                    topFrames.remove(topFrames.size() - 1);
-                }
-            }
-        }
-
-        List<ImageFrame> bestFrames = new ArrayList<>();
-        for (ScoredFrame scoredFrame : topFrames) {
-            bestFrames.add(scoredFrame.frame);
-        }
-        bestFrames.sort(Comparator.comparingInt(frame -> frame.sequenceIndex));
+        List<io.github.ppissias.jtransient.engine.ImageFrame> candidateFrames = AutoTuneCandidatePoolBuilder.buildCandidatePool(
+                filesInfo,
+                baseConfig,
+                autoTuneMaxCandidateFrames,
+                (percentage, message) -> System.out.printf(Locale.US, "[Auto-Tune %3d%%] %s%n", percentage, message));
 
         TransientEngineProgressListener autoTuneListener = createScaledConsoleProgressListener("Auto-Tune", 50, 100, "Tuning");
-        JTransientAutoTuner.AutoTunerResult result = JTransientAutoTuner.tune(bestFrames, baseConfig, profile, autoTuneListener);
+        JTransientAutoTuner.AutoTunerResult result = JTransientAutoTuner.tune(candidateFrames, baseConfig, profile, autoTuneListener);
 
         if (result == null || !result.success || result.optimizedConfig == null) {
             throw new IOException("Auto-Tune did not return an optimized configuration.");
@@ -223,7 +209,11 @@ public class BatchDetectionTool {
             throw new IllegalArgumentException("Expected exactly 2 positional arguments: <fits_directory> <detection_config.json>.");
         }
 
-        return new CliArguments(new File(positionalArgs.get(0)), new File(positionalArgs.get(1)), autoTuneProfile, false);
+        return new CliArguments(
+                new File(positionalArgs.get(0)),
+                new File(positionalArgs.get(1)),
+                autoTuneProfile,
+                false);
     }
 
     private static JTransientAutoTuner.AutoTuneProfile parseAutoTuneProfile(String value) {
