@@ -442,29 +442,31 @@ public class ImageDisplayUtils {
         return image;
     }
 
-    private static BufferedImage createCroppedMasterMaskOverlay(short[][] masterStackData,
-                                                                boolean[][] masterMask,
-                                                                int cx,
-                                                                int cy,
-                                                                int cropWidth,
-                                                                int cropHeight,
-                                                                SourceExtractor.DetectedObject highlightDetection) {
-        short[][] croppedMasterData = robustEdgeAwareCrop(masterStackData, cx, cy, cropWidth, cropHeight);
+    private static BufferedImage createCroppedMaskOverlay(short[][] backgroundData,
+                                                          boolean[][] mask,
+                                                          int cx,
+                                                          int cy,
+                                                          int cropWidth,
+                                                          int cropHeight,
+                                                          SourceExtractor.DetectedObject highlightDetection,
+                                                          Color maskColor) {
+        short[][] croppedMasterData = robustEdgeAwareCrop(backgroundData, cx, cy, cropWidth, cropHeight);
         BufferedImage grayImage = createDisplayImage(croppedMasterData);
         BufferedImage image = new BufferedImage(cropWidth, cropHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = image.createGraphics();
         g2d.drawImage(grayImage, 0, 0, null);
 
-        boolean transposed = isMasterMaskTransposed(masterMask, masterStackData[0].length, masterStackData.length);
+        boolean transposed = isMasterMaskTransposed(mask, backgroundData[0].length, backgroundData.length);
         int halfWidth = cropWidth / 2;
         int halfHeight = cropHeight / 2;
+        int maskRgb = maskColor.getRGB();
 
         for (int y = 0; y < cropHeight; y++) {
             int sourceY = cy - halfHeight + y;
             for (int x = 0; x < cropWidth; x++) {
                 int sourceX = cx - halfWidth + x;
-                if (isMasterMaskSet(masterMask, sourceX, sourceY, transposed)) {
-                    image.setRGB(x, y, new Color(255, 32, 32).getRGB());
+                if (isMasterMaskSet(mask, sourceX, sourceY, transposed)) {
+                    image.setRGB(x, y, maskRgb);
                 }
             }
         }
@@ -479,6 +481,24 @@ public class ImageDisplayUtils {
 
         g2d.dispose();
         return image;
+    }
+
+    private static BufferedImage createCroppedMasterMaskOverlay(short[][] masterStackData,
+                                                                boolean[][] masterMask,
+                                                                int cx,
+                                                                int cy,
+                                                                int cropWidth,
+                                                                int cropHeight,
+                                                                SourceExtractor.DetectedObject highlightDetection) {
+        return createCroppedMaskOverlay(
+                masterStackData,
+                masterMask,
+                cx,
+                cy,
+                cropWidth,
+                cropHeight,
+                highlightDetection,
+                new Color(255, 32, 32));
     }
 
     private static boolean isMasterMaskTransposed(boolean[][] masterMask, int refWidth, int refHeight) {
@@ -530,6 +550,10 @@ public class ImageDisplayUtils {
         }
 
         return new MaskOverlapStats(overlappingPixels, totalPixels);
+    }
+
+    private static String formatPercent(double fraction) {
+        return String.format(Locale.US, "%.1f%%", fraction * 100.0);
     }
 
     private static BufferedImage createDisplayImageSoft(short[][] imageData) {
@@ -1939,6 +1963,10 @@ public class ImageDisplayUtils {
                                                      String primaryStackLabel,
                                                      String primaryStackFileName,
                                                      short[][] masterStackData,
+                                                     boolean[][] auxiliaryMask,
+                                                     String auxiliaryMaskLabel,
+                                                     String auxiliaryMaskFileName,
+                                                     Double auxiliaryMaskOverlapFraction,
                                                      short[][] secondaryStackData,
                                                      String secondaryStackLabel,
                                                      String secondaryStackFileName,
@@ -1956,6 +1984,8 @@ public class ImageDisplayUtils {
         int cropSize = Math.max(150, (int) Math.round(objectRadius * 2) + 100);
         int startX = cx - (cropSize / 2);
         int startY = cy - (cropSize / 2);
+        short[][] maskReferenceData = masterStackData != null ? masterStackData : primaryStackData;
+        Double resolvedAuxiliaryMaskOverlap = auxiliaryMaskOverlapFraction;
 
         short[][] croppedPrimaryData = null;
         if (primaryStackData != null && primaryStackFileName != null) {
@@ -1974,6 +2004,28 @@ public class ImageDisplayUtils {
             if (croppedPrimaryData != null && diffFileName != null) {
                 BufferedImage diffImg = createSlowMoverDifferenceMap(croppedPrimaryData, croppedMasterData);
                 saveTrackImageLossless(diffImg, new File(exportDir, diffFileName));
+            }
+        }
+
+        if (auxiliaryMask != null && masterStackData != null && auxiliaryMaskFileName != null) {
+            BufferedImage maskImg = createCroppedMaskOverlay(
+                    masterStackData,
+                    auxiliaryMask,
+                    cx,
+                    cy,
+                    cropSize,
+                    cropSize,
+                    detection,
+                    new Color(255, 80, 80));
+            saveTrackImageLossless(maskImg, new File(exportDir, auxiliaryMaskFileName));
+        }
+        if (auxiliaryMask != null && maskReferenceData != null) {
+            if (resolvedAuxiliaryMaskOverlap == null) {
+                resolvedAuxiliaryMaskOverlap = computeMaskOverlapStats(
+                        detection,
+                        auxiliaryMask,
+                        maskReferenceData[0].length,
+                        maskReferenceData.length).fraction;
             }
         }
 
@@ -2002,6 +2054,9 @@ public class ImageDisplayUtils {
         if (masterFileName != null) {
             report.println("<div><a href='" + masterFileName + "' target='_blank'><img src='" + masterFileName + "' style='max-width: 150px;' alt='Median Stack Crop' /></a><br/><center><small>Median Stack</small></center></div>");
         }
+        if (auxiliaryMaskFileName != null && auxiliaryMask != null && masterStackData != null) {
+            report.println("<div><a href='" + auxiliaryMaskFileName + "' target='_blank'><img src='" + auxiliaryMaskFileName + "' style='max-width: 150px;' alt='" + auxiliaryMaskLabel + " Crop' /></a><br/><center><small>" + auxiliaryMaskLabel + "</small></center></div>");
+        }
         if (diffFileName != null && croppedPrimaryData != null && masterStackData != null) {
             report.println("<div><a href='" + diffFileName + "' target='_blank'><img src='" + diffFileName + "' style='max-width: 150px;' alt='" + diffLabel + " Crop' /></a><br/><center><small>" + diffLabel + "</small></center></div>");
         }
@@ -2016,7 +2071,7 @@ public class ImageDisplayUtils {
         }
         report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' style='max-width: 150px;' alt='Shape Footprint' /></a><br/><center><small>Shape</small></center></div>");
         report.println("</div>");
-        report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>" + escapeHtml(formatPixelCoordinateWithSky(astrometryContext, detection.x, detection.y)) + "<br>Elongation: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f", detection.elongation) + "</span><br>Pixels: <span style='color:#fff;'>" + (int) detection.pixelArea + "</span></div>");
+        report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>" + escapeHtml(formatPixelCoordinateWithSky(astrometryContext, detection.x, detection.y)) + "<br>Elongation: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f", detection.elongation) + "</span><br>Pixels: <span style='color:#fff;'>" + (int) detection.pixelArea + "</span>" + (resolvedAuxiliaryMaskOverlap != null ? "<br>Mask Overlap: <span style='color:#fff;'>" + formatPercent(resolvedAuxiliaryMaskOverlap) + "</span>" : "") + "</div>");
         report.print(buildDeepStackIdentificationHtml(astrometryContext, detection));
         report.println("</div>");
     }
@@ -2741,7 +2796,9 @@ public class ImageDisplayUtils {
         boolean[][] masterMask = result.masterMask;
         List<SourceExtractor.DetectedObject> masterStars = result.masterStars;
         short[][] slowMoverStackData = result.slowMoverStackData;
+        boolean[][] slowMoverMedianArtifactMask = result.slowMoverMedianArtifactMask;
         List<SourceExtractor.DetectedObject> slowMoverCandidates = result.slowMoverCandidates;
+        PipelineResult.SlowMoverTelemetry slowMoverTelemetry = result.slowMoverTelemetry;
         List<SourceExtractor.DetectedObject> masterMaximumStackTransientStreaks = result.masterMaximumStackTransientStreaks;
         PipelineTelemetry pipelineTelemetry = result.telemetry;
         List<List<SourceExtractor.DetectedObject>> allTransients = result.allTransients;
@@ -3376,25 +3433,50 @@ public class ImageDisplayUtils {
             if (config.enableSlowMoverDetection) {
                 boolean hasCandidates = slowMoverCandidates != null && !slowMoverCandidates.isEmpty();
                 boolean hasMaximumStackTransientStreaks = masterMaximumStackTransientStreaks != null && !masterMaximumStackTransientStreaks.isEmpty();
-                boolean hasTelemetry = result.slowMoverTelemetry != null;
+                boolean hasTelemetry = slowMoverTelemetry != null;
+                boolean hasSlowMoverStack = slowMoverStackData != null;
+                boolean hasSlowMoverMask = slowMoverMedianArtifactMask != null;
 
-                if (hasCandidates || hasTelemetry || hasMaximumStackTransientStreaks) {
+                if (hasCandidates || hasTelemetry || hasMaximumStackTransientStreaks || hasSlowMoverStack || hasSlowMoverMask) {
                     report.println("<h2>Deep Stack Anomalies (Ultra-Slow Mover Candidates)</h2>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
 
                     if (hasTelemetry) {
+                        report.println("<div class='panel'>");
+                        report.println("<h3 style='color: #ffffff; margin-top: 0;'>Slow-Mover Telemetry</h3>");
                         report.println("<div class='flex-container' style='margin-bottom: 25px;'>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + result.slowMoverTelemetry.candidatesDetected + "</span><span class='metric-label'>Raw Candidates</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + String.format(Locale.US, "%.2f", result.slowMoverTelemetry.medianElongation) + "</span><span class='metric-label'>Median Background Elongation</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + String.format(Locale.US, "%.2f", result.slowMoverTelemetry.dynamicElongationThreshold) + "</span><span class='metric-label'>Dynamic Threshold</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.rawCandidatesExtracted + "</span><span class='metric-label'>Raw Candidates</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.candidatesAboveElongationThreshold + "</span><span class='metric-label'>Above Elongation Threshold</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.candidatesEvaluatedAgainstMasks + "</span><span class='metric-label'>Evaluated Against Mask</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.candidatesDetected + "</span><span class='metric-label'>Final Candidates</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.rejectedIrregularShape + "</span><span class='metric-label'>Rejected Irregular</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.rejectedBinaryAnomaly + "</span><span class='metric-label'>Rejected Binary</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.rejectedLowMedianSupport + "</span><span class='metric-label'>Rejected Low Overlap</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.rejectedHighMedianSupport + "</span><span class='metric-label'>Rejected High Overlap</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + String.format(Locale.US, "%.2f", slowMoverTelemetry.medianElongation) + "</span><span class='metric-label'>Median Elongation</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + String.format(Locale.US, "%.2f", slowMoverTelemetry.madElongation) + "</span><span class='metric-label'>MAD Elongation</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + String.format(Locale.US, "%.2f", slowMoverTelemetry.dynamicElongationThreshold) + "</span><span class='metric-label'>Dynamic Threshold</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + formatPercent(slowMoverTelemetry.medianSupportOverlapThreshold) + "</span><span class='metric-label'>Min Overlap</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + formatPercent(slowMoverTelemetry.medianSupportMaxOverlapThreshold) + "</span><span class='metric-label'>Max Overlap</span></div>");
+                        report.println("<div class='metric-box'><span class='metric-value'>" + formatPercent(slowMoverTelemetry.avgMedianSupportOverlap) + "</span><span class='metric-label'>Average Overlap</span></div>");
                         report.println("</div>");
+                        report.println("</div>");
+                    } else if (hasSlowMoverStack || hasSlowMoverMask || hasCandidates) {
+                        report.println("<div class='panel'><p>Slow-mover telemetry was not exported for this run.</p></div>");
                     }
 
-                    if (hasCandidates && slowMoverStackData != null) {
+                    if (hasCandidates) {
                         report.println("<div class='flex-container'>");
 
                         int smCounter = 1;
-                        for (SourceExtractor.DetectedObject sm : slowMoverCandidates) {
+                        for (int i = 0; i < slowMoverCandidates.size(); i++) {
+                            SourceExtractor.DetectedObject sm = slowMoverCandidates.get(i);
+                            Double candidateOverlap = null;
+                            if (slowMoverTelemetry != null
+                                    && slowMoverTelemetry.candidateMedianSupportOverlaps != null
+                                    && i < slowMoverTelemetry.candidateMedianSupportOverlaps.size()) {
+                                candidateOverlap = slowMoverTelemetry.candidateMedianSupportOverlaps.get(i);
+                            }
                             exportDeepStackDetectionCard(
                                     report,
                                     exportDir,
@@ -3405,6 +3487,10 @@ public class ImageDisplayUtils {
                                     "Slow Mover Stack",
                                     "slow_mover_" + smCounter + "_sm_stack.png",
                                     masterStackData,
+                                    slowMoverMedianArtifactMask,
+                                    "Slow-Mover Median Mask",
+                                    "slow_mover_" + smCounter + "_median_mask.png",
+                                    candidateOverlap,
                                     masterMaximumStackData,
                                     "Maximum Stack",
                                     "slow_mover_" + smCounter + "_maximum_stack.png",
@@ -3438,6 +3524,10 @@ public class ImageDisplayUtils {
                                     "Maximum Stack",
                                     "master_max_streak_" + streakCounter + "_maximum_stack.png",
                                     masterStackData,
+                                    null,
+                                    null,
+                                    null,
+                                    null,
                                     null,
                                     null,
                                     null,
