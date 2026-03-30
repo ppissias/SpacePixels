@@ -51,7 +51,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private final File visualizationPreferencesFile = new File(System.getProperty("user.home"), SpacePixelsVisualizationPreferencesIO.DEFAULT_FILENAME);
 
     private JSpinner spinDetectionSigma, spinMinPixels, spinEdgeMargin, spinGrowSigma, spinVoidFraction, spinVoidRadius;
-    private JCheckBox chkEnableSlowMovers, chkEnableSlowMoverShapeFiltering;
+    private JCheckBox chkEnableSlowMovers, chkEnableSlowMoverShapeFiltering, chkEnableSlowMoverSpecificShapeFiltering;
     private JSpinner spinMasterSigma, spinMasterMinPix, spinMasterSlowMoverMinElongation, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma, spinSlowMoverBaselineMadMultiplier, spinSlowMoverStackMiddleFraction;
     private JSpinner spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction;
     private JSpinner spinStreakMinElong, spinStreakMinPix, spinSingleStreakMinPeakSigma, spinPointMinPix;
@@ -66,7 +66,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     // --- Anomaly Rescue ---
     private JCheckBox chkEnableAnomalyRescue;
-    private JSpinner spinAnomalyMinPeakSigma, spinAnomalyMinPixels, spinAnomalyMinIntegratedSigma, spinAnomalyMinPeakSigmaFloor;
+    private JSpinner spinAnomalyMinPeakSigma, spinAnomalyMinPixels, spinAnomalyMinIntegratedSigma, spinAnomalyMinIntegratedPixels, spinAnomalyMinPeakSigmaFloor;
 
     // --- Quality Control Spinners ---
     private JSpinner spinMinFramesAnalysis, spinStarCountSigma, spinFwhmSigma;
@@ -368,6 +368,7 @@ public class DetectionConfigurationPanel extends JPanel {
         spinAnomalyMinPeakSigma = addRow(panel, "Anomaly Min Peak Sigma", "Minimum peak signal-to-noise required for a single-frame point source to be rescued as an anomaly. Higher values are stricter.", doubleSpinnerModel(jTransientConfig.anomalyMinPeakSigma, 1.0, 50.0, 0.1));
         spinAnomalyMinPixels = addRow(panel, "Anomaly Min Pixels", "Minimum size required for a single-frame point source to be rescued. Higher values reject more hot pixels and cosmic rays.", intSpinnerModel(jTransientConfig.anomalyMinPixels, 1, 2000, 1));
         spinAnomalyMinIntegratedSigma = addRow(panel, "Anomaly Min Integrated Sigma", "Minimum integrated signal-to-noise required for the broader single-frame anomaly rescue path. Higher values demand stronger total support from faint but larger flashes.", doubleSpinnerModel(jTransientConfig.anomalyMinIntegratedSigma, 1.0, 200.0, 0.5));
+        spinAnomalyMinIntegratedPixels = addRow(panel, "Anomaly Min Integrated Pixels", "Minimum footprint size required for the integrated-sigma anomaly path. Higher values reject small high-energy fragments from the broader rescue branch.", intSpinnerModel(jTransientConfig.anomalyMinIntegratedPixels, 1, 2000, 1));
         spinAnomalyMinPeakSigmaFloor = addRow(panel, "Anomaly Min Peak Sigma Floor", "Safety floor for diffuse anomaly rescue. Even broader anomalies must retain at least some local prominence to avoid low-contrast mush.", doubleSpinnerModel(jTransientConfig.anomalyMinPeakSigmaFloor, 0.0, 20.0, 0.1));
 
         panel.add(Box.createVerticalStrut(10));
@@ -388,6 +389,7 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Slow Mover Filtering"));
         chkEnableSlowMoverShapeFiltering = addCheckboxRow(panel, "Enable Slow-Mover Shape Filtering", "Keeps the slow-mover shape veto stage active. Disable this only if you want to skip irregular, binary, and slow-mover-specific shape checks entirely.", getOptionalBooleanField(jTransientConfig, "enableSlowMoverShapeFiltering", true));
+        chkEnableSlowMoverSpecificShapeFiltering = addCheckboxRow(panel, "Enable Slow-Mover Specific Shape Filtering", "Keeps the extra slow-mover-only compact-shape veto active after the shared irregular and binary checks. Disable this to keep the shared shape filters while bypassing the targeted slow-mover-specific veto.", getOptionalBooleanField(jTransientConfig, "enableSlowMoverSpecificShapeFiltering", true));
         panel.add(createSectionHeader("Slow Mover Median Support"));
         spinSlowMoverMedianSupportOverlapFraction = addRow(panel, "Median Support Min Overlap", "Minimum fraction of a slow-mover footprint that must overlap the median-stack artifact mask before the candidate is trusted. Higher values demand stronger support from the median stack.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportOverlapFraction, 0.0, 1.0, 0.01));
         spinSlowMoverMedianSupportMaxOverlapFraction = addRow(panel, "Median Support Max Overlap", "Maximum fraction of a slow-mover footprint that may overlap the median-stack artifact mask. Lower values reject candidates that look too similar to stationary median-stack artifacts.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportMaxOverlapFraction, 0.0, 1.0, 0.01));
@@ -727,8 +729,10 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.anomalyMinPeakSigma = ((Number) spinAnomalyMinPeakSigma.getValue()).doubleValue();
             jTransientConfig.anomalyMinPixels = ((Number) spinAnomalyMinPixels.getValue()).intValue();
             jTransientConfig.anomalyMinIntegratedSigma = ((Number) spinAnomalyMinIntegratedSigma.getValue()).doubleValue();
+            jTransientConfig.anomalyMinIntegratedPixels = ((Number) spinAnomalyMinIntegratedPixels.getValue()).intValue();
             jTransientConfig.anomalyMinPeakSigmaFloor = ((Number) spinAnomalyMinPeakSigmaFloor.getValue()).doubleValue();
             setOptionalBooleanField(jTransientConfig, "enableSlowMoverShapeFiltering", chkEnableSlowMoverShapeFiltering.isSelected());
+            setOptionalBooleanField(jTransientConfig, "enableSlowMoverSpecificShapeFiltering", chkEnableSlowMoverSpecificShapeFiltering.isSelected());
 
             autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
             SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);

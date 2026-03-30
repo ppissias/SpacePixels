@@ -2733,6 +2733,13 @@ public class ImageDisplayUtils {
         return html.toString();
     }
 
+    private static String compactMetricBox(String value, String label) {
+        return "<div class='metric-box compact'>"
+                + "<span class='metric-value'>" + escapeHtml(value) + "</span>"
+                + "<span class='metric-label'>" + escapeHtml(label) + "</span>"
+                + "</div>";
+    }
+
     private static String formatDecimal(double value, int decimals) {
         return String.format(Locale.US, "%." + decimals + "f", value);
     }
@@ -2909,6 +2916,9 @@ public class ImageDisplayUtils {
             report.println(".metric-box { display: inline-block; background-color: #2b2b2b; padding: 15px 20px; border-radius: 5px; margin: 5px 15px 15px 0; border-left: 4px solid #4da6ff; min-width: 140px; } ");
             report.println(".metric-value { font-size: 26px; font-weight: bold; color: #ffffff; display: block; margin-bottom: 5px; } ");
             report.println(".metric-label { font-size: 11px; color: #999999; text-transform: uppercase; letter-spacing: 1px; } ");
+            report.println(".metric-box.compact { padding: 7px 9px; margin: 3px 6px 6px 0; min-width: 92px; border-left-width: 3px; border-radius: 4px; }");
+            report.println(".metric-box.compact .metric-value { font-size: 15px; margin-bottom: 2px; line-height: 1.1; }");
+            report.println(".metric-box.compact .metric-label { font-size: 9px; letter-spacing: 0.4px; line-height: 1.15; }");
 
             // Tables
             report.println("table { border-collapse: collapse; width: 100%; margin-top: 15px; font-size: 14px; background-color: #2b2b2b; border-radius: 5px; overflow: hidden; } ");
@@ -3500,20 +3510,30 @@ public class ImageDisplayUtils {
                         report.println("<div class='panel'>");
                         report.println("<h3 style='color: #ffffff; margin-top: 0;'>Slow-Mover Telemetry</h3>");
                         report.println("<div class='flex-container' style='margin-bottom: 25px;'>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.rawCandidatesExtracted + "</span><span class='metric-label'>Raw Candidates</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.candidatesAboveElongationThreshold + "</span><span class='metric-label'>Above Elongation Threshold</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.candidatesEvaluatedAgainstMasks + "</span><span class='metric-label'>Evaluated Against Mask</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.candidatesDetected + "</span><span class='metric-label'>Final Candidates</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.rejectedIrregularShape + "</span><span class='metric-label'>Rejected Irregular</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.rejectedBinaryAnomaly + "</span><span class='metric-label'>Rejected Binary</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.rejectedLowMedianSupport + "</span><span class='metric-label'>Rejected Low Overlap</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + slowMoverTelemetry.rejectedHighMedianSupport + "</span><span class='metric-label'>Rejected High Overlap</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + String.format(Locale.US, "%.2f", slowMoverTelemetry.medianElongation) + "</span><span class='metric-label'>Median Elongation</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + String.format(Locale.US, "%.2f", slowMoverTelemetry.madElongation) + "</span><span class='metric-label'>MAD Elongation</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + String.format(Locale.US, "%.2f", slowMoverTelemetry.dynamicElongationThreshold) + "</span><span class='metric-label'>Dynamic Threshold</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + formatPercent(slowMoverTelemetry.medianSupportOverlapThreshold) + "</span><span class='metric-label'>Min Overlap</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + formatPercent(slowMoverTelemetry.medianSupportMaxOverlapThreshold) + "</span><span class='metric-label'>Max Overlap</span></div>");
-                        report.println("<div class='metric-box'><span class='metric-value'>" + formatPercent(slowMoverTelemetry.avgMedianSupportOverlap) + "</span><span class='metric-label'>Average Overlap</span></div>");
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rawCandidatesExtracted), "Raw Candidates"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.candidatesAboveElongationThreshold), "Above Elongation"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.candidatesEvaluatedAgainstMasks), "Mask Stage"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.candidatesDetected), "Final Candidates"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedIrregularShape), "Rejected Irregular"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedBinaryAnomaly), "Rejected Binary"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShape), "Rejected Shape Veto"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedLowMedianSupport), "Rejected Low Overlap"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedHighMedianSupport), "Rejected High Overlap"));
+                        report.println(compactMetricBox(String.format(Locale.US, "%.2f", slowMoverTelemetry.medianElongation), "Median Elongation"));
+                        report.println(compactMetricBox(String.format(Locale.US, "%.2f", slowMoverTelemetry.madElongation), "MAD Elongation"));
+                        report.println(compactMetricBox(String.format(Locale.US, "%.2f", slowMoverTelemetry.dynamicElongationThreshold), "Dynamic Threshold"));
+                        report.println(compactMetricBox(formatPercent(slowMoverTelemetry.medianSupportOverlapThreshold), "Min Overlap"));
+                        report.println(compactMetricBox(formatPercent(slowMoverTelemetry.medianSupportMaxOverlapThreshold), "Max Overlap"));
+                        report.println(compactMetricBox(formatPercent(slowMoverTelemetry.avgMedianSupportOverlap), "Average Overlap"));
+                        report.println("</div>");
+                        report.println("<div class='astro-note' style='margin-top: -12px; margin-bottom: 10px;'>Slow-mover-only shape-veto breakdown. These counts are a subset of <strong>Rejected Shape Veto</strong>.</div>");
+                        report.println("<div class='flex-container' style='margin-bottom: 10px;'>");
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShapeTooShort), "Too Short"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShapeLowFill), "Low Fill"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShapeSparseBins), "Sparse Bins"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShapeGappedBins), "Gapped Bins"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShapeCurvedCenterline), "Curved Centerline"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShapeBulgedWidth), "Bulged Width"));
                         report.println("</div>");
                         report.println("</div>");
                     } else if (hasSlowMoverStack || hasSlowMoverMask || hasCandidates) {
