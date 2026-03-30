@@ -234,6 +234,30 @@ public class ImageDisplayUtils {
             startX = fixedCenterX - (trackBoxWidth / 2);
             startY = fixedCenterY - (trackBoxHeight / 2);
         }
+
+        public CropBounds(SourceExtractor.DetectedObject detection, int padding) {
+            double objectRadius = 0;
+            if (detection != null && detection.pixelArea > 0) {
+                if (detection.isStreak) {
+                    objectRadius = Math.sqrt((detection.pixelArea * detection.elongation) / Math.PI);
+                } else {
+                    objectRadius = Math.sqrt(detection.pixelArea / Math.PI);
+                }
+            }
+
+            double minX = detection == null ? 0 : detection.x - objectRadius;
+            double maxX = detection == null ? 0 : detection.x + objectRadius;
+            double minY = detection == null ? 0 : detection.y - objectRadius;
+            double maxY = detection == null ? 0 : detection.y + objectRadius;
+
+            trackBoxWidth = (int) Math.round(maxX - minX) + padding;
+            trackBoxHeight = (int) Math.round(maxY - minY) + padding;
+            fixedCenterX = (int) Math.round((minX + maxX) / 2.0);
+            fixedCenterY = (int) Math.round((minY + maxY) / 2.0);
+
+            startX = fixedCenterX - (trackBoxWidth / 2);
+            startY = fixedCenterY - (trackBoxHeight / 2);
+        }
     }
 
     private static class CreativeTributeLayout {
@@ -763,7 +787,7 @@ public class ImageDisplayUtils {
 
     // --- REFACTORED: GLOBAL TRACK MAP RENDERER ---
     private static BufferedImage createGlobalTrackMap(short[][] backgroundData,
-                                                     List<TrackLinker.Track> anomalies,
+                                                     List<TrackLinker.AnomalyDetection> anomalies,
                                                      List<TrackLinker.Track> singleStreaks,
                                                      List<TrackLinker.Track> streakTracks,
                                                      List<TrackLinker.Track> movingTargets) {
@@ -774,8 +798,8 @@ public class ImageDisplayUtils {
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
         int aCounter = 1;
-        for (TrackLinker.Track t : anomalies) {
-            SourceExtractor.DetectedObject pt = t.points.get(0);
+        for (TrackLinker.AnomalyDetection anomaly : anomalies) {
+            SourceExtractor.DetectedObject pt = anomaly.object;
             int cx = (int) Math.round(pt.x), cy = (int) Math.round(pt.y);
             g2d.setColor(new Color(255, 51, 255)); g2d.setStroke(new BasicStroke(2.5f));
             g2d.drawOval(cx - 20, cy - 20, 40, 40);
@@ -1297,7 +1321,7 @@ public class ImageDisplayUtils {
 
     private static BufferedImage createCreativeTributeImage(short[][] backgroundData,
                                                             List<List<SourceExtractor.DetectedObject>> allTransients,
-                                                            List<TrackLinker.Track> anomalies,
+                                                            List<TrackLinker.AnomalyDetection> anomalies,
                                                             List<TrackLinker.Track> singleStreaks,
                                                             List<TrackLinker.Track> streakTracks,
                                                             List<TrackLinker.Track> movingTargets,
@@ -1353,9 +1377,9 @@ public class ImageDisplayUtils {
         for (TrackLinker.Track track : streakTracks) {
             drawGlowingTrack(g2d, track, layout, new Color(255, 204, 102), 2.8f, 9.5f);
         }
-        for (TrackLinker.Track track : anomalies) {
-            if (track.points != null && !track.points.isEmpty()) {
-                drawCreativePulse(g2d, track.points.get(0), layout, new Color(255, 102, 204));
+        for (TrackLinker.AnomalyDetection anomaly : anomalies) {
+            if (anomaly != null && anomaly.object != null) {
+                drawCreativePulse(g2d, anomaly.object, layout, new Color(255, 102, 204));
             }
         }
         for (TrackLinker.Track track : singleStreaks) {
@@ -1439,7 +1463,7 @@ public class ImageDisplayUtils {
         y += 24;
         g2d.drawString("Raw transients: " + rawTransientCount + " | Confirmed tracks: " + confirmedTrackCount, textX, y);
         y += 24;
-        g2d.drawString("Flashes: " + anomalies.size() + " | Single streaks: " + singleStreaks.size() + " | Deep-stack hints: " + deepStackHintCount, textX, y);
+        g2d.drawString("Anomalies: " + anomalies.size() + " | Single streaks: " + singleStreaks.size() + " | Deep-stack hints: " + deepStackHintCount, textX, y);
         y += 24;
         g2d.drawString("Dominant motion: " + dominantMotion + " | Longest linked path: " + String.format(Locale.US, "%.1f px", longestPath), textX, y);
 
@@ -1618,7 +1642,7 @@ public class ImageDisplayUtils {
 
     private static CreativeTributeLayout createCreativeTributeLayout(short[][] backgroundData,
                                                                      List<List<SourceExtractor.DetectedObject>> allTransients,
-                                                                     List<TrackLinker.Track> anomalies,
+                                                                     List<TrackLinker.AnomalyDetection> anomalies,
                                                                      List<TrackLinker.Track> singleStreaks,
                                                                      List<TrackLinker.Track> streakTracks,
                                                                      List<TrackLinker.Track> movingTargets,
@@ -1628,7 +1652,7 @@ public class ImageDisplayUtils {
         int imageHeight = backgroundData.length;
 
         double[] bounds = new double[]{Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE};
-        includeCreativeTrackBounds(bounds, anomalies);
+        includeCreativeAnomalyBounds(bounds, anomalies);
         includeCreativeTrackBounds(bounds, singleStreaks);
         includeCreativeTrackBounds(bounds, streakTracks);
         includeCreativeTrackBounds(bounds, movingTargets);
@@ -1691,6 +1715,19 @@ public class ImageDisplayUtils {
             for (SourceExtractor.DetectedObject point : track.points) {
                 includeCreativePoint(bounds, point.x, point.y);
             }
+        }
+    }
+
+    private static void includeCreativeAnomalyBounds(double[] bounds, List<TrackLinker.AnomalyDetection> anomalies) {
+        if (anomalies == null) {
+            return;
+        }
+
+        for (TrackLinker.AnomalyDetection anomaly : anomalies) {
+            if (anomaly == null || anomaly.object == null) {
+                continue;
+            }
+            includeCreativePoint(bounds, anomaly.object.x, anomaly.object.y);
         }
     }
 
@@ -2626,14 +2663,31 @@ public class ImageDisplayUtils {
                 formatUtcTimestamp(detection.timestamp));
     }
 
-    private static String buildAnomalyMetricsText(SourceExtractor.DetectedObject detection) {
+    private static String buildAnomalyMetricsText(TrackLinker.AnomalyDetection anomaly) {
+        SourceExtractor.DetectedObject detection = anomaly.object;
         return String.format(
                 Locale.US,
-                "Peak Sigma: %.2f, Flux: %.1f, Pixels: %d, Elongation: %.2f",
+                "%s, Peak Sigma: %.2f, Integrated Sigma: %.2f, Flux: %.1f, Pixels: %d, Elongation: %.2f",
+                formatAnomalyTypeLabel(anomaly.type),
                 detection.peakSigma,
+                detection.integratedSigma,
                 detection.totalFlux,
                 (int) detection.pixelArea,
                 detection.elongation);
+    }
+
+    private static String formatAnomalyTypeLabel(TrackLinker.AnomalyType type) {
+        if (type == null) {
+            return "Rescue Type: Unknown";
+        }
+        switch (type) {
+            case PEAK_SIGMA:
+                return "Rescue Type: Peak-Sigma";
+            case INTEGRATED_SIGMA:
+                return "Rescue Type: Integrated-Sigma";
+            default:
+                return "Rescue Type: " + type.name();
+        }
     }
 
     private static String buildTrackTimingSummaryHtml(TrackLinker.Track track) {
@@ -2789,7 +2843,8 @@ public class ImageDisplayUtils {
                                                  AppConfig appConfig) throws IOException {
 
         // Extract variables from the PipelineResult to keep the rendering logic unchanged
-        List<TrackLinker.Track> tracks = result.tracks;
+        List<TrackLinker.Track> tracks = result.tracks != null ? result.tracks : new ArrayList<>();
+        List<TrackLinker.AnomalyDetection> anomalies = result.anomalies != null ? result.anomalies : new ArrayList<>();
         TrackerTelemetry linkerTelemetry = result.telemetry != null ? result.telemetry.trackerTelemetry : null;
         short[][] masterStackData = result.masterStackData;
         short[][] masterMaximumStackData = result.masterMaximumStackData;
@@ -2803,7 +2858,6 @@ public class ImageDisplayUtils {
         PipelineTelemetry pipelineTelemetry = result.telemetry;
         List<List<SourceExtractor.DetectedObject>> allTransients = result.allTransients;
         ReportAstrometryContext astrometryContext = buildReportAstrometryContext(fitsFiles, appConfig);
-        List<TrackLinker.Track> anomalies = new ArrayList<>();
         List<TrackLinker.Track> singleStreaks = new ArrayList<>();
         List<TrackLinker.Track> streakTracks = new ArrayList<>();
         List<TrackLinker.Track> movingTargets = new ArrayList<>();
@@ -2814,8 +2868,7 @@ public class ImageDisplayUtils {
             for (SourceExtractor.DetectedObject pt : track.points) uniqueFrames.add(pt.sourceFrameIndex);
 
             if (uniqueFrames.size() == 1) {
-                if (track.isAnomaly) anomalies.add(track);
-                else singleStreaks.add(track);
+                singleStreaks.add(track);
             } else {
                 if (track.isStreakTrack) streakTracks.add(track);
                 else movingTargets.add(track);
@@ -2919,7 +2972,7 @@ public class ImageDisplayUtils {
                 report.println("<div class='metric-box'><span class='metric-value'>" + singleStreaks.size() + "</span><span class='metric-label'>Streaks</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + streakTracks.size() + "</span><span class='metric-label'>Streak Tracks</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + movingTargets.size() + "</span><span class='metric-label'>Moving Object Tracks</span></div>");
-                report.println("<div class='metric-box'><span class='metric-value'>" + anomalies.size() + "</span><span class='metric-label'>High-Energy Anomalies</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + anomalies.size() + "</span><span class='metric-label'>Single-Frame Anomalies</span></div>");
                 String potentialSlowMoverMetric = config.enableSlowMoverDetection ? String.valueOf(potentialSlowMoverCount) : "Off";
                 report.println("<div class='metric-box'><span class='metric-value'>" + potentialSlowMoverMetric + "</span><span class='metric-label'>Potential Slow Movers</span></div>");
                 report.println("</div>");
@@ -3134,8 +3187,10 @@ public class ImageDisplayUtils {
                 report.println("<tr><td>3. Final Track</td><td>Duplicate Track (Ignored)</td><td>" + linkerTelemetry.countTrackDuplicate + "</td></tr>");
                 report.println("</table>");
                 report.println("<p class='astro-note' style='margin-top: 12px;'>");
-                report.println("Phase outputs: <strong>" + linkerTelemetry.streakTracksFound + "</strong> accepted streak tracks and <strong>" + linkerTelemetry.pointTracksFound + "</strong> accepted point/anomaly tracks. ");
-                report.println("The point/anomaly total includes anomaly-rescue outputs and is not identical to the final moving-target bucket.");
+                report.println("Phase outputs: <strong>" + linkerTelemetry.streakTracksFound + "</strong> accepted streak tracks, <strong>" + linkerTelemetry.pointTracksFound + "</strong> accepted point tracks, and <strong>" + linkerTelemetry.anomaliesFound + "</strong> rescued anomalies.");
+                if (linkerTelemetry.integratedSigmaAnomaliesFound > 0) {
+                    report.println(" <strong>" + linkerTelemetry.integratedSigmaAnomaliesFound + "</strong> anomaly rescues came from the integrated-sigma path.");
+                }
                 report.println("</p>");
 
                 report.println("</div>");
@@ -3146,8 +3201,8 @@ public class ImageDisplayUtils {
             // =================================================================
             report.println("<h2>Target Visualizations</h2>");
 
-            if (tracks.isEmpty()) {
-                report.println("<div class='panel'><p>No moving targets were detected in this session.</p></div>");
+            if (singleStreaks.isEmpty() && streakTracks.isEmpty() && movingTargets.isEmpty() && anomalies.isEmpty()) {
+                report.println("<div class='panel'><p>No moving tracks, single-frame streaks, or anomaly rescues were detected in this session.</p></div>");
             }
 
 
@@ -3341,15 +3396,15 @@ public class ImageDisplayUtils {
             }
 
             if (!anomalies.isEmpty()) {
-                report.println("<h3 style='color: #ff3333; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>High-Energy Anomalies (Optical Flashes)</h3>");
+                report.println("<h3 style='color: #ff3333; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single-Frame Anomalies (Optical Flashes)</h3>");
                 int counter = 1;
-                for (TrackLinker.Track track : anomalies) {
-                    CropBounds cb = new CropBounds(track, trackCropPadding);
-                    SourceExtractor.DetectedObject pt = track.points.get(0);
+                for (TrackLinker.AnomalyDetection anomaly : anomalies) {
+                    SourceExtractor.DetectedObject pt = anomaly.object;
+                    CropBounds cb = new CropBounds(pt, trackCropPadding);
                     int frameIndex = pt.sourceFrameIndex;
 
                     report.println("<div class='detection-card streak-title' style='border-left-color: #ff3333; color: #ff3333;'>");
-                    report.println("<div class='detection-title' style='color: #ff3333;'>Anomaly Event A" + counter + "</div>");
+                    report.println("<div class='detection-title' style='color: #ff3333;'>Anomaly Event A" + counter + " <span style='background: #7a1f50; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>" + escapeHtml(formatAnomalyTypeLabel(anomaly.type).replace("Rescue Type: ", "")) + "</span></div>");
 
                     short[][] croppedData = robustEdgeAwareCrop(rawFrames.get(frameIndex), cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
                     BufferedImage detectionImg = createDisplayImage(croppedData);
@@ -3357,7 +3412,7 @@ public class ImageDisplayUtils {
                     saveTrackImageLossless(detectionImg, new File(exportDir, detectionFileName));
 
                     String shapeFileName = "anomaly_" + counter + "_shape.png";
-                    BufferedImage shapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY, false);
+                    BufferedImage shapeImg = createSingleStreakShapeImage(java.util.Collections.singletonList(pt), cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY, false);
                     saveTrackImageLossless(shapeImg, new File(exportDir, shapeFileName));
 
                     String maskFileName = null;
@@ -3403,7 +3458,7 @@ public class ImageDisplayUtils {
                     }
                     report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
                     report.println("</div>");
-                    String metricsStr = buildAnomalyMetricsText(pt);
+                    String metricsStr = buildAnomalyMetricsText(anomaly);
                     String overlapColor = "#aaaaaa";
                     String overlapAssessment = "n/a";
                     if (maskOverlapStats.totalPixels > 0) {
@@ -3548,7 +3603,7 @@ public class ImageDisplayUtils {
             // =================================================================
             // 4.5 GLOBAL TRAJECTORY MAP
             // =================================================================
-            if (!tracks.isEmpty()) {
+            if (!singleStreaks.isEmpty() || !streakTracks.isEmpty() || !movingTargets.isEmpty() || !anomalies.isEmpty()) {
                 short[][] bgData = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
                 if (bgData != null) {
                     BufferedImage globalMap = createGlobalTrackMap(bgData, anomalies, singleStreaks, streakTracks, movingTargets);
@@ -3626,7 +3681,7 @@ public class ImageDisplayUtils {
                 report.println("<h2>The AI's Perspective: Skyprint of the Session</h2>");
                 report.println("<p style='color: #c7bfd6; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>A creative tribute by Codex. This poster compresses the whole run into one image: faint time-mapped transient dust for everything that flashed through the extractor, brighter paths for linked movers, and separate markers for deep-stack hints that deserve a second look.</p>");
                 report.println("<a href='" + creativeFileName + "' target='_blank'><img src='" + creativeFileName + "' class='native-size-image' style='border: 1px solid #666; border-radius: 6px;' alt='Creative Tribute Skyprint' /></a>");
-                report.println("<p style='font-size: 13px; color: #b8b0c7; margin-bottom: 0;'>This session stitched together <strong style='color:#ffffff;'>" + rawTransientCount + "</strong> raw transients, produced <strong style='color:#ffffff;'>" + confirmedTrackCount + "</strong> linked tracks, surfaced <strong style='color:#ffffff;'>" + anomalies.size() + "</strong> optical flashes, and left <strong style='color:#ffffff;'>" + deepStackHintCount + "</strong> deep-stack hints on the table. The dominant linked motion trends toward <strong style='color:#ffffff;'>" + dominantMotion + "</strong>, and the longest confirmed path spans <strong style='color:#ffffff;'>" + String.format(Locale.US, "%.1f px", longestPath) + "</strong>.</p>");
+                report.println("<p style='font-size: 13px; color: #b8b0c7; margin-bottom: 0;'>This session stitched together <strong style='color:#ffffff;'>" + rawTransientCount + "</strong> raw transients, produced <strong style='color:#ffffff;'>" + confirmedTrackCount + "</strong> linked tracks, surfaced <strong style='color:#ffffff;'>" + anomalies.size() + "</strong> single-frame anomalies, and left <strong style='color:#ffffff;'>" + deepStackHintCount + "</strong> deep-stack hints on the table. The dominant linked motion trends toward <strong style='color:#ffffff;'>" + dominantMotion + "</strong>, and the longest confirmed path spans <strong style='color:#ffffff;'>" + String.format(Locale.US, "%.1f px", longestPath) + "</strong>.</p>");
                 report.println("</div>");
             }
 

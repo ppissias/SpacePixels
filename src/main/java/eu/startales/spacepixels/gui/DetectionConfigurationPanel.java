@@ -32,6 +32,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,7 +51,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private final File visualizationPreferencesFile = new File(System.getProperty("user.home"), SpacePixelsVisualizationPreferencesIO.DEFAULT_FILENAME);
 
     private JSpinner spinDetectionSigma, spinMinPixels, spinEdgeMargin, spinGrowSigma, spinVoidFraction, spinVoidRadius;
-    private JCheckBox chkEnableSlowMovers;
+    private JCheckBox chkEnableSlowMovers, chkEnableSlowMoverShapeFiltering;
     private JSpinner spinMasterSigma, spinMasterMinPix, spinMasterSlowMoverMinElongation, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma, spinSlowMoverBaselineMadMultiplier, spinSlowMoverStackMiddleFraction;
     private JSpinner spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction;
     private JSpinner spinStreakMinElong, spinStreakMinPix, spinSingleStreakMinPeakSigma, spinPointMinPix;
@@ -65,7 +66,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     // --- Anomaly Rescue ---
     private JCheckBox chkEnableAnomalyRescue;
-    private JSpinner spinAnomalyMinPeakSigma, spinAnomalyMinPixels;
+    private JSpinner spinAnomalyMinPeakSigma, spinAnomalyMinPixels, spinAnomalyMinIntegratedSigma, spinAnomalyMinPeakSigmaFloor;
 
     // --- Quality Control Spinners ---
     private JSpinner spinMinFramesAnalysis, spinStarCountSigma, spinFwhmSigma;
@@ -366,6 +367,8 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Advanced Anomaly Rescue"));
         spinAnomalyMinPeakSigma = addRow(panel, "Anomaly Min Peak Sigma", "Minimum peak signal-to-noise required for a single-frame point source to be rescued as an anomaly. Higher values are stricter.", doubleSpinnerModel(jTransientConfig.anomalyMinPeakSigma, 1.0, 50.0, 0.1));
         spinAnomalyMinPixels = addRow(panel, "Anomaly Min Pixels", "Minimum size required for a single-frame point source to be rescued. Higher values reject more hot pixels and cosmic rays.", intSpinnerModel(jTransientConfig.anomalyMinPixels, 1, 2000, 1));
+        spinAnomalyMinIntegratedSigma = addRow(panel, "Anomaly Min Integrated Sigma", "Minimum integrated signal-to-noise required for the broader single-frame anomaly rescue path. Higher values demand stronger total support from faint but larger flashes.", doubleSpinnerModel(jTransientConfig.anomalyMinIntegratedSigma, 1.0, 200.0, 0.5));
+        spinAnomalyMinPeakSigmaFloor = addRow(panel, "Anomaly Min Peak Sigma Floor", "Safety floor for diffuse anomaly rescue. Even broader anomalies must retain at least some local prominence to avoid low-contrast mush.", doubleSpinnerModel(jTransientConfig.anomalyMinPeakSigmaFloor, 0.0, 20.0, 0.1));
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Streak Detection"));
@@ -383,6 +386,8 @@ public class DetectionConfigurationPanel extends JPanel {
         spinMasterSlowMoverMinPixels = addRow(panel, "Master Slow-Mover Min Pixels", "Minimum size required for an elongated source in the master stack to be considered a slow-mover candidate.", intSpinnerModel(jTransientConfig.masterSlowMoverMinPixels, 1, 2000, 1));
 
         panel.add(Box.createVerticalStrut(10));
+        panel.add(createSectionHeader("Slow Mover Filtering"));
+        chkEnableSlowMoverShapeFiltering = addCheckboxRow(panel, "Enable Slow-Mover Shape Filtering", "Keeps the slow-mover shape veto stage active. Disable this only if you want to skip irregular, binary, and slow-mover-specific shape checks entirely.", getOptionalBooleanField(jTransientConfig, "enableSlowMoverShapeFiltering", true));
         panel.add(createSectionHeader("Slow Mover Median Support"));
         spinSlowMoverMedianSupportOverlapFraction = addRow(panel, "Median Support Min Overlap", "Minimum fraction of a slow-mover footprint that must overlap the median-stack artifact mask before the candidate is trusted. Higher values demand stronger support from the median stack.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportOverlapFraction, 0.0, 1.0, 0.01));
         spinSlowMoverMedianSupportMaxOverlapFraction = addRow(panel, "Median Support Max Overlap", "Maximum fraction of a slow-mover footprint that may overlap the median-stack artifact mask. Lower values reject candidates that look too similar to stationary median-stack artifacts.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportMaxOverlapFraction, 0.0, 1.0, 0.01));
@@ -721,6 +726,9 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.enableAnomalyRescue = chkEnableAnomalyRescue.isSelected();
             jTransientConfig.anomalyMinPeakSigma = ((Number) spinAnomalyMinPeakSigma.getValue()).doubleValue();
             jTransientConfig.anomalyMinPixels = ((Number) spinAnomalyMinPixels.getValue()).intValue();
+            jTransientConfig.anomalyMinIntegratedSigma = ((Number) spinAnomalyMinIntegratedSigma.getValue()).doubleValue();
+            jTransientConfig.anomalyMinPeakSigmaFloor = ((Number) spinAnomalyMinPeakSigmaFloor.getValue()).doubleValue();
+            setOptionalBooleanField(jTransientConfig, "enableSlowMoverShapeFiltering", chkEnableSlowMoverShapeFiltering.isSelected());
 
             autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
             SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
@@ -955,6 +963,23 @@ public class DetectionConfigurationPanel extends JPanel {
 
         // Push the visual changes to the underlying memory state immediately
         applySettingsToMemory();
+    }
+
+    private boolean getOptionalBooleanField(DetectionConfig config, String fieldName, boolean defaultValue) {
+        try {
+            Field field = DetectionConfig.class.getField(fieldName);
+            return field.getBoolean(config);
+        } catch (ReflectiveOperationException ignored) {
+            return defaultValue;
+        }
+    }
+
+    private void setOptionalBooleanField(DetectionConfig config, String fieldName, boolean value) {
+        try {
+            Field field = DetectionConfig.class.getField(fieldName);
+            field.setBoolean(config, value);
+        } catch (ReflectiveOperationException ignored) {
+        }
     }
 
     private void showTelemetryReportWindow(String reportText) {

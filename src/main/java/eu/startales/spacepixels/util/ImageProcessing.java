@@ -544,10 +544,7 @@ public class ImageProcessing {
                 System.err.println("Failed to export visualization for iteration " + k + ": " + e.getMessage());
             }
 
-            int anomalyCount = 0;
-            for (TrackLinker.Track t : result.tracks) {
-                if (t.isAnomaly) anomalyCount++;
-            }
+            int anomalyCount = result.anomalies == null ? 0 : result.anomalies.size();
             summaries.add(new ImageDisplayUtils.IterationSummary(k, k + "_frames", result.tracks.size(), anomalyCount));
 
             currentIteration++;
@@ -573,18 +570,14 @@ public class ImageProcessing {
 
     private static DetectionSummary summarizeDetections(PipelineResult result) {
         List<TrackLinker.Track> tracks = result.tracks;
-        int anomalies = 0;
+        int anomalies = result.anomalies == null ? 0 : result.anomalies.size();
         int singleStreaks = 0;
         int streakTracks = 0;
         int movingTargets = 0;
 
         for (TrackLinker.Track track : tracks) {
             if (track.points.size() == 1) {
-                if (track.isAnomaly) {
-                    anomalies++;
-                } else {
-                    singleStreaks++;
-                }
+                singleStreaks++;
             } else if (track.isStreakTrack) {
                 streakTracks++;
             } else {
@@ -596,7 +589,7 @@ public class ImageProcessing {
         int maximumStackTransientStreaks = result.masterMaximumStackTransientStreaks == null ? 0 : result.masterMaximumStackTransientStreaks.size();
 
         return new DetectionSummary(
-                tracks.size(),
+                singleStreaks + streakTracks + movingTargets + anomalies,
                 singleStreaks,
                 streakTracks,
                 movingTargets,
