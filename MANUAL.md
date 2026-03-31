@@ -578,7 +578,7 @@ When WCS is available, SpacePixels uses it for:
 
 ### Headless batch detection
 
-`BatchDetectionTool` runs the standard pipeline without the GUI.
+`BatchDetectionCli` runs the standard pipeline without the GUI.
 
 Usage pattern:
 

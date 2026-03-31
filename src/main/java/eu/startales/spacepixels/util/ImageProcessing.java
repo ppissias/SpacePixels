@@ -42,6 +42,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 
+/**
+ * High-level FITS processing facade for SpacePixels.
+ *
+ * <p>This class owns the end-to-end workflow around FITS import validation, image conversion,
+ * preview/stretch generation, plate-solving persistence, and handoff to the JTransient detection
+ * engine. It also applies small SpacePixels-specific safeguards around engine configuration before
+ * running the pipeline.</p>
+ */
 public class ImageProcessing {
 
     @FunctionalInterface
@@ -49,12 +57,16 @@ public class ImageProcessing {
         boolean shouldProceed(DetectionSummary summary);
     }
 
+    /**
+     * Lightweight detection-count snapshot used by UI safety prompts before heavy report export.
+     */
     public static final class DetectionSummary {
         public final int totalDetections;
         public final int singleStreaks;
         public final int streakTracks;
         public final int movingTargets;
         public final int anomalies;
+        public final int suspectedThresholdStreakTracks;
         public final int slowMoverCandidates;
         public final int maximumStackTransientStreaks;
         public final int potentialSlowMovers;
@@ -64,6 +76,7 @@ public class ImageProcessing {
                                  int streakTracks,
                                  int movingTargets,
                                  int anomalies,
+                                 int suspectedThresholdStreakTracks,
                                  int slowMoverCandidates,
                                  int maximumStackTransientStreaks) {
             this.totalDetections = totalDetections;
@@ -71,12 +84,89 @@ public class ImageProcessing {
             this.streakTracks = streakTracks;
             this.movingTargets = movingTargets;
             this.anomalies = anomalies;
+            this.suspectedThresholdStreakTracks = suspectedThresholdStreakTracks;
             this.slowMoverCandidates = slowMoverCandidates;
             this.maximumStackTransientStreaks = maximumStackTransientStreaks;
             this.potentialSlowMovers = slowMoverCandidates + maximumStackTransientStreaks;
         }
     }
 
+    /**
+     * Clones the user config and applies runtime-only adjustments derived from the actual frame
+     * count of the current run.
+     *
+     * <p>The current adjustment keeps the slow-mover middle-fraction below the effective maximum
+     * order statistic so small runs do not accidentally collapse into a pure maximum stack.</p>
+     */
+    static DetectionConfig createEffectiveDetectionConfig(DetectionConfig baseConfig, int frameCount) {
+        if (baseConfig == null) {
+            return null;
+        }
+
+        DetectionConfig effectiveConfig = baseConfig.clone();
+        if (!effectiveConfig.enableSlowMoverDetection) {
+            return effectiveConfig;
+        }
+
+        double adjustedFraction = clampSlowMoverStackMiddleFraction(effectiveConfig.slowMoverStackMiddleFraction, frameCount);
+        if (Double.compare(adjustedFraction, effectiveConfig.slowMoverStackMiddleFraction) != 0) {
+            System.out.printf(
+                    Locale.US,
+                    "Adjusting slowMoverStackMiddleFraction from %.4f to %.4f for %d frames so the slow-mover stack stays one frame below the maximum stack.%n",
+                    effectiveConfig.slowMoverStackMiddleFraction,
+                    adjustedFraction,
+                    frameCount);
+            effectiveConfig.slowMoverStackMiddleFraction = adjustedFraction;
+        }
+
+        return effectiveConfig;
+    }
+
+    /**
+     * Lowers the requested slow-mover stack fraction only when the engine would otherwise pick the
+     * same order statistic as the maximum stack for the given number of frames.
+     */
+    static double clampSlowMoverStackMiddleFraction(double requestedFraction, int frameCount) {
+        double boundedFraction = Math.max(0.0, Math.min(1.0, requestedFraction));
+        if (frameCount <= 1) {
+            return boundedFraction;
+        }
+
+        int maximumAllowedIndex = frameCount - 2;
+        if (computeSlowMoverStackOrderIndex(frameCount, boundedFraction) <= maximumAllowedIndex) {
+            return boundedFraction;
+        }
+
+        int requestedRoundedWindow = (int) Math.round(frameCount * boundedFraction);
+        int safeRoundedWindow = requestedRoundedWindow;
+
+        // Match the engine's rounded-window bucketing, but never let the selected sample hit the pure maximum.
+        while (safeRoundedWindow > 0
+                && computeSlowMoverStackOrderIndex(frameCount, safeRoundedWindow / (double) frameCount) > maximumAllowedIndex) {
+            safeRoundedWindow--;
+        }
+
+        return safeRoundedWindow / (double) frameCount;
+    }
+
+    /**
+     * Mirrors the JTransient slow-mover stack bucket math so SpacePixels can reason about the
+     * selected per-pixel order statistic before invoking the engine.
+     */
+    static int computeSlowMoverStackOrderIndex(int frameCount, double fraction) {
+        if (frameCount <= 0) {
+            return -1;
+        }
+
+        double boundedFraction = Math.max(0.0, Math.min(1.0, fraction));
+        int roundedWindow = (int) Math.round(frameCount * boundedFraction);
+        int centerIndex = (frameCount - 1) / 2;
+        return Math.min(frameCount - 1, centerIndex + (roundedWindow / 2));
+    }
+
+    /**
+     * Internal metadata bundle used during parallel FITS validation/loading in headless mode.
+     */
     private static class FitsMetadataLoadResult {
         private final FitsFileInformation fileInfo;
         private final int width;
@@ -95,11 +185,17 @@ public class ImageProcessing {
     public static class RedirectImportException extends Exception {
         private final File newDirectory;
 
+        /**
+         * Carries the replacement directory that the caller should load instead of the current one.
+         */
         public RedirectImportException(File newDirectory) {
             super("Redirecting import to new directory");
             this.newDirectory = newDirectory;
         }
 
+        /**
+         * Returns the directory that should replace the original import target.
+         */
         public File getNewDirectory() {
             return newDirectory;
         }
@@ -117,10 +213,16 @@ public class ImageProcessing {
 
     private FitsFileInformation[] cachedFileInfo;
 
+    /**
+     * Creates a processing facade bound to a specific aligned FITS directory.
+     */
     public static synchronized ImageProcessing getInstance(File alignedFitsFolderFullPath) throws IOException, FitsException {
         return new ImageProcessing(alignedFitsFolderFullPath);
     }
 
+    /**
+     * Initializes the processor and loads persisted app-level preferences if they exist.
+     */
     private ImageProcessing(File alignedFitsFolderFullPath) throws IOException, FitsException {
         this.alignedFitsFolderFullPath = alignedFitsFolderFullPath;
 
@@ -188,6 +290,9 @@ public class ImageProcessing {
         return fallback;
     }
 
+    /**
+     * Detects whether a FITS file is compressed, either via a compressed HDU or `ZIMAGE` header.
+     */
     private boolean isCompressedFits(Fits fits) throws FitsException, IOException {
         int numHdus = fits.getNumberOfHDUs();
         for (int i = 0; i < numHdus; i++) {
@@ -285,6 +390,10 @@ public class ImageProcessing {
     // THE MULTI-THREADED DETECTION PIPELINE
     // =========================================================================
 
+    /**
+     * Runs the standard detection pipeline on the full cached frame set and exports the HTML
+     * session report plus associated visualizations.
+     */
     public File detectObjects(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
         long startTime = System.currentTimeMillis();
 
@@ -331,10 +440,12 @@ public class ImageProcessing {
             progressListener.onProgressUpdate(20, "Initializing JTransient Engine...");
         }
 
+        DetectionConfig effectiveConfig = createEffectiveDetectionConfig(config, framesForLibrary.size());
+
         JTransientEngine engine = new JTransientEngine();
         JTransientEngine.DEBUG = true;
 
-        PipelineResult result = engine.runPipeline(framesForLibrary, config, progressListener);
+        PipelineResult result = engine.runPipeline(framesForLibrary, effectiveConfig, progressListener);
 
         engine.shutdown();
         // =========================================================
@@ -360,7 +471,7 @@ public class ImageProcessing {
             System.out.println("Total Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
 
             try {
-                ImageDisplayUtils.exportTrackVisualizations(result, rawFramesForExport, this.cachedFileInfo, exportDir, config, appConfig);
+                ImageDisplayUtils.exportTrackVisualizations(result, rawFramesForExport, this.cachedFileInfo, exportDir, effectiveConfig, appConfig);
 
                 if (progressListener != null) {
                     progressListener.onProgressUpdate(100, "Finished!");
@@ -378,6 +489,10 @@ public class ImageProcessing {
 // ITERATIVE SLOW-MOVER PIPELINE
 // =========================================================================
 
+    /**
+     * Re-runs detection on progressively larger time-spaced subsets so slow movers can be explored
+     * across several pass sizes while sharing a single global master stack.
+     */
     public File detectSlowObjectsIterative(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener, int maxFramesLimit) throws Exception {
         long startTime = System.currentTimeMillis();
 
@@ -492,9 +607,11 @@ public class ImageProcessing {
                 }
             }
 
+            DetectionConfig effectiveConfig = createEffectiveDetectionConfig(config, spacedSubset.size());
+
             JTransientEngine engine = new JTransientEngine();
             // Pass the SCALED listener and the pre-computed Master Stack to the engine
-            PipelineResult result = engine.runPipeline(spacedSubset, config, scaledListener, providedMasterStack);
+            PipelineResult result = engine.runPipeline(spacedSubset, effectiveConfig, scaledListener, providedMasterStack);
             engine.shutdown();
 
             DetectionSummary detectionSummary = summarizeDetections(result);
@@ -538,7 +655,7 @@ public class ImageProcessing {
             iterationDir.mkdirs();
 
             try {
-                ImageDisplayUtils.exportTrackVisualizations(result, rawFramesForExport, this.cachedFileInfo, iterationDir, config, appConfig);
+                ImageDisplayUtils.exportTrackVisualizations(result, rawFramesForExport, this.cachedFileInfo, iterationDir, effectiveConfig, appConfig);
 
             } catch (IOException e) {
                 System.err.println("Failed to export visualization for iteration " + k + ": " + e.getMessage());
@@ -568,9 +685,13 @@ public class ImageProcessing {
         return masterDir;
     }
 
+    /**
+     * Condenses the engine result into coarse detection categories for UI confirmation prompts.
+     */
     private static DetectionSummary summarizeDetections(PipelineResult result) {
         List<TrackLinker.Track> tracks = result.tracks;
         int anomalies = result.anomalies == null ? 0 : result.anomalies.size();
+        int suspectedThresholdStreakTracks = result.suspectedThresholdStreakTracks == null ? 0 : result.suspectedThresholdStreakTracks.size();
         int singleStreaks = 0;
         int streakTracks = 0;
         int movingTargets = 0;
@@ -589,15 +710,20 @@ public class ImageProcessing {
         int maximumStackTransientStreaks = result.masterMaximumStackTransientStreaks == null ? 0 : result.masterMaximumStackTransientStreaks.size();
 
         return new DetectionSummary(
-                singleStreaks + streakTracks + movingTargets + anomalies,
+                singleStreaks + streakTracks + movingTargets + anomalies + suspectedThresholdStreakTracks,
                 singleStreaks,
                 streakTracks,
                 movingTargets,
                 anomalies,
+                suspectedThresholdStreakTracks,
                 slowMoverCandidates,
                 maximumStackTransientStreaks);
     }
 
+    /**
+     * Chooses a deterministic subset of frame indices, preferring timestamp spacing when valid
+     * times are available and falling back to index spacing otherwise.
+     */
     private List<Integer> getSampledIndices(long[] times, boolean hasValidTime, int maxLimit, int k) {
         List<Integer> indices = new ArrayList<>();
 
@@ -648,6 +774,10 @@ public class ImageProcessing {
     // UPDATED FITS FILE INFORMATION (The Import Gatekeeper)
     // =========================================================================
 
+    /**
+     * Loads FITS metadata for interactive use after validating compression state, format
+     * consistency, dimensions, and optional auto-conversion paths.
+     */
     public FitsFileInformation[] getFitsfileInformation() throws Exception {
         File[] fitsFileInformation = getFitsFilesDetails();
         int numFiles = fitsFileInformation.length;
@@ -914,6 +1044,10 @@ public class ImageProcessing {
         return ret;
     }
 
+    /**
+     * Headless variant of FITS metadata loading used by CLI/batch flows that cannot prompt the
+     * user for decompression or format-conversion decisions.
+     */
     public FitsFileInformation[] getFitsfileInformationHeadless() throws Exception {
         File[] fitsFiles = getFitsFilesDetails();
         int numFiles = fitsFiles.length;
@@ -975,6 +1109,10 @@ public class ImageProcessing {
     // EXISTING HELPER METHODS (Unchanged)
     // =========================================================================
 
+    /**
+     * Loads and validates a single FITS file for headless mode, enforcing the strict mono 16-bit
+     * requirements expected by the batch pipeline.
+     */
     private FitsMetadataLoadResult loadFitsMetadataHeadless(File currentFile) throws Exception {
         Fits fitsFile = null;
         try {
@@ -1026,6 +1164,9 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Ensures every headless input frame matches the reference frame in geometry and bit depth.
+     */
     private void validateHeadlessFitsConsistency(FitsMetadataLoadResult reference, FitsMetadataLoadResult candidate) throws IOException {
         if (candidate.bitpix != reference.bitpix) {
             throw new IOException("Inconsistent FITS bit depth detected. File " + candidate.fileInfo.getFileName() +
@@ -1041,6 +1182,9 @@ public class ImageProcessing {
 
 
 
+    /**
+     * Enumerates FITS-like files in the configured directory and returns them in stable path order.
+     */
     private File[] getFitsFilesDetails() throws IOException, FitsException {
         File directory = alignedFitsFolderFullPath;
         if (!directory.isDirectory()) {
@@ -1069,12 +1213,19 @@ public class ImageProcessing {
         return ret;
     }
 
+    /**
+     * Closes a group of FITS handles that were opened as a batch.
+     */
     private static void closeFitsFiles(Fits[] fitsFiles) throws IOException {
         for (Fits fitsFile : fitsFiles) {
             fitsFile.close();
         }
     }
 
+    /**
+     * Starts plate solving through either ASTAP or astrometry.net using the currently configured
+     * external tooling.
+     */
     public Future<PlateSolveResult> solve(String fitsFileFullPath, boolean astap, boolean astrometry) throws FitsException, IOException {
         ApplicationWindow.logger.info("trying to solve image astap=" + astap + " astrometry=" + astrometry);
 
@@ -1101,6 +1252,10 @@ public class ImageProcessing {
         return null;
     }
 
+    /**
+     * Copies WCS keywords from a reference FITS file into every file in the active directory and
+     * optionally emits stretched derivatives alongside the solved outputs.
+     */
     public void applyWCSHeader(String wcsHeaderFile, int stretchFactor, int iterations, boolean stretch, StretchAlgorithm algo) throws IOException, FitsException {
         File[] fitsFileInformation = getFitsFilesDetails();
         Fits[] fitsFiles = new Fits[fitsFileInformation.length];
@@ -1133,6 +1288,10 @@ public class ImageProcessing {
         closeFitsFiles(fitsFiles);
     }
 
+    /**
+     * Writes stretched derivatives for every FITS file in the active directory without modifying
+     * headers or running any detection logic.
+     */
     public void onlyStretch(int stretchFactor, int iterations, StretchAlgorithm algo) throws IOException, FitsException {
         File[] fitsFileInformation = getFitsFilesDetails();
         for (int i = 0; i < fitsFileInformation.length; i++) {
@@ -1141,6 +1300,9 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Downloads a remote file to disk and returns the number of bytes written.
+     */
     public static int downloadFile(URL fileURL, String targetFilePath) throws IOException {
         ApplicationWindow.logger.info("downloading : " + fileURL.toString() + " to " + targetFilePath);
         File targetfile = new File(targetFilePath);
@@ -1162,6 +1324,9 @@ public class ImageProcessing {
         return totalBytesRead;
     }
 
+    /**
+     * Persists a plate-solving result next to the FITS file as a simple INI-style sidecar.
+     */
     public void writeSolveResults(String fitsFileFullPath, PlateSolveResult result) throws IOException {
         String solveResultFilename = fitsFileFullPath.substring(0, fitsFileFullPath.lastIndexOf(".")) + "_result.ini";
         File solveResultFile = new File(solveResultFilename);
@@ -1183,6 +1348,9 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Reads a previously saved plate-solving sidecar if one exists for the FITS file.
+     */
     public PlateSolveResult readSolveResults(String fitsFileFullPath) {
         String solveResultFilename = fitsFileFullPath.substring(0, fitsFileFullPath.lastIndexOf(".")) + "_result.ini";
         File solveResultFile = new File(solveResultFilename);
@@ -1259,14 +1427,24 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Exposes the mutable application preferences currently associated with this processor.
+     */
     public AppConfig getAppConfig() {
         return appConfig;
     }
 
+    /**
+     * Writes the current application preferences back to the user's config file.
+     */
     public void saveAppConfig() throws IOException {
         SpacePixelsAppConfigIO.write(appConfigFile, appConfig);
     }
 
+    /**
+     * Emits solved FITS derivatives for a single source file, including mono conversions and
+     * optional stretched variants when requested.
+     */
     private void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, boolean stretch, StretchAlgorithm algo) throws FitsException, IOException {
         int naxis = getImageHDU(originalFits).getHeader().getIntValue("NAXIS");
         boolean isColor = false;
@@ -1297,6 +1475,10 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Emits only stretched derivatives for a single FITS file, preserving both color and derived
+     * mono outputs when applicable.
+     */
     private void writeOnlyStretchedFitsFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException, IOException {
         int naxis = getImageHDU(originalFits).getHeader().getIntValue("NAXIS");
         boolean isColor = false;
@@ -1320,6 +1502,10 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Converts a color FITS container into a new mono FITS container while preserving the original
+     * non-structural header metadata.
+     */
     private Fits convertToMono(Fits colorFITSImage) throws FitsException, IOException {
         BasicHDU<?> originalHDU = getImageHDU(colorFITSImage);
         Object monoKernelData = convertToMono(originalHDU.getKernel());
@@ -1354,6 +1540,9 @@ public class ImageProcessing {
         return updatedFits;
     }
 
+    /**
+     * Writes a FITS object to disk using SpacePixels' suffix-based naming convention.
+     */
     private void writeFitsWithSuffix(Fits fitsImage, String fitsFilename, String suffix) throws IOException, FitsException {
         int lastSepPosition = fitsFilename.lastIndexOf(".");
         fitsFilename = fitsFilename.substring(0, lastSepPosition) + suffix + ".fit";
@@ -1364,6 +1553,9 @@ public class ImageProcessing {
         fitsImage.write(new File(fitsFilename));
     }
 
+    /**
+     * Ensures a sibling output directory exists and returns the matching output path for a file.
+     */
     private String addDirectory(File currentFile, String directory) throws IOException {
         String newDirectory = currentFile.getParent() + File.separator + directory;
         File newDirFile = new File(newDirectory);
@@ -1377,6 +1569,10 @@ public class ImageProcessing {
     // 32-BIT TO 16-BIT STANDARDIZATION LOGIC
     // =========================================================================
 
+    /**
+     * Decompresses a sequence of compressed FITS files into a sibling directory and returns that
+     * new directory for optional reload.
+     */
     private File batchDecompress(File[] files) throws Exception {
         eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog =
                 new eu.startales.spacepixels.gui.ProcessingProgressDialog(null);
@@ -1416,6 +1612,10 @@ public class ImageProcessing {
         return targetDir;
     }
 
+    /**
+     * Standardizes 32-bit FITS inputs into 16-bit outputs, optionally preserving color frames and
+     * extracting luminance for detection workflows.
+     */
     private File batchConvert32BitTo16Bit(File[] files, boolean isColor) throws Exception {
         eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog =
                 new eu.startales.spacepixels.gui.ProcessingProgressDialog(null);
@@ -1485,6 +1685,10 @@ public class ImageProcessing {
         return targetDir;
     }
 
+    /**
+     * Builds a new FITS container from converted pixel data while preserving non-structural header
+     * cards and restoring the unsigned-16-bit interpretation through `BZERO`/`BSCALE`.
+     */
     private Fits createFitsFromData(Object newData, Header originalHeader) throws FitsException, IOException {
         Fits updatedFits = new Fits();
         BasicHDU<?> newHDU = FitsFactory.hduFactory(newData);
@@ -1522,6 +1726,9 @@ public class ImageProcessing {
     // DEBUG: FITS VERIFICATION
     // =========================================================================
 
+    /**
+     * Dumps a compact debug summary of a FITS file's stored and display-scaled numeric range.
+     */
     private void printFitsDebugInfo(String label, File fitsFile) {
         try (Fits fits = new Fits(fitsFile)) {
             BasicHDU<?> hdu = getImageHDU(fits);
@@ -1583,6 +1790,10 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Converts supported mono kernels into the signed-short storage layout used for unsigned 16-bit
+     * FITS export.
+     */
     private short[][] standardizeTo16BitMono(Object kernel) throws IOException {
         if (kernel instanceof float[][]) {
             float[][] floatData = (float[][]) kernel;
@@ -1632,6 +1843,10 @@ public class ImageProcessing {
         throw new IOException("Unsupported FITS format for Mono Standardization");
     }
 
+    /**
+     * Converts supported color kernels into a 16-bit signed-short RGB cube suitable for FITS
+     * export and later luminance extraction.
+     */
     private short[][][] standardizeTo16BitColor(Object kernel) throws IOException {
         if (kernel instanceof float[][][]) {
             float[][][] floatData = (float[][][]) kernel;
@@ -1689,6 +1904,9 @@ public class ImageProcessing {
         throw new IOException("Unsupported FITS format for Color Standardization");
     }
 
+    /**
+     * Produces a simple luminance plane from a 16-bit RGB cube using an equal-channel average.
+     */
     private short[][] extractLuminance(short[][][] color16) {
         int height = color16[0].length;
         int width = color16[0][0].length;
@@ -1706,6 +1924,9 @@ public class ImageProcessing {
         return monoData;
     }
 
+    /**
+     * Converts an in-memory 16-bit color cube to a mono plane without changing the FITS container.
+     */
     private Object convertToMono(Object kernelData) throws FitsException {
         if (kernelData instanceof short[][][]) {
             short[][][] data = (short[][][]) kernelData;
@@ -1728,6 +1949,9 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Applies the selected stretch algorithm directly to a FITS image in memory.
+     */
     public void stretchFITSImage(Fits fitsImage, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException, IOException {
         BasicHDU<?> hdu = getImageHDU(fitsImage);
         Object kernelData = hdu.getKernel();
@@ -1783,6 +2007,9 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Builds a quick-look preview image from raw FITS kernel data without applying any stretch.
+     */
     public BufferedImage getImagePreview(Object kernelData) throws FitsException {
         BufferedImage ret = new BufferedImage(350, 350, BufferedImage.TYPE_INT_ARGB);
 
@@ -1839,6 +2066,9 @@ public class ImageProcessing {
         return ret;
     }
 
+    /**
+     * Renders a stretched preview image at the requested output size from raw FITS kernel data.
+     */
     private BufferedImage getStretchedImage(Object kernelData, int width, int height, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException {
         BufferedImage ret = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 
@@ -1924,14 +2154,23 @@ public class ImageProcessing {
         return ret;
     }
 
+    /**
+     * Convenience wrapper that renders a 350x350 stretched preview.
+     */
     public BufferedImage getStretchedImagePreview(Object kernelData, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException {
         return getStretchedImage(kernelData, 350, 350, stretchFactor, iterations, algo);
     }
 
+    /**
+     * Convenience wrapper that renders a stretched preview at the caller's requested size.
+     */
     public BufferedImage getStretchedImageFullSize(Object kernelData, int width, int height, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException {
         return getStretchedImage(kernelData, width, height, stretchFactor, iterations, algo);
     }
 
+    /**
+     * Dispatches raw image data to the concrete stretch implementation selected by the caller.
+     */
     private Object stretchImageData(Object kernelData, int intensity, int iterations, int width, int height, StretchAlgorithm algo) throws FitsException {
         switch (algo) {
             case ENHANCE_HIGH:
@@ -1947,6 +2186,10 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Applies an aggressive repeated multiplicative stretch intended to quickly brighten faint
+     * detail in mono data.
+     */
     private Object stretchImageEnhanceHigh(Object kernelData, int intensity, int iterations, int width, int height) throws FitsException {
         if (kernelData instanceof short[][]) {
             short[][] data = (short[][]) kernelData;
@@ -2001,6 +2244,9 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Applies a softer adaptive stretch that favors dim regions more than already bright pixels.
+     */
     private Object stretchImageEnhanceLow(Object kernelData, int intensity, int iterations, int width, int height) throws FitsException {
         if (kernelData instanceof short[][]) {
             short[][] data = (short[][]) kernelData;
@@ -2075,6 +2321,10 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Isolates only the strongest excursions above the average background for a high-contrast
+     * detection-style preview.
+     */
     private Object stretchImageEnhanceExtreme(Object kernelData, int threshold, int intensity, int width, int height) throws FitsException {
         if (kernelData instanceof short[][]) {
             short[][] data = (short[][]) kernelData;
@@ -2118,6 +2368,10 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Applies an asinh stretch using histogram-derived black and white points for a more
+     * photographic preview.
+     */
     private Object stretchImageAsinh(Object kernelData, int blackPointPercent, int stretchStrength, int width, int height) throws FitsException {
         if (kernelData instanceof short[][]) {
             short[][] data = (short[][]) kernelData;
@@ -2178,10 +2432,16 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Small math helper for the asinh stretch implementation.
+     */
     private static double asinh(double value) {
         return Math.log(value + Math.sqrt((value * value) + 1.0));
     }
 
+    /**
+     * Resolves a percentile from a histogram without needing to sort the full image sample set.
+     */
     private static int percentileFromHistogram(int[] histogram, long totalPixels, double percentile) {
         if (totalPixels <= 0) {
             return 0;
@@ -2200,6 +2460,9 @@ public class ImageProcessing {
         return histogram.length - 1;
     }
 
+    /**
+     * Creates a timestamped sibling directory for detection exports and returns its location.
+     */
     public static File createDetectionsDirectory(File anyFitsFile) {
         File parentDir = anyFitsFile.getParentFile();
         if (parentDir == null) {

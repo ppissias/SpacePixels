@@ -68,7 +68,7 @@ def injectStarsStartScripts = registerToolStartScripts(
 def batchDetectStartScripts = registerToolStartScripts(
         'batchDetectStartScripts',
         'batchDetect',
-        'eu.startales.spacepixels.tools.BatchDetectionTool',
+        'eu.startales.spacepixels.tools.BatchDetectionCli',
         batchDetectJvmArgs
 )
 
@@ -97,8 +97,8 @@ tasks.register('injectStars', JavaExec) {
 
 tasks.register('batchDetect', JavaExec) {
     group = 'application'
-    description = 'Run the headless batch detection tool. Usage: gradlew batchDetect -PbatchArgs="\\"<fits_dir>\\" \\"<config.json>\\" [--auto-tune balanced]"'
-    mainClass = 'eu.startales.spacepixels.tools.BatchDetectionTool'
+    description = 'Run the batch detection CLI. Usage: gradlew batchDetect -PbatchArgs="\\"<fits_dir>\\" \\"<config.json>\\" [--auto-tune balanced]"'
+    mainClass = 'eu.startales.spacepixels.tools.BatchDetectionCli'
     classpath = sourceSets.main.runtimeClasspath
     jvmArgs = batchDetectJvmArgs
 

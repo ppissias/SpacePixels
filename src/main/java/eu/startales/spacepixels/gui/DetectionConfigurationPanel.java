@@ -58,7 +58,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private JSpinner spinBgClippingIters, spinBgClippingFactor;
 
     // --- TrackLinker Spinners ---
-    private JCheckBox chkStrictExposureKinematics;
+    private JCheckBox chkStrictExposureKinematics, chkEnableGeometricTrackLinking;
     private JSpinner spinReqDetToStar, spinStarJitterExp, spinStarJitter, spinMaxMaskOverlapFraction, spinPredTol, spinAngleTol;
     private JSpinner spinTrackMinFrameRatio, spinAbsMaxPoints, spinMaxJump;
     private JSpinner spinRhythmVar, spinRhythmMinRatio, spinRhythmStatThresh, spinTimeBasedVelocityTolerance;
@@ -119,6 +119,22 @@ public class DetectionConfigurationPanel extends JPanel {
         saveBtn.setToolTipText("Save detection-profile and visualization preferences as the defaults for future startups.");
         saveBtn.addActionListener(e -> savePersistedSettings());
 
+        JButton loadDefaultsBtn = new JButton("Load Defaults");
+        loadDefaultsBtn.setToolTipText("Reset the detection settings in this panel to a fresh DetectionConfig instance. This does not overwrite the saved profile unless you save afterward.");
+        loadDefaultsBtn.addActionListener(e -> {
+            int choice = JOptionPane.showConfirmDialog(
+                    this,
+                    "Reset the detection settings in this panel to DetectionConfig defaults?\n\n" +
+                            "This updates the current in-memory session only. Your saved profile remains unchanged until you click Save Configuration.",
+                    "Load Detection Defaults",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+            if (choice == JOptionPane.YES_OPTION) {
+                loadDetectionDefaults();
+                JOptionPane.showMessageDialog(this, "DetectionConfig defaults loaded into the panel and current session.", "Defaults Loaded", JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+
         previewBtn.setToolTipText("Run extraction on the selected frame with current settings and show the exact pixel mask.");
         previewBtn.addActionListener(e -> previewManager.showPreview(getJTransientConfig()));
 
@@ -137,6 +153,7 @@ public class DetectionConfigurationPanel extends JPanel {
         bottomPanel.add(autoTuneProfileCombo);
         bottomPanel.add(autoTuneBtn);
         bottomPanel.add(previewBtn);
+        bottomPanel.add(loadDefaultsBtn);
         bottomPanel.add(saveBtn);
         bottomPanel.add(applyBtn);
 
@@ -317,6 +334,11 @@ public class DetectionConfigurationPanel extends JPanel {
         }
     }
 
+    private void loadDetectionDefaults() {
+        jTransientConfig = new DetectionConfig();
+        updateSpinnersFromConfig(jTransientConfig);
+    }
+
     public DetectionConfig getJTransientConfig() {
         applySettingsToMemory();
         return jTransientConfig;
@@ -345,6 +367,11 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Tracking & Anomalies"));
         spinStarJitter = addRow(panel, "Base Star Jitter Radius", "Expected motion of fixed stars from seeing, guiding, or alignment. Used to grow the master star mask and ignore motion smaller than normal star jitter.", doubleSpinnerModel(jTransientConfig.maxStarJitter, 0.0, 20.0, 0.25));
         spinMaxMaskOverlapFraction = addRow(panel, "Max Mask Overlap Fraction", "Maximum fraction of a detection allowed to overlap the master star mask. Higher values rescue objects near star halos but may admit more false positives.", doubleSpinnerModel(jTransientConfig.maxMaskOverlapFraction, 0.0, 1.0, 0.01));
+        chkEnableGeometricTrackLinking = addCheckboxRow(
+                panel,
+                "Enable Geometric Track Linking",
+                "Controls whether the frame-agnostic geometric point-track linker runs when timestamps are available. Keep this enabled unless you want to rely exclusively on the time-based linker. If timestamps are missing, geometric linking remains the fallback.",
+                getOptionalBooleanField(jTransientConfig, "enableGeometricTrackLinking", true));
         spinMaxJump = addRow(panel, "Max Jump Velocity", "Maximum allowed jump between linked points in geometric tracking mode. Higher values allow faster movers but increase false links; ignored by time-based tracking.", doubleSpinnerModel(jTransientConfig.maxJumpPixels, 1.0, 5000.0, 1.0));
         chkStrictExposureKinematics = addCheckboxRow(panel, "Strict Exposure Kinematics", "Uses exposure time and object footprint to cap how far a real object can move between frames. Enable this if you see too many unrealistic track links.", jTransientConfig.strictExposureKinematics);
         chkEnableAnomalyRescue = addCheckboxRow(panel, "Enable Anomaly Rescue", "Allows very bright single-frame point sources to be kept even if they do not form a multi-frame track.", jTransientConfig.enableAnomalyRescue);
@@ -383,7 +410,7 @@ public class DetectionConfigurationPanel extends JPanel {
         spinMasterSlowMoverSigma = addRow(panel, "Master Slow-Mover Sigma", "Detection threshold used only when searching the deep stack for ultra-slow movers.", doubleSpinnerModel(jTransientConfig.masterSlowMoverSigmaMultiplier, 0.5, 15.0, 0.1));
         spinMasterSlowMoverGrowSigma = addRow(panel, "Master Slow-Mover Grow Sigma", "Secondary grow threshold used only for deep-stack slow-mover extraction. Lower values capture more faint edges.", doubleSpinnerModel(jTransientConfig.masterSlowMoverGrowSigmaMultiplier, 0.1, 15.0, 0.1));
         spinSlowMoverBaselineMadMultiplier = addRow(panel, "Slow Mover Baseline MAD Multiplier", "How far above the field's median elongation a source must be to count as a slow-mover candidate. Higher values are stricter.", doubleSpinnerModel(jTransientConfig.slowMoverBaselineMadMultiplier, 0.0, 10.0, 0.1));
-        spinSlowMoverStackMiddleFraction = addRow(panel, "Slow Mover Stack Middle Fraction", "Fraction of sorted per-pixel samples around the median used to build the slow-mover stack. Larger values blend more frames; smaller values stay closer to the median.", doubleSpinnerModel(jTransientConfig.slowMoverStackMiddleFraction, 0.0, 1.0, 0.01));
+        spinSlowMoverStackMiddleFraction = addRow(panel, "Slow Mover Stack Middle Fraction", "Fraction of sorted per-pixel samples around the median used to build the slow-mover stack. Larger values blend more frames; smaller values stay closer to the median. For small frame counts, SpacePixels automatically caps this so the selected sample stays at least one frame below the pure maximum stack.", doubleSpinnerModel(jTransientConfig.slowMoverStackMiddleFraction, 0.0, 1.0, 0.01));
         spinMasterSlowMoverMinPixels = addRow(panel, "Master Slow-Mover Min Pixels", "Minimum size required for an elongated source in the master stack to be considered a slow-mover candidate.", intSpinnerModel(jTransientConfig.masterSlowMoverMinPixels, 1, 2000, 1));
 
         panel.add(Box.createVerticalStrut(10));
@@ -716,6 +743,7 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.angleToleranceDegrees = ((Number) spinAngleTol.getValue()).doubleValue();
             jTransientConfig.maxJumpPixels = ((Number) spinMaxJump.getValue()).doubleValue();
             jTransientConfig.strictExposureKinematics = chkStrictExposureKinematics.isSelected();
+            setOptionalBooleanField(jTransientConfig, "enableGeometricTrackLinking", chkEnableGeometricTrackLinking.isSelected());
             jTransientConfig.maxFwhmRatio = ((Number) spinMaxFwhmRatio.getValue()).doubleValue();
             jTransientConfig.maxSurfaceBrightnessRatio = ((Number) spinMaxSurfaceBrightnessRatio.getValue()).doubleValue();
             jTransientConfig.trackMinFrameRatio = ((Number) spinTrackMinFrameRatio.getValue()).doubleValue();
@@ -956,14 +984,67 @@ public class DetectionConfigurationPanel extends JPanel {
      * Helper method to physically move the UI sliders to match a provided config.
      */
     private void updateSpinnersFromConfig(DetectionConfig config) {
-
+        setSpinnerValueClamped(spinMasterSigma, config.masterSigmaMultiplier);
         setSpinnerValueClamped(spinDetectionSigma, config.detectionSigmaMultiplier);
         setSpinnerValueClamped(spinGrowSigma, config.growSigmaMultiplier);
+        setSpinnerValueClamped(spinMasterMinPix, config.masterMinDetectionPixels);
         setSpinnerValueClamped(spinMinPixels, config.minDetectionPixels);
+        setSpinnerValueClamped(spinEdgeMargin, config.edgeMarginPixels);
+        setSpinnerValueClamped(spinVoidFraction, config.voidThresholdFraction);
+        setSpinnerValueClamped(spinVoidRadius, config.voidProximityRadius);
+        chkEnableSlowMovers.setSelected(config.enableSlowMoverDetection);
+
+        setSpinnerValueClamped(spinMasterSlowMoverSigma, config.masterSlowMoverSigmaMultiplier);
+        setSpinnerValueClamped(spinMasterSlowMoverGrowSigma, config.masterSlowMoverGrowSigmaMultiplier);
+        setSpinnerValueClamped(spinSlowMoverBaselineMadMultiplier, config.slowMoverBaselineMadMultiplier);
+        setSpinnerValueClamped(spinSlowMoverStackMiddleFraction, config.slowMoverStackMiddleFraction);
+        setSpinnerValueClamped(spinMasterSlowMoverMinPixels, config.masterSlowMoverMinPixels);
+        setSpinnerValueClamped(spinSlowMoverMedianSupportOverlapFraction, config.slowMoverMedianSupportOverlapFraction);
+        setSpinnerValueClamped(spinSlowMoverMedianSupportMaxOverlapFraction, config.slowMoverMedianSupportMaxOverlapFraction);
+
+        chkStrictExposureKinematics.setSelected(config.strictExposureKinematics);
+        chkEnableGeometricTrackLinking.setSelected(getOptionalBooleanField(config, "enableGeometricTrackLinking", true));
         setSpinnerValueClamped(spinStarJitter, config.maxStarJitter);
         setSpinnerValueClamped(spinMaxMaskOverlapFraction, config.maxMaskOverlapFraction);
-        chkStrictExposureKinematics.setSelected(config.strictExposureKinematics);
+        setSpinnerValueClamped(spinPredTol, config.predictionTolerance);
+        setSpinnerValueClamped(spinAngleTol, config.angleToleranceDegrees);
+        setSpinnerValueClamped(spinMaxJump, config.maxJumpPixels);
+        setSpinnerValueClamped(spinMaxFwhmRatio, config.maxFwhmRatio);
+        setSpinnerValueClamped(spinMaxSurfaceBrightnessRatio, config.maxSurfaceBrightnessRatio);
+        setSpinnerValueClamped(spinTrackMinFrameRatio, config.trackMinFrameRatio);
+        setSpinnerValueClamped(spinAbsMaxPoints, config.absoluteMaxPointsRequired);
+        setSpinnerValueClamped(spinRhythmVar, config.rhythmAllowedVariance);
+        setSpinnerValueClamped(spinRhythmMinRatio, config.rhythmMinConsistencyRatio);
+        setSpinnerValueClamped(spinRhythmStatThresh, config.rhythmStationaryThreshold);
+        setSpinnerValueClamped(spinTimeBasedVelocityTolerance, config.timeBasedVelocityTolerance);
+
         setSpinnerValueClamped(spinStreakMinElong, config.streakMinElongation);
+        setSpinnerValueClamped(spinStreakMinPix, config.streakMinPixels);
+        setSpinnerValueClamped(spinSingleStreakMinPeakSigma, config.singleStreakMinPeakSigma);
+        setSpinnerValueClamped(spinBgClippingIters, config.bgClippingIterations);
+        setSpinnerValueClamped(spinBgClippingFactor, config.bgClippingFactor);
+
+        chkEnableAnomalyRescue.setSelected(config.enableAnomalyRescue);
+        setSpinnerValueClamped(spinAnomalyMinPeakSigma, config.anomalyMinPeakSigma);
+        setSpinnerValueClamped(spinAnomalyMinPixels, config.anomalyMinPixels);
+        setSpinnerValueClamped(spinAnomalyMinIntegratedSigma, config.anomalyMinIntegratedSigma);
+        setSpinnerValueClamped(spinAnomalyMinIntegratedPixels, config.anomalyMinIntegratedPixels);
+        setSpinnerValueClamped(spinAnomalyMinPeakSigmaFloor, config.anomalyMinPeakSigmaFloor);
+        chkEnableSlowMoverShapeFiltering.setSelected(getOptionalBooleanField(config, "enableSlowMoverShapeFiltering", true));
+        chkEnableSlowMoverSpecificShapeFiltering.setSelected(getOptionalBooleanField(config, "enableSlowMoverSpecificShapeFiltering", true));
+
+        setSpinnerValueClamped(spinMinFramesAnalysis, config.minFramesForAnalysis);
+        setSpinnerValueClamped(spinStarCountSigma, config.starCountSigmaDeviation);
+        setSpinnerValueClamped(spinFwhmSigma, config.fwhmSigmaDeviation);
+        setSpinnerValueClamped(spinEccentricitySigma, config.eccentricitySigmaDeviation);
+        setSpinnerValueClamped(spinBackgroundSigma, config.backgroundSigmaDeviation);
+        setSpinnerValueClamped(spinMinBgDevAdu, config.minBackgroundDeviationADU);
+        setSpinnerValueClamped(spinMinEccEnvelope, config.minEccentricityEnvelope);
+        setSpinnerValueClamped(spinMinFwhmEnvelope, config.minFwhmEnvelope);
+        setSpinnerValueClamped(spinQualitySigma, config.qualitySigmaMultiplier);
+        setSpinnerValueClamped(spinQualityGrowSigma, config.qualityGrowSigmaMultiplier);
+        setSpinnerValueClamped(spinQualityMinPix, config.qualityMinDetectionPixels);
+        setSpinnerValueClamped(spinMaxElongFwhm, config.qualityMaxElongationForFwhm);
 
         // Push the visual changes to the underlying memory state immediately
         applySettingsToMemory();

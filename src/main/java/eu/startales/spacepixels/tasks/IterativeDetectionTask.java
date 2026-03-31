@@ -100,6 +100,7 @@ public class IterativeDetectionTask implements Runnable {
                                         " - Multi-frame streak tracks: " + summary.streakTracks + "\n" +
                                         " - Single streaks: " + summary.singleStreaks + "\n" +
                                         " - Single-frame anomalies: " + summary.anomalies + "\n" +
+                                        " - Suspected threshold streak tracks: " + summary.suspectedThresholdStreakTracks + "\n" +
                                         " - Potential slow movers: " + summary.potentialSlowMovers + " (" + summary.slowMoverCandidates + " deep-stack candidates, " + summary.maximumStackTransientStreaks + " unmatched maximum-stack streaks)\n\n" +
                                         "Generating the HTML report will take a long time.\n" +
                                         "Do you want to proceed?",

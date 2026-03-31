@@ -2852,6 +2852,9 @@ public class ImageDisplayUtils {
         // Extract variables from the PipelineResult to keep the rendering logic unchanged
         List<TrackLinker.Track> tracks = result.tracks != null ? result.tracks : new ArrayList<>();
         List<TrackLinker.AnomalyDetection> anomalies = result.anomalies != null ? result.anomalies : new ArrayList<>();
+        List<TrackLinker.Track> suspectedThresholdStreakTracks = result.suspectedThresholdStreakTracks != null
+                ? result.suspectedThresholdStreakTracks
+                : new ArrayList<>();
         TrackerTelemetry linkerTelemetry = result.telemetry != null ? result.telemetry.trackerTelemetry : null;
         short[][] masterStackData = result.masterStackData;
         short[][] masterMaximumStackData = result.masterMaximumStackData;
@@ -2977,12 +2980,13 @@ public class ImageDisplayUtils {
 
                 report.println("<div class='panel'>");
                 report.println("<h2>Detection Breakdown</h2>");
-                report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Final report sections summarized up front so linked targets, anomalies, and potential slow movers are visible immediately.</p>");
+                report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Final report sections summarized up front so linked targets, anomalies, suspected threshold streak groups, and potential slow movers are visible immediately.</p>");
                 report.println("<div class='flex-container'>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + singleStreaks.size() + "</span><span class='metric-label'>Streaks</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + streakTracks.size() + "</span><span class='metric-label'>Streak Tracks</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + movingTargets.size() + "</span><span class='metric-label'>Moving Object Tracks</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + anomalies.size() + "</span><span class='metric-label'>Single-Frame Anomalies</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + suspectedThresholdStreakTracks.size() + "</span><span class='metric-label'>Suspected Threshold Streaks</span></div>");
                 String potentialSlowMoverMetric = config.enableSlowMoverDetection ? String.valueOf(potentialSlowMoverCount) : "Off";
                 report.println("<div class='metric-box'><span class='metric-value'>" + potentialSlowMoverMetric + "</span><span class='metric-label'>Potential Slow Movers</span></div>");
                 report.println("</div>");
@@ -3201,6 +3205,9 @@ public class ImageDisplayUtils {
                 if (linkerTelemetry.integratedSigmaAnomaliesFound > 0) {
                     report.println(" <strong>" + linkerTelemetry.integratedSigmaAnomaliesFound + "</strong> anomaly rescues came from the integrated-sigma path.");
                 }
+                if (!suspectedThresholdStreakTracks.isEmpty()) {
+                    report.println(" Post-anomaly same-frame grouping produced <strong>" + suspectedThresholdStreakTracks.size() + "</strong> suspected threshold streak tracks.");
+                }
                 report.println("</p>");
 
                 report.println("</div>");
@@ -3211,8 +3218,8 @@ public class ImageDisplayUtils {
             // =================================================================
             report.println("<h2>Target Visualizations</h2>");
 
-            if (singleStreaks.isEmpty() && streakTracks.isEmpty() && movingTargets.isEmpty() && anomalies.isEmpty()) {
-                report.println("<div class='panel'><p>No moving tracks, single-frame streaks, or anomaly rescues were detected in this session.</p></div>");
+            if (singleStreaks.isEmpty() && streakTracks.isEmpty() && movingTargets.isEmpty() && anomalies.isEmpty() && suspectedThresholdStreakTracks.isEmpty()) {
+                report.println("<div class='panel'><p>No moving tracks, single-frame streaks, anomaly rescues, or suspected threshold streak groupings were detected in this session.</p></div>");
             }
 
 
@@ -3488,6 +3495,39 @@ public class ImageDisplayUtils {
                         report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>Veto-mask overlap: <span style='color:" + overlapColor + "; font-weight: bold;'>" + String.format(Locale.US, "%.1f%%", maskOverlapStats.fraction * 100.0) + "</span> (" + maskOverlapStats.overlappingPixels + " / " + maskOverlapStats.totalPixels + " detection pixels) | Limit: " + String.format(Locale.US, "%.1f%%", config.maxMaskOverlapFraction * 100.0) + " <span style='color:" + overlapColor + ";'>[" + overlapAssessment + "]</span></div>");
                     }
                     report.println("</div>");
+                    counter++;
+                }
+            }
+
+            if (!suspectedThresholdStreakTracks.isEmpty()) {
+                report.println("<h3 style='color: #ff9933; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Suspected Threshold Streak Tracks</h3>");
+                int counter = 1;
+                for (TrackLinker.Track track : suspectedThresholdStreakTracks) {
+                    CropBounds cb = new CropBounds(track, trackCropPadding);
+                    SourceExtractor.DetectedObject pt = track.points.get(0);
+                    int frameIndex = pt.sourceFrameIndex;
+
+                    report.println("<div class='detection-card streak-title'>");
+                    report.println("<div class='detection-title'>Suspected Threshold Streak STS" + counter + "</div>");
+
+                    short[][] croppedData = robustEdgeAwareCrop(rawFrames.get(frameIndex), cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
+                    BufferedImage streakImg = createDisplayImage(croppedData);
+                    String streakFileName = "suspected_threshold_streak_" + counter + ".png";
+                    saveTrackImageLossless(streakImg, new File(exportDir, streakFileName));
+
+                    String shapeFileName = "suspected_threshold_streak_" + counter + "_shape.png";
+                    BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY, true);
+                    saveTrackImageLossless(streakShapeImg, new File(exportDir, shapeFileName));
+
+                    report.println("<div class='image-container'>");
+                    report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
+                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
+                    report.println("</div>");
+                    String metricsStr = buildStreakMetricsText(pt);
+                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + buildSourceCoordinateListEntry(pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr) + "</ul>");
+                    report.print(buildSingleFrameSkyViewerHtml(astrometryContext, pt, "Reference epoch for suspected threshold streak lookup"));
+                    report.println("</div>");
+
                     counter++;
                 }
             }

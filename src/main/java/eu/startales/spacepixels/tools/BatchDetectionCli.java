@@ -28,9 +28,9 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * Headless batch transient detector for monochrome 16-bit FITS sequences.
+ * Command-line entrypoint for headless batch transient detection on monochrome 16-bit FITS sequences.
  */
-public class BatchDetectionTool {
+public class BatchDetectionCli {
 
     private static class CliArguments {
         private final File inputDir;
@@ -260,10 +260,10 @@ public class BatchDetectionTool {
 
     private static void printUsage() {
         System.out.println("==================================================================");
-        System.out.println("  SpacePixels - Batch Detection Tool");
+        System.out.println("  SpacePixels - Batch Detection CLI");
         System.out.println("==================================================================");
         System.out.println("Usage:");
-        System.out.println("  java eu.startales.spacepixels.tools.BatchDetectionTool <fits_directory> <detection_config.json> [--auto-tune <conservative|balanced|aggressive>]");
+        System.out.println("  java eu.startales.spacepixels.tools.BatchDetectionCli <fits_directory> <detection_config.json> [--auto-tune <conservative|balanced|aggressive>]");
         System.out.println();
         System.out.println("Notes:");
         System.out.println("  - The input directory must contain only uncompressed 16-bit monochrome FITS files with identical dimensions.");

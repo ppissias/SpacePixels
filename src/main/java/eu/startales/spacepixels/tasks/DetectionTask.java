@@ -124,6 +124,7 @@ public class DetectionTask implements Runnable {
                                             " - Multi-frame streak tracks: " + summary.streakTracks + "\n" +
                                             " - Single streaks: " + summary.singleStreaks + "\n" +
                                             " - Single-frame anomalies: " + summary.anomalies + "\n" +
+                                            " - Suspected threshold streak tracks: " + summary.suspectedThresholdStreakTracks + "\n" +
                                             " - Potential slow movers: " + summary.potentialSlowMovers + " (" + summary.slowMoverCandidates + " deep-stack candidates, " + summary.maximumStackTransientStreaks + " unmatched maximum-stack streaks)\n\n" +
                                             "Generating image crops, GIFs, and an HTML report for this many objects will take a long time and consume significant disk space.\n" +
                                             "This usually indicates the Detection Sigma was set too low and the engine linked background noise.\n\n" +
