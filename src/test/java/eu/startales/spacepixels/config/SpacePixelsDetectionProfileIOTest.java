@@ -49,6 +49,12 @@ public class SpacePixelsDetectionProfileIOTest {
     }
 
     @Test
+    public void normalizeAutoTuneMaxCandidateFramesAllowsFourFrameRuns() {
+        assertEquals(4, SpacePixelsDetectionProfile.normalizeAutoTuneMaxCandidateFrames(4));
+        assertEquals(4, SpacePixelsDetectionProfile.normalizeAutoTuneMaxCandidateFrames(3));
+    }
+
+    @Test
     public void loadMigratesLegacyQualityFields() throws Exception {
         String legacyJson = "{\"growSigmaMultiplier\":2.4,\"maxElongationForFwhm\":1.8}";
 

@@ -18,7 +18,7 @@ import java.util.Objects;
 public final class SpacePixelsDetectionProfile {
 
     public static final int DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES = 20;
-    public static final int MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES = 5;
+    public static final int MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES = 4;
 
     private final DetectionConfig detectionConfig;
     private final int autoTuneMaxCandidateFrames;

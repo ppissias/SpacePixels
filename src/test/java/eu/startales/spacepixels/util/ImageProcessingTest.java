@@ -34,4 +34,17 @@ public class ImageProcessingTest {
         assertEquals(0.60, effectiveConfig.slowMoverStackMiddleFraction, 1.0e-10);
         assertEquals(5, ImageProcessing.computeSlowMoverStackOrderIndex(7, effectiveConfig.slowMoverStackMiddleFraction));
     }
+
+    @Test
+    public void keepsFourFrameSlowMoverFractionAtThirdSortedSample() {
+        DetectionConfig baseConfig = new DetectionConfig();
+        baseConfig.enableSlowMoverDetection = true;
+        baseConfig.slowMoverStackMiddleFraction = 0.75;
+
+        DetectionConfig effectiveConfig = ImageProcessing.createEffectiveDetectionConfig(baseConfig, 4);
+
+        assertEquals(0.75, effectiveConfig.slowMoverStackMiddleFraction, 1.0e-10);
+        assertEquals(2, ImageProcessing.computeSlowMoverStackOrderIndex(4, baseConfig.slowMoverStackMiddleFraction));
+        assertEquals(2, ImageProcessing.computeSlowMoverStackOrderIndex(4, effectiveConfig.slowMoverStackMiddleFraction));
+    }
 }

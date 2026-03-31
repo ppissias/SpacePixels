@@ -51,9 +51,9 @@ public class BatchConvertMonoTask implements Runnable {
                 eventBus.post(new EngineProgressUpdateEvent(percentage, message));
             };
 
-            preProcessing.batchConvertToMono(stretchEnabled, stretchFactor, iterations, algo, progressListener);
+            java.io.File generatedMonoDirectory = preProcessing.batchConvertToMono(stretchEnabled, stretchFactor, iterations, algo, progressListener);
 
-            eventBus.post(new BatchConvertFinishedEvent(true, null));
+            eventBus.post(new BatchConvertFinishedEvent(true, null, generatedMonoDirectory));
         } catch (Exception ex) {
             ApplicationWindow.logger.log(Level.SEVERE, "Cannot convert images", ex);
             eventBus.post(new BatchConvertFinishedEvent(false, ex.getMessage()));

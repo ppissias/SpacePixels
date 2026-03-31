@@ -151,7 +151,19 @@ public class BatchDetectionCli {
                 (percentage, message) -> System.out.printf(Locale.US, "[Auto-Tune %3d%%] %s%n", percentage, message));
 
         TransientEngineProgressListener autoTuneListener = createScaledConsoleProgressListener("Auto-Tune", 50, 100, "Tuning");
-        JTransientAutoTuner.AutoTunerResult result = JTransientAutoTuner.tune(candidateFrames, baseConfig, profile, autoTuneListener);
+        int originalSampleSize = JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE;
+        int effectiveSampleSize = Math.min(originalSampleSize, candidateFrames.size());
+        if (effectiveSampleSize != originalSampleSize) {
+            System.out.println("Temporarily lowering Auto-Tuner sample size from " + originalSampleSize + " to " + effectiveSampleSize + " to support the available frame count.");
+        }
+
+        JTransientAutoTuner.AutoTunerResult result;
+        JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = effectiveSampleSize;
+        try {
+            result = JTransientAutoTuner.tune(candidateFrames, baseConfig, profile, autoTuneListener);
+        } finally {
+            JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = originalSampleSize;
+        }
 
         if (result == null || !result.success || result.optimizedConfig == null) {
             throw new IOException("Auto-Tune did not return an optimized configuration.");

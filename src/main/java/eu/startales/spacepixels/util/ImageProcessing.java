@@ -315,11 +315,15 @@ public class ImageProcessing {
     // =========================================================================
 
     /**
-     * Converts all images in the folder to monochrome.
-     * If stretch is true, it also stretches the newly created monochrome images.
+     * Converts all color images in the folder to monochrome and returns the generated mono
+     * directory so the UI can optionally import it immediately.
+     *
+     * <p>If stretch is enabled, stretched mono derivatives are also written alongside the mono
+     * outputs.</p>
      */
-    public void batchConvertToMono(boolean stretch, int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
+    public File batchConvertToMono(boolean stretch, int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
         File[] fitsFileInformation = getFitsFilesDetails();
+        File generatedMonoDirectory = null;
 
         int total = fitsFileInformation.length;
         for (int i = 0; i < total; i++) {
@@ -340,6 +344,9 @@ public class ImageProcessing {
 
                 // Save standard mono
                 String monoFilename = addDirectory(fileInfo, "_mono");
+                if (generatedMonoDirectory == null) {
+                    generatedMonoDirectory = new File(monoFilename).getParentFile();
+                }
                 writeFitsWithSuffix(monochromeFits, monoFilename, "_mono");
 
                 // If stretch is enabled, stretch the mono version and save it
@@ -354,6 +361,7 @@ public class ImageProcessing {
             }
             originalFits.close();
         }
+        return generatedMonoDirectory;
     }
 
     /**

@@ -26,8 +26,6 @@ import java.awt.image.WritableRaster;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -53,16 +51,10 @@ public class ImageDisplayUtils {
     public static double autoStretchBlackSigma = 0.5;
     public static double autoStretchWhiteSigma = 5.0;
 
-    // --- Soft Stretch Parameters ---
-    public static double softStretchBlackRatio = 0.9;
-    public static double softStretchWhiteRatio = 0.8;
-
     // --- Export & Cropping Parameters ---
     public static int gifBlinkSpeedMs = 300;
     public static int trackCropPadding = 200;
     public static int trackObjectCentricCropSize = 200;
-    public static int singleStreakExportPadding = 50;
-    public static double streakElongationCropMultiplier = 10.0;
     public static boolean includeAiCreativeReportSections = false;
 
     // --- Annotation Tools (For GIFs) ---
@@ -75,29 +67,6 @@ public class ImageDisplayUtils {
     // DATA MODELS
     // =================================================================
 
-    public static class FitsDataAnalysis {
-        public int width;
-        public int height;
-        public long totalPixels;
-
-        public short minRaw;
-        public short maxRaw;
-        public int countRawZero;
-        public int countRawMin;
-        public int countRawMax;
-
-        public int minUnsigned;
-        public int maxUnsigned;
-        public int countUnsignedZero;
-        public int countUnsignedMax;
-
-        public double meanUnsigned;
-        public double sigmaUnsigned;
-
-        public double autoBlackPoint;
-        public double autoWhitePoint;
-    }
-
     public static class IterationSummary {
         public int frameCount;
         public String folderName;
@@ -109,98 +78,6 @@ public class ImageDisplayUtils {
             this.folderName = folderName;
             this.trackCount = trackCount;
             this.anomalyCount = anomalyCount;
-        }
-    }
-
-    private static class ObserverSite {
-        private final double latitudeDeg;
-        private final double longitudeDeg;
-        private final double altitudeMeters;
-        private final String sourceLabel;
-
-        private ObserverSite(double latitudeDeg, double longitudeDeg, double altitudeMeters, String sourceLabel) {
-            this.latitudeDeg = latitudeDeg;
-            this.longitudeDeg = longitudeDeg;
-            this.altitudeMeters = altitudeMeters;
-            this.sourceLabel = sourceLabel;
-        }
-
-        private String toSkybotObserverUriSpec() {
-            return formatSignedCoordinate(latitudeDeg, 6) + "," + formatSignedCoordinate(longitudeDeg, 6) + "," + formatDecimal(altitudeMeters, 1);
-        }
-
-        private String toSkybotObserverFreeFormatSpec() {
-            return formatSignedCoordinate(longitudeDeg, 6) + " " + formatSignedCoordinate(latitudeDeg, 6) + " " + formatDecimal(altitudeMeters, 1);
-        }
-    }
-
-    private static class ReportAstrometryContext {
-        private final FitsFileInformation[] fitsFiles;
-        private final WcsSolutionResolver.ResolvedWcsSolution wcsSolution;
-        private final ObserverSite observerSite;
-        private final String skybotObserverCode;
-        private final String skybotObserverSource;
-        private final long sessionMidpointTimestampMillis;
-
-        private ReportAstrometryContext(FitsFileInformation[] fitsFiles,
-                                        WcsSolutionResolver.ResolvedWcsSolution wcsSolution,
-                                        ObserverSite observerSite,
-                                        String skybotObserverCode,
-                                        String skybotObserverSource,
-                                        long sessionMidpointTimestampMillis) {
-            this.fitsFiles = fitsFiles;
-            this.wcsSolution = wcsSolution;
-            this.observerSite = observerSite;
-            this.skybotObserverCode = skybotObserverCode;
-            this.skybotObserverSource = skybotObserverSource;
-            this.sessionMidpointTimestampMillis = sessionMidpointTimestampMillis;
-        }
-
-        private WcsCoordinateTransformer getTransformer() {
-            return wcsSolution != null ? wcsSolution.getTransformer() : null;
-        }
-
-        private boolean hasAstrometricSolution() {
-            return getTransformer() != null;
-        }
-
-        private String getWcsSummary() {
-            if (wcsSolution == null) {
-                return "No aligned-frame WCS solution available";
-            }
-            String scope = wcsSolution.isSharedAcrossAlignedSet() ? "shared aligned WCS" : "native frame WCS";
-            return scope + " from " + escapeHtml(wcsSolution.getSourceFileName()) + " (" + escapeHtml(wcsSolution.getSourceType()) + ")";
-        }
-
-        private long getFrameTimestampMillis(int frameIndex) {
-            if (fitsFiles == null || frameIndex < 0 || frameIndex >= fitsFiles.length || fitsFiles[frameIndex] == null) {
-                return -1L;
-            }
-            return fitsFiles[frameIndex].getObservationTimestamp();
-        }
-
-        private boolean hasSkybotObserverCode() {
-            return skybotObserverCode != null && !skybotObserverCode.isEmpty();
-        }
-
-        private String getPreferredSkybotObserver() {
-            return hasSkybotObserverCode() ? skybotObserverCode : "500";
-        }
-    }
-
-    private static class SolarSystemQueryTarget {
-        private final double pixelX;
-        private final double pixelY;
-        private final long timestampMillis;
-        private final double searchRadiusDegrees;
-        private final String summaryLabel;
-
-        private SolarSystemQueryTarget(double pixelX, double pixelY, long timestampMillis, double searchRadiusDegrees, String summaryLabel) {
-            this.pixelX = pixelX;
-            this.pixelY = pixelY;
-            this.timestampMillis = timestampMillis;
-            this.searchRadiusDegrees = searchRadiusDegrees;
-            this.summaryLabel = summaryLabel;
         }
     }
 
@@ -578,90 +455,6 @@ public class ImageDisplayUtils {
 
     private static String formatPercent(double fraction) {
         return String.format(Locale.US, "%.1f%%", fraction * 100.0);
-    }
-
-    private static BufferedImage createDisplayImageSoft(short[][] imageData) {
-        int height = imageData.length;
-        int width = imageData[0].length;
-
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
-        WritableRaster raster = image.getRaster();
-
-        long sum = 0;
-        int min = 65535;
-        int max = 0;
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int val = imageData[y][x] + 32768;
-                if (val < min) min = val;
-                if (val > max) max = val;
-                sum += val;
-            }
-        }
-
-        double mean = (double) sum / (width * height);
-
-        double blackPoint = min + ((mean - min) * softStretchBlackRatio);
-        double whitePoint = min + ((max - min) * softStretchWhiteRatio);
-
-        double range = whitePoint - blackPoint;
-        if (range <= 0) range = 1;
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int val = imageData[y][x] + 32768;
-
-                double adjustedVal = val - blackPoint;
-                if (adjustedVal < 0) adjustedVal = 0;
-                if (adjustedVal > range) adjustedVal = range;
-
-                double normalized = adjustedVal / range;
-                double stretched = Math.sqrt(normalized);
-                int displayValue = (int) (stretched * 255.0);
-
-                if (displayValue > 255) displayValue = 255;
-                if (displayValue < 0) displayValue = 0;
-
-                raster.setSample(x, y, 0, displayValue);
-            }
-        }
-
-        return image;
-    }
-
-    private static BufferedImage cropRegionToImage(short[][] fullImage, int cx, int cy, int cropWidth, int cropHeight) {
-        int halfWidth = cropWidth / 2;
-        int halfHeight = cropHeight / 2;
-
-        short[][] croppedData = new short[cropHeight][cropWidth];
-        int imgHeight = fullImage.length;
-        int imgWidth = fullImage[0].length;
-
-        for (int y = 0; y < cropHeight; y++) {
-            for (int x = 0; x < cropWidth; x++) {
-                int sourceY = cy - halfHeight + y;
-                int sourceX = cx - halfWidth + x;
-
-                if (sourceY >= 0 && sourceY < imgHeight && sourceX >= 0 && sourceX < imgWidth) {
-                    croppedData[y][x] = fullImage[sourceY][sourceX];
-                } else {
-                    croppedData[y][x] = 0;
-                }
-            }
-        }
-
-        return createDisplayImage(croppedData);
-    }
-
-    private static BufferedImage exportSingleStreak(short[][] rawImage, SourceExtractor.DetectedObject streak) {
-        int estimatedLength = (int) (streak.elongation * streakElongationCropMultiplier) + singleStreakExportPadding;
-        int cropSize = Math.min(estimatedLength, Math.max(rawImage.length, rawImage[0].length));
-
-        int cx = (int) Math.round(streak.x);
-        int cy = (int) Math.round(streak.y);
-
-        return cropRegionToImage(rawImage, cx, cy, cropSize, cropSize);
     }
 
     private static void saveTrackImageLossless(BufferedImage image, File outputFile) throws IOException {
@@ -1995,7 +1788,7 @@ public class ImageDisplayUtils {
                                                      File exportDir,
                                                      List<short[][]> rawFrames,
                                                      SourceExtractor.DetectedObject detection,
-                                                     ReportAstrometryContext astrometryContext,
+                                                     DetectionReportAstrometry.Context astrometryContext,
                                                      short[][] primaryStackData,
                                                      String primaryStackLabel,
                                                      String primaryStackFileName,
@@ -2108,472 +1901,11 @@ public class ImageDisplayUtils {
         }
         report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' style='max-width: 150px;' alt='Shape Footprint' /></a><br/><center><small>Shape</small></center></div>");
         report.println("</div>");
-        report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>" + escapeHtml(formatPixelCoordinateWithSky(astrometryContext, detection.x, detection.y)) + "<br>Elongation: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f", detection.elongation) + "</span><br>Pixels: <span style='color:#fff;'>" + (int) detection.pixelArea + "</span>" + (resolvedAuxiliaryMaskOverlap != null ? "<br>Mask Overlap: <span style='color:#fff;'>" + formatPercent(resolvedAuxiliaryMaskOverlap) + "</span>" : "") + "</div>");
-        report.print(buildDeepStackIdentificationHtml(astrometryContext, detection));
+        report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>" + escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(astrometryContext, detection.x, detection.y)) + "<br>Elongation: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f", detection.elongation) + "</span><br>Pixels: <span style='color:#fff;'>" + (int) detection.pixelArea + "</span>" + (resolvedAuxiliaryMaskOverlap != null ? "<br>Mask Overlap: <span style='color:#fff;'>" + formatPercent(resolvedAuxiliaryMaskOverlap) + "</span>" : "") + "</div>");
+        report.print(DetectionReportAstrometry.buildDeepStackIdentificationHtml(astrometryContext, detection));
         report.println("</div>");
     }
 
-    private static ReportAstrometryContext buildReportAstrometryContext(FitsFileInformation[] fitsFiles, AppConfig appConfig) {
-        WcsSolutionResolver.ResolvedWcsSolution wcsSolution = WcsSolutionResolver.resolve(null, fitsFiles);
-        ObserverSite observerSite = resolveObserverSite(fitsFiles, appConfig);
-        String observerCode = resolveSkybotObserverCode(appConfig);
-        String observerCodeSource = observerCode != null ? "Configuration panel" : null;
-        long sessionMidpointTimestampMillis = resolveSessionMidpointTimestamp(fitsFiles);
-        return new ReportAstrometryContext(fitsFiles, wcsSolution, observerSite, observerCode, observerCodeSource, sessionMidpointTimestampMillis);
-    }
-
-    private static String resolveSkybotObserverCode(AppConfig appConfig) {
-        if (appConfig == null || appConfig.observatoryCode == null) {
-            return null;
-        }
-        String code = appConfig.observatoryCode.trim();
-        if (code.isEmpty()) {
-            return null;
-        }
-        return code.toUpperCase(Locale.US);
-    }
-
-    private static ObserverSite resolveObserverSite(FitsFileInformation[] fitsFiles, AppConfig appConfig) {
-        if (fitsFiles != null) {
-            for (FitsFileInformation file : fitsFiles) {
-                if (file == null) {
-                    continue;
-                }
-                Double latitude = parseCoordinateValue(getFirstHeaderValue(file, "SITELAT", "OBSGEO-B", "LAT-OBS"));
-                Double longitude = parseCoordinateValue(getFirstHeaderValue(file, "SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS"));
-                if (latitude != null && longitude != null) {
-                    Double altitude = parseDoubleValue(getFirstHeaderValue(file, "SITEELEV", "OBSALT", "ALT-OBS", "ELEVATIO"));
-                    return new ObserverSite(latitude, longitude, altitude != null ? altitude : 0.0, "FITS header");
-                }
-            }
-        }
-
-        if (appConfig != null) {
-            Double latitude = parseCoordinateValue(appConfig.siteLat);
-            Double longitude = parseCoordinateValue(appConfig.siteLong);
-            if (latitude != null && longitude != null) {
-                return new ObserverSite(latitude, longitude, 0.0, "Configuration panel");
-            }
-        }
-
-        return null;
-    }
-
-    private static long resolveSessionMidpointTimestamp(FitsFileInformation[] fitsFiles) {
-        if (fitsFiles == null || fitsFiles.length == 0) {
-            return -1L;
-        }
-
-        List<Long> timestamps = new ArrayList<>();
-        for (FitsFileInformation file : fitsFiles) {
-            if (file == null) {
-                continue;
-            }
-            long timestamp = file.getObservationTimestamp();
-            if (timestamp > 0L) {
-                timestamps.add(timestamp);
-            }
-        }
-
-        if (timestamps.isEmpty()) {
-            return -1L;
-        }
-
-        return timestamps.get(timestamps.size() / 2);
-    }
-
-    private static String buildDeepStackIdentificationHtml(ReportAstrometryContext astrometryContext,
-                                                           SourceExtractor.DetectedObject detection) {
-        SolarSystemQueryTarget queryTarget = buildSingleDetectionQueryTarget(astrometryContext, detection);
-        return buildSolarSystemIdentificationHtml(astrometryContext, queryTarget,
-                "Reference epoch for stack lookup",
-                "Search SkyBoT",
-                "SkyBoT search radius");
-    }
-
-    private static String buildTrackSolarSystemIdentificationHtml(ReportAstrometryContext astrometryContext,
-                                                                  TrackLinker.Track track) {
-        SolarSystemQueryTarget queryTarget = buildTrackQueryTarget(astrometryContext, track);
-        return buildSolarSystemIdentificationHtml(astrometryContext, queryTarget,
-                "Reference epoch for track lookup",
-                "Search SkyBoT (Track Midpoint)",
-                "SkyBoT search radius");
-    }
-
-    private static String buildSingleFrameSkyViewerHtml(ReportAstrometryContext astrometryContext,
-                                                        SourceExtractor.DetectedObject detection,
-                                                        String epochLabel) {
-        SolarSystemQueryTarget queryTarget = buildFrameDetectionQueryTarget(astrometryContext, detection);
-        return buildSkyViewerLinksHtml(astrometryContext, queryTarget, epochLabel);
-    }
-
-    private static String buildTrackSkyViewerHtml(ReportAstrometryContext astrometryContext,
-                                                  TrackLinker.Track track,
-                                                  String epochLabel) {
-        SolarSystemQueryTarget queryTarget = buildTrackQueryTarget(astrometryContext, track);
-        return buildSkyViewerLinksHtml(astrometryContext, queryTarget, epochLabel);
-    }
-
-    private static String buildSolarSystemIdentificationHtml(ReportAstrometryContext astrometryContext,
-                                                             SolarSystemQueryTarget queryTarget,
-                                                             String epochLabel,
-                                                             String buttonLabel,
-                                                             String radiusLabel) {
-        StringBuilder html = new StringBuilder();
-        html.append("<div class='astro-note'>");
-
-        if (astrometryContext == null || !astrometryContext.hasAstrometricSolution()) {
-            html.append("Solar-system identification link unavailable: no reusable aligned-frame WCS solution was found for this session.");
-            html.append("</div>");
-            return html.toString();
-        }
-
-        if (queryTarget == null) {
-            html.append("Solar-system identification link unavailable: no valid timestamp could be resolved for this detection.");
-            html.append("</div>");
-            return html.toString();
-        }
-
-        WcsCoordinateTransformer.SkyCoordinate skyCoordinate = astrometryContext.getTransformer().pixelToSky(queryTarget.pixelX, queryTarget.pixelY);
-        html.append("Sky position: <span class='coord-highlight'>RA ")
-                .append(escapeHtml(WcsCoordinateTransformer.formatRa(skyCoordinate.getRaDegrees())))
-                .append(" | Dec ")
-                .append(escapeHtml(WcsCoordinateTransformer.formatDec(skyCoordinate.getDecDegrees())))
-                .append("</span>");
-        if (queryTarget.summaryLabel != null && !queryTarget.summaryLabel.isEmpty()) {
-            html.append("<br>").append(escapeHtml(queryTarget.summaryLabel)).append(".");
-        }
-        html.append("<br>WCS source: ").append(astrometryContext.getWcsSummary()).append(".");
-
-        String epochText = formatUtcTimestamp(queryTarget.timestampMillis);
-        if (queryTarget.timestampMillis > 0L) {
-            html.append("<br>").append(escapeHtml(epochLabel)).append(": ").append(escapeHtml(epochText)).append(".");
-        } else {
-            html.append("<br>Reference epoch unavailable: no valid frame timestamps were found in the FITS headers.");
-        }
-
-        if (astrometryContext.hasSkybotObserverCode()) {
-            html.append("<br>Observer used for lookup: IAU code ")
-                    .append(escapeHtml(astrometryContext.skybotObserverCode))
-                    .append(" (")
-                    .append(escapeHtml(astrometryContext.skybotObserverSource))
-                    .append(").");
-        } else {
-            html.append("<br>Observer used for lookup: geocenter (500).");
-        }
-        if (astrometryContext.observerSite != null) {
-            html.append("<br>Known site coordinates: ")
-                    .append(escapeHtml(String.format(Locale.US, "%.5f, %.5f (%s)",
-                            astrometryContext.observerSite.latitudeDeg,
-                            astrometryContext.observerSite.longitudeDeg,
-                            astrometryContext.observerSite.sourceLabel)))
-                    .append(".");
-        }
-
-        String nominalSkybotUrl = buildSkybotUrl(astrometryContext, queryTarget, queryTarget.searchRadiusDegrees, false);
-        if (nominalSkybotUrl != null) {
-            double nominalRadiusArcmin = queryTarget.searchRadiusDegrees * 60.0;
-            double widerRadiusDegrees = Math.min(queryTarget.searchRadiusDegrees * 2.5, 2.0);
-            double muchWiderRadiusDegrees = Math.min(queryTarget.searchRadiusDegrees * 6.0, 5.0);
-            html.append("<div class='id-links'>");
-            html.append("<a class='id-link' href='").append(nominalSkybotUrl).append("' target='_blank' rel='noopener noreferrer'>").append(escapeHtml(buttonLabel)).append("</a>");
-            html.append("<a class='id-link' href='").append(buildSkybotUrl(astrometryContext, queryTarget, widerRadiusDegrees, false)).append("' target='_blank' rel='noopener noreferrer'>SkyBoT Wide Cone</a>");
-            html.append("<a class='id-link' href='").append(buildSkybotUrl(astrometryContext, queryTarget, muchWiderRadiusDegrees, false)).append("' target='_blank' rel='noopener noreferrer'>SkyBoT Much Wider Cone</a>");
-            if (astrometryContext.hasSkybotObserverCode()) {
-                html.append("<a class='id-link' href='").append(buildSkybotUrl(astrometryContext, queryTarget, queryTarget.searchRadiusDegrees, true)).append("' target='_blank' rel='noopener noreferrer'>SkyBoT Geocenter</a>");
-            }
-            html.append("</div>");
-            html.append("<div class='astro-note' style='margin-top: 6px;'>")
-                    .append(escapeHtml(radiusLabel)).append(": ")
-                    .append(escapeHtml(String.format(Locale.US, "%.2f arcmin", nominalRadiusArcmin)))
-                    .append(" | Wide: ")
-                    .append(escapeHtml(String.format(Locale.US, "%.2f arcmin", widerRadiusDegrees * 60.0)))
-                    .append(" | Much wider: ")
-                    .append(escapeHtml(String.format(Locale.US, "%.2f arcmin", muchWiderRadiusDegrees * 60.0)))
-                    .append(" (asteroids + comets).</div>");
-        }
-
-        html.append(buildSkyViewerLinksHtml(astrometryContext, queryTarget, epochLabel));
-
-        html.append("</div>");
-        return html.toString();
-    }
-
-    private static SolarSystemQueryTarget buildSingleDetectionQueryTarget(ReportAstrometryContext astrometryContext,
-                                                                          SourceExtractor.DetectedObject detection) {
-        if (astrometryContext == null || detection == null) {
-            return null;
-        }
-
-        long timestampMillis = astrometryContext.sessionMidpointTimestampMillis;
-        double radiusDegrees = estimateSkybotSearchRadiusDegrees(astrometryContext, detection.x, detection.y, detection.pixelArea, detection.elongation);
-        return new SolarSystemQueryTarget(detection.x, detection.y, timestampMillis, radiusDegrees, null);
-    }
-
-    private static SolarSystemQueryTarget buildFrameDetectionQueryTarget(ReportAstrometryContext astrometryContext,
-                                                                         SourceExtractor.DetectedObject detection) {
-        if (astrometryContext == null || detection == null) {
-            return null;
-        }
-
-        long timestampMillis = astrometryContext.getFrameTimestampMillis(detection.sourceFrameIndex);
-        if (timestampMillis <= 0L) {
-            timestampMillis = astrometryContext.sessionMidpointTimestampMillis;
-        }
-
-        double radiusDegrees = estimateSkybotSearchRadiusDegrees(astrometryContext, detection.x, detection.y, detection.pixelArea, detection.elongation);
-        return new SolarSystemQueryTarget(detection.x, detection.y, timestampMillis, radiusDegrees, "Single-frame detection");
-    }
-
-    private static SolarSystemQueryTarget buildTrackQueryTarget(ReportAstrometryContext astrometryContext,
-                                                                TrackLinker.Track track) {
-        if (astrometryContext == null || track == null || track.points == null || track.points.isEmpty()) {
-            return null;
-        }
-
-        double sumX = 0.0;
-        double sumY = 0.0;
-        double sumArea = 0.0;
-        double sumElongation = 0.0;
-        int count = 0;
-        long timestampAccumulator = 0L;
-        int timestampCount = 0;
-
-        for (SourceExtractor.DetectedObject point : track.points) {
-            if (point == null) {
-                continue;
-            }
-            sumX += point.x;
-            sumY += point.y;
-            sumArea += Math.max(1.0, point.pixelArea);
-            sumElongation += Math.max(1.0, point.elongation);
-            count++;
-
-            long timestampMillis = astrometryContext.getFrameTimestampMillis(point.sourceFrameIndex);
-            if (timestampMillis > 0L) {
-                timestampAccumulator += timestampMillis;
-                timestampCount++;
-            }
-        }
-
-        if (count == 0) {
-            return null;
-        }
-
-        long timestampMillis = timestampCount > 0 ? Math.round((double) timestampAccumulator / timestampCount) : -1L;
-        double pixelX = sumX / count;
-        double pixelY = sumY / count;
-        double avgArea = sumArea / count;
-        double avgElongation = sumElongation / count;
-        double radiusDegrees = estimateSkybotSearchRadiusDegrees(astrometryContext, pixelX, pixelY, avgArea, avgElongation);
-        return new SolarSystemQueryTarget(pixelX, pixelY, timestampMillis, radiusDegrees,
-                "Track midpoint from " + count + " detections");
-    }
-
-    private static String buildSkybotUrl(ReportAstrometryContext astrometryContext,
-                                         SolarSystemQueryTarget queryTarget,
-                                         double searchRadiusDegrees,
-                                         boolean forceGeocenterObserver) {
-        if (astrometryContext == null || !astrometryContext.hasAstrometricSolution() || queryTarget == null || queryTarget.timestampMillis <= 0L) {
-            return null;
-        }
-
-        WcsCoordinateTransformer.SkyCoordinate skyCoordinate = astrometryContext.getTransformer().pixelToSky(queryTarget.pixelX, queryTarget.pixelY);
-        String observer = forceGeocenterObserver ? "500" : astrometryContext.getPreferredSkybotObserver();
-
-        StringBuilder url = new StringBuilder("https://ssp.imcce.fr/webservices/skybot/api/conesearch.php?");
-        url.append("-ep=").append(urlEncode(formatSkybotTimestamp(queryTarget.timestampMillis)));
-        url.append("&-ra=").append(urlEncode(formatDecimal(skyCoordinate.getRaDegrees(), 6)));
-        url.append("&-dec=").append(urlEncode(formatDecimal(skyCoordinate.getDecDegrees(), 6)));
-        url.append("&-rd=").append(urlEncode(formatDecimal(searchRadiusDegrees, 6)));
-        url.append("&-mime=html");
-        url.append("&-output=all");
-        url.append("&-observer=").append(urlEncode(observer));
-        url.append("&-objFilter=101");
-        url.append("&-from=SpacePixels");
-        return url.toString();
-    }
-
-    private static String buildSkyViewerLinksHtml(ReportAstrometryContext astrometryContext,
-                                                  SolarSystemQueryTarget queryTarget,
-                                                  String epochLabel) {
-        StringBuilder html = new StringBuilder();
-        html.append("<div class='astro-note' style='margin-top: 8px;'>");
-
-        if (astrometryContext == null || !astrometryContext.hasAstrometricSolution()) {
-            html.append("Interactive sky-viewer links unavailable: no reusable aligned-frame WCS solution was found for this session.");
-            html.append("</div>");
-            return html.toString();
-        }
-
-        if (queryTarget == null || queryTarget.timestampMillis <= 0L) {
-            html.append("Interactive sky-viewer links unavailable: no valid timestamp could be resolved for this detection.");
-            html.append("</div>");
-            return html.toString();
-        }
-
-        WcsCoordinateTransformer.SkyCoordinate skyCoordinate = astrometryContext.getTransformer().pixelToSky(queryTarget.pixelX, queryTarget.pixelY);
-        double tightFovDegrees = clampFieldOfViewDegrees(queryTarget.searchRadiusDegrees * 8.0, 0.5, 12.0);
-        double wideFovDegrees = clampFieldOfViewDegrees(queryTarget.searchRadiusDegrees * 22.0, 4.0, 60.0);
-
-        html.append("Interactive sky viewers:");
-        html.append("<div class='id-links'>");
-        html.append("<a class='id-link' href='")
-                .append(buildStellariumWebUrl(astrometryContext, queryTarget, skyCoordinate, tightFovDegrees))
-                .append("' target='_blank' rel='noopener noreferrer'>Stellarium Web (RA/Dec)</a>");
-        html.append("<a class='id-link' href='")
-                .append(buildStellariumWebUrl(astrometryContext, queryTarget, skyCoordinate, wideFovDegrees))
-                .append("' target='_blank' rel='noopener noreferrer'>Stellarium Web Wide</a>");
-        html.append("</div>");
-
-        html.append("<div class='astro-note' style='margin-top: 6px;'>")
-                .append("Stellarium links use best-effort RA/Dec URL parameters at ")
-                .append(escapeHtml(formatUtcTimestamp(queryTarget.timestampMillis)))
-                .append(" with FOV ")
-                .append(escapeHtml(String.format(Locale.US, "%.2f° / %.2f°", tightFovDegrees, wideFovDegrees)))
-                .append(".");
-        if (epochLabel != null && !epochLabel.isEmpty()) {
-            html.append(" ").append(escapeHtml(epochLabel)).append(": ")
-                    .append(escapeHtml(formatUtcTimestamp(queryTarget.timestampMillis)))
-                    .append(".");
-        }
-        html.append("</div>");
-        html.append("</div>");
-        return html.toString();
-    }
-
-    private static String buildStellariumWebUrl(ReportAstrometryContext astrometryContext,
-                                                SolarSystemQueryTarget queryTarget,
-                                                WcsCoordinateTransformer.SkyCoordinate skyCoordinate,
-                                                double fovDegrees) {
-        StringBuilder url = new StringBuilder("https://stellarium-web.org/?");
-        url.append("date=").append(urlEncode(formatStellariumTimestamp(queryTarget.timestampMillis)));
-        url.append("&ra=").append(urlEncode(formatDecimal(skyCoordinate.getRaDegrees(), 6)));
-        url.append("&dec=").append(urlEncode(formatDecimal(skyCoordinate.getDecDegrees(), 6)));
-        url.append("&fov=").append(urlEncode(formatDecimal(fovDegrees, 4)));
-        if (astrometryContext != null && astrometryContext.observerSite != null) {
-            url.append("&lat=").append(urlEncode(formatDecimal(astrometryContext.observerSite.latitudeDeg, 5)));
-            url.append("&lng=").append(urlEncode(formatDecimal(astrometryContext.observerSite.longitudeDeg, 5)));
-            url.append("&elev=").append(urlEncode(formatDecimal(astrometryContext.observerSite.altitudeMeters, 1)));
-        }
-        return url.toString();
-    }
-
-    private static double estimateSkybotSearchRadiusDegrees(ReportAstrometryContext astrometryContext,
-                                                            double pixelX,
-                                                            double pixelY,
-                                                            double pixelArea,
-                                                            double elongation) {
-        double pixelScaleArcsec = estimateLocalPixelScaleArcsec(astrometryContext.getTransformer(), pixelX, pixelY);
-        if (!Double.isFinite(pixelScaleArcsec) || pixelScaleArcsec <= 0.0) {
-            pixelScaleArcsec = 2.0;
-        }
-
-        double objectRadiusPixels = pixelArea > 0
-                ? Math.sqrt((pixelArea * Math.max(elongation, 1.0)) / Math.PI)
-                : 15.0;
-        double radiusArcsec = Math.max(90.0, objectRadiusPixels * pixelScaleArcsec * 6.0);
-        radiusArcsec = Math.min(radiusArcsec, 900.0);
-        return radiusArcsec / 3600.0;
-    }
-
-    private static double estimateLocalPixelScaleArcsec(WcsCoordinateTransformer transformer, double pixelX, double pixelY) {
-        if (transformer == null) {
-            return Double.NaN;
-        }
-
-        WcsCoordinateTransformer.SkyCoordinate center = transformer.pixelToSky(pixelX, pixelY);
-        WcsCoordinateTransformer.SkyCoordinate offsetX = transformer.pixelToSky(pixelX + 1.0, pixelY);
-        WcsCoordinateTransformer.SkyCoordinate offsetY = transformer.pixelToSky(pixelX, pixelY + 1.0);
-        double stepX = angularSeparationArcsec(center.getRaDegrees(), center.getDecDegrees(), offsetX.getRaDegrees(), offsetX.getDecDegrees());
-        double stepY = angularSeparationArcsec(center.getRaDegrees(), center.getDecDegrees(), offsetY.getRaDegrees(), offsetY.getDecDegrees());
-        return (stepX + stepY) / 2.0;
-    }
-
-    private static double angularSeparationArcsec(double ra1Deg, double dec1Deg, double ra2Deg, double dec2Deg) {
-        double ra1 = Math.toRadians(ra1Deg);
-        double dec1 = Math.toRadians(dec1Deg);
-        double ra2 = Math.toRadians(ra2Deg);
-        double dec2 = Math.toRadians(dec2Deg);
-        double sinHalfDec = Math.sin((dec2 - dec1) / 2.0);
-        double sinHalfRa = Math.sin((ra2 - ra1) / 2.0);
-        double a = (sinHalfDec * sinHalfDec) + (Math.cos(dec1) * Math.cos(dec2) * sinHalfRa * sinHalfRa);
-        double c = 2.0 * Math.asin(Math.min(1.0, Math.sqrt(Math.max(0.0, a))));
-        return Math.toDegrees(c) * 3600.0;
-    }
-
-    private static String getFirstHeaderValue(FitsFileInformation file, String... keys) {
-        if (file == null || file.getFitsHeader() == null || keys == null) {
-            return null;
-        }
-
-        for (String key : keys) {
-            String value = file.getFitsHeader().get(key);
-            if (value != null && !value.trim().isEmpty()) {
-                return value;
-            }
-        }
-        return null;
-    }
-
-    private static Double parseCoordinateValue(String rawValue) {
-        if (rawValue == null) {
-            return null;
-        }
-
-        String cleaned = rawValue.replace("'", "").trim().toUpperCase(Locale.US);
-        if (cleaned.isEmpty()) {
-            return null;
-        }
-
-        boolean forceNegative = cleaned.endsWith("S") || cleaned.endsWith("W");
-        boolean forcePositive = cleaned.endsWith("N") || cleaned.endsWith("E");
-        if (forceNegative || forcePositive) {
-            cleaned = cleaned.substring(0, cleaned.length() - 1).trim();
-        }
-
-        cleaned = cleaned.replace(",", ".");
-        Double parsed = parseDoubleValue(cleaned);
-        if (parsed == null) {
-            return null;
-        }
-        if (forceNegative) {
-            return -Math.abs(parsed);
-        }
-        if (forcePositive) {
-            return Math.abs(parsed);
-        }
-        return parsed;
-    }
-
-    private static Double parseDoubleValue(String rawValue) {
-        if (rawValue == null) {
-            return null;
-        }
-
-        String cleaned = rawValue.replace("'", "").trim();
-        if (cleaned.isEmpty()) {
-            return null;
-        }
-
-        try {
-            return Double.parseDouble(cleaned);
-        } catch (NumberFormatException ex) {
-            return null;
-        }
-    }
-
-    private static String formatSkybotTimestamp(long timestampMillis) {
-        return DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
-                .withZone(ZoneOffset.UTC)
-                .format(Instant.ofEpochMilli(timestampMillis));
-    }
-
-    private static String formatStellariumTimestamp(long timestampMillis) {
-        return DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
-                .withZone(ZoneOffset.UTC)
-                .format(Instant.ofEpochMilli(timestampMillis));
-    }
 
     private static String formatUtcTimestamp(long timestampMillis) {
         if (timestampMillis <= 0L) {
@@ -2744,82 +2076,8 @@ public class ImageDisplayUtils {
         return String.format(Locale.US, "%." + decimals + "f", value);
     }
 
-    private static String formatSignedCoordinate(double value, int decimals) {
-        if (value > 0.0) {
-            return "+" + formatDecimal(value, decimals);
-        }
-        if (value == 0.0d) {
-            return "+0";
-        }
-        return formatDecimal(value, decimals);
-    }
-
-    private static double clampFieldOfViewDegrees(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    private static String formatPixelCoordinateWithSky(ReportAstrometryContext astrometryContext, double pixelX, double pixelY) {
-        String pixel = String.format(Locale.US, "X: %.1f, Y: %.1f", pixelX, pixelY);
-        String sky = formatSkyCoordinateInline(astrometryContext, pixelX, pixelY);
-        return sky == null ? pixel : pixel + " | " + sky;
-    }
-
-    private static String formatPixelCoordinateWithSky(ReportAstrometryContext astrometryContext, int pixelX, int pixelY) {
-        String pixel = String.format(Locale.US, "[%d, %d]", pixelX, pixelY);
-        String sky = formatSkyCoordinateInline(astrometryContext, pixelX, pixelY);
-        return sky == null ? pixel : pixel + " | " + sky;
-    }
-
     private static String formatPixelCoordinateOnly(int pixelX, int pixelY) {
         return String.format(Locale.US, "[%d, %d]", pixelX, pixelY);
-    }
-
-    private static String formatPixelCoordinateBlockHtml(ReportAstrometryContext astrometryContext, double pixelX, double pixelY) {
-        StringBuilder html = new StringBuilder();
-        html.append("<span class='coord-highlight coord-stack'>");
-        html.append("<span class='coord-line'>")
-                .append(escapeHtml(String.format(Locale.US, "X: %.1f, Y: %.1f", pixelX, pixelY)))
-                .append("</span>");
-        if (astrometryContext != null && astrometryContext.hasAstrometricSolution()) {
-            WcsCoordinateTransformer.SkyCoordinate skyCoordinate = astrometryContext.getTransformer().pixelToSky(pixelX, pixelY);
-            html.append("<span class='coord-line'>RA ")
-                    .append(escapeHtml(WcsCoordinateTransformer.formatRa(skyCoordinate.getRaDegrees())))
-                    .append(" | Dec ")
-                    .append(escapeHtml(WcsCoordinateTransformer.formatDec(skyCoordinate.getDecDegrees())))
-                    .append("</span>");
-        }
-        html.append("</span>");
-        return html.toString();
-    }
-
-    private static String buildSourceCoordinateListEntry(String fileLabel,
-                                                         ReportAstrometryContext astrometryContext,
-                                                         double pixelX,
-                                                         double pixelY,
-                                                         String metricsText) {
-        StringBuilder html = new StringBuilder();
-        html.append("<li>");
-        html.append("<div class='source-file'>").append(escapeHtml(fileLabel)).append("</div>");
-        html.append(formatPixelCoordinateBlockHtml(astrometryContext, pixelX, pixelY));
-        if (metricsText != null && !metricsText.isEmpty()) {
-            html.append("<div class='source-metrics'>").append(escapeHtml(metricsText)).append("</div>");
-        }
-        html.append("</li>");
-        return html.toString();
-    }
-
-    private static String formatSkyCoordinateInline(ReportAstrometryContext astrometryContext, double pixelX, double pixelY) {
-        if (astrometryContext == null || !astrometryContext.hasAstrometricSolution()) {
-            return null;
-        }
-
-        WcsCoordinateTransformer.SkyCoordinate skyCoordinate = astrometryContext.getTransformer().pixelToSky(pixelX, pixelY);
-        return "RA " + WcsCoordinateTransformer.formatRa(skyCoordinate.getRaDegrees())
-                + " | Dec " + WcsCoordinateTransformer.formatDec(skyCoordinate.getDecDegrees());
-    }
-
-    private static String urlEncode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     private static String escapeHtml(String value) {
@@ -2867,7 +2125,7 @@ public class ImageDisplayUtils {
         List<SourceExtractor.DetectedObject> masterMaximumStackTransientStreaks = result.masterMaximumStackTransientStreaks;
         PipelineTelemetry pipelineTelemetry = result.telemetry;
         List<List<SourceExtractor.DetectedObject>> allTransients = result.allTransients;
-        ReportAstrometryContext astrometryContext = buildReportAstrometryContext(fitsFiles, appConfig);
+        DetectionReportAstrometry.Context astrometryContext = DetectionReportAstrometry.buildContext(fitsFiles, appConfig);
         List<TrackLinker.Track> singleStreaks = new ArrayList<>();
         List<TrackLinker.Track> streakTracks = new ArrayList<>();
         List<TrackLinker.Track> movingTargets = new ArrayList<>();
@@ -3002,20 +2260,20 @@ public class ImageDisplayUtils {
                 if (astrometryContext.hasAstrometricSolution()) {
                     report.println("<div class='flex-container'>");
                     report.println("<div class='metric-box'><span class='metric-value'>Available</span><span class='metric-label'>Aligned WCS</span></div>");
-                    report.println("<div class='metric-box'><span class='metric-value'>" + escapeHtml(formatUtcTimestamp(astrometryContext.sessionMidpointTimestampMillis)) + "</span><span class='metric-label'>Session Midpoint (UTC)</span></div>");
+                    report.println("<div class='metric-box'><span class='metric-value'>" + escapeHtml(formatUtcTimestamp(astrometryContext.getSessionMidpointTimestampMillis())) + "</span><span class='metric-label'>Session Midpoint (UTC)</span></div>");
                     String observerMetric = astrometryContext.hasSkybotObserverCode()
-                            ? escapeHtml(astrometryContext.skybotObserverCode)
+                            ? escapeHtml(astrometryContext.getSkybotObserverCode())
                             : "500";
                     report.println("<div class='metric-box'><span class='metric-value'>" + observerMetric + "</span><span class='metric-label'>SkyBoT Observer</span></div>");
                     report.println("</div>");
                     report.println("<div class='astro-note'>WCS source: " + astrometryContext.getWcsSummary() + ".");
                     if (astrometryContext.hasSkybotObserverCode()) {
-                        report.println("<br>SkyBoT observer code source: " + escapeHtml(astrometryContext.skybotObserverSource) + ".");
+                        report.println("<br>SkyBoT observer code source: " + escapeHtml(astrometryContext.getSkybotObserverSource()) + ".");
                     } else {
                         report.println("<br>No IAU observatory code configured. SkyBoT links will use geocenter (500).");
                     }
-                    if (astrometryContext.observerSite != null) {
-                        report.println("<br>Known site coordinates source: " + escapeHtml(astrometryContext.observerSite.sourceLabel) + ".");
+                    if (astrometryContext.getObserverSiteSourceLabel() != null) {
+                        report.println("<br>Known site coordinates source: " + escapeHtml(astrometryContext.getObserverSiteSourceLabel()) + ".");
                     } else {
                         report.println("<br>No observer site coordinates found.");
                     }
@@ -3240,7 +2498,7 @@ public class ImageDisplayUtils {
                     saveTrackImageLossless(streakImg, new File(exportDir, streakFileName));
 
                     String shapeFileName = "single_streak_" + counter + "_shape.png";
-                    BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY, true);
+                    BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY, false);
                     saveTrackImageLossless(streakShapeImg, new File(exportDir, shapeFileName));
 
                     report.println("<div class='image-container'>");
@@ -3248,8 +2506,8 @@ public class ImageDisplayUtils {
                     report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
                     report.println("</div>");
                     String metricsStr = buildStreakMetricsText(pt);
-                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + buildSourceCoordinateListEntry(pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr) + "</ul>");
-                    report.print(buildSingleFrameSkyViewerHtml(astrometryContext, pt, "Reference epoch for streak lookup"));
+                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + DetectionReportAstrometry.buildSourceCoordinateListEntry(pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr) + "</ul>");
+                    report.print(DetectionReportAstrometry.buildSingleFrameSkyViewerHtml(astrometryContext, pt, "Reference epoch for streak lookup"));
                     report.println("</div>");
 
                     counter++;
@@ -3303,10 +2561,10 @@ public class ImageDisplayUtils {
                     for (int i = 0; i < track.points.size(); i++) {
                         SourceExtractor.DetectedObject pt = track.points.get(i);
                         String metricsStr = buildStreakMetricsText(pt);
-                        report.println(buildSourceCoordinateListEntry("[" + (i + 1) + "] " + pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr));
+                        report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry("[" + (i + 1) + "] " + pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr));
                     }
                     report.println("</ul>");
-                    report.print(buildTrackSkyViewerHtml(astrometryContext, track, "Reference epoch for streak-track lookup"));
+                    report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(astrometryContext, track, "Reference epoch for streak-track lookup"));
                     report.println("</div>");
                     counter++;
                 }
@@ -3403,10 +2661,10 @@ public class ImageDisplayUtils {
                     for (int i = 0; i < track.points.size(); i++) {
                         SourceExtractor.DetectedObject pt = track.points.get(i);
                         String metricsStr = buildMovingTrackMetricsText(pt);
-                        report.println(buildSourceCoordinateListEntry("[" + (i + 1) + "] " + pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr));
+                        report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry("[" + (i + 1) + "] " + pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr));
                     }
                     report.println("</ul>");
-                    report.print(buildTrackSolarSystemIdentificationHtml(astrometryContext, track));
+                    report.print(DetectionReportAstrometry.buildTrackSolarSystemIdentificationHtml(astrometryContext, track));
                     report.println("</div>");
                     counter++;
                 }
@@ -3490,7 +2748,7 @@ public class ImageDisplayUtils {
                             overlapAssessment = "comfortably below limit";
                         }
                     }
-                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + buildSourceCoordinateListEntry(pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr) + "</ul>");
+                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + DetectionReportAstrometry.buildSourceCoordinateListEntry(pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr) + "</ul>");
                     if (maskOverlapStats.totalPixels > 0) {
                         report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>Veto-mask overlap: <span style='color:" + overlapColor + "; font-weight: bold;'>" + String.format(Locale.US, "%.1f%%", maskOverlapStats.fraction * 100.0) + "</span> (" + maskOverlapStats.overlappingPixels + " / " + maskOverlapStats.totalPixels + " detection pixels) | Limit: " + String.format(Locale.US, "%.1f%%", config.maxMaskOverlapFraction * 100.0) + " <span style='color:" + overlapColor + ";'>[" + overlapAssessment + "]</span></div>");
                     }
@@ -3516,7 +2774,7 @@ public class ImageDisplayUtils {
                     saveTrackImageLossless(streakImg, new File(exportDir, streakFileName));
 
                     String shapeFileName = "suspected_threshold_streak_" + counter + "_shape.png";
-                    BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY, true);
+                    BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY, false);
                     saveTrackImageLossless(streakShapeImg, new File(exportDir, shapeFileName));
 
                     report.println("<div class='image-container'>");
@@ -3524,8 +2782,8 @@ public class ImageDisplayUtils {
                     report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
                     report.println("</div>");
                     String metricsStr = buildStreakMetricsText(pt);
-                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + buildSourceCoordinateListEntry(pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr) + "</ul>");
-                    report.print(buildSingleFrameSkyViewerHtml(astrometryContext, pt, "Reference epoch for suspected threshold streak lookup"));
+                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + DetectionReportAstrometry.buildSourceCoordinateListEntry(pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr) + "</ul>");
+                    report.print(DetectionReportAstrometry.buildSingleFrameSkyViewerHtml(astrometryContext, pt, "Reference epoch for suspected threshold streak lookup"));
                     report.println("</div>");
 
                     counter++;
@@ -3673,7 +2931,7 @@ public class ImageDisplayUtils {
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
                     report.println("An overview of all detected transients and moving targets plotted over the master background. " +
                             "Multi-frame tracks are connected with lines (<strong>T#</strong> for targets, <strong>ST#</strong> for streaks), while single-frame anomalies and single streaks are circled (<strong>A#</strong> and <strong>S#</strong>).</p>");
-                    report.println("<a href='global_track_map.png' target='_blank'><img src='global_track_map.png' style='width: 100%; border: 1px solid #555; border-radius: 4px;' alt='Global Track Map' /></a>");
+                    report.println("<a href='global_track_map.png' target='_blank'><img src='global_track_map.png' class='native-size-image' style='border: 1px solid #555; border-radius: 4px;' alt='Global Track Map' /></a>");
                     report.println("</div>");
                 }
             }
@@ -3700,7 +2958,7 @@ public class ImageDisplayUtils {
                     report.println("<div style='flex: 1; min-width: 400px;'>");
                     report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Exact Footprint Map</h4>");
                     report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Plots the exact raw pixels at a 1:1 scale. Both objects and streaks</p>");
-                    report.println("<a href='global_transient_map.png' target='_blank'><img src='global_transient_map.png' style='width: 100%; border: 1px solid #555; border-radius: 4px;' alt='Global Transient Map' /></a></div>");
+                    report.println("<a href='global_transient_map.png' target='_blank'><img src='global_transient_map.png' class='native-size-image' style='border: 1px solid #555; border-radius: 4px;' alt='Global Transient Map' /></a></div>");
 
                     report.println("<div style='flex: 1; min-width: 400px;'>");
                     report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Transient Cluster Map</h4>");
@@ -3806,64 +3064,5 @@ public class ImageDisplayUtils {
             }
             report.println("</table></div></body></html>");
         }
-    }
-
-    // =================================================================
-    // ANALYTICS & DIAGNOSTICS (Unchanged)
-    // =================================================================
-
-    private static FitsDataAnalysis analyzeFitsData(short[][] imageData) {
-        FitsDataAnalysis data = new FitsDataAnalysis();
-
-        data.height = imageData.length;
-        data.width = imageData[0].length;
-        data.totalPixels = (long) data.width * data.height;
-
-        data.minRaw = Short.MAX_VALUE;
-        data.maxRaw = Short.MIN_VALUE;
-        data.minUnsigned = 65535;
-        data.maxUnsigned = 0;
-
-        long sumUnsigned = 0;
-
-        for (int y = 0; y < data.height; y++) {
-            for (int x = 0; x < data.width; x++) {
-                short rawVal = imageData[y][x];
-                int unsignedVal = rawVal + 32768;
-
-                if (rawVal < data.minRaw) data.minRaw = rawVal;
-                if (rawVal > data.maxRaw) data.maxRaw = rawVal;
-
-                if (unsignedVal < data.minUnsigned) data.minUnsigned = unsignedVal;
-                if (unsignedVal > data.maxUnsigned) data.maxUnsigned = unsignedVal;
-
-                sumUnsigned += unsignedVal;
-
-                if (rawVal == 0) data.countRawZero++;
-                if (rawVal == Short.MIN_VALUE) data.countRawMin++;
-                if (rawVal == Short.MAX_VALUE) data.countRawMax++;
-                if (unsignedVal == 0) data.countUnsignedZero++;
-                if (unsignedVal == 65535) data.countUnsignedMax++;
-            }
-        }
-
-        data.meanUnsigned = (double) sumUnsigned / data.totalPixels;
-
-        double sumSqDiff = 0;
-        for (int y = 0; y < data.height; y++) {
-            for (int x = 0; x < data.width; x++) {
-                int unsignedVal = imageData[y][x] + 32768;
-                double diff = unsignedVal - data.meanUnsigned;
-                sumSqDiff += (diff * diff);
-            }
-        }
-
-        double variance = sumSqDiff / data.totalPixels;
-        data.sigmaUnsigned = Math.sqrt(variance);
-
-        data.autoBlackPoint = data.meanUnsigned - (autoStretchBlackSigma * data.sigmaUnsigned);
-        data.autoWhitePoint = data.meanUnsigned + (autoStretchWhiteSigma * data.sigmaUnsigned);
-
-        return data;
     }
 }

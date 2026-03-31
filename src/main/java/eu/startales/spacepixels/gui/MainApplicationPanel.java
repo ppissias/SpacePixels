@@ -214,19 +214,14 @@ public class MainApplicationPanel extends JPanel {
             boolean stretchEnabled = mainAppWindow.getStretchPanel().isStretchEnabled();
             StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-            new Thread(() -> {
-                mainAppWindow.getEventBus().post(new BatchConvertStartedEvent());
-                try {
-                    io.github.ppissias.jtransient.engine.TransientEngineProgressListener progressListener = (percentage, message) -> {
-                        mainAppWindow.getEventBus().post(new EngineProgressUpdateEvent(percentage, message));
-                    };
-                    mainAppWindow.getImageProcessing().batchConvertToMono(stretchEnabled, stretchFactor, iterations, algo, progressListener);
-                    mainAppWindow.getEventBus().post(new BatchConvertFinishedEvent(true, null));
-                } catch (Exception ex) {
-                    ApplicationWindow.logger.log(java.util.logging.Level.SEVERE, "Batch convert failed", ex);
-                    mainAppWindow.getEventBus().post(new BatchConvertFinishedEvent(false, ex.getMessage()));
-                }
-            }).start();
+            BatchConvertMonoTask task = new BatchConvertMonoTask(
+                    mainAppWindow.getEventBus(),
+                    mainAppWindow.getImageProcessing(),
+                    stretchEnabled,
+                    stretchFactor,
+                    iterations,
+                    algo);
+            new Thread(task).start();
         });
 
         stretchButton.addActionListener(e -> {
@@ -814,11 +809,27 @@ public class MainApplicationPanel extends JPanel {
             enableControlsProcessingFinished();
 
             if (event.isSuccess()) {
-                JOptionPane.showMessageDialog(this,
-                        "Batch conversion to mono completed successfully.\n" +
-                                "Please import the newly created directory to use them.",
-                        "Conversion Complete",
-                        JOptionPane.INFORMATION_MESSAGE);
+                File generatedMonoDirectory = event.getGeneratedMonoDirectory();
+                if (generatedMonoDirectory != null) {
+                    int choice = JOptionPane.showConfirmDialog(
+                            this,
+                            "Batch conversion to mono completed successfully.\n\n" +
+                                    "Import the newly created mono directory now?\n" +
+                                    generatedMonoDirectory.getAbsolutePath(),
+                            "Conversion Complete",
+                            JOptionPane.YES_NO_OPTION,
+                            JOptionPane.QUESTION_MESSAGE);
+                    if (choice == JOptionPane.YES_OPTION) {
+                        statusLabel.setText("Importing converted mono directory");
+                        new Thread(new FitsImportTask(mainAppWindow.getEventBus(), generatedMonoDirectory)).start();
+                        return;
+                    }
+                } else {
+                    JOptionPane.showMessageDialog(this,
+                            "Batch conversion to mono completed successfully.",
+                            "Conversion Complete",
+                            JOptionPane.INFORMATION_MESSAGE);
+                }
             } else {
                 JOptionPane.showMessageDialog(this,
                         "Cannot convert images: " + event.getErrorMessage(),

@@ -70,7 +70,19 @@ public class AutoTuneTask implements Runnable {
 
             eventBus.post(new EngineProgressUpdateEvent(50, "Starting mathematical tuning algorithms..."));
 
-            JTransientAutoTuner.AutoTunerResult result = JTransientAutoTuner.tune(candidateFrames, baseConfig, profile, autoTuneListener);
+            int originalSampleSize = JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE;
+            int effectiveSampleSize = Math.min(originalSampleSize, candidateFrames.size());
+            if (effectiveSampleSize != originalSampleSize) {
+                ApplicationWindow.logger.info("Temporarily lowering Auto-Tuner sample size from " + originalSampleSize + " to " + effectiveSampleSize + " to support the available frame count.");
+            }
+
+            JTransientAutoTuner.AutoTunerResult result;
+            JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = effectiveSampleSize;
+            try {
+                result = JTransientAutoTuner.tune(candidateFrames, baseConfig, profile, autoTuneListener);
+            } finally {
+                JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = originalSampleSize;
+            }
 
             eventBus.post(new EngineProgressUpdateEvent(100, "Auto-Tuning complete!"));
             eventBus.post(new AutoTuneFinishedEvent(true, "Auto-Tuning completed successfully.", result));
