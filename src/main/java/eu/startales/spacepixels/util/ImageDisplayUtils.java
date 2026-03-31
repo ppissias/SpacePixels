@@ -2065,6 +2065,93 @@ public class ImageDisplayUtils {
         return html.toString();
     }
 
+    private static String buildSingleFrameEventSummaryHtml(TrackLinker.Track track,
+                                                           FitsFileInformation[] fitsFiles) {
+        if (track == null || track.points == null || track.points.isEmpty()) {
+            return "";
+        }
+
+        int partCount = 0;
+        int frameIndex = -1;
+        long frameTimestamp = -1L;
+        long exposureMillis = -1L;
+
+        for (SourceExtractor.DetectedObject point : track.points) {
+            if (point == null) {
+                continue;
+            }
+
+            partCount++;
+            if (frameIndex < 0 && point.sourceFrameIndex >= 0) {
+                frameIndex = point.sourceFrameIndex;
+            }
+
+            long candidateTimestamp = resolveFrameTimestampMillis(point, fitsFiles);
+            if (candidateTimestamp > 0L && frameTimestamp <= 0L) {
+                frameTimestamp = candidateTimestamp;
+            }
+
+            long candidateExposure = resolveFrameExposureMillis(point, fitsFiles);
+            if (candidateExposure > 0L) {
+                exposureMillis = candidateExposure;
+            }
+        }
+
+        if (partCount == 0) {
+            return "";
+        }
+
+        StringBuilder html = new StringBuilder();
+        html.append("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 15px;'>");
+        if (frameIndex >= 0) {
+            html.append("Frame: <span style='color:#fff;'>").append(frameIndex + 1).append("</span><br>");
+        }
+        html.append("Frame UTC: <span style='color:#fff;'>")
+                .append(escapeHtml(formatUtcTimestamp(frameTimestamp)))
+                .append("</span><br>");
+        if (exposureMillis > 0L) {
+            html.append("Exposure: <span style='color:#fff;'>")
+                    .append(escapeHtml(formatDuration(exposureMillis)))
+                    .append("</span><br>");
+        }
+        html.append("Streak Parts: <span style='color:#fff;'>").append(partCount).append("</span>");
+        if (partCount > 1) {
+            html.append(" <span style='color:#ff9933;'>(grouped same-frame components)</span>");
+        }
+        html.append("</div>");
+        return html.toString();
+    }
+
+    private static long resolveFrameTimestampMillis(SourceExtractor.DetectedObject detection,
+                                                    FitsFileInformation[] fitsFiles) {
+        if (detection == null) {
+            return -1L;
+        }
+        if (detection.timestamp > 0L) {
+            return detection.timestamp;
+        }
+        if (fitsFiles == null || detection.sourceFrameIndex < 0 || detection.sourceFrameIndex >= fitsFiles.length) {
+            return -1L;
+        }
+        FitsFileInformation frameInfo = fitsFiles[detection.sourceFrameIndex];
+        return frameInfo != null ? frameInfo.getObservationTimestamp() : -1L;
+    }
+
+    private static long resolveFrameExposureMillis(SourceExtractor.DetectedObject detection,
+                                                   FitsFileInformation[] fitsFiles) {
+        if (detection == null) {
+            return -1L;
+        }
+        if (detection.exposureDuration > 0L) {
+            return detection.exposureDuration;
+        }
+        if (fitsFiles == null || detection.sourceFrameIndex < 0 || detection.sourceFrameIndex >= fitsFiles.length) {
+            return -1L;
+        }
+        FitsFileInformation frameInfo = fitsFiles[detection.sourceFrameIndex];
+        return frameInfo != null ? frameInfo.getExposureDurationMillis() : -1L;
+    }
+
     private static String compactMetricBox(String value, String label) {
         return "<div class='metric-box compact'>"
                 + "<span class='metric-value'>" + escapeHtml(value) + "</span>"
@@ -2488,9 +2575,14 @@ public class ImageDisplayUtils {
                     CropBounds cb = new CropBounds(track, trackCropPadding);
                     SourceExtractor.DetectedObject pt = track.points.get(0);
                     int frameIndex = pt.sourceFrameIndex;
+                    int partCount = track.points.size();
+                    String partBadge = partCount > 1
+                            ? " <span style='background: #6b4a20; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>" + partCount + " Parts</span>"
+                            : "";
 
                     report.println("<div class='detection-card streak-title'>");
-                    report.println("<div class='detection-title'>Single Streak Event S" + counter + "</div>");
+                    report.println("<div class='detection-title'>Single Streak Event S" + counter + partBadge + "</div>");
+                    report.print(buildSingleFrameEventSummaryHtml(track, fitsFiles));
 
                     short[][] croppedData = robustEdgeAwareCrop(rawFrames.get(frameIndex), cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
                     BufferedImage streakImg = createDisplayImage(croppedData);
@@ -2505,9 +2597,21 @@ public class ImageDisplayUtils {
                     report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
                     report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
                     report.println("</div>");
-                    String metricsStr = buildStreakMetricsText(pt);
-                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + DetectionReportAstrometry.buildSourceCoordinateListEntry(pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr) + "</ul>");
-                    report.print(DetectionReportAstrometry.buildSingleFrameSkyViewerHtml(astrometryContext, pt, "Reference epoch for streak lookup"));
+                    report.println("<strong>Detection Coordinates & Part Metrics:</strong><ul class='source-list'>");
+                    for (int i = 0; i < track.points.size(); i++) {
+                        SourceExtractor.DetectedObject part = track.points.get(i);
+                        String metricsStr = buildStreakMetricsText(part);
+                        String fileLabel = partCount > 1
+                                ? "[Part " + (i + 1) + "] " + part.sourceFilename
+                                : part.sourceFilename;
+                        report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry(fileLabel, astrometryContext, part.x, part.y, metricsStr));
+                    }
+                    report.println("</ul>");
+                    if (partCount > 1) {
+                        report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(astrometryContext, track, "Reference epoch for single-streak frame lookup"));
+                    } else {
+                        report.print(DetectionReportAstrometry.buildSingleFrameSkyViewerHtml(astrometryContext, pt, "Reference epoch for streak lookup"));
+                    }
                     report.println("</div>");
 
                     counter++;

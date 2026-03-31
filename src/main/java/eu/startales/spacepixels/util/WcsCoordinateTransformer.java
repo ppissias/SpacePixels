@@ -8,6 +8,8 @@ import java.util.Map;
  * Supports standard celestial TAN projections with CD, PC+CDELT, or CDELT+CROTA matrices.
  */
 public final class WcsCoordinateTransformer {
+    private static final String STANDARD_CTYPE1 = "RA---TAN";
+    private static final String STANDARD_CTYPE2 = "DEC--TAN";
 
     private final double crpix1;
     private final double crpix2;
@@ -36,8 +38,8 @@ public final class WcsCoordinateTransformer {
             return null;
         }
 
-        String ctype1 = cleanHeaderValue(header.get("CTYPE1"));
-        String ctype2 = cleanHeaderValue(header.get("CTYPE2"));
+        String ctype1 = cleanHeaderValue(getHeaderValue(header, "CTYPE1"));
+        String ctype2 = cleanHeaderValue(getHeaderValue(header, "CTYPE2"));
         if (ctype1 == null || ctype2 == null) {
             return null;
         }
@@ -142,7 +144,7 @@ public final class WcsCoordinateTransformer {
     }
 
     private static Double parseDouble(Map<String, String> header, String key) {
-        String rawValue = cleanHeaderValue(header.get(key));
+        String rawValue = cleanHeaderValue(getHeaderValue(header, key));
         if (rawValue == null || rawValue.isEmpty()) {
             return null;
         }
@@ -152,6 +154,35 @@ public final class WcsCoordinateTransformer {
         } catch (NumberFormatException ex) {
             return null;
         }
+    }
+
+    private static String getHeaderValue(Map<String, String> header, String key) {
+        if (header == null || key == null) {
+            return null;
+        }
+
+        String direct = header.get(key);
+        if (direct != null) {
+            return direct;
+        }
+
+        direct = header.get(key.toUpperCase(Locale.US));
+        if (direct != null) {
+            return direct;
+        }
+
+        direct = header.get(key.toLowerCase(Locale.US));
+        if (direct != null) {
+            return direct;
+        }
+
+        for (Map.Entry<String, String> entry : header.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
+                return entry.getValue();
+            }
+        }
+
+        return null;
     }
 
     private static String cleanHeaderValue(String value) {

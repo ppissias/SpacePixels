@@ -9,8 +9,6 @@
  */
 package eu.startales.spacepixels.util;
 
-import io.github.ppissias.jplatesolve.PlateSolveResult;
-
 import java.util.HashMap;
 import java.util.Map;
 
@@ -27,7 +25,6 @@ public class FitsFileInformation {
     private int sizeHeight;
 
     private final Map<String, String> fitsHeader = new HashMap<String, String>();
-    private PlateSolveResult solveResult;
 
 
     public String getFilePath() {
@@ -85,14 +82,6 @@ public class FitsFileInformation {
 
     public void setFileName(String fileName) {
         this.fileName = fileName;
-    }
-
-    public PlateSolveResult getSolveResult() {
-        return solveResult;
-    }
-
-    public void setSolveResult(PlateSolveResult solveResult) {
-        this.solveResult = solveResult;
     }
 
     public Map<String, String> getFitsHeader() {
@@ -208,7 +197,7 @@ public class FitsFileInformation {
     @Override
     public String toString() {
         return "FitsFileInformation [filePath=" + filePath + ", monochrome=" + monochrome + ", sizeWidth=" + sizeWidth
-                + ", sizeHeight=" + sizeHeight + ", fitsHeader=" + fitsHeader + ", solveResult=" + solveResult + "]";
+                + ", sizeHeight=" + sizeHeight + ", fitsHeader=" + fitsHeader + "]";
     }
 
 }

@@ -34,6 +34,7 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -51,6 +52,23 @@ import java.util.concurrent.FutureTask;
  * running the pipeline.</p>
  */
 public class ImageProcessing {
+    private static final Set<String> FIXED_WCS_HEADER_KEYS = Set.of(
+            "WCSAXES",
+            "RADESYS",
+            "RADECSYS",
+            "LONPOLE",
+            "LATPOLE",
+            "EQUINOX",
+            "EPOCH",
+            "WCSNAME",
+            "A_ORDER",
+            "B_ORDER",
+            "AP_ORDER",
+            "BP_ORDER",
+            "A_DMAX",
+            "B_DMAX",
+            "AP_DMAX",
+            "BP_DMAX");
 
     @FunctionalInterface
     public interface DetectionSafetyPrompt {
@@ -1010,11 +1028,6 @@ public class ImageProcessing {
                         fileInfo.getFitsHeader().put(fitsHeaderCard.getKey(), fitsHeaderCard.getValue());
                     }
 
-                    PlateSolveResult previousSolveresult = readSolveResults(fpath);
-                    if (previousSolveresult != null) {
-                        fileInfo.setSolveResult(previousSolveresult);
-                    }
-
                     return fileInfo;
 
                 } finally {
@@ -1157,11 +1170,6 @@ public class ImageProcessing {
             while (iter.hasNext()) {
                 HeaderCard fitsHeaderCard = iter.next();
                 fileInfo.getFitsHeader().put(fitsHeaderCard.getKey(), fitsHeaderCard.getValue());
-            }
-
-            PlateSolveResult previousSolveresult = readSolveResults(currentFile.getAbsolutePath());
-            if (previousSolveresult != null) {
-                fileInfo.setSolveResult(previousSolveresult);
             }
 
             return new FitsMetadataLoadResult(fileInfo, width, height, bitpix);
@@ -1333,96 +1341,35 @@ public class ImageProcessing {
     }
 
     /**
-     * Persists a plate-solving result next to the FITS file as a simple INI-style sidecar.
-     */
-    public void writeSolveResults(String fitsFileFullPath, PlateSolveResult result) throws IOException {
-        String solveResultFilename = fitsFileFullPath.substring(0, fitsFileFullPath.lastIndexOf(".")) + "_result.ini";
-        File solveResultFile = new File(solveResultFilename);
-
-        Properties props = new Properties();
-        props.setProperty("success", String.valueOf(result.isSuccess()));
-        if (result.getFailureReason() != null) props.setProperty("failure_reason", result.getFailureReason());
-        if (result.getWarning() != null) props.setProperty("warning", result.getWarning());
-
-        Map<String, String> solveInformation = result.getSolveInformation();
-        if (solveInformation != null) {
-            for (Map.Entry<String, String> entry : solveInformation.entrySet()) {
-                if (entry.getValue() != null) props.setProperty(entry.getKey(), entry.getValue());
-            }
-        }
-
-        try (FileOutputStream fos = new FileOutputStream(solveResultFile)) {
-            props.store(fos, "SpacePixels Plate Solve Results");
-        }
-    }
-
-    /**
-     * Reads a previously saved plate-solving sidecar if one exists for the FITS file.
-     */
-    public PlateSolveResult readSolveResults(String fitsFileFullPath) {
-        String solveResultFilename = fitsFileFullPath.substring(0, fitsFileFullPath.lastIndexOf(".")) + "_result.ini";
-        File solveResultFile = new File(solveResultFilename);
-
-        if (solveResultFile.exists()) {
-            Properties props = new Properties();
-            try (FileInputStream fis = new FileInputStream(solveResultFile)) {
-                props.load(fis);
-
-                boolean success = Boolean.parseBoolean(props.getProperty("success", "false"));
-                String failure_reason = props.getProperty("failure_reason");
-                String warning = props.getProperty("warning");
-
-                Map<String, String> solveInfo = new HashMap<>();
-                for (String key : props.stringPropertyNames()) {
-                    if (!key.equals("success") && !key.equals("failure_reason") && !key.equals("warning")) {
-                        solveInfo.put(key, props.getProperty(key));
-                    }
-                }
-                return new PlateSolveResult(success, failure_reason, warning, solveInfo);
-            } catch (IOException e) {
-                ApplicationWindow.logger.warning("Could not read solve results: " + e.getMessage());
-            }
-        }
-        return null;
-    }
-
-    /**
      * Safely injects Plate Solve WCS coordinates directly into the original FITS header.
      * Uses a temporary file swap to prevent data corruption.
      */
-    public void updateFitsHeaderWithWCS(String fitsFileFullPath, Map<String, String> wcsData) throws Exception {
+    public Map<String, String> updateFitsHeaderWithWCS(String fitsFileFullPath, Map<String, String> wcsData) throws Exception {
+        if (wcsData == null || wcsData.isEmpty()) {
+            throw new IOException("No WCS solution metadata was provided.");
+        }
+
         File originalFile = new File(fitsFileFullPath);
         File tempFile = new File(fitsFileFullPath + ".tmp");
+        Map<String, String> updatedHeader;
 
         try (Fits fits = new Fits(originalFile)) {
             BasicHDU<?> hdu = getImageHDU(fits);
-            Header header = hdu.getHeader();
-
-            for (Map.Entry<String, String> entry : wcsData.entrySet()) {
-                String key = entry.getKey().toUpperCase();
-                String value = entry.getValue();
-
-                // Standard FITS keys cannot exceed 8 chars.
-                // This cleanly filters out internal JPlateSolve keys like 'annotated_image_link' or 'success'
-                if (key.length() > 8 || value == null) {
-                    continue;
-                }
-
-                // Infer types to write proper FITS header values
-                try {
-                    if (value.contains(".")) {
-                        header.addValue(key, Double.parseDouble(value), "SpacePixels WCS");
-                    } else {
-                        header.addValue(key, Integer.parseInt(value), "SpacePixels WCS");
-                    }
-                } catch (NumberFormatException e) {
-                    String cleanValue = value;
-                    if (cleanValue.startsWith("'") && cleanValue.endsWith("'")) {
-                        cleanValue = cleanValue.substring(1, cleanValue.length() - 1).trim();
-                    }
-                    header.addValue(key, cleanValue, "SpacePixels WCS");
-                }
+            if (hdu == null || hdu.getHeader() == null) {
+                throw new IOException("Could not locate an image header in " + originalFile.getName());
             }
+
+            Header header = hdu.getHeader();
+            clearExistingWcsHeader(header);
+            clearLegacySolveMetadata(header);
+
+            List<HeaderCard> wcsHeaderCards = resolveWcsHeaderCards(wcsData);
+            for (HeaderCard card : wcsHeaderCards) {
+                header.addLine(card.copy());
+            }
+
+            writeSolveProvenance(header, wcsData);
+            updatedHeader = extractHeaderMap(header);
             fits.write(tempFile);
         }
 
@@ -1432,6 +1379,309 @@ public class ImageProcessing {
             }
         } else {
             throw new IOException("Failed to delete original FITS file to overwrite it.");
+        }
+
+        return updatedHeader;
+    }
+
+    public void cleanupSolveArtifacts(String fitsFileFullPath, PlateSolveResult result) {
+        if (fitsFileFullPath == null || fitsFileFullPath.isEmpty()) {
+            return;
+        }
+
+        deleteFileQuietly(getLegacySolveResultFile(fitsFileFullPath));
+        deleteFileQuietly(getLegacyWcsSidecarFile(fitsFileFullPath, ".wcs"));
+        deleteFileQuietly(getLegacyWcsSidecarFile(fitsFileFullPath, ".WCS"));
+        deleteFileQuietly(getLegacyAstapIniFile(fitsFileFullPath));
+
+        if (result == null || result.getSolveInformation() == null) {
+            return;
+        }
+
+        deleteFileQuietly(resolveLocalFileReference(normalizeExternalUrl(getSolveMetadataValue(result.getSolveInformation(), "wcs_link"))));
+        deleteFileQuietly(resolveLocalFileReference(normalizeExternalUrl(getSolveMetadataValue(result.getSolveInformation(), "annotated_image_link"))));
+    }
+
+    private List<HeaderCard> resolveWcsHeaderCards(Map<String, String> wcsData) throws Exception {
+        String wcsLink = normalizeExternalUrl(getSolveMetadataValue(wcsData, "wcs_link"));
+        if (wcsLink != null && !wcsLink.isEmpty()) {
+            List<HeaderCard> cards = loadWcsHeaderCardsFromReference(wcsLink);
+            if (!cards.isEmpty()) {
+                return cards;
+            }
+        }
+
+        List<HeaderCard> cards = buildWcsHeaderCardsFromMetadata(wcsData);
+        if (!cards.isEmpty()) {
+            return cards;
+        }
+
+        throw new IOException("The solve result did not provide a usable WCS header.");
+    }
+
+    private List<HeaderCard> loadWcsHeaderCardsFromReference(String wcsReference) throws Exception {
+        File localWcsFile = resolveLocalFileReference(wcsReference);
+        if (localWcsFile != null) {
+            return readWcsHeaderCards(localWcsFile);
+        }
+
+        File temporaryWcsFile = Files.createTempFile("spacepixels-wcs-", ".fits").toFile();
+        try {
+            downloadFile(new URL(wcsReference), temporaryWcsFile.getAbsolutePath());
+            return readWcsHeaderCards(temporaryWcsFile);
+        } catch (Exception error) {
+            throw new IOException("Could not import WCS header from " + wcsReference + ": " + error.getMessage(), error);
+        } finally {
+            Files.deleteIfExists(temporaryWcsFile.toPath());
+        }
+    }
+
+    private File resolveLocalFileReference(String reference) {
+        if (reference == null || reference.isEmpty()) {
+            return null;
+        }
+
+        try {
+            URL url = new URL(reference);
+            if ("file".equalsIgnoreCase(url.getProtocol())) {
+                return new File(url.toURI());
+            }
+            return null;
+        } catch (Exception ignored) {
+            File file = new File(reference);
+            return file.isAbsolute() || file.exists() ? file : null;
+        }
+    }
+
+    private List<HeaderCard> readWcsHeaderCards(File wcsFitsFile) throws Exception {
+        try (Fits wcsFits = new Fits(wcsFitsFile)) {
+            BasicHDU<?> hdu = getImageHDU(wcsFits);
+            if (hdu == null || hdu.getHeader() == null) {
+                return Collections.emptyList();
+            }
+
+            List<HeaderCard> cards = new ArrayList<>();
+            Cursor<String, HeaderCard> iterator = hdu.getHeader().iterator();
+            while (iterator.hasNext()) {
+                HeaderCard card = iterator.next();
+                if (isWcsHeaderKey(card.getKey())) {
+                    cards.add(card.copy());
+                }
+            }
+            return cards;
+        }
+    }
+
+    private List<HeaderCard> buildWcsHeaderCardsFromMetadata(Map<String, String> metadata) throws HeaderCardException {
+        if (metadata == null || metadata.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Header temporaryHeader = new Header();
+        for (Map.Entry<String, String> entry : metadata.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                continue;
+            }
+
+            String key = entry.getKey().toUpperCase(Locale.US);
+            if (!isWcsHeaderKey(key)) {
+                continue;
+            }
+
+            writeHeaderValue(temporaryHeader, key, entry.getValue());
+        }
+
+        List<HeaderCard> cards = new ArrayList<>();
+        Cursor<String, HeaderCard> iterator = temporaryHeader.iterator();
+        while (iterator.hasNext()) {
+            HeaderCard card = iterator.next();
+            if (isWcsHeaderKey(card.getKey())) {
+                cards.add(card.copy());
+            }
+        }
+        return cards;
+    }
+
+    private void clearExistingWcsHeader(Header header) {
+        if (header == null) {
+            return;
+        }
+
+        List<String> keysToDelete = new ArrayList<>();
+        Cursor<String, HeaderCard> iterator = header.iterator();
+        while (iterator.hasNext()) {
+            HeaderCard card = iterator.next();
+            if (isWcsHeaderKey(card.getKey())) {
+                keysToDelete.add(card.getKey());
+            }
+        }
+
+        for (String key : keysToDelete) {
+            if (header.containsKey(key)) {
+                header.deleteKey(key);
+            }
+        }
+    }
+
+    private void clearLegacySolveMetadata(Header header) {
+        if (header == null) {
+            return;
+        }
+
+        for (String key : new String[]{"RA", "DEC", "PIXSCALE", "PARITY", "RADIUS", "SOURCE", "WCS_LINK", "PLTSOLVD", "WARNING", "ERROR"}) {
+            if (header.containsKey(key)) {
+                header.deleteKey(key);
+            }
+        }
+    }
+
+    private boolean isWcsHeaderKey(String key) {
+        if (key == null || key.isEmpty()) {
+            return false;
+        }
+
+        String upperKey = key.toUpperCase(Locale.US);
+        return FIXED_WCS_HEADER_KEYS.contains(upperKey)
+                || upperKey.matches("CTYPE\\d+")
+                || upperKey.matches("CRPIX\\d+")
+                || upperKey.matches("CRVAL\\d+")
+                || upperKey.matches("CUNIT\\d+")
+                || upperKey.matches("CDELT\\d+")
+                || upperKey.matches("CROTA\\d+")
+                || upperKey.matches("CD\\d+_\\d+")
+                || upperKey.matches("PC\\d+_\\d+")
+                || upperKey.matches("PV\\d+_\\d+")
+                || upperKey.matches("PS\\d+_\\d+")
+                || upperKey.matches("A_\\d+_\\d+")
+                || upperKey.matches("B_\\d+_\\d+")
+                || upperKey.matches("AP_\\d+_\\d+")
+                || upperKey.matches("BP_\\d+_\\d+");
+    }
+
+    private String getSolveMetadataValue(Map<String, String> metadata, String key) {
+        if (metadata == null || metadata.isEmpty() || key == null || key.isEmpty()) {
+            return null;
+        }
+
+        String direct = metadata.get(key);
+        if (direct != null) {
+            return direct;
+        }
+
+        for (Map.Entry<String, String> entry : metadata.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
+                return entry.getValue();
+            }
+        }
+
+        return null;
+    }
+
+    private String normalizeExternalUrl(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String normalized = value.trim();
+        if (normalized.startsWith("'") && normalized.endsWith("'") && normalized.length() > 1) {
+            normalized = normalized.substring(1, normalized.length() - 1).trim();
+        }
+
+        normalized = normalized.replace("\\:", ":").replace("\\=", "=");
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private void writeSolveProvenance(Header header, Map<String, String> wcsData) throws HeaderCardException {
+        String source = getSolveMetadataValue(wcsData, "source");
+        if (source != null && !source.isEmpty()) {
+            writeHeaderValue(header, "SOURCE", source);
+        }
+
+        String wcsLink = normalizeExternalUrl(getSolveMetadataValue(wcsData, "wcs_link"));
+        if (wcsLink != null && isRemoteReference(wcsLink)) {
+            writeHeaderValue(header, "WCS_LINK", wcsLink);
+        }
+    }
+
+    private boolean isRemoteReference(String reference) {
+        if (reference == null || reference.isEmpty()) {
+            return false;
+        }
+
+        try {
+            URL url = new URL(reference);
+            return !"file".equalsIgnoreCase(url.getProtocol());
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private Map<String, String> extractHeaderMap(Header header) {
+        Map<String, String> headerMap = new HashMap<>();
+        if (header == null) {
+            return headerMap;
+        }
+
+        Cursor<String, HeaderCard> iterator = header.iterator();
+        while (iterator.hasNext()) {
+            HeaderCard card = iterator.next();
+            if (card.getKey() != null && card.getValue() != null) {
+                headerMap.put(card.getKey(), card.getValue());
+            }
+        }
+        return headerMap;
+    }
+
+    private File getLegacySolveResultFile(String fitsFileFullPath) {
+        int extensionIndex = fitsFileFullPath.lastIndexOf('.');
+        String basePath = extensionIndex >= 0 ? fitsFileFullPath.substring(0, extensionIndex) : fitsFileFullPath;
+        return new File(basePath + "_result.ini");
+    }
+
+    private File getLegacyWcsSidecarFile(String fitsFileFullPath, String extension) {
+        int extensionIndex = fitsFileFullPath.lastIndexOf('.');
+        String basePath = extensionIndex >= 0 ? fitsFileFullPath.substring(0, extensionIndex) : fitsFileFullPath;
+        return new File(basePath + extension);
+    }
+
+    private File getLegacyAstapIniFile(String fitsFileFullPath) {
+        int extensionIndex = fitsFileFullPath.lastIndexOf('.');
+        String basePath = extensionIndex >= 0 ? fitsFileFullPath.substring(0, extensionIndex) : fitsFileFullPath;
+        return new File(basePath + ".ini");
+    }
+
+    private void deleteFileQuietly(File file) {
+        if (file == null || !file.isFile()) {
+            return;
+        }
+
+        try {
+            Files.deleteIfExists(file.toPath());
+        } catch (IOException ignored) {
+        }
+    }
+
+    private void writeHeaderValue(Header header, String key, String value) throws HeaderCardException {
+        if (header == null || key == null || key.isEmpty() || value == null) {
+            return;
+        }
+
+        if (header.containsKey(key)) {
+            header.deleteKey(key);
+        }
+
+        try {
+            if (value.contains(".")) {
+                header.addValue(key, Double.parseDouble(value), "SpacePixels WCS");
+            } else {
+                header.addValue(key, Integer.parseInt(value), "SpacePixels WCS");
+            }
+        } catch (NumberFormatException e) {
+            String cleanValue = value;
+            if (cleanValue.startsWith("'") && cleanValue.endsWith("'")) {
+                cleanValue = cleanValue.substring(1, cleanValue.length() - 1).trim();
+            }
+            header.addValue(key, cleanValue, "SpacePixels WCS");
         }
     }
 

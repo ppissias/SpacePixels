@@ -9,7 +9,6 @@
  */
 package eu.startales.spacepixels.gui;
 
-import io.github.ppissias.jplatesolve.PlateSolveResult;
 import eu.startales.spacepixels.util.FitsFileInformation;
 
 import javax.swing.table.AbstractTableModel;
@@ -59,11 +58,9 @@ public class FitsFileTableModel extends AbstractTableModel {
         return columns[col];
     }
 
-    @Override
-    public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
-        if (columnIndex == COL_SOLVED && aValue instanceof PlateSolveResult) {
-            fitsfiles[rowIndex].setSolveResult((PlateSolveResult) aValue);
-            fireTableCellUpdated(rowIndex, columnIndex); // Tell UI to redraw this cell
+    public void refreshRow(int rowIndex) {
+        if (rowIndex >= 0 && rowIndex < fitsfiles.length) {
+            fireTableRowsUpdated(rowIndex, rowIndex);
         }
     }
 
@@ -96,11 +93,7 @@ public class FitsFileTableModel extends AbstractTableModel {
                 return file.getLocation();
 
             case COL_SOLVED:
-                // It is solved if it has a saved ASTAP .ini result OR if it inherently has WCS headers
-                PlateSolveResult solveResult = file.getSolveResult();
-                boolean hasIniResult = (solveResult != null && solveResult.isSuccess());
-                boolean hasWcsHeader = file.isWcsSolved();
-                return (hasIniResult || hasWcsHeader) ? "Yes" : "No";
+                return file.isWcsSolved() ? "Yes" : "No";
 
             default:
                 return "";

@@ -47,10 +47,6 @@ public class PlateSolveTask implements Runnable {
             Future<PlateSolveResult> solveResultFuture = preProcessing.solve(filePath, useAstap, useAstrometryNet);
             PlateSolveResult result = solveResultFuture.get();
 
-            if (result.isSuccess()) {
-                preProcessing.writeSolveResults(filePath, result);
-            }
-
             // 3. Tell the UI we are done and pass the result
             eventBus.post(new SolveFinishedEvent(rowIndex, result));
 
