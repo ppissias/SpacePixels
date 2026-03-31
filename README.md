@@ -6,6 +6,10 @@ Instead of stacking away motion, SpacePixels analyzes the frame-to-frame changes
 
 Please check the [SpacePixels Wiki](https://github.com/ppissias/SpacePixels/wiki) or the [User Manual](MANUAL.md) for detailed instructions.
 
+Download the latest packaged release from:
+
+[SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases)
+
 ## 🔭 Why I Created SpacePixels: The Opposite of Stacking
 
 In modern astrophotography, our primary goal is almost always to create a single, deep, noise-free image of a deep-sky object. To do this, we take dozens or hundreds of individual sub-exposures and run them through stacking software.
@@ -51,6 +55,15 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 
 ![Sample Detection](https://startales.eu/various_files/anomaly_17_context.gif)
 *Sample Detection - high-energy anomaly, data credit cloudynights user TheStarsabove.*
+
+## Video Tutorial
+
+<a href="https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ" target="_blank">
+  <img src="https://img.youtube.com/vi/7XBdYh0Wn7A/mqdefault.jpg" alt="Watch the SpacePixels video tutorial on YouTube" width="320"/>
+</a>
+
+[Watch the video tutorial on YouTube](https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ)
+
 
 ## JTransient engine documentation
 
