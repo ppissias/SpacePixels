@@ -225,6 +225,35 @@ public class ApplicationWindow {
                 setTabEnabled(detectionConfigurationPanel, true);
 
                 configurationApplicationPanel.refreshComponents();
+
+                if (filesInfo != null) {
+                    int unusableTimestampCount = 0;
+                    StringBuilder examples = new StringBuilder();
+                    for (FitsFileInformation fileInfo : filesInfo) {
+                        if (fileInfo != null && fileInfo.hasDisplayableObservationDateWithoutUsableTimestamp()) {
+                            unusableTimestampCount++;
+                            if (examples.length() < 700) {
+                                examples.append(" - ")
+                                        .append(fileInfo.getFileName())
+                                        .append(": ")
+                                        .append(fileInfo.getObservationTimestampDiagnostics())
+                                        .append("\n");
+                            }
+                        }
+                    }
+
+                    if (unusableTimestampCount > 0) {
+                        JOptionPane.showMessageDialog(
+                                frmIpodImage,
+                                "SpacePixels imported " + unusableTimestampCount + " file(s) with a visible FITS date/time\n" +
+                                        "that still could not be converted into the timestamp passed to JTransient.\n\n" +
+                                        "Those frames will be sent with no usable timing information, so time-based linking\n" +
+                                        "and any timing-sensitive diagnostics may be skipped or degraded.\n\n" +
+                                        "Examples:\n" + examples,
+                                "Timestamp Parsing Warning",
+                                JOptionPane.WARNING_MESSAGE);
+                    }
+                }
                 
                 // --- Issue warning for large datasets ---
                 if (filesInfo != null && filesInfo.length > 100) {

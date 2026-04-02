@@ -96,12 +96,12 @@ public class IterativeDetectionTask implements Runnable {
                                 null,
                                 "The iterative engine found a very high number of detections in this pass (" + summary.totalDetections + ").\n\n" +
                                         "Breakdown:\n" +
-                                        " - Moving target tracks: " + summary.movingTargets + "\n" +
-                                        " - Multi-frame streak tracks: " + summary.streakTracks + "\n" +
+                                        " - Moving target tracks (non-streak): " + summary.movingTargets + "\n" +
+                                        " - Confirmed multi-frame streak tracks: " + summary.streakTracks + "\n" +
                                         " - Single streaks: " + summary.singleStreaks + "\n" +
                                         " - Single-frame anomalies: " + summary.anomalies + "\n" +
-                                        " - Suspected threshold streak tracks: " + summary.suspectedThresholdStreakTracks + "\n" +
-                                        " - Potential slow movers: " + summary.potentialSlowMovers + " (" + summary.slowMoverCandidates + " deep-stack candidates, " + summary.maximumStackTransientStreaks + " unmatched maximum-stack streaks)\n\n" +
+                                        " - Suspected streak tracks (anomaly groupings): " + summary.suspectedStreakTracks + "\n" +
+                                        " - Potential slow movers: " + summary.potentialSlowMovers + " (" + summary.slowMoverCandidates + " deep-stack candidates)\n\n" +
                                         "Generating the HTML report will take a long time.\n" +
                                         "Do you want to proceed?",
                                 "High Detection Count Warning",

@@ -120,12 +120,12 @@ public class DetectionTask implements Runnable {
                                     null,
                                     "The engine found an unusually high number of detections (" + summary.totalDetections + ").\n\n" +
                                             "Breakdown:\n" +
-                                            " - Moving target tracks: " + summary.movingTargets + "\n" +
-                                            " - Multi-frame streak tracks: " + summary.streakTracks + "\n" +
+                                            " - Moving target tracks (non-streak): " + summary.movingTargets + "\n" +
+                                            " - Confirmed multi-frame streak tracks: " + summary.streakTracks + "\n" +
                                             " - Single streaks: " + summary.singleStreaks + "\n" +
                                             " - Single-frame anomalies: " + summary.anomalies + "\n" +
-                                            " - Suspected threshold streak tracks: " + summary.suspectedThresholdStreakTracks + "\n" +
-                                            " - Potential slow movers: " + summary.potentialSlowMovers + " (" + summary.slowMoverCandidates + " deep-stack candidates, " + summary.maximumStackTransientStreaks + " unmatched maximum-stack streaks)\n\n" +
+                                            " - Suspected streak tracks (anomaly groupings): " + summary.suspectedStreakTracks + "\n" +
+                                            " - Potential slow movers: " + summary.potentialSlowMovers + " (" + summary.slowMoverCandidates + " deep-stack candidates)\n\n" +
                                             "Generating image crops, GIFs, and an HTML report for this many objects will take a long time and consume significant disk space.\n" +
                                             "This usually indicates the Detection Sigma was set too low and the engine linked background noise.\n\n" +
                                             "Do you want to proceed with generating the report anyway?",

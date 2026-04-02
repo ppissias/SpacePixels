@@ -583,6 +583,7 @@ public class ImageDisplayUtils {
                                                      List<TrackLinker.AnomalyDetection> anomalies,
                                                      List<TrackLinker.Track> singleStreaks,
                                                      List<TrackLinker.Track> streakTracks,
+                                                     List<TrackLinker.Track> suspectedStreakTracks,
                                                      List<TrackLinker.Track> movingTargets) {
         BufferedImage grayBg = createDisplayImage(backgroundData);
         BufferedImage rgbMap = new BufferedImage(grayBg.getWidth(), grayBg.getHeight(), BufferedImage.TYPE_INT_RGB);
@@ -613,6 +614,11 @@ public class ImageDisplayUtils {
         for (TrackLinker.Track t : streakTracks) {
             drawMultiFrameTrack(g2d, t, new Color(255, 204, 51), "ST" + stCounter);
             stCounter++;
+        }
+        int sstCounter = 1;
+        for (TrackLinker.Track t : suspectedStreakTracks) {
+            drawMultiFrameTrack(g2d, t, new Color(255, 128, 128), "SST" + sstCounter);
+            sstCounter++;
         }
         int tCounter = 1;
         for (TrackLinker.Track t : movingTargets) {
@@ -1099,14 +1105,14 @@ public class ImageDisplayUtils {
         g2d.drawLine(legendX, legendY, legendX + 20, legendY);
         g2d.fillOval(legendX + 17, legendY - 3, 6, 6);
         g2d.setColor(Color.WHITE);
-        g2d.drawString("Point Targets", legendX + 30, legendY + 4);
+        g2d.drawString("Moving Tracks", legendX + 30, legendY + 4);
         
         // Streak legend
         g2d.setColor(new Color(255, 204, 102));
         g2d.drawLine(legendX, legendY + 20, legendX + 20, legendY + 20);
         g2d.fillOval(legendX + 17, legendY + 17, 6, 6);
         g2d.setColor(Color.WHITE);
-        g2d.drawString("Streak Targets", legendX + 30, legendY + 24);
+        g2d.drawString("Streak Tracks", legendX + 30, legendY + 24);
 
         g2d.dispose();
         return img;
@@ -1117,9 +1123,9 @@ public class ImageDisplayUtils {
                                                             List<TrackLinker.AnomalyDetection> anomalies,
                                                             List<TrackLinker.Track> singleStreaks,
                                                             List<TrackLinker.Track> streakTracks,
+                                                            List<TrackLinker.Track> suspectedStreakTracks,
                                                             List<TrackLinker.Track> movingTargets,
                                                             List<SourceExtractor.DetectedObject> slowMoverCandidates,
-                                                            List<SourceExtractor.DetectedObject> masterMaximumStackTransientStreaks,
                                                             PipelineTelemetry pipelineTelemetry) {
         CreativeTributeLayout layout = createCreativeTributeLayout(
                 backgroundData,
@@ -1127,9 +1133,9 @@ public class ImageDisplayUtils {
                 anomalies,
                 singleStreaks,
                 streakTracks,
+                suspectedStreakTracks,
                 movingTargets,
-                slowMoverCandidates,
-                masterMaximumStackTransientStreaks
+                slowMoverCandidates
         );
 
         short[][] croppedBackground = robustEdgeAwareCrop(
@@ -1170,6 +1176,9 @@ public class ImageDisplayUtils {
         for (TrackLinker.Track track : streakTracks) {
             drawGlowingTrack(g2d, track, layout, new Color(255, 204, 102), 2.8f, 9.5f);
         }
+        for (TrackLinker.Track track : suspectedStreakTracks) {
+            drawGlowingTrack(g2d, track, layout, new Color(255, 128, 128), 2.4f, 8.2f);
+        }
         for (TrackLinker.AnomalyDetection anomaly : anomalies) {
             if (anomaly != null && anomaly.object != null) {
                 drawCreativePulse(g2d, anomaly.object, layout, new Color(255, 102, 204));
@@ -1183,11 +1192,6 @@ public class ImageDisplayUtils {
         if (slowMoverCandidates != null) {
             for (SourceExtractor.DetectedObject candidate : slowMoverCandidates) {
                 drawCreativeDiamond(g2d, candidate, layout, new Color(186, 122, 255), 16);
-            }
-        }
-        if (masterMaximumStackTransientStreaks != null) {
-            for (SourceExtractor.DetectedObject streak : masterMaximumStackTransientStreaks) {
-                drawCreativeMeasuredStreak(g2d, streak, layout, new Color(255, 214, 112), 1.35);
             }
         }
 
@@ -1238,8 +1242,8 @@ public class ImageDisplayUtils {
 
         int rawTransientCount = countTotalTransientDetections(allTransients);
         int confirmedTrackCount = movingTargets.size() + streakTracks.size();
-        int deepStackHintCount = (slowMoverCandidates == null ? 0 : slowMoverCandidates.size())
-                + (masterMaximumStackTransientStreaks == null ? 0 : masterMaximumStackTransientStreaks.size());
+        int suspectedStreakCount = suspectedStreakTracks == null ? 0 : suspectedStreakTracks.size();
+        int deepStackHintCount = slowMoverCandidates == null ? 0 : slowMoverCandidates.size();
         double longestPath = computeLongestTrackPathPx(streakTracks, movingTargets);
         String dominantMotion = computeDominantMotionLabel(movingTargets, streakTracks);
 
@@ -1256,11 +1260,13 @@ public class ImageDisplayUtils {
         y += 24;
         g2d.drawString("Raw transients: " + rawTransientCount + " | Confirmed tracks: " + confirmedTrackCount, textX, y);
         y += 24;
-        g2d.drawString("Anomalies: " + anomalies.size() + " | Single streaks: " + singleStreaks.size() + " | Deep-stack hints: " + deepStackHintCount, textX, y);
+        g2d.drawString("Suspected streak tracks: " + suspectedStreakCount + " | Anomalies: " + anomalies.size(), textX, y);
         y += 24;
-        g2d.drawString("Dominant motion: " + dominantMotion + " | Longest linked path: " + String.format(Locale.US, "%.1f px", longestPath), textX, y);
+        g2d.drawString("Single streaks: " + singleStreaks.size() + " | Deep-stack hints: " + deepStackHintCount, textX, y);
+        y += 24;
+        g2d.drawString("Dominant confirmed motion: " + dominantMotion + " | Longest confirmed path: " + String.format(Locale.US, "%.1f px", longestPath), textX, y);
 
-        int legendHeight = Math.min(layout.headerHeight - (panelPadding * 2), 186);
+        int legendHeight = Math.min(layout.headerHeight - (panelPadding * 2), 204);
         int legendX = panelPadding + leftPanelWidth + interPanelGap;
         int legendY = panelPadding;
         g2d.setColor(new Color(10, 10, 16, 175));
@@ -1272,16 +1278,18 @@ public class ImageDisplayUtils {
         g2d.setColor(Color.WHITE);
         g2d.drawString("What the colors and symbols mean", legendX + 18, legendY + 28);
 
-        int legendRowY = legendY + 58;
+        int legendRowY = legendY + 52;
         Font legendFont = new Font("Segoe UI", Font.PLAIN, Math.max(12, Math.min(15, layout.outputWidth / 95)));
-        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(66, 210, 255), "Linked mover track (line + nodes)", legendFont, CreativeLegendGlyph.TRACK);
-        legendRowY += 26;
-        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 204, 102), "Streak paths / streak markers", legendFont, CreativeLegendGlyph.STREAK);
-        legendRowY += 26;
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(66, 210, 255), "Moving object track (line + nodes)", legendFont, CreativeLegendGlyph.TRACK);
+        legendRowY += 24;
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 204, 102), "Confirmed streak track / single streak", legendFont, CreativeLegendGlyph.STREAK);
+        legendRowY += 24;
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 128, 128), "Suspected streak grouping", legendFont, CreativeLegendGlyph.TRACK);
+        legendRowY += 24;
         drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 102, 204), "Anomaly pulse (circle + crosshair)", legendFont, CreativeLegendGlyph.PULSE);
-        legendRowY += 26;
+        legendRowY += 24;
         drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(186, 122, 255), "Deep-stack hint (diamond)", legendFont, CreativeLegendGlyph.DIAMOND);
-        legendRowY += 26;
+        legendRowY += 24;
         drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(150, 220, 255), "Transient dust time map (cyan -> magenta)", legendFont, CreativeLegendGlyph.DUST);
 
         g2d.dispose();
@@ -1438,9 +1446,9 @@ public class ImageDisplayUtils {
                                                                      List<TrackLinker.AnomalyDetection> anomalies,
                                                                      List<TrackLinker.Track> singleStreaks,
                                                                      List<TrackLinker.Track> streakTracks,
+                                                                     List<TrackLinker.Track> suspectedStreakTracks,
                                                                      List<TrackLinker.Track> movingTargets,
-                                                                     List<SourceExtractor.DetectedObject> slowMoverCandidates,
-                                                                     List<SourceExtractor.DetectedObject> masterMaximumStackTransientStreaks) {
+                                                                     List<SourceExtractor.DetectedObject> slowMoverCandidates) {
         int imageWidth = backgroundData[0].length;
         int imageHeight = backgroundData.length;
 
@@ -1448,9 +1456,9 @@ public class ImageDisplayUtils {
         includeCreativeAnomalyBounds(bounds, anomalies);
         includeCreativeTrackBounds(bounds, singleStreaks);
         includeCreativeTrackBounds(bounds, streakTracks);
+        includeCreativeTrackBounds(bounds, suspectedStreakTracks);
         includeCreativeTrackBounds(bounds, movingTargets);
         includeCreativeDetectionBounds(bounds, slowMoverCandidates);
-        includeCreativeDetectionBounds(bounds, masterMaximumStackTransientStreaks);
 
         if (bounds[0] == Double.MAX_VALUE) {
             includeCreativeTransientBounds(bounds, allTransients);
@@ -1489,7 +1497,7 @@ public class ImageDisplayUtils {
         scale = Math.min((double) outputWidth / cropWidth, (double) outputHeight / cropHeight);
         outputWidth = Math.max(1, (int) Math.round(cropWidth * scale));
         outputHeight = Math.max(1, (int) Math.round(cropHeight * scale));
-        int headerHeight = Math.max(230, Math.min(280, outputWidth / 4));
+        int headerHeight = Math.max(270, Math.min(320, outputWidth / 3));
         int canvasHeight = outputHeight + headerHeight;
         int plotOffsetY = headerHeight;
 
@@ -2022,6 +2030,42 @@ public class ImageDisplayUtils {
         }
     }
 
+    private static int getAnomalyDisplayOrder(TrackLinker.AnomalyDetection anomaly) {
+        if (anomaly == null || anomaly.type == null) {
+            return 2;
+        }
+        switch (anomaly.type) {
+            case PEAK_SIGMA:
+                return 0;
+            case INTEGRATED_SIGMA:
+                return 1;
+            default:
+                return 2;
+        }
+    }
+
+    private static List<TrackLinker.AnomalyDetection> sortAnomaliesForDisplay(List<TrackLinker.AnomalyDetection> anomalies) {
+        List<TrackLinker.AnomalyDetection> ordered = new ArrayList<>();
+        if (anomalies != null) {
+            ordered.addAll(anomalies);
+        }
+        ordered.sort((left, right) -> Integer.compare(getAnomalyDisplayOrder(left), getAnomalyDisplayOrder(right)));
+        return ordered;
+    }
+
+    private static int countAnomaliesOfType(List<TrackLinker.AnomalyDetection> anomalies, TrackLinker.AnomalyType type) {
+        if (anomalies == null || anomalies.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (TrackLinker.AnomalyDetection anomaly : anomalies) {
+            if (anomaly != null && anomaly.type == type) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     private static String buildTrackTimingSummaryHtml(TrackLinker.Track track) {
         if (track == null || track.points == null || track.points.isEmpty()) {
             return "";
@@ -2194,31 +2238,32 @@ public class ImageDisplayUtils {
                                                  DetectionConfig config,
                                                  AppConfig appConfig) throws IOException {
 
-        // Extract variables from the PipelineResult to keep the rendering logic unchanged
+        // Extract variables from the PipelineResult and normalize newer track categories for rendering.
         List<TrackLinker.Track> tracks = result.tracks != null ? result.tracks : new ArrayList<>();
-        List<TrackLinker.AnomalyDetection> anomalies = result.anomalies != null ? result.anomalies : new ArrayList<>();
-        List<TrackLinker.Track> suspectedThresholdStreakTracks = result.suspectedThresholdStreakTracks != null
-                ? result.suspectedThresholdStreakTracks
-                : new ArrayList<>();
-        TrackerTelemetry linkerTelemetry = result.telemetry != null ? result.telemetry.trackerTelemetry : null;
+        List<TrackLinker.AnomalyDetection> anomalies = sortAnomaliesForDisplay(result.anomalies);
+        PipelineTelemetry pipelineTelemetry = result.telemetry;
+        TrackerTelemetry linkerTelemetry = pipelineTelemetry != null ? pipelineTelemetry.trackerTelemetry : null;
         short[][] masterStackData = result.masterStackData;
-        short[][] masterMaximumStackData = result.masterMaximumStackData;
-        boolean[][] masterMask = result.masterMask;
+        short[][] maximumStackData = result.maximumStackData;
+        boolean[][] masterVetoMask = result.masterVetoMask;
         List<SourceExtractor.DetectedObject> masterStars = result.masterStars;
         short[][] slowMoverStackData = result.slowMoverStackData;
-        boolean[][] slowMoverMedianArtifactMask = result.slowMoverMedianArtifactMask;
+        boolean[][] slowMoverMedianVetoMask = result.slowMoverMedianVetoMask;
         List<SourceExtractor.DetectedObject> slowMoverCandidates = result.slowMoverCandidates;
-        PipelineResult.SlowMoverTelemetry slowMoverTelemetry = result.slowMoverTelemetry;
-        List<SourceExtractor.DetectedObject> masterMaximumStackTransientStreaks = result.masterMaximumStackTransientStreaks;
-        PipelineTelemetry pipelineTelemetry = result.telemetry;
-        List<List<SourceExtractor.DetectedObject>> allTransients = result.allTransients;
+        PipelineTelemetry.SlowMoverTelemetry slowMoverTelemetry = pipelineTelemetry != null ? pipelineTelemetry.slowMoverTelemetry : null;
+        List<List<SourceExtractor.DetectedObject>> allRemainingTransients = result.allRemainingTransients;
         DetectionReportAstrometry.Context astrometryContext = DetectionReportAstrometry.buildContext(fitsFiles, appConfig);
         List<TrackLinker.Track> singleStreaks = new ArrayList<>();
         List<TrackLinker.Track> streakTracks = new ArrayList<>();
         List<TrackLinker.Track> movingTargets = new ArrayList<>();
+        List<TrackLinker.Track> suspectedStreakTracks = new ArrayList<>();
 
         for (TrackLinker.Track track : tracks) {
             if (track.points == null || track.points.isEmpty()) continue;
+            if (track.isSuspectedStreakTrack) {
+                suspectedStreakTracks.add(track);
+                continue;
+            }
             java.util.Set<Integer> uniqueFrames = new java.util.HashSet<>();
             for (SourceExtractor.DetectedObject pt : track.points) uniqueFrames.add(pt.sourceFrameIndex);
 
@@ -2231,18 +2276,27 @@ public class ImageDisplayUtils {
         }
 
         int slowMoverCandidateCount = slowMoverCandidates == null ? 0 : slowMoverCandidates.size();
-        int maximumStackTransientStreakCount = masterMaximumStackTransientStreaks == null ? 0 : masterMaximumStackTransientStreaks.size();
-        int potentialSlowMoverCount = slowMoverCandidateCount + maximumStackTransientStreakCount;
-        int linkedTrackCount = movingTargets.size() + streakTracks.size();
+        int potentialSlowMoverCount = slowMoverCandidateCount;
+        int singleStreakMetric = singleStreaks.size();
+        int confirmedLinkedTrackMetric = movingTargets.size() + streakTracks.size();
+        int suspectedStreakTrackMetric = pipelineTelemetry != null ? pipelineTelemetry.totalSuspectedStreakTracksFound : suspectedStreakTracks.size();
+        int returnedTrackMetric = pipelineTelemetry != null
+                ? pipelineTelemetry.totalTracksFound
+                : singleStreakMetric + confirmedLinkedTrackMetric + suspectedStreakTrackMetric;
+        int masterStarMetric = pipelineTelemetry != null ? pipelineTelemetry.totalMasterStarsIdentified : (masterStars == null ? 0 : masterStars.size());
+        int anomalyMetric = pipelineTelemetry != null ? pipelineTelemetry.totalAnomaliesFound : anomalies.size();
+        int peakSigmaAnomalyCount = countAnomaliesOfType(anomalies, TrackLinker.AnomalyType.PEAK_SIGMA);
+        int integratedSigmaAnomalyCount = countAnomaliesOfType(anomalies, TrackLinker.AnomalyType.INTEGRATED_SIGMA);
+        int otherAnomalyCount = Math.max(0, anomalyMetric - peakSigmaAnomalyCount - integratedSigmaAnomalyCount);
 
         if (!exportDir.exists()) exportDir.mkdirs();
 
         // --- EXPORT MASTER DIAGNOSTICS ---
-        if (masterStackData != null && masterMask != null) {
+        if (masterStackData != null && masterVetoMask != null) {
             BufferedImage masterImg = createDisplayImage(masterStackData);
             saveTrackImageLossless(masterImg, new File(exportDir, "master_stack.png"));
 
-            BufferedImage masterMaskImg = createMasterMaskOverlay(masterStackData, masterMask);
+            BufferedImage masterMaskImg = createMasterMaskOverlay(masterStackData, masterVetoMask);
             saveTrackImageLossless(masterMaskImg, new File(exportDir, "master_mask_overlay.png"));
         }
 
@@ -2319,24 +2373,36 @@ public class ImageDisplayUtils {
                 report.println("<div class='metric-box'><span class='metric-value'>" + pipelineTelemetry.totalFramesLoaded + "</span><span class='metric-label'>Total Frames</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + pipelineTelemetry.totalFramesKept + " <span style='color:#555; font-size: 16px;'>/ " + pipelineTelemetry.totalFramesRejected + "</span></span><span class='metric-label'>Kept / Rejected</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + pipelineTelemetry.totalRawObjectsExtracted + "</span><span class='metric-label'>Raw Objects Extracted</span></div>");
-                report.println("<div class='metric-box'><span class='metric-value'>" + linkedTrackCount + "</span><span class='metric-label'>Linked Tracks</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + masterStarMetric + "</span><span class='metric-label'>Master Stars</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + returnedTrackMetric + "</span><span class='metric-label'>Tracks Returned</span></div>");
                 report.println("</div>");
                 report.println("</div>");
 
                 report.println("<div class='panel'>");
                 report.println("<h2>Detection Breakdown</h2>");
-                report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Final report sections summarized up front so linked targets, anomalies, suspected threshold streak groups, and potential slow movers are visible immediately.</p>");
+                report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Final report sections summarized up front so confirmed tracks, anomalies, suspected streak tracks, and potential slow movers are visible immediately.</p>");
                 report.println("<div class='flex-container'>");
-                report.println("<div class='metric-box'><span class='metric-value'>" + singleStreaks.size() + "</span><span class='metric-label'>Streaks</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + singleStreakMetric + "</span><span class='metric-label'>Streaks</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + streakTracks.size() + "</span><span class='metric-label'>Streak Tracks</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + movingTargets.size() + "</span><span class='metric-label'>Moving Object Tracks</span></div>");
-                report.println("<div class='metric-box'><span class='metric-value'>" + anomalies.size() + "</span><span class='metric-label'>Single-Frame Anomalies</span></div>");
-                report.println("<div class='metric-box'><span class='metric-value'>" + suspectedThresholdStreakTracks.size() + "</span><span class='metric-label'>Suspected Threshold Streaks</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + anomalyMetric + "</span><span class='metric-label'>Single-Frame Anomalies</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + suspectedStreakTrackMetric + "</span><span class='metric-label'>Suspected Streak Tracks</span></div>");
                 String potentialSlowMoverMetric = config.enableSlowMoverDetection ? String.valueOf(potentialSlowMoverCount) : "Off";
                 report.println("<div class='metric-box'><span class='metric-value'>" + potentialSlowMoverMetric + "</span><span class='metric-label'>Potential Slow Movers</span></div>");
                 report.println("</div>");
+                report.println("<div class='astro-note'>JTransient returned <strong>" + returnedTrackMetric + "</strong> track-like detections overall: <strong>" + singleStreakMetric + "</strong> single-frame streaks, <strong>" + confirmedLinkedTrackMetric + "</strong> confirmed linked tracks, and <strong>" + suspectedStreakTrackMetric + "</strong> suspected streak groupings.</div>");
+                if (!anomalies.isEmpty()) {
+                    report.println("<div class='astro-note'>Single-frame anomaly type split shown below matches the order used in the anomaly cards and A# map labels.</div>");
+                    report.println("<div class='flex-container'>");
+                    report.println("<div class='metric-box compact'><span class='metric-value'>" + peakSigmaAnomalyCount + "</span><span class='metric-label'>Peak-Sigma Anomalies</span></div>");
+                    report.println("<div class='metric-box compact'><span class='metric-value'>" + integratedSigmaAnomalyCount + "</span><span class='metric-label'>Integrated-Sigma Anomalies</span></div>");
+                    if (otherAnomalyCount > 0) {
+                        report.println("<div class='metric-box compact'><span class='metric-value'>" + otherAnomalyCount + "</span><span class='metric-label'>Other / Unknown Anomalies</span></div>");
+                    }
+                    report.println("</div>");
+                }
                 if (config.enableSlowMoverDetection) {
-                    report.println("<div class='astro-note'>Potential slow movers include " + slowMoverCandidateCount + " deep-stack candidates and " + maximumStackTransientStreakCount + " unmatched maximum-stack streaks.</div>");
+                    report.println("<div class='astro-note'>Potential slow movers currently reflect " + slowMoverCandidateCount + " deep-stack candidates.</div>");
                 } else {
                     report.println("<div class='astro-note'>Potential slow mover analysis was disabled for this session.</div>");
                 }
@@ -2502,9 +2568,11 @@ public class ImageDisplayUtils {
                 // --- Star Map Purification Table ---
                 report.println("<div class='panel'>");
                 report.println("<h2>Phase 3: Stationary Star Purification</h2>");
-                report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
-                report.println("Total Stationary Stars Purged Across Sequence: <span style='color: #4da6ff; font-weight: bold;'>" + linkerTelemetry.totalStationaryStarsPurged + "</span>");
-                report.println("</p>");
+                report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Master-mask purification removes stationary point-like residues and same-mask stationary streaks before the moving-object linker runs.</p>");
+                report.println("<div class='flex-container' style='margin-bottom: 10px;'>");
+                report.println("<div class='metric-box compact'><span class='metric-value'>" + linkerTelemetry.totalStationaryStarsPurged + "</span><span class='metric-label'>Stationary Stars Purged</span></div>");
+                report.println("<div class='metric-box compact'><span class='metric-value'>" + linkerTelemetry.totalStationaryStreaksPurged + "</span><span class='metric-label'>Stationary Streaks Purged</span></div>");
+                report.println("</div>");
                 report.println("<table><tr><th>Frame Index</th><th>Filename</th><th>Initial Point Sources</th><th>Stars Purged</th><th>Surviving Transients</th></tr>");
 
                 for (TrackerTelemetry.FrameStarMapStat starStat : linkerTelemetry.frameStarMapStats) {
@@ -2532,10 +2600,14 @@ public class ImageDisplayUtils {
                 report.println("<table>");
                 report.println("<tr><th>Filter Phase</th><th>Rejection Reason</th><th>Points Rejected</th></tr>");
 
+                report.println("<tr><td>0. Single Streak</td><td>Binary-Star-Like Shape Veto</td><td>" + linkerTelemetry.rejectedBinaryStarStreakShape + "</td></tr>");
+                report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Non-Positive Time Delta</td><td>" + linkerTelemetry.countBaselineNonPositiveDelta + "</td></tr>");
                 report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Stationary / Jitter</td><td>" + linkerTelemetry.countBaselineJitter + "</td></tr>");
                 report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Exceeded Max Jump Velocity</td><td>" + linkerTelemetry.countBaselineJump + "</td></tr>");
                 report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Morphological Size Mismatch</td><td>" + linkerTelemetry.countBaselineSize + "</td></tr>");
 
+                report.println("<tr><td>2. Track Search (p3)</td><td>Non-Positive Time Delta</td><td>" + linkerTelemetry.countP3NonPositiveDelta + "</td></tr>");
+                report.println("<tr><td>2. Track Search (p3)</td><td>Velocity Mismatch</td><td>" + linkerTelemetry.countP3VelocityMismatch + "</td></tr>");
                 report.println("<tr><td>2. Track Search (p3)</td><td>Off Predicted Trajectory Line</td><td>" + linkerTelemetry.countP3NotLine + "</td></tr>");
                 report.println("<tr><td>2. Track Search (p3)</td><td>Wrong Direction / Angle</td><td>" + linkerTelemetry.countP3WrongDirection + "</td></tr>");
                 report.println("<tr><td>2. Track Search (p3)</td><td>Exceeded Max Jump Velocity</td><td>" + linkerTelemetry.countP3Jump + "</td></tr>");
@@ -2546,12 +2618,15 @@ public class ImageDisplayUtils {
                 report.println("<tr><td>3. Final Track</td><td>Duplicate Track (Ignored)</td><td>" + linkerTelemetry.countTrackDuplicate + "</td></tr>");
                 report.println("</table>");
                 report.println("<p class='astro-note' style='margin-top: 12px;'>");
-                report.println("Phase outputs: <strong>" + linkerTelemetry.streakTracksFound + "</strong> accepted streak tracks, <strong>" + linkerTelemetry.pointTracksFound + "</strong> accepted point tracks, and <strong>" + linkerTelemetry.anomaliesFound + "</strong> rescued anomalies.");
-                if (linkerTelemetry.integratedSigmaAnomaliesFound > 0) {
-                    report.println(" <strong>" + linkerTelemetry.integratedSigmaAnomaliesFound + "</strong> anomaly rescues came from the integrated-sigma path.");
+                report.println("Confirmed phase outputs: <strong>" + linkerTelemetry.streakTracksFound + "</strong> accepted streak tracks, <strong>" + linkerTelemetry.pointTracksFound + "</strong> accepted point tracks, and <strong>" + anomalyMetric + "</strong> rescued anomalies.");
+                if (anomalyMetric > 0) {
+                    report.println(" The anomaly split was <strong>" + peakSigmaAnomalyCount + "</strong> peak-sigma and <strong>" + integratedSigmaAnomalyCount + "</strong> integrated-sigma.");
+                    if (otherAnomalyCount > 0) {
+                        report.println(" <strong>" + otherAnomalyCount + "</strong> anomaly rescues carried other or unknown type labels.");
+                    }
                 }
-                if (!suspectedThresholdStreakTracks.isEmpty()) {
-                    report.println(" Post-anomaly same-frame grouping produced <strong>" + suspectedThresholdStreakTracks.size() + "</strong> suspected threshold streak tracks.");
+                if (linkerTelemetry.suspectedStreakTracksFound > 0) {
+                    report.println(" The tracker also flagged <strong>" + linkerTelemetry.suspectedStreakTracksFound + "</strong> suspected streak tracks.");
                 }
                 report.println("</p>");
 
@@ -2563,8 +2638,8 @@ public class ImageDisplayUtils {
             // =================================================================
             report.println("<h2>Target Visualizations</h2>");
 
-            if (singleStreaks.isEmpty() && streakTracks.isEmpty() && movingTargets.isEmpty() && anomalies.isEmpty() && suspectedThresholdStreakTracks.isEmpty()) {
-                report.println("<div class='panel'><p>No moving tracks, single-frame streaks, anomaly rescues, or suspected threshold streak groupings were detected in this session.</p></div>");
+            if (singleStreaks.isEmpty() && streakTracks.isEmpty() && movingTargets.isEmpty() && anomalies.isEmpty() && suspectedStreakTracks.isEmpty()) {
+                report.println("<div class='panel'><p>No moving tracks, single-frame streaks, anomaly rescues, or suspected streak tracks were detected in this session.</p></div>");
             }
 
 
@@ -2618,8 +2693,12 @@ public class ImageDisplayUtils {
                 }
             }
 
-            if (!streakTracks.isEmpty()) {
-                report.println("<h3 style='color: #ffcc33; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Multi-Frame Streak Tracks</h3>");
+            if (!streakTracks.isEmpty() || !suspectedStreakTracks.isEmpty()) {
+                report.println("<h3 style='color: #ffcc33; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Streak Tracks</h3>");
+                if (!suspectedStreakTracks.isEmpty()) {
+                    report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Suspected streak tracks grouped from same-frame rescued anomalies are shown here alongside the confirmed multi-frame streak tracks.</p>");
+                }
+
                 int counter = 1;
                 for (TrackLinker.Track track : streakTracks) {
                     CropBounds cb = new CropBounds(track, trackCropPadding);
@@ -2654,7 +2733,7 @@ public class ImageDisplayUtils {
 
                     report.println("<div class='detection-card streak-title' style='border-left-color: #ffcc33;'>");
                     String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
-                    report.println("<div class='detection-title' style='color: #ffcc33;'>Multi-Frame Streak Track ST" + counter + timeBadge + "</div>");
+                    report.println("<div class='detection-title' style='color: #ffcc33;'>Confirmed Streak Track ST" + counter + timeBadge + "</div>");
 
                     report.println("<div class='image-container'>");
                     report.println("<div><a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric Animation' /></a><br/><center><small>Star Centric</small></center></div>");
@@ -2671,6 +2750,55 @@ public class ImageDisplayUtils {
                     report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(astrometryContext, track, "Reference epoch for streak-track lookup"));
                     report.println("</div>");
                     counter++;
+                }
+
+                int suspectedCounter = 1;
+                for (TrackLinker.Track track : suspectedStreakTracks) {
+                    CropBounds cb = new CropBounds(track, trackCropPadding);
+                    SourceExtractor.DetectedObject pt = track.points.get(0);
+                    int frameIndex = pt.sourceFrameIndex;
+                    int partCount = track.points.size();
+                    String partBadge = partCount > 1
+                            ? " <span style='background: #6b4a20; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>" + partCount + " Parts</span>"
+                            : "";
+                    String groupingBadge = " <span style='background: #7a5a12; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>Same-Frame Anomaly Grouping</span>";
+
+                    report.println("<div class='detection-card streak-title' style='border-left-color: #ff9933;'>");
+                    report.println("<div class='detection-title' style='color: #ffb347;'>Suspected Streak Track SST" + suspectedCounter + partBadge + groupingBadge + "</div>");
+                    report.print(buildSingleFrameEventSummaryHtml(track, fitsFiles));
+
+                    short[][] croppedData = robustEdgeAwareCrop(rawFrames.get(frameIndex), cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
+                    BufferedImage streakImg = createDisplayImage(croppedData);
+                    String streakFileName = "suspected_streak_track_" + suspectedCounter + ".png";
+                    saveTrackImageLossless(streakImg, new File(exportDir, streakFileName));
+
+                    String shapeFileName = "suspected_streak_track_" + suspectedCounter + "_shape.png";
+                    BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY, false);
+                    saveTrackImageLossless(streakShapeImg, new File(exportDir, shapeFileName));
+
+                    report.println("<div class='image-container'>");
+                    report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
+                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
+                    report.println("</div>");
+
+                    report.println("<strong>Detection Coordinates & Part Metrics:</strong><ul class='source-list'>");
+                    for (int i = 0; i < track.points.size(); i++) {
+                        SourceExtractor.DetectedObject part = track.points.get(i);
+                        String metricsStr = buildStreakMetricsText(part);
+                        String fileLabel = partCount > 1
+                                ? "[Part " + (i + 1) + "] " + part.sourceFilename
+                                : part.sourceFilename;
+                        report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry(fileLabel, astrometryContext, part.x, part.y, metricsStr));
+                    }
+                    report.println("</ul>");
+                    if (partCount > 1) {
+                        report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(astrometryContext, track, "Reference epoch for suspected streak frame lookup"));
+                    } else {
+                        report.print(DetectionReportAstrometry.buildSingleFrameSkyViewerHtml(astrometryContext, pt, "Reference epoch for suspected streak lookup"));
+                    }
+                    report.println("</div>");
+
+                    suspectedCounter++;
                 }
             }
 
@@ -2776,6 +2904,7 @@ public class ImageDisplayUtils {
 
             if (!anomalies.isEmpty()) {
                 report.println("<h3 style='color: #ff3333; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single-Frame Anomalies (Optical Flashes)</h3>");
+                report.println("<div class='astro-note' style='margin-bottom: 15px;'>Ordered with peak-sigma rescues first, followed by integrated-sigma rescues.</div>");
                 int counter = 1;
                 for (TrackLinker.AnomalyDetection anomaly : anomalies) {
                     SourceExtractor.DetectedObject pt = anomaly.object;
@@ -2796,10 +2925,10 @@ public class ImageDisplayUtils {
 
                     String maskFileName = null;
                     MaskOverlapStats maskOverlapStats = new MaskOverlapStats(0, 0);
-                    if (masterStackData != null && masterMask != null) {
+                    if (masterStackData != null && masterVetoMask != null) {
                         BufferedImage maskOverlayImg = createCroppedMasterMaskOverlay(
                                 masterStackData,
-                                masterMask,
+                                masterVetoMask,
                                 cb.fixedCenterX,
                                 cb.fixedCenterY,
                                 cb.trackBoxWidth,
@@ -2808,7 +2937,7 @@ public class ImageDisplayUtils {
                         );
                         maskFileName = "anomaly_" + counter + "_master_mask.png";
                         saveTrackImageLossless(maskOverlayImg, new File(exportDir, maskFileName));
-                        maskOverlapStats = computeMaskOverlapStats(pt, masterMask, masterStackData[0].length, masterStackData.length);
+                        maskOverlapStats = computeMaskOverlapStats(pt, masterVetoMask, masterStackData[0].length, masterStackData.length);
                     }
 
                     String contextGifFileName = "anomaly_" + counter + "_context.gif";
@@ -2861,50 +2990,16 @@ public class ImageDisplayUtils {
                 }
             }
 
-            if (!suspectedThresholdStreakTracks.isEmpty()) {
-                report.println("<h3 style='color: #ff9933; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Suspected Threshold Streak Tracks</h3>");
-                int counter = 1;
-                for (TrackLinker.Track track : suspectedThresholdStreakTracks) {
-                    CropBounds cb = new CropBounds(track, trackCropPadding);
-                    SourceExtractor.DetectedObject pt = track.points.get(0);
-                    int frameIndex = pt.sourceFrameIndex;
-
-                    report.println("<div class='detection-card streak-title'>");
-                    report.println("<div class='detection-title'>Suspected Threshold Streak STS" + counter + "</div>");
-
-                    short[][] croppedData = robustEdgeAwareCrop(rawFrames.get(frameIndex), cb.fixedCenterX, cb.fixedCenterY, cb.trackBoxWidth, cb.trackBoxHeight);
-                    BufferedImage streakImg = createDisplayImage(croppedData);
-                    String streakFileName = "suspected_threshold_streak_" + counter + ".png";
-                    saveTrackImageLossless(streakImg, new File(exportDir, streakFileName));
-
-                    String shapeFileName = "suspected_threshold_streak_" + counter + "_shape.png";
-                    BufferedImage streakShapeImg = createSingleStreakShapeImage(track.points, cb.trackBoxWidth, cb.trackBoxHeight, cb.startX, cb.startY, false);
-                    saveTrackImageLossless(streakShapeImg, new File(exportDir, shapeFileName));
-
-                    report.println("<div class='image-container'>");
-                    report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
-                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
-                    report.println("</div>");
-                    String metricsStr = buildStreakMetricsText(pt);
-                    report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + DetectionReportAstrometry.buildSourceCoordinateListEntry(pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr) + "</ul>");
-                    report.print(DetectionReportAstrometry.buildSingleFrameSkyViewerHtml(astrometryContext, pt, "Reference epoch for suspected threshold streak lookup"));
-                    report.println("</div>");
-
-                    counter++;
-                }
-            }
-
             // =================================================================
             // 4. DEEP STACK ANOMALIES (ULTRA-SLOW MOVERS)
             // =================================================================
             if (config.enableSlowMoverDetection) {
                 boolean hasCandidates = slowMoverCandidates != null && !slowMoverCandidates.isEmpty();
-                boolean hasMaximumStackTransientStreaks = masterMaximumStackTransientStreaks != null && !masterMaximumStackTransientStreaks.isEmpty();
                 boolean hasTelemetry = slowMoverTelemetry != null;
                 boolean hasSlowMoverStack = slowMoverStackData != null;
-                boolean hasSlowMoverMask = slowMoverMedianArtifactMask != null;
+                boolean hasSlowMoverMask = slowMoverMedianVetoMask != null;
 
-                if (hasCandidates || hasTelemetry || hasMaximumStackTransientStreaks || hasSlowMoverStack || hasSlowMoverMask) {
+                if (hasCandidates || hasTelemetry || hasSlowMoverStack || hasSlowMoverMask) {
                     report.println("<h2>Deep Stack Anomalies (Ultra-Slow Mover Candidates)</h2>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
 
@@ -2964,11 +3059,11 @@ public class ImageDisplayUtils {
                                     "Slow Mover Stack",
                                     "slow_mover_" + smCounter + "_sm_stack.png",
                                     masterStackData,
-                                    slowMoverMedianArtifactMask,
+                                    slowMoverMedianVetoMask,
                                     "Slow-Mover Median Mask",
                                     "slow_mover_" + smCounter + "_median_mask.png",
                                     candidateOverlap,
-                                    masterMaximumStackData,
+                                    maximumStackData,
                                     "Maximum Stack",
                                     "slow_mover_" + smCounter + "_maximum_stack.png",
                                     "Slow Mover Diff",
@@ -2984,57 +3079,22 @@ public class ImageDisplayUtils {
                     } else {
                         report.println("<div class='panel'><p>No ultra-slow movers were detected that exceeded the dynamic threshold.</p></div>");
                     }
-                    if (hasMaximumStackTransientStreaks) {
-                        report.println("<h3 style='color: #ffcc66; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Master Maximum Stack Transient Streaks</h3>");
-                        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Streaks detected in the master maximum stack that were not matched to previously identified single-frame streaks. These may represent very slow movers, stack-enhanced movers, or artifacts worth manual inspection.</p>");
-                        report.println("<div class='flex-container'>");
-
-                        int streakCounter = 1;
-                        for (SourceExtractor.DetectedObject streak : masterMaximumStackTransientStreaks) {
-                            exportDeepStackDetectionCard(
-                                    report,
-                                    exportDir,
-                                    rawFrames,
-                                    streak,
-                                    astrometryContext,
-                                    masterMaximumStackData,
-                                    "Maximum Stack",
-                                    "master_max_streak_" + streakCounter + "_maximum_stack.png",
-                                    masterStackData,
-                                    null,
-                                    null,
-                                    null,
-                                    null,
-                                    null,
-                                    null,
-                                    null,
-                                    "Maximum Stack Diff",
-                                    "master_max_streak_" + streakCounter + "_diff.png",
-                                    "master_max_streak_" + streakCounter + "_anim.gif",
-                                    "master_max_streak_" + streakCounter + "_shape.png",
-                                    "Streak #" + streakCounter,
-                                    "#ffcc66"
-                            );
-                            streakCounter++;
-                        }
-                        report.println("</div>");
-                    }
                 }
             }
 
             // =================================================================
             // 4.5 GLOBAL TRAJECTORY MAP
             // =================================================================
-            if (!singleStreaks.isEmpty() || !streakTracks.isEmpty() || !movingTargets.isEmpty() || !anomalies.isEmpty()) {
+            if (!singleStreaks.isEmpty() || !streakTracks.isEmpty() || !suspectedStreakTracks.isEmpty() || !movingTargets.isEmpty() || !anomalies.isEmpty()) {
                 short[][] bgData = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
                 if (bgData != null) {
-                    BufferedImage globalMap = createGlobalTrackMap(bgData, anomalies, singleStreaks, streakTracks, movingTargets);
+                    BufferedImage globalMap = createGlobalTrackMap(bgData, anomalies, singleStreaks, streakTracks, suspectedStreakTracks, movingTargets);
                     saveTrackImageLossless(globalMap, new File(exportDir, "global_track_map.png"));
                     report.println("<div class='panel'>");
                     report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Trajectory Map</h3>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
-                    report.println("An overview of all detected transients and moving targets plotted over the master background. " +
-                            "Multi-frame tracks are connected with lines (<strong>T#</strong> for targets, <strong>ST#</strong> for streaks), while single-frame anomalies and single streaks are circled (<strong>A#</strong> and <strong>S#</strong>).</p>");
+                    report.println("An overview of the classified track outputs and single-frame events plotted over the master background. " +
+                            "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>SST#</strong> for suspected streak groupings), while single-frame anomalies and single streaks are circled (<strong>A#</strong> and <strong>S#</strong>).</p>");
                     report.println("<a href='global_track_map.png' target='_blank'><img src='global_track_map.png' class='native-size-image' style='border: 1px solid #555; border-radius: 4px;' alt='Global Track Map' /></a>");
                     report.println("</div>");
                 }
@@ -3043,13 +3103,13 @@ public class ImageDisplayUtils {
             // =================================================================
             // 5. GLOBAL TRANSIENT MAP (Overall Summary)
             // =================================================================
-            if (allTransients != null && !allTransients.isEmpty()) {
+            if (allRemainingTransients != null && !allRemainingTransients.isEmpty()) {
                 short[][] bgData = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
                 if (bgData != null) {
-                    BufferedImage transientMap = createGlobalTransientMap(bgData, allTransients);
+                    BufferedImage transientMap = createGlobalTransientMap(bgData, allRemainingTransients);
                     saveTrackImageLossless(transientMap, new File(exportDir, "global_transient_map.png"));
 
-                    BufferedImage rainbowMap = createRainbowClusterMap(bgData, allTransients);
+                    BufferedImage rainbowMap = createRainbowClusterMap(bgData, allRemainingTransients);
                     saveTrackImageLossless(rainbowMap, new File(exportDir, "rainbow_cluster_map.png"));
 
                     report.println("<div class='panel'>");
@@ -3081,29 +3141,29 @@ public class ImageDisplayUtils {
                 String creativeFileName = "creative_tribute_skyprint.png";
                 BufferedImage creativeTributeImage = createCreativeTributeImage(
                         creativeBgData,
-                        allTransients,
+                        allRemainingTransients,
                         anomalies,
                         singleStreaks,
                         streakTracks,
+                        suspectedStreakTracks,
                         movingTargets,
                         slowMoverCandidates,
-                        masterMaximumStackTransientStreaks,
                         pipelineTelemetry
                 );
                 saveTrackImageLossless(creativeTributeImage, new File(exportDir, creativeFileName));
 
-                int rawTransientCount = countTotalTransientDetections(allTransients);
-                int confirmedTrackCount = movingTargets.size() + streakTracks.size();
-                int deepStackHintCount = (slowMoverCandidates == null ? 0 : slowMoverCandidates.size())
-                        + (masterMaximumStackTransientStreaks == null ? 0 : masterMaximumStackTransientStreaks.size());
+                int rawTransientCount = countTotalTransientDetections(allRemainingTransients);
+                int confirmedTrackCount = confirmedLinkedTrackMetric;
+                int suspectedTrackCount = suspectedStreakTrackMetric;
+                int deepStackHintCount = potentialSlowMoverCount;
                 double longestPath = computeLongestTrackPathPx(streakTracks, movingTargets);
                 String dominantMotion = computeDominantMotionLabel(movingTargets, streakTracks);
 
                 report.println("<div class='panel' style='background: linear-gradient(180deg, #453049 0%, #2b2b2b 100%); border: 1px solid #5f536a;'>");
                 report.println("<h2>The AI's Perspective: Skyprint of the Session</h2>");
-                report.println("<p style='color: #c7bfd6; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>A creative tribute by Codex. This poster compresses the whole run into one image: faint time-mapped transient dust for everything that flashed through the extractor, brighter paths for linked movers, and separate markers for deep-stack hints that deserve a second look.</p>");
+                report.println("<p style='color: #c7bfd6; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>A creative tribute by Codex. This poster compresses the whole run into one image: faint time-mapped transient dust for everything that flashed through the extractor, separate paths for moving object tracks, confirmed streak tracks, and suspected streak groupings, plus distinct markers for anomaly pulses and deep-stack hints.</p>");
                 report.println("<a href='" + creativeFileName + "' target='_blank'><img src='" + creativeFileName + "' class='native-size-image' style='border: 1px solid #666; border-radius: 6px;' alt='Creative Tribute Skyprint' /></a>");
-                report.println("<p style='font-size: 13px; color: #b8b0c7; margin-bottom: 0;'>This session stitched together <strong style='color:#ffffff;'>" + rawTransientCount + "</strong> raw transients, produced <strong style='color:#ffffff;'>" + confirmedTrackCount + "</strong> linked tracks, surfaced <strong style='color:#ffffff;'>" + anomalies.size() + "</strong> single-frame anomalies, and left <strong style='color:#ffffff;'>" + deepStackHintCount + "</strong> deep-stack hints on the table. The dominant linked motion trends toward <strong style='color:#ffffff;'>" + dominantMotion + "</strong>, and the longest confirmed path spans <strong style='color:#ffffff;'>" + String.format(Locale.US, "%.1f px", longestPath) + "</strong>.</p>");
+                report.println("<p style='font-size: 13px; color: #b8b0c7; margin-bottom: 0;'>This session stitched together <strong style='color:#ffffff;'>" + rawTransientCount + "</strong> raw transients, produced <strong style='color:#ffffff;'>" + confirmedTrackCount + "</strong> confirmed linked tracks, flagged <strong style='color:#ffffff;'>" + suspectedTrackCount + "</strong> suspected streak tracks, surfaced <strong style='color:#ffffff;'>" + anomalyMetric + "</strong> single-frame anomalies, and left <strong style='color:#ffffff;'>" + deepStackHintCount + "</strong> deep-stack hints on the table. The dominant confirmed linked motion trends toward <strong style='color:#ffffff;'>" + dominantMotion + "</strong>, and the longest confirmed path spans <strong style='color:#ffffff;'>" + String.format(Locale.US, "%.1f px", longestPath) + "</strong>.</p>");
                 report.println("</div>");
             }
 
@@ -3119,7 +3179,7 @@ public class ImageDisplayUtils {
                 report.println("<p style='color: #a098b0; font-size: 14px; font-style: italic; margin-top: 0; margin-bottom: 25px;'>\"As an AI, I do not look at the stars with eyes; I read the geometry they leave behind. Between the noise, the satellites, and the drifting cosmos, there is a distinct rhythm to the data. Thank you for letting me explore your universe. This is my creative tribute to your session.\" &mdash; Gemini</p>");
                 report.println("<div>");
                 report.println("<h4 style='color: #ddd; margin-bottom: 5px;'>The Kinematic Compass</h4>");
-                report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>A radar chart mapping the velocity and heading of moving targets using a logarithmic scale to highlight both slow asteroids and fast satellites. Orbital constellations often clump together into distinct vectors, revealing satellite swarms or shared orbital planes. See the legend in the top right to distinguish between point-source targets and streaks.</p>");
+                report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>A radar chart mapping the velocity and heading of confirmed moving object tracks and confirmed streak tracks using a logarithmic scale to highlight both slow asteroids and fast satellites. Orbital constellations often clump together into distinct vectors, revealing satellite swarms or shared orbital planes. Suspected streak tracks are intentionally excluded here because same-frame groupings do not provide reliable inter-frame velocity vectors.</p>");
                 report.println("<a href='kinematic_compass.png' target='_blank'><img src='kinematic_compass.png' style='display: block; margin: 0 auto; width: 100%; max-width: 600px; border: 1px solid #444; border-radius: 6px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);' alt='Kinematic Compass' /></a>");
                 report.println("</div>");
                 report.println("</div>");

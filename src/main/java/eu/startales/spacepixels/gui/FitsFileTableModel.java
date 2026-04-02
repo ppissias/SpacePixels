@@ -28,7 +28,7 @@ public class FitsFileTableModel extends AbstractTableModel {
     private final FitsFileInformation[] fitsfiles;
 
     // Formatted with nice capitalization
-    private final String[] columns = {"Filename", "Mono/Color", "Width", "Height", "Date", "Exposure", "Location", "Solved"};
+    private final String[] columns = {"Filename", "Mono/Color", "Width", "Height", "Time (UTC)", "Exposure", "Location", "Solved"};
 
     public FitsFileTableModel(FitsFileInformation[] fitsfiles) {
         this.fitsfiles = fitsfiles;

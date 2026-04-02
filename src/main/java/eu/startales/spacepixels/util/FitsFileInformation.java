@@ -9,14 +9,45 @@
  */
 package eu.startales.spacepixels.util;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Holds high level information for a FITS file
  *
  */
 public class FitsFileInformation {
+    private static final DateTimeFormatter PIPELINE_TIMESTAMP_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS 'UTC'").withZone(ZoneOffset.UTC);
+    private static final Pattern COMBINED_DATE_TIME_PATTERN = Pattern.compile(
+            "^(\\d{4}-\\d{2}-\\d{2})[T ](\\d{2})[:._-](\\d{2})[:._-](\\d{2})([.,]\\d+)?(Z|[+-]\\d{2}:?\\d{2})?$");
+    private static final Pattern COMBINED_COMPACT_TIME_PATTERN = Pattern.compile(
+            "^(\\d{4}-\\d{2}-\\d{2})[T ](\\d{2})(\\d{2})(\\d{2})([.,]\\d+)?(Z|[+-]\\d{2}:?\\d{2})?$");
+
+    private static final class ObservationTimestampParseResult {
+        private final long timestampMillis;
+        private final String normalizedInput;
+        private final String strategy;
+        private final String failureReason;
+
+        private ObservationTimestampParseResult(long timestampMillis,
+                                               String normalizedInput,
+                                               String strategy,
+                                               String failureReason) {
+            this.timestampMillis = timestampMillis;
+            this.normalizedInput = normalizedInput;
+            this.strategy = strategy;
+            this.failureReason = failureReason;
+        }
+    }
 
     private String filePath;
     private String fileName;
@@ -90,22 +121,22 @@ public class FitsFileInformation {
 
     // --- NEW: Helper methods to extract display information from the FITS header map ---
 
+    public String getRawObservationDateHeader() {
+        return sanitizeHeaderValue(fitsHeader.get("DATE-OBS"));
+    }
+
+    public String getRawObservationTimeHeader() {
+        return sanitizeHeaderValue(fitsHeader.get("TIME-OBS"));
+    }
+
     public String getObservationDate() {
-        String dateObs = fitsHeader.get("DATE-OBS");
-        if (dateObs != null) dateObs = dateObs.replace("'", "").trim();
-        
-        String timeObs = fitsHeader.get("TIME-OBS");
-        if (timeObs != null) timeObs = timeObs.replace("'", "").trim();
-        
-        if (dateObs != null && !dateObs.isEmpty()) {
-            if (dateObs.contains("T")) {
-                return dateObs.replace("T", " "); // Format ISO-8601 nicely
-            } else if (timeObs != null && !timeObs.isEmpty()) {
-                return dateObs + " " + timeObs;
-            }
-            return dateObs;
+        ObservationTimestampParseResult parseResult = parseObservationTimestamp();
+        if (parseResult.timestampMillis > 0L) {
+            return formatPipelineTimestamp(parseResult.timestampMillis);
         }
-        return "N/A";
+
+        String rawDisplay = getRawObservationDisplay();
+        return "N/A".equals(rawDisplay) ? "N/A" : "UNPARSEABLE: " + rawDisplay;
     }
 
     /**
@@ -113,29 +144,35 @@ public class FitsFileInformation {
      * @return Epoch milliseconds, or -1 if the date is missing or malformed.
      */
     public long getObservationTimestamp() {
-        String dateObs = fitsHeader.get("DATE-OBS");
-        if (dateObs == null) return -1;
-        dateObs = dateObs.replace("'", "").trim();
+        return parseObservationTimestamp().timestampMillis;
+    }
 
-        try {
-            if (dateObs.contains("T")) {
-                return java.time.LocalDateTime.parse(dateObs, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-                           .atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
-            } else {
-                String timeObs = fitsHeader.get("TIME-OBS");
-                if (timeObs != null) {
-                    timeObs = timeObs.replace("'", "").trim();
-                    String combined = dateObs + "T" + timeObs;
-                    return java.time.LocalDateTime.parse(combined, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-                               .atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
-                } else {
-                    return java.time.LocalDate.parse(dateObs, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
-                               .atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli();
-                }
-            }
-        } catch (Exception e) {
-            return -1;
+    public boolean hasDisplayableObservationDateWithoutUsableTimestamp() {
+        return !"N/A".equals(getRawObservationDisplay()) && getObservationTimestamp() <= 0L;
+    }
+
+    public String getObservationTimestampDiagnostics() {
+        ObservationTimestampParseResult parseResult = parseObservationTimestamp();
+        StringBuilder sb = new StringBuilder();
+        sb.append("rawDATE-OBS='").append(valueOrPlaceholder(getRawObservationDateHeader())).append("'");
+        sb.append(", rawTIME-OBS='").append(valueOrPlaceholder(getRawObservationTimeHeader())).append("'");
+        sb.append(", rawDisplay='").append(valueOrPlaceholder(getRawObservationDisplay())).append("'");
+        sb.append(", guiDisplay='").append(valueOrPlaceholder(getObservationDate())).append("'");
+        sb.append(", parseStatus=").append(parseResult.timestampMillis > 0L ? "OK" : "FAILED");
+        if (parseResult.strategy != null) {
+            sb.append(", strategy='").append(parseResult.strategy).append("'");
         }
+        if (parseResult.normalizedInput != null) {
+            sb.append(", normalized='").append(parseResult.normalizedInput).append("'");
+        }
+        if (parseResult.timestampMillis > 0L) {
+            sb.append(", timestampMillis=").append(parseResult.timestampMillis);
+            sb.append(", timestampUtc='").append(formatPipelineTimestamp(parseResult.timestampMillis)).append("'");
+        }
+        if (parseResult.failureReason != null) {
+            sb.append(", reason='").append(parseResult.failureReason).append("'");
+        }
+        return sb.toString();
     }
 
     public String getExposure() {
@@ -198,6 +235,163 @@ public class FitsFileInformation {
     public String toString() {
         return "FitsFileInformation [filePath=" + filePath + ", monochrome=" + monochrome + ", sizeWidth=" + sizeWidth
                 + ", sizeHeight=" + sizeHeight + ", fitsHeader=" + fitsHeader + "]";
+    }
+
+    private String getRawObservationDisplay() {
+        String dateObs = getRawObservationDateHeader();
+        String timeObs = getRawObservationTimeHeader();
+
+        if (dateObs != null && !dateObs.isEmpty()) {
+            if (dateObs.contains("T")) {
+                return dateObs.replace("T", " ");
+            }
+            if (timeObs != null && !timeObs.isEmpty()) {
+                return dateObs + " " + timeObs;
+            }
+            return dateObs;
+        }
+        return "N/A";
+    }
+
+    private ObservationTimestampParseResult parseObservationTimestamp() {
+        String dateObs = getRawObservationDateHeader();
+        if (dateObs == null || dateObs.isEmpty()) {
+            return new ObservationTimestampParseResult(-1L, null, null, "DATE-OBS missing");
+        }
+
+        if (dateObs.contains("T")) {
+            return parseCombinedDateTime(dateObs, "DATE-OBS as combined date/time");
+        }
+
+        String timeObs = getRawObservationTimeHeader();
+        if (timeObs != null && !timeObs.isEmpty()) {
+            return parseCombinedDateTime(dateObs + "T" + timeObs, "DATE-OBS + TIME-OBS as combined date/time");
+        }
+
+        try {
+            long timestampMillis = LocalDate.parse(dateObs, DateTimeFormatter.ISO_LOCAL_DATE)
+                    .atStartOfDay(ZoneOffset.UTC)
+                    .toInstant()
+                    .toEpochMilli();
+            return new ObservationTimestampParseResult(timestampMillis, dateObs, "DATE-OBS as ISO_LOCAL_DATE", null);
+        } catch (Exception e) {
+            return new ObservationTimestampParseResult(-1L, dateObs, "DATE-OBS as ISO_LOCAL_DATE", e.getMessage());
+        }
+    }
+
+    private ObservationTimestampParseResult parseCombinedDateTime(String candidateInput, String strategy) {
+        String normalizedInput = normalizeCombinedDateTime(candidateInput);
+        if (normalizedInput == null) {
+            return new ObservationTimestampParseResult(-1L, candidateInput, strategy, "Could not normalize date/time value");
+        }
+
+        try {
+            if (normalizedInput.endsWith("Z") || normalizedInput.matches(".*[+-]\\d{2}:\\d{2}$")) {
+                long timestampMillis = OffsetDateTime.parse(normalizedInput, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                        .toInstant()
+                        .toEpochMilli();
+                return new ObservationTimestampParseResult(timestampMillis, normalizedInput, strategy + " via ISO_OFFSET_DATE_TIME", null);
+            }
+
+            long timestampMillis = LocalDateTime.parse(normalizedInput, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                    .atZone(ZoneOffset.UTC)
+                    .toInstant()
+                    .toEpochMilli();
+            return new ObservationTimestampParseResult(timestampMillis, normalizedInput, strategy + " via ISO_LOCAL_DATE_TIME", null);
+        } catch (Exception e) {
+            return new ObservationTimestampParseResult(-1L, normalizedInput, strategy, e.getMessage());
+        }
+    }
+
+    private static String normalizeCombinedDateTime(String candidateInput) {
+        String sanitized = sanitizeHeaderValue(candidateInput);
+        if (sanitized == null) {
+            return null;
+        }
+
+        Matcher dottedMatcher = COMBINED_DATE_TIME_PATTERN.matcher(sanitized);
+        if (dottedMatcher.matches()) {
+            return buildNormalizedDateTime(
+                    dottedMatcher.group(1),
+                    dottedMatcher.group(2),
+                    dottedMatcher.group(3),
+                    dottedMatcher.group(4),
+                    dottedMatcher.group(5),
+                    dottedMatcher.group(6));
+        }
+
+        Matcher compactMatcher = COMBINED_COMPACT_TIME_PATTERN.matcher(sanitized);
+        if (compactMatcher.matches()) {
+            return buildNormalizedDateTime(
+                    compactMatcher.group(1),
+                    compactMatcher.group(2),
+                    compactMatcher.group(3),
+                    compactMatcher.group(4),
+                    compactMatcher.group(5),
+                    compactMatcher.group(6));
+        }
+
+        if (sanitized.matches("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}([.,]\\d+)?(Z|[+-]\\d{2}:?\\d{2})?$")) {
+            sanitized = sanitized.replaceFirst(" ", "T");
+        }
+
+        return sanitized.replace(',', '.');
+    }
+
+    private static String buildNormalizedDateTime(String datePart,
+                                                  String hour,
+                                                  String minute,
+                                                  String second,
+                                                  String fraction,
+                                                  String zone) {
+        StringBuilder normalized = new StringBuilder();
+        normalized.append(datePart)
+                .append('T')
+                .append(hour)
+                .append(':')
+                .append(minute)
+                .append(':')
+                .append(second);
+
+        if (fraction != null && !fraction.isEmpty()) {
+            normalized.append(fraction.replace(',', '.'));
+        }
+        if (zone != null && !zone.isEmpty()) {
+            normalized.append(normalizeZoneSuffix(zone));
+        }
+        return normalized.toString();
+    }
+
+    private static String normalizeZoneSuffix(String zone) {
+        if (zone == null || zone.isEmpty() || "Z".equals(zone)) {
+            return zone;
+        }
+        if (zone.matches("[+-]\\d{2}:\\d{2}")) {
+            return zone;
+        }
+        if (zone.matches("[+-]\\d{4}")) {
+            return zone.substring(0, 3) + ":" + zone.substring(3);
+        }
+        return zone;
+    }
+
+    private static String sanitizeHeaderValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        String sanitized = value.replace("'", "").trim();
+        return sanitized.isEmpty() ? null : sanitized;
+    }
+
+    private static String valueOrPlaceholder(String value) {
+        return value == null || value.isEmpty() ? "N/A" : value;
+    }
+
+    private static String formatPipelineTimestamp(long timestampMillis) {
+        if (timestampMillis <= 0L) {
+            return "N/A";
+        }
+        return PIPELINE_TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(timestampMillis));
     }
 
 }

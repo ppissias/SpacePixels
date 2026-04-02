@@ -35,6 +35,9 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.URL;
 import java.nio.file.Files;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -52,6 +55,9 @@ import java.util.concurrent.FutureTask;
  * running the pipeline.</p>
  */
 public class ImageProcessing {
+    private static final DateTimeFormatter TRACE_TIMESTAMP_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS 'UTC'").withZone(ZoneOffset.UTC);
+
     private static final Set<String> FIXED_WCS_HEADER_KEYS = Set.of(
             "WCSAXES",
             "RADESYS",
@@ -84,9 +90,8 @@ public class ImageProcessing {
         public final int streakTracks;
         public final int movingTargets;
         public final int anomalies;
-        public final int suspectedThresholdStreakTracks;
+        public final int suspectedStreakTracks;
         public final int slowMoverCandidates;
-        public final int maximumStackTransientStreaks;
         public final int potentialSlowMovers;
 
         private DetectionSummary(int totalDetections,
@@ -94,19 +99,108 @@ public class ImageProcessing {
                                  int streakTracks,
                                  int movingTargets,
                                  int anomalies,
-                                 int suspectedThresholdStreakTracks,
-                                 int slowMoverCandidates,
-                                 int maximumStackTransientStreaks) {
+                                 int suspectedStreakTracks,
+                                 int slowMoverCandidates) {
             this.totalDetections = totalDetections;
             this.singleStreaks = singleStreaks;
             this.streakTracks = streakTracks;
             this.movingTargets = movingTargets;
             this.anomalies = anomalies;
-            this.suspectedThresholdStreakTracks = suspectedThresholdStreakTracks;
+            this.suspectedStreakTracks = suspectedStreakTracks;
             this.slowMoverCandidates = slowMoverCandidates;
-            this.maximumStackTransientStreaks = maximumStackTransientStreaks;
-            this.potentialSlowMovers = slowMoverCandidates + maximumStackTransientStreaks;
+            this.potentialSlowMovers = slowMoverCandidates;
         }
+    }
+
+    private static void logFitsTimestampDiagnostics(String stageLabel, FitsFileInformation[] filesInfo) {
+        if (filesInfo == null) {
+            System.out.println("\n--- " + stageLabel + " FITS Timestamp Diagnostics ---");
+            System.out.println("No FITS metadata loaded.");
+            return;
+        }
+
+        int validTimestamps = 0;
+        int displayWithoutTimestamp = 0;
+
+        System.out.println("\n--- " + stageLabel + " FITS Timestamp Diagnostics ---");
+        for (int i = 0; i < filesInfo.length; i++) {
+            FitsFileInformation info = filesInfo[i];
+            long timestamp = info.getObservationTimestamp();
+            if (timestamp > 0L) {
+                validTimestamps++;
+            }
+            if (info.hasDisplayableObservationDateWithoutUsableTimestamp()) {
+                displayWithoutTimestamp++;
+            }
+
+            System.out.println(String.format(
+                    Locale.US,
+                    "[%03d] file='%s' | parsedTimestamp=%d | parsedUtc='%s' | %s",
+                    i,
+                    info.getFileName(),
+                    timestamp,
+                    formatTraceTimestamp(timestamp),
+                    info.getObservationTimestampDiagnostics()));
+        }
+        System.out.println(String.format(
+                Locale.US,
+                "Timestamp diagnostics summary: %d/%d files produced a usable timestamp; %d files displayed a date/time but would pass no usable timestamp to JTransient.",
+                validTimestamps,
+                filesInfo.length,
+                displayWithoutTimestamp));
+    }
+
+    private static void logPipelineFrameTimingPayload(String stageLabel,
+                                                      List<ImageFrame> frames,
+                                                      FitsFileInformation[] filesInfo) {
+        if (frames == null) {
+            System.out.println("\n--- " + stageLabel + " JTransient Frame Timing Payload ---");
+            System.out.println("No frames prepared for JTransient.");
+            return;
+        }
+
+        int validTimestamps = 0;
+        System.out.println("\n--- " + stageLabel + " JTransient Frame Timing Payload ---");
+        for (int i = 0; i < frames.size(); i++) {
+            ImageFrame frame = frames.get(i);
+            if (frame.timestamp > 0L) {
+                validTimestamps++;
+            }
+
+            FitsFileInformation fileInfo = null;
+            if (filesInfo != null && frame.sequenceIndex >= 0 && frame.sequenceIndex < filesInfo.length) {
+                fileInfo = filesInfo[frame.sequenceIndex];
+            } else if (filesInfo != null && i >= 0 && i < filesInfo.length) {
+                fileInfo = filesInfo[i];
+            }
+
+            String diagnostics = fileInfo != null
+                    ? fileInfo.getObservationTimestampDiagnostics()
+                    : "No matching FitsFileInformation entry was found for this frame.";
+
+            System.out.println(String.format(
+                    Locale.US,
+                    "[%03d] sequenceIndex=%d | file='%s' | payloadTimestamp=%d | payloadUtc='%s' | exposureMs=%d | %s",
+                    i,
+                    frame.sequenceIndex,
+                    frame.filename,
+                    frame.timestamp,
+                    formatTraceTimestamp(frame.timestamp),
+                    frame.exposureDuration,
+                    diagnostics));
+        }
+        System.out.println(String.format(
+                Locale.US,
+                "JTransient payload summary: %d/%d frames carry a usable timestamp.",
+                validTimestamps,
+                frames.size()));
+    }
+
+    private static String formatTraceTimestamp(long timestampMillis) {
+        if (timestampMillis <= 0L) {
+            return "N/A";
+        }
+        return TRACE_TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(timestampMillis));
     }
 
     /**
@@ -457,6 +551,8 @@ public class ImageProcessing {
             fitsFile.close();
         }
 
+        logPipelineFrameTimingPayload("Standard pipeline", framesForLibrary, this.cachedFileInfo);
+
         // =========================================================
         // 2. HAND OFF TO THE LIBRARY!
         // =========================================================
@@ -633,6 +729,8 @@ public class ImageProcessing {
                 }
             }
 
+            logPipelineFrameTimingPayload("Iterative pass " + k, spacedSubset, this.cachedFileInfo);
+
             DetectionConfig effectiveConfig = createEffectiveDetectionConfig(config, spacedSubset.size());
 
             JTransientEngine engine = new JTransientEngine();
@@ -715,14 +813,23 @@ public class ImageProcessing {
      * Condenses the engine result into coarse detection categories for UI confirmation prompts.
      */
     private static DetectionSummary summarizeDetections(PipelineResult result) {
-        List<TrackLinker.Track> tracks = result.tracks;
+        List<TrackLinker.Track> tracks = result.tracks != null ? result.tracks : Collections.emptyList();
         int anomalies = result.anomalies == null ? 0 : result.anomalies.size();
-        int suspectedThresholdStreakTracks = result.suspectedThresholdStreakTracks == null ? 0 : result.suspectedThresholdStreakTracks.size();
+        int suspectedStreakTracks = 0;
         int singleStreaks = 0;
         int streakTracks = 0;
         int movingTargets = 0;
 
         for (TrackLinker.Track track : tracks) {
+            if (track == null || track.points == null || track.points.isEmpty()) {
+                continue;
+            }
+
+            if (track.isSuspectedStreakTrack) {
+                suspectedStreakTracks++;
+                continue;
+            }
+
             if (track.points.size() == 1) {
                 singleStreaks++;
             } else if (track.isStreakTrack) {
@@ -733,17 +840,15 @@ public class ImageProcessing {
         }
 
         int slowMoverCandidates = result.slowMoverCandidates == null ? 0 : result.slowMoverCandidates.size();
-        int maximumStackTransientStreaks = result.masterMaximumStackTransientStreaks == null ? 0 : result.masterMaximumStackTransientStreaks.size();
 
         return new DetectionSummary(
-                singleStreaks + streakTracks + movingTargets + anomalies + suspectedThresholdStreakTracks,
+                singleStreaks + streakTracks + movingTargets + anomalies + suspectedStreakTracks,
                 singleStreaks,
                 streakTracks,
                 movingTargets,
                 anomalies,
-                suspectedThresholdStreakTracks,
-                slowMoverCandidates,
-                maximumStackTransientStreaks);
+                suspectedStreakTracks,
+                slowMoverCandidates);
     }
 
     /**
@@ -1062,6 +1167,7 @@ public class ImageProcessing {
 
         this.cachedFileInfo = ret;
         System.out.println("Finished loading metadata for " + numFiles + " files instantly.");
+        logFitsTimestampDiagnostics("Interactive import", ret);
         return ret;
     }
 
@@ -1123,6 +1229,7 @@ public class ImageProcessing {
 
         this.cachedFileInfo = ret;
         System.out.println("Validated and loaded metadata for " + numFiles + " FITS files.");
+        logFitsTimestampDiagnostics("Headless import", ret);
         return ret;
     }
 
