@@ -422,8 +422,8 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createTabIntro("Configuration for moving-object track construction. Common settings cover the main linker behavior; advanced settings collect the stricter geometric-only limits and point-to-point similarity checks."));
 
         panel.add(createSectionHeader("Common Settings"));
-        chkEnableGeometricTrackLinking = addCheckboxRow(panel, "Enable Geometric Track Linking", "Keeps the geometric track linker active for moving-object and streak trajectories. Disable this if you want to rely only on time-aware constant speed tracks", getOptionalBooleanField(jTransientConfig, "enableGeometricTrackLinking", true));
         chkStrictExposureKinematics = addCheckboxRow(panel, "Strict Exposure Kinematics", "Rejects candidate links when the implied motion is inconsistent with exposure timing assumptions. Usually it is a good way to filter out false positives", jTransientConfig.strictExposureKinematics);
+        chkEnableGeometricTrackLinking = addCheckboxRow(panel, "Enable Geometric Track Linking", "Enable the geometric (time-agnostic) track linker. May produce false positives", getOptionalBooleanField(jTransientConfig, "enableGeometricTrackLinking", true));
         spinStarJitter = addRow(panel, "Base Star Jitter Radius", "Baseline radius under which detections are treated as stationary star jitter instead of true moving points. Higher values are more conservative around registration residuals.", doubleSpinnerModel(jTransientConfig.maxStarJitter, 0.0, 20.0, 0.1));
         spinPredTol = addRow(panel, "Prediction Line Tolerance", "Maximum distance a candidate point may sit from the projected track line and still be accepted. Higher values allow noisier tracks but increase false links.", doubleSpinnerModel(jTransientConfig.predictionTolerance, 0.1, 50.0, 0.1));
         spinTrackMinFrameRatio = addRow(panel, "Track Length Min Frame Ratio", "Controls minimum track length as required points = total frames / this value. Lower values demand longer tracks; higher values allow shorter ones.", doubleSpinnerModel(jTransientConfig.trackMinFrameRatio, 1.0, 20.0, 0.25));
@@ -992,8 +992,7 @@ public class DetectionConfigurationPanel extends JPanel {
                                     "%s\n" +
                                     "• Min Pixels: %d\n" +
                                     "• Max Star Jitter: %s px\n" +
-                                    "• Max Mask Overlap Fraction: %s\n" +
-                                    "• Streak Min Elongation: %s\n\n" +
+                                    "• Max Mask Overlap Fraction: %s\n\n" +
                                     "Telemetry: Extracted %d stable stars with a %.1f%% noise ratio.\n\n" +
                                     "Would you like to view the detailed mathematical evaluation report?",
                             detectionMsg,
@@ -1001,7 +1000,6 @@ public class DetectionConfigurationPanel extends JPanel {
                             appliedConfig.minDetectionPixels,
                             formatSpinnerValue(spinStarJitter),
                             formatSpinnerValue(spinMaxMaskOverlapFraction),
-                            formatSpinnerValue(spinStreakMinElong),
                             result.bestStarCount,
                             (result.bestTransientRatio * 100)
                     );
