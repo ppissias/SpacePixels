@@ -279,10 +279,14 @@ public class BatchDetectionCli {
         System.out.println();
         System.out.println("Notes:");
         System.out.println("  - The input directory must contain only uncompressed 16-bit monochrome FITS files with identical dimensions.");
-        System.out.println("  - The configuration JSON should be a full DetectionConfig export, such as SpacePixels' detection_config.json.");
+        System.out.println("  - The configuration JSON should be a SpacePixels detection profile JSON (flat DetectionConfig fields plus autoTuneMaxCandidateFrames).");
+        System.out.println("  - Packaged distributions include config/default_detection_profile.json as a starting point.");
         System.out.println("  - When Auto-Tune is enabled, the tuned configuration is used for the pipeline run and exported with the report.");
         System.out.println();
+        System.out.println("Packaged launcher example:");
+        System.out.println("  batchDetect.bat \"C:\\astro\\sequence\" \"config\\default_detection_profile.json\" --auto-tune aggressive");
+        System.out.println();
         System.out.println("Gradle example:");
-        System.out.println("  gradlew.bat batchDetect -PbatchArgs=\"\\\"C:\\\\astro\\\\sequence\\\" \\\"C:\\\\astro\\\\detection_config.json\\\" --auto-tune balanced\"");
+        System.out.println("  gradlew.bat batchDetect -PbatchArgs=\"\\\"C:\\\\astro\\\\sequence\\\" \\\"src\\\\dist\\\\config\\\\default_detection_profile.json\\\" --auto-tune aggressive\"");
     }
 }

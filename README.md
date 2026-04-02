@@ -165,10 +165,12 @@ After building or unpacking a distribution, you should find:
   - `bin\\SpacePixels.bat`
   - `bin\\batchDetect.bat`
   - `bin\\injectStars.bat`
+  - `config\\default_detection_profile.json`
 - Linux/macOS:
   - `bin/SpacePixels`
   - `bin/batchDetect`
   - `bin/injectStars`
+  - `config/default_detection_profile.json`
 
 ### Headless batch detection
 
@@ -177,20 +179,20 @@ Use either the packaged `batchDetect` launcher or the Gradle task.
 Packaged launcher examples:
 
 - Windows:
-  - `bin\\batchDetect.bat "C:\\astro\\sequence" "C:\\astro\\detection_config.json"`
-  - `bin\\batchDetect.bat "C:\\astro\\sequence" "C:\\astro\\detection_config.json" --auto-tune balanced`
+  - `bin\\batchDetect.bat "C:\\astro\\sequence" "config\\default_detection_profile.json"`
+  - `bin\\batchDetect.bat "C:\\astro\\sequence" "config\\default_detection_profile.json" --auto-tune aggressive`
 - Linux/macOS:
-  - `bin/batchDetect "/data/sequence" "/data/detection_config.json" --auto-tune balanced`
+  - `bin/batchDetect "/data/sequence" "config/default_detection_profile.json" --auto-tune aggressive`
 
 Gradle task examples:
 
 - Windows:
-  - `gradlew.bat batchDetect -PbatchArgs="\"C:\\astro\\sequence\" \"C:\\astro\\detection_config.json\""`
-  - `gradlew.bat batchDetect -PbatchArgs="\"C:\\astro\\sequence\" \"C:\\astro\\detection_config.json\" --auto-tune balanced"`
+  - `gradlew.bat batchDetect -PbatchArgs="\"C:\\astro\\sequence\" \"src\\dist\\config\\default_detection_profile.json\""`
+  - `gradlew.bat batchDetect -PbatchArgs="\"C:\\astro\\sequence\" \"src\\dist\\config\\default_detection_profile.json\" --auto-tune aggressive"`
 - Linux/macOS:
-  - `./gradlew batchDetect -PbatchArgs="\"/data/sequence\" \"/data/detection_config.json\" --auto-tune balanced"`
+  - `./gradlew batchDetect -PbatchArgs="\"/data/sequence\" \"src/dist/config/default_detection_profile.json\" --auto-tune aggressive"`
 
-`batchDetect` accepts an exported `DetectionConfig` JSON and can optionally run Auto-Tune with `conservative`, `balanced`, or `aggressive`.
+`batchDetect` accepts a SpacePixels detection-profile JSON and can optionally run Auto-Tune with `conservative`, `balanced`, or `aggressive`.
 
 ### Artificial star injection
 

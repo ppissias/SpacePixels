@@ -587,14 +587,15 @@ Usage pattern:
 Important limitations:
 
 - the directory must contain uncompressed 16-bit monochrome FITS files
-- the config file must be a valid exported `DetectionConfig` JSON
+- the config file must be a valid SpacePixels detection-profile JSON
+- packaged distributions include `config/default_detection_profile.json`
 
 Gradle example:
 
 - Windows:
-  - `gradlew.bat batchDetect -PbatchArgs="\"C:\\astro\\sequence\" \"C:\\astro\\detection_config.json\" --auto-tune balanced"`
+  - `gradlew.bat batchDetect -PbatchArgs="\"C:\\astro\\sequence\" \"src\\dist\\config\\default_detection_profile.json\" --auto-tune aggressive"`
 - Linux/macOS:
-  - `./gradlew batchDetect -PbatchArgs="\"/data/sequence\" \"/data/detection_config.json\" --auto-tune balanced"`
+  - `./gradlew batchDetect -PbatchArgs="\"/data/sequence\" \"src/dist/config/default_detection_profile.json\" --auto-tune aggressive"`
 
 ### Artificial star injection
 
