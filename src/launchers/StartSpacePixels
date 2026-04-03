@@ -5,7 +5,7 @@ APP_HOME=$(CDPATH= cd -- "$(dirname "$0")" && pwd) || exit 1
 status=$?
 if [ "$status" -ne 0 ] && [ -t 0 ] && [ -t 1 ]; then
     echo
-    printf 'Press Enter to close this window... '
+    printf 'Press Enter to close ... '
     read launcher_ack
 fi
 exit "$status"
