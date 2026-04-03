@@ -124,8 +124,8 @@ Download the latest packaged release from:
 
 Then run:
 
-- Windows: `SpacePixels.bat`
-- Linux/macOS: `SpacePixels`
+- Windows: `StartSpacePixels.bat`
+- Linux/macOS: `./StartSpacePixels`
 
 ### Running from source
 
@@ -173,10 +173,13 @@ The AI creative sections are controlled by a session-only checkbox in `Detection
 
 ## Command-line utilities
 
-`build.gradle` generates dedicated launcher scripts for the command-line tools and adds them to the distribution `bin` folder alongside the main `SpacePixels` launcher.
+`build.gradle` keeps the generated application launcher in `bin`, adds dedicated command-line tool launchers there, and ships top-level `StartSpacePixels` wrappers that check Java before delegating to the generated launcher.
 
 After building or unpacking a distribution, you should find:
 
+- Release root:
+  - `StartSpacePixels.bat`
+  - `StartSpacePixels`
 - Windows:
   - `bin\\SpacePixels.bat`
   - `bin\\batchDetect.bat`

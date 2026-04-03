@@ -1,0 +1,11 @@
+#!/bin/sh
+
+APP_HOME=$(CDPATH= cd -- "$(dirname "$0")" && pwd) || exit 1
+"$APP_HOME/bin/SpacePixels" "$@"
+status=$?
+if [ "$status" -ne 0 ] && [ -t 0 ] && [ -t 1 ]; then
+    echo
+    printf 'Press Enter to close this window... '
+    read launcher_ack
+fi
+exit "$status"

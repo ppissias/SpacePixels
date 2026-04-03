@@ -82,8 +82,8 @@ Download the latest release from:
 
 Then run:
 
-- Windows: `SpacePixels.bat`
-- Linux/macOS: `SpacePixels`
+- Windows: `StartSpacePixels.bat`
+- Linux/macOS: `./StartSpacePixels`
 
 ### Running from source
 
