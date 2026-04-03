@@ -11,6 +11,12 @@ plugins {
     id 'application'
 }
 
+def mainLauncherName = 'SpacePixels'
+def requiredJavaVersion = '21'
+def javaInstallLinks = [
+        "Eclipse Temurin (OpenJDK): https://adoptium.net/temurin/releases/?version=${requiredJavaVersion}",
+        'Oracle JDK: https://www.oracle.com/java/technologies/downloads/'
+]
 def sharedJvmArgs = ["-XX:MaxRAMPercentage=80.0", "-XX:+UseG1GC"]
 def batchDetectJvmArgs = sharedJvmArgs + ["-Djava.awt.headless=true"]
 
@@ -19,7 +25,7 @@ repositories {
 }
 // Add your group and version here
 group = 'eu.startales.spacepixels'
-version = '2026.04-01'
+version = '2026.04-02'
 
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
@@ -41,7 +47,7 @@ dependencies {
 
 application {
     mainClass = 'eu.startales.spacepixels.gui.ApplicationWindow'
-    applicationName = 'SpacePixels'
+    applicationName = mainLauncherName
 
     // Dynamically allocate up to 80% of the host system's total memory at runtime.
     // This applies to both `./gradlew run` and the generated distribution start scripts.
@@ -71,6 +77,221 @@ def batchDetectStartScripts = registerToolStartScripts(
         'eu.startales.spacepixels.tools.BatchDetectionCli',
         batchDetectJvmArgs
 )
+
+def replaceScriptBlock = { String script, String originalBlock, String replacementBlock, File scriptFile, String blockDescription ->
+    if (script.contains(replacementBlock)) {
+        return script
+    }
+    if (!script.contains(originalBlock)) {
+        throw new GradleException("Could not customize ${scriptFile.name}: expected ${blockDescription} block in the generated Gradle start script.")
+    }
+    script.replace(originalBlock, replacementBlock)
+}
+
+def requireScriptSnippet = { File scriptFile, String snippet, String description ->
+    if (!scriptFile.exists()) {
+        throw new GradleException("Expected generated launcher ${scriptFile} to exist.")
+    }
+
+    def script = scriptFile.getText('UTF-8')
+    if (!script.contains(snippet)) {
+        throw new GradleException("${scriptFile.name} is missing ${description}.")
+    }
+}
+
+def customizeWindowsStartScript = { File scriptFile ->
+    if (!scriptFile.exists()) {
+        return
+    }
+
+    def script = scriptFile.getText('UTF-8')
+    def newline = script.contains('\r\n') ? '\r\n' : '\n'
+    def missingJavaBlock = [
+            "echo. 1>&2",
+            "echo ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH. 1>&2",
+            "echo. 1>&2",
+            "echo Please set the JAVA_HOME variable in your environment to match the 1>&2",
+            "echo location of your Java installation. 1>&2",
+            "",
+            "goto fail"
+    ].join(newline)
+    def invalidJavaHomeBlock = [
+            "echo. 1>&2",
+            "echo ERROR: JAVA_HOME is set to an invalid directory: %JAVA_HOME% 1>&2",
+            "echo. 1>&2",
+            "echo Please set the JAVA_HOME variable in your environment to match the 1>&2",
+            "echo location of your Java installation. 1>&2",
+            "",
+            "goto fail"
+    ].join(newline)
+    def javaHelpBlock = [
+            ":showJavaInstallHelp",
+            "echo %APP_BASE_NAME% requires Java ${requiredJavaVersion} or newer. 1>&2",
+            "echo Download Java ${requiredJavaVersion} from one of these sources: 1>&2",
+            javaInstallLinks.collect { "echo   ${it} 1>&2" },
+            "echo. 1>&2",
+            "pause",
+            "goto :eof",
+            ""
+    ].flatten().join(newline)
+
+    def updatedScript = replaceScriptBlock(script, missingJavaBlock, [
+            "echo. 1>&2",
+            "echo ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH. 1>&2",
+            "echo. 1>&2",
+            "echo Please set the JAVA_HOME variable in your environment to match the 1>&2",
+            "echo location of your Java installation. 1>&2",
+            "echo. 1>&2",
+            "call :showJavaInstallHelp",
+            "goto fail"
+    ].join(newline), scriptFile, 'missing-java error handling')
+    updatedScript = replaceScriptBlock(updatedScript, invalidJavaHomeBlock, [
+            "echo. 1>&2",
+            "echo ERROR: JAVA_HOME is set to an invalid directory: %JAVA_HOME% 1>&2",
+            "echo. 1>&2",
+            "echo Please set the JAVA_HOME variable in your environment to match the 1>&2",
+            "echo location of your Java installation. 1>&2",
+            "echo. 1>&2",
+            "call :showJavaInstallHelp",
+            "goto fail"
+    ].join(newline), scriptFile, 'invalid-JAVA_HOME error handling')
+
+    if (!updatedScript.contains("${newline}:showJavaInstallHelp${newline}")) {
+        def executeAnchor = "${newline}:execute"
+        if (!updatedScript.contains(executeAnchor)) {
+            throw new GradleException("Could not customize ${scriptFile.name}: missing :execute label in the generated Gradle start script.")
+        }
+        updatedScript = updatedScript.replace(executeAnchor, "${newline}${javaHelpBlock}:execute")
+    }
+
+    ['call :showJavaInstallHelp', ':showJavaInstallHelp', 'pause', "requires Java ${requiredJavaVersion} or newer."].each { snippet ->
+        if (!updatedScript.contains(snippet)) {
+            throw new GradleException("Could not customize ${scriptFile.name}: missing '${snippet}'.")
+        }
+    }
+
+    if (updatedScript != script) {
+        scriptFile.write(updatedScript, 'UTF-8')
+    }
+}
+
+def customizeUnixStartScript = { File scriptFile ->
+    if (!scriptFile.exists()) {
+        return
+    }
+
+    def script = scriptFile.getText('UTF-8')
+    def newline = script.contains('\r\n') ? '\r\n' : '\n'
+    def dieBlock = [
+            "die () {",
+            "    echo",
+            "    echo \"\$*\"",
+            "    echo",
+            "    exit 1",
+            "} >&2",
+            ""
+    ].join(newline)
+    def javaAwareDieBlock = [
+            "die () {",
+            "    echo",
+            "    echo \"\$*\"",
+            "    echo",
+            "    exit 1",
+            "} >&2",
+            "",
+            "die_with_java_install_help () {",
+            "    echo",
+            "    echo \"\$*\"",
+            "    echo",
+            "    echo \"\$APP_BASE_NAME requires Java ${requiredJavaVersion} or newer.\"",
+            "    echo \"Download Java ${requiredJavaVersion} from one of these sources:\"",
+            javaInstallLinks.collect { "    echo \"  ${it}\"" },
+            "    if [ -t 0 ] && [ -t 1 ]; then",
+            "        echo",
+            "        printf 'Press Enter to close this window... '",
+            "        read java_install_help_ack",
+            "    fi",
+            "    echo",
+            "    exit 1",
+            "} >&2",
+            ""
+    ].flatten().join(newline)
+    def updatedScript = replaceScriptBlock(script, dieBlock, javaAwareDieBlock, scriptFile, 'POSIX die helper')
+    updatedScript = replaceScriptBlock(updatedScript, [
+            "        die \"ERROR: JAVA_HOME is set to an invalid directory: \$JAVA_HOME",
+            "",
+            "Please set the JAVA_HOME variable in your environment to match the",
+            "location of your Java installation.\""
+    ].join(newline), [
+            "        die_with_java_install_help \"ERROR: JAVA_HOME is set to an invalid directory: \$JAVA_HOME",
+            "",
+            "Please set the JAVA_HOME variable in your environment to match the",
+            "location of your Java installation.\""
+    ].join(newline), scriptFile, 'invalid-JAVA_HOME POSIX handling')
+    updatedScript = replaceScriptBlock(updatedScript, [
+            "        die \"ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.",
+            "",
+            "Please set the JAVA_HOME variable in your environment to match the",
+            "location of your Java installation.\""
+    ].join(newline), [
+            "        die_with_java_install_help \"ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.",
+            "",
+            "Please set the JAVA_HOME variable in your environment to match the",
+            "location of your Java installation.\""
+    ].join(newline), scriptFile, 'missing-java POSIX handling')
+
+    ['die_with_java_install_help', "Press Enter to close this window...", "requires Java ${requiredJavaVersion} or newer."].each { snippet ->
+        if (!updatedScript.contains(snippet)) {
+            throw new GradleException("Could not customize ${scriptFile.name}: missing '${snippet}'.")
+        }
+    }
+
+    if (updatedScript != script) {
+        scriptFile.write(updatedScript, 'UTF-8')
+    }
+}
+
+tasks.withType(CreateStartScripts).configureEach {
+    doLast {
+        customizeWindowsStartScript(windowsScript)
+        customizeUnixStartScript(unixScript)
+    }
+}
+
+tasks.register('verifyReleaseLaunchScripts') {
+    group = 'verification'
+    description = 'Verifies the generated release launchers pause with Java install help and reference the current versioned jar.'
+    dependsOn tasks.named('startScripts')
+    dependsOn injectStarsStartScripts
+    dependsOn batchDetectStartScripts
+
+    doLast {
+        def expectedJarName = tasks.named('jar').get().archiveFileName.get()
+        def generatedLaunchers = [
+                [name: mainLauncherName, directory: layout.buildDirectory.dir('scripts').get().asFile],
+                [name: 'injectStars', directory: layout.buildDirectory.dir('generated-scripts/injectStars').get().asFile],
+                [name: 'batchDetect', directory: layout.buildDirectory.dir('generated-scripts/batchDetect').get().asFile]
+        ]
+
+        generatedLaunchers.each { launcher ->
+            def windowsScript = new File(launcher.directory, "${launcher.name}.bat")
+            def unixScript = new File(launcher.directory, launcher.name)
+
+            requireScriptSnippet(windowsScript, expectedJarName, "the current versioned jar reference (${expectedJarName})")
+            requireScriptSnippet(windowsScript, 'call :showJavaInstallHelp', 'the Windows Java install help hook')
+            requireScriptSnippet(windowsScript, 'pause', 'the Windows pause command')
+            requireScriptSnippet(unixScript, expectedJarName, "the current versioned jar reference (${expectedJarName})")
+            requireScriptSnippet(unixScript, 'die_with_java_install_help', 'the POSIX Java install help hook')
+            requireScriptSnippet(unixScript, 'Press Enter to close this window...', 'the POSIX pause prompt')
+        }
+    }
+}
+
+['installDist', 'distZip', 'distTar'].each { taskName ->
+    tasks.named(taskName).configure {
+        dependsOn tasks.named('verifyReleaseLaunchScripts')
+    }
+}
 
 distributions {
     main {

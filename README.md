@@ -4,7 +4,10 @@ SpacePixels is a desktop and command-line FITS workflow for finding moving and t
 
 Instead of stacking away motion, SpacePixels analyzes the frame-to-frame changes, links detections across time, and exports a full HTML session report with diagnostics, crops, and animations.
 
-Please check the [SpacePixels Wiki](https://github.com/ppissias/SpacePixels/wiki) or the [User Manual](MANUAL.md) for detailed instructions.
+More resources:
+- [SpacePixels Website](https://startales.eu/SpacePixels/)
+- [User Manual](MANUAL.md)
+- [SpacePixels Wiki](https://github.com/ppissias/SpacePixels/wiki) 
 
 Download the latest packaged release from:
 
@@ -99,6 +102,19 @@ For the underlying detection logic and the meaning of the engine configuration o
 ## Installation and launch
 
 SpacePixels requires Java 21 or newer.
+
+<p><strong>Prerequisite:</strong> Java 21 must be installed on your system.</p>
+<p>
+  Please make sure you have Java 21 installed. Download Java: 
+  <a href="https://www.oracle.com/java/technologies/downloads/" target="_blank" rel="noopener noreferrer">
+    Oracle Java
+  </a> or
+  <a href="https://adoptium.net/temurin/releases/?version=21" target="_blank" rel="noopener noreferrer">
+    Eclipse Temurin
+  </a>
+  
+
+</p>
 
 ### Running a release build
 
