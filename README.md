@@ -19,6 +19,7 @@ In modern astrophotography, our primary goal is almost always to create a single
 
 Those stacking algorithms, such as sigma clipping, are incredibly good at doing one specific thing: **throwing away anything that changes between frames**.
 
+
 But what exactly are we throwing away? Those rejected pixels and artifacts are often real, dynamic events happening above our heads: asteroids, comets, meteors, artificial satellites, and unknown transients. By stacking, we are literally erasing the active universe to look at the static one.
 
 **SpacePixels is the exact opposite of a stacking tool.** It was built to mine that discarded data. Instead of averaging out movement to hide it, SpacePixels actively hunts for movement across your sub-exposures to reveal the hidden transients you captured while you were focused on the deep-sky target.
@@ -122,7 +123,7 @@ Download the latest packaged release from:
 
 [SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases)
 
-Then run:
+Then unzip / untar and run:
 
 - Windows: `StartSpacePixels.bat`
 - Linux/macOS: `./StartSpacePixels`
