@@ -24,6 +24,17 @@ import java.util.List;
 import java.util.Locale;
 
 final class DetectionReportAstrometry {
+    private static final double JPL_NEO_RECOVERY_HALF_WIDTH_DEGREES = 5.0d;
+
+    static final class TrackSkyRateSummary {
+        private final double raRateArcsecPerHour;
+        private final double decRateArcsecPerHour;
+
+        private TrackSkyRateSummary(double raRateArcsecPerHour, double decRateArcsecPerHour) {
+            this.raRateArcsecPerHour = raRateArcsecPerHour;
+            this.decRateArcsecPerHour = decRateArcsecPerHour;
+        }
+    }
 
     static final class Context {
         private final FitsFileInformation[] fitsFiles;
@@ -155,6 +166,23 @@ final class DetectionReportAstrometry {
                 "SkyBoT search radius");
     }
 
+    static String buildTrackSkyRateSummaryHtml(Context astrometryContext,
+                                               TrackLinker.Track track) {
+        if (astrometryContext == null || !astrometryContext.hasAstrometricSolution()) {
+            return "";
+        }
+
+        TrackSkyRateSummary skyRateSummary = resolveTrackSkyRateSummary(track, astrometryContext);
+        StringBuilder html = new StringBuilder();
+        html.append("Avg RA Rate: <span style='color:#fff;'>")
+                .append(escapeHtml(formatSkyRateArcsecPerHour(skyRateSummary != null ? skyRateSummary.raRateArcsecPerHour : Double.NaN)))
+                .append("</span><br>");
+        html.append("Avg Dec Rate: <span style='color:#fff;'>")
+                .append(escapeHtml(formatSkyRateArcsecPerHour(skyRateSummary != null ? skyRateSummary.decRateArcsecPerHour : Double.NaN)))
+                .append("</span><br>");
+        return html.toString();
+    }
+
     static String buildSingleFrameSkyViewerHtml(Context astrometryContext,
                                                 SourceExtractor.DetectedObject detection,
                                                 String epochLabel) {
@@ -270,6 +298,33 @@ final class DetectionReportAstrometry {
                     .append(" (asteroids + comets).</div>");
         }
 
+        String nominalJplUrl = buildJplSbIdentUrl(astrometryContext, queryTarget, queryTarget.searchRadiusDegrees);
+        if (nominalJplUrl != null) {
+            String neoRecoveryJplUrl = buildJplSbIdentUrl(astrometryContext, queryTarget, JPL_NEO_RECOVERY_HALF_WIDTH_DEGREES, "neo");
+            html.append("<div class='id-links'>");
+            html.append("<a class='id-link' href='").append(nominalJplUrl).append("' target='_blank' rel='noopener noreferrer'>JPL Exact FOV</a>");
+            if (neoRecoveryJplUrl != null) {
+                html.append("<a class='id-link' href='").append(neoRecoveryJplUrl).append("' target='_blank' rel='noopener noreferrer'>JPL NEO Recovery</a>");
+            }
+            html.append("</div>");
+            html.append("<div class='astro-note' style='margin-top: 6px;'>JPL Small-Body Identification uses ");
+            if (isJplCompatibleObservatoryCode(astrometryContext.getSkybotObserverCode())) {
+                html.append("MPC observatory code ").append(escapeHtml(normalizeObservatoryCode(astrometryContext.getSkybotObserverCode())));
+            } else if (astrometryContext.observerSite != null) {
+                html.append("topocentric site coordinates from ").append(escapeHtml(astrometryContext.observerSite.sourceLabel));
+            }
+            html.append(". These JPL links open the raw JSON API response. <strong>JPL Exact FOV</strong> keeps the search tight to the measured image footprint. <strong>JPL NEO Recovery</strong> is the fallback for fast nearby NEOs that JPL's first pass can miss in a small field; it uses a fixed ")
+                    .append(escapeHtml(String.format(Locale.US, "%.1f", JPL_NEO_RECOVERY_HALF_WIDTH_DEGREES)))
+                    .append("&deg; half-width and limits results to NEOs.</div>");
+        } else {
+            String jplUnavailableReason = buildJplUnavailableReason(astrometryContext);
+            if (jplUnavailableReason != null) {
+                html.append("<div class='astro-note' style='margin-top: 6px;'>")
+                        .append(escapeHtml(jplUnavailableReason))
+                        .append("</div>");
+            }
+        }
+
         html.append(buildSkyViewerLinksHtml(astrometryContext, queryTarget, epochLabel));
 
         html.append("</div>");
@@ -347,6 +402,75 @@ final class DetectionReportAstrometry {
                 "Track midpoint from " + count + " detections");
     }
 
+    static long resolveTrackPointStartTimestamp(Context astrometryContext,
+                                                SourceExtractor.DetectedObject point) {
+        if (point == null) {
+            return -1L;
+        }
+        if (point.timestamp > 0L) {
+            return point.timestamp;
+        }
+        return astrometryContext != null ? astrometryContext.getFrameTimestampMillis(point.sourceFrameIndex) : -1L;
+    }
+
+    static long resolveTrackPointExposureMillis(SourceExtractor.DetectedObject point) {
+        return point != null ? Math.max(point.exposureDuration, 0L) : 0L;
+    }
+
+    private static TrackSkyRateSummary resolveTrackSkyRateSummary(TrackLinker.Track track,
+                                                                  Context astrometryContext) {
+        if (track == null || track.points == null || track.points.isEmpty()
+                || astrometryContext == null || !astrometryContext.hasAstrometricSolution()) {
+            return null;
+        }
+
+        SourceExtractor.DetectedObject earliestPoint = null;
+        SourceExtractor.DetectedObject latestPoint = null;
+        long earliestMidpointTimestamp = Long.MAX_VALUE;
+        long latestMidpointTimestamp = Long.MIN_VALUE;
+
+        for (SourceExtractor.DetectedObject point : track.points) {
+            long midpointTimestamp = resolveTrackPointMidpointTimestamp(astrometryContext, point);
+            if (midpointTimestamp <= 0L) {
+                continue;
+            }
+            if (midpointTimestamp < earliestMidpointTimestamp) {
+                earliestMidpointTimestamp = midpointTimestamp;
+                earliestPoint = point;
+            }
+            if (midpointTimestamp > latestMidpointTimestamp) {
+                latestMidpointTimestamp = midpointTimestamp;
+                latestPoint = point;
+            }
+        }
+
+        if (earliestPoint == null || latestPoint == null || latestMidpointTimestamp <= earliestMidpointTimestamp) {
+            return null;
+        }
+
+        WcsCoordinateTransformer.SkyCoordinate earliestSky = astrometryContext.getTransformer().pixelToSky(earliestPoint.x, earliestPoint.y);
+        WcsCoordinateTransformer.SkyCoordinate latestSky = astrometryContext.getTransformer().pixelToSky(latestPoint.x, latestPoint.y);
+        double elapsedHours = (latestMidpointTimestamp - earliestMidpointTimestamp) / 3_600_000.0d;
+        if (!Double.isFinite(elapsedHours) || elapsedHours <= 0.0d) {
+            return null;
+        }
+
+        double raDeltaDegrees = normalizeAngleDeltaDegrees(latestSky.getRaDegrees() - earliestSky.getRaDegrees());
+        double decDeltaDegrees = latestSky.getDecDegrees() - earliestSky.getDecDegrees();
+        return new TrackSkyRateSummary(
+                (raDeltaDegrees * 3600.0d) / elapsedHours,
+                (decDeltaDegrees * 3600.0d) / elapsedHours);
+    }
+
+    private static long resolveTrackPointMidpointTimestamp(Context astrometryContext,
+                                                           SourceExtractor.DetectedObject point) {
+        long startTimestamp = resolveTrackPointStartTimestamp(astrometryContext, point);
+        if (startTimestamp <= 0L) {
+            return -1L;
+        }
+        return startTimestamp + (resolveTrackPointExposureMillis(point) / 2L);
+    }
+
     private static String buildSkybotUrl(Context astrometryContext,
                                          SolarSystemQueryTarget queryTarget,
                                          double searchRadiusDegrees,
@@ -369,6 +493,112 @@ final class DetectionReportAstrometry {
         url.append("&-objFilter=101");
         url.append("&-from=SpacePixels");
         return url.toString();
+    }
+
+    private static String buildJplSbIdentUrl(Context astrometryContext,
+                                             SolarSystemQueryTarget queryTarget,
+                                             double searchRadiusDegrees) {
+        return buildJplSbIdentUrl(astrometryContext, queryTarget, searchRadiusDegrees, null);
+    }
+
+    private static String buildJplSbIdentUrl(Context astrometryContext,
+                                             SolarSystemQueryTarget queryTarget,
+                                             double searchRadiusDegrees,
+                                             String smallBodyGroup) {
+        if (astrometryContext == null || !astrometryContext.hasAstrometricSolution() || queryTarget == null || queryTarget.timestampMillis <= 0L) {
+            return null;
+        }
+
+        WcsCoordinateTransformer.SkyCoordinate skyCoordinate = astrometryContext.getTransformer().pixelToSky(queryTarget.pixelX, queryTarget.pixelY);
+        return buildJplSbIdentUrl(
+                astrometryContext.getSkybotObserverCode(),
+                astrometryContext.observerSite != null ? astrometryContext.observerSite.latitudeDeg : null,
+                astrometryContext.observerSite != null ? astrometryContext.observerSite.longitudeDeg : null,
+                astrometryContext.observerSite != null ? astrometryContext.observerSite.altitudeMeters : null,
+                queryTarget.timestampMillis,
+                skyCoordinate.getRaDegrees(),
+                skyCoordinate.getDecDegrees(),
+                searchRadiusDegrees,
+                smallBodyGroup);
+    }
+
+    static String buildJplSbIdentUrl(String observerCode,
+                                     Double observerLatitudeDeg,
+                                     Double observerLongitudeDeg,
+                                     Double observerAltitudeMeters,
+                                     long timestampMillis,
+                                     double raDegrees,
+                                     double decDegrees,
+                                     double searchRadiusDegrees) {
+        return buildJplSbIdentUrl(observerCode, observerLatitudeDeg, observerLongitudeDeg, observerAltitudeMeters,
+                timestampMillis, raDegrees, decDegrees, searchRadiusDegrees, null);
+    }
+
+    static String buildJplSbIdentUrl(String observerCode,
+                                     Double observerLatitudeDeg,
+                                     Double observerLongitudeDeg,
+                                     Double observerAltitudeMeters,
+                                     long timestampMillis,
+                                     double raDegrees,
+                                     double decDegrees,
+                                     double searchRadiusDegrees,
+                                     String smallBodyGroup) {
+        if (timestampMillis <= 0L
+                || !Double.isFinite(raDegrees)
+                || !Double.isFinite(decDegrees)
+                || !Double.isFinite(searchRadiusDegrees)
+                || searchRadiusDegrees <= 0.0d) {
+            return null;
+        }
+
+        double raHalfWidthDegrees = estimateJplRaHalfWidthDegrees(searchRadiusDegrees, decDegrees);
+        StringBuilder url = new StringBuilder("https://ssd-api.jpl.nasa.gov/sb_ident.api?");
+        if (!appendJplObserverParameters(url, observerCode, observerLatitudeDeg, observerLongitudeDeg, observerAltitudeMeters)) {
+            return null;
+        }
+        url.append("&obs-time=").append(urlEncode(formatJplTimestamp(timestampMillis)));
+        url.append("&fov-ra-center=").append(urlEncode(formatJplRa(raDegrees)));
+        url.append("&fov-dec-center=").append(urlEncode(formatJplDec(decDegrees)));
+        url.append("&fov-ra-hwidth=").append(urlEncode(formatDecimal(raHalfWidthDegrees, 4)));
+        url.append("&fov-dec-hwidth=").append(urlEncode(formatDecimal(searchRadiusDegrees, 4)));
+        url.append("&two-pass=true");
+        url.append("&suppress-first-pass=true");
+        url.append("&req-elem=false");
+        if (smallBodyGroup != null && !smallBodyGroup.trim().isEmpty()) {
+            url.append("&sb-group=").append(urlEncode(smallBodyGroup.trim().toLowerCase(Locale.US)));
+        }
+        return url.toString();
+    }
+
+    private static boolean appendJplObserverParameters(StringBuilder url,
+                                                       String observerCode,
+                                                       Double observerLatitudeDeg,
+                                                       Double observerLongitudeDeg,
+                                                       Double observerAltitudeMeters) {
+        String normalizedObserverCode = normalizeObservatoryCode(observerCode);
+        if (isJplCompatibleObservatoryCode(normalizedObserverCode)) {
+            url.append("mpc-code=").append(urlEncode(normalizedObserverCode));
+            return true;
+        }
+
+        if (observerLatitudeDeg == null || observerLongitudeDeg == null
+                || !Double.isFinite(observerLatitudeDeg) || !Double.isFinite(observerLongitudeDeg)
+                || observerLatitudeDeg < -90.0d || observerLatitudeDeg > 90.0d) {
+            return false;
+        }
+
+        double normalizedLongitude = normalizeLongitudeDegrees(observerLongitudeDeg);
+        if (!Double.isFinite(normalizedLongitude) || normalizedLongitude < -180.0d || normalizedLongitude > 180.0d) {
+            return false;
+        }
+
+        double altitudeKm = observerAltitudeMeters != null && Double.isFinite(observerAltitudeMeters)
+                ? observerAltitudeMeters / 1000.0d
+                : 0.0d;
+        url.append("lat=").append(urlEncode(formatDecimal(observerLatitudeDeg, 6)));
+        url.append("&lon=").append(urlEncode(formatDecimal(normalizedLongitude, 6)));
+        url.append("&alt=").append(urlEncode(formatDecimal(altitudeKm, 4)));
+        return true;
     }
 
     private static String buildSkyViewerLinksHtml(Context astrometryContext,
@@ -508,14 +738,7 @@ final class DetectionReportAstrometry {
     }
 
     private static String resolveSkybotObserverCode(AppConfig appConfig) {
-        if (appConfig == null || appConfig.observatoryCode == null) {
-            return null;
-        }
-        String code = appConfig.observatoryCode.trim();
-        if (code.isEmpty()) {
-            return null;
-        }
-        return code.toUpperCase(Locale.US);
+        return appConfig != null ? normalizeObservatoryCode(appConfig.observatoryCode) : null;
     }
 
     private static ObserverSite resolveObserverSite(FitsFileInformation[] fitsFiles, AppConfig appConfig) {
@@ -528,7 +751,10 @@ final class DetectionReportAstrometry {
                 Double longitude = parseCoordinateValue(getFirstHeaderValue(file, "SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS"));
                 if (latitude != null && longitude != null) {
                     Double altitude = parseDoubleValue(getFirstHeaderValue(file, "SITEELEV", "OBSALT", "ALT-OBS", "ELEVATIO"));
-                    return new ObserverSite(latitude, longitude, altitude != null ? altitude : 0.0, "FITS header");
+                    ObserverSite observerSite = createObserverSite(latitude, longitude, altitude, "FITS header");
+                    if (observerSite != null) {
+                        return observerSite;
+                    }
                 }
             }
         }
@@ -537,11 +763,32 @@ final class DetectionReportAstrometry {
             Double latitude = parseCoordinateValue(appConfig.siteLat);
             Double longitude = parseCoordinateValue(appConfig.siteLong);
             if (latitude != null && longitude != null) {
-                return new ObserverSite(latitude, longitude, 0.0, "Configuration panel");
+                return createObserverSite(latitude, longitude, 0.0, "Configuration panel");
             }
         }
 
         return null;
+    }
+
+    private static ObserverSite createObserverSite(Double latitudeDeg,
+                                                   Double longitudeDeg,
+                                                   Double altitudeMeters,
+                                                   String sourceLabel) {
+        if (latitudeDeg == null || longitudeDeg == null
+                || !Double.isFinite(latitudeDeg) || !Double.isFinite(longitudeDeg)
+                || latitudeDeg < -90.0d || latitudeDeg > 90.0d) {
+            return null;
+        }
+
+        double normalizedLongitude = normalizeLongitudeDegrees(longitudeDeg);
+        if (!Double.isFinite(normalizedLongitude) || normalizedLongitude < -180.0d || normalizedLongitude > 180.0d) {
+            return null;
+        }
+
+        double normalizedAltitudeMeters = altitudeMeters != null && Double.isFinite(altitudeMeters)
+                ? altitudeMeters
+                : 0.0d;
+        return new ObserverSite(latitudeDeg, normalizedLongitude, normalizedAltitudeMeters, sourceLabel);
     }
 
     private static long resolveSessionMidpointTimestamp(FitsFileInformation[] fitsFiles) {
@@ -634,6 +881,31 @@ final class DetectionReportAstrometry {
                 .format(Instant.ofEpochMilli(timestampMillis));
     }
 
+    private static String formatJplTimestamp(long timestampMillis) {
+        return DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss")
+                .withZone(ZoneOffset.UTC)
+                .format(Instant.ofEpochMilli(timestampMillis));
+    }
+
+    private static String formatJplRa(double raDegrees) {
+        double totalSeconds = normalizeDegrees(raDegrees) / 15.0 * 3600.0;
+        int hours = (int) (totalSeconds / 3600.0);
+        totalSeconds -= hours * 3600.0;
+        int minutes = (int) (totalSeconds / 60.0);
+        double seconds = totalSeconds - (minutes * 60.0);
+        return String.format(Locale.US, "%02d-%02d-%05.2f", hours, minutes, seconds);
+    }
+
+    private static String formatJplDec(double decDegrees) {
+        double absolute = Math.abs(decDegrees);
+        int degrees = (int) absolute;
+        double remainingMinutes = (absolute - degrees) * 60.0;
+        int minutes = (int) remainingMinutes;
+        double seconds = (remainingMinutes - minutes) * 60.0;
+        String formatted = String.format(Locale.US, "%02d-%02d-%05.2f", degrees, minutes, seconds);
+        return decDegrees < 0.0 ? "M" + formatted : formatted;
+    }
+
     private static String formatStellariumTimestamp(long timestampMillis) {
         return DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
                 .withZone(ZoneOffset.UTC)
@@ -656,6 +928,80 @@ final class DetectionReportAstrometry {
 
     private static double clampFieldOfViewDegrees(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static double estimateJplRaHalfWidthDegrees(double decHalfWidthDegrees, double centerDecDegrees) {
+        double cosine = Math.cos(Math.toRadians(centerDecDegrees));
+        if (Math.abs(cosine) < 0.15) {
+            return Math.min(decHalfWidthDegrees * 6.0, 12.0);
+        }
+        return Math.min(decHalfWidthDegrees / Math.abs(cosine), 12.0);
+    }
+
+    private static double normalizeAngleDeltaDegrees(double deltaDegrees) {
+        while (deltaDegrees <= -180.0d) {
+            deltaDegrees += 360.0d;
+        }
+        while (deltaDegrees > 180.0d) {
+            deltaDegrees -= 360.0d;
+        }
+        return deltaDegrees;
+    }
+
+    private static String formatSkyRateArcsecPerHour(double rateArcsecPerHour) {
+        if (!Double.isFinite(rateArcsecPerHour)) {
+            return "n/a";
+        }
+        return String.format(Locale.US, "%+.1f arcsec/h", rateArcsecPerHour);
+    }
+
+    static boolean isJplCompatibleObservatoryCode(String observerCode) {
+        String normalizedObserverCode = normalizeObservatoryCode(observerCode);
+        return normalizedObserverCode != null && !"500".equals(normalizedObserverCode);
+    }
+
+    private static String normalizeObservatoryCode(String observerCode) {
+        if (observerCode == null) {
+            return null;
+        }
+
+        String normalized = observerCode.trim().toUpperCase(Locale.US);
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private static double normalizeDegrees(double degrees) {
+        double normalized = degrees % 360.0;
+        return normalized < 0.0 ? normalized + 360.0 : normalized;
+    }
+
+    static double normalizeLongitudeDegrees(double longitudeDegrees) {
+        if (!Double.isFinite(longitudeDegrees)) {
+            return Double.NaN;
+        }
+
+        double normalized = longitudeDegrees % 360.0d;
+        if (normalized > 180.0d) {
+            normalized -= 360.0d;
+        }
+        if (normalized < -180.0d) {
+            normalized += 360.0d;
+        }
+        return normalized;
+    }
+
+    private static String buildJplUnavailableReason(Context astrometryContext) {
+        if (astrometryContext == null) {
+            return null;
+        }
+
+        String observerCode = normalizeObservatoryCode(astrometryContext.getSkybotObserverCode());
+        if ("500".equals(observerCode) && astrometryContext.observerSite == null) {
+            return "JPL Small-Body Identification link unavailable: JPL does not accept MPC code 500. Configure a real MPC observatory code or site latitude/longitude.";
+        }
+        if (observerCode == null && astrometryContext.observerSite == null) {
+            return "JPL Small-Body Identification link unavailable: configure a real MPC observatory code or site latitude/longitude.";
+        }
+        return null;
     }
 
     private static String urlEncode(String value) {

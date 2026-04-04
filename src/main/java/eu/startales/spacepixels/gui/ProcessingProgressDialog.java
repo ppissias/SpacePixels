@@ -59,7 +59,14 @@ public class ProcessingProgressDialog extends JDialog {
 
     // A simple method to push updates to this dialog
     public void updateProgress(int percentage, String message) {
+        progressBar.setIndeterminate(false);
         progressBar.setValue(percentage);
+        statusLabel.setText(message);
+    }
+
+    public void showIndeterminateProgress(String message) {
+        progressBar.setValue(0);
+        progressBar.setIndeterminate(true);
         statusLabel.setText(message);
     }
 }

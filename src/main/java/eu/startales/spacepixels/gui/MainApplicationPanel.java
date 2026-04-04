@@ -620,12 +620,16 @@ public class MainApplicationPanel extends JPanel {
         EventQueue.invokeLater(() -> {
             setProgressBarWorking();
             disableControlsSolving();
+            statusLabel.setText("Plate solving image...");
+            progressDialog.showIndeterminateProgress("Plate solving selected image...");
+            progressDialog.setVisible(true);
         });
     }
 
     @Subscribe
     public void onSolveFinished(SolveFinishedEvent event) {
         EventQueue.invokeLater(() -> {
+            progressDialog.setVisible(false);
             PlateSolveResult result = event.getResult();
             FitsFileTableModel model = (FitsFileTableModel) table.getModel();
             FitsFileInformation fileInfo = model.getFitsFileAt(event.getRowIndex());

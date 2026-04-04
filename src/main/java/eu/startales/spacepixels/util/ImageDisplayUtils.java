@@ -2066,7 +2066,8 @@ public class ImageDisplayUtils {
         return count;
     }
 
-    private static String buildTrackTimingSummaryHtml(TrackLinker.Track track) {
+    private static String buildTrackTimingSummaryHtml(TrackLinker.Track track,
+                                                      DetectionReportAstrometry.Context astrometryContext) {
         if (track == null || track.points == null || track.points.isEmpty()) {
             return "";
         }
@@ -2080,12 +2081,12 @@ public class ImageDisplayUtils {
         long firstStartTimestamp = -1L;
         long lastEndTimestamp = -1L;
         for (SourceExtractor.DetectedObject point : track.points) {
-            if (point.timestamp <= 0L) {
+            long startTimestamp = DetectionReportAstrometry.resolveTrackPointStartTimestamp(astrometryContext, point);
+            if (startTimestamp <= 0L) {
                 continue;
             }
-            long startTimestamp = point.timestamp;
-            long endTimestamp = point.timestamp + Math.max(point.exposureDuration, 0L);
-            if (firstStartTimestamp < 0L) {
+            long endTimestamp = startTimestamp + DetectionReportAstrometry.resolveTrackPointExposureMillis(point);
+            if (firstStartTimestamp < 0L || startTimestamp < firstStartTimestamp) {
                 firstStartTimestamp = startTimestamp;
             }
             lastEndTimestamp = Math.max(lastEndTimestamp, endTimestamp);
@@ -2101,6 +2102,7 @@ public class ImageDisplayUtils {
         html.append("Last UTC: <span style='color:#fff;'>").append(escapeHtml(formatUtcTimestamp(lastEndTimestamp))).append("</span><br>");
         html.append("Track Duration: <span style='color:#fff;'>").append(escapeHtml(formatDuration(durationMillis))).append("</span><br>");
         html.append("Mean Speed: <span style='color:#fff;'>").append(escapeHtml(formatTrackSpeed(displacementPixels, durationMillis))).append("</span><br>");
+        html.append(DetectionReportAstrometry.buildTrackSkyRateSummaryHtml(astrometryContext, track));
         html.append("Start-End Motion: <span style='color:#fff;'>")
                 .append(escapeHtml(formatDecimal(displacementPixels, 1)))
                 .append(" px @ ")
@@ -2844,7 +2846,7 @@ public class ImageDisplayUtils {
                     report.println("<div class='detection-card'>");
                     String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
                     report.println("<div class='detection-title'>Moving Target Track T" + counter + timeBadge + "</div>");
-                    report.print(buildTrackTimingSummaryHtml(track));
+                    report.print(buildTrackTimingSummaryHtml(track, astrometryContext));
 
                     report.println("<div class='image-container'>");
                     report.println("<div><a href='" + objFileName + "' target='_blank'><img src='" + objFileName + "' alt='Object Centric' /></a><br/><center><small>Object Centric</small></center></div>");

@@ -71,7 +71,7 @@ public class ConfigurationPanel extends JPanel {
         observatoryCodeTextField = new JTextField();
         mainContent.add(createConfigRow(
                 "IAU Observatory Code",
-                "Optional 3-character observatory code for SkyBoT and other topocentric services. If not set, SpacePixels will fall back to geocenter-based lookups.<br><b>Format:</b> MPC/IAU code such as <code>500</code> or <code>J95</code>.",
+                "Optional 3-character observatory code for SkyBoT and other topocentric services. If not set, SpacePixels will fall back to geocenter-based lookups where supported.<br><b>Format:</b> MPC/IAU code such as <code>J95</code>.<br><b>Note:</b> <code>500</code> is only a SkyBoT geocenter fallback and is not valid for JPL Small-Body Identification.",
                 observatoryCodeTextField));
 
         latTextField = new JTextField();
