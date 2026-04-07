@@ -185,6 +185,35 @@ public class ImageDisplayUtils {
         }
     }
 
+    private static class ReportTrackReference {
+        public final TrackLinker.Track track;
+        public final String label;
+        public final String categoryLabel;
+
+        public ReportTrackReference(TrackLinker.Track track, String label, String categoryLabel) {
+            this.track = track;
+            this.label = label;
+            this.categoryLabel = categoryLabel;
+        }
+    }
+
+    private static class SlowMoverTrackMatch {
+        public final String label;
+        public final String categoryLabel;
+        public final int overlappingTrackPoints;
+        public final double bestDistancePixels;
+
+        public SlowMoverTrackMatch(String label,
+                                   String categoryLabel,
+                                   int overlappingTrackPoints,
+                                   double bestDistancePixels) {
+            this.label = label;
+            this.categoryLabel = categoryLabel;
+            this.overlappingTrackPoints = overlappingTrackPoints;
+            this.bestDistancePixels = bestDistancePixels;
+        }
+    }
+
     /**
      * Returns an evenly spaced sample of chronological frame indices while guaranteeing that
      * mandatory frames (where actual detections occur) are included to never miss a transient.
@@ -463,6 +492,158 @@ public class ImageDisplayUtils {
         return new MaskOverlapStats(overlappingPixels, totalPixels);
     }
 
+    private static List<ReportTrackReference> buildReportTrackReferences(List<TrackLinker.Track> streakTracks,
+                                                                         List<TrackLinker.Track> suspectedStreakTracks,
+                                                                         List<TrackLinker.Track> movingTargets) {
+        List<ReportTrackReference> references = new ArrayList<>();
+        int stCounter = 1;
+        if (streakTracks != null) {
+            for (TrackLinker.Track track : streakTracks) {
+                references.add(new ReportTrackReference(track, "ST" + stCounter, "streak track"));
+                stCounter++;
+            }
+        }
+
+        int sstCounter = 1;
+        if (suspectedStreakTracks != null) {
+            for (TrackLinker.Track track : suspectedStreakTracks) {
+                references.add(new ReportTrackReference(track, "SST" + sstCounter, "suspected streak track"));
+                sstCounter++;
+            }
+        }
+
+        int tCounter = 1;
+        if (movingTargets != null) {
+            for (TrackLinker.Track track : movingTargets) {
+                references.add(new ReportTrackReference(track, "T" + tCounter, "moving object track"));
+                tCounter++;
+            }
+        }
+        return references;
+    }
+
+    private static List<SlowMoverTrackMatch> findMatchingReportedTracks(SourceExtractor.DetectedObject detection,
+                                                                        List<ReportTrackReference> trackReferences) {
+        List<SlowMoverTrackMatch> matches = new ArrayList<>();
+        if (detection == null || trackReferences == null || trackReferences.isEmpty()) {
+            return matches;
+        }
+
+        for (ReportTrackReference trackReference : trackReferences) {
+            SlowMoverTrackMatch match = computeSlowMoverTrackMatch(detection, trackReference);
+            if (match != null) {
+                matches.add(match);
+            }
+        }
+
+        matches.sort(Comparator
+                .comparingInt((SlowMoverTrackMatch match) -> match.overlappingTrackPoints).reversed()
+                .thenComparingDouble(match -> match.bestDistancePixels)
+                .thenComparing(match -> match.label));
+        return matches;
+    }
+
+    private static SlowMoverTrackMatch computeSlowMoverTrackMatch(SourceExtractor.DetectedObject detection,
+                                                                  ReportTrackReference trackReference) {
+        if (detection == null || trackReference == null || trackReference.track == null
+                || trackReference.track.points == null || trackReference.track.points.isEmpty()) {
+            return null;
+        }
+
+        double footprintRadius = computeDetectionFootprintRadius(detection);
+        double matchTolerancePixels = Math.max(3.0, Math.min(10.0, footprintRadius * 0.55 + 2.0));
+        int overlappingTrackPoints = 0;
+        double bestDistancePixels = Double.POSITIVE_INFINITY;
+
+        for (SourceExtractor.DetectedObject point : trackReference.track.points) {
+            if (point == null) {
+                continue;
+            }
+            double pointDistance = computePointToDetectionDistance(point, detection);
+            bestDistancePixels = Math.min(bestDistancePixels, pointDistance);
+            if (pointDistance <= matchTolerancePixels) {
+                overlappingTrackPoints++;
+            }
+        }
+
+        if (overlappingTrackPoints == 0 || !Double.isFinite(bestDistancePixels)) {
+            return null;
+        }
+
+        return new SlowMoverTrackMatch(
+                trackReference.label,
+                trackReference.categoryLabel,
+                overlappingTrackPoints,
+                bestDistancePixels
+        );
+    }
+
+    private static double computeDetectionFootprintRadius(SourceExtractor.DetectedObject detection) {
+        if (detection == null) {
+            return 0.0;
+        }
+        double area = detection.pixelArea > 0.0 ? detection.pixelArea : 0.0;
+        if (area <= 0.0 && detection.rawPixels != null && !detection.rawPixels.isEmpty()) {
+            area = detection.rawPixels.size();
+        }
+        if (area <= 0.0) {
+            area = 1.0;
+        }
+        return Math.sqrt(area / Math.PI);
+    }
+
+    private static double computePointToDetectionDistance(SourceExtractor.DetectedObject point,
+                                                          SourceExtractor.DetectedObject detection) {
+        if (point == null || detection == null) {
+            return Double.POSITIVE_INFINITY;
+        }
+
+        if (detection.rawPixels != null && !detection.rawPixels.isEmpty()) {
+            double bestDistancePixels = Double.POSITIVE_INFINITY;
+            for (SourceExtractor.Pixel pixel : detection.rawPixels) {
+                double dx = point.x - pixel.x;
+                double dy = point.y - pixel.y;
+                bestDistancePixels = Math.min(bestDistancePixels, Math.hypot(dx, dy));
+            }
+            if (Double.isFinite(bestDistancePixels)) {
+                return bestDistancePixels;
+            }
+        }
+
+        return Math.hypot(point.x - detection.x, point.y - detection.y);
+    }
+
+    private static String buildSlowMoverTrackMatchSummaryHtml(List<SlowMoverTrackMatch> matches) {
+        if (matches == null || matches.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder html = new StringBuilder();
+        int displayedMatches = Math.min(matches.size(), 3);
+        for (int i = 0; i < displayedMatches; i++) {
+            SlowMoverTrackMatch match = matches.get(i);
+            if (i > 0) {
+                html.append(", ");
+            }
+            html.append("<span style='color:#fff;'>")
+                    .append(escapeHtml(match.label))
+                    .append("</span> <span style='color:#888;'>(")
+                    .append(escapeHtml(match.categoryLabel))
+                    .append(", ")
+                    .append(match.overlappingTrackPoints)
+                    .append(match.overlappingTrackPoints == 1 ? " point" : " points")
+                    .append(", best ")
+                    .append(String.format(Locale.US, "%.1f px", match.bestDistancePixels))
+                    .append(")</span>");
+        }
+        if (matches.size() > displayedMatches) {
+            html.append(" <span style='color:#777;'>+")
+                    .append(matches.size() - displayedMatches)
+                    .append(" more</span>");
+        }
+        return html.toString();
+    }
+
     private static String formatPercent(double fraction) {
         return String.format(Locale.US, "%.1f%%", fraction * 100.0);
     }
@@ -730,9 +911,12 @@ public class ImageDisplayUtils {
             SourceExtractor.DetectedObject p2 = track.points.get(i + 1);
             g2d.drawLine((int) Math.round(p1.x), (int) Math.round(p1.y), (int) Math.round(p2.x), (int) Math.round(p2.y));
         }
-        g2d.setColor(new Color(255, 80, 80));
+        g2d.setColor(lineColor);
         for (SourceExtractor.DetectedObject pt : track.points) {
             g2d.fillOval((int) Math.round(pt.x) - 4, (int) Math.round(pt.y) - 4, 8, 8);
+            g2d.setColor(Color.WHITE);
+            g2d.drawOval((int) Math.round(pt.x) - 4, (int) Math.round(pt.y) - 4, 8, 8);
+            g2d.setColor(lineColor);
         }
         g2d.setColor(Color.WHITE); g2d.setFont(new Font("Segoe UI", Font.BOLD, 18));
         g2d.drawString(label, (int) Math.round(track.points.get(0).x) + 15, (int) Math.round(track.points.get(0).y) - 15);
@@ -1952,6 +2136,7 @@ public class ImageDisplayUtils {
                                                      File exportDir,
                                                      List<short[][]> rawFrames,
                                                      SourceExtractor.DetectedObject detection,
+                                                     List<SlowMoverTrackMatch> matchedTracks,
                                                      DetectionReportAstrometry.Context astrometryContext,
                                                      short[][] primaryStackData,
                                                      String primaryStackLabel,
@@ -2049,6 +2234,14 @@ public class ImageDisplayUtils {
 
         report.println("<div class='detection-card' style='border-left-color: " + accentColor + "; padding: 15px; margin-bottom: 0;'>");
         report.println("<div class='detection-title' style='color: " + accentColor + "; font-size: 1.1em; margin-bottom: 10px;'>" + detectionTitle + "</div>");
+        if (matchedTracks != null && !matchedTracks.isEmpty()) {
+            report.println("<div class='astro-note' style='margin-top: 0; margin-bottom: 12px; border-left: 3px solid #66d9a3;'>"
+                    + "<strong>Also identified as reported track"
+                    + (matchedTracks.size() == 1 ? "" : "s")
+                    + ":</strong> "
+                    + buildSlowMoverTrackMatchSummaryHtml(matchedTracks)
+                    + "</div>");
+        }
         report.println("<div class='image-container' style='margin-bottom: 10px;'>");
         if (masterFileName != null) {
             report.println("<div><a href='" + masterFileName + "' target='_blank'><img src='" + masterFileName + "' style='max-width: 150px;' alt='Median Stack Crop' /></a><br/><center><small>Median Stack</small></center></div>");
@@ -2939,6 +3132,11 @@ public class ImageDisplayUtils {
                 localRescueTracks.add(residualTrack);
             }
         }
+        List<ReportTrackReference> reportTrackReferences = buildReportTrackReferences(
+                streakTracks,
+                suspectedStreakTracks,
+                movingTargets
+        );
 
         int slowMoverCandidateCount = slowMoverCandidates == null ? 0 : slowMoverCandidates.size();
         int localRescueCandidateCount = localRescueCandidates.size();
@@ -3721,6 +3919,7 @@ public class ImageDisplayUtils {
                         int smCounter = 1;
                         for (int i = 0; i < slowMoverCandidates.size(); i++) {
                             SourceExtractor.DetectedObject sm = slowMoverCandidates.get(i);
+                            List<SlowMoverTrackMatch> matchedTracks = findMatchingReportedTracks(sm, reportTrackReferences);
                             SlowMoverCandidateDiagnostics candidateDiagnostics = null;
                             if (i < slowMoverCandidateResults.size()) {
                                 SlowMoverCandidateResult candidateResult = slowMoverCandidateResults.get(i);
@@ -3733,6 +3932,7 @@ public class ImageDisplayUtils {
                                     exportDir,
                                     rawFrames,
                                     sm,
+                                    matchedTracks,
                                     astrometryContext,
                                     slowMoverStackData,
                                     "Slow Mover Stack",

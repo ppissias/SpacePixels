@@ -51,7 +51,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private final File visualizationPreferencesFile = new File(System.getProperty("user.home"), SpacePixelsVisualizationPreferencesIO.DEFAULT_FILENAME);
 
     private JSpinner spinDetectionSigma, spinMinPixels, spinEdgeMargin, spinGrowSigma, spinVoidFraction, spinVoidRadius;
-    private JCheckBox chkEnableSlowMovers, chkEnableSlowMoverShapeFiltering, chkEnableSlowMoverSpecificShapeFiltering, chkEnableSlowMoverResidualFootprintFiltering, chkEnableBinaryStarLikeStreakShapeVeto;
+    private JCheckBox chkEnableSlowMovers, chkEnableSlowMoverResidualFootprintFiltering, chkEnableBinaryStarLikeStreakShapeVeto;
     private JSpinner spinMasterSigma, spinMasterMinPix, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma, spinSlowMoverBaselineMadMultiplier, spinSlowMoverStackMiddleFraction;
     private JSpinner spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction, spinSlowMoverResidualFootprintMinFluxFraction;
     private JSpinner spinStreakMinElong, spinStreakMinPix, spinSingleStreakMinPeakSigma;
@@ -487,8 +487,6 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Advanced Settings"));
         spinSlowMoverStackMiddleFraction = addRow(panel, "Slow Mover Stack Middle Fraction", "Fraction of sorted per-pixel samples around the median used to build the slow-mover stack. Larger values blend more frames; smaller values stay closer to the median. For small frame counts, SpacePixels automatically caps this so the selected sample stays at least one frame below the pure maximum stack.", doubleSpinnerModel(jTransientConfig.slowMoverStackMiddleFraction, 0.0, 1.0, 0.01));
-        chkEnableSlowMoverShapeFiltering = addCheckboxRow(panel, "Enable Slow-Mover Shape Filtering", "Keeps the slow-mover shape veto stage active. Disable this only if you want to skip irregular, binary, and slow-mover-specific shape checks entirely.", getOptionalBooleanField(jTransientConfig, "enableSlowMoverShapeFiltering", true));
-        chkEnableSlowMoverSpecificShapeFiltering = addCheckboxRow(panel, "Enable Slow-Mover Specific Shape Filtering", "Keeps the extra slow-mover-only compact-shape veto active after the shared irregular and binary checks. Disable this to keep the shared shape filters while bypassing the targeted slow-mover-specific veto.", getOptionalBooleanField(jTransientConfig, "enableSlowMoverSpecificShapeFiltering", true));
         spinSlowMoverMedianSupportOverlapFraction = addRow(panel, "Median Support Min Overlap", "Minimum fraction of a slow-mover footprint that must overlap the median-stack artifact mask before the candidate is trusted. Higher values demand stronger support from the median stack.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportOverlapFraction, 0.0, 1.0, 0.01));
         spinSlowMoverMedianSupportMaxOverlapFraction = addRow(panel, "Median Support Max Overlap", "Maximum fraction of a slow-mover footprint that may overlap the median-stack artifact mask. Lower values reject candidates that look too similar to stationary median-stack artifacts.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportMaxOverlapFraction, 0.0, 1.0, 0.01));
         chkEnableSlowMoverResidualFootprintFiltering = addCheckboxRow(panel, "Enable Slow-Mover Residual Footprint Filtering", "Checks whether each accepted slow-mover candidate keeps enough positive residual flux on its own detected footprint in Slow Mover Stack - Median Stack. Disable this only if you want to bypass the residual-footprint veto entirely.", getOptionalBooleanField(jTransientConfig, "enableSlowMoverResidualFootprintFiltering", true));
@@ -830,8 +828,6 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.anomalyMinPeakSigmaFloor = ((Number) spinAnomalyMinPeakSigmaFloor.getValue()).doubleValue();
             setOptionalDoubleField(jTransientConfig, "suspectedStreakLineTolerance", ((Number) spinSuspectedStreakLineTolerance.getValue()).doubleValue());
             setOptionalDoubleField(jTransientConfig, "anomalySuspectedStreakMinElongation", ((Number) spinAnomalySuspectedStreakMinElongation.getValue()).doubleValue());
-            setOptionalBooleanField(jTransientConfig, "enableSlowMoverShapeFiltering", chkEnableSlowMoverShapeFiltering.isSelected());
-            setOptionalBooleanField(jTransientConfig, "enableSlowMoverSpecificShapeFiltering", chkEnableSlowMoverSpecificShapeFiltering.isSelected());
             setOptionalBooleanField(jTransientConfig, "enableBinaryStarLikeStreakShapeVeto", chkEnableBinaryStarLikeStreakShapeVeto.isSelected());
             setOptionalBooleanField(jTransientConfig, "enableResidualTransientAnalysis", chkEnableResidualTransientAnalysis.isSelected());
             setOptionalBooleanField(jTransientConfig, "enableLocalRescueCandidates", chkEnableLocalRescueCandidates.isSelected());
@@ -1110,8 +1106,6 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinAnomalyMinPeakSigmaFloor, config.anomalyMinPeakSigmaFloor);
         setSpinnerValueClamped(spinSuspectedStreakLineTolerance, getOptionalDoubleField(config, "suspectedStreakLineTolerance", 6.0));
         setSpinnerValueClamped(spinAnomalySuspectedStreakMinElongation, getOptionalDoubleField(config, "anomalySuspectedStreakMinElongation", 3.5));
-        chkEnableSlowMoverShapeFiltering.setSelected(getOptionalBooleanField(config, "enableSlowMoverShapeFiltering", true));
-        chkEnableSlowMoverSpecificShapeFiltering.setSelected(getOptionalBooleanField(config, "enableSlowMoverSpecificShapeFiltering", true));
         chkEnableResidualTransientAnalysis.setSelected(getOptionalBooleanField(config, "enableResidualTransientAnalysis", true));
         chkEnableLocalRescueCandidates.setSelected(getOptionalBooleanField(config, "enableLocalRescueCandidates", true));
         chkEnableLocalActivityClusters.setSelected(getOptionalBooleanField(config, "enableLocalActivityClusters", true));
