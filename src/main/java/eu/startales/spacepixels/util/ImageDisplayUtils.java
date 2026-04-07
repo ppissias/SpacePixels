@@ -589,60 +589,138 @@ public class ImageDisplayUtils {
     }
 
     // --- REFACTORED: GLOBAL TRACK MAP RENDERER ---
+    private static final Color GLOBAL_MAP_ANOMALY_COLOR = new Color(255, 51, 255);
+    private static final Color GLOBAL_MAP_SINGLE_STREAK_COLOR = new Color(255, 153, 51);
+    private static final Color GLOBAL_MAP_STREAK_TRACK_COLOR = new Color(255, 204, 51);
+    private static final Color GLOBAL_MAP_SUSPECTED_STREAK_COLOR = new Color(255, 128, 128);
+    private static final Color GLOBAL_MAP_MOVING_TARGET_COLOR = new Color(77, 166, 255);
+    private static final Color GLOBAL_MAP_LOCAL_RESCUE_COLOR = new Color(64, 224, 208);
+    private static final Color GLOBAL_MAP_LOCAL_ACTIVITY_COLOR = new Color(150, 120, 255);
+    private static final Color GLOBAL_MAP_DEEP_STACK_COLOR = new Color(170, 255, 110);
+
     private static BufferedImage createGlobalTrackMap(short[][] backgroundData,
                                                      List<TrackLinker.AnomalyDetection> anomalies,
                                                      List<TrackLinker.Track> singleStreaks,
                                                      List<TrackLinker.Track> streakTracks,
                                                      List<TrackLinker.Track> suspectedStreakTracks,
                                                      List<TrackLinker.Track> movingTargets,
-                                                     List<TrackLinker.Track> localRescueTracks) {
+                                                     List<TrackLinker.Track> localRescueTracks,
+                                                     List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters,
+                                                     List<SourceExtractor.DetectedObject> deepStackCandidates) {
         BufferedImage grayBg = createDisplayImage(backgroundData);
         BufferedImage rgbMap = new BufferedImage(grayBg.getWidth(), grayBg.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
         g2d.drawImage(grayBg, 0, 0, null);
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
+        int stCounter = 1;
+        for (TrackLinker.Track t : streakTracks) {
+            drawMultiFrameTrack(g2d, t, GLOBAL_MAP_STREAK_TRACK_COLOR, "ST" + stCounter);
+            stCounter++;
+        }
+        int sstCounter = 1;
+        for (TrackLinker.Track t : suspectedStreakTracks) {
+            drawMultiFrameTrack(g2d, t, GLOBAL_MAP_SUSPECTED_STREAK_COLOR, "SST" + sstCounter);
+            sstCounter++;
+        }
+        int tCounter = 1;
+        for (TrackLinker.Track t : movingTargets) {
+            drawMultiFrameTrack(g2d, t, GLOBAL_MAP_MOVING_TARGET_COLOR, "T" + tCounter);
+            tCounter++;
+        }
+        int lrCounter = 1;
+        for (TrackLinker.Track t : localRescueTracks) {
+            drawMultiFrameTrack(g2d, t, GLOBAL_MAP_LOCAL_RESCUE_COLOR, "LR" + lrCounter);
+            lrCounter++;
+        }
+
+        int lcCounter = 1;
+        for (ResidualTransientAnalysis.LocalActivityCluster cluster : localActivityClusters) {
+            drawLocalActivityCluster(g2d, cluster, GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, "LC" + lcCounter);
+            lcCounter++;
+        }
+
+        int dsCounter = 1;
+        for (SourceExtractor.DetectedObject candidate : deepStackCandidates) {
+            drawDeepStackCandidate(g2d, candidate, GLOBAL_MAP_DEEP_STACK_COLOR, "DS" + dsCounter);
+            dsCounter++;
+        }
+
         int aCounter = 1;
         for (TrackLinker.AnomalyDetection anomaly : anomalies) {
-            SourceExtractor.DetectedObject pt = anomaly.object;
-            int cx = (int) Math.round(pt.x), cy = (int) Math.round(pt.y);
-            g2d.setColor(new Color(255, 51, 255)); g2d.setStroke(new BasicStroke(2.5f));
-            g2d.drawOval(cx - 20, cy - 20, 40, 40);
-            g2d.setFont(new Font("Segoe UI", Font.BOLD, 18)); g2d.drawString("A" + aCounter, cx + 25, cy - 25);
+            drawSingleFindingMarker(g2d, anomaly.object, GLOBAL_MAP_ANOMALY_COLOR, "A" + aCounter, 20);
             aCounter++;
         }
 
         int sCounter = 1;
         for (TrackLinker.Track t : singleStreaks) {
-            SourceExtractor.DetectedObject pt = t.points.get(0);
-            int cx = (int) Math.round(pt.x), cy = (int) Math.round(pt.y);
-            g2d.setColor(new Color(255, 153, 51)); g2d.setStroke(new BasicStroke(2.5f));
-            g2d.drawOval(cx - 20, cy - 20, 40, 40);
-            g2d.setFont(new Font("Segoe UI", Font.BOLD, 18)); g2d.drawString("S" + sCounter, cx + 25, cy - 25);
+            drawSingleFindingMarker(g2d, t.points.get(0), GLOBAL_MAP_SINGLE_STREAK_COLOR, "S" + sCounter, 20);
             sCounter++;
-        }
-        int stCounter = 1;
-        for (TrackLinker.Track t : streakTracks) {
-            drawMultiFrameTrack(g2d, t, new Color(255, 204, 51), "ST" + stCounter);
-            stCounter++;
-        }
-        int sstCounter = 1;
-        for (TrackLinker.Track t : suspectedStreakTracks) {
-            drawMultiFrameTrack(g2d, t, new Color(255, 128, 128), "SST" + sstCounter);
-            sstCounter++;
-        }
-        int tCounter = 1;
-        for (TrackLinker.Track t : movingTargets) {
-            drawMultiFrameTrack(g2d, t, new Color(77, 166, 255), "T" + tCounter);
-            tCounter++;
-        }
-        int lrCounter = 1;
-        for (TrackLinker.Track t : localRescueTracks) {
-            drawMultiFrameTrack(g2d, t, new Color(64, 224, 208), "LR" + lrCounter);
-            lrCounter++;
         }
         g2d.dispose();
         return rgbMap;
+    }
+
+    private static void drawSingleFindingMarker(Graphics2D g2d, SourceExtractor.DetectedObject pt, Color color, String label, int radius) {
+        if (pt == null) {
+            return;
+        }
+        int cx = (int) Math.round(pt.x);
+        int cy = (int) Math.round(pt.y);
+        g2d.setColor(color);
+        g2d.setStroke(new BasicStroke(2.5f));
+        g2d.drawOval(cx - radius, cy - radius, radius * 2, radius * 2);
+        if (pt.rawPixels != null) {
+            for (SourceExtractor.Pixel pixel : pt.rawPixels) {
+                g2d.fillRect(pixel.x - 1, pixel.y - 1, 3, 3);
+            }
+        }
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        g2d.drawString(label, cx + radius + 5, cy - radius - 5);
+    }
+
+    private static void drawDeepStackCandidate(Graphics2D g2d, SourceExtractor.DetectedObject candidate, Color color, String label) {
+        if (candidate == null) {
+            return;
+        }
+        int radius = Math.max(20, (int) Math.round(Math.sqrt(Math.max(1.0, candidate.pixelArea * Math.max(1.0, candidate.elongation)) / Math.PI)) + 12);
+        drawSingleFindingMarker(g2d, candidate, color, label, radius);
+    }
+
+    private static void drawLocalActivityCluster(Graphics2D g2d,
+                                                 ResidualTransientAnalysis.LocalActivityCluster cluster,
+                                                 Color color,
+                                                 String label) {
+        if (cluster == null || cluster.points == null || cluster.points.isEmpty()) {
+            return;
+        }
+
+        double centroidX = cluster.metrics != null ? cluster.metrics.centroidX : cluster.points.get(0).x;
+        double centroidY = cluster.metrics != null ? cluster.metrics.centroidY : cluster.points.get(0).y;
+        double clusterRadius = cluster.metrics != null ? cluster.metrics.clusterRadiusPixels : 0.0;
+        int radius = Math.max(18, (int) Math.ceil(clusterRadius + 12.0));
+        int cx = (int) Math.round(centroidX);
+        int cy = (int) Math.round(centroidY);
+
+        Stroke previousStroke = g2d.getStroke();
+        g2d.setColor(color);
+        g2d.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10.0f, new float[]{8.0f, 6.0f}, 0.0f));
+        g2d.drawOval(cx - radius, cy - radius, radius * 2, radius * 2);
+        g2d.setStroke(previousStroke);
+
+        for (SourceExtractor.DetectedObject point : cluster.points) {
+            int px = (int) Math.round(point.x);
+            int py = (int) Math.round(point.y);
+            g2d.setColor(color);
+            g2d.fillOval(px - 4, py - 4, 8, 8);
+            g2d.setColor(Color.WHITE);
+            g2d.drawOval(px - 4, py - 4, 8, 8);
+        }
+
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        g2d.drawString(label, cx + radius + 6, cy - radius - 6);
     }
 
     private static void drawMultiFrameTrack(Graphics2D g2d, TrackLinker.Track track, Color lineColor, String label) {
@@ -1884,7 +1962,7 @@ public class ImageDisplayUtils {
                                                      String auxiliaryMaskFileName,
                                                      Double auxiliaryMaskOverlapFraction,
                                                      SlowMoverCandidateDiagnostics candidateDiagnostics,
-                                                     Double residualCoreThreshold,
+                                                     Double residualFootprintThreshold,
                                                      short[][] secondaryStackData,
                                                      String secondaryStackLabel,
                                                      String secondaryStackFileName,
@@ -2016,24 +2094,28 @@ public class ImageDisplayUtils {
                     .append("</span>");
         }
         if (candidateDiagnostics != null) {
-            deepStackStats.append("<br>Residual Core Radius: <span style='color:#fff;'>")
-                    .append(String.format(Locale.US, "%.2f px", candidateDiagnostics.residualCoreRadiusPixelsUsed))
+            deepStackStats.append("<br>Residual Footprint Flux Fraction: <span style='color:#fff;'>")
+                    .append(formatPercent(candidateDiagnostics.residualFootprintFluxFraction))
                     .append("</span>");
-            deepStackStats.append("<br>Residual Core Positive: <span style='color:#fff;'>")
-                    .append(formatPercent(candidateDiagnostics.residualCorePositiveFraction))
-                    .append("</span>");
-            if (residualCoreThreshold != null) {
+            if (residualFootprintThreshold != null) {
                 deepStackStats.append(" <span style='color:#777;'>(threshold ")
-                        .append(formatPercent(residualCoreThreshold))
+                        .append(formatPercent(residualFootprintThreshold))
                         .append(")</span>");
             }
-            deepStackStats.append("<br>Residual Core Pixels: <span style='color:#fff;'>")
-                    .append(candidateDiagnostics.residualCorePositivePixels)
-                    .append("/")
-                    .append(candidateDiagnostics.residualCorePixels)
+            deepStackStats.append("<br>Residual Footprint Flux: <span style='color:#fff;'>")
+                    .append(String.format(Locale.US, "%.1f", candidateDiagnostics.residualFootprintFlux))
                     .append("</span>");
-            deepStackStats.append("<br>Residual Core Filter: <span style='color:#fff;'>")
-                    .append(candidateDiagnostics.residualCoreFilteringEnabled ? "enabled" : "disabled")
+            deepStackStats.append("<br>Slow-Mover Footprint Flux: <span style='color:#fff;'>")
+                    .append(String.format(Locale.US, "%.1f", candidateDiagnostics.slowMoverFootprintFlux))
+                    .append("</span>");
+            deepStackStats.append("<br>Median Footprint Flux: <span style='color:#fff;'>")
+                    .append(String.format(Locale.US, "%.1f", candidateDiagnostics.medianFootprintFlux))
+                    .append("</span>");
+            deepStackStats.append("<br>Footprint Pixels: <span style='color:#fff;'>")
+                    .append(candidateDiagnostics.footprintPixelCount)
+                    .append("</span>");
+            deepStackStats.append("<br>Residual Footprint Filter: <span style='color:#fff;'>")
+                    .append(candidateDiagnostics.residualFootprintFilteringEnabled ? "enabled" : "disabled")
                     .append("</span>");
         }
         deepStackStats.append("</div>");
@@ -2716,11 +2798,57 @@ public class ImageDisplayUtils {
                 || telemetry.rejectedSlowMoverShape > 0
                 || telemetry.rejectedLowMedianSupport > 0
                 || telemetry.rejectedHighMedianSupport > 0
-                || telemetry.rejectedLowResidualCoreSupport > 0
+                || telemetry.rejectedLowResidualFootprintSupport > 0
                 || telemetry.dynamicElongationThreshold > 0.0
                 || telemetry.avgMedianSupportOverlap > 0.0
-                || telemetry.avgResidualCorePositiveFraction > 0.0
-                || telemetry.residualCoreMinPositiveFractionThreshold > 0.0;
+                || telemetry.avgResidualFootprintFluxFraction > 0.0
+                || telemetry.residualFootprintMinFluxFractionThreshold > 0.0;
+    }
+
+    private static String colorToHex(Color color) {
+        if (color == null) {
+            return "#ffffff";
+        }
+        return String.format(Locale.US, "#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
+    }
+
+    private static void appendGlobalTrajectoryLegendItem(StringBuilder html, String code, String label, Color color, int count) {
+        if (count <= 0) {
+            return;
+        }
+        html.append("<div class='legend-pill'>")
+                .append("<span class='legend-code' style='background:")
+                .append(colorToHex(color))
+                .append(";'>")
+                .append(escapeHtml(code))
+                .append("</span>")
+                .append("<span>")
+                .append(escapeHtml(label))
+                .append(": <strong>")
+                .append(count)
+                .append("</strong></span></div>");
+    }
+
+    private static String buildGlobalTrajectoryLegendHtml(int movingTargetCount,
+                                                          int streakTrackCount,
+                                                          int suspectedStreakCount,
+                                                          int localRescueCount,
+                                                          int localActivityCount,
+                                                          int deepStackCount,
+                                                          int anomalyCount,
+                                                          int singleStreakCount) {
+        StringBuilder html = new StringBuilder();
+        html.append("<div class='map-legend'>");
+        appendGlobalTrajectoryLegendItem(html, "T", "Moving object tracks", GLOBAL_MAP_MOVING_TARGET_COLOR, movingTargetCount);
+        appendGlobalTrajectoryLegendItem(html, "ST", "Confirmed streak tracks", GLOBAL_MAP_STREAK_TRACK_COLOR, streakTrackCount);
+        appendGlobalTrajectoryLegendItem(html, "SST", "Suspected streak tracks", GLOBAL_MAP_SUSPECTED_STREAK_COLOR, suspectedStreakCount);
+        appendGlobalTrajectoryLegendItem(html, "LR", "Local rescue candidates", GLOBAL_MAP_LOCAL_RESCUE_COLOR, localRescueCount);
+        appendGlobalTrajectoryLegendItem(html, "LC", "Local activity clusters", GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, localActivityCount);
+        appendGlobalTrajectoryLegendItem(html, "DS", "Deep-stack anomalies", GLOBAL_MAP_DEEP_STACK_COLOR, deepStackCount);
+        appendGlobalTrajectoryLegendItem(html, "A", "Single-frame anomalies", GLOBAL_MAP_ANOMALY_COLOR, anomalyCount);
+        appendGlobalTrajectoryLegendItem(html, "S", "Single streaks", GLOBAL_MAP_SINGLE_STREAK_COLOR, singleStreakCount);
+        html.append("</div>");
+        return html.toString();
     }
 
     // =================================================================
@@ -2897,6 +3025,9 @@ public class ImageDisplayUtils {
             report.println(".id-link:hover { background: #2f6288; color: #ffffff; }");
             report.println(".astro-note { font-size: 12px; color: #aaaaaa; margin-top: 10px; line-height: 1.45; }");
             report.println(".native-size-image { max-width: 100%; width: auto; height: auto; display: block; margin: 0 auto; }");
+            report.println(".map-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }");
+            report.println(".legend-pill { display: inline-flex; align-items: center; gap: 8px; background: #262626; border: 1px solid #444; border-radius: 999px; padding: 6px 10px; font-size: 12px; color: #d0d0d0; }");
+            report.println(".legend-code { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; padding: 4px 8px; border-radius: 999px; color: #101010; font-weight: bold; letter-spacing: 0.4px; }");
             report.println("</style></head><body>");
 
             report.println("<h1>SpacePixels Session Report</h1>");
@@ -2926,7 +3057,7 @@ public class ImageDisplayUtils {
                 report.println("<div class='metric-box'><span class='metric-value'>" + movingTargets.size() + "</span><span class='metric-label'>Moving Object Tracks</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + anomalyMetric + "</span><span class='metric-label'>Single-Frame Anomalies</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + suspectedStreakTrackMetric + "</span><span class='metric-label'>Suspected Streak Tracks</span></div>");
-                String potentialSlowMoverMetric = config.enableSlowMoverDetection ? String.valueOf(potentialSlowMoverCount) : "Off";
+                String potentialSlowMoverMetric = config.enableSlowMoverDetection ? String.valueOf(slowMoverCandidateCount) : "Off";
                 report.println("<div class='metric-box'><span class='metric-value'>" + potentialSlowMoverMetric + "</span><span class='metric-label'>Potential Slow Movers</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + localRescueCandidateCount + "</span><span class='metric-label'>Local Rescue Candidates</span></div>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + localActivityClusterCount + "</span><span class='metric-label'>Local Activity Clusters</span></div>");
@@ -2943,7 +3074,7 @@ public class ImageDisplayUtils {
                     report.println("</div>");
                 }
                 if (config.enableSlowMoverDetection) {
-                    report.println("<div class='astro-note'>Potential slow movers currently reflect " + slowMoverCandidateCount + " deep-stack candidates plus " + localRescueCandidateCount + " local rescue candidates.</div>");
+                    report.println("<div class='astro-note'>Top-level counts are separated by category: <strong>" + slowMoverCandidateCount + "</strong> deep-stack slow-mover candidates and <strong>" + localRescueCandidateCount + "</strong> local rescue candidates.</div>");
                 } else {
                     report.println("<div class='astro-note'>Potential slow mover analysis was disabled for this session.</div>");
                 }
@@ -3560,15 +3691,15 @@ public class ImageDisplayUtils {
                         report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShape), "Rejected Shape Veto"));
                         report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedLowMedianSupport), "Rejected Low Overlap"));
                         report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedHighMedianSupport), "Rejected High Overlap"));
-                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedLowResidualCoreSupport), "Rejected Low Residual"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedLowResidualFootprintSupport), "Rejected Low Residual"));
                         report.println(compactMetricBox(String.format(Locale.US, "%.2f", slowMoverTelemetry.medianElongation), "Median Elongation"));
                         report.println(compactMetricBox(String.format(Locale.US, "%.2f", slowMoverTelemetry.madElongation), "MAD Elongation"));
                         report.println(compactMetricBox(String.format(Locale.US, "%.2f", slowMoverTelemetry.dynamicElongationThreshold), "Dynamic Threshold"));
                         report.println(compactMetricBox(formatPercent(slowMoverTelemetry.medianSupportOverlapThreshold), "Min Overlap"));
                         report.println(compactMetricBox(formatPercent(slowMoverTelemetry.medianSupportMaxOverlapThreshold), "Max Overlap"));
                         report.println(compactMetricBox(formatPercent(slowMoverTelemetry.avgMedianSupportOverlap), "Average Overlap"));
-                        report.println(compactMetricBox(formatPercent(slowMoverTelemetry.residualCoreMinPositiveFractionThreshold), "Residual Core Min"));
-                        report.println(compactMetricBox(formatPercent(slowMoverTelemetry.avgResidualCorePositiveFraction), "Residual Core Avg"));
+                        report.println(compactMetricBox(formatPercent(slowMoverTelemetry.residualFootprintMinFluxFractionThreshold), "Residual Flux Min"));
+                        report.println(compactMetricBox(formatPercent(slowMoverTelemetry.avgResidualFootprintFluxFraction), "Residual Flux Avg"));
                         report.println("</div>");
                         report.println("<div class='astro-note' style='margin-top: -12px; margin-bottom: 10px;'>Slow-mover-only shape-veto breakdown. These counts are a subset of <strong>Rejected Shape Veto</strong>.</div>");
                         report.println("<div class='flex-container' style='margin-bottom: 10px;'>");
@@ -3612,7 +3743,7 @@ public class ImageDisplayUtils {
                                     "slow_mover_" + smCounter + "_median_mask.png",
                                     candidateDiagnostics != null ? candidateDiagnostics.medianSupportOverlap : null,
                                     candidateDiagnostics,
-                                    slowMoverTelemetry != null ? slowMoverTelemetry.residualCoreMinPositiveFractionThreshold : config.slowMoverResidualCoreMinPositiveFraction,
+                                    slowMoverTelemetry != null ? slowMoverTelemetry.residualFootprintMinFluxFractionThreshold : config.slowMoverResidualFootprintMinFluxFraction,
                                     maximumStackData,
                                     "Maximum Stack",
                                     "slow_mover_" + smCounter + "_maximum_stack.png",
@@ -3678,16 +3809,26 @@ public class ImageDisplayUtils {
             // =================================================================
             // 4.5 GLOBAL TRAJECTORY MAP
             // =================================================================
-            if (!singleStreaks.isEmpty() || !streakTracks.isEmpty() || !suspectedStreakTracks.isEmpty() || !movingTargets.isEmpty() || !anomalies.isEmpty() || !localRescueTracks.isEmpty()) {
+            if (!singleStreaks.isEmpty() || !streakTracks.isEmpty() || !suspectedStreakTracks.isEmpty() || !movingTargets.isEmpty() || !anomalies.isEmpty() || !localRescueTracks.isEmpty() || !localActivityClusters.isEmpty() || !slowMoverCandidates.isEmpty()) {
                 short[][] bgData = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
                 if (bgData != null) {
-                    BufferedImage globalMap = createGlobalTrackMap(bgData, anomalies, singleStreaks, streakTracks, suspectedStreakTracks, movingTargets, localRescueTracks);
+                    BufferedImage globalMap = createGlobalTrackMap(bgData, anomalies, singleStreaks, streakTracks, suspectedStreakTracks, movingTargets, localRescueTracks, localActivityClusters, slowMoverCandidates);
                     saveTrackImageLossless(globalMap, new File(exportDir, "global_track_map.png"));
                     report.println("<div class='panel'>");
                     report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Trajectory Map</h3>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
                     report.println("An overview of the classified track outputs and single-frame events plotted over the master background. " +
-                            "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>SST#</strong> for suspected streak groupings, <strong>LR#</strong> for local rescue candidates), while single-frame anomalies and single streaks are circled (<strong>A#</strong> and <strong>S#</strong>).</p>");
+                            "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>SST#</strong> for suspected streak groupings, <strong>LR#</strong> for local rescue candidates). " +
+                            "Local activity clusters are ringed as <strong>LC#</strong>, while deep-stack anomalies, single-frame anomalies, and single streaks are marked as <strong>DS#</strong>, <strong>A#</strong>, and <strong>S#</strong>.</p>");
+                    report.println(buildGlobalTrajectoryLegendHtml(
+                            movingTargets.size(),
+                            streakTracks.size(),
+                            suspectedStreakTracks.size(),
+                            localRescueTracks.size(),
+                            localActivityClusters.size(),
+                            slowMoverCandidates.size(),
+                            anomalies.size(),
+                            singleStreaks.size()));
                     report.println("<a href='global_track_map.png' target='_blank'><img src='global_track_map.png' class='native-size-image' style='border: 1px solid #555; border-radius: 4px;' alt='Global Track Map' /></a>");
                     report.println("</div>");
                 }

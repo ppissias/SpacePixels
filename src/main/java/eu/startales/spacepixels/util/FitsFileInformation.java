@@ -16,6 +16,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -226,6 +227,24 @@ public class FitsFileInformation {
         return "N/A";
     }
 
+    public String getGoogleEarthUrl() {
+        String latitude = firstCoordinateHeader("SITELAT", "OBSGEO-B", "LAT-OBS");
+        String longitude = firstCoordinateHeader("SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS");
+        if (latitude == null || longitude == null) {
+            return null;
+        }
+
+        String searchQuery = sanitizeCoordinateSearchValue(latitude) + ", " + sanitizeCoordinateSearchValue(longitude);
+        if (searchQuery.isBlank()) {
+            return null;
+        }
+        return "https://earth.google.com/web/search/" + java.net.URLEncoder.encode(searchQuery, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    public boolean hasGoogleEarthLocation() {
+        return getGoogleEarthUrl() != null;
+    }
+
     public boolean isWcsSolved() {
         // A FITS file is widely considered Plate Solved if it contains standard WCS coordinate mappings
         return fitsHeader.containsKey("CRVAL1") && fitsHeader.containsKey("CTYPE1");
@@ -251,6 +270,19 @@ public class FitsFileInformation {
             return dateObs;
         }
         return "N/A";
+    }
+
+    private String firstCoordinateHeader(String... keys) {
+        if (keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            String value = sanitizeHeaderValue(fitsHeader.get(key));
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private ObservationTimestampParseResult parseObservationTimestamp() {
@@ -381,6 +413,14 @@ public class FitsFileInformation {
         }
         String sanitized = value.replace("'", "").trim();
         return sanitized.isEmpty() ? null : sanitized;
+    }
+
+    private static String sanitizeCoordinateSearchValue(String value) {
+        String sanitized = sanitizeHeaderValue(value);
+        if (sanitized == null) {
+            return "";
+        }
+        return sanitized.toUpperCase(Locale.US).replaceAll("\\s+", " ");
     }
 
     private static String valueOrPlaceholder(String value) {

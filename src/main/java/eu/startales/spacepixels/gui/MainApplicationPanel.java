@@ -17,9 +17,14 @@ import eu.startales.spacepixels.tasks.*;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -27,6 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.google.common.eventbus.Subscribe;
 
 public class MainApplicationPanel extends JPanel {
+    private static final Color LINK_COLOR = new Color(120, 180, 255);
 
     //link to main window
     private final ApplicationWindow mainAppWindow;
@@ -274,6 +280,7 @@ public class MainApplicationPanel extends JPanel {
 
         table = new JTable();
         scrollPane.setViewportView(table);
+        installEarthLinkSupport();
 
         table.getSelectionModel().addListSelectionListener(event -> {
             int selectedRow = table.getSelectedRow();
@@ -338,10 +345,17 @@ public class MainApplicationPanel extends JPanel {
 
             table.getColumnModel().getColumn(column).setPreferredWidth(width + 15);
         }
+
+        if (table.getColumnModel().getColumnCount() > FitsFileTableModel.COL_EARTH) {
+            table.getColumnModel().getColumn(FitsFileTableModel.COL_EARTH).setMinWidth(65);
+            table.getColumnModel().getColumn(FitsFileTableModel.COL_EARTH).setPreferredWidth(65);
+            table.getColumnModel().getColumn(FitsFileTableModel.COL_EARTH).setMaxWidth(90);
+        }
     }
 
     public void setTableModel(AbstractTableModel tableModel) {
         table.setModel(tableModel);
+        configureTableRenderers();
         resizeTableColumns(table);
         containsColorImages = false;
         FitsFileTableModel model = (FitsFileTableModel) tableModel;
@@ -363,6 +377,106 @@ public class MainApplicationPanel extends JPanel {
             ApplicationWindow.logger.info("All images are Monochrome. Enabling 'Detect Objects'.");
             convertMonoButton.setEnabled(false);
             setDetectionButtonsEnabled();
+        }
+    }
+
+    private void configureTableRenderers() {
+        if (table.getColumnModel().getColumnCount() <= FitsFileTableModel.COL_EARTH) {
+            return;
+        }
+
+        table.getColumnModel().getColumn(FitsFileTableModel.COL_EARTH).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                boolean hasLink = value != null && !String.valueOf(value).isBlank();
+                label.setHorizontalAlignment(SwingConstants.CENTER);
+                label.setText(hasLink ? String.valueOf(value) : "");
+                if (!isSelected) {
+                    label.setForeground(hasLink ? LINK_COLOR : table.getForeground());
+                }
+                label.setToolTipText(hasLink ? "Open the FITS site coordinates in Google Earth Web" : null);
+                return label;
+            }
+        });
+    }
+
+    private void installEarthLinkSupport() {
+        table.addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                int viewRow = table.rowAtPoint(e.getPoint());
+                int viewColumn = table.columnAtPoint(e.getPoint());
+                boolean overEarthLink = hasEarthLinkAt(viewRow, viewColumn);
+                table.setCursor(Cursor.getPredefinedCursor(overEarthLink ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
+            }
+        });
+
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseExited(MouseEvent e) {
+                table.setCursor(Cursor.getDefaultCursor());
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (!SwingUtilities.isLeftMouseButton(e)) {
+                    return;
+                }
+
+                int viewRow = table.rowAtPoint(e.getPoint());
+                int viewColumn = table.columnAtPoint(e.getPoint());
+                if (!hasEarthLinkAt(viewRow, viewColumn)) {
+                    return;
+                }
+
+                openEarthLinkForRow(viewRow);
+            }
+        });
+    }
+
+    private boolean hasEarthLinkAt(int viewRow, int viewColumn) {
+        if (viewRow < 0 || viewColumn < 0 || table.getModel() == null) {
+            return false;
+        }
+        int modelColumn = table.convertColumnIndexToModel(viewColumn);
+        if (modelColumn != FitsFileTableModel.COL_EARTH) {
+            return false;
+        }
+        FitsFileTableModel model = (FitsFileTableModel) table.getModel();
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        FitsFileInformation fileInfo = model.getFitsFileAt(modelRow);
+        return fileInfo != null && fileInfo.hasGoogleEarthLocation();
+    }
+
+    private void openEarthLinkForRow(int viewRow) {
+        if (viewRow < 0 || table.getModel() == null) {
+            return;
+        }
+
+        FitsFileTableModel model = (FitsFileTableModel) table.getModel();
+        FitsFileInformation fileInfo = model.getFitsFileAt(table.convertRowIndexToModel(viewRow));
+        if (fileInfo == null) {
+            return;
+        }
+
+        String googleEarthUrl = fileInfo.getGoogleEarthUrl();
+        if (googleEarthUrl == null || googleEarthUrl.isBlank()) {
+            return;
+        }
+
+        openExternalUrl(googleEarthUrl, "Google Earth");
+    }
+
+    private void openExternalUrl(String url, String label) {
+        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+            try {
+                Desktop.getDesktop().browse(URI.create(url));
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Could not open " + label + ": " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        } else {
+            JOptionPane.showMessageDialog(this, label + " links are not supported on your system.", "Info", JOptionPane.INFORMATION_MESSAGE);
         }
     }
 

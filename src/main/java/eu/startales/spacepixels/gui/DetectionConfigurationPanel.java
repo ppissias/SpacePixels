@@ -51,9 +51,9 @@ public class DetectionConfigurationPanel extends JPanel {
     private final File visualizationPreferencesFile = new File(System.getProperty("user.home"), SpacePixelsVisualizationPreferencesIO.DEFAULT_FILENAME);
 
     private JSpinner spinDetectionSigma, spinMinPixels, spinEdgeMargin, spinGrowSigma, spinVoidFraction, spinVoidRadius;
-    private JCheckBox chkEnableSlowMovers, chkEnableSlowMoverShapeFiltering, chkEnableSlowMoverSpecificShapeFiltering, chkEnableSlowMoverResidualCoreFiltering, chkEnableBinaryStarLikeStreakShapeVeto;
+    private JCheckBox chkEnableSlowMovers, chkEnableSlowMoverShapeFiltering, chkEnableSlowMoverSpecificShapeFiltering, chkEnableSlowMoverResidualFootprintFiltering, chkEnableBinaryStarLikeStreakShapeVeto;
     private JSpinner spinMasterSigma, spinMasterMinPix, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma, spinSlowMoverBaselineMadMultiplier, spinSlowMoverStackMiddleFraction;
-    private JSpinner spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction, spinSlowMoverResidualCoreRadiusPixels, spinSlowMoverResidualCoreMinPositiveFraction;
+    private JSpinner spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction, spinSlowMoverResidualFootprintMinFluxFraction;
     private JSpinner spinStreakMinElong, spinStreakMinPix, spinSingleStreakMinPeakSigma;
     private JSpinner spinBgClippingIters, spinBgClippingFactor;
 
@@ -491,9 +491,8 @@ public class DetectionConfigurationPanel extends JPanel {
         chkEnableSlowMoverSpecificShapeFiltering = addCheckboxRow(panel, "Enable Slow-Mover Specific Shape Filtering", "Keeps the extra slow-mover-only compact-shape veto active after the shared irregular and binary checks. Disable this to keep the shared shape filters while bypassing the targeted slow-mover-specific veto.", getOptionalBooleanField(jTransientConfig, "enableSlowMoverSpecificShapeFiltering", true));
         spinSlowMoverMedianSupportOverlapFraction = addRow(panel, "Median Support Min Overlap", "Minimum fraction of a slow-mover footprint that must overlap the median-stack artifact mask before the candidate is trusted. Higher values demand stronger support from the median stack.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportOverlapFraction, 0.0, 1.0, 0.01));
         spinSlowMoverMedianSupportMaxOverlapFraction = addRow(panel, "Median Support Max Overlap", "Maximum fraction of a slow-mover footprint that may overlap the median-stack artifact mask. Lower values reject candidates that look too similar to stationary median-stack artifacts.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportMaxOverlapFraction, 0.0, 1.0, 0.01));
-        chkEnableSlowMoverResidualCoreFiltering = addCheckboxRow(panel, "Enable Slow-Mover Residual Core Filtering", "Checks the centroid-centered core of each deep-stack slow-mover candidate against Slow Mover Stack - Median Stack. Enable this to require a compact positive residual near the candidate center.", getOptionalBooleanField(jTransientConfig, "enableSlowMoverResidualCoreFiltering", true));
-        spinSlowMoverResidualCoreRadiusPixels = addRow(panel, "Residual Core Radius (Pixels)", "Radius of the centroid-centered core tested against the positive slow-mover residual image. Larger values are more tolerant of broader compact slow movers.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "slowMoverResidualCoreRadiusPixels", 2.0), 0.0, 20.0, 0.1));
-        spinSlowMoverResidualCoreMinPositiveFraction = addRow(panel, "Residual Core Min Positive Fraction", "Minimum fraction of core-footprint pixels that must stay positive in Slow Mover Stack - Median Stack. Higher values demand stronger centered excess signal.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "slowMoverResidualCoreMinPositiveFraction", 0.50), 0.0, 1.0, 0.01));
+        chkEnableSlowMoverResidualFootprintFiltering = addCheckboxRow(panel, "Enable Slow-Mover Residual Footprint Filtering", "Checks whether each accepted slow-mover candidate keeps enough positive residual flux on its own detected footprint in Slow Mover Stack - Median Stack. Disable this only if you want to bypass the residual-footprint veto entirely.", getOptionalBooleanField(jTransientConfig, "enableSlowMoverResidualFootprintFiltering", true));
+        spinSlowMoverResidualFootprintMinFluxFraction = addRow(panel, "Residual Footprint Min Flux Fraction", "Minimum fraction of the candidate's own slow-mover footprint flux that must remain as positive residual after subtracting the ordinary median stack. Higher values demand a more genuinely new slow-mover signal.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "slowMoverResidualFootprintMinFluxFraction", 0.10), 0.0, 1.0, 0.01));
 
         return panel;
     }
@@ -798,9 +797,8 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.masterSlowMoverMinPixels = ((Number) spinMasterSlowMoverMinPixels.getValue()).intValue();
             jTransientConfig.slowMoverMedianSupportOverlapFraction = ((Number) spinSlowMoverMedianSupportOverlapFraction.getValue()).doubleValue();
             jTransientConfig.slowMoverMedianSupportMaxOverlapFraction = ((Number) spinSlowMoverMedianSupportMaxOverlapFraction.getValue()).doubleValue();
-            setOptionalBooleanField(jTransientConfig, "enableSlowMoverResidualCoreFiltering", chkEnableSlowMoverResidualCoreFiltering.isSelected());
-            setOptionalDoubleField(jTransientConfig, "slowMoverResidualCoreRadiusPixels", ((Number) spinSlowMoverResidualCoreRadiusPixels.getValue()).doubleValue());
-            setOptionalDoubleField(jTransientConfig, "slowMoverResidualCoreMinPositiveFraction", ((Number) spinSlowMoverResidualCoreMinPositiveFraction.getValue()).doubleValue());
+            setOptionalBooleanField(jTransientConfig, "enableSlowMoverResidualFootprintFiltering", chkEnableSlowMoverResidualFootprintFiltering.isSelected());
+            setOptionalDoubleField(jTransientConfig, "slowMoverResidualFootprintMinFluxFraction", ((Number) spinSlowMoverResidualFootprintMinFluxFraction.getValue()).doubleValue());
             jTransientConfig.streakMinElongation = ((Number) spinStreakMinElong.getValue()).doubleValue();
             jTransientConfig.streakMinPixels = ((Number) spinStreakMinPix.getValue()).intValue();
             jTransientConfig.singleStreakMinPeakSigma = ((Number) spinSingleStreakMinPeakSigma.getValue()).doubleValue();
@@ -1078,9 +1076,8 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinMasterSlowMoverMinPixels, config.masterSlowMoverMinPixels);
         setSpinnerValueClamped(spinSlowMoverMedianSupportOverlapFraction, config.slowMoverMedianSupportOverlapFraction);
         setSpinnerValueClamped(spinSlowMoverMedianSupportMaxOverlapFraction, config.slowMoverMedianSupportMaxOverlapFraction);
-        chkEnableSlowMoverResidualCoreFiltering.setSelected(getOptionalBooleanField(config, "enableSlowMoverResidualCoreFiltering", true));
-        setSpinnerValueClamped(spinSlowMoverResidualCoreRadiusPixels, getOptionalDoubleField(config, "slowMoverResidualCoreRadiusPixels", 2.0));
-        setSpinnerValueClamped(spinSlowMoverResidualCoreMinPositiveFraction, getOptionalDoubleField(config, "slowMoverResidualCoreMinPositiveFraction", 0.50));
+        chkEnableSlowMoverResidualFootprintFiltering.setSelected(getOptionalBooleanField(config, "enableSlowMoverResidualFootprintFiltering", true));
+        setSpinnerValueClamped(spinSlowMoverResidualFootprintMinFluxFraction, getOptionalDoubleField(config, "slowMoverResidualFootprintMinFluxFraction", 0.10));
 
         chkStrictExposureKinematics.setSelected(config.strictExposureKinematics);
         chkEnableGeometricTrackLinking.setSelected(getOptionalBooleanField(config, "enableGeometricTrackLinking", true));

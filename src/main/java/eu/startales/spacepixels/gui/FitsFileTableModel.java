@@ -23,12 +23,13 @@ public class FitsFileTableModel extends AbstractTableModel {
     public static final int COL_DATE = 4;
     public static final int COL_EXPOSURE = 5;
     public static final int COL_LOCATION = 6;
-    public static final int COL_SOLVED = 7;
+    public static final int COL_EARTH = 7;
+    public static final int COL_SOLVED = 8;
 
     private final FitsFileInformation[] fitsfiles;
 
     // Formatted with nice capitalization
-    private final String[] columns = {"Filename", "Mono/Color", "Width", "Height", "Time (UTC)", "Exposure", "Location", "Solved"};
+    private final String[] columns = {"Filename", "Mono/Color", "Width", "Height", "Time (UTC)", "Exposure", "Location", "Loc Link", "Solved"};
 
     public FitsFileTableModel(FitsFileInformation[] fitsfiles) {
         this.fitsfiles = fitsfiles;
@@ -91,6 +92,9 @@ public class FitsFileTableModel extends AbstractTableModel {
 
             case COL_LOCATION:
                 return file.getLocation();
+
+            case COL_EARTH:
+                return file.hasGoogleEarthLocation() ? "<html><u>Open</u></html>" : "";
 
             case COL_SOLVED:
                 return file.isWcsSolved() ? "Yes" : "No";
