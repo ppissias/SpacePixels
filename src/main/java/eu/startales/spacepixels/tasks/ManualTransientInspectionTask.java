@@ -9,6 +9,7 @@ import eu.startales.spacepixels.gui.TransientInspectionFrame;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.FrameTransients;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
@@ -66,7 +67,7 @@ public class ManualTransientInspectionTask implements Runnable {
             };
 
             JTransientEngine engine = new JTransientEngine();
-            List<JTransientEngine.FrameTransients> cleanTransients = engine.detectTransients(framesForLibrary, config, progressListener);
+            List<FrameTransients> cleanTransients = engine.detectTransients(framesForLibrary, config, progressListener);
             engine.shutdown();
 
             SwingUtilities.invokeLater(() -> {

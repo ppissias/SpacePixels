@@ -6,8 +6,8 @@ import eu.startales.spacepixels.util.RawImageAnnotator;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
 import io.github.ppissias.jtransient.core.SourceExtractor;
+import io.github.ppissias.jtransient.engine.FrameTransients;
 import io.github.ppissias.jtransient.engine.ImageFrame;
-import io.github.ppissias.jtransient.engine.JTransientEngine;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -24,7 +24,7 @@ import java.util.Map;
 
 public class TransientInspectionFrame extends JFrame {
     private final List<ImageFrame> frames;
-    private final List<JTransientEngine.FrameTransients> allTransients;
+    private final List<FrameTransients> allTransients;
     private final Map<String, FitsFileInformation> fileInfoByName = new HashMap<>();
     private final FitsFileInformation[] allFilesInfo;
     private int currentIndex = 0;
@@ -35,7 +35,7 @@ public class TransientInspectionFrame extends JFrame {
     private final JLabel statusLabel = new JLabel();
     private final JLabel cursorStatusLabel = new JLabel(" Cursor: WCS unavailable");
 
-    public TransientInspectionFrame(List<ImageFrame> frames, List<JTransientEngine.FrameTransients> allTransients, FitsFileInformation[] filesInfo) {
+    public TransientInspectionFrame(List<ImageFrame> frames, List<FrameTransients> allTransients, FitsFileInformation[] filesInfo) {
         this.frames = frames;
         this.allTransients = allTransients;
         this.allFilesInfo = filesInfo;
@@ -116,7 +116,7 @@ public class TransientInspectionFrame extends JFrame {
             return;
         }
 
-        JTransientEngine.FrameTransients ft = allTransients.get(currentIndex);
+        FrameTransients ft = allTransients.get(currentIndex);
         List<SourceExtractor.DetectedObject> frameTransients = ft.transients != null ? ft.transients : java.util.Collections.emptyList();
         
         // Find the corresponding original ImageFrame using the filename provided by the engine

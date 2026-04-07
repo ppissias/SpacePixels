@@ -499,6 +499,34 @@ public class MainApplicationPanel extends JPanel {
     }
 
     @Subscribe
+    public void onImportStarted(FitsImportStartedEvent event) {
+        EventQueue.invokeLater(() -> {
+            setProgressBarWorking();
+            statusLabel.setText("Importing FITS/XISF sequence...");
+            progressDialog.showIndeterminateProgress("Loading FITS/XISF sequence in the background...");
+            if (!progressDialog.isVisible()) {
+                progressDialog.setVisible(true);
+            }
+        });
+    }
+
+    @Subscribe
+    public void onImportFinished(FitsImportFinishedEvent event) {
+        EventQueue.invokeLater(() -> {
+            progressDialog.setVisible(false);
+            setProgressBarIdle();
+
+            if (event.isSuccess()) {
+                FitsFileInformation[] files = event.getFilesInformation();
+                int importedCount = files == null ? 0 : files.length;
+                statusLabel.setText("Imported " + importedCount + " file(s)");
+            } else {
+                statusLabel.setText("Import failed");
+            }
+        });
+    }
+
+    @Subscribe
     public void onDetectionStarted(DetectionStartedEvent event) {
         EventQueue.invokeLater(() -> {
             setProgressBarWorking();

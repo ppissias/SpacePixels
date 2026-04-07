@@ -55,7 +55,7 @@ public class ApplicationWindow {
     private static final int RELEASE_CHECK_TIMEOUT_MS = 4000;
 
     private JFrame frmIpodImage;
-    private final String version = "2026.04-03";
+    private final String version = "2026.04-04";
 
     // --- EVENT BUS INSTANCE ---
     private final EventBus eventBus = new EventBus("SpacePixelsBus");
@@ -72,7 +72,7 @@ public class ApplicationWindow {
     private final BlinkFrame blinkFrame = new BlinkFrame(getEventBus());
     private final JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
     private final JMenu fileMenu = new JMenu("File");
-    private final JMenuItem importMenuItem = new JMenuItem("Import aligned fits files");
+    private final JMenuItem importMenuItem = new JMenuItem("Import aligned FITS/XISF files");
     private final JLabel updateNoticeLabel = new JLabel();
 
     public static volatile boolean OOM_FLAG = false;
@@ -176,10 +176,10 @@ public class ApplicationWindow {
 
         // --- REFACTORED MENU LISTENER ---
         importMenuItem.addActionListener(e -> {
-            logger.info("Will try to import fits files!");
+            logger.info("Will try to import FITS/XISF files.");
             final JFileChooser fc = new JFileChooser();
             fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-            fc.setDialogTitle("Directory containing aligned fits images");
+            fc.setDialogTitle("Directory containing aligned FITS or XISF images");
 
             if (fc.showOpenDialog(frmIpodImage) == JFileChooser.APPROVE_OPTION) {
                 File file = fc.getSelectedFile();

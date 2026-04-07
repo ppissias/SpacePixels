@@ -101,7 +101,8 @@ public class IterativeDetectionTask implements Runnable {
                                         " - Single streaks: " + summary.singleStreaks + "\n" +
                                         " - Single-frame anomalies: " + summary.anomalies + "\n" +
                                         " - Suspected streak tracks (anomaly groupings): " + summary.suspectedStreakTracks + "\n" +
-                                        " - Potential slow movers: " + summary.potentialSlowMovers + " (" + summary.slowMoverCandidates + " deep-stack candidates)\n\n" +
+                                        " - Potential slow movers: " + summary.potentialSlowMovers + " (" + summary.slowMoverCandidates + " deep-stack candidates, " + summary.localRescueCandidates + " local rescue candidates)\n" +
+                                        " - Broad local activity clusters: " + summary.localActivityClusters + "\n\n" +
                                         "Generating the HTML report will take a long time.\n" +
                                         "Do you want to proceed?",
                                 "High Detection Count Warning",

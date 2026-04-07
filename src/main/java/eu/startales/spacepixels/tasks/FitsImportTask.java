@@ -11,11 +11,13 @@
 package eu.startales.spacepixels.tasks;
 
 import com.google.common.eventbus.EventBus;
+import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
 import eu.startales.spacepixels.events.FitsImportFinishedEvent;
 import eu.startales.spacepixels.events.FitsImportStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.XisfImageConverter;
 
 import java.io.File;
 import java.util.logging.Level;
@@ -35,9 +37,18 @@ public class FitsImportTask implements Runnable {
         eventBus.post(new FitsImportStartedEvent());
 
         try {
+            File importDirectory = XisfImageConverter.prepareDirectoryForFitsImport(
+                    directory,
+                    (percentage, message) -> eventBus.post(new EngineProgressUpdateEvent(percentage, message)));
+            if (!directory.equals(importDirectory)) {
+                ApplicationWindow.logger.info("Redirecting import to converted XISF directory: " + importDirectory.getAbsolutePath());
+                eventBus.post(new EngineProgressUpdateEvent(90, "Loading generated FITS metadata..."));
+            }
+
             // 2. Do the heavy lifting
-            ImageProcessing imgProcessing = ImageProcessing.getInstance(directory);
+            ImageProcessing imgProcessing = ImageProcessing.getInstance(importDirectory);
             FitsFileInformation[] filesInfo = imgProcessing.getFitsfileInformation();
+            eventBus.post(new EngineProgressUpdateEvent(100, "Import complete."));
 
             // 3. Post success with the extracted data
             eventBus.post(new FitsImportFinishedEvent(true, null, imgProcessing, filesInfo));

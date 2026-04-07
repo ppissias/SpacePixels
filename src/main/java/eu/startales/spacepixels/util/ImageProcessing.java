@@ -23,10 +23,13 @@ import eu.startales.spacepixels.config.SpacePixelsAppConfigIO;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
+import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
+import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.core.TrackLinker;
 
 import javax.swing.*;
@@ -92,6 +95,8 @@ public class ImageProcessing {
         public final int anomalies;
         public final int suspectedStreakTracks;
         public final int slowMoverCandidates;
+        public final int localRescueCandidates;
+        public final int localActivityClusters;
         public final int potentialSlowMovers;
 
         private DetectionSummary(int totalDetections,
@@ -100,7 +105,9 @@ public class ImageProcessing {
                                  int movingTargets,
                                  int anomalies,
                                  int suspectedStreakTracks,
-                                 int slowMoverCandidates) {
+                                 int slowMoverCandidates,
+                                 int localRescueCandidates,
+                                 int localActivityClusters) {
             this.totalDetections = totalDetections;
             this.singleStreaks = singleStreaks;
             this.streakTracks = streakTracks;
@@ -108,7 +115,9 @@ public class ImageProcessing {
             this.anomalies = anomalies;
             this.suspectedStreakTracks = suspectedStreakTracks;
             this.slowMoverCandidates = slowMoverCandidates;
-            this.potentialSlowMovers = slowMoverCandidates;
+            this.localRescueCandidates = localRescueCandidates;
+            this.localActivityClusters = localActivityClusters;
+            this.potentialSlowMovers = slowMoverCandidates + localRescueCandidates;
         }
     }
 
@@ -814,7 +823,7 @@ public class ImageProcessing {
      */
     private static DetectionSummary summarizeDetections(PipelineResult result) {
         List<TrackLinker.Track> tracks = result.tracks != null ? result.tracks : Collections.emptyList();
-        int anomalies = result.anomalies == null ? 0 : result.anomalies.size();
+        List<TrackLinker.AnomalyDetection> anomalies = result.anomalies != null ? result.anomalies : Collections.emptyList();
         int suspectedStreakTracks = 0;
         int singleStreaks = 0;
         int streakTracks = 0;
@@ -839,16 +848,30 @@ public class ImageProcessing {
             }
         }
 
-        int slowMoverCandidates = result.slowMoverCandidates == null ? 0 : result.slowMoverCandidates.size();
+        SlowMoverAnalysis slowMoverAnalysis = result.slowMoverAnalysis != null
+                ? result.slowMoverAnalysis
+                : SlowMoverAnalysis.empty();
+        int slowMoverCandidates = !slowMoverAnalysis.candidates.isEmpty()
+                ? slowMoverAnalysis.candidates.size()
+                : (result.slowMoverCandidates == null ? 0 : result.slowMoverCandidates.size());
+        ResidualTransientAnalysis residualAnalysis = result.residualTransientAnalysis != null
+                ? result.residualTransientAnalysis
+                : ResidualTransientAnalysis.empty();
+        int localRescueCandidates = residualAnalysis.localRescueCandidates.size();
+        int localActivityClusters = residualAnalysis.localActivityClusters.size();
+        int anomalyCount = anomalies.size();
 
         return new DetectionSummary(
-                singleStreaks + streakTracks + movingTargets + anomalies + suspectedStreakTracks,
+                singleStreaks + streakTracks + movingTargets + anomalyCount + suspectedStreakTracks
+                        + slowMoverCandidates + localRescueCandidates + localActivityClusters,
                 singleStreaks,
                 streakTracks,
                 movingTargets,
-                anomalies,
+                anomalyCount,
                 suspectedStreakTracks,
-                slowMoverCandidates);
+                slowMoverCandidates,
+                localRescueCandidates,
+                localActivityClusters);
     }
 
     /**

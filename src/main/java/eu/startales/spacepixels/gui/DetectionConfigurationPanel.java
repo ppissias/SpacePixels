@@ -51,9 +51,9 @@ public class DetectionConfigurationPanel extends JPanel {
     private final File visualizationPreferencesFile = new File(System.getProperty("user.home"), SpacePixelsVisualizationPreferencesIO.DEFAULT_FILENAME);
 
     private JSpinner spinDetectionSigma, spinMinPixels, spinEdgeMargin, spinGrowSigma, spinVoidFraction, spinVoidRadius;
-    private JCheckBox chkEnableSlowMovers, chkEnableSlowMoverShapeFiltering, chkEnableSlowMoverSpecificShapeFiltering, chkEnableBinaryStarLikeStreakShapeVeto;
+    private JCheckBox chkEnableSlowMovers, chkEnableSlowMoverShapeFiltering, chkEnableSlowMoverSpecificShapeFiltering, chkEnableSlowMoverResidualCoreFiltering, chkEnableBinaryStarLikeStreakShapeVeto;
     private JSpinner spinMasterSigma, spinMasterMinPix, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma, spinSlowMoverBaselineMadMultiplier, spinSlowMoverStackMiddleFraction;
-    private JSpinner spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction;
+    private JSpinner spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction, spinSlowMoverResidualCoreRadiusPixels, spinSlowMoverResidualCoreMinPositiveFraction;
     private JSpinner spinStreakMinElong, spinStreakMinPix, spinSingleStreakMinPeakSigma;
     private JSpinner spinBgClippingIters, spinBgClippingFactor;
 
@@ -67,6 +67,10 @@ public class DetectionConfigurationPanel extends JPanel {
     // --- Anomaly Rescue ---
     private JCheckBox chkEnableAnomalyRescue;
     private JSpinner spinAnomalyMinPeakSigma, spinAnomalyMinPixels, spinAnomalyMinIntegratedSigma, spinAnomalyMinIntegratedPixels, spinAnomalyMinPeakSigmaFloor, spinSuspectedStreakLineTolerance, spinAnomalySuspectedStreakMinElongation;
+
+    // --- Residual transient analysis ---
+    private JCheckBox chkEnableResidualTransientAnalysis, chkEnableLocalRescueCandidates, chkEnableLocalActivityClusters;
+    private JSpinner spinLocalActivityClusterRadiusPixels, spinLocalActivityClusterMinFrames;
 
     // --- Quality Control Spinners ---
     private JSpinner spinMinFramesAnalysis, spinStarCountSigma, spinFwhmSigma;
@@ -104,6 +108,7 @@ public class DetectionConfigurationPanel extends JPanel {
         tabbedPane.addTab("Moving Objects", buildScrollPane(buildMovingObjectsPanel()));
         tabbedPane.addTab("Anomaly Detection", buildScrollPane(buildAnomalyDetectionPanel()));
         tabbedPane.addTab("Slow Movers", buildScrollPane(buildSlowMoversPanel()));
+        tabbedPane.addTab("Residual Analysis", buildScrollPane(buildResidualAnalysisPanel()));
         tabbedPane.addTab("Quality Control", buildScrollPane(buildQualityPanel()));
         tabbedPane.addTab("Advanced Visualization", buildScrollPane(buildAdvancedVisualizationPanel()));
 
@@ -486,6 +491,29 @@ public class DetectionConfigurationPanel extends JPanel {
         chkEnableSlowMoverSpecificShapeFiltering = addCheckboxRow(panel, "Enable Slow-Mover Specific Shape Filtering", "Keeps the extra slow-mover-only compact-shape veto active after the shared irregular and binary checks. Disable this to keep the shared shape filters while bypassing the targeted slow-mover-specific veto.", getOptionalBooleanField(jTransientConfig, "enableSlowMoverSpecificShapeFiltering", true));
         spinSlowMoverMedianSupportOverlapFraction = addRow(panel, "Median Support Min Overlap", "Minimum fraction of a slow-mover footprint that must overlap the median-stack artifact mask before the candidate is trusted. Higher values demand stronger support from the median stack.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportOverlapFraction, 0.0, 1.0, 0.01));
         spinSlowMoverMedianSupportMaxOverlapFraction = addRow(panel, "Median Support Max Overlap", "Maximum fraction of a slow-mover footprint that may overlap the median-stack artifact mask. Lower values reject candidates that look too similar to stationary median-stack artifacts.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportMaxOverlapFraction, 0.0, 1.0, 0.01));
+        chkEnableSlowMoverResidualCoreFiltering = addCheckboxRow(panel, "Enable Slow-Mover Residual Core Filtering", "Checks the centroid-centered core of each deep-stack slow-mover candidate against Slow Mover Stack - Median Stack. Enable this to require a compact positive residual near the candidate center.", getOptionalBooleanField(jTransientConfig, "enableSlowMoverResidualCoreFiltering", true));
+        spinSlowMoverResidualCoreRadiusPixels = addRow(panel, "Residual Core Radius (Pixels)", "Radius of the centroid-centered core tested against the positive slow-mover residual image. Larger values are more tolerant of broader compact slow movers.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "slowMoverResidualCoreRadiusPixels", 2.0), 0.0, 20.0, 0.1));
+        spinSlowMoverResidualCoreMinPositiveFraction = addRow(panel, "Residual Core Min Positive Fraction", "Minimum fraction of core-footprint pixels that must stay positive in Slow Mover Stack - Median Stack. Higher values demand stronger centered excess signal.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "slowMoverResidualCoreMinPositiveFraction", 0.50), 0.0, 1.0, 0.01));
+
+        return panel;
+    }
+
+    private JPanel buildResidualAnalysisPanel() {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBorder(new EmptyBorder(10, 20, 20, 20));
+
+        panel.add(createTabIntro("Final-pass analysis of the leftover per-frame point transients after JTransient finishes normal classification. This stage runs only on detections that were not consumed by confirmed moving-object tracks, accepted streak tracks, suspected same-frame streak tracks, or standalone anomalies. It first looks for weak object-like local rescue candidates, then groups the still-leftover points into broader local activity clusters for manual review."));
+
+        panel.add(createSectionHeader("Common Settings"));
+        chkEnableResidualTransientAnalysis = addCheckboxRow(panel, "Enable Residual Transient Analysis", "Master switch for the final-pass leftover-transient analysis stage. Disable this to skip both local rescue candidates and local activity clusters.", getOptionalBooleanField(jTransientConfig, "enableResidualTransientAnalysis", true));
+        chkEnableLocalRescueCandidates = addCheckboxRow(panel, "Enable Local Rescue Candidates", "Runs the object-like rescue pass on leftover point detections to surface weak local motion or repeaters that did not become normal tracks.", getOptionalBooleanField(jTransientConfig, "enableLocalRescueCandidates", true));
+        chkEnableLocalActivityClusters = addCheckboxRow(panel, "Enable Local Activity Clusters", "After local rescue candidates are removed, groups the remaining leftover detections into broad same-area activity clusters for review. These are not confirmed objects.", getOptionalBooleanField(jTransientConfig, "enableLocalActivityClusters", true));
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createSectionHeader("Activity Cluster Settings"));
+        spinLocalActivityClusterRadiusPixels = addRow(panel, "Local Activity Cluster Radius (Pixels)", "Spatial linkage radius used when grouping leftover detections into broad local activity clusters after rescue candidates are consumed.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "localActivityClusterRadiusPixels", 10.0), 0.0, 100.0, 0.5));
+        spinLocalActivityClusterMinFrames = addRow(panel, "Local Activity Cluster Min Frames", "Minimum number of unique frames required before a broad local activity cluster is exported for review.", intSpinnerModel(getOptionalIntField(jTransientConfig, "localActivityClusterMinFrames", 3), 1, 100, 1));
 
         return panel;
     }
@@ -770,6 +798,9 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.masterSlowMoverMinPixels = ((Number) spinMasterSlowMoverMinPixels.getValue()).intValue();
             jTransientConfig.slowMoverMedianSupportOverlapFraction = ((Number) spinSlowMoverMedianSupportOverlapFraction.getValue()).doubleValue();
             jTransientConfig.slowMoverMedianSupportMaxOverlapFraction = ((Number) spinSlowMoverMedianSupportMaxOverlapFraction.getValue()).doubleValue();
+            setOptionalBooleanField(jTransientConfig, "enableSlowMoverResidualCoreFiltering", chkEnableSlowMoverResidualCoreFiltering.isSelected());
+            setOptionalDoubleField(jTransientConfig, "slowMoverResidualCoreRadiusPixels", ((Number) spinSlowMoverResidualCoreRadiusPixels.getValue()).doubleValue());
+            setOptionalDoubleField(jTransientConfig, "slowMoverResidualCoreMinPositiveFraction", ((Number) spinSlowMoverResidualCoreMinPositiveFraction.getValue()).doubleValue());
             jTransientConfig.streakMinElongation = ((Number) spinStreakMinElong.getValue()).doubleValue();
             jTransientConfig.streakMinPixels = ((Number) spinStreakMinPix.getValue()).intValue();
             jTransientConfig.singleStreakMinPeakSigma = ((Number) spinSingleStreakMinPeakSigma.getValue()).doubleValue();
@@ -804,6 +835,11 @@ public class DetectionConfigurationPanel extends JPanel {
             setOptionalBooleanField(jTransientConfig, "enableSlowMoverShapeFiltering", chkEnableSlowMoverShapeFiltering.isSelected());
             setOptionalBooleanField(jTransientConfig, "enableSlowMoverSpecificShapeFiltering", chkEnableSlowMoverSpecificShapeFiltering.isSelected());
             setOptionalBooleanField(jTransientConfig, "enableBinaryStarLikeStreakShapeVeto", chkEnableBinaryStarLikeStreakShapeVeto.isSelected());
+            setOptionalBooleanField(jTransientConfig, "enableResidualTransientAnalysis", chkEnableResidualTransientAnalysis.isSelected());
+            setOptionalBooleanField(jTransientConfig, "enableLocalRescueCandidates", chkEnableLocalRescueCandidates.isSelected());
+            setOptionalBooleanField(jTransientConfig, "enableLocalActivityClusters", chkEnableLocalActivityClusters.isSelected());
+            setOptionalDoubleField(jTransientConfig, "localActivityClusterRadiusPixels", ((Number) spinLocalActivityClusterRadiusPixels.getValue()).doubleValue());
+            setOptionalIntField(jTransientConfig, "localActivityClusterMinFrames", ((Number) spinLocalActivityClusterMinFrames.getValue()).intValue());
 
             autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
             SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
@@ -1042,6 +1078,9 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinMasterSlowMoverMinPixels, config.masterSlowMoverMinPixels);
         setSpinnerValueClamped(spinSlowMoverMedianSupportOverlapFraction, config.slowMoverMedianSupportOverlapFraction);
         setSpinnerValueClamped(spinSlowMoverMedianSupportMaxOverlapFraction, config.slowMoverMedianSupportMaxOverlapFraction);
+        chkEnableSlowMoverResidualCoreFiltering.setSelected(getOptionalBooleanField(config, "enableSlowMoverResidualCoreFiltering", true));
+        setSpinnerValueClamped(spinSlowMoverResidualCoreRadiusPixels, getOptionalDoubleField(config, "slowMoverResidualCoreRadiusPixels", 2.0));
+        setSpinnerValueClamped(spinSlowMoverResidualCoreMinPositiveFraction, getOptionalDoubleField(config, "slowMoverResidualCoreMinPositiveFraction", 0.50));
 
         chkStrictExposureKinematics.setSelected(config.strictExposureKinematics);
         chkEnableGeometricTrackLinking.setSelected(getOptionalBooleanField(config, "enableGeometricTrackLinking", true));
@@ -1076,6 +1115,11 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinAnomalySuspectedStreakMinElongation, getOptionalDoubleField(config, "anomalySuspectedStreakMinElongation", 3.5));
         chkEnableSlowMoverShapeFiltering.setSelected(getOptionalBooleanField(config, "enableSlowMoverShapeFiltering", true));
         chkEnableSlowMoverSpecificShapeFiltering.setSelected(getOptionalBooleanField(config, "enableSlowMoverSpecificShapeFiltering", true));
+        chkEnableResidualTransientAnalysis.setSelected(getOptionalBooleanField(config, "enableResidualTransientAnalysis", true));
+        chkEnableLocalRescueCandidates.setSelected(getOptionalBooleanField(config, "enableLocalRescueCandidates", true));
+        chkEnableLocalActivityClusters.setSelected(getOptionalBooleanField(config, "enableLocalActivityClusters", true));
+        setSpinnerValueClamped(spinLocalActivityClusterRadiusPixels, getOptionalDoubleField(config, "localActivityClusterRadiusPixels", 10.0));
+        setSpinnerValueClamped(spinLocalActivityClusterMinFrames, getOptionalIntField(config, "localActivityClusterMinFrames", 3));
 
         setSpinnerValueClamped(spinMinFramesAnalysis, config.minFramesForAnalysis);
         setSpinnerValueClamped(spinStarCountSigma, config.starCountSigmaDeviation);
@@ -1112,6 +1156,15 @@ public class DetectionConfigurationPanel extends JPanel {
         }
     }
 
+    private int getOptionalIntField(DetectionConfig config, String fieldName, int defaultValue) {
+        try {
+            Field field = DetectionConfig.class.getField(fieldName);
+            return field.getInt(config);
+        } catch (ReflectiveOperationException ignored) {
+            return defaultValue;
+        }
+    }
+
     private void setOptionalBooleanField(DetectionConfig config, String fieldName, boolean value) {
         try {
             Field field = DetectionConfig.class.getField(fieldName);
@@ -1124,6 +1177,14 @@ public class DetectionConfigurationPanel extends JPanel {
         try {
             Field field = DetectionConfig.class.getField(fieldName);
             field.setDouble(config, value);
+        } catch (ReflectiveOperationException ignored) {
+        }
+    }
+
+    private void setOptionalIntField(DetectionConfig config, String fieldName, int value) {
+        try {
+            Field field = DetectionConfig.class.getField(fieldName);
+            field.setInt(config, value);
         } catch (ReflectiveOperationException ignored) {
         }
     }

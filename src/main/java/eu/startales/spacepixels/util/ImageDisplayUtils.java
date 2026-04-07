@@ -13,10 +13,15 @@ package eu.startales.spacepixels.util;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
+import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
+import io.github.ppissias.jtransient.core.SlowMoverCandidateDiagnostics;
+import io.github.ppissias.jtransient.core.SlowMoverCandidateResult;
+import io.github.ppissias.jtransient.core.SlowMoverSummaryTelemetry;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.core.TrackLinker;
-import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import io.github.ppissias.jtransient.engine.PipelineResult;
+import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import io.github.ppissias.jtransient.telemetry.TrackerTelemetry;
 
 import javax.imageio.ImageIO;
@@ -30,8 +35,13 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 public class ImageDisplayUtils {
 
@@ -584,7 +594,8 @@ public class ImageDisplayUtils {
                                                      List<TrackLinker.Track> singleStreaks,
                                                      List<TrackLinker.Track> streakTracks,
                                                      List<TrackLinker.Track> suspectedStreakTracks,
-                                                     List<TrackLinker.Track> movingTargets) {
+                                                     List<TrackLinker.Track> movingTargets,
+                                                     List<TrackLinker.Track> localRescueTracks) {
         BufferedImage grayBg = createDisplayImage(backgroundData);
         BufferedImage rgbMap = new BufferedImage(grayBg.getWidth(), grayBg.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
@@ -625,6 +636,11 @@ public class ImageDisplayUtils {
             drawMultiFrameTrack(g2d, t, new Color(77, 166, 255), "T" + tCounter);
             tCounter++;
         }
+        int lrCounter = 1;
+        for (TrackLinker.Track t : localRescueTracks) {
+            drawMultiFrameTrack(g2d, t, new Color(64, 224, 208), "LR" + lrCounter);
+            lrCounter++;
+        }
         g2d.dispose();
         return rgbMap;
     }
@@ -642,6 +658,68 @@ public class ImageDisplayUtils {
         }
         g2d.setColor(Color.WHITE); g2d.setFont(new Font("Segoe UI", Font.BOLD, 18));
         g2d.drawString(label, (int) Math.round(track.points.get(0).x) + 15, (int) Math.round(track.points.get(0).y) - 15);
+    }
+
+    private static BufferedImage createMicroDriftTrailImage(TrackLinker.Track track,
+                                                            short[][] backgroundData,
+                                                            int cropWidth,
+                                                            int cropHeight,
+                                                            int startX,
+                                                            int startY) {
+        short[][] croppedBackground = robustEdgeAwareCrop(
+                backgroundData,
+                startX + (cropWidth / 2),
+                startY + (cropHeight / 2),
+                cropWidth,
+                cropHeight);
+        BufferedImage grayBackground = createDisplayImage(croppedBackground);
+        BufferedImage output = new BufferedImage(cropWidth, cropHeight, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = output.createGraphics();
+        g2d.setColor(Color.BLACK);
+        g2d.fillRect(0, 0, cropWidth, cropHeight);
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
+        g2d.drawImage(grayBackground, 0, 0, null);
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        int pointCount = track == null || track.points == null ? 0 : track.points.size();
+        for (int i = 0; i < pointCount; i++) {
+            SourceExtractor.DetectedObject point = track.points.get(i);
+            float ratio = pointCount > 1 ? (float) i / (pointCount - 1) : 0f;
+            Color timeColor = Color.getHSBColor(0.66f - (0.66f * ratio), 1.0f, 1.0f);
+            int localX = (int) Math.round(point.x - startX);
+            int localY = (int) Math.round(point.y - startY);
+
+            if (point.rawPixels != null && !point.rawPixels.isEmpty()) {
+                for (SourceExtractor.Pixel pixel : point.rawPixels) {
+                    int px = pixel.x - startX;
+                    int py = pixel.y - startY;
+                    if (px >= 0 && px < cropWidth && py >= 0 && py < cropHeight) {
+                        output.setRGB(px, py, timeColor.getRGB());
+                    }
+                }
+            }
+
+            g2d.setColor(new Color(timeColor.getRed(), timeColor.getGreen(), timeColor.getBlue(), 120));
+            g2d.fillOval(localX - 7, localY - 7, 14, 14);
+            g2d.setColor(timeColor);
+            g2d.fillOval(localX - 3, localY - 3, 6, 6);
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            g2d.drawString(String.valueOf(i + 1), localX + 8, localY - 8);
+
+            if (i > 0) {
+                SourceExtractor.DetectedObject previous = track.points.get(i - 1);
+                int prevX = (int) Math.round(previous.x - startX);
+                int prevY = (int) Math.round(previous.y - startY);
+                g2d.setColor(new Color(timeColor.getRed(), timeColor.getGreen(), timeColor.getBlue(), 180));
+                g2d.setStroke(new BasicStroke(2.0f));
+                g2d.drawLine(prevX, prevY, localX, localY);
+            }
+        }
+
+        g2d.dispose();
+        return output;
     }
 
     private static BufferedImage createDriftMap(List<SourceExtractor.Pixel> path, int outSize) {
@@ -1805,6 +1883,8 @@ public class ImageDisplayUtils {
                                                      String auxiliaryMaskLabel,
                                                      String auxiliaryMaskFileName,
                                                      Double auxiliaryMaskOverlapFraction,
+                                                     SlowMoverCandidateDiagnostics candidateDiagnostics,
+                                                     Double residualCoreThreshold,
                                                      short[][] secondaryStackData,
                                                      String secondaryStackLabel,
                                                      String secondaryStackFileName,
@@ -1824,6 +1904,9 @@ public class ImageDisplayUtils {
         int startY = cy - (cropSize / 2);
         short[][] maskReferenceData = masterStackData != null ? masterStackData : primaryStackData;
         Double resolvedAuxiliaryMaskOverlap = auxiliaryMaskOverlapFraction;
+        if (resolvedAuxiliaryMaskOverlap == null && candidateDiagnostics != null) {
+            resolvedAuxiliaryMaskOverlap = candidateDiagnostics.medianSupportOverlap;
+        }
 
         short[][] croppedPrimaryData = null;
         if (primaryStackData != null && primaryStackFileName != null) {
@@ -1909,8 +1992,390 @@ public class ImageDisplayUtils {
         }
         report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' style='max-width: 150px;' alt='Shape Footprint' /></a><br/><center><small>Shape</small></center></div>");
         report.println("</div>");
-        report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>" + escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(astrometryContext, detection.x, detection.y)) + "<br>Elongation: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f", detection.elongation) + "</span><br>Pixels: <span style='color:#fff;'>" + (int) detection.pixelArea + "</span>" + (resolvedAuxiliaryMaskOverlap != null ? "<br>Mask Overlap: <span style='color:#fff;'>" + formatPercent(resolvedAuxiliaryMaskOverlap) + "</span>" : "") + "</div>");
+        if ((auxiliaryMaskFileName != null && auxiliaryMask != null && masterStackData != null)
+                || (diffFileName != null && croppedPrimaryData != null && masterStackData != null)) {
+            report.println("<div class='astro-note' style='margin-top: 0; margin-bottom: 10px;'><strong>"
+                    + escapeHtml(auxiliaryMaskLabel != null ? auxiliaryMaskLabel : "Median Mask")
+                    + ":</strong> the ordinary median-stack object mask around this candidate. It shows what the static baseline already explains, and <strong>Mask Overlap</strong> measures how much of the candidate falls on that baseline.<br><strong>"
+                    + escapeHtml(diffLabel != null ? diffLabel : "Diff")
+                    + ":</strong> a positive-only <code>"
+                    + escapeHtml(primaryStackLabel != null ? primaryStackLabel : "Primary Stack")
+                    + " - Median Stack</code> map. Red marks pixels that are brighter in the slow-mover stack than in the ordinary median stack.</div>");
+        }
+        StringBuilder deepStackStats = new StringBuilder();
+        deepStackStats.append("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>")
+                .append(escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(astrometryContext, detection.x, detection.y)))
+                .append("<br>Elongation: <span style='color:#fff;'>")
+                .append(String.format(Locale.US, "%.2f", detection.elongation))
+                .append("</span><br>Pixels: <span style='color:#fff;'>")
+                .append((int) detection.pixelArea)
+                .append("</span>");
+        if (resolvedAuxiliaryMaskOverlap != null) {
+            deepStackStats.append("<br>Mask Overlap: <span style='color:#fff;'>")
+                    .append(formatPercent(resolvedAuxiliaryMaskOverlap))
+                    .append("</span>");
+        }
+        if (candidateDiagnostics != null) {
+            deepStackStats.append("<br>Residual Core Radius: <span style='color:#fff;'>")
+                    .append(String.format(Locale.US, "%.2f px", candidateDiagnostics.residualCoreRadiusPixelsUsed))
+                    .append("</span>");
+            deepStackStats.append("<br>Residual Core Positive: <span style='color:#fff;'>")
+                    .append(formatPercent(candidateDiagnostics.residualCorePositiveFraction))
+                    .append("</span>");
+            if (residualCoreThreshold != null) {
+                deepStackStats.append(" <span style='color:#777;'>(threshold ")
+                        .append(formatPercent(residualCoreThreshold))
+                        .append(")</span>");
+            }
+            deepStackStats.append("<br>Residual Core Pixels: <span style='color:#fff;'>")
+                    .append(candidateDiagnostics.residualCorePositivePixels)
+                    .append("/")
+                    .append(candidateDiagnostics.residualCorePixels)
+                    .append("</span>");
+            deepStackStats.append("<br>Residual Core Filter: <span style='color:#fff;'>")
+                    .append(candidateDiagnostics.residualCoreFilteringEnabled ? "enabled" : "disabled")
+                    .append("</span>");
+        }
+        deepStackStats.append("</div>");
+        report.println(deepStackStats);
         report.print(DetectionReportAstrometry.buildDeepStackIdentificationHtml(astrometryContext, detection));
+        report.println("</div>");
+    }
+
+    private static TrackLinker.Track buildResidualTrack(List<SourceExtractor.DetectedObject> points) {
+        TrackLinker.Track track = new TrackLinker.Track();
+        if (points == null || points.isEmpty()) {
+            return track;
+        }
+
+        List<SourceExtractor.DetectedObject> orderedPoints = new ArrayList<>(points);
+        orderedPoints.sort(Comparator.comparingInt((SourceExtractor.DetectedObject point) -> point.sourceFrameIndex)
+                .thenComparingDouble(point -> point.x)
+                .thenComparingDouble(point -> point.y));
+        for (SourceExtractor.DetectedObject point : orderedPoints) {
+            track.addPoint(point);
+        }
+        return track;
+    }
+
+    private static Set<Integer> collectResidualFrameIndices(TrackLinker.Track track) {
+        Set<Integer> frameIndices = new HashSet<>();
+        if (track == null || track.points == null) {
+            return frameIndices;
+        }
+        for (SourceExtractor.DetectedObject point : track.points) {
+            frameIndices.add(point.sourceFrameIndex);
+        }
+        return frameIndices;
+    }
+
+    private static String formatLocalRescueKind(ResidualTransientAnalysis.LocalRescueKind kind) {
+        if (kind == null) {
+            return "Local Rescue";
+        }
+        switch (kind) {
+            case LOCAL_REPEAT:
+                return "Same-Location Repeat";
+            case SPARSE_LOCAL_DRIFT:
+                return "Sparse Local Drift";
+            case MICRO_DRIFT:
+            default:
+                return "Micro-Drift";
+        }
+    }
+
+    private static String buildLocalRescueBadge(ResidualTransientAnalysis.LocalRescueKind kind) {
+        if (kind == ResidualTransientAnalysis.LocalRescueKind.LOCAL_REPEAT) {
+            return " <span style='background: #19595a; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>2+ Same-Location Rescue</span>";
+        }
+        if (kind == ResidualTransientAnalysis.LocalRescueKind.SPARSE_LOCAL_DRIFT) {
+            return " <span style='background: #2d5a88; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>Sparse Local-Drift Rescue</span>";
+        }
+        return "";
+    }
+
+    private static String buildLocalRescueNote(ResidualTransientAnalysis.LocalRescueKind kind) {
+        if (kind == ResidualTransientAnalysis.LocalRescueKind.LOCAL_REPEAT) {
+            return "Engine-side residual rescue built by JTransient from unclassified transients after normal track, anomaly, and suspected-streak classification. This candidate is a tight local repeater rather than a strong kinematic track.";
+        }
+        if (kind == ResidualTransientAnalysis.LocalRescueKind.SPARSE_LOCAL_DRIFT) {
+            return "Engine-side residual rescue built by JTransient from unclassified transients after normal track, anomaly, and suspected-streak classification. This candidate shows coherent local drift across a sparse set of frames, so it would be missed by stricter contiguous-frame linking.";
+        }
+        return "Engine-side residual rescue built by JTransient from unclassified transients after normal track, anomaly, and suspected-streak classification. These are not confirmed tracks; manual verification is recommended.";
+    }
+
+    private static void exportMicroDriftCandidateCard(java.io.PrintWriter report,
+                                                      File exportDir,
+                                                      List<short[][]> rawFrames,
+                                                      FitsFileInformation[] fitsFiles,
+                                                      DetectionReportAstrometry.Context astrometryContext,
+                                                      short[][] referenceBackground,
+                                                      ResidualTransientAnalysis.LocalRescueCandidate candidate,
+                                                      int counter) throws IOException {
+        TrackLinker.Track track = buildResidualTrack(candidate.points);
+        CropBounds cropBounds = new CropBounds(track, Math.max(140, trackCropPadding / 2));
+
+        String prefix = "micro_drift_" + counter;
+        String backgroundFileName = prefix + "_background.png";
+        String trailFileName = prefix + "_trail.png";
+        String shapeFileName = prefix + "_shape.png";
+        String contextGifFileName = prefix + "_context.gif";
+
+        short[][] backgroundSource = referenceBackground;
+        if (backgroundSource == null && rawFrames != null && !rawFrames.isEmpty()) {
+            int fallbackIndex = Math.max(0, Math.min(rawFrames.size() - 1, track.points.get(0).sourceFrameIndex));
+            backgroundSource = rawFrames.get(fallbackIndex);
+        }
+
+        if (backgroundSource != null) {
+            short[][] croppedBackground = robustEdgeAwareCrop(
+                    backgroundSource,
+                    cropBounds.fixedCenterX,
+                    cropBounds.fixedCenterY,
+                    cropBounds.trackBoxWidth,
+                    cropBounds.trackBoxHeight);
+            saveTrackImageLossless(createDisplayImage(croppedBackground), new File(exportDir, backgroundFileName));
+
+            BufferedImage trailImage = createMicroDriftTrailImage(
+                    track,
+                    backgroundSource,
+                    cropBounds.trackBoxWidth,
+                    cropBounds.trackBoxHeight,
+                    cropBounds.startX,
+                    cropBounds.startY);
+            saveTrackImageLossless(trailImage, new File(exportDir, trailFileName));
+        }
+
+        BufferedImage shapeImage = createTrackShapeImage(
+                track,
+                cropBounds.trackBoxWidth,
+                cropBounds.trackBoxHeight,
+                cropBounds.startX,
+                cropBounds.startY);
+        saveTrackImageLossless(shapeImage, new File(exportDir, shapeFileName));
+
+        if (rawFrames != null && !rawFrames.isEmpty()) {
+            java.util.Set<Integer> mandatoryFrames = collectResidualFrameIndices(track);
+            java.util.Map<Integer, SourceExtractor.DetectedObject> pointByFrame = new java.util.HashMap<>();
+            for (SourceExtractor.DetectedObject point : track.points) {
+                pointByFrame.put(point.sourceFrameIndex, point);
+            }
+
+            List<Integer> sampledIndices = getRepresentativeSequence(rawFrames.size(), mandatoryFrames, 12);
+            List<BufferedImage> contextFrames = new ArrayList<>();
+            for (int frameIndex : sampledIndices) {
+                short[][] croppedData = robustEdgeAwareCrop(
+                        rawFrames.get(frameIndex),
+                        cropBounds.fixedCenterX,
+                        cropBounds.fixedCenterY,
+                        cropBounds.trackBoxWidth,
+                        cropBounds.trackBoxHeight);
+                BufferedImage frameImage = createDisplayImage(croppedData);
+                Graphics2D g2d = frameImage.createGraphics();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                SourceExtractor.DetectedObject detectedPoint = pointByFrame.get(frameIndex);
+                if (detectedPoint != null) {
+                    int localX = (int) Math.round(detectedPoint.x - cropBounds.startX);
+                    int localY = (int) Math.round(detectedPoint.y - cropBounds.startY);
+                    g2d.setColor(new Color(64, 224, 208));
+                    g2d.setStroke(new BasicStroke(targetCircleStrokeWidth));
+                    g2d.drawOval(localX - targetCircleRadius, localY - targetCircleRadius, targetCircleRadius * 2, targetCircleRadius * 2);
+                    g2d.setFont(new Font("Segoe UI", Font.BOLD, 13));
+                    g2d.setColor(Color.WHITE);
+                    int pointOrder = track.points.indexOf(detectedPoint) + 1;
+                    g2d.drawString("P" + pointOrder, localX + 18, localY - 18);
+                }
+
+                g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
+                g2d.setColor(new Color(255, 255, 255, 230));
+                g2d.drawString("Frame " + (frameIndex + 1), 10, 18);
+                g2d.dispose();
+                contextFrames.add(frameImage);
+            }
+            GifSequenceWriter.saveAnimatedGif(contextFrames, new File(exportDir, contextGifFileName), gifBlinkSpeedMs);
+        }
+
+        String candidateBadge = buildLocalRescueBadge(candidate.kind);
+        String candidateNote = buildLocalRescueNote(candidate.kind);
+        ResidualTransientAnalysis.LocalTransientMetrics metrics = candidate.metrics;
+        report.println("<div class='detection-card' style='border-left-color: #40e0d0;'>");
+        report.println("<div class='detection-title' style='color: #40e0d0;'>Local Rescue Candidate LR" + counter + candidateBadge + "</div>");
+        report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>" + candidateNote + "</div>");
+        report.println("<div class='image-container'>");
+        if (backgroundSource != null) {
+            report.println("<div><a href='" + backgroundFileName + "' target='_blank'><img src='" + backgroundFileName + "' alt='Reference Crop' /></a><br/><center><small>Reference Crop</small></center></div>");
+            report.println("<div><a href='" + trailFileName + "' target='_blank'><img src='" + trailFileName + "' alt='Local Trail Map' /></a><br/><center><small>Local Trail Map</small></center></div>");
+        }
+        if (rawFrames != null && !rawFrames.isEmpty()) {
+            report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Micro-Drift Animation' /></a><br/><center><small>Animation (Star-Centric)</small></center></div>");
+        }
+        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint Evolution' /></a><br/><center><small>Shape Evolution</small></center></div>");
+        report.println("</div>");
+
+        report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 10px;'>"
+                + "Type: <span style='color:#fff;'>" + escapeHtml(formatLocalRescueKind(candidate.kind)) + "</span>"
+                + " | "
+                + "Support: <span style='color:#fff;'>" + metrics.pointCount + " detections</span>"
+                + " across <span style='color:#fff;'>" + metrics.frameSpan + "</span> frame(s)"
+                + " | Gap Frames: <span style='color:#fff;'>" + metrics.totalGapFrames + "</span>"
+                + " | Total Motion: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.totalDisplacementPixels) + "</span>"
+                + " | Mean Step: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.averageStepPixels) + "</span>"
+                + " | Cluster Radius: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.clusterRadiusPixels) + "</span>"
+                + " | Fit RMSE: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.linearityRmsePixels) + "</span>"
+                + " | Score: <span style='color:#fff;'>" + String.format(Locale.US, "%.1f", candidate.score) + "</span>"
+                + "</div>");
+        report.print(buildTrackTimingSummaryHtml(track, astrometryContext));
+
+        report.println("<strong>Detection Coordinates & Frames:</strong><ul class='source-list'>");
+        for (int i = 0; i < track.points.size(); i++) {
+            SourceExtractor.DetectedObject point = track.points.get(i);
+            String pointMetrics = buildMicroDriftMetricsText(point, i + 1);
+            report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry(
+                    "[" + (i + 1) + "] " + point.sourceFilename,
+                    astrometryContext,
+                    point.x,
+                    point.y,
+                    pointMetrics));
+        }
+        report.println("</ul>");
+        report.print(DetectionReportAstrometry.buildTrackSolarSystemIdentificationHtml(astrometryContext, track));
+        report.println("</div>");
+    }
+
+    private static void exportLocalActivityClusterCard(java.io.PrintWriter report,
+                                                       File exportDir,
+                                                       List<short[][]> rawFrames,
+                                                       DetectionReportAstrometry.Context astrometryContext,
+                                                       short[][] referenceBackground,
+                                                       ResidualTransientAnalysis.LocalActivityCluster cluster,
+                                                       int counter) throws IOException {
+        TrackLinker.Track track = buildResidualTrack(cluster.points);
+        CropBounds cropBounds = new CropBounds(track, Math.max(180, trackCropPadding / 2));
+
+        String prefix = "local_activity_" + counter;
+        String backgroundFileName = prefix + "_background.png";
+        String trailFileName = prefix + "_trail.png";
+        String shapeFileName = prefix + "_shape.png";
+        String contextGifFileName = prefix + "_context.gif";
+
+        short[][] backgroundSource = referenceBackground;
+        if (backgroundSource == null && rawFrames != null && !rawFrames.isEmpty()) {
+            int fallbackIndex = Math.max(0, Math.min(rawFrames.size() - 1, track.points.get(0).sourceFrameIndex));
+            backgroundSource = rawFrames.get(fallbackIndex);
+        }
+
+        if (backgroundSource != null) {
+            short[][] croppedBackground = robustEdgeAwareCrop(
+                    backgroundSource,
+                    cropBounds.fixedCenterX,
+                    cropBounds.fixedCenterY,
+                    cropBounds.trackBoxWidth,
+                    cropBounds.trackBoxHeight);
+            saveTrackImageLossless(createDisplayImage(croppedBackground), new File(exportDir, backgroundFileName));
+
+            BufferedImage trailImage = createMicroDriftTrailImage(
+                    track,
+                    backgroundSource,
+                    cropBounds.trackBoxWidth,
+                    cropBounds.trackBoxHeight,
+                    cropBounds.startX,
+                    cropBounds.startY);
+            saveTrackImageLossless(trailImage, new File(exportDir, trailFileName));
+        }
+
+        BufferedImage shapeImage = createTrackShapeImage(
+                track,
+                cropBounds.trackBoxWidth,
+                cropBounds.trackBoxHeight,
+                cropBounds.startX,
+                cropBounds.startY);
+        saveTrackImageLossless(shapeImage, new File(exportDir, shapeFileName));
+
+        if (rawFrames != null && !rawFrames.isEmpty()) {
+            Set<Integer> mandatoryFrames = collectResidualFrameIndices(track);
+            Map<Integer, SourceExtractor.DetectedObject> pointByFrame = new HashMap<>();
+            for (SourceExtractor.DetectedObject point : track.points) {
+                pointByFrame.put(point.sourceFrameIndex, point);
+            }
+
+            List<Integer> sampledIndices = getRepresentativeSequence(rawFrames.size(), mandatoryFrames, 12);
+            List<BufferedImage> contextFrames = new ArrayList<>();
+            for (int frameIndex : sampledIndices) {
+                short[][] croppedData = robustEdgeAwareCrop(
+                        rawFrames.get(frameIndex),
+                        cropBounds.fixedCenterX,
+                        cropBounds.fixedCenterY,
+                        cropBounds.trackBoxWidth,
+                        cropBounds.trackBoxHeight);
+                BufferedImage frameImage = createDisplayImage(croppedData);
+                Graphics2D g2d = frameImage.createGraphics();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                SourceExtractor.DetectedObject detectedPoint = pointByFrame.get(frameIndex);
+                if (detectedPoint != null) {
+                    int localX = (int) Math.round(detectedPoint.x - cropBounds.startX);
+                    int localY = (int) Math.round(detectedPoint.y - cropBounds.startY);
+                    g2d.setColor(new Color(255, 170, 80));
+                    g2d.setStroke(new BasicStroke(targetCircleStrokeWidth));
+                    g2d.drawOval(localX - targetCircleRadius, localY - targetCircleRadius, targetCircleRadius * 2, targetCircleRadius * 2);
+                    g2d.setFont(new Font("Segoe UI", Font.BOLD, 13));
+                    g2d.setColor(Color.WHITE);
+                    int pointOrder = track.points.indexOf(detectedPoint) + 1;
+                    g2d.drawString("P" + pointOrder, localX + 18, localY - 18);
+                }
+
+                g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
+                g2d.setColor(new Color(255, 255, 255, 230));
+                g2d.drawString("Frame " + (frameIndex + 1), 10, 18);
+                g2d.dispose();
+                contextFrames.add(frameImage);
+            }
+            GifSequenceWriter.saveAnimatedGif(contextFrames, new File(exportDir, contextGifFileName), gifBlinkSpeedMs);
+        }
+
+        ResidualTransientAnalysis.LocalTransientMetrics metrics = cluster.metrics;
+        report.println("<div class='detection-card' style='border-left-color: #ffb347;'>");
+        report.println("<div class='detection-title' style='color: #ffb347;'>Local Activity Cluster LC" + counter
+                + " <span style='background: #7a4b14; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>"
+                + String.format(Locale.US, "%.0f px Linkage", cluster.linkageRadiusPixels)
+                + "</span></div>");
+        report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>Broad engine-side residual review cluster built by JTransient after rescue-consumed points are removed. This is not a confirmed object category; it highlights persistent same-area activity worth manual inspection.</div>");
+        report.println("<div class='image-container'>");
+        if (backgroundSource != null) {
+            report.println("<div><a href='" + backgroundFileName + "' target='_blank'><img src='" + backgroundFileName + "' alt='Reference Crop' /></a><br/><center><small>Reference Crop</small></center></div>");
+            report.println("<div><a href='" + trailFileName + "' target='_blank'><img src='" + trailFileName + "' alt='Local Cluster Trail Map' /></a><br/><center><small>Cluster Trail Map</small></center></div>");
+        }
+        if (rawFrames != null && !rawFrames.isEmpty()) {
+            report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Local Activity Animation' /></a><br/><center><small>Animation (Star-Centric)</small></center></div>");
+        }
+        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Cluster Shape Evolution' /></a><br/><center><small>Shape Evolution</small></center></div>");
+        report.println("</div>");
+
+        report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 10px;'>"
+                + "Support: <span style='color:#fff;'>" + metrics.pointCount + " detections</span>"
+                + " across <span style='color:#fff;'>" + metrics.uniqueFrameCount + "</span> unique frame(s)"
+                + " | Frame Span: <span style='color:#fff;'>" + metrics.frameSpan + "</span>"
+                + " | Gap Frames: <span style='color:#fff;'>" + metrics.totalGapFrames + "</span>"
+                + " | Total Motion: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.totalDisplacementPixels) + "</span>"
+                + " | Mean Step: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.averageStepPixels) + "</span>"
+                + " | Cluster Radius: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.clusterRadiusPixels) + "</span>"
+                + " | Fit RMSE: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.linearityRmsePixels) + "</span>"
+                + " | Linkage Radius: <span style='color:#fff;'>" + String.format(Locale.US, "%.1f px", cluster.linkageRadiusPixels) + "</span>"
+                + "</div>");
+
+        report.println("<strong>Cluster Coordinates & Frames:</strong><ul class='source-list'>");
+        for (int i = 0; i < track.points.size(); i++) {
+            SourceExtractor.DetectedObject point = track.points.get(i);
+            String metricsText = buildMicroDriftMetricsText(point, i + 1);
+            report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry(
+                    "[" + (i + 1) + "] " + point.sourceFilename,
+                    astrometryContext,
+                    point.x,
+                    point.y,
+                    metricsText));
+        }
+        report.println("</ul>");
         report.println("</div>");
     }
 
@@ -2000,6 +2465,20 @@ public class ImageDisplayUtils {
                 detection.elongation,
                 detection.fwhm,
                 detection.peakSigma,
+                formatUtcTimestamp(detection.timestamp));
+    }
+
+    private static String buildMicroDriftMetricsText(SourceExtractor.DetectedObject detection, int sequenceNumber) {
+        return String.format(
+                Locale.US,
+                "Point %d, Flux: %.1f, Pixels: %d, Elongation: %.2f, FWHM: %.2f, Peak Sigma: %.2f, Integrated Sigma: %.2f, UTC: %s",
+                sequenceNumber,
+                detection.totalFlux,
+                (int) detection.pixelArea,
+                detection.elongation,
+                detection.fwhm,
+                detection.peakSigma,
+                detection.integratedSigma,
                 formatUtcTimestamp(detection.timestamp));
     }
 
@@ -2224,6 +2703,26 @@ public class ImageDisplayUtils {
                 .replace("\"", "&quot;");
     }
 
+    private static boolean hasMeaningfulSlowMoverTelemetry(SlowMoverSummaryTelemetry telemetry) {
+        if (telemetry == null) {
+            return false;
+        }
+        return telemetry.rawCandidatesExtracted > 0
+                || telemetry.candidatesAboveElongationThreshold > 0
+                || telemetry.candidatesEvaluatedAgainstMasks > 0
+                || telemetry.candidatesDetected > 0
+                || telemetry.rejectedIrregularShape > 0
+                || telemetry.rejectedBinaryAnomaly > 0
+                || telemetry.rejectedSlowMoverShape > 0
+                || telemetry.rejectedLowMedianSupport > 0
+                || telemetry.rejectedHighMedianSupport > 0
+                || telemetry.rejectedLowResidualCoreSupport > 0
+                || telemetry.dynamicElongationThreshold > 0.0
+                || telemetry.avgMedianSupportOverlap > 0.0
+                || telemetry.avgResidualCorePositiveFraction > 0.0
+                || telemetry.residualCoreMinPositiveFractionThreshold > 0.0;
+    }
+
     // =================================================================
     // HTML EXPORT
     // =================================================================
@@ -2249,16 +2748,46 @@ public class ImageDisplayUtils {
         short[][] maximumStackData = result.maximumStackData;
         boolean[][] masterVetoMask = result.masterVetoMask;
         List<SourceExtractor.DetectedObject> masterStars = result.masterStars;
-        short[][] slowMoverStackData = result.slowMoverStackData;
-        boolean[][] slowMoverMedianVetoMask = result.slowMoverMedianVetoMask;
-        List<SourceExtractor.DetectedObject> slowMoverCandidates = result.slowMoverCandidates;
-        PipelineTelemetry.SlowMoverTelemetry slowMoverTelemetry = pipelineTelemetry != null ? pipelineTelemetry.slowMoverTelemetry : null;
-        List<List<SourceExtractor.DetectedObject>> allRemainingTransients = result.allRemainingTransients;
+        SlowMoverAnalysis slowMoverAnalysis = result.slowMoverAnalysis != null
+                ? result.slowMoverAnalysis
+                : SlowMoverAnalysis.empty();
+        short[][] slowMoverStackData = slowMoverAnalysis.slowMoverStackData != null
+                ? slowMoverAnalysis.slowMoverStackData
+                : result.slowMoverStackData;
+        boolean[][] slowMoverMedianVetoMask = slowMoverAnalysis.medianVetoMask != null
+                ? slowMoverAnalysis.medianVetoMask
+                : result.slowMoverMedianVetoMask;
+        List<SlowMoverCandidateResult> slowMoverCandidateResults = slowMoverAnalysis.candidates != null
+                ? slowMoverAnalysis.candidates
+                : java.util.Collections.emptyList();
+        List<SourceExtractor.DetectedObject> slowMoverCandidates = new ArrayList<>();
+        if (!slowMoverCandidateResults.isEmpty()) {
+            for (SlowMoverCandidateResult candidateResult : slowMoverCandidateResults) {
+                if (candidateResult != null && candidateResult.object != null) {
+                    slowMoverCandidates.add(candidateResult.object);
+                }
+            }
+        } else if (result.slowMoverCandidates != null) {
+            slowMoverCandidates.addAll(result.slowMoverCandidates);
+        }
+        SlowMoverSummaryTelemetry slowMoverTelemetry = hasMeaningfulSlowMoverTelemetry(slowMoverAnalysis.telemetry)
+                ? slowMoverAnalysis.telemetry
+                : (pipelineTelemetry != null && pipelineTelemetry.slowMoverTelemetry != null
+                ? new SlowMoverSummaryTelemetry(pipelineTelemetry.slowMoverTelemetry)
+                : null);
+        List<List<SourceExtractor.DetectedObject>> allTransients = result.allTransients;
+        List<List<SourceExtractor.DetectedObject>> unclassifiedTransients = result.unclassifiedTransients;
+        ResidualTransientAnalysis residualTransientAnalysis = result.residualTransientAnalysis != null
+                ? result.residualTransientAnalysis
+                : ResidualTransientAnalysis.empty();
+        List<ResidualTransientAnalysis.LocalRescueCandidate> localRescueCandidates = residualTransientAnalysis.localRescueCandidates;
+        List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters = residualTransientAnalysis.localActivityClusters;
         DetectionReportAstrometry.Context astrometryContext = DetectionReportAstrometry.buildContext(fitsFiles, appConfig);
         List<TrackLinker.Track> singleStreaks = new ArrayList<>();
         List<TrackLinker.Track> streakTracks = new ArrayList<>();
         List<TrackLinker.Track> movingTargets = new ArrayList<>();
         List<TrackLinker.Track> suspectedStreakTracks = new ArrayList<>();
+        List<TrackLinker.Track> localRescueTracks = new ArrayList<>();
 
         for (TrackLinker.Track track : tracks) {
             if (track.points == null || track.points.isEmpty()) continue;
@@ -2276,9 +2805,17 @@ public class ImageDisplayUtils {
                 else movingTargets.add(track);
             }
         }
+        for (ResidualTransientAnalysis.LocalRescueCandidate candidate : localRescueCandidates) {
+            TrackLinker.Track residualTrack = buildResidualTrack(candidate.points);
+            if (residualTrack.points != null && !residualTrack.points.isEmpty()) {
+                localRescueTracks.add(residualTrack);
+            }
+        }
 
         int slowMoverCandidateCount = slowMoverCandidates == null ? 0 : slowMoverCandidates.size();
-        int potentialSlowMoverCount = slowMoverCandidateCount;
+        int localRescueCandidateCount = localRescueCandidates.size();
+        int localActivityClusterCount = localActivityClusters.size();
+        int potentialSlowMoverCount = slowMoverCandidateCount + localRescueCandidateCount;
         int singleStreakMetric = singleStreaks.size();
         int confirmedLinkedTrackMetric = movingTargets.size() + streakTracks.size();
         int suspectedStreakTrackMetric = pipelineTelemetry != null ? pipelineTelemetry.totalSuspectedStreakTracksFound : suspectedStreakTracks.size();
@@ -2391,6 +2928,8 @@ public class ImageDisplayUtils {
                 report.println("<div class='metric-box'><span class='metric-value'>" + suspectedStreakTrackMetric + "</span><span class='metric-label'>Suspected Streak Tracks</span></div>");
                 String potentialSlowMoverMetric = config.enableSlowMoverDetection ? String.valueOf(potentialSlowMoverCount) : "Off";
                 report.println("<div class='metric-box'><span class='metric-value'>" + potentialSlowMoverMetric + "</span><span class='metric-label'>Potential Slow Movers</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + localRescueCandidateCount + "</span><span class='metric-label'>Local Rescue Candidates</span></div>");
+                report.println("<div class='metric-box'><span class='metric-value'>" + localActivityClusterCount + "</span><span class='metric-label'>Local Activity Clusters</span></div>");
                 report.println("</div>");
                 report.println("<div class='astro-note'>JTransient returned <strong>" + returnedTrackMetric + "</strong> track-like detections overall: <strong>" + singleStreakMetric + "</strong> single-frame streaks, <strong>" + confirmedLinkedTrackMetric + "</strong> confirmed linked tracks, and <strong>" + suspectedStreakTrackMetric + "</strong> suspected streak groupings.</div>");
                 if (!anomalies.isEmpty()) {
@@ -2404,10 +2943,12 @@ public class ImageDisplayUtils {
                     report.println("</div>");
                 }
                 if (config.enableSlowMoverDetection) {
-                    report.println("<div class='astro-note'>Potential slow movers currently reflect " + slowMoverCandidateCount + " deep-stack candidates.</div>");
+                    report.println("<div class='astro-note'>Potential slow movers currently reflect " + slowMoverCandidateCount + " deep-stack candidates plus " + localRescueCandidateCount + " local rescue candidates.</div>");
                 } else {
                     report.println("<div class='astro-note'>Potential slow mover analysis was disabled for this session.</div>");
                 }
+                int unclassifiedTransientCount = countTotalTransientDetections(unclassifiedTransients);
+                report.println("<div class='astro-note'>Local rescue candidates and local activity clusters are engine-side residual outputs from JTransient. Rescue candidates are mined from <strong>unclassifiedTransients</strong>, then the remaining leftovers are clustered into broader local activity groups for manual review. This run ended with <strong>" + unclassifiedTransientCount + "</strong> unclassified transient detections before residual analysis.</div>");
                 report.println("</div>");
 
                 report.println("<div class='panel'>");
@@ -3004,6 +3545,7 @@ public class ImageDisplayUtils {
                 if (hasCandidates || hasTelemetry || hasSlowMoverStack || hasSlowMoverMask) {
                     report.println("<h2>Deep Stack Anomalies (Ultra-Slow Mover Candidates)</h2>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
+                    report.println("<div class='astro-note' style='margin-bottom: 18px;'><strong>Slow-Mover Median Mask</strong> shows the object footprints extracted from the ordinary median stack using the same strict slow-mover detection settings. It marks what the normal median stack already explains. A real ultra-slow mover should usually overlap this mask somewhat, because it still leaves some support in the median stack, but not so much that it is indistinguishable from a fully static source.<br><strong>Slow Mover Diff</strong> is the positive-only difference image <code>Slow Mover Stack - Median Stack</code>. Black means there is no extra signal in the slow-mover stack at that pixel; red highlights signal that becomes brighter in the slow-mover stack and can reveal faint ultra-slow motion.</div>");
 
                     if (hasTelemetry) {
                         report.println("<div class='panel'>");
@@ -3018,12 +3560,15 @@ public class ImageDisplayUtils {
                         report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShape), "Rejected Shape Veto"));
                         report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedLowMedianSupport), "Rejected Low Overlap"));
                         report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedHighMedianSupport), "Rejected High Overlap"));
+                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedLowResidualCoreSupport), "Rejected Low Residual"));
                         report.println(compactMetricBox(String.format(Locale.US, "%.2f", slowMoverTelemetry.medianElongation), "Median Elongation"));
                         report.println(compactMetricBox(String.format(Locale.US, "%.2f", slowMoverTelemetry.madElongation), "MAD Elongation"));
                         report.println(compactMetricBox(String.format(Locale.US, "%.2f", slowMoverTelemetry.dynamicElongationThreshold), "Dynamic Threshold"));
                         report.println(compactMetricBox(formatPercent(slowMoverTelemetry.medianSupportOverlapThreshold), "Min Overlap"));
                         report.println(compactMetricBox(formatPercent(slowMoverTelemetry.medianSupportMaxOverlapThreshold), "Max Overlap"));
                         report.println(compactMetricBox(formatPercent(slowMoverTelemetry.avgMedianSupportOverlap), "Average Overlap"));
+                        report.println(compactMetricBox(formatPercent(slowMoverTelemetry.residualCoreMinPositiveFractionThreshold), "Residual Core Min"));
+                        report.println(compactMetricBox(formatPercent(slowMoverTelemetry.avgResidualCorePositiveFraction), "Residual Core Avg"));
                         report.println("</div>");
                         report.println("<div class='astro-note' style='margin-top: -12px; margin-bottom: 10px;'>Slow-mover-only shape-veto breakdown. These counts are a subset of <strong>Rejected Shape Veto</strong>.</div>");
                         report.println("<div class='flex-container' style='margin-bottom: 10px;'>");
@@ -3045,11 +3590,12 @@ public class ImageDisplayUtils {
                         int smCounter = 1;
                         for (int i = 0; i < slowMoverCandidates.size(); i++) {
                             SourceExtractor.DetectedObject sm = slowMoverCandidates.get(i);
-                            Double candidateOverlap = null;
-                            if (slowMoverTelemetry != null
-                                    && slowMoverTelemetry.candidateMedianSupportOverlaps != null
-                                    && i < slowMoverTelemetry.candidateMedianSupportOverlaps.size()) {
-                                candidateOverlap = slowMoverTelemetry.candidateMedianSupportOverlaps.get(i);
+                            SlowMoverCandidateDiagnostics candidateDiagnostics = null;
+                            if (i < slowMoverCandidateResults.size()) {
+                                SlowMoverCandidateResult candidateResult = slowMoverCandidateResults.get(i);
+                                if (candidateResult != null && candidateResult.object == sm) {
+                                    candidateDiagnostics = candidateResult.diagnostics;
+                                }
                             }
                             exportDeepStackDetectionCard(
                                     report,
@@ -3064,7 +3610,9 @@ public class ImageDisplayUtils {
                                     slowMoverMedianVetoMask,
                                     "Slow-Mover Median Mask",
                                     "slow_mover_" + smCounter + "_median_mask.png",
-                                    candidateOverlap,
+                                    candidateDiagnostics != null ? candidateDiagnostics.medianSupportOverlap : null,
+                                    candidateDiagnostics,
+                                    slowMoverTelemetry != null ? slowMoverTelemetry.residualCoreMinPositiveFractionThreshold : config.slowMoverResidualCoreMinPositiveFraction,
                                     maximumStackData,
                                     "Maximum Stack",
                                     "slow_mover_" + smCounter + "_maximum_stack.png",
@@ -3085,18 +3633,61 @@ public class ImageDisplayUtils {
             }
 
             // =================================================================
+            // 4.25 LOCAL MICRO-DRIFT CANDIDATES
+            // =================================================================
+            if (!localRescueCandidates.isEmpty()) {
+                short[][] microDriftBackground = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
+                report.println("<h2>Local Rescue Candidates (Residual Heuristic Analysis)</h2>");
+                report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Engine-side JTransient rescue analysis over <strong>unclassifiedTransients</strong>. These candidates highlight faint local motion spanning just a few pixels, sparse coherent local drifts across a handful of frames, plus short same-location repeats that are worth manual inspection.</p>");
+                report.println("<div class='astro-note' style='margin-bottom: 15px;'>These detections are no longer a SpacePixels-side post-pass. They come directly from JTransient residual analysis after the normal track, anomaly, and suspected-streak branches have already finished.</div>");
+
+                int counter = 1;
+                for (ResidualTransientAnalysis.LocalRescueCandidate candidate : localRescueCandidates) {
+                    exportMicroDriftCandidateCard(
+                            report,
+                            exportDir,
+                            rawFrames,
+                            fitsFiles,
+                            astrometryContext,
+                            microDriftBackground,
+                            candidate,
+                            counter);
+                    counter++;
+                }
+            }
+
+            if (!localActivityClusters.isEmpty()) {
+                short[][] clusterBackground = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
+                report.println("<h2>Local Activity Clusters (Residual Review Buckets)</h2>");
+                report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Broad engine-side spatial clusters built from leftover detections after local rescue candidates have already consumed their points. These are not object confirmations; they are review buckets for persistent same-area activity.</p>");
+
+                int counter = 1;
+                for (ResidualTransientAnalysis.LocalActivityCluster cluster : localActivityClusters) {
+                    exportLocalActivityClusterCard(
+                            report,
+                            exportDir,
+                            rawFrames,
+                            astrometryContext,
+                            clusterBackground,
+                            cluster,
+                            counter);
+                    counter++;
+                }
+            }
+
+            // =================================================================
             // 4.5 GLOBAL TRAJECTORY MAP
             // =================================================================
-            if (!singleStreaks.isEmpty() || !streakTracks.isEmpty() || !suspectedStreakTracks.isEmpty() || !movingTargets.isEmpty() || !anomalies.isEmpty()) {
+            if (!singleStreaks.isEmpty() || !streakTracks.isEmpty() || !suspectedStreakTracks.isEmpty() || !movingTargets.isEmpty() || !anomalies.isEmpty() || !localRescueTracks.isEmpty()) {
                 short[][] bgData = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
                 if (bgData != null) {
-                    BufferedImage globalMap = createGlobalTrackMap(bgData, anomalies, singleStreaks, streakTracks, suspectedStreakTracks, movingTargets);
+                    BufferedImage globalMap = createGlobalTrackMap(bgData, anomalies, singleStreaks, streakTracks, suspectedStreakTracks, movingTargets, localRescueTracks);
                     saveTrackImageLossless(globalMap, new File(exportDir, "global_track_map.png"));
                     report.println("<div class='panel'>");
                     report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Trajectory Map</h3>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
                     report.println("An overview of the classified track outputs and single-frame events plotted over the master background. " +
-                            "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>SST#</strong> for suspected streak groupings), while single-frame anomalies and single streaks are circled (<strong>A#</strong> and <strong>S#</strong>).</p>");
+                            "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>SST#</strong> for suspected streak groupings, <strong>LR#</strong> for local rescue candidates), while single-frame anomalies and single streaks are circled (<strong>A#</strong> and <strong>S#</strong>).</p>");
                     report.println("<a href='global_track_map.png' target='_blank'><img src='global_track_map.png' class='native-size-image' style='border: 1px solid #555; border-radius: 4px;' alt='Global Track Map' /></a>");
                     report.println("</div>");
                 }
@@ -3105,19 +3696,19 @@ public class ImageDisplayUtils {
             // =================================================================
             // 5. GLOBAL TRANSIENT MAP (Overall Summary)
             // =================================================================
-            if (allRemainingTransients != null && !allRemainingTransients.isEmpty()) {
+            if (allTransients != null && !allTransients.isEmpty()) {
                 short[][] bgData = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
                 if (bgData != null) {
-                    BufferedImage transientMap = createGlobalTransientMap(bgData, allRemainingTransients);
+                    BufferedImage transientMap = createGlobalTransientMap(bgData, allTransients);
                     saveTrackImageLossless(transientMap, new File(exportDir, "global_transient_map.png"));
 
-                    BufferedImage rainbowMap = createRainbowClusterMap(bgData, allRemainingTransients);
+                    BufferedImage rainbowMap = createRainbowClusterMap(bgData, allTransients);
                     saveTrackImageLossless(rainbowMap, new File(exportDir, "rainbow_cluster_map.png"));
 
                     report.println("<div class='panel'>");
                     report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Transient Maps</h3>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
-                    report.println("Shows all raw transients detected across the entire session. Colors map to time (Blue = Start, Red = End). This helps visualize noise floors, hot columns, and unlinked moving targets.</p>");
+                    report.println("Shows the full <strong>allTransients</strong> population carried into tracking after stationary-star vetoing. Colors map to time (Blue = Start, Red = End). This helps visualize noise floors, hot columns, surviving streak detections, and unlinked moving targets.</p>");
 
                     report.println("<div class='image-container' style='flex-wrap: wrap;'>");
 
@@ -3143,7 +3734,7 @@ public class ImageDisplayUtils {
                 String creativeFileName = "creative_tribute_skyprint.png";
                 BufferedImage creativeTributeImage = createCreativeTributeImage(
                         creativeBgData,
-                        allRemainingTransients,
+                        allTransients,
                         anomalies,
                         singleStreaks,
                         streakTracks,
@@ -3154,7 +3745,7 @@ public class ImageDisplayUtils {
                 );
                 saveTrackImageLossless(creativeTributeImage, new File(exportDir, creativeFileName));
 
-                int rawTransientCount = countTotalTransientDetections(allRemainingTransients);
+                int rawTransientCount = countTotalTransientDetections(allTransients);
                 int confirmedTrackCount = confirmedLinkedTrackMetric;
                 int suspectedTrackCount = suspectedStreakTrackMetric;
                 int deepStackHintCount = potentialSlowMoverCount;
