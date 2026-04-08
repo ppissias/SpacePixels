@@ -355,10 +355,16 @@ public class MainApplicationPanel extends JPanel {
 
     public void setTableModel(AbstractTableModel tableModel) {
         table.setModel(tableModel);
+        table.clearSelection();
         configureTableRenderers();
         resizeTableColumns(table);
         containsColorImages = false;
         FitsFileTableModel model = (FitsFileTableModel) tableModel;
+
+        if (model.getRowCount() == 0) {
+            clearLoadedControls();
+            return;
+        }
 
         for (int i = 0; i < model.getRowCount(); i++) {
             FitsFileInformation fileInfo = model.getFitsFileAt(i);
@@ -378,6 +384,15 @@ public class MainApplicationPanel extends JPanel {
             convertMonoButton.setEnabled(false);
             setDetectionButtonsEnabled();
         }
+    }
+
+    private void clearLoadedControls() {
+        containsColorImages = false;
+        solveButton.setEnabled(false);
+        blinkButton.setEnabled(false);
+        convertMonoButton.setEnabled(false);
+        stretchButton.setEnabled(false);
+        setDetectionButtonsDisabled();
     }
 
     private void configureTableRenderers() {
@@ -633,7 +648,7 @@ public class MainApplicationPanel extends JPanel {
             if (event.isSuccess()) {
                 FitsFileInformation[] files = event.getFilesInformation();
                 int importedCount = files == null ? 0 : files.length;
-                statusLabel.setText("Imported " + importedCount + " file(s)");
+                statusLabel.setText(importedCount == 0 ? "No files loaded" : "Imported " + importedCount + " file(s)");
             } else {
                 statusLabel.setText("Import failed");
             }

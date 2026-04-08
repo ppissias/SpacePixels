@@ -213,16 +213,16 @@ public class FitsFileInformation {
     }
 
     public String getLocation() {
-        String lat = fitsHeader.get("SITELAT");
-        String lon = fitsHeader.get("SITELONG");
+        String lat = firstCoordinateHeader("SITELAT", "OBSGEO-B", "LAT-OBS");
+        String lon = firstCoordinateHeader("SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS");
         
         if (lat != null && lon != null) {
-            return lat.replace("'", "").trim() + " / " + lon.replace("'", "").trim();
+            return lat + " / " + lon;
         }
         
-        String obs = fitsHeader.get("OBSERVAT");
+        String obs = sanitizeHeaderValue(fitsHeader.get("OBSERVAT"));
         if (obs != null) {
-            return obs.replace("'", "").trim();
+            return obs;
         }
         return "N/A";
     }

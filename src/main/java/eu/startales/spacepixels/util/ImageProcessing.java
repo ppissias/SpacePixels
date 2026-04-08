@@ -121,6 +121,50 @@ public class ImageProcessing {
         }
     }
 
+    /**
+     * Immutable payload returned after the JTransient engine completes but before any optional
+     * report export starts.
+     */
+    public static final class PipelineExecutionData {
+        private final PipelineResult pipelineResult;
+        private final DetectionConfig effectiveConfig;
+        private final FitsFileInformation[] filesInformation;
+        private final List<short[][]> rawFramesForExport;
+        private final long pipelineDurationMillis;
+
+        private PipelineExecutionData(PipelineResult pipelineResult,
+                                      DetectionConfig effectiveConfig,
+                                      FitsFileInformation[] filesInformation,
+                                      List<short[][]> rawFramesForExport,
+                                      long pipelineDurationMillis) {
+            this.pipelineResult = pipelineResult;
+            this.effectiveConfig = effectiveConfig == null ? null : effectiveConfig.clone();
+            this.filesInformation = filesInformation == null ? new FitsFileInformation[0] : filesInformation.clone();
+            this.rawFramesForExport = Collections.unmodifiableList(new ArrayList<>(rawFramesForExport));
+            this.pipelineDurationMillis = pipelineDurationMillis;
+        }
+
+        public PipelineResult getPipelineResult() {
+            return pipelineResult;
+        }
+
+        public DetectionConfig getEffectiveConfig() {
+            return effectiveConfig == null ? null : effectiveConfig.clone();
+        }
+
+        public FitsFileInformation[] getFilesInformation() {
+            return filesInformation.clone();
+        }
+
+        public List<short[][]> getRawFramesForExport() {
+            return rawFramesForExport;
+        }
+
+        public long getPipelineDurationMillis() {
+            return pipelineDurationMillis;
+        }
+    }
+
     private static void logFitsTimestampDiagnostics(String stageLabel, FitsFileInformation[] filesInfo) {
         if (filesInfo == null) {
             System.out.println("\n--- " + stageLabel + " FITS Timestamp Diagnostics ---");
@@ -524,6 +568,38 @@ public class ImageProcessing {
      * session report plus associated visualizations.
      */
     public File detectObjects(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
+        PipelineExecutionData executionData = runDetectionPipeline(config, progressListener);
+
+        if (safetyPrompt != null) {
+            DetectionSummary detectionSummary = summarizeDetections(executionData.getPipelineResult());
+            if (!safetyPrompt.shouldProceed(detectionSummary)) {
+                System.out.println("Report generation aborted by UI callback. Detection count: " + detectionSummary.totalDetections);
+                return null;
+            }
+        }
+
+        System.out.println("\n--- PHASE 5: Exporting Visualizations ---");
+        if (progressListener != null) {
+            progressListener.onProgressUpdate(90, "Exporting tracks and generating HTML report...");
+        }
+
+        try {
+            File reportFile = exportDetectionReport(executionData);
+            if (progressListener != null) {
+                progressListener.onProgressUpdate(100, "Finished!");
+            }
+            return reportFile;
+        } catch (IOException e) {
+            System.err.println("Failed to export visualizations: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Runs the standard detection pipeline and returns the in-memory engine output without writing
+     * any report artifacts to disk.
+     */
+    public PipelineExecutionData runDetectionPipeline(DetectionConfig config, TransientEngineProgressListener progressListener) throws Exception {
         long startTime = System.currentTimeMillis();
 
         if (this.cachedFileInfo == null) getFitsfileInformation();
@@ -536,37 +612,31 @@ public class ImageProcessing {
 
         for (int i = 0; i < numFrames; i++) {
 
-            // --- PROGRESS UPDATE: FITS Loading (0% to 20%) ---
             if (progressListener != null) {
                 int percent = (int) (((float) i / numFrames) * 20);
                 progressListener.onProgressUpdate(percent, "Loading frame " + (i + 1) + " of " + numFrames + "...");
             }
 
             File currentFile = new File(this.cachedFileInfo[i].getFilePath());
-            Fits fitsFile = new Fits(currentFile);
-            BasicHDU<?> hdu = getImageHDU(fitsFile);
-            Object kernel = hdu.getKernel();
+            try (Fits fitsFile = new Fits(currentFile)) {
+                BasicHDU<?> hdu = getImageHDU(fitsFile);
+                Object kernel = hdu.getKernel();
 
-            if (!(kernel instanceof short[][])) {
-                fitsFile.close();
-                throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString());
+                if (!(kernel instanceof short[][])) {
+                    throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString());
+                }
+
+                short[][] imageData = (short[][]) kernel;
+                long timestamp = this.cachedFileInfo[i].getObservationTimestamp();
+                long exposure = this.cachedFileInfo[i].getExposureDurationMillis();
+                framesForLibrary.add(new ImageFrame(i, currentFile.getName(), imageData, timestamp, exposure));
+                rawFramesForExport.add(imageData);
             }
-
-            short[][] imageData = (short[][]) kernel;
-            long timestamp = this.cachedFileInfo[i].getObservationTimestamp();
-            long exposure = this.cachedFileInfo[i].getExposureDurationMillis();
-            framesForLibrary.add(new ImageFrame(i, currentFile.getName(), imageData, timestamp, exposure));
-            rawFramesForExport.add(imageData);
-            fitsFile.close();
         }
 
         logPipelineFrameTimingPayload("Standard pipeline", framesForLibrary, this.cachedFileInfo);
 
-        // =========================================================
-        // 2. HAND OFF TO THE LIBRARY!
-        // =========================================================
         System.out.println("\n--- Passing data to JTransient Engine ---");
-
         if (progressListener != null) {
             progressListener.onProgressUpdate(20, "Initializing JTransient Engine...");
         }
@@ -576,44 +646,41 @@ public class ImageProcessing {
         JTransientEngine engine = new JTransientEngine();
         JTransientEngine.DEBUG = true;
 
-        PipelineResult result = engine.runPipeline(framesForLibrary, effectiveConfig, progressListener);
-
-        engine.shutdown();
-        // =========================================================
-
-        if (safetyPrompt != null) {
-            DetectionSummary detectionSummary = summarizeDetections(result);
-            if (!safetyPrompt.shouldProceed(detectionSummary)) {
-                System.out.println("Report generation aborted by UI callback. Detection count: " + detectionSummary.totalDetections);
-                return null;
-            }
+        PipelineResult result;
+        try {
+            result = engine.runPipeline(framesForLibrary, effectiveConfig, progressListener);
+        } finally {
+            engine.shutdown();
         }
 
-        // 3. Handle the results in SpacePixels
-        System.out.println("\n--- PHASE 5: Exporting Visualizations ---");
+        long pipelineDuration = System.currentTimeMillis() - startTime;
+        System.out.println("Total Pipeline Time: " + pipelineDuration + "ms");
 
-        if (progressListener != null) {
-            progressListener.onProgressUpdate(90, "Exporting tracks and generating HTML report...");
+        return new PipelineExecutionData(result, effectiveConfig, this.cachedFileInfo, rawFramesForExport, pipelineDuration);
+    }
+
+    /**
+     * Exports the HTML report and visualization bundle for a previously executed pipeline run.
+     */
+    public File exportDetectionReport(PipelineExecutionData executionData) throws IOException {
+        if (executionData == null) {
+            throw new IllegalArgumentException("executionData must not be null");
         }
 
-        if (numFrames > 0) {
-            File exportDir = createDetectionsDirectory(new File(this.cachedFileInfo[0].getFilePath()));
-
-            System.out.println("Total Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
-
-            try {
-                ImageDisplayUtils.exportTrackVisualizations(result, rawFramesForExport, this.cachedFileInfo, exportDir, effectiveConfig, appConfig);
-
-                if (progressListener != null) {
-                    progressListener.onProgressUpdate(100, "Finished!");
-                }
-
-                return new File(exportDir, ImageDisplayUtils.detectionReportName);
-            } catch (IOException e) {
-                System.err.println("Failed to export visualizations: " + e.getMessage());
-            }
+        FitsFileInformation[] filesInformation = executionData.getFilesInformation();
+        if (filesInformation.length == 0) {
+            return null;
         }
-        return null;
+
+        File exportDir = createDetectionsDirectory(new File(filesInformation[0].getFilePath()));
+        ImageDisplayUtils.exportTrackVisualizations(
+                executionData.getPipelineResult(),
+                executionData.getRawFramesForExport(),
+                filesInformation,
+                exportDir,
+                executionData.getEffectiveConfig(),
+                appConfig);
+        return new File(exportDir, ImageDisplayUtils.detectionReportName);
     }
 
 // =========================================================================
@@ -1089,6 +1156,9 @@ public class ImageProcessing {
                 return new FitsFileInformation[0]; // Stop the current import
             }
 
+            ApplicationWindow.logger.info("User declined 32-bit mono standardization. Clearing the active import.");
+            return new FitsFileInformation[0];
+
         } else if (format == FitsFormatChecker.FitsFormat.COLOR_32BIT_FLOAT || format == FitsFormatChecker.FitsFormat.COLOR_32BIT_INT) {
             int choice = JOptionPane.showConfirmDialog(null,
                     "These images are 32-bit Color.\nSpacePixels' transient detection engine requires 16-bit monochrome files.\n\n" +
@@ -1109,6 +1179,9 @@ public class ImageProcessing {
                 }
                 return new FitsFileInformation[0]; // Stop the current import
             }
+
+            ApplicationWindow.logger.info("User declined 32-bit color standardization. Clearing the active import.");
+            return new FitsFileInformation[0];
         } else if (format == FitsFormatChecker.FitsFormat.UNSUPPORTED) {
             JOptionPane.showMessageDialog(null, "Unsupported FITS format detected. SpacePixels supports 16-bit and 32-bit FITS files.", "Import Error", JOptionPane.ERROR_MESSAGE);
             return new FitsFileInformation[0];
@@ -1896,7 +1969,7 @@ public class ImageProcessing {
      */
     private Fits convertToMono(Fits colorFITSImage) throws FitsException, IOException {
         BasicHDU<?> originalHDU = getImageHDU(colorFITSImage);
-        Object monoKernelData = convertToMono(originalHDU.getKernel());
+        Object monoKernelData = convertColorKernelToMono(originalHDU.getKernel());
         Fits updatedFits = new Fits();
         updatedFits.addHDU(FitsFactory.hduFactory(monoKernelData));
 
@@ -2077,7 +2150,7 @@ public class ImageProcessing {
      * Builds a new FITS container from converted pixel data while preserving non-structural header
      * cards and restoring the unsigned-16-bit interpretation through `BZERO`/`BSCALE`.
      */
-    private Fits createFitsFromData(Object newData, Header originalHeader) throws FitsException, IOException {
+    static Fits createFitsFromData(Object newData, Header originalHeader) throws FitsException, IOException {
         Fits updatedFits = new Fits();
         BasicHDU<?> newHDU = FitsFactory.hduFactory(newData);
         updatedFits.addHDU(newHDU);
@@ -2182,7 +2255,7 @@ public class ImageProcessing {
      * Converts supported mono kernels into the signed-short storage layout used for unsigned 16-bit
      * FITS export.
      */
-    private short[][] standardizeTo16BitMono(Object kernel) throws IOException {
+    static short[][] standardizeTo16BitMono(Object kernel) throws IOException {
         if (kernel instanceof float[][]) {
             float[][] floatData = (float[][]) kernel;
             int height = floatData.length;
@@ -2235,7 +2308,7 @@ public class ImageProcessing {
      * Converts supported color kernels into a 16-bit signed-short RGB cube suitable for FITS
      * export and later luminance extraction.
      */
-    private short[][][] standardizeTo16BitColor(Object kernel) throws IOException {
+    static short[][][] standardizeTo16BitColor(Object kernel) throws IOException {
         if (kernel instanceof float[][][]) {
             float[][][] floatData = (float[][][]) kernel;
             int depth = floatData.length;
@@ -2295,7 +2368,7 @@ public class ImageProcessing {
     /**
      * Produces a simple luminance plane from a 16-bit RGB cube using an equal-channel average.
      */
-    private short[][] extractLuminance(short[][][] color16) {
+    static short[][] extractLuminance(short[][][] color16) {
         int height = color16[0].length;
         int width = color16[0][0].length;
         short[][] monoData = new short[height][width];
@@ -2315,7 +2388,7 @@ public class ImageProcessing {
     /**
      * Converts an in-memory 16-bit color cube to a mono plane without changing the FITS container.
      */
-    private Object convertToMono(Object kernelData) throws FitsException {
+    static short[][] convertColorKernelToMono(Object kernelData) throws FitsException {
         if (kernelData instanceof short[][][]) {
             short[][][] data = (short[][][]) kernelData;
             short[][] monoData = new short[data[0].length][data[0][0].length];

@@ -212,9 +212,18 @@ public class ApplicationWindow {
             setMenuState(true);
 
             if (event.isSuccess()) {
+                FitsFileInformation[] filesInfo = event.getFilesInformation();
+                if (filesInfo == null) {
+                    filesInfo = new FitsFileInformation[0];
+                }
+
+                if (filesInfo.length == 0) {
+                    clearImportedDataset();
+                    return;
+                }
+
                 // Update internal state
                 this.imagePreProcessing = event.getImagePreProcessing();
-                FitsFileInformation[] filesInfo = event.getFilesInformation();
 
                 // Update UI components
                 AbstractTableModel tableModel = new FitsFileTableModel(filesInfo);
@@ -274,6 +283,14 @@ public class ApplicationWindow {
     }
 
     // --- HELPER METHODS ---
+
+    private void clearImportedDataset() {
+        this.imagePreProcessing = null;
+        mainApplicationPanel.setTableModel(new FitsFileTableModel(new FitsFileInformation[0]));
+        setTabEnabled(configurationApplicationPanel, false);
+        setTabEnabled(stretchPanel, false);
+        setTabEnabled(detectionConfigurationPanel, false);
+    }
 
     private void setTabEnabled(Component component, boolean state) {
         int index = tabbedPane.indexOfComponent(component);

@@ -129,3 +129,14 @@ tasks.register('batchDetect', JavaExec) {
         args org.apache.tools.ant.types.Commandline.translateCommandline(project.getProperty('batchArgs'))
     }
 }
+
+tasks.register('realDataTest', JavaExec) {
+    group = 'verification'
+    description = 'Run opt-in real-data integration tests against local datasets outside the repository.'
+    dependsOn tasks.named('testClasses')
+    mainClass = 'eu.startales.spacepixels.tools.SpacePixelsRealDataMain'
+    classpath = sourceSets.test.runtimeClasspath
+    jvmArgs = batchDetectJvmArgs
+    systemProperty 'spacepixels.testdata.root', 'C:/Users/petro/Documents/astro-data/tests'
+    shouldRunAfter tasks.named('test')
+}

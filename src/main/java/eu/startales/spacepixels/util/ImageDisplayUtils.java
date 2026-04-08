@@ -648,6 +648,10 @@ public class ImageDisplayUtils {
         return String.format(Locale.US, "%.1f%%", fraction * 100.0);
     }
 
+    private static String formatOptionalMetric(double value) {
+        return Double.isFinite(value) ? String.format(Locale.US, "%.2f", value) : "n/a";
+    }
+
     private static void saveTrackImageLossless(BufferedImage image, File outputFile) throws IOException {
         if (image == null) {
             System.err.println("Warning: Attempted to save a null image. Skipping.");
@@ -2986,9 +2990,6 @@ public class ImageDisplayUtils {
                 || telemetry.candidatesAboveElongationThreshold > 0
                 || telemetry.candidatesEvaluatedAgainstMasks > 0
                 || telemetry.candidatesDetected > 0
-                || telemetry.rejectedIrregularShape > 0
-                || telemetry.rejectedBinaryAnomaly > 0
-                || telemetry.rejectedSlowMoverShape > 0
                 || telemetry.rejectedLowMedianSupport > 0
                 || telemetry.rejectedHighMedianSupport > 0
                 || telemetry.rejectedLowResidualFootprintSupport > 0
@@ -3203,6 +3204,14 @@ public class ImageDisplayUtils {
 
             // Scrollable section for config
             report.println(".scroll-box { max-height: 300px; overflow-y: auto; border: 1px solid #444; border-radius: 4px; }");
+            report.println(".panel.compact-diagnostics-panel { padding: 18px 20px; }");
+            report.println(".compact-note { color: #999999; font-size: 12px; margin-top: -8px; margin-bottom: 12px; line-height: 1.4; }");
+            report.println(".compact-threshold-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px; margin-bottom: 12px; }");
+            report.println(".compact-threshold-grid .config-item { padding: 5px 8px; font-size: 11px; }");
+            report.println(".scroll-box.compact-table-box { max-height: 360px; overflow: auto; margin-top: 10px; background-color: #2b2b2b; position: relative; }");
+            report.println(".scroll-box.compact-table-box table { margin-top: 0; width: max-content; min-width: 100%; font-size: 12px; border-collapse: separate; border-spacing: 0; overflow: visible; }");
+            report.println(".scroll-box.compact-table-box th, .scroll-box.compact-table-box td { padding: 7px 9px; white-space: nowrap; line-height: 1.25; }");
+            report.println(".scroll-box.compact-table-box thead th { position: sticky; top: 0; z-index: 3; background-color: #222; box-shadow: 0 1px 0 #333; }");
 
             // Visualizations
             report.println(".detection-card { background: #2d2d2d; padding: 20px; margin-bottom: 30px; border-radius: 8px; border-left: 5px solid #4da6ff; }");
@@ -3308,17 +3317,61 @@ public class ImageDisplayUtils {
                 }
                 report.println("</div>");
 
+                if (!pipelineTelemetry.frameQualityStats.isEmpty()) {
+                    report.println("<div class='panel compact-diagnostics-panel'>");
+                    report.println("<h2>Quality Control: Frame Quality Statistics</h2>");
+                    report.println("<p class='compact-note'>Per-frame quality metrics after the session evaluator. Bright-star eccentricity is shown as <code>n/a</code> when too few bright stars qualified for that frame. For long sessions, the detailed table below is scrollable and keeps its column headers pinned.</p>");
+                    report.println("<div class='compact-threshold-grid'>");
+                    report.println("<div class='config-item'><span>Thresholds Available</span><span class='val'>" + (pipelineTelemetry.qualityThresholds.available ? "Yes" : "No") + "</span></div>");
+                    report.println("<div class='config-item'><span>Min Allowed Star Count</span><span class='val'>" + formatOptionalMetric(pipelineTelemetry.qualityThresholds.minAllowedStarCount) + "</span></div>");
+                    report.println("<div class='config-item'><span>Max Allowed FWHM</span><span class='val'>" + formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedFwhm) + "</span></div>");
+                    report.println("<div class='config-item'><span>Max Allowed Eccentricity</span><span class='val'>" + formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedEccentricity) + "</span></div>");
+                    report.println("<div class='config-item'><span>Max Bright-Star Eccentricity</span><span class='val'>" + formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedBrightStarEccentricity) + "</span></div>");
+                    report.println("<div class='config-item'><span>Background Median Baseline</span><span class='val'>" + formatOptionalMetric(pipelineTelemetry.qualityThresholds.backgroundMedianBaseline) + "</span></div>");
+                    report.println("<div class='config-item'><span>Max Background Deviation</span><span class='val'>" + formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedBackgroundDeviation) + "</span></div>");
+                    report.println("<div class='config-item'><span>Min Allowed Bg Median</span><span class='val'>" + formatOptionalMetric(pipelineTelemetry.qualityThresholds.minAllowedBackgroundMedian) + "</span></div>");
+                    report.println("<div class='config-item'><span>Max Allowed Bg Median</span><span class='val'>" + formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedBackgroundMedian) + "</span></div>");
+                    report.println("</div>");
+                    report.println("<div class='scroll-box compact-table-box'>");
+                    report.println("<table><thead><tr><th>Frame Index</th><th>Filename</th><th>Bg Median</th><th>Bg Sigma</th><th>Median FWHM</th><th>Median Ecc</th><th>Bright-Star Median Ecc</th><th>Stars</th><th>Shape Stars</th><th>Bright Shape Stars</th><th>FWHM Stars</th><th>Status</th><th>Rejection Reason</th></tr></thead><tbody>");
+                    for (PipelineTelemetry.FrameQualityStat stat : pipelineTelemetry.frameQualityStats) {
+                        String statusLabel = stat.rejected ? "Rejected" : "Kept";
+                        String rejectionReason = (stat.rejectionReason == null || stat.rejectionReason.isBlank()) ? "-" : escapeHtml(stat.rejectionReason);
+                        report.println("<tr><td>" + (stat.frameIndex + 1) + "</td>");
+                        report.println("<td>" + escapeHtml(stat.filename) + "</td>");
+                        report.println("<td>" + formatOptionalMetric(stat.backgroundMedian) + "</td>");
+                        report.println("<td>" + formatOptionalMetric(stat.backgroundNoise) + "</td>");
+                        report.println("<td>" + formatOptionalMetric(stat.medianFWHM) + "</td>");
+                        report.println("<td>" + formatOptionalMetric(stat.medianEccentricity) + "</td>");
+                        report.println("<td>" + formatOptionalMetric(stat.brightStarMedianEccentricity) + "</td>");
+                        report.println("<td>" + stat.starCount + "</td>");
+                        report.println("<td>" + stat.usableShapeStarCount + "</td>");
+                        report.println("<td>" + stat.brightStarShapeStarCount + "</td>");
+                        report.println("<td>" + stat.fwhmStarCount + "</td>");
+                        report.println("<td" + (stat.rejected ? " class='alert'" : "") + ">" + statusLabel + "</td>");
+                        report.println("<td" + (stat.rejected ? " class='alert'" : "") + ">" + rejectionReason + "</td></tr>");
+                    }
+                    report.println("</tbody></table>");
+                    report.println("</div>");
+                    report.println("</div>");
+                }
+
                 // --- Rejected Frames Table ---
                 if (!pipelineTelemetry.rejectedFrames.isEmpty()) {
-                    report.println("<div class='panel'>");
+                    report.println("<div class='panel compact-diagnostics-panel'>");
                     report.println("<h2>Quality Control: Rejected Frames</h2>");
-                    report.println("<table><tr><th>Frame Index</th><th>Filename</th><th>Rejection Reason</th></tr>");
+                    report.println("<div class='scroll-box compact-table-box'>");
+                    report.println("<table><tr><th>Frame Index</th><th>Filename</th><th>Median Ecc</th><th>Bright-Star Median Ecc</th><th>Bright Shape Stars</th><th>Rejection Reason</th></tr>");
                     for (PipelineTelemetry.FrameRejectionStat rej : pipelineTelemetry.rejectedFrames) {
                         report.println("<tr><td>" + (rej.frameIndex + 1) + "</td>");
-                        report.println("<td>" + rej.filename + "</td>");
-                        report.println("<td class='alert'>" + rej.reason + "</td></tr>");
+                        report.println("<td>" + escapeHtml(rej.filename) + "</td>");
+                        report.println("<td>" + formatOptionalMetric(rej.medianEccentricity) + "</td>");
+                        report.println("<td>" + formatOptionalMetric(rej.brightStarMedianEccentricity) + "</td>");
+                        report.println("<td>" + rej.brightStarShapeStarCount + "</td>");
+                        report.println("<td class='alert'>" + escapeHtml(rej.reason) + "</td></tr>");
                     }
                     report.println("</table>");
+                    report.println("</div>");
                     report.println("</div>");
                 }
 
@@ -3422,30 +3475,34 @@ public class ImageDisplayUtils {
                 }
 
                 // --- Extraction Stats Table ---
-                report.println("<div class='panel'>");
+                report.println("<div class='panel compact-diagnostics-panel'>");
                 report.println("<h2>Frame Extraction Statistics</h2>");
-                report.println("<table><tr><th>Frame Index</th><th>Filename</th><th>Objects Extracted</th><th>Bg Median</th><th>Bg Sigma</th><th>Seed Threshold</th><th>Grow Threshold</th></tr>");
+                report.println("<p class='compact-note'>Detailed per-frame extraction diagnostics are shown in a scrollable compact table to keep long sequences readable without removing any rows.</p>");
+                report.println("<div class='scroll-box compact-table-box'>");
+                report.println("<table><thead><tr><th>Frame Index</th><th>Filename</th><th>Objects Extracted</th><th>Bg Median</th><th>Bg Sigma</th><th>Seed Threshold</th><th>Grow Threshold</th></tr></thead><tbody>");
                 for (PipelineTelemetry.FrameExtractionStat stat : pipelineTelemetry.frameExtractionStats) {
                     report.println("<tr><td>" + (stat.frameIndex + 1) + "</td>");
-                    report.println("<td>" + stat.filename + "</td>");
+                    report.println("<td>" + escapeHtml(stat.filename) + "</td>");
                     report.println("<td>" + stat.objectCount + "</td>");
                     report.println("<td>" + String.format(Locale.US, "%.2f", stat.bgMedian) + "</td>");
                     report.println("<td>" + String.format(Locale.US, "%.2f", stat.bgSigma) + "</td>");
                     report.println("<td>" + String.format(Locale.US, "%.2f", stat.seedThreshold) + "</td>");
                     report.println("<td>" + String.format(Locale.US, "%.2f", stat.growThreshold) + "</td></tr>");
                 }
-                report.println("</table>");
+                report.println("</tbody></table>");
+                report.println("</div>");
                 report.println("</div>");
 
                 // --- Star Map Purification Table ---
-                report.println("<div class='panel'>");
+                report.println("<div class='panel compact-diagnostics-panel'>");
                 report.println("<h2>Phase 3: Stationary Star Purification</h2>");
-                report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Master-mask purification removes stationary point-like residues and same-mask stationary streaks before the moving-object linker runs.</p>");
+                report.println("<p class='compact-note'>Master-mask purification removes stationary point-like residues and same-mask stationary streaks before the moving-object linker runs. The per-frame breakdown is shown below in a scrollable compact table.</p>");
                 report.println("<div class='flex-container' style='margin-bottom: 10px;'>");
                 report.println("<div class='metric-box compact'><span class='metric-value'>" + linkerTelemetry.totalStationaryStarsPurged + "</span><span class='metric-label'>Stationary Stars Purged</span></div>");
                 report.println("<div class='metric-box compact'><span class='metric-value'>" + linkerTelemetry.totalStationaryStreaksPurged + "</span><span class='metric-label'>Stationary Streaks Purged</span></div>");
                 report.println("</div>");
-                report.println("<table><tr><th>Frame Index</th><th>Filename</th><th>Initial Point Sources</th><th>Stars Purged</th><th>Surviving Transients</th></tr>");
+                report.println("<div class='scroll-box compact-table-box'>");
+                report.println("<table><thead><tr><th>Frame Index</th><th>Filename</th><th>Initial Point Sources</th><th>Stars Purged</th><th>Surviving Transients</th></tr></thead><tbody>");
 
                 for (TrackerTelemetry.FrameStarMapStat starStat : linkerTelemetry.frameStarMapStats) {
                     String fName = "Unknown";
@@ -3453,12 +3510,13 @@ public class ImageDisplayUtils {
                         fName = pipelineTelemetry.frameExtractionStats.get(starStat.frameIndex).filename;
                     }
                     report.println("<tr><td>" + (starStat.frameIndex + 1) + "</td>");
-                    report.println("<td>" + fName + "</td>");
+                    report.println("<td>" + escapeHtml(fName) + "</td>");
                     report.println("<td>" + starStat.initialPointSources + "</td>");
                     report.println("<td style='color: #ff9933;'>" + starStat.purgedStars + "</td>");
                     report.println("<td style='color: #44ff44; font-weight: bold;'>" + starStat.survivingTransients + "</td></tr>");
                 }
-                report.println("</table>");
+                report.println("</tbody></table>");
+                report.println("</div>");
                 report.println("</div>");
             }
 
@@ -3884,9 +3942,6 @@ public class ImageDisplayUtils {
                         report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.candidatesAboveElongationThreshold), "Above Elongation"));
                         report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.candidatesEvaluatedAgainstMasks), "Mask Stage"));
                         report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.candidatesDetected), "Final Candidates"));
-                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedIrregularShape), "Rejected Irregular"));
-                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedBinaryAnomaly), "Rejected Binary"));
-                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShape), "Rejected Shape Veto"));
                         report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedLowMedianSupport), "Rejected Low Overlap"));
                         report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedHighMedianSupport), "Rejected High Overlap"));
                         report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedLowResidualFootprintSupport), "Rejected Low Residual"));
@@ -3898,15 +3953,6 @@ public class ImageDisplayUtils {
                         report.println(compactMetricBox(formatPercent(slowMoverTelemetry.avgMedianSupportOverlap), "Average Overlap"));
                         report.println(compactMetricBox(formatPercent(slowMoverTelemetry.residualFootprintMinFluxFractionThreshold), "Residual Flux Min"));
                         report.println(compactMetricBox(formatPercent(slowMoverTelemetry.avgResidualFootprintFluxFraction), "Residual Flux Avg"));
-                        report.println("</div>");
-                        report.println("<div class='astro-note' style='margin-top: -12px; margin-bottom: 10px;'>Slow-mover-only shape-veto breakdown. These counts are a subset of <strong>Rejected Shape Veto</strong>.</div>");
-                        report.println("<div class='flex-container' style='margin-bottom: 10px;'>");
-                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShapeTooShort), "Too Short"));
-                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShapeLowFill), "Low Fill"));
-                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShapeSparseBins), "Sparse Bins"));
-                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShapeGappedBins), "Gapped Bins"));
-                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShapeCurvedCenterline), "Curved Centerline"));
-                        report.println(compactMetricBox(String.valueOf(slowMoverTelemetry.rejectedSlowMoverShapeBulgedWidth), "Bulged Width"));
                         report.println("</div>");
                         report.println("</div>");
                     } else if (hasSlowMoverStack || hasSlowMoverMask || hasCandidates) {

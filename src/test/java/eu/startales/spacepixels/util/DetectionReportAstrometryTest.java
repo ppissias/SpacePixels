@@ -100,4 +100,35 @@ public class DetectionReportAstrometryTest {
         assertTrue(url.contains("lat=49.625833"));
         assertTrue(url.contains("lon=8.753056"));
     }
+
+    @Test
+    public void formatsAltAzSummaryWhenObserverSiteAndEpochAreAvailable() {
+        long timestampMillis = Instant.parse("2026-04-01T00:00:00Z").toEpochMilli();
+        DetectionReportAstrometry.ObserverSite observerSite =
+                new DetectionReportAstrometry.ObserverSite(37.9838, 23.7275, 120.0, "Test Site");
+
+        String summary = DetectionReportAstrometry.formatHorizontalCoordinateSummary(
+                observerSite,
+                timestampMillis,
+                150.0,
+                -10.5);
+
+        assertNotNull(summary);
+        assertTrue(summary.startsWith("Alt / Az at observer site: Alt "));
+        assertTrue(summary.contains(", Az "));
+        assertTrue(summary.endsWith("°."));
+
+        DetectionReportAstrometry.HorizontalCoordinate coordinate =
+                DetectionReportAstrometry.resolveHorizontalCoordinate(observerSite, timestampMillis, 150.0, -10.5);
+        assertNotNull(coordinate);
+        assertTrue(coordinate.altitudeDeg >= -90.0 && coordinate.altitudeDeg <= 90.0);
+        assertTrue(coordinate.azimuthDeg >= 0.0 && coordinate.azimuthDeg <= 360.0);
+    }
+
+    @Test
+    public void doesNotFormatAltAzSummaryWithoutObserverSite() {
+        long timestampMillis = Instant.parse("2026-04-01T00:00:00Z").toEpochMilli();
+
+        assertNull(DetectionReportAstrometry.formatHorizontalCoordinateSummary(null, timestampMillis, 150.0, -10.5));
+    }
 }

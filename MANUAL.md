@@ -597,6 +597,81 @@ Gradle example:
 - Linux/macOS:
   - `./gradlew batchDetect -PbatchArgs="\"/data/sequence\" \"src/dist/config/default_detection_profile.json\" --auto-tune aggressive"`
 
+Internally, `BatchDetectionCli` now reuses the same public Java pipeline API described below.
+
+### Embedded Java pipeline API
+
+SpacePixels also exposes a public Java API for running the same standard pipeline from another application without going through the GUI.
+
+Primary types:
+
+- `eu.startales.spacepixels.api.SpacePixelsPipelineApi`
+- `eu.startales.spacepixels.api.DefaultSpacePixelsPipelineApi`
+- `eu.startales.spacepixels.api.SpacePixelsPipelineRequest`
+- `eu.startales.spacepixels.api.SpacePixelsPipelineResult`
+- `eu.startales.spacepixels.api.InputPreparationMode`
+
+Typical usage:
+
+```java
+import eu.startales.spacepixels.api.DefaultSpacePixelsPipelineApi;
+import eu.startales.spacepixels.api.InputPreparationMode;
+import eu.startales.spacepixels.api.SpacePixelsPipelineApi;
+import eu.startales.spacepixels.api.SpacePixelsPipelineRequest;
+import eu.startales.spacepixels.api.SpacePixelsPipelineResult;
+import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
+
+import java.io.File;
+
+SpacePixelsPipelineApi api = new DefaultSpacePixelsPipelineApi();
+
+SpacePixelsPipelineRequest request = SpacePixelsPipelineRequest.builder(new File("C:\\astro\\sequence"))
+        .detectionConfig(new DetectionConfig())
+        .autoTuneProfile(JTransientAutoTuner.AutoTuneProfile.BALANCED)
+        .inputPreparationMode(InputPreparationMode.AUTO_PREPARE_TO_16BIT_MONO)
+        .generateReport(true)
+        .progressListener((percentage, message) -> System.out.println(percentage + "% " + message))
+        .build();
+
+SpacePixelsPipelineResult result = api.run(request);
+```
+
+Behavior summary:
+
+- `inputDirectory` is required and points at the source sequence directory.
+- `detectionConfig` is optional. If omitted, SpacePixels uses a new default `DetectionConfig`.
+- `autoTuneProfile` is optional. If provided, Auto-Tune runs before the pipeline and the tuned configuration is exposed as `effectiveConfig` in the result.
+- `autoTuneMaxCandidateFrames` is optional and limits the Auto-Tune candidate pool size.
+- `generateReport` controls whether the standard HTML report and export assets are written to disk.
+- `progressListener` is optional and receives coarse `0..100` progress updates.
+
+Input preparation modes:
+
+- `FAIL_IF_NOT_READY`
+  - requires the input directory to already contain uncompressed 16-bit monochrome FITS files
+- `AUTO_PREPARE_TO_16BIT_MONO`
+  - accepts supported FITS or XISF inputs and creates a new detection-ready 16-bit monochrome FITS directory first
+
+What the result contains:
+
+- `originalInputDirectory`
+- `preparedInputDirectory`
+- `inputWasPrepared`
+- validated `FitsFileInformation[]`
+- `baseConfig`
+- `effectiveConfig`
+- optional Auto-Tune profile and telemetry
+- raw `PipelineResult`
+- optional `exportDirectory` and `reportFile`
+
+Practical notes:
+
+- report generation is optional, but the raw `PipelineResult` is always returned on success
+- if Auto-Tune is requested and fails, the API throws `SpacePixelsPipelineException`; it does not silently fall back to the base configuration
+- the prepared directory is kept on disk and returned to the caller when automatic preparation is used
+- `BatchDetectionCli` keeps its current strict behavior by using `FAIL_IF_NOT_READY`
+
 ### Artificial star injection
 
 `ArtificialStarInjector` injects synthetic moving stars into a FITS sequence for testing.
