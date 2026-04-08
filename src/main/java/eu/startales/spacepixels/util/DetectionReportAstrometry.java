@@ -633,18 +633,42 @@ final class DetectionReportAstrometry {
         double tightFovDegrees = clampFieldOfViewDegrees(queryTarget.searchRadiusDegrees * 8.0, 0.5, 12.0);
         double wideFovDegrees = clampFieldOfViewDegrees(queryTarget.searchRadiusDegrees * 22.0, 4.0, 60.0);
 
+        HorizontalCoordinate horizontalCoordinate = resolveHorizontalCoordinate(
+                astrometryContext != null ? astrometryContext.observerSite : null,
+                queryTarget.timestampMillis,
+                skyCoordinate.getRaDegrees(),
+                skyCoordinate.getDecDegrees());
+
         html.append("Interactive sky viewers:");
         html.append("<div class='id-links'>");
+        if (horizontalCoordinate != null && astrometryContext != null && astrometryContext.observerSite != null) {
+            html.append("<a class='id-link' href='")
+                    .append(buildStellariumWebAltAzUrl(
+                            astrometryContext.observerSite,
+                            queryTarget.timestampMillis,
+                            horizontalCoordinate,
+                            tightFovDegrees))
+                    .append("' target='_blank' rel='noopener noreferrer'>Stellarium Web (Alt/Az)</a>");
+            html.append("<a class='id-link' href='")
+                    .append(buildStellariumWebAltAzUrl(
+                            astrometryContext.observerSite,
+                            queryTarget.timestampMillis,
+                            horizontalCoordinate,
+                            wideFovDegrees))
+                    .append("' target='_blank' rel='noopener noreferrer'>Stellarium Web Wide (Alt/Az)</a>");
+        }
         html.append("<a class='id-link' href='")
                 .append(buildStellariumWebUrl(astrometryContext, queryTarget, skyCoordinate, tightFovDegrees))
                 .append("' target='_blank' rel='noopener noreferrer'>Stellarium Web (RA/Dec)</a>");
         html.append("<a class='id-link' href='")
                 .append(buildStellariumWebUrl(astrometryContext, queryTarget, skyCoordinate, wideFovDegrees))
-                .append("' target='_blank' rel='noopener noreferrer'>Stellarium Web Wide</a>");
+                .append("' target='_blank' rel='noopener noreferrer'>Stellarium Web Wide (RA/Dec)</a>");
         html.append("</div>");
 
         html.append("<div class='astro-note' style='margin-top: 6px;'>")
-                .append("Stellarium links use best-effort RA/Dec URL parameters at ")
+                .append(horizontalCoordinate != null
+                        ? "Stellarium links use best-effort observer-site Alt/Az and RA/Dec URL parameters at "
+                        : "Stellarium links use best-effort RA/Dec URL parameters at ")
                 .append(escapeHtml(formatUtcTimestamp(queryTarget.timestampMillis)))
                 .append(" with FOV ")
                 .append(escapeHtml(String.format(Locale.US, "%.2f° / %.2f°", tightFovDegrees, wideFovDegrees)))
@@ -654,14 +678,11 @@ final class DetectionReportAstrometry {
                     .append(escapeHtml(formatUtcTimestamp(queryTarget.timestampMillis)))
                     .append(".");
         }
-        String horizontalSummary = formatHorizontalCoordinateSummary(
-                astrometryContext != null ? astrometryContext.observerSite : null,
-                queryTarget.timestampMillis,
-                skyCoordinate.getRaDegrees(),
-                skyCoordinate.getDecDegrees());
+        String horizontalSummary = formatHorizontalCoordinateSummary(horizontalCoordinate);
         if (horizontalSummary != null) {
             html.append(" ").append(escapeHtml(horizontalSummary));
         }
+        html.append(" Stellarium Web may display browser-local time even when the observing site is elsewhere.");
         html.append("</div>");
         html.append("</div>");
         return html.toString();
@@ -681,6 +702,28 @@ final class DetectionReportAstrometry {
             url.append("&lng=").append(urlEncode(formatDecimal(astrometryContext.observerSite.longitudeDeg, 5)));
             url.append("&elev=").append(urlEncode(formatDecimal(astrometryContext.observerSite.altitudeMeters, 1)));
         }
+        return url.toString();
+    }
+
+    static String buildStellariumWebAltAzUrl(ObserverSite observerSite,
+                                             long timestampMillis,
+                                             HorizontalCoordinate horizontalCoordinate,
+                                             double fovDegrees) {
+        if (observerSite == null || horizontalCoordinate == null || timestampMillis <= 0L
+                || !Double.isFinite(horizontalCoordinate.altitudeDeg)
+                || !Double.isFinite(horizontalCoordinate.azimuthDeg)
+                || !Double.isFinite(fovDegrees) || fovDegrees <= 0.0d) {
+            return null;
+        }
+
+        StringBuilder url = new StringBuilder("https://stellarium-web.org/?");
+        url.append("date=").append(urlEncode(formatStellariumTimestamp(timestampMillis)));
+        url.append("&alt=").append(urlEncode(formatDecimal(horizontalCoordinate.altitudeDeg, 6)));
+        url.append("&az=").append(urlEncode(formatDecimal(horizontalCoordinate.azimuthDeg, 6)));
+        url.append("&fov=").append(urlEncode(formatDecimal(fovDegrees, 4)));
+        url.append("&lat=").append(urlEncode(formatDecimal(observerSite.latitudeDeg, 5)));
+        url.append("&lng=").append(urlEncode(formatDecimal(observerSite.longitudeDeg, 5)));
+        url.append("&elev=").append(urlEncode(formatDecimal(observerSite.altitudeMeters, 1)));
         return url.toString();
     }
 
@@ -982,6 +1025,10 @@ final class DetectionReportAstrometry {
                 timestampMillis,
                 raDegrees,
                 decDegrees);
+        return formatHorizontalCoordinateSummary(horizontalCoordinate);
+    }
+
+    static String formatHorizontalCoordinateSummary(HorizontalCoordinate horizontalCoordinate) {
         if (horizontalCoordinate == null) {
             return null;
         }

@@ -126,6 +126,45 @@ public class DetectionReportAstrometryTest {
     }
 
     @Test
+    public void buildsStellariumAltAzUrlWhenObserverSiteAndEpochAreAvailable() {
+        long timestampMillis = Instant.parse("2026-04-01T00:00:00Z").toEpochMilli();
+        DetectionReportAstrometry.ObserverSite observerSite =
+                new DetectionReportAstrometry.ObserverSite(37.9838, 23.7275, 120.0, "Test Site");
+        DetectionReportAstrometry.HorizontalCoordinate coordinate =
+                DetectionReportAstrometry.resolveHorizontalCoordinate(observerSite, timestampMillis, 150.0, -10.5);
+
+        String url = DetectionReportAstrometry.buildStellariumWebAltAzUrl(
+                observerSite,
+                timestampMillis,
+                coordinate,
+                3.5);
+
+        assertNotNull(url);
+        assertTrue(url.startsWith("https://stellarium-web.org/?date=2026-04-01T00%3A00%3A00Z"));
+        assertTrue(url.contains("&alt="));
+        assertTrue(url.contains("&az="));
+        assertTrue(url.contains("&fov=3.5000"));
+        assertTrue(url.contains("&lat=37.98380"));
+        assertTrue(url.contains("&lng=23.72750"));
+        assertTrue(url.contains("&elev=120.0"));
+    }
+
+    @Test
+    public void doesNotBuildStellariumAltAzUrlWithoutObserverSite() {
+        long timestampMillis = Instant.parse("2026-04-01T00:00:00Z").toEpochMilli();
+        DetectionReportAstrometry.ObserverSite observerSite =
+                new DetectionReportAstrometry.ObserverSite(37.9838, 23.7275, 120.0, "Test Site");
+        DetectionReportAstrometry.HorizontalCoordinate coordinate =
+                DetectionReportAstrometry.resolveHorizontalCoordinate(observerSite, timestampMillis, 150.0, -10.5);
+
+        assertNull(DetectionReportAstrometry.buildStellariumWebAltAzUrl(
+                null,
+                timestampMillis,
+                coordinate,
+                3.5));
+    }
+
+    @Test
     public void doesNotFormatAltAzSummaryWithoutObserverSite() {
         long timestampMillis = Instant.parse("2026-04-01T00:00:00Z").toEpochMilli();
 

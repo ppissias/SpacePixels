@@ -3524,11 +3524,12 @@ public class ImageDisplayUtils {
             // 2. TRACKER TELEMETRY
             // =================================================================
             if (linkerTelemetry != null) {
-                report.println("<div class='panel'>");
+                report.println("<div class='panel compact-diagnostics-panel'>");
                 report.println("<h2>Track Linking Diagnostics</h2>");
+                report.println("<p class='compact-note'>Compact scrollable view with sticky headers for the track-link rejection phases and final acceptance summary.</p>");
 
-                report.println("<table>");
-                report.println("<tr><th>Filter Phase</th><th>Rejection Reason</th><th>Points Rejected</th></tr>");
+                report.println("<div class='scroll-box compact-table-box'>");
+                report.println("<table><thead><tr><th>Filter Phase</th><th>Rejection Reason</th><th>Points Rejected</th></tr></thead><tbody>");
 
                 report.println("<tr><td>0. Single Streak</td><td>Binary-Star-Like Shape Veto</td><td>" + linkerTelemetry.rejectedBinaryStarStreakShape + "</td></tr>");
                 report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Non-Positive Time Delta</td><td>" + linkerTelemetry.countBaselineNonPositiveDelta + "</td></tr>");
@@ -3546,7 +3547,8 @@ public class ImageDisplayUtils {
                 report.println("<tr><td>3. Final Track</td><td>Insufficient Track Length</td><td>" + linkerTelemetry.countTrackTooShort + "</td></tr>");
                 report.println("<tr><td>3. Final Track</td><td>Erratic Kinematic Rhythm</td><td>" + linkerTelemetry.countTrackErraticRhythm + "</td></tr>");
                 report.println("<tr><td>3. Final Track</td><td>Duplicate Track (Ignored)</td><td>" + linkerTelemetry.countTrackDuplicate + "</td></tr>");
-                report.println("</table>");
+                report.println("</tbody></table>");
+                report.println("</div>");
                 report.println("<p class='astro-note' style='margin-top: 12px;'>");
                 report.println("Confirmed phase outputs: <strong>" + linkerTelemetry.streakTracksFound + "</strong> accepted streak tracks, <strong>" + linkerTelemetry.pointTracksFound + "</strong> accepted point tracks, and <strong>" + anomalyMetric + "</strong> rescued anomalies.");
                 if (anomalyMetric > 0) {
