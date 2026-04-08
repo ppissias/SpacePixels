@@ -165,6 +165,25 @@ public class DetectionReportAstrometryTest {
     }
 
     @Test
+    public void flagsSiderealLikeRaDriftAsPotentialGeo() {
+        assertTrue(DetectionReportAstrometry.isNearSiderealRaRate(54148.0));
+        assertNotNull(DetectionReportAstrometry.classifyTrackMotionByRaRate(54148.0));
+        assertTrue(DetectionReportAstrometry.classifyTrackMotionByRaRate(54148.0).contains("GEO-like"));
+    }
+
+    @Test
+    public void doesNotFlagNonSiderealRaDriftAsPotentialGeo() {
+        assertFalse(DetectionReportAstrometry.isNearSiderealRaRate(25000.0));
+        assertNull(DetectionReportAstrometry.classifyTrackMotionByRaRate(25000.0));
+    }
+
+    @Test
+    public void formatsApparentSkySpeedInHumanFriendlyUnits() {
+        assertEquals("15.04 deg/h (15.04 arcsec/s)", DetectionReportAstrometry.formatApparentSkySpeed(54148.0));
+        assertEquals("n/a", DetectionReportAstrometry.formatApparentSkySpeed(Double.NaN));
+    }
+
+    @Test
     public void doesNotFormatAltAzSummaryWithoutObserverSite() {
         long timestampMillis = Instant.parse("2026-04-01T00:00:00Z").toEpochMilli();
 

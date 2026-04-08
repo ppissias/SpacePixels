@@ -25,14 +25,21 @@ import java.util.Locale;
 
 final class DetectionReportAstrometry {
     private static final double JPL_NEO_RECOVERY_HALF_WIDTH_DEGREES = 5.0d;
+    private static final double SIDEREAL_DAY_SECONDS = 86164.0905d;
+    private static final double SIDEREAL_RATE_ARCSEC_PER_HOUR = (360.0d * 3600.0d * 3600.0d) / SIDEREAL_DAY_SECONDS;
+    private static final double SIDEREAL_RATE_MATCH_FRACTION = 0.10d;
 
     static final class TrackSkyRateSummary {
         private final double raRateArcsecPerHour;
         private final double decRateArcsecPerHour;
+        private final double skySpeedArcsecPerHour;
 
-        private TrackSkyRateSummary(double raRateArcsecPerHour, double decRateArcsecPerHour) {
+        private TrackSkyRateSummary(double raRateArcsecPerHour,
+                                    double decRateArcsecPerHour,
+                                    double skySpeedArcsecPerHour) {
             this.raRateArcsecPerHour = raRateArcsecPerHour;
             this.decRateArcsecPerHour = decRateArcsecPerHour;
+            this.skySpeedArcsecPerHour = skySpeedArcsecPerHour;
         }
     }
 
@@ -190,6 +197,15 @@ final class DetectionReportAstrometry {
         html.append("Avg Dec Rate: <span style='color:#fff;'>")
                 .append(escapeHtml(formatSkyRateArcsecPerHour(skyRateSummary != null ? skyRateSummary.decRateArcsecPerHour : Double.NaN)))
                 .append("</span><br>");
+        html.append("Apparent Sky Speed: <span style='color:#fff;'>")
+                .append(escapeHtml(formatApparentSkySpeed(skyRateSummary != null ? skyRateSummary.skySpeedArcsecPerHour : Double.NaN)))
+                .append("</span><br>");
+        String motionClass = classifyTrackMotionByRaRate(skyRateSummary != null ? skyRateSummary.raRateArcsecPerHour : Double.NaN);
+        if (motionClass != null) {
+            html.append("Motion Class: <span style='color:#ffcc33;'>")
+                    .append(escapeHtml(motionClass))
+                    .append("</span><br>");
+        }
         return html.toString();
     }
 
@@ -467,9 +483,15 @@ final class DetectionReportAstrometry {
 
         double raDeltaDegrees = normalizeAngleDeltaDegrees(latestSky.getRaDegrees() - earliestSky.getRaDegrees());
         double decDeltaDegrees = latestSky.getDecDegrees() - earliestSky.getDecDegrees();
+        double skySeparationDegrees = computeAngularSeparationDegrees(
+                earliestSky.getRaDegrees(),
+                earliestSky.getDecDegrees(),
+                latestSky.getRaDegrees(),
+                latestSky.getDecDegrees());
         return new TrackSkyRateSummary(
                 (raDeltaDegrees * 3600.0d) / elapsedHours,
-                (decDeltaDegrees * 3600.0d) / elapsedHours);
+                (decDeltaDegrees * 3600.0d) / elapsedHours,
+                (skySeparationDegrees * 3600.0d) / elapsedHours);
     }
 
     private static long resolveTrackPointMidpointTimestamp(Context astrometryContext,
@@ -1016,6 +1038,42 @@ final class DetectionReportAstrometry {
         return String.format(Locale.US, "%+.1f arcsec/h", rateArcsecPerHour);
     }
 
+    private static String formatUnsignedSkyRateArcsecPerHour(double rateArcsecPerHour) {
+        if (!Double.isFinite(rateArcsecPerHour)) {
+            return "n/a";
+        }
+        return String.format(Locale.US, "%.1f arcsec/h", Math.abs(rateArcsecPerHour));
+    }
+
+    static String formatApparentSkySpeed(double skySpeedArcsecPerHour) {
+        if (!Double.isFinite(skySpeedArcsecPerHour)) {
+            return "n/a";
+        }
+        double absoluteArcsecPerHour = Math.abs(skySpeedArcsecPerHour);
+        double degreesPerHour = absoluteArcsecPerHour / 3600.0d;
+        double arcsecPerSecond = absoluteArcsecPerHour / 3600.0d;
+        return String.format(Locale.US, "%.2f deg/h (%.2f arcsec/s)", degreesPerHour, arcsecPerSecond);
+    }
+
+    static String classifyTrackMotionByRaRate(double raRateArcsecPerHour) {
+        if (!isNearSiderealRaRate(raRateArcsecPerHour)) {
+            return null;
+        }
+        return "GEO-like apparent motion (RA drift close to sidereal; possible geosynchronous satellite)";
+    }
+
+    static String formatSiderealLikeTrackNote(double raRateArcsecPerHour) {
+        return classifyTrackMotionByRaRate(raRateArcsecPerHour);
+    }
+
+    static boolean isNearSiderealRaRate(double raRateArcsecPerHour) {
+        if (!Double.isFinite(raRateArcsecPerHour)) {
+            return false;
+        }
+        return Math.abs(Math.abs(raRateArcsecPerHour) - SIDEREAL_RATE_ARCSEC_PER_HOUR)
+                <= (SIDEREAL_RATE_ARCSEC_PER_HOUR * SIDEREAL_RATE_MATCH_FRACTION);
+    }
+
     static String formatHorizontalCoordinateSummary(ObserverSite observerSite,
                                                     long timestampMillis,
                                                     double raDegrees,
@@ -1083,6 +1141,30 @@ final class DetectionReportAstrometry {
                 + (0.000387933d * centuriesSinceJ2000 * centuriesSinceJ2000)
                 - ((centuriesSinceJ2000 * centuriesSinceJ2000 * centuriesSinceJ2000) / 38710000.0d);
         return normalizeDegrees(gmstDegrees + longitudeDegrees);
+    }
+
+    private static double computeAngularSeparationDegrees(double ra1Degrees,
+                                                          double dec1Degrees,
+                                                          double ra2Degrees,
+                                                          double dec2Degrees) {
+        if (!Double.isFinite(ra1Degrees) || !Double.isFinite(dec1Degrees)
+                || !Double.isFinite(ra2Degrees) || !Double.isFinite(dec2Degrees)) {
+            return Double.NaN;
+        }
+
+        double ra1Rad = Math.toRadians(ra1Degrees);
+        double dec1Rad = Math.toRadians(dec1Degrees);
+        double ra2Rad = Math.toRadians(ra2Degrees);
+        double dec2Rad = Math.toRadians(dec2Degrees);
+
+        double sinDec1 = Math.sin(dec1Rad);
+        double sinDec2 = Math.sin(dec2Rad);
+        double cosDec1 = Math.cos(dec1Rad);
+        double cosDec2 = Math.cos(dec2Rad);
+        double cosDeltaRa = Math.cos(ra2Rad - ra1Rad);
+        double cosine = (sinDec1 * sinDec2) + (cosDec1 * cosDec2 * cosDeltaRa);
+        cosine = Math.max(-1.0d, Math.min(1.0d, cosine));
+        return Math.toDegrees(Math.acos(cosine));
     }
 
     static boolean isJplCompatibleObservatoryCode(String observerCode) {

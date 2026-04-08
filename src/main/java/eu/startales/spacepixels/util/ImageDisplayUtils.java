@@ -3666,6 +3666,7 @@ public class ImageDisplayUtils {
                     report.println("<div class='detection-card streak-title' style='border-left-color: #ffcc33;'>");
                     String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
                     report.println("<div class='detection-title' style='color: #ffcc33;'>Confirmed Streak Track ST" + counter + timeBadge + "</div>");
+                    report.print(buildTrackTimingSummaryHtml(track, astrometryContext));
 
                     report.println("<div class='image-container'>");
                     report.println("<div><a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric Animation' /></a><br/><center><small>Star Centric</small></center></div>");
