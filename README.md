@@ -7,6 +7,7 @@ Instead of stacking away motion, SpacePixels analyzes the frame-to-frame changes
 More resources:
 - [SpacePixels Website](https://startales.eu/SpacePixels/)
 - [User Manual](MANUAL.md)
+- [Java API Guide](API.md)
 - [SpacePixels Wiki](https://github.com/ppissias/SpacePixels/wiki) 
 
 Download the latest packaged release from:
@@ -90,6 +91,12 @@ For the underlying detection logic and the meaning of the engine configuration o
 - Plate-solves images through ASTAP or Astrometry.net and uses WCS for RA/Dec overlays and report links.
 - Batch-converts color FITS to monochrome and batch-stretches imported datasets.
 - Includes headless utilities for batch detection and artificial star injection.
+
+## Official Java API
+
+The official supported Java integration surface is [`eu.startales.spacepixels.api`](src/main/java/eu/startales/spacepixels/api).
+
+For setup, request/result behavior, and usage examples, see [API.md](API.md).
 
 ## Input requirements
 
@@ -233,3 +240,7 @@ Gradle task examples:
   - `./gradlew injectStars -PinjArgs="/data/sequence 15 10.0 4500 4.0"`
 
 This utility injects synthetic moving stars into a FITS sequence for testing and validation.
+
+## Publishing
+
+Maven Central publishing instructions now live in [PUBLISHING.md](PUBLISHING.md).

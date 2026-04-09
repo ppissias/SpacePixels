@@ -8,4 +8,5 @@ jgoodies-forms-1.8.0-sources.jar
 
 .project
 .classpath
+gradle.properties
 
