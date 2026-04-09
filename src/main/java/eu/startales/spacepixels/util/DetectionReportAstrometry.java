@@ -404,8 +404,15 @@ final class DetectionReportAstrometry {
     static String buildTrackSkyViewerHtml(Context astrometryContext,
                                           TrackLinker.Track track,
                                           String epochLabel) {
+        return buildTrackSkyViewerHtml(astrometryContext, track, epochLabel, null);
+    }
+
+    static String buildTrackSkyViewerHtml(Context astrometryContext,
+                                          TrackLinker.Track track,
+                                          String epochLabel,
+                                          Double preferredTightFovDegrees) {
         SolarSystemQueryTarget queryTarget = buildTrackQueryTarget(astrometryContext, track);
-        return buildSkyViewerLinksHtml(astrometryContext, queryTarget, epochLabel);
+        return buildSkyViewerLinksHtml(astrometryContext, queryTarget, epochLabel, preferredTightFovDegrees);
     }
 
     static String formatPixelCoordinateWithSky(Context astrometryContext, double pixelX, double pixelY) {
@@ -523,6 +530,9 @@ final class DetectionReportAstrometry {
             }
             if (liveJplRenderSlotId != null && !liveJplRenderSlotId.isEmpty()) {
                 html.append(buildLiveRenderButtonHtml("jpl", nominalJplUrl, liveJplRenderSlotId, "Render JPL Results Here"));
+                if (neoRecoveryJplUrl != null) {
+                    html.append(buildLiveRenderButtonHtml("jpl", neoRecoveryJplUrl, liveJplRenderSlotId, "Render JPL NEO Recovery Results Here"));
+                }
             }
             html.append("</div>");
             html.append("<div class='astro-note' style='margin-top: 6px;'>JPL Small-Body Identification uses ");
@@ -532,9 +542,9 @@ final class DetectionReportAstrometry {
                 html.append("topocentric site coordinates from ").append(escapeHtml(astrometryContext.observerSite.sourceLabel));
             }
             if (useSimpleJplLabels && liveJplRenderSlotId != null && !liveJplRenderSlotId.isEmpty()) {
-                html.append(". <strong>Open JPL in Browser</strong> opens the original JPL response in a new tab. <strong>Render JPL Results Here</strong> asks SpacePixels to fetch the same result and show it inside this report. <strong>Open JPL NEO Recovery in Browser</strong> is the wider fallback for fast nearby NEOs that JPL's first pass can miss in a small field; it uses a fixed ");
+                html.append(". <strong>Open JPL in Browser</strong> opens the original exact-FOV JPL response in a new tab. <strong>Render JPL Results Here</strong> fetches that same exact-FOV result into this report. <strong>Open JPL NEO Recovery in Browser</strong> is the wider fallback for fast nearby NEOs that JPL's first pass can miss in a small field, and <strong>Render JPL NEO Recovery Results Here</strong> fetches that wider fallback into this report. It uses a fixed ");
             } else {
-                html.append(". These JPL links open the raw JSON API response. <strong>JPL Exact FOV</strong> keeps the search tight to the measured image footprint. <strong>JPL NEO Recovery</strong> is the fallback for fast nearby NEOs that JPL's first pass can miss in a small field; it uses a fixed ");
+                html.append(". These JPL links open the raw JSON API response. <strong>JPL Exact FOV</strong> keeps the search tight to the measured image footprint. <strong>Render JPL Results Here</strong> fetches that exact-FOV result into this report. <strong>JPL NEO Recovery</strong> is the fallback for fast nearby NEOs that JPL's first pass can miss in a small field, and <strong>Render JPL NEO Recovery Results Here</strong> fetches that wider fallback into this report. It uses a fixed ");
             }
             html.append(escapeHtml(String.format(Locale.US, "%.1f", JPL_NEO_RECOVERY_HALF_WIDTH_DEGREES)))
                     .append("&deg; half-width and limits results to NEOs.</div>");
@@ -933,6 +943,13 @@ final class DetectionReportAstrometry {
     private static String buildSkyViewerLinksHtml(Context astrometryContext,
                                                   SolarSystemQueryTarget queryTarget,
                                                   String epochLabel) {
+        return buildSkyViewerLinksHtml(astrometryContext, queryTarget, epochLabel, null);
+    }
+
+    private static String buildSkyViewerLinksHtml(Context astrometryContext,
+                                                  SolarSystemQueryTarget queryTarget,
+                                                  String epochLabel,
+                                                  Double preferredTightFovDegrees) {
         StringBuilder html = new StringBuilder();
         html.append("<div class='astro-note' style='margin-top: 8px;'>");
 
@@ -949,8 +966,15 @@ final class DetectionReportAstrometry {
         }
 
         WcsCoordinateTransformer.SkyCoordinate skyCoordinate = astrometryContext.getTransformer().pixelToSky(queryTarget.pixelX, queryTarget.pixelY);
-        double tightFovDegrees = clampFieldOfViewDegrees(queryTarget.searchRadiusDegrees * 8.0, 0.5, 12.0);
-        double wideFovDegrees = clampFieldOfViewDegrees(queryTarget.searchRadiusDegrees * 22.0, 4.0, 60.0);
+        double tightFovDegrees = preferredTightFovDegrees != null
+                && Double.isFinite(preferredTightFovDegrees)
+                && preferredTightFovDegrees > 0.0d
+                ? clampFieldOfViewDegrees(preferredTightFovDegrees, 0.20d, 12.0d)
+                : clampFieldOfViewDegrees(queryTarget.searchRadiusDegrees * 8.0, 0.5, 12.0);
+        double wideFovDegrees = clampFieldOfViewDegrees(
+                Math.max(queryTarget.searchRadiusDegrees * 22.0, tightFovDegrees * 6.0),
+                4.0,
+                60.0);
 
         HorizontalCoordinate horizontalCoordinate = resolveHorizontalCoordinate(
                 astrometryContext != null ? astrometryContext.observerSite : null,
@@ -1000,6 +1024,9 @@ final class DetectionReportAstrometry {
         String horizontalSummary = formatHorizontalCoordinateSummary(horizontalCoordinate);
         if (horizontalSummary != null) {
             html.append(" ").append(escapeHtml(horizontalSummary));
+        }
+        if (preferredTightFovDegrees != null && Double.isFinite(preferredTightFovDegrees) && preferredTightFovDegrees > 0.0d) {
+            html.append(" The tight Stellarium view matches the displayed crop FOV when WCS is available.");
         }
         html.append(" Stellarium Web may display browser-local time even when the observing site is elsewhere.");
         html.append("</div>");

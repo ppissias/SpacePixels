@@ -55,8 +55,8 @@ public final class ReportLookupProxyServer {
 
     private static final String FETCH_PATH = "/api/report/fetch";
     private static final int CONNECT_TIMEOUT_MS = 10_000;
-    private static final int SATCHECKER_READ_TIMEOUT_MS = 30_000;
-    private static final int JPL_READ_TIMEOUT_MS = 120_000;
+    private static final int SATCHECKER_READ_TIMEOUT_MS = 60_000;
+    private static final int JPL_READ_TIMEOUT_MS = 300_000;
     private static final int MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
     private static final ReportLookupProxyServer INSTANCE = new ReportLookupProxyServer();
@@ -276,6 +276,20 @@ public final class ReportLookupProxyServer {
             String unwrapped = trimToNull(trimmed.substring(1, trimmed.length() - 1));
             if (unwrapped != null) {
                 return unwrapped;
+            }
+        }
+        if (trimmed.matches("^\\d+\\s+.*[a-z].*$")) {
+            int firstSpace = trimmed.indexOf(' ');
+            if (firstSpace > 0) {
+                return trimmed.substring(0, firstSpace);
+            }
+        }
+        int lastOpenParen = trimmed.lastIndexOf('(');
+        int lastCloseParen = trimmed.endsWith(")") ? trimmed.length() - 1 : -1;
+        if (lastOpenParen > 0 && lastCloseParen > lastOpenParen) {
+            String trailingDesignation = trimToNull(trimmed.substring(lastOpenParen + 1, lastCloseParen));
+            if (trailingDesignation != null) {
+                return trailingDesignation;
             }
         }
         return trimmed;

@@ -20,6 +20,8 @@ import java.io.File;
 import java.io.IOException;
 
 public class ConfigurationPanel extends JPanel {
+    private static final int CONFIG_TEXT_COLUMN_WIDTH = 560;
+
     // link to main window
     private final ApplicationWindow mainAppWindow;
 
@@ -278,8 +280,8 @@ public class ConfigurationPanel extends JPanel {
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
         titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // Wrapping the description in HTML enables automatic word-wrapping in Swing
-        JLabel descLabel = new JLabel("<html>" + description + "</html>");
+        // Constrain the HTML width so longer astrometry/help text wraps instead of clipping.
+        JLabel descLabel = new JLabel("<html><div style='width: " + CONFIG_TEXT_COLUMN_WIDTH + "px;'>" + description + "</div></html>");
         descLabel.setFont(descLabel.getFont().deriveFont(Font.PLAIN, 12f));
         descLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
         descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -288,11 +290,12 @@ public class ConfigurationPanel extends JPanel {
         textPanel.add(Box.createVerticalStrut(3)); // Small gap between title and desc
         textPanel.add(descLabel);
 
-        // Give the descriptions enough room for the format guidance without clipping.
-        Dimension textDim = new Dimension(450, 80);
+        // Keep a stable text column width but allow the row height to grow with wrapped content.
+        Dimension preferredTextSize = textPanel.getPreferredSize();
+        Dimension textDim = new Dimension(CONFIG_TEXT_COLUMN_WIDTH, preferredTextSize.height);
         textPanel.setPreferredSize(textDim);
         textPanel.setMinimumSize(textDim);
-        textPanel.setMaximumSize(textDim);
+        textPanel.setMaximumSize(new Dimension(CONFIG_TEXT_COLUMN_WIDTH, Integer.MAX_VALUE));
 
         // Right side: Input Control
         JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));

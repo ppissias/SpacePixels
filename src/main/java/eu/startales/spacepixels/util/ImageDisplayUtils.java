@@ -186,6 +186,32 @@ public class ImageDisplayUtils {
         }
     }
 
+    private static class SkyOrientationOverlay {
+        public final double northAngleFromUpDegrees;
+        public final double eastAngleFromUpDegrees;
+        public final double fovWidthDegrees;
+        public final double fovHeightDegrees;
+        public final double preferredViewerFovDegrees;
+        public final String centerRaText;
+        public final String centerDecText;
+
+        private SkyOrientationOverlay(double northAngleFromUpDegrees,
+                                      double eastAngleFromUpDegrees,
+                                      double fovWidthDegrees,
+                                      double fovHeightDegrees,
+                                      double preferredViewerFovDegrees,
+                                      String centerRaText,
+                                      String centerDecText) {
+            this.northAngleFromUpDegrees = northAngleFromUpDegrees;
+            this.eastAngleFromUpDegrees = eastAngleFromUpDegrees;
+            this.fovWidthDegrees = fovWidthDegrees;
+            this.fovHeightDegrees = fovHeightDegrees;
+            this.preferredViewerFovDegrees = preferredViewerFovDegrees;
+            this.centerRaText = centerRaText;
+            this.centerDecText = centerDecText;
+        }
+    }
+
     private static class ReportTrackReference {
         public final TrackLinker.Track track;
         public final String label;
@@ -2268,16 +2294,6 @@ public class ImageDisplayUtils {
         }
         report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' style='max-width: 150px;' alt='Shape Footprint' /></a><br/><center><small>Shape</small></center></div>");
         report.println("</div>");
-        if ((auxiliaryMaskFileName != null && auxiliaryMask != null && masterStackData != null)
-                || (diffFileName != null && croppedPrimaryData != null && masterStackData != null)) {
-            report.println("<div class='astro-note' style='margin-top: 0; margin-bottom: 10px;'><strong>"
-                    + escapeHtml(auxiliaryMaskLabel != null ? auxiliaryMaskLabel : "Median Mask")
-                    + ":</strong> the ordinary median-stack object mask around this candidate. It shows what the static baseline already explains, and <strong>Mask Overlap</strong> measures how much of the candidate falls on that baseline.<br><strong>"
-                    + escapeHtml(diffLabel != null ? diffLabel : "Diff")
-                    + ":</strong> a positive-only <code>"
-                    + escapeHtml(primaryStackLabel != null ? primaryStackLabel : "Primary Stack")
-                    + " - Median Stack</code> map. Red marks pixels that are brighter in the slow-mover stack than in the ordinary median stack.</div>");
-        }
         StringBuilder deepStackStats = new StringBuilder();
         deepStackStats.append("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>")
                 .append(escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(astrometryContext, detection.x, detection.y)))
@@ -3129,6 +3145,171 @@ public class ImageDisplayUtils {
         return html.toString();
     }
 
+    private static String buildDeepStackMaskAndDiffExplanationHtml() {
+        return "<div class='astro-note' style='margin-bottom: 18px;'><strong>Slow-Mover Median Mask</strong> shows the object footprints extracted from the ordinary median stack using the same strict slow-mover detection settings. It marks what the normal median stack already explains. A real ultra-slow mover should usually overlap this mask somewhat, because it still leaves some support in the median stack, but not so much that it is indistinguishable from a fully static source.<br><strong>Slow Mover Diff</strong> is the positive-only difference image <code>Slow Mover Stack - Median Stack</code>. Black means there is no extra signal in the slow-mover stack at that pixel; red highlights signal that becomes brighter in the slow-mover stack and can reveal faint ultra-slow motion.</div>";
+    }
+
+    private static SkyOrientationOverlay buildSkyOrientationOverlay(DetectionReportAstrometry.Context astrometryContext,
+                                                                    double centerPixelX,
+                                                                    double centerPixelY,
+                                                                    int cropWidthPixels,
+                                                                    int cropHeightPixels) {
+        if (astrometryContext == null
+                || !astrometryContext.hasAstrometricSolution()
+                || cropWidthPixels <= 0
+                || cropHeightPixels <= 0) {
+            return null;
+        }
+
+        WcsCoordinateTransformer transformer = astrometryContext.getTransformer();
+        if (transformer == null) {
+            return null;
+        }
+
+        WcsCoordinateTransformer.SkyCoordinate center = transformer.pixelToSky(centerPixelX, centerPixelY);
+        WcsCoordinateTransformer.SkyCoordinate offsetX = transformer.pixelToSky(centerPixelX + 1.0, centerPixelY);
+        WcsCoordinateTransformer.SkyCoordinate offsetY = transformer.pixelToSky(centerPixelX, centerPixelY + 1.0);
+        if (center == null || offsetX == null || offsetY == null) {
+            return null;
+        }
+
+        double cosDec = Math.cos(Math.toRadians(center.getDecDegrees()));
+        if (!Double.isFinite(cosDec) || Math.abs(cosDec) < 1.0e-9) {
+            return null;
+        }
+
+        double eastPerPixelX = normalizeSkyAngleDeltaDegrees(offsetX.getRaDegrees() - center.getRaDegrees()) * cosDec;
+        double northPerPixelX = offsetX.getDecDegrees() - center.getDecDegrees();
+        double eastPerPixelY = normalizeSkyAngleDeltaDegrees(offsetY.getRaDegrees() - center.getRaDegrees()) * cosDec;
+        double northPerPixelY = offsetY.getDecDegrees() - center.getDecDegrees();
+        double determinant = eastPerPixelX * northPerPixelY - eastPerPixelY * northPerPixelX;
+        if (!Double.isFinite(determinant) || Math.abs(determinant) < 1.0e-12) {
+            return null;
+        }
+
+        double northDx = -eastPerPixelY / determinant;
+        double northDy = eastPerPixelX / determinant;
+        double eastDx = northPerPixelY / determinant;
+        double eastDy = -northPerPixelX / determinant;
+        double northMagnitude = Math.hypot(northDx, northDy);
+        double eastMagnitude = Math.hypot(eastDx, eastDy);
+        if (!Double.isFinite(northMagnitude) || !Double.isFinite(eastMagnitude)
+                || northMagnitude < 1.0e-9 || eastMagnitude < 1.0e-9) {
+            return null;
+        }
+
+        double northAngleFromUp = angleClockwiseFromImageUp(northDx / northMagnitude, northDy / northMagnitude);
+        double eastAngleFromUp = angleClockwiseFromImageUp(eastDx / eastMagnitude, eastDy / eastMagnitude);
+        double fovWidthDegrees = Math.hypot(eastPerPixelX, northPerPixelX) * cropWidthPixels;
+        double fovHeightDegrees = Math.hypot(eastPerPixelY, northPerPixelY) * cropHeightPixels;
+        if (!Double.isFinite(fovWidthDegrees) || !Double.isFinite(fovHeightDegrees)
+                || fovWidthDegrees <= 0.0d || fovHeightDegrees <= 0.0d) {
+            return null;
+        }
+
+        return new SkyOrientationOverlay(
+                northAngleFromUp,
+                eastAngleFromUp,
+                fovWidthDegrees,
+                fovHeightDegrees,
+                Math.max(fovWidthDegrees, fovHeightDegrees),
+                WcsCoordinateTransformer.formatRa(center.getRaDegrees()),
+                WcsCoordinateTransformer.formatDec(center.getDecDegrees()));
+    }
+
+    private static double[] computeTrackMeanPixelCenter(TrackLinker.Track track) {
+        if (track == null || track.points == null || track.points.isEmpty()) {
+            return null;
+        }
+
+        double sumX = 0.0d;
+        double sumY = 0.0d;
+        int count = 0;
+        for (SourceExtractor.DetectedObject point : track.points) {
+            if (point == null) {
+                continue;
+            }
+            sumX += point.x;
+            sumY += point.y;
+            count++;
+        }
+
+        if (count == 0) {
+            return null;
+        }
+        return new double[]{sumX / count, sumY / count};
+    }
+
+    private static String buildSkyOrientationImageTileHtml(String fileName,
+                                                           String altText,
+                                                           String captionText,
+                                                           String imageStyle,
+                                                           SkyOrientationOverlay overlay) {
+        StringBuilder html = new StringBuilder();
+        html.append("<div>");
+        html.append("<div class='sky-orientation-figure'>");
+        html.append("<a href='").append(escapeHtml(fileName)).append("' target='_blank'>");
+        html.append("<img src='").append(escapeHtml(fileName)).append("' alt='").append(escapeHtml(altText)).append("'");
+        if (imageStyle != null && !imageStyle.isBlank()) {
+            html.append(" style='").append(escapeHtml(imageStyle)).append("'");
+        }
+        html.append(" /></a>");
+        if (overlay != null) {
+            html.append("<div class='sky-orientation-overlay'>");
+            html.append("<div class='sky-orientation-title'>Sky Orientation</div>");
+            html.append("<div class='sky-orientation-compass'>");
+            html.append("<div class='sky-orientation-arrow north' style='--rotation:")
+                    .append(escapeHtml(formatDecimal(overlay.northAngleFromUpDegrees, 1)))
+                    .append("deg;'><span>N</span></div>");
+            html.append("<div class='sky-orientation-arrow east' style='--rotation:")
+                    .append(escapeHtml(formatDecimal(overlay.eastAngleFromUpDegrees, 1)))
+                    .append("deg;'><span>E</span></div>");
+            html.append("<div class='sky-orientation-center'></div>");
+            html.append("</div>");
+            html.append("<div class='sky-orientation-meta'>FOV ")
+                    .append(escapeHtml(formatFieldOfViewDimensions(overlay.fovWidthDegrees, overlay.fovHeightDegrees)))
+                    .append("</div>");
+            html.append("<div class='sky-orientation-meta'>Center RA ")
+                    .append(escapeHtml(overlay.centerRaText))
+                    .append("</div>");
+            html.append("<div class='sky-orientation-meta'>Center Dec ")
+                    .append(escapeHtml(overlay.centerDecText))
+                    .append("</div>");
+            html.append("</div>");
+        }
+        html.append("</div>");
+        html.append("<br/><center><small>").append(escapeHtml(captionText)).append("</small></center>");
+        html.append("</div>");
+        return html.toString();
+    }
+
+    private static double normalizeSkyAngleDeltaDegrees(double deltaDegrees) {
+        double normalized = deltaDegrees % 360.0d;
+        if (normalized > 180.0d) {
+            normalized -= 360.0d;
+        }
+        if (normalized < -180.0d) {
+            normalized += 360.0d;
+        }
+        return normalized;
+    }
+
+    private static double angleClockwiseFromImageUp(double dx, double dy) {
+        double angle = Math.toDegrees(Math.atan2(dx, -dy));
+        return angle < 0.0d ? angle + 360.0d : angle;
+    }
+
+    private static String formatFieldOfViewDimensions(double widthDegrees, double heightDegrees) {
+        double largestDimension = Math.max(widthDegrees, heightDegrees);
+        if (!Double.isFinite(largestDimension) || largestDimension <= 0.0d) {
+            return "n/a";
+        }
+        if (largestDimension >= 1.0d) {
+            return formatDecimal(widthDegrees, 2) + "° x " + formatDecimal(heightDegrees, 2) + "°";
+        }
+        return formatDecimal(widthDegrees * 60.0d, 1) + "' x " + formatDecimal(heightDegrees * 60.0d, 1) + "'";
+    }
+
     private static long resolveFrameTimestampMillis(SourceExtractor.DetectedObject detection,
                                                     FitsFileInformation[] fitsFiles) {
         if (detection == null) {
@@ -3729,6 +3910,21 @@ public class ImageDisplayUtils {
             report.println(".live-raw-json summary { cursor: pointer; color: #9ecfff; }");
             report.println(".live-raw-json pre { margin-top: 8px; padding: 12px; background: #16191d; border: 1px solid #303841; border-radius: 6px; color: #cfd8e3; overflow: auto; white-space: pre-wrap; word-break: break-word; }");
             report.println(".astro-note { font-size: 12px; color: #aaaaaa; margin-top: 10px; line-height: 1.45; }");
+            report.println(".sky-orientation-figure { position: relative; display: inline-block; }");
+            report.println(".sky-orientation-overlay { position: absolute; top: 8px; right: 8px; width: 156px; padding: 10px 11px; border-radius: 10px; background: rgba(10, 16, 23, 0.93); border: 1px solid rgba(120, 177, 229, 0.68); color: #edf5ff; box-shadow: 0 8px 22px rgba(0,0,0,0.45); opacity: 0; pointer-events: none; transform: translateY(-4px); transition: opacity 140ms ease, transform 140ms ease; }");
+            report.println(".sky-orientation-figure:hover .sky-orientation-overlay { opacity: 1; transform: translateY(0); }");
+            report.println(".sky-orientation-title { color: #9ecfff; font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.9px; margin-bottom: 8px; }");
+            report.println(".sky-orientation-compass { position: relative; width: 74px; height: 74px; margin: 0 auto 9px auto; border-radius: 50%; border: 1px solid rgba(158, 207, 255, 0.34); background: radial-gradient(circle at 50% 50%, rgba(63, 107, 153, 0.36) 0%, rgba(18, 26, 36, 0.16) 68%, rgba(18, 26, 36, 0.04) 100%); }");
+            report.println(".sky-orientation-compass::before { content: ''; position: absolute; left: 50%; top: 8px; bottom: 8px; width: 1px; background: rgba(255,255,255,0.08); transform: translateX(-50%); }");
+            report.println(".sky-orientation-compass::after { content: ''; position: absolute; top: 50%; left: 8px; right: 8px; height: 1px; background: rgba(255,255,255,0.08); transform: translateY(-50%); }");
+            report.println(".sky-orientation-arrow { position: absolute; left: 50%; top: 50%; width: 0; height: 28px; transform: translate(-50%, -100%) rotate(var(--rotation, 0deg)); transform-origin: 50% 100%; }");
+            report.println(".sky-orientation-arrow::before { content: ''; position: absolute; left: -1px; top: 7px; width: 2px; height: 19px; background: currentColor; border-radius: 999px; }");
+            report.println(".sky-orientation-arrow::after { content: ''; position: absolute; left: -5px; top: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid currentColor; }");
+            report.println(".sky-orientation-arrow span { position: absolute; top: -15px; left: -7px; font-size: 10px; font-weight: bold; }");
+            report.println(".sky-orientation-arrow.north { color: #a7ef73; }");
+            report.println(".sky-orientation-arrow.east { color: #7fc2ff; }");
+            report.println(".sky-orientation-center { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; border-radius: 50%; background: #ffffff; transform: translate(-50%, -50%); box-shadow: 0 0 8px rgba(255,255,255,0.35); }");
+            report.println(".sky-orientation-meta { color: #dce8f5; font-size: 11px; line-height: 1.35; margin-top: 2px; white-space: nowrap; }");
             report.println(".native-size-image { max-width: 100%; width: auto; height: auto; display: block; margin: 0 auto; }");
             report.println(".map-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }");
             report.println(".legend-pill { display: inline-flex; align-items: center; gap: 8px; background: #262626; border: 1px solid #444; border-radius: 999px; padding: 6px 10px; font-size: 12px; color: #d0d0d0; }");
@@ -4161,6 +4357,12 @@ public class ImageDisplayUtils {
                     String starFileName = "streak_track_" + counter + "_star_centric.gif";
                     File starFile = new File(exportDir, starFileName);
                     GifSequenceWriter.saveAnimatedGif(starCentricFrames, starFile, gifBlinkSpeedMs);
+                    SkyOrientationOverlay streakTrackOverlay = buildSkyOrientationOverlay(
+                            astrometryContext,
+                            cb.fixedCenterX,
+                            cb.fixedCenterY,
+                            cb.trackBoxWidth,
+                            cb.trackBoxHeight);
 
                     report.println("<div class='detection-card streak-title' style='border-left-color: #ffcc33;'>");
                     String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
@@ -4169,8 +4371,18 @@ public class ImageDisplayUtils {
                     report.print(buildConfirmedStreakFrameFragmentSummaryHtml(track, fitsFiles));
 
                     report.println("<div class='image-container'>");
-                    report.println("<div><a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric Animation' /></a><br/><center><small>Star Centric</small></center></div>");
-                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Track Shape Map' /></a><br/><center><small>Track Shape Map</small></center></div>");
+                    report.println(buildSkyOrientationImageTileHtml(
+                            starFileName,
+                            "Star Centric Animation",
+                            "Star Centric",
+                            null,
+                            streakTrackOverlay));
+                    report.println(buildSkyOrientationImageTileHtml(
+                            shapeFileName,
+                            "Track Shape Map",
+                            "Track Shape Map",
+                            null,
+                            streakTrackOverlay));
                     report.println("</div>");
                     report.println(buildFoldableStreakDetailsHtml(
                             "Show individual streak fragments (" + track.points.size() + ")",
@@ -4180,7 +4392,11 @@ public class ImageDisplayUtils {
                             astrometryContext,
                             track,
                             "streak-track-satchecker-" + counter));
-                    report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(astrometryContext, track, "Reference epoch for streak-track lookup"));
+                    report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(
+                            astrometryContext,
+                            track,
+                            "Reference epoch for streak-track lookup",
+                            streakTrackOverlay != null ? streakTrackOverlay.preferredViewerFovDegrees : null));
                     report.println("</div>");
                     counter++;
                 }
@@ -4273,6 +4489,21 @@ public class ImageDisplayUtils {
                     String starFileName = "moving_track_" + counter + "_star_centric.gif";
                     GifSequenceWriter.saveAnimatedGif(objectCentricFrames, new File(exportDir, objFileName), gifBlinkSpeedMs);
                     GifSequenceWriter.saveAnimatedGif(starCentricFrames, new File(exportDir, starFileName), gifBlinkSpeedMs);
+                    double[] movingTrackMeanCenter = computeTrackMeanPixelCenter(track);
+                    SkyOrientationOverlay movingObjectOverlay = movingTrackMeanCenter != null
+                            ? buildSkyOrientationOverlay(
+                            astrometryContext,
+                            movingTrackMeanCenter[0],
+                            movingTrackMeanCenter[1],
+                            trackObjectCentricCropSize,
+                            trackObjectCentricCropSize)
+                            : null;
+                    SkyOrientationOverlay movingTrackFrameOverlay = buildSkyOrientationOverlay(
+                            astrometryContext,
+                            cb.fixedCenterX,
+                            cb.fixedCenterY,
+                            cb.trackBoxWidth,
+                            cb.trackBoxHeight);
 
                     report.println("<div class='detection-card'>");
                     String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
@@ -4280,9 +4511,24 @@ public class ImageDisplayUtils {
                     report.print(buildTrackTimingSummaryHtml(track, astrometryContext));
 
                     report.println("<div class='image-container'>");
-                    report.println("<div><a href='" + objFileName + "' target='_blank'><img src='" + objFileName + "' alt='Object Centric' /></a><br/><center><small>Object Centric</small></center></div>");
-                    report.println("<div><a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric' /></a><br/><center><small>Star Centric</small></center></div>");
-                    report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Track Shape Map' /></a><br/><center><small>Track Shape Map</small></center></div>");
+                    report.println(buildSkyOrientationImageTileHtml(
+                            objFileName,
+                            "Object Centric",
+                            "Object Centric",
+                            null,
+                            movingObjectOverlay));
+                    report.println(buildSkyOrientationImageTileHtml(
+                            starFileName,
+                            "Star Centric",
+                            "Star Centric",
+                            null,
+                            movingTrackFrameOverlay));
+                    report.println(buildSkyOrientationImageTileHtml(
+                            shapeFileName,
+                            "Track Shape Map",
+                            "Track Shape Map",
+                            null,
+                            movingTrackFrameOverlay));
                     report.println("</div>");
 
                     // --- NEW: EVOLUTION (TIGHT CROPS) ---
@@ -4435,7 +4681,6 @@ public class ImageDisplayUtils {
                 if (hasCandidates || hasTelemetry || hasSlowMoverStack || hasSlowMoverMask) {
                     report.println("<h2>Deep Stack Anomalies (Ultra-Slow Mover Candidates)</h2>");
                     report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
-                    report.println("<div class='astro-note' style='margin-bottom: 18px;'><strong>Slow-Mover Median Mask</strong> shows the object footprints extracted from the ordinary median stack using the same strict slow-mover detection settings. It marks what the normal median stack already explains. A real ultra-slow mover should usually overlap this mask somewhat, because it still leaves some support in the median stack, but not so much that it is indistinguishable from a fully static source.<br><strong>Slow Mover Diff</strong> is the positive-only difference image <code>Slow Mover Stack - Median Stack</code>. Black means there is no extra signal in the slow-mover stack at that pixel; red highlights signal that becomes brighter in the slow-mover stack and can reveal faint ultra-slow motion.</div>");
 
                     if (hasTelemetry) {
                         report.println("<div class='panel'>");
@@ -4457,9 +4702,12 @@ public class ImageDisplayUtils {
                         report.println(compactMetricBox(formatPercent(slowMoverTelemetry.residualFootprintMinFluxFractionThreshold), "Residual Flux Min"));
                         report.println(compactMetricBox(formatPercent(slowMoverTelemetry.avgResidualFootprintFluxFraction), "Residual Flux Avg"));
                         report.println("</div>");
+                        report.println(buildDeepStackMaskAndDiffExplanationHtml());
                         report.println("</div>");
                     } else if (hasSlowMoverStack || hasSlowMoverMask || hasCandidates) {
-                        report.println("<div class='panel'><p>Slow-mover telemetry was not exported for this run.</p></div>");
+                        report.println("<div class='panel'><p>Slow-mover telemetry was not exported for this run.</p>");
+                        report.println(buildDeepStackMaskAndDiffExplanationHtml());
+                        report.println("</div>");
                     }
 
                     if (hasCandidates) {
