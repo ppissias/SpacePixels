@@ -19,10 +19,13 @@ import eu.startales.spacepixels.events.FitsImportStartedEvent;
 import eu.startales.spacepixels.tasks.FitsImportTask;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.ReportLookupProxyServer;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -145,8 +148,18 @@ public class ApplicationWindow {
         frmIpodImage.setBounds(new Rectangle(50, 50, 1200, 650));
         frmIpodImage.setResizable(false);
         frmIpodImage.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frmIpodImage.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                ReportLookupProxyServer.getInstance().stop();
+            }
+        });
         frmIpodImage.getContentPane().setLayout(new BorderLayout(0, 0));
         frmIpodImage.getContentPane().add(tabbedPane, BorderLayout.CENTER);
+
+        if (!ReportLookupProxyServer.getInstance().start()) {
+            logger.warning("Live report rendering proxy is unavailable. Static report links will still work.");
+        }
 
         mainApplicationPanel = new MainApplicationPanel(this);
         configurationApplicationPanel = new ConfigurationPanel(this);

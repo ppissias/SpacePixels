@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -2317,7 +2318,10 @@ public class ImageDisplayUtils {
         }
         deepStackStats.append("</div>");
         report.println(deepStackStats);
-        report.print(DetectionReportAstrometry.buildDeepStackIdentificationHtml(astrometryContext, detection));
+        report.print(DetectionReportAstrometry.buildDeepStackIdentificationHtml(
+                astrometryContext,
+                detection,
+                "deep-stack-jpl-" + detectionTitle.replaceAll("[^A-Za-z0-9]+", "-").toLowerCase(Locale.US)));
         report.println("</div>");
     }
 
@@ -2518,7 +2522,10 @@ public class ImageDisplayUtils {
                     pointMetrics));
         }
         report.println("</ul>");
-        report.print(DetectionReportAstrometry.buildTrackSolarSystemIdentificationHtml(astrometryContext, track));
+        report.print(DetectionReportAstrometry.buildTrackSolarSystemIdentificationHtml(
+                astrometryContext,
+                track,
+                "local-rescue-jpl-" + counter));
         report.println("</div>");
     }
 
@@ -2927,6 +2934,144 @@ public class ImageDisplayUtils {
         return html.toString();
     }
 
+    private static String buildConfirmedStreakFrameFragmentSummaryHtml(TrackLinker.Track track,
+                                                                       FitsFileInformation[] fitsFiles) {
+        if (track == null || track.points == null || track.points.isEmpty()) {
+            return "";
+        }
+
+        LinkedHashMap<Integer, List<Integer>> frameToFragmentIndices = new LinkedHashMap<>();
+        LinkedHashMap<Integer, String> frameToFilename = new LinkedHashMap<>();
+        LinkedHashMap<Integer, Long> frameToTimestamp = new LinkedHashMap<>();
+
+        for (int i = 0; i < track.points.size(); i++) {
+            SourceExtractor.DetectedObject point = track.points.get(i);
+            if (point == null) {
+                continue;
+            }
+
+            int frameIndex = point.sourceFrameIndex;
+            frameToFragmentIndices.computeIfAbsent(frameIndex, ignored -> new ArrayList<>()).add(i + 1);
+
+            if (!frameToFilename.containsKey(frameIndex)) {
+                String fileLabel = point.sourceFilename;
+                if ((fileLabel == null || fileLabel.isBlank())
+                        && fitsFiles != null
+                        && frameIndex >= 0
+                        && frameIndex < fitsFiles.length
+                        && fitsFiles[frameIndex] != null) {
+                    fileLabel = fitsFiles[frameIndex].getFileName();
+                }
+                frameToFilename.put(frameIndex, fileLabel);
+            }
+
+            if (!frameToTimestamp.containsKey(frameIndex)) {
+                frameToTimestamp.put(frameIndex, resolveFrameTimestampMillis(point, fitsFiles));
+            }
+        }
+
+        if (frameToFragmentIndices.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder html = new StringBuilder();
+        html.append("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 15px;'>");
+        html.append("Frames &amp; Fragments:<br>");
+
+        for (Map.Entry<Integer, List<Integer>> entry : frameToFragmentIndices.entrySet()) {
+            int frameIndex = entry.getKey();
+            List<Integer> fragmentIndices = entry.getValue();
+            String filename = frameToFilename.get(frameIndex);
+            long timestampMillis = frameToTimestamp.getOrDefault(frameIndex, -1L);
+
+            html.append("<span style='color:#fff;'>Frame ");
+            html.append(frameIndex >= 0 ? frameIndex + 1 : "?");
+            html.append("</span>");
+            if (filename != null && !filename.isBlank()) {
+                html.append(" <span style='color:#7fbfff;'>(").append(escapeHtml(filename)).append(")</span>");
+            }
+            if (timestampMillis > 0L) {
+                html.append(" <span style='color:#88c999;'>").append(escapeHtml(formatUtcTimestamp(timestampMillis))).append("</span>");
+            }
+            html.append(": fragments <span style='color:#ffcc66;'>");
+            for (int i = 0; i < fragmentIndices.size(); i++) {
+                if (i > 0) {
+                    html.append(", ");
+                }
+                html.append("[").append(fragmentIndices.get(i)).append("]");
+            }
+            html.append("</span><br>");
+        }
+
+        html.append("</div>");
+        return html.toString();
+    }
+
+    private static String buildFoldableStreakDetailsHtml(String summaryLabel,
+                                                         String headingLabel,
+                                                         String entriesHtml) {
+        if (entriesHtml == null || entriesHtml.isBlank()) {
+            return "";
+        }
+
+        StringBuilder html = new StringBuilder();
+        html.append("<details class='foldable-streak-details'>");
+        html.append("<summary>").append(escapeHtml(summaryLabel)).append("</summary>");
+        html.append("<div class='foldable-streak-body'>");
+        html.append("<strong>").append(escapeHtml(headingLabel)).append(":</strong>");
+        html.append("<ul class='source-list'>").append(entriesHtml).append("</ul>");
+        html.append("</div>");
+        html.append("</details>");
+        return html.toString();
+    }
+
+    private static String buildStreakPointEntriesHtml(TrackLinker.Track track,
+                                                      DetectionReportAstrometry.Context astrometryContext,
+                                                      boolean usePartLabel) {
+        if (track == null || track.points == null || track.points.isEmpty()) {
+            return "";
+        }
+
+        int partCount = track.points.size();
+        StringBuilder entries = new StringBuilder();
+        for (int i = 0; i < track.points.size(); i++) {
+            SourceExtractor.DetectedObject point = track.points.get(i);
+            String metricsStr = buildStreakMetricsText(point);
+            String sourceFilename = point.sourceFilename != null ? point.sourceFilename : "Unknown";
+            String fileLabel;
+            if (partCount == 1) {
+                fileLabel = sourceFilename;
+            } else if (usePartLabel) {
+                fileLabel = "[Part " + (i + 1) + "] " + sourceFilename;
+            } else {
+                fileLabel = "[" + (i + 1) + "] " + sourceFilename;
+            }
+            entries.append(DetectionReportAstrometry.buildSourceCoordinateListEntry(fileLabel, astrometryContext, point.x, point.y, metricsStr));
+        }
+        return entries.toString();
+    }
+
+    private static String buildMovingTrackPointEntriesHtml(TrackLinker.Track track,
+                                                           DetectionReportAstrometry.Context astrometryContext) {
+        if (track == null || track.points == null || track.points.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder entries = new StringBuilder();
+        for (int i = 0; i < track.points.size(); i++) {
+            SourceExtractor.DetectedObject point = track.points.get(i);
+            String metricsStr = buildMovingTrackMetricsText(point);
+            String sourceFilename = point.sourceFilename != null ? point.sourceFilename : "Unknown";
+            entries.append(DetectionReportAstrometry.buildSourceCoordinateListEntry(
+                    "[" + (i + 1) + "] " + sourceFilename,
+                    astrometryContext,
+                    point.x,
+                    point.y,
+                    metricsStr));
+        }
+        return entries.toString();
+    }
+
     private static String buildSingleFrameEventSummaryHtml(TrackLinker.Track track,
                                                            FitsFileInformation[] fitsFiles) {
         if (track == null || track.points == null || track.points.isEmpty()) {
@@ -3038,6 +3183,270 @@ public class ImageDisplayUtils {
                 .replace("<", "&lt;")
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;");
+    }
+
+    private static String escapeJsString(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\r", "\\r")
+                .replace("\n", "\\n");
+    }
+
+    private static void appendLiveReportRenderingScript(java.io.PrintWriter report) {
+        report.println("<script>");
+        report.println("(function () {");
+        report.println("  const REPORT_PROXY_BASE_URL = '" + escapeJsString(ReportLookupProxyServer.getServiceBaseUrl()) + "';");
+        report.println("  const REPORT_PROXY_FETCH_URL = REPORT_PROXY_BASE_URL + '/api/report/fetch';");
+        report.println("  const JPL_MAX_RENDER_ROWS = 250;");
+        report.println("  const liveLookupCache = new Map();");
+        report.println("");
+        report.println("  function escapeHtml(value) {");
+        report.println("    if (value === null || value === undefined) return '';");
+        report.println("    return String(value)");
+        report.println("      .replace(/&/g, '&amp;')");
+        report.println("      .replace(/</g, '&lt;')");
+        report.println("      .replace(/>/g, '&gt;')");
+        report.println("      .replace(/\\\"/g, '&quot;');");
+        report.println("  }");
+        report.println("");
+        report.println("  function safeArray(value) {");
+        report.println("    return Array.isArray(value) ? value : [];");
+        report.println("  }");
+        report.println("");
+        report.println("  function formatNumber(value, digits) {");
+        report.println("    const number = Number(value);");
+        report.println("    if (!Number.isFinite(number)) return 'n/a';");
+        report.println("    return number.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });");
+        report.println("  }");
+        report.println("");
+        report.println("  function parseLooseNumber(value) {");
+        report.println("    if (typeof value === 'number') return value;");
+        report.println("    if (typeof value !== 'string') return Number.NaN;");
+        report.println("    const cleaned = value.replace(/,/g, '').trim();");
+        report.println("    const parsed = Number(cleaned);");
+        report.println("    return Number.isFinite(parsed) ? parsed : Number.NaN;");
+        report.println("  }");
+        report.println("");
+        report.println("  function buildMetricCard(label, value) {");
+        report.println("    return \"<div class='live-mini-card'><span class='live-mini-label'>\" + escapeHtml(label) + \"</span><span class='live-mini-value'>\" + escapeHtml(value) + \"</span></div>\";");
+        report.println("  }");
+        report.println("");
+        report.println("  function buildRawJsonDetails(payload) {");
+        report.println("    return \"<details class='live-raw-json'><summary>Show Raw JSON</summary><pre>\" + escapeHtml(JSON.stringify(payload, null, 2)) + \"</pre></details>\";");
+        report.println("  }");
+        report.println("");
+        report.println("  function renderLookupUnavailable(slot, provider, error) {");
+        report.println("    const providerLabel = provider === 'satchecker' ? 'SatChecker' : 'JPL';");
+        report.println("    const details = error && error.message ? \"<div class='live-caption'>Technical detail: \" + escapeHtml(error.message) + \"</div>\" : '';");
+        report.println("    slot.innerHTML = \"<div class='live-render-panel error'><div class='live-render-title'>Live in-report rendering is unavailable</div><p class='live-caption'>SpacePixels is not reachable on \" + escapeHtml(REPORT_PROXY_BASE_URL) + \". Start SpacePixels to use <strong>Render \" + providerLabel + \" Results Here</strong>. The browser link above still works.</p>\" + details + \"</div>\";");
+        report.println("  }");
+        report.println("");
+        report.println("  function renderErrorResponse(slot, response) {");
+        report.println("    const message = response && response.message ? response.message : 'The live lookup did not return usable data.';");
+        report.println("    let html = \"<div class='live-render-panel error'><div class='live-render-title'>Live lookup failed</div><p class='live-caption'>\" + escapeHtml(message) + \"</p>\";");
+        report.println("    if (response && response.upstreamStatus) {");
+        report.println("      html += \"<div class='live-caption'>Upstream HTTP status: \" + escapeHtml(response.upstreamStatus) + \"</div>\";");
+        report.println("    }");
+        report.println("    if (response && response.payload !== undefined) {");
+        report.println("      html += buildRawJsonDetails(response.payload);");
+        report.println("    }");
+        report.println("    html += \"</div>\";");
+        report.println("    slot.innerHTML = html;");
+        report.println("  }");
+        report.println("");
+        report.println("  function renderSatCheckerResponse(slot, response) {");
+        report.println("    const normalized = response.normalized || {};");
+        report.println("    const candidates = safeArray(normalized.candidates).slice();");
+        report.println("    candidates.sort(function (a, b) {");
+        report.println("      const angleDelta = parseLooseNumber(a.minAngleDeg) - parseLooseNumber(b.minAngleDeg);");
+        report.println("      if (angleDelta !== 0) {");
+        report.println("        return angleDelta;");
+        report.println("      }");
+        report.println("      const positionDelta = parseLooseNumber(b.positionCount) - parseLooseNumber(a.positionCount);");
+        report.println("      if (positionDelta !== 0) {");
+        report.println("        return positionDelta;");
+        report.println("      }");
+        report.println("      const spanDelta = parseLooseNumber(a.maxAngleDeg) - parseLooseNumber(b.maxAngleDeg);");
+        report.println("      if (spanDelta !== 0) {");
+        report.println("        return spanDelta;");
+        report.println("      }");
+        report.println("      return String(a.displayName || '').localeCompare(String(b.displayName || ''));");
+        report.println("    });");
+        report.println("");
+        report.println("    let html = \"<div class='live-render-panel'><div class='live-render-heading'><div class='live-render-title'>Rendered SatChecker Results</div><div class='live-render-meta'>Fetched \" + escapeHtml(response.fetchedAtUtc || 'just now') + \"</div></div>\";");
+        report.println("    html += \"<div class='live-mini-grid'>\";");
+        report.println("    html += buildMetricCard('Satellites', normalized.totalSatellites !== undefined ? normalized.totalSatellites : candidates.length);");
+        report.println("    html += buildMetricCard('Positions', normalized.totalPositionResults !== undefined ? normalized.totalPositionResults : 'n/a');");
+        report.println("    html += buildMetricCard('Runtime', normalized.totalTimeSeconds !== undefined ? formatNumber(normalized.totalTimeSeconds, 2) + ' s' : 'n/a');");
+        report.println("    html += \"</div>\";");
+        report.println("    html += \"<p class='live-caption'>This is the same SatChecker lookup shown by the browser link above, rendered inside the report for quick inspection.</p>\";");
+        report.println("    html += \"<p class='live-caption'>Candidates are ordered heuristically by closest angular separation first, then by how many SatChecker positions were returned for that satellite.</p>\";");
+        report.println("");
+        report.println("    if (!candidates.length) {");
+        report.println("      html += \"<p class='live-empty-note'>SatChecker returned no satellite candidates for this query.</p>\";");
+        report.println("    } else {");
+        report.println("      html += \"<div class='live-table-box'><table><thead><tr><th>Name</th><th>NORAD</th><th>Positions</th><th>First UTC</th><th>Last UTC</th><th>Closest Angle (deg)</th><th>Range (km)</th><th>TLE Epoch</th><th>Links</th></tr></thead><tbody>\";");
+        report.println("      candidates.forEach(function (candidate) {");
+        report.println("        const noradText = candidate.noradId ? String(candidate.noradId) : 'n/a';");
+        report.println("        const rangeText = candidate.minRangeKm !== undefined ? formatNumber(candidate.minRangeKm, 1) : 'n/a';");
+        report.println("        let links = '';");
+        report.println("        if (candidate.n2yoUrl) {");
+        report.println("          links += \"<a class='live-link-inline' href='\" + escapeHtml(candidate.n2yoUrl) + \"' target='_blank' rel='noopener noreferrer'>N2YO Details</a>\";");
+        report.println("        }");
+        report.println("        if (candidate.celestrakUrl) {");
+        report.println("          if (links) { links += \" | \"; }");
+        report.println("          links += \"<a class='live-link-inline' href='\" + escapeHtml(candidate.celestrakUrl) + \"' target='_blank' rel='noopener noreferrer'>CelesTrak SATCAT</a>\";");
+        report.println("        }");
+        report.println("        html += \"<tr>\" +");
+        report.println("          \"<td>\" + escapeHtml(candidate.displayName || 'Unnamed satellite') + \"</td>\" +");
+        report.println("          \"<td>\" + escapeHtml(noradText) + \"</td>\" +");
+        report.println("          \"<td>\" + escapeHtml(candidate.positionCount !== undefined ? candidate.positionCount : 'n/a') + \"</td>\" +");
+        report.println("          \"<td>\" + escapeHtml(candidate.firstUtc || 'n/a') + \"</td>\" +");
+        report.println("          \"<td>\" + escapeHtml(candidate.lastUtc || 'n/a') + \"</td>\" +");
+        report.println("          \"<td>\" + escapeHtml(candidate.minAngleDeg !== undefined ? formatNumber(candidate.minAngleDeg, 4) : 'n/a') + \"</td>\" +");
+        report.println("          \"<td>\" + escapeHtml(rangeText) + \"</td>\" +");
+        report.println("          \"<td>\" + escapeHtml(candidate.tleEpochUtc || 'n/a') + \"</td>\" +");
+        report.println("          \"<td>\" + links + \"</td>\" +");
+        report.println("          \"</tr>\";");
+        report.println("      });");
+        report.println("      html += \"</tbody></table></div>\";");
+        report.println("    }");
+        report.println("");
+        report.println("    html += buildRawJsonDetails(response.payload);");
+        report.println("    html += \"</div>\";");
+        report.println("    slot.innerHTML = html;");
+        report.println("  }");
+        report.println("");
+        report.println("  function renderJplResponse(slot, response) {");
+        report.println("    const normalized = response.normalized || {};");
+        report.println("    const fields = safeArray(normalized.fields);");
+        report.println("    const allRows = safeArray(normalized.rows).slice();");
+        report.println("    const distanceFieldIndex = fields.findIndex(function (fieldName) {");
+        report.println("      return String(fieldName).indexOf('Dist. from center Norm') !== -1;");
+        report.println("    });");
+        report.println("    if (distanceFieldIndex >= 0) {");
+        report.println("      allRows.sort(function (left, right) {");
+        report.println("        const leftValue = parseLooseNumber(safeArray(left.values)[distanceFieldIndex]);");
+        report.println("        const rightValue = parseLooseNumber(safeArray(right.values)[distanceFieldIndex]);");
+        report.println("        if (!Number.isFinite(leftValue) && !Number.isFinite(rightValue)) return 0;");
+        report.println("        if (!Number.isFinite(leftValue)) return 1;");
+        report.println("        if (!Number.isFinite(rightValue)) return -1;");
+        report.println("        return leftValue - rightValue;");
+        report.println("      });");
+        report.println("    }");
+        report.println("");
+        report.println("    const displayedRows = allRows.slice(0, JPL_MAX_RENDER_ROWS);");
+        report.println("    let html = \"<div class='live-render-panel'><div class='live-render-heading'><div class='live-render-title'>Rendered JPL Results</div><div class='live-render-meta'>Fetched \" + escapeHtml(response.fetchedAtUtc || 'just now') + \"</div></div>\";");
+        report.println("    html += \"<div class='live-mini-grid'>\";");
+        report.println("    html += buildMetricCard('Result Set', normalized.resultSetLabel || 'Candidates');");
+        report.println("    html += buildMetricCard('Matches', normalized.matchCount !== undefined ? normalized.matchCount : allRows.length);");
+        report.println("    html += buildMetricCard('Observer', normalized.observerLocation || 'Topocentric / MPC');");
+        report.println("    html += \"</div>\";");
+        report.println("    html += \"<p class='live-caption'>This is the same JPL Small-Body Identification lookup shown by the browser link above, rendered inside the report for faster inspection.</p>\";");
+        report.println("");
+        report.println("    if (!displayedRows.length) {");
+        report.println("      html += \"<p class='live-empty-note'>JPL returned no matching small bodies for this query.</p>\";");
+        report.println("    } else {");
+        report.println("      html += \"<div class='live-table-box'><table><thead><tr>\";");
+        report.println("      fields.forEach(function (fieldName) {");
+        report.println("        html += \"<th>\" + escapeHtml(fieldName) + \"</th>\";");
+        report.println("      });");
+        report.println("      html += \"<th>Links</th></tr></thead><tbody>\";");
+        report.println("      displayedRows.forEach(function (row) {");
+        report.println("        const values = safeArray(row.values);");
+        report.println("        html += \"<tr>\";");
+        report.println("        values.forEach(function (value) {");
+        report.println("          html += \"<td>\" + escapeHtml(value) + \"</td>\";");
+        report.println("        });");
+        report.println("        let links = '';");
+        report.println("        if (row.sbdbLookupUrl) {");
+        report.println("          links += \"<a class='live-link-inline' href='\" + escapeHtml(row.sbdbLookupUrl) + \"' target='_blank' rel='noopener noreferrer'>JPL SBDB Lookup</a>\";");
+        report.println("        }");
+        report.println("        if (row.sbdbUrl) {");
+        report.println("          if (links) { links += \" | \"; }");
+        report.println("          links += \"<a class='live-link-inline' href='\" + escapeHtml(row.sbdbUrl) + \"' target='_blank' rel='noopener noreferrer'>JPL SBDB Classic</a>\";");
+        report.println("        }");
+        report.println("        html += \"<td>\" + links + \"</td></tr>\";");
+        report.println("      });");
+        report.println("      html += \"</tbody></table></div>\";");
+        report.println("      if (allRows.length > displayedRows.length) {");
+        report.println("        html += \"<p class='live-empty-note'>Showing the closest \" + escapeHtml(displayedRows.length) + \" of \" + escapeHtml(allRows.length) + \" returned rows. Use the browser link above for the full raw response.</p>\";");
+        report.println("      }");
+        report.println("    }");
+        report.println("");
+        report.println("    html += buildRawJsonDetails(response.payload);");
+        report.println("    html += \"</div>\";");
+        report.println("    slot.innerHTML = html;");
+        report.println("  }");
+        report.println("");
+        report.println("  function renderResponse(slot, response) {");
+        report.println("    if (!response || response.ok !== true) {");
+        report.println("      renderErrorResponse(slot, response || { message: 'The live lookup returned no data.' });");
+        report.println("      return;");
+        report.println("    }");
+        report.println("    if (response.provider === 'satchecker') {");
+        report.println("      renderSatCheckerResponse(slot, response);");
+        report.println("      return;");
+        report.println("    }");
+        report.println("    if (response.provider === 'jpl') {");
+        report.println("      renderJplResponse(slot, response);");
+        report.println("      return;");
+        report.println("    }");
+        report.println("    renderErrorResponse(slot, { message: 'Unknown live lookup provider returned by SpacePixels.' });");
+        report.println("  }");
+        report.println("");
+        report.println("  function loadLiveLookup(button) {");
+        report.println("    const provider = button.getAttribute('data-provider');");
+        report.println("    const target = button.getAttribute('data-target');");
+        report.println("    const slotId = button.getAttribute('data-slot-id');");
+        report.println("    const slot = slotId ? document.getElementById(slotId) : null;");
+        report.println("    if (!provider || !target || !slot) {");
+        report.println("      return;");
+        report.println("    }");
+        report.println("");
+        report.println("    const cacheKey = provider + '|' + target;");
+        report.println("    if (liveLookupCache.has(cacheKey)) {");
+        report.println("      renderResponse(slot, liveLookupCache.get(cacheKey));");
+        report.println("      return;");
+        report.println("    }");
+        report.println("");
+        report.println("    const originalLabel = button.getAttribute('data-original-label') || button.textContent;");
+        report.println("    button.setAttribute('data-original-label', originalLabel);");
+        report.println("    button.disabled = true;");
+        report.println("    button.textContent = 'Loading...';");
+        report.println("    slot.innerHTML = \"<div class='live-render-panel'><div class='live-caption'>Loading live report data from SpacePixels...</div></div>\";");
+        report.println("");
+        report.println("    fetch(REPORT_PROXY_FETCH_URL + '?provider=' + encodeURIComponent(provider) + '&target=' + encodeURIComponent(target))");
+        report.println("      .then(function (httpResponse) {");
+        report.println("        return httpResponse.json();");
+        report.println("      })");
+        report.println("      .then(function (response) {");
+        report.println("        liveLookupCache.set(cacheKey, response);");
+        report.println("        renderResponse(slot, response);");
+        report.println("      })");
+        report.println("      .catch(function (error) {");
+        report.println("        renderLookupUnavailable(slot, provider, error);");
+        report.println("      })");
+        report.println("      .finally(function () {");
+        report.println("        button.disabled = false;");
+        report.println("        button.textContent = originalLabel;");
+        report.println("      });");
+        report.println("  }");
+        report.println("");
+        report.println("  document.addEventListener('click', function (event) {");
+        report.println("    const button = event.target.closest('.render-live-link');");
+        report.println("    if (!button) {");
+        report.println("      return;");
+        report.println("    }");
+        report.println("    event.preventDefault();");
+        report.println("    loadLiveLookup(button);");
+        report.println("  });");
+        report.println("})();");
+        report.println("</script>");
     }
 
     private static boolean hasMeaningfulSlowMoverTelemetry(SlowMoverSummaryTelemetry telemetry) {
@@ -3284,12 +3693,41 @@ public class ImageDisplayUtils {
             report.println(".source-list li { background: #3d3d3d; padding: 8px 10px; border-radius: 4px; font-size: 0.9em; font-family: monospace; color: #aaa; border: 1px solid #555; flex: 1 1 360px; max-width: 520px; line-height: 1.4; }");
             report.println(".source-file { color: #dddddd; margin-bottom: 4px; word-break: break-word; }");
             report.println(".source-metrics { color: #999999; margin-top: 4px; }");
+            report.println(".foldable-streak-details { margin-top: 10px; margin-bottom: 12px; }");
+            report.println(".foldable-streak-details summary { cursor: pointer; color: #9ecfff; font-weight: bold; list-style: none; }");
+            report.println(".foldable-streak-details summary::-webkit-details-marker { display: none; }");
+            report.println(".foldable-streak-details summary::before { content: '\\25B6'; color: #9ecfff; display: inline-block; margin-right: 8px; font-size: 11px; transform: translateY(-1px); }");
+            report.println(".foldable-streak-details[open] summary::before { content: '\\25BC'; }");
+            report.println(".foldable-streak-body { margin-top: 10px; }");
+            report.println(".foldable-streak-body .source-list { margin-top: 8px; }");
             report.println(".coord-highlight { color: #4da6ff; font-weight: bold; }");
             report.println(".coord-stack { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; max-width: 100%; }");
             report.println(".coord-line { display: block; white-space: normal; }");
             report.println(".id-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }");
             report.println(".id-link { display: inline-block; background: #254a69; color: #d9ecff; padding: 6px 10px; border-radius: 999px; text-decoration: none; font-size: 12px; border: 1px solid #356c97; }");
             report.println(".id-link:hover { background: #2f6288; color: #ffffff; }");
+            report.println("button.id-link { cursor: pointer; font-family: inherit; line-height: 1.2; }");
+            report.println(".live-result-slot { margin-top: 12px; }");
+            report.println(".live-render-panel { background: #262b31; border: 1px solid #37424f; border-radius: 8px; padding: 14px 16px; margin-top: 10px; }");
+            report.println(".live-render-panel.error { border-color: #7a3b3b; background: #342525; }");
+            report.println(".live-render-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 10px; }");
+            report.println(".live-render-title { color: #ffffff; font-weight: bold; font-size: 14px; }");
+            report.println(".live-render-meta { color: #92a1b2; font-size: 11px; }");
+            report.println(".live-mini-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }");
+            report.println(".live-mini-card { background: #1f2429; border: 1px solid #34414d; border-radius: 6px; padding: 10px 12px; min-width: 120px; }");
+            report.println(".live-mini-label { color: #8e9baa; font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px; display: block; margin-bottom: 4px; }");
+            report.println(".live-mini-value { color: #ffffff; font-size: 14px; font-weight: bold; }");
+            report.println(".live-empty-note { color: #b7c1cc; font-size: 12px; margin: 10px 0 0 0; }");
+            report.println(".live-caption { color: #9eb1c4; font-size: 12px; margin: 0 0 10px 0; line-height: 1.45; }");
+            report.println(".live-table-box { max-height: 360px; overflow: auto; border: 1px solid #3d4650; border-radius: 6px; margin-top: 10px; }");
+            report.println(".live-table-box table { margin-top: 0; width: max-content; min-width: 100%; font-size: 12px; border-collapse: separate; border-spacing: 0; }");
+            report.println(".live-table-box th, .live-table-box td { padding: 7px 9px; white-space: nowrap; line-height: 1.25; vertical-align: top; }");
+            report.println(".live-table-box thead th { position: sticky; top: 0; z-index: 2; background: #1c2127; }");
+            report.println(".live-link-inline { color: #7fc2ff; text-decoration: none; }");
+            report.println(".live-link-inline:hover { text-decoration: underline; }");
+            report.println(".live-raw-json { margin-top: 12px; }");
+            report.println(".live-raw-json summary { cursor: pointer; color: #9ecfff; }");
+            report.println(".live-raw-json pre { margin-top: 8px; padding: 12px; background: #16191d; border: 1px solid #303841; border-radius: 6px; color: #cfd8e3; overflow: auto; white-space: pre-wrap; word-break: break-word; }");
             report.println(".astro-note { font-size: 12px; color: #aaaaaa; margin-top: 10px; line-height: 1.45; }");
             report.println(".native-size-image { max-width: 100%; width: auto; height: auto; display: block; margin: 0 auto; }");
             report.println(".map-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }");
@@ -3664,16 +4102,17 @@ public class ImageDisplayUtils {
                     report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
                     report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
                     report.println("</div>");
-                    report.println("<strong>Detection Coordinates & Part Metrics:</strong><ul class='source-list'>");
-                    for (int i = 0; i < track.points.size(); i++) {
-                        SourceExtractor.DetectedObject part = track.points.get(i);
-                        String metricsStr = buildStreakMetricsText(part);
-                        String fileLabel = partCount > 1
-                                ? "[Part " + (i + 1) + "] " + part.sourceFilename
-                                : part.sourceFilename;
-                        report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry(fileLabel, astrometryContext, part.x, part.y, metricsStr));
+                    String singleStreakEntriesHtml = buildStreakPointEntriesHtml(track, astrometryContext, true);
+                    if (partCount > 1) {
+                        report.println(buildFoldableStreakDetailsHtml(
+                                "Show individual streak parts (" + partCount + ")",
+                                "Detection Coordinates & Part Metrics",
+                                singleStreakEntriesHtml));
+                    } else {
+                        report.println("<strong>Detection Coordinates:</strong><ul class='source-list'>");
+                        report.println(singleStreakEntriesHtml);
+                        report.println("</ul>");
                     }
-                    report.println("</ul>");
                     if (partCount > 1) {
                         report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(astrometryContext, track, "Reference epoch for single-streak frame lookup"));
                     } else {
@@ -3727,20 +4166,20 @@ public class ImageDisplayUtils {
                     String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
                     report.println("<div class='detection-title' style='color: #ffcc33;'>Confirmed Streak Track ST" + counter + timeBadge + "</div>");
                     report.print(buildTrackTimingSummaryHtml(track, astrometryContext));
+                    report.print(buildConfirmedStreakFrameFragmentSummaryHtml(track, fitsFiles));
 
                     report.println("<div class='image-container'>");
                     report.println("<div><a href='" + starFileName + "' target='_blank'><img src='" + starFileName + "' alt='Star Centric Animation' /></a><br/><center><small>Star Centric</small></center></div>");
                     report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Track Shape Map' /></a><br/><center><small>Track Shape Map</small></center></div>");
                     report.println("</div>");
-
-                    report.println("<strong>Detection Coordinates & Frames:</strong><ul class='source-list'>");
-                    for (int i = 0; i < track.points.size(); i++) {
-                        SourceExtractor.DetectedObject pt = track.points.get(i);
-                        String metricsStr = buildStreakMetricsText(pt);
-                        report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry("[" + (i + 1) + "] " + pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr));
-                    }
-                    report.println("</ul>");
-                    report.print(DetectionReportAstrometry.buildTrackSatCheckerHtml(astrometryContext, track));
+                    report.println(buildFoldableStreakDetailsHtml(
+                            "Show individual streak fragments (" + track.points.size() + ")",
+                            "Detection Coordinates & Frames",
+                            buildStreakPointEntriesHtml(track, astrometryContext, false)));
+                    report.print(DetectionReportAstrometry.buildConfirmedStreakTrackSatCheckerHtml(
+                            astrometryContext,
+                            track,
+                            "streak-track-satchecker-" + counter));
                     report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(astrometryContext, track, "Reference epoch for streak-track lookup"));
                     report.println("</div>");
                     counter++;
@@ -3774,17 +4213,17 @@ public class ImageDisplayUtils {
                     report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
                     report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
                     report.println("</div>");
-
-                    report.println("<strong>Detection Coordinates & Part Metrics:</strong><ul class='source-list'>");
-                    for (int i = 0; i < track.points.size(); i++) {
-                        SourceExtractor.DetectedObject part = track.points.get(i);
-                        String metricsStr = buildStreakMetricsText(part);
-                        String fileLabel = partCount > 1
-                                ? "[Part " + (i + 1) + "] " + part.sourceFilename
-                                : part.sourceFilename;
-                        report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry(fileLabel, astrometryContext, part.x, part.y, metricsStr));
+                    String suspectedEntriesHtml = buildStreakPointEntriesHtml(track, astrometryContext, true);
+                    if (partCount > 1) {
+                        report.println(buildFoldableStreakDetailsHtml(
+                                "Show individual streak parts (" + partCount + ")",
+                                "Detection Coordinates & Part Metrics",
+                                suspectedEntriesHtml));
+                    } else {
+                        report.println("<strong>Detection Coordinates:</strong><ul class='source-list'>");
+                        report.println(suspectedEntriesHtml);
+                        report.println("</ul>");
                     }
-                    report.println("</ul>");
                     if (partCount > 1) {
                         report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(astrometryContext, track, "Reference epoch for suspected streak frame lookup"));
                     } else {
@@ -3883,14 +4322,14 @@ public class ImageDisplayUtils {
                     shapeEvolutionHtml.append("</div></div>\n");
                     report.print(shapeEvolutionHtml.toString());
 
-                    report.println("<strong>Detection Coordinates & Frames:</strong><ul class='source-list'>");
-                    for (int i = 0; i < track.points.size(); i++) {
-                        SourceExtractor.DetectedObject pt = track.points.get(i);
-                        String metricsStr = buildMovingTrackMetricsText(pt);
-                        report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry("[" + (i + 1) + "] " + pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr));
-                    }
-                    report.println("</ul>");
-                    report.print(DetectionReportAstrometry.buildTrackSolarSystemIdentificationHtml(astrometryContext, track));
+                    report.println(buildFoldableStreakDetailsHtml(
+                            "Show detection coordinates & frames (" + track.points.size() + ")",
+                            "Detection Coordinates & Frames",
+                            buildMovingTrackPointEntriesHtml(track, astrometryContext)));
+                    report.print(DetectionReportAstrometry.buildMovingTrackSolarSystemIdentificationHtml(
+                            astrometryContext,
+                            track,
+                            "moving-track-jpl-" + counter));
                     report.println("</div>");
                     counter++;
                 }
@@ -4229,6 +4668,7 @@ public class ImageDisplayUtils {
                 report.println("</div>");
             }
 
+            appendLiveReportRenderingScript(report);
             report.println("</body></html>");
         }
         System.out.println("\nFinished exporting visualizations and generated HTML report at: " + reportFile.getAbsolutePath());

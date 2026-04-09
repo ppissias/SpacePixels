@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 
@@ -212,24 +213,65 @@ final class DetectionReportAstrometry {
 
     static String buildDeepStackIdentificationHtml(Context astrometryContext,
                                                    SourceExtractor.DetectedObject detection) {
+        return buildDeepStackIdentificationHtml(astrometryContext, detection, null);
+    }
+
+    static String buildDeepStackIdentificationHtml(Context astrometryContext,
+                                                   SourceExtractor.DetectedObject detection,
+                                                   String liveRenderSlotId) {
         SolarSystemQueryTarget queryTarget = buildSingleDetectionQueryTarget(astrometryContext, detection);
         return buildSolarSystemIdentificationHtml(astrometryContext, queryTarget,
                 "Reference epoch for stack lookup",
                 "Search SkyBoT",
-                "SkyBoT search radius");
+                "SkyBoT search radius",
+                liveRenderSlotId,
+                false);
     }
 
     static String buildTrackSolarSystemIdentificationHtml(Context astrometryContext,
                                                           TrackLinker.Track track) {
+        return buildTrackSolarSystemIdentificationHtml(astrometryContext, track, null);
+    }
+
+    static String buildTrackSolarSystemIdentificationHtml(Context astrometryContext,
+                                                          TrackLinker.Track track,
+                                                          String liveRenderSlotId) {
         SolarSystemQueryTarget queryTarget = buildTrackQueryTarget(astrometryContext, track);
         return buildSolarSystemIdentificationHtml(astrometryContext, queryTarget,
                 "Reference epoch for track lookup",
                 "Search SkyBoT (Track Midpoint)",
-                "SkyBoT search radius");
+                "SkyBoT search radius",
+                liveRenderSlotId,
+                false);
+    }
+
+    static String buildMovingTrackSolarSystemIdentificationHtml(Context astrometryContext,
+                                                                TrackLinker.Track track,
+                                                                String liveRenderSlotId) {
+        SolarSystemQueryTarget queryTarget = buildTrackQueryTarget(astrometryContext, track);
+        return buildSolarSystemIdentificationHtml(astrometryContext, queryTarget,
+                "Reference epoch for track lookup",
+                "Search SkyBoT (Track Midpoint)",
+                "SkyBoT search radius",
+                liveRenderSlotId,
+                true);
     }
 
     static String buildTrackSatCheckerHtml(Context astrometryContext,
                                            TrackLinker.Track track) {
+        return buildTrackSatCheckerHtml(astrometryContext, track, null, false);
+    }
+
+    static String buildConfirmedStreakTrackSatCheckerHtml(Context astrometryContext,
+                                                          TrackLinker.Track track,
+                                                          String liveRenderSlotId) {
+        return buildTrackSatCheckerHtml(astrometryContext, track, liveRenderSlotId, true);
+    }
+
+    private static String buildTrackSatCheckerHtml(Context astrometryContext,
+                                                   TrackLinker.Track track,
+                                                   String liveRenderSlotId,
+                                                   boolean useSimpleLabels) {
         StringBuilder html = new StringBuilder();
         html.append("<div class='astro-note'>");
 
@@ -300,11 +342,28 @@ final class DetectionReportAstrometry {
         html.append("<div class='id-links'>");
         html.append("<a class='id-link' href='")
                 .append(satCheckerUrl)
-                .append("' target='_blank' rel='noopener noreferrer'>SatChecker Tight Candidate Query</a>");
+                .append("' target='_blank' rel='noopener noreferrer'>")
+                .append(useSimpleLabels ? "Open SatChecker in Browser" : "SatChecker Tight Candidate Query")
+                .append("</a>");
+        if (liveRenderSlotId != null && !liveRenderSlotId.isEmpty()) {
+            html.append(buildLiveRenderButtonHtml("satchecker", satCheckerUrl, liveRenderSlotId, "Render SatChecker Results Here"));
+        }
         html.append("</div>");
-        html.append("<div class='astro-note' style='margin-top: 6px;'>This link uses a tighter SatChecker FOV request centered on the measured streak midpoint with <strong>mid_obs_time_jd</strong>, a short duration window, and <strong>async=False</strong> so the browser waits for the JSON response directly. Query radius: ")
-                .append(escapeHtml(String.format(Locale.US, "%.2f°", queryTarget.fovRadiusDegrees)))
-                .append("; grouping: satellite; TLE payload omitted.</div>");
+        if (useSimpleLabels && liveRenderSlotId != null && !liveRenderSlotId.isEmpty()) {
+            html.append("<div class='astro-note' style='margin-top: 6px;'>")
+                    .append("<strong>Open SatChecker in Browser</strong> opens the original SatChecker response in a new tab. ")
+                    .append("<strong>Render SatChecker Results Here</strong> asks SpacePixels to fetch the same result and show it inside this report. ")
+                    .append("Query radius: ")
+                    .append(escapeHtml(String.format(Locale.US, "%.2f°", queryTarget.fovRadiusDegrees)))
+                    .append("; grouping: satellite; TLE payload omitted.</div>");
+        } else {
+            html.append("<div class='astro-note' style='margin-top: 6px;'>This link uses a tighter SatChecker FOV request centered on the measured streak midpoint with <strong>mid_obs_time_jd</strong>, a short duration window, and <strong>async=False</strong> so the browser waits for the JSON response directly. Query radius: ")
+                    .append(escapeHtml(String.format(Locale.US, "%.2f°", queryTarget.fovRadiusDegrees)))
+                    .append("; grouping: satellite; TLE payload omitted.</div>");
+        }
+        if (liveRenderSlotId != null && !liveRenderSlotId.isEmpty()) {
+            html.append(buildLiveRenderContainerHtml(liveRenderSlotId));
+        }
         html.append("</div>");
         return html.toString();
     }
@@ -375,7 +434,9 @@ final class DetectionReportAstrometry {
                                                              SolarSystemQueryTarget queryTarget,
                                                              String epochLabel,
                                                              String buttonLabel,
-                                                             String radiusLabel) {
+                                                             String radiusLabel,
+                                                             String liveJplRenderSlotId,
+                                                             boolean useSimpleJplLabels) {
         StringBuilder html = new StringBuilder();
         html.append("<div class='astro-note'>");
 
@@ -453,10 +514,15 @@ final class DetectionReportAstrometry {
         String nominalJplUrl = buildJplSbIdentUrl(astrometryContext, queryTarget, queryTarget.searchRadiusDegrees);
         if (nominalJplUrl != null) {
             String neoRecoveryJplUrl = buildJplSbIdentUrl(astrometryContext, queryTarget, JPL_NEO_RECOVERY_HALF_WIDTH_DEGREES, "neo");
+            String exactJplLabel = useSimpleJplLabels ? "Open JPL in Browser" : "JPL Exact FOV";
+            String neoJplLabel = useSimpleJplLabels ? "Open JPL NEO Recovery in Browser" : "JPL NEO Recovery";
             html.append("<div class='id-links'>");
-            html.append("<a class='id-link' href='").append(nominalJplUrl).append("' target='_blank' rel='noopener noreferrer'>JPL Exact FOV</a>");
+            html.append("<a class='id-link' href='").append(nominalJplUrl).append("' target='_blank' rel='noopener noreferrer'>").append(exactJplLabel).append("</a>");
             if (neoRecoveryJplUrl != null) {
-                html.append("<a class='id-link' href='").append(neoRecoveryJplUrl).append("' target='_blank' rel='noopener noreferrer'>JPL NEO Recovery</a>");
+                html.append("<a class='id-link' href='").append(neoRecoveryJplUrl).append("' target='_blank' rel='noopener noreferrer'>").append(neoJplLabel).append("</a>");
+            }
+            if (liveJplRenderSlotId != null && !liveJplRenderSlotId.isEmpty()) {
+                html.append(buildLiveRenderButtonHtml("jpl", nominalJplUrl, liveJplRenderSlotId, "Render JPL Results Here"));
             }
             html.append("</div>");
             html.append("<div class='astro-note' style='margin-top: 6px;'>JPL Small-Body Identification uses ");
@@ -465,9 +531,16 @@ final class DetectionReportAstrometry {
             } else if (astrometryContext.observerSite != null) {
                 html.append("topocentric site coordinates from ").append(escapeHtml(astrometryContext.observerSite.sourceLabel));
             }
-            html.append(". These JPL links open the raw JSON API response. <strong>JPL Exact FOV</strong> keeps the search tight to the measured image footprint. <strong>JPL NEO Recovery</strong> is the fallback for fast nearby NEOs that JPL's first pass can miss in a small field; it uses a fixed ")
-                    .append(escapeHtml(String.format(Locale.US, "%.1f", JPL_NEO_RECOVERY_HALF_WIDTH_DEGREES)))
+            if (useSimpleJplLabels && liveJplRenderSlotId != null && !liveJplRenderSlotId.isEmpty()) {
+                html.append(". <strong>Open JPL in Browser</strong> opens the original JPL response in a new tab. <strong>Render JPL Results Here</strong> asks SpacePixels to fetch the same result and show it inside this report. <strong>Open JPL NEO Recovery in Browser</strong> is the wider fallback for fast nearby NEOs that JPL's first pass can miss in a small field; it uses a fixed ");
+            } else {
+                html.append(". These JPL links open the raw JSON API response. <strong>JPL Exact FOV</strong> keeps the search tight to the measured image footprint. <strong>JPL NEO Recovery</strong> is the fallback for fast nearby NEOs that JPL's first pass can miss in a small field; it uses a fixed ");
+            }
+            html.append(escapeHtml(String.format(Locale.US, "%.1f", JPL_NEO_RECOVERY_HALF_WIDTH_DEGREES)))
                     .append("&deg; half-width and limits results to NEOs.</div>");
+            if (liveJplRenderSlotId != null && !liveJplRenderSlotId.isEmpty()) {
+                html.append(buildLiveRenderContainerHtml(liveJplRenderSlotId));
+            }
         } else {
             String jplUnavailableReason = buildJplUnavailableReason(astrometryContext);
             if (jplUnavailableReason != null) {
@@ -1529,6 +1602,39 @@ final class DetectionReportAstrometry {
 
     private static String urlEncode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private static String buildLiveRenderButtonHtml(String provider,
+                                                    String targetUrl,
+                                                    String slotId,
+                                                    String buttonLabel) {
+        if (provider == null || provider.isEmpty()
+                || targetUrl == null || targetUrl.isEmpty()
+                || slotId == null || slotId.isEmpty()
+                || buttonLabel == null || buttonLabel.isEmpty()) {
+            return "";
+        }
+
+        String encodedTarget = Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(targetUrl.getBytes(StandardCharsets.UTF_8));
+
+        return "<button type='button' class='id-link render-live-link' data-provider='"
+                + escapeHtml(provider)
+                + "' data-target='"
+                + escapeHtml(encodedTarget)
+                + "' data-slot-id='"
+                + escapeHtml(slotId)
+                + "'>"
+                + escapeHtml(buttonLabel)
+                + "</button>";
+    }
+
+    private static String buildLiveRenderContainerHtml(String slotId) {
+        if (slotId == null || slotId.isEmpty()) {
+            return "";
+        }
+        return "<div class='live-result-slot' id='" + escapeHtml(slotId) + "'></div>";
     }
 
     private static String escapeHtml(String value) {
