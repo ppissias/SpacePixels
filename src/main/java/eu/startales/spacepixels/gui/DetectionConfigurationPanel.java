@@ -54,7 +54,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private JCheckBox chkEnableSlowMovers, chkEnableSlowMoverResidualFootprintFiltering, chkEnableBinaryStarLikeStreakShapeVeto;
     private JSpinner spinMasterSigma, spinMasterMinPix, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma, spinSlowMoverBaselineMadMultiplier, spinSlowMoverStackMiddleFraction;
     private JSpinner spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction, spinSlowMoverResidualFootprintMinFluxFraction;
-    private JSpinner spinStreakMinElong, spinStreakMinPix, spinSingleStreakMinPeakSigma;
+    private JSpinner spinStreakMinElong, spinStreakMinPix, spinSingleStreakMinPeakSigma, spinStreakTimeConsistencyTolerance;
     private JSpinner spinBgClippingIters, spinBgClippingFactor;
 
     // --- TrackLinker Spinners ---
@@ -411,6 +411,11 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Advanced Settings"));
         spinAngleTol = addRow(panel, "Trajectory Angle Tolerance", "For streak-based tracks, maximum allowed difference between the streak angle and the inferred track direction.", doubleSpinnerModel(jTransientConfig.angleToleranceDegrees, 0.5, 180.0, 0.5));
+        spinStreakTimeConsistencyTolerance = addRow(
+                panel,
+                "Streak Time Consistency Tolerance",
+                "When timestamps are available, this controls how much projected-speed variation the multi-frame streak linker tolerates between sampled frames. Higher values are more permissive for fragmented or faint streak trails.",
+                doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "streakTimeConsistencyTolerance", 0.50), 0.0, 1.0, 0.01));
         chkEnableBinaryStarLikeStreakShapeVeto = addCheckboxRow(
                 panel,
                 "Enable Binary-Star-Like Streak Shape Veto",
@@ -806,6 +811,7 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.streakMinElongation = ((Number) spinStreakMinElong.getValue()).doubleValue();
             jTransientConfig.streakMinPixels = ((Number) spinStreakMinPix.getValue()).intValue();
             jTransientConfig.singleStreakMinPeakSigma = ((Number) spinSingleStreakMinPeakSigma.getValue()).doubleValue();
+            setOptionalDoubleField(jTransientConfig, "streakTimeConsistencyTolerance", ((Number) spinStreakTimeConsistencyTolerance.getValue()).doubleValue());
             jTransientConfig.bgClippingIterations = ((Number) spinBgClippingIters.getValue()).intValue();
             jTransientConfig.bgClippingFactor = ((Number) spinBgClippingFactor.getValue()).doubleValue();
 
@@ -1111,6 +1117,7 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinStreakMinElong, config.streakMinElongation);
         setSpinnerValueClamped(spinStreakMinPix, config.streakMinPixels);
         setSpinnerValueClamped(spinSingleStreakMinPeakSigma, config.singleStreakMinPeakSigma);
+        setSpinnerValueClamped(spinStreakTimeConsistencyTolerance, getOptionalDoubleField(config, "streakTimeConsistencyTolerance", 0.50));
         chkEnableBinaryStarLikeStreakShapeVeto.setSelected(getOptionalBooleanField(config, "enableBinaryStarLikeStreakShapeVeto", true));
         setSpinnerValueClamped(spinBgClippingIters, config.bgClippingIterations);
         setSpinnerValueClamped(spinBgClippingFactor, config.bgClippingFactor);

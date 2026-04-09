@@ -2802,12 +2802,70 @@ public class ImageDisplayUtils {
         }
     }
 
+    private static int getTrackDisplayFrameIndex(TrackLinker.Track track) {
+        if (track == null || track.points == null || track.points.isEmpty()) {
+            return Integer.MAX_VALUE;
+        }
+
+        int earliestFrameIndex = Integer.MAX_VALUE;
+        for (SourceExtractor.DetectedObject point : track.points) {
+            if (point == null) {
+                continue;
+            }
+            earliestFrameIndex = Math.min(earliestFrameIndex, point.sourceFrameIndex);
+        }
+        return earliestFrameIndex;
+    }
+
+    private static int getAnomalyDisplayFrameIndex(TrackLinker.AnomalyDetection anomaly) {
+        if (anomaly == null || anomaly.object == null) {
+            return Integer.MAX_VALUE;
+        }
+        return anomaly.object.sourceFrameIndex;
+    }
+
+    private static String getTrackDisplayFileName(TrackLinker.Track track) {
+        if (track == null || track.points == null || track.points.isEmpty()) {
+            return "";
+        }
+        SourceExtractor.DetectedObject firstPoint = track.points.get(0);
+        return firstPoint != null && firstPoint.sourceFilename != null ? firstPoint.sourceFilename : "";
+    }
+
+    private static List<TrackLinker.Track> sortTracksForFrameDisplay(List<TrackLinker.Track> tracks) {
+        List<TrackLinker.Track> ordered = new ArrayList<>();
+        if (tracks != null) {
+            ordered.addAll(tracks);
+        }
+        ordered.sort(Comparator
+                .comparingInt(ImageDisplayUtils::getTrackDisplayFrameIndex)
+                .thenComparing(ImageDisplayUtils::getTrackDisplayFileName)
+                .thenComparingDouble(track -> track != null && track.points != null && !track.points.isEmpty() && track.points.get(0) != null
+                        ? track.points.get(0).x
+                        : Double.POSITIVE_INFINITY)
+                .thenComparingDouble(track -> track != null && track.points != null && !track.points.isEmpty() && track.points.get(0) != null
+                        ? track.points.get(0).y
+                        : Double.POSITIVE_INFINITY));
+        return ordered;
+    }
+
     private static List<TrackLinker.AnomalyDetection> sortAnomaliesForDisplay(List<TrackLinker.AnomalyDetection> anomalies) {
         List<TrackLinker.AnomalyDetection> ordered = new ArrayList<>();
         if (anomalies != null) {
             ordered.addAll(anomalies);
         }
-        ordered.sort((left, right) -> Integer.compare(getAnomalyDisplayOrder(left), getAnomalyDisplayOrder(right)));
+        ordered.sort(Comparator
+                .comparingInt(ImageDisplayUtils::getAnomalyDisplayFrameIndex)
+                .thenComparingInt(ImageDisplayUtils::getAnomalyDisplayOrder)
+                .thenComparing(anomaly -> anomaly != null && anomaly.object != null && anomaly.object.sourceFilename != null
+                        ? anomaly.object.sourceFilename
+                        : "")
+                .thenComparingDouble(anomaly -> anomaly != null && anomaly.object != null
+                        ? anomaly.object.x
+                        : Double.POSITIVE_INFINITY)
+                .thenComparingDouble(anomaly -> anomaly != null && anomaly.object != null
+                        ? anomaly.object.y
+                        : Double.POSITIVE_INFINITY));
         return ordered;
     }
 
@@ -3127,6 +3185,8 @@ public class ImageDisplayUtils {
                 else movingTargets.add(track);
             }
         }
+        singleStreaks = sortTracksForFrameDisplay(singleStreaks);
+        suspectedStreakTracks = sortTracksForFrameDisplay(suspectedStreakTracks);
         for (ResidualTransientAnalysis.LocalRescueCandidate candidate : localRescueCandidates) {
             TrackLinker.Track residualTrack = buildResidualTrack(candidate.points);
             if (residualTrack.points != null && !residualTrack.points.isEmpty()) {
@@ -3680,6 +3740,7 @@ public class ImageDisplayUtils {
                         report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry("[" + (i + 1) + "] " + pt.sourceFilename, astrometryContext, pt.x, pt.y, metricsStr));
                     }
                     report.println("</ul>");
+                    report.print(DetectionReportAstrometry.buildTrackSatCheckerHtml(astrometryContext, track));
                     report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(astrometryContext, track, "Reference epoch for streak-track lookup"));
                     report.println("</div>");
                     counter++;
@@ -3837,7 +3898,7 @@ public class ImageDisplayUtils {
 
             if (!anomalies.isEmpty()) {
                 report.println("<h3 style='color: #ff3333; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single-Frame Anomalies (Optical Flashes)</h3>");
-                report.println("<div class='astro-note' style='margin-bottom: 15px;'>Ordered with peak-sigma rescues first, followed by integrated-sigma rescues.</div>");
+                report.println("<div class='astro-note' style='margin-bottom: 15px;'>Ordered by source frame index. If multiple anomalies land on the same frame, peak-sigma rescues are shown before integrated-sigma rescues.</div>");
                 int counter = 1;
                 for (TrackLinker.AnomalyDetection anomaly : anomalies) {
                     SourceExtractor.DetectedObject pt = anomaly.object;

@@ -165,6 +165,70 @@ public class DetectionReportAstrometryTest {
     }
 
     @Test
+    public void buildsSatCheckerFovUrlForSynchronousTightCandidateLookup() {
+        long midpointTimestampMillis = Instant.parse("2026-04-01T00:00:00Z").toEpochMilli();
+        DetectionReportAstrometry.ObserverSite observerSite =
+                new DetectionReportAstrometry.ObserverSite(37.9838, 289.5970, 120.0, "Test Site");
+
+        String url = DetectionReportAstrometry.buildSatCheckerFovUrl(
+                observerSite,
+                midpointTimestampMillis,
+                37L,
+                150.0,
+                -10.5,
+                2.25,
+                false);
+
+        assertNotNull(url);
+        assertTrue(url.startsWith("https://satchecker.cps.iau.org/fov/satellite-passes/?"));
+        assertTrue(url.contains("latitude=37.983800"));
+        assertTrue(url.contains("longitude=-70.403000"));
+        assertTrue(url.contains("elevation=120.0"));
+        assertTrue(url.contains("mid_obs_time_jd="));
+        assertTrue(url.contains("&duration=37"));
+        assertTrue(url.contains("&ra=150.000000"));
+        assertTrue(url.contains("&dec=-10.500000"));
+        assertTrue(url.contains("&fov_radius=2.2500"));
+        assertTrue(url.contains("&group_by=satellite"));
+        assertTrue(url.contains("&data_source=any"));
+        assertTrue(url.contains("&async=False"));
+        assertFalse(url.contains("start_time_jd="));
+        assertFalse(url.contains("include_tles"));
+    }
+
+    @Test
+    public void rejectsSatCheckerFovUrlWithoutRequiredInputs() {
+        long midpointTimestampMillis = Instant.parse("2026-04-01T00:00:00Z").toEpochMilli();
+        DetectionReportAstrometry.ObserverSite observerSite =
+                new DetectionReportAstrometry.ObserverSite(37.9838, 23.7275, 120.0, "Test Site");
+
+        assertNull(DetectionReportAstrometry.buildSatCheckerFovUrl(
+                null,
+                midpointTimestampMillis,
+                30L,
+                150.0,
+                -10.5,
+                2.25,
+                false));
+        assertNull(DetectionReportAstrometry.buildSatCheckerFovUrl(
+                observerSite,
+                -1L,
+                30L,
+                150.0,
+                -10.5,
+                2.25,
+                false));
+        assertNull(DetectionReportAstrometry.buildSatCheckerFovUrl(
+                observerSite,
+                midpointTimestampMillis,
+                0L,
+                150.0,
+                -10.5,
+                2.25,
+                false));
+    }
+
+    @Test
     public void flagsSiderealLikeRaDriftAsPotentialGeo() {
         assertTrue(DetectionReportAstrometry.isNearSiderealRaRate(54148.0));
         assertNotNull(DetectionReportAstrometry.classifyTrackMotionByRaRate(54148.0));

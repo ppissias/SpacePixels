@@ -25,6 +25,11 @@ import java.util.Locale;
 
 final class DetectionReportAstrometry {
     private static final double JPL_NEO_RECOVERY_HALF_WIDTH_DEGREES = 5.0d;
+    private static final double SATCHECKER_MIN_FOV_RADIUS_DEGREES = 0.25d;
+    private static final double SATCHECKER_MAX_FOV_RADIUS_DEGREES = 1.5d;
+    private static final double SATCHECKER_TRACK_FOV_PADDING_DEGREES = 0.20d;
+    private static final long SATCHECKER_TIGHT_QUERY_MIN_DURATION_SECONDS = 5L;
+    private static final long SATCHECKER_TIGHT_QUERY_MAX_DURATION_SECONDS = 15L;
     private static final double SIDEREAL_DAY_SECONDS = 86164.0905d;
     private static final double SIDEREAL_RATE_ARCSEC_PER_HOUR = (360.0d * 3600.0d * 3600.0d) / SIDEREAL_DAY_SECONDS;
     private static final double SIDEREAL_RATE_MATCH_FRACTION = 0.10d;
@@ -153,6 +158,46 @@ final class DetectionReportAstrometry {
         }
     }
 
+    private static final class TrackTimeWindow {
+        private final long startTimestampMillis;
+        private final long endTimestampMillis;
+        private final long durationSeconds;
+
+        private TrackTimeWindow(long startTimestampMillis,
+                                long endTimestampMillis,
+                                long durationSeconds) {
+            this.startTimestampMillis = startTimestampMillis;
+            this.endTimestampMillis = endTimestampMillis;
+            this.durationSeconds = durationSeconds;
+        }
+    }
+
+    private static final class SatCheckerQueryTarget {
+        private final double raDegrees;
+        private final double decDegrees;
+        private final double fovRadiusDegrees;
+        private final long startTimestampMillis;
+        private final long endTimestampMillis;
+        private final long durationSeconds;
+        private final String summaryLabel;
+
+        private SatCheckerQueryTarget(double raDegrees,
+                                      double decDegrees,
+                                      double fovRadiusDegrees,
+                                      long startTimestampMillis,
+                                      long endTimestampMillis,
+                                      long durationSeconds,
+                                      String summaryLabel) {
+            this.raDegrees = raDegrees;
+            this.decDegrees = decDegrees;
+            this.fovRadiusDegrees = fovRadiusDegrees;
+            this.startTimestampMillis = startTimestampMillis;
+            this.endTimestampMillis = endTimestampMillis;
+            this.durationSeconds = durationSeconds;
+            this.summaryLabel = summaryLabel;
+        }
+    }
+
     private DetectionReportAstrometry() {
     }
 
@@ -181,6 +226,87 @@ final class DetectionReportAstrometry {
                 "Reference epoch for track lookup",
                 "Search SkyBoT (Track Midpoint)",
                 "SkyBoT search radius");
+    }
+
+    static String buildTrackSatCheckerHtml(Context astrometryContext,
+                                           TrackLinker.Track track) {
+        StringBuilder html = new StringBuilder();
+        html.append("<div class='astro-note'>");
+
+        if (astrometryContext == null || !astrometryContext.hasAstrometricSolution()) {
+            html.append("SatChecker link unavailable: no reusable aligned-frame WCS solution was found for this session.");
+            html.append("</div>");
+            return html.toString();
+        }
+
+        if (astrometryContext.observerSite == null) {
+            html.append("SatChecker link unavailable: observer site coordinates are required and were not found in the FITS headers or configuration panel.");
+            html.append("</div>");
+            return html.toString();
+        }
+
+        SatCheckerQueryTarget queryTarget = buildTrackSatCheckerQueryTarget(astrometryContext, track);
+        if (queryTarget == null) {
+            html.append("SatChecker link unavailable: no valid streak-track time window or usable FOV geometry could be resolved.");
+            html.append("</div>");
+            return html.toString();
+        }
+
+        long queryMidpointTimestampMillis = resolveTimeWindowMidpointTimestamp(queryTarget.startTimestampMillis, queryTarget.endTimestampMillis);
+        long candidateDurationSeconds = resolveSatCheckerCandidateDurationSeconds(queryTarget.durationSeconds);
+        String satCheckerUrl = buildSatCheckerFovUrl(
+                astrometryContext.observerSite,
+                queryMidpointTimestampMillis,
+                candidateDurationSeconds,
+                queryTarget.raDegrees,
+                queryTarget.decDegrees,
+                queryTarget.fovRadiusDegrees,
+                false);
+        if (satCheckerUrl == null) {
+            html.append("SatChecker link unavailable: the streak-track query parameters could not be normalized into a valid request.");
+            html.append("</div>");
+            return html.toString();
+        }
+
+        html.append("Satellite identification (SatChecker): <span class='coord-highlight'>RA ")
+                .append(escapeHtml(WcsCoordinateTransformer.formatRa(queryTarget.raDegrees)))
+                .append(" | Dec ")
+                .append(escapeHtml(WcsCoordinateTransformer.formatDec(queryTarget.decDegrees)))
+                .append("</span>");
+        if (queryTarget.summaryLabel != null && !queryTarget.summaryLabel.isEmpty()) {
+            html.append("<br>").append(escapeHtml(queryTarget.summaryLabel)).append(".");
+        }
+        html.append("<br>Observed track span: ")
+                .append(escapeHtml(formatUtcTimestamp(queryTarget.startTimestampMillis)))
+                .append(" to ")
+                .append(escapeHtml(formatUtcTimestamp(queryTarget.endTimestampMillis)))
+                .append(" (")
+                .append(escapeHtml(formatDurationSeconds(queryTarget.durationSeconds)))
+                .append(").");
+        html.append("<br>Tight candidate query: midpoint ")
+                .append(escapeHtml(formatUtcTimestamp(queryMidpointTimestampMillis)))
+                .append(", duration ")
+                .append(escapeHtml(formatDurationSeconds(candidateDurationSeconds)))
+                .append(".");
+        html.append("<br>SatChecker site: ")
+                .append(escapeHtml(String.format(
+                        Locale.US,
+                        "%.5f, %.5f @ %.1f m (%s)",
+                        astrometryContext.observerSite.latitudeDeg,
+                        astrometryContext.observerSite.longitudeDeg,
+                        astrometryContext.observerSite.altitudeMeters,
+                        astrometryContext.observerSite.sourceLabel)))
+                .append(".");
+        html.append("<div class='id-links'>");
+        html.append("<a class='id-link' href='")
+                .append(satCheckerUrl)
+                .append("' target='_blank' rel='noopener noreferrer'>SatChecker Tight Candidate Query</a>");
+        html.append("</div>");
+        html.append("<div class='astro-note' style='margin-top: 6px;'>This link uses a tighter SatChecker FOV request centered on the measured streak midpoint with <strong>mid_obs_time_jd</strong>, a short duration window, and <strong>async=False</strong> so the browser waits for the JSON response directly. Query radius: ")
+                .append(escapeHtml(String.format(Locale.US, "%.2f°", queryTarget.fovRadiusDegrees)))
+                .append("; grouping: satellite; TLE payload omitted.</div>");
+        html.append("</div>");
+        return html.toString();
     }
 
     static String buildTrackSkyRateSummaryHtml(Context astrometryContext,
@@ -426,6 +552,104 @@ final class DetectionReportAstrometry {
         double radiusDegrees = estimateSkybotSearchRadiusDegrees(astrometryContext, pixelX, pixelY, avgArea, avgElongation);
         return new SolarSystemQueryTarget(pixelX, pixelY, timestampMillis, radiusDegrees,
                 "Track midpoint from " + count + " detections");
+    }
+
+    private static SatCheckerQueryTarget buildTrackSatCheckerQueryTarget(Context astrometryContext,
+                                                                         TrackLinker.Track track) {
+        if (astrometryContext == null || !astrometryContext.hasAstrometricSolution()
+                || astrometryContext.observerSite == null) {
+            return null;
+        }
+
+        TrackTimeWindow timeWindow = resolveTrackTimeWindow(astrometryContext, track);
+        if (timeWindow == null) {
+            return null;
+        }
+
+        return buildTrackCenteredSatCheckerQueryTarget(astrometryContext, track, timeWindow);
+    }
+
+    private static TrackTimeWindow resolveTrackTimeWindow(Context astrometryContext,
+                                                          TrackLinker.Track track) {
+        if (track == null || track.points == null || track.points.isEmpty()) {
+            return null;
+        }
+
+        long earliestStartTimestamp = Long.MAX_VALUE;
+        long latestEndTimestamp = Long.MIN_VALUE;
+
+        for (SourceExtractor.DetectedObject point : track.points) {
+            long startTimestamp = resolveTrackPointStartTimestamp(astrometryContext, point);
+            if (startTimestamp <= 0L) {
+                continue;
+            }
+
+            long endTimestamp = startTimestamp + resolveTrackPointExposureMillis(point);
+            if (endTimestamp < startTimestamp) {
+                endTimestamp = startTimestamp;
+            }
+
+            earliestStartTimestamp = Math.min(earliestStartTimestamp, startTimestamp);
+            latestEndTimestamp = Math.max(latestEndTimestamp, endTimestamp);
+        }
+
+        if (earliestStartTimestamp == Long.MAX_VALUE) {
+            return null;
+        }
+
+        if (latestEndTimestamp < earliestStartTimestamp) {
+            latestEndTimestamp = earliestStartTimestamp;
+        }
+
+        long durationMillis = Math.max(1L, latestEndTimestamp - earliestStartTimestamp);
+        long durationSeconds = Math.max(1L, (long) Math.ceil(durationMillis / 1000.0d));
+        return new TrackTimeWindow(earliestStartTimestamp, latestEndTimestamp, durationSeconds);
+    }
+
+    private static SatCheckerQueryTarget buildTrackCenteredSatCheckerQueryTarget(Context astrometryContext,
+                                                                                 TrackLinker.Track track,
+                                                                                 TrackTimeWindow timeWindow) {
+        SolarSystemQueryTarget trackQueryTarget = buildTrackQueryTarget(astrometryContext, track);
+        if (trackQueryTarget == null) {
+            return null;
+        }
+
+        WcsCoordinateTransformer transformer = astrometryContext.getTransformer();
+        WcsCoordinateTransformer.SkyCoordinate midpointSky = transformer.pixelToSky(trackQueryTarget.pixelX, trackQueryTarget.pixelY);
+        if (midpointSky == null || !Double.isFinite(midpointSky.getRaDegrees()) || !Double.isFinite(midpointSky.getDecDegrees())) {
+            return null;
+        }
+
+        double maxTrackSeparationDegrees = 0.0d;
+        for (SourceExtractor.DetectedObject point : track.points) {
+            if (point == null) {
+                continue;
+            }
+
+            WcsCoordinateTransformer.SkyCoordinate pointSky = transformer.pixelToSky(point.x, point.y);
+            double separationDegrees = computeAngularSeparationDegrees(
+                    midpointSky.getRaDegrees(),
+                    midpointSky.getDecDegrees(),
+                    pointSky.getRaDegrees(),
+                    pointSky.getDecDegrees());
+            if (!Double.isFinite(separationDegrees)) {
+                continue;
+            }
+            maxTrackSeparationDegrees = Math.max(maxTrackSeparationDegrees, separationDegrees);
+        }
+
+        double fovRadiusDegrees = clampFieldOfViewDegrees(
+                Math.max(trackQueryTarget.searchRadiusDegrees * 1.5d, maxTrackSeparationDegrees + SATCHECKER_TRACK_FOV_PADDING_DEGREES),
+                SATCHECKER_MIN_FOV_RADIUS_DEGREES,
+                SATCHECKER_MAX_FOV_RADIUS_DEGREES);
+        return new SatCheckerQueryTarget(
+                midpointSky.getRaDegrees(),
+                midpointSky.getDecDegrees(),
+                fovRadiusDegrees,
+                timeWindow.startTimestampMillis,
+                timeWindow.endTimestampMillis,
+                timeWindow.durationSeconds,
+                "SatChecker tight query centered on the measured streak-track midpoint");
     }
 
     static long resolveTrackPointStartTimestamp(Context astrometryContext,
@@ -1005,8 +1229,48 @@ final class DetectionReportAstrometry {
                 .format(Instant.ofEpochMilli(timestampMillis));
     }
 
+    private static String formatDurationSeconds(long durationSeconds) {
+        if (durationSeconds <= 0L) {
+            return "0 s";
+        }
+        if (durationSeconds < 60L) {
+            return durationSeconds + " s";
+        }
+        long minutes = durationSeconds / 60L;
+        long seconds = durationSeconds % 60L;
+        return String.format(Locale.US, "%d min %02d s", minutes, seconds);
+    }
+
+    private static long resolveTimeWindowMidpointTimestamp(long startTimestampMillis,
+                                                           long endTimestampMillis) {
+        if (startTimestampMillis <= 0L && endTimestampMillis <= 0L) {
+            return -1L;
+        }
+        if (startTimestampMillis <= 0L) {
+            return endTimestampMillis;
+        }
+        if (endTimestampMillis <= startTimestampMillis) {
+            return startTimestampMillis;
+        }
+        return startTimestampMillis + ((endTimestampMillis - startTimestampMillis) / 2L);
+    }
+
+    private static long resolveSatCheckerCandidateDurationSeconds(long observedDurationSeconds) {
+        if (observedDurationSeconds <= 0L) {
+            return SATCHECKER_TIGHT_QUERY_MIN_DURATION_SECONDS;
+        }
+        return Math.max(
+                SATCHECKER_TIGHT_QUERY_MIN_DURATION_SECONDS,
+                Math.min(SATCHECKER_TIGHT_QUERY_MAX_DURATION_SECONDS, observedDurationSeconds));
+    }
+
     private static String formatDecimal(double value, int decimals) {
         return String.format(Locale.US, "%." + decimals + "f", value);
+    }
+
+    private static String formatJulianDate(long timestampMillis) {
+        double julianDate = (timestampMillis / 86400000.0d) + 2440587.5d;
+        return formatDecimal(julianDate, 8);
     }
 
     private static double clampFieldOfViewDegrees(double value, double min, double max) {
@@ -1170,6 +1434,53 @@ final class DetectionReportAstrometry {
     static boolean isJplCompatibleObservatoryCode(String observerCode) {
         String normalizedObserverCode = normalizeObservatoryCode(observerCode);
         return normalizedObserverCode != null && !"500".equals(normalizedObserverCode);
+    }
+
+    static String buildSatCheckerFovUrl(ObserverSite observerSite,
+                                        long midpointTimestampMillis,
+                                        long durationSeconds,
+                                        double raDegrees,
+                                        double decDegrees,
+                                        double fovRadiusDegrees,
+                                        boolean asyncResponse) {
+        if (observerSite == null
+                || midpointTimestampMillis <= 0L
+                || durationSeconds <= 0L
+                || !Double.isFinite(observerSite.latitudeDeg)
+                || !Double.isFinite(observerSite.longitudeDeg)
+                || observerSite.latitudeDeg < -90.0d
+                || observerSite.latitudeDeg > 90.0d
+                || !Double.isFinite(raDegrees)
+                || !Double.isFinite(decDegrees)
+                || decDegrees < -90.0d
+                || decDegrees > 90.0d
+                || !Double.isFinite(fovRadiusDegrees)
+                || fovRadiusDegrees <= 0.0d) {
+            return null;
+        }
+
+        double normalizedLongitude = normalizeLongitudeDegrees(observerSite.longitudeDeg);
+        if (!Double.isFinite(normalizedLongitude)) {
+            return null;
+        }
+
+        double elevationMeters = Double.isFinite(observerSite.altitudeMeters)
+                ? observerSite.altitudeMeters
+                : 0.0d;
+
+        StringBuilder url = new StringBuilder("https://satchecker.cps.iau.org/fov/satellite-passes/?");
+        url.append("latitude=").append(urlEncode(formatDecimal(observerSite.latitudeDeg, 6)));
+        url.append("&longitude=").append(urlEncode(formatDecimal(normalizedLongitude, 6)));
+        url.append("&elevation=").append(urlEncode(formatDecimal(elevationMeters, 1)));
+        url.append("&mid_obs_time_jd=").append(urlEncode(formatJulianDate(midpointTimestampMillis)));
+        url.append("&duration=").append(durationSeconds);
+        url.append("&ra=").append(urlEncode(formatDecimal(normalizeDegrees(raDegrees), 6)));
+        url.append("&dec=").append(urlEncode(formatDecimal(decDegrees, 6)));
+        url.append("&fov_radius=").append(urlEncode(formatDecimal(fovRadiusDegrees, 4)));
+        url.append("&group_by=satellite");
+        url.append("&data_source=any");
+        url.append("&async=").append(asyncResponse ? "True" : "False");
+        return url.toString();
     }
 
     private static String normalizeObservatoryCode(String observerCode) {
