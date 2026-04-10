@@ -1,6 +1,11 @@
 package eu.startales.spacepixels.util;
 
+import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
+import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
+import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
+import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
+import io.github.ppissias.jtransient.telemetry.TrackerTelemetry;
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
 import nom.tam.fits.Header;
@@ -9,12 +14,15 @@ import org.junit.Test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -176,6 +184,82 @@ public class ImageProcessingTest {
         assertFalse(Files.exists(legacyAstapIniPath));
         assertFalse(Files.exists(temporaryWcsPath));
         assertFalse(Files.exists(temporaryPreviewPath));
+    }
+
+    @Test
+    public void suppressesLatePhaseOutputsWhenFewerThanThreeFramesSurviveQualityControl() {
+        PipelineTelemetry telemetry = new PipelineTelemetry();
+        telemetry.totalFramesKept = 2;
+        telemetry.totalTracksFound = 4;
+        telemetry.totalAnomaliesFound = 2;
+        telemetry.totalSuspectedStreakTracksFound = 1;
+        telemetry.trackerTelemetry = new TrackerTelemetry();
+        telemetry.slowMoverTelemetry = new PipelineTelemetry.SlowMoverTelemetry();
+
+        short[][] masterStack = new short[][]{{1}};
+        boolean[][] vetoMask = new boolean[][]{{true}};
+        short[][] maximumStack = new short[][]{{2}};
+
+        PipelineResult original = new PipelineResult(
+                Collections.singletonList(null),
+                telemetry,
+                masterStack,
+                Collections.emptyList(),
+                SlowMoverAnalysis.empty(),
+                new short[][]{{3}},
+                new boolean[][]{{false}},
+                Collections.emptyList(),
+                Collections.singletonList(null),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                ResidualTransientAnalysis.empty(),
+                vetoMask,
+                Collections.emptyList(),
+                maximumStack);
+
+        PipelineResult sanitized = ImageProcessing.suppressLatePhaseOutputsWhenTooFewFramesRemain(original);
+
+        assertTrue(sanitized.tracks.isEmpty());
+        assertTrue(sanitized.anomalies.isEmpty());
+        assertTrue(sanitized.slowMoverCandidates.isEmpty());
+        assertTrue(sanitized.slowMoverAnalysis.candidates.isEmpty());
+        assertNull(sanitized.slowMoverStackData);
+        assertNull(sanitized.slowMoverMedianVetoMask);
+        assertTrue(sanitized.residualTransientAnalysis.localRescueCandidates.isEmpty());
+        assertTrue(sanitized.residualTransientAnalysis.localActivityClusters.isEmpty());
+        assertNull(sanitized.telemetry.trackerTelemetry);
+        assertNull(sanitized.telemetry.slowMoverTelemetry);
+        assertEquals(0, sanitized.telemetry.totalTracksFound);
+        assertEquals(0, sanitized.telemetry.totalAnomaliesFound);
+        assertEquals(0, sanitized.telemetry.totalSuspectedStreakTracksFound);
+        assertSame(masterStack, sanitized.masterStackData);
+        assertSame(vetoMask, sanitized.masterVetoMask);
+        assertSame(maximumStack, sanitized.maximumStackData);
+    }
+
+    @Test
+    public void keepsLatePhaseOutputsWhenEnoughFramesSurviveQualityControl() {
+        PipelineTelemetry telemetry = new PipelineTelemetry();
+        telemetry.totalFramesKept = 3;
+
+        PipelineResult original = new PipelineResult(
+                Collections.emptyList(),
+                telemetry,
+                null,
+                Collections.emptyList(),
+                SlowMoverAnalysis.empty(),
+                null,
+                null,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                ResidualTransientAnalysis.empty(),
+                null,
+                Collections.emptyList(),
+                null);
+
+        assertSame(original, ImageProcessing.suppressLatePhaseOutputsWhenTooFewFramesRemain(original));
     }
 
     private static Map<String, String> createAstrometrySolveInfo(String wcsLink) {

@@ -340,24 +340,24 @@ final class DetectionReportAstrometry {
                         astrometryContext.observerSite.sourceLabel)))
                 .append(".");
         html.append("<div class='id-links'>");
-        html.append("<a class='id-link' href='")
-                .append(satCheckerUrl)
-                .append("' target='_blank' rel='noopener noreferrer'>")
-                .append(useSimpleLabels ? "Open SatChecker in Browser" : "SatChecker Tight Candidate Query")
-                .append("</a>");
         if (liveRenderSlotId != null && !liveRenderSlotId.isEmpty()) {
             html.append(buildLiveRenderButtonHtml("satchecker", satCheckerUrl, liveRenderSlotId, "Render SatChecker Results Here"));
         }
+        html.append("<a class='id-link' href='")
+                .append(satCheckerUrl)
+                .append("' target='_blank' rel='noopener noreferrer'>")
+                .append(useSimpleLabels ? "Open SatChecker Raw JSON in Browser" : "SatChecker Tight Candidate Raw JSON")
+                .append("</a>");
         html.append("</div>");
         if (useSimpleLabels && liveRenderSlotId != null && !liveRenderSlotId.isEmpty()) {
             html.append("<div class='astro-note' style='margin-top: 6px;'>")
-                    .append("<strong>Open SatChecker in Browser</strong> opens the original SatChecker response in a new tab. ")
-                    .append("<strong>Render SatChecker Results Here</strong> asks SpacePixels to fetch the same result and show it inside this report. ")
+                    .append("<strong>Render SatChecker Results Here</strong> asks SpacePixels to fetch the same result and show it inside this report first. ")
+                    .append("<strong>Open SatChecker Raw JSON in Browser</strong> opens the original raw JSON reply in a new tab. ")
                     .append("Query radius: ")
                     .append(escapeHtml(String.format(Locale.US, "%.2f°", queryTarget.fovRadiusDegrees)))
                     .append("; grouping: satellite; TLE payload omitted.</div>");
         } else {
-            html.append("<div class='astro-note' style='margin-top: 6px;'>This link uses a tighter SatChecker FOV request centered on the measured streak midpoint with <strong>mid_obs_time_jd</strong>, a short duration window, and <strong>async=False</strong> so the browser waits for the JSON response directly. Query radius: ")
+            html.append("<div class='astro-note' style='margin-top: 6px;'><strong>Render SatChecker Results Here</strong> fetches the tight result into this report first. <strong>SatChecker Tight Candidate Raw JSON</strong> opens the original raw JSON reply in a new tab. This uses a tighter SatChecker FOV request centered on the measured streak midpoint with <strong>mid_obs_time_jd</strong>, a short duration window, and <strong>async=False</strong> so the browser waits for the JSON response directly. Query radius: ")
                     .append(escapeHtml(String.format(Locale.US, "%.2f°", queryTarget.fovRadiusDegrees)))
                     .append("; grouping: satellite; TLE payload omitted.</div>");
         }
@@ -521,18 +521,18 @@ final class DetectionReportAstrometry {
         String nominalJplUrl = buildJplSbIdentUrl(astrometryContext, queryTarget, queryTarget.searchRadiusDegrees);
         if (nominalJplUrl != null) {
             String neoRecoveryJplUrl = buildJplSbIdentUrl(astrometryContext, queryTarget, JPL_NEO_RECOVERY_HALF_WIDTH_DEGREES, "neo");
-            String exactJplLabel = useSimpleJplLabels ? "Open JPL in Browser" : "JPL Exact FOV";
-            String neoJplLabel = useSimpleJplLabels ? "Open JPL NEO Recovery in Browser" : "JPL NEO Recovery";
+            String exactJplLabel = useSimpleJplLabels ? "Open JPL Raw JSON in Browser" : "JPL Exact FOV Raw JSON";
+            String neoJplLabel = useSimpleJplLabels ? "Open JPL NEO Recovery Raw JSON in Browser" : "JPL NEO Recovery Raw JSON";
             html.append("<div class='id-links'>");
-            html.append("<a class='id-link' href='").append(nominalJplUrl).append("' target='_blank' rel='noopener noreferrer'>").append(exactJplLabel).append("</a>");
-            if (neoRecoveryJplUrl != null) {
-                html.append("<a class='id-link' href='").append(neoRecoveryJplUrl).append("' target='_blank' rel='noopener noreferrer'>").append(neoJplLabel).append("</a>");
-            }
             if (liveJplRenderSlotId != null && !liveJplRenderSlotId.isEmpty()) {
                 html.append(buildLiveRenderButtonHtml("jpl", nominalJplUrl, liveJplRenderSlotId, "Render JPL Results Here"));
                 if (neoRecoveryJplUrl != null) {
                     html.append(buildLiveRenderButtonHtml("jpl", neoRecoveryJplUrl, liveJplRenderSlotId, "Render JPL NEO Recovery Results Here"));
                 }
+            }
+            html.append("<a class='id-link' href='").append(nominalJplUrl).append("' target='_blank' rel='noopener noreferrer'>").append(exactJplLabel).append("</a>");
+            if (neoRecoveryJplUrl != null) {
+                html.append("<a class='id-link' href='").append(neoRecoveryJplUrl).append("' target='_blank' rel='noopener noreferrer'>").append(neoJplLabel).append("</a>");
             }
             html.append("</div>");
             html.append("<div class='astro-note' style='margin-top: 6px;'>JPL Small-Body Identification uses ");
@@ -542,9 +542,9 @@ final class DetectionReportAstrometry {
                 html.append("topocentric site coordinates from ").append(escapeHtml(astrometryContext.observerSite.sourceLabel));
             }
             if (useSimpleJplLabels && liveJplRenderSlotId != null && !liveJplRenderSlotId.isEmpty()) {
-                html.append(". <strong>Open JPL in Browser</strong> opens the original exact-FOV JPL response in a new tab. <strong>Render JPL Results Here</strong> fetches that same exact-FOV result into this report. <strong>Open JPL NEO Recovery in Browser</strong> is the wider fallback for fast nearby NEOs that JPL's first pass can miss in a small field, and <strong>Render JPL NEO Recovery Results Here</strong> fetches that wider fallback into this report. It uses a fixed ");
+                html.append(". <strong>Render JPL Results Here</strong> fetches the exact-FOV result into this report first. <strong>Render JPL NEO Recovery Results Here</strong> fetches the wider fallback for fast nearby NEOs that JPL's first pass can miss in a small field. <strong>Open JPL Raw JSON in Browser</strong> and <strong>Open JPL NEO Recovery Raw JSON in Browser</strong> open the original raw JSON API replies in a new tab. It uses a fixed ");
             } else {
-                html.append(". These JPL links open the raw JSON API response. <strong>JPL Exact FOV</strong> keeps the search tight to the measured image footprint. <strong>Render JPL Results Here</strong> fetches that exact-FOV result into this report. <strong>JPL NEO Recovery</strong> is the fallback for fast nearby NEOs that JPL's first pass can miss in a small field, and <strong>Render JPL NEO Recovery Results Here</strong> fetches that wider fallback into this report. It uses a fixed ");
+                html.append(". <strong>Render JPL Results Here</strong> fetches the exact-FOV result into this report first. <strong>JPL Exact FOV Raw JSON</strong> opens the original raw JSON API reply for the tight measured footprint. <strong>Render JPL NEO Recovery Results Here</strong> fetches the wider fallback for fast nearby NEOs that JPL's first pass can miss in a small field, and <strong>JPL NEO Recovery Raw JSON</strong> opens that fallback raw JSON API reply in a new tab. It uses a fixed ");
             }
             html.append(escapeHtml(String.format(Locale.US, "%.1f", JPL_NEO_RECOVERY_HALF_WIDTH_DEGREES)))
                     .append("&deg; half-width and limits results to NEOs.</div>");

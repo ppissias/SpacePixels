@@ -57,6 +57,7 @@ import java.util.concurrent.Future;
  * running the pipeline.</p>
  */
 public class ImageProcessing {
+    static final int MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS = 3;
     private static final DateTimeFormatter TRACE_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS 'UTC'").withZone(ZoneOffset.UTC);
 
@@ -651,6 +652,7 @@ public class ImageProcessing {
         } finally {
             engine.shutdown();
         }
+        result = suppressLatePhaseOutputsWhenTooFewFramesRemain(result);
 
         long pipelineDuration = System.currentTimeMillis() - startTime;
         System.out.println("Total Pipeline Time: " + pipelineDuration + "ms");
@@ -938,6 +940,44 @@ public class ImageProcessing {
                 slowMoverCandidates,
                 localRescueCandidates,
                 localActivityClusters);
+    }
+
+    static PipelineResult suppressLatePhaseOutputsWhenTooFewFramesRemain(PipelineResult result) {
+        if (result == null || result.telemetry == null) {
+            return result;
+        }
+
+        int keptFrames = result.telemetry.totalFramesKept;
+        if (keptFrames >= MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS) {
+            return result;
+        }
+
+        System.out.println(
+                "Only " + keptFrames
+                        + " frames remained after quality control. Suppressing downstream multi-frame report outputs.");
+
+        result.telemetry.totalTracksFound = 0;
+        result.telemetry.totalAnomaliesFound = 0;
+        result.telemetry.totalSuspectedStreakTracksFound = 0;
+        result.telemetry.trackerTelemetry = null;
+        result.telemetry.slowMoverTelemetry = null;
+
+        return new PipelineResult(
+                Collections.emptyList(),
+                result.telemetry,
+                result.masterStackData,
+                result.masterStars == null ? Collections.emptyList() : result.masterStars,
+                SlowMoverAnalysis.empty(),
+                null,
+                null,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                result.allTransients == null ? Collections.emptyList() : result.allTransients,
+                result.unclassifiedTransients == null ? Collections.emptyList() : result.unclassifiedTransients,
+                ResidualTransientAnalysis.empty(),
+                result.masterVetoMask,
+                result.driftPoints == null ? Collections.emptyList() : result.driftPoints,
+                result.maximumStackData);
     }
 
     /**

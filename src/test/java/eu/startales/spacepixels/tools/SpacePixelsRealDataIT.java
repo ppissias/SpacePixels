@@ -39,6 +39,7 @@ public class SpacePixelsRealDataIT {
 
         Path rootDirectory = Path.of(rootValue);
         Assume.assumeTrue("Configured real-data root does not exist: " + rootDirectory, Files.isDirectory(rootDirectory));
+        RealDataDetectionProfile detectionProfile = resolveDetectionProfile(rootDirectory);
 
         List<Path> datasetDirectories;
         try (Stream<Path> stream = Files.list(rootDirectory)) {
@@ -51,7 +52,7 @@ public class SpacePixelsRealDataIT {
         List<String> failures = new ArrayList<>();
         for (Path datasetDirectory : datasetDirectories) {
             try {
-                runSingleDataset(datasetDirectory);
+                runSingleDataset(datasetDirectory, detectionProfile);
             } catch (Throwable throwable) {
                 failures.add(datasetDirectory.getFileName() + ": " + throwable.getMessage());
             }
@@ -62,18 +63,22 @@ public class SpacePixelsRealDataIT {
         }
     }
 
-    private static void runSingleDataset(Path datasetDirectory) throws Exception {
+    private static void runSingleDataset(Path datasetDirectory, RealDataDetectionProfile detectionProfile) throws Exception {
         Path tempUserHome = Files.createTempDirectory("spacepixels-realdata-home");
-        Path tempConfigFile = Files.createTempFile("spacepixels-realdata-profile", ".json");
+        Path tempConfigFile = detectionProfile.rootConfigPath != null
+                ? null
+                : Files.createTempFile("spacepixels-realdata-profile", ".json");
         String originalUserHome = System.getProperty("user.home");
 
         try {
             System.setProperty("user.home", tempUserHome.toString());
-            try (java.io.Writer writer = Files.newBufferedWriter(tempConfigFile)) {
-                SpacePixelsDetectionProfileIO.write(
-                        writer,
-                        new DetectionConfig(),
-                        SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES);
+            if (tempConfigFile != null) {
+                try (java.io.Writer writer = Files.newBufferedWriter(tempConfigFile)) {
+                    SpacePixelsDetectionProfileIO.write(
+                            writer,
+                            detectionProfile.profile.getDetectionConfig(),
+                            detectionProfile.profile.getAutoTuneMaxCandidateFrames());
+                }
             }
 
             DetectionInputPreparation.PreparedDirectory preparedDirectory = DetectionInputPreparation.prepareInputDirectory(
@@ -85,7 +90,8 @@ public class SpacePixelsRealDataIT {
             SpacePixelsPipelineApi api = new DefaultSpacePixelsPipelineApi();
             SpacePixelsPipelineResult apiResult = api.run(
                     SpacePixelsPipelineRequest.builder(preparedDirectory.getPreparedInputDirectory())
-                            .detectionConfig(new DetectionConfig())
+                            .detectionConfig(detectionProfile.profile.getDetectionConfig())
+                            .autoTuneMaxCandidateFrames(detectionProfile.profile.getAutoTuneMaxCandidateFrames())
                             .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
                             .generateReport(false)
                             .build());
@@ -96,7 +102,7 @@ public class SpacePixelsRealDataIT {
             ByteArrayOutputStream stdoutBytes = new ByteArrayOutputStream();
             ByteArrayOutputStream stderrBytes = new ByteArrayOutputStream();
             int exitCode = BatchDetectionCli.execute(
-                    new String[]{preparedDirectory.getPreparedInputDirectory().getAbsolutePath(), tempConfigFile.toString()},
+                    new String[]{preparedDirectory.getPreparedInputDirectory().getAbsolutePath(), detectionProfile.resolveCliConfigPath(tempConfigFile).toString()},
                     new PrintStream(stdoutBytes, true, StandardCharsets.UTF_8.name()),
                     new PrintStream(stderrBytes, true, StandardCharsets.UTF_8.name()));
 
@@ -104,6 +110,7 @@ public class SpacePixelsRealDataIT {
             String cliOutput = stdoutBytes.toString(StandardCharsets.UTF_8.name());
             String reportPath = extractCliValue(cliOutput, "Report file:");
             assertTrue("CLI did not report a generated report path for " + datasetDirectory, reportPath != null && !reportPath.isBlank());
+            System.out.println("Real-data detection profile for " + datasetDirectory.getFileName() + ": " + detectionProfile.describeSource());
             System.out.println("Real-data report for " + datasetDirectory.getFileName() + ": " + reportPath);
         } finally {
             if (originalUserHome == null) {
@@ -111,9 +118,26 @@ public class SpacePixelsRealDataIT {
             } else {
                 System.setProperty("user.home", originalUserHome);
             }
-            Files.deleteIfExists(tempConfigFile);
+            if (tempConfigFile != null) {
+                Files.deleteIfExists(tempConfigFile);
+            }
             deleteRecursively(tempUserHome);
         }
+    }
+
+    private static RealDataDetectionProfile resolveDetectionProfile(Path rootDirectory) throws Exception {
+        Path rootConfigPath = rootDirectory.resolve(SpacePixelsDetectionProfileIO.DEFAULT_FILENAME);
+        if (Files.isRegularFile(rootConfigPath)) {
+            try (java.io.Reader reader = Files.newBufferedReader(rootConfigPath)) {
+                return new RealDataDetectionProfile(SpacePixelsDetectionProfileIO.load(reader), rootConfigPath);
+            }
+        }
+
+        return new RealDataDetectionProfile(
+                new SpacePixelsDetectionProfile(
+                        new DetectionConfig(),
+                        SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES),
+                null);
     }
 
     private static String extractCliValue(String cliOutput, String prefix) {
@@ -126,6 +150,26 @@ public class SpacePixelsRealDataIT {
             }
         }
         return null;
+    }
+
+    private static final class RealDataDetectionProfile {
+        private final SpacePixelsDetectionProfile profile;
+        private final Path rootConfigPath;
+
+        private RealDataDetectionProfile(SpacePixelsDetectionProfile profile, Path rootConfigPath) {
+            this.profile = profile;
+            this.rootConfigPath = rootConfigPath;
+        }
+
+        private Path resolveCliConfigPath(Path temporaryConfigPath) {
+            return rootConfigPath != null ? rootConfigPath : temporaryConfigPath;
+        }
+
+        private String describeSource() {
+            return rootConfigPath != null
+                    ? rootConfigPath.toAbsolutePath().toString()
+                    : "generated default DetectionConfig";
+        }
     }
 
     private static void deleteRecursively(Path directory) throws Exception {

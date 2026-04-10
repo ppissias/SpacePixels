@@ -3795,6 +3795,8 @@ public class ImageDisplayUtils {
         int potentialSlowMoverCount = slowMoverCandidateCount + localRescueCandidateCount;
         int singleStreakMetric = singleStreaks.size();
         int confirmedLinkedTrackMetric = movingTargets.size() + streakTracks.size();
+        boolean insufficientFramesAfterQuality = pipelineTelemetry != null
+                && pipelineTelemetry.totalFramesKept < ImageProcessing.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS;
         int suspectedStreakTrackMetric = pipelineTelemetry != null ? pipelineTelemetry.totalSuspectedStreakTracksFound : suspectedStreakTracks.size();
         int returnedTrackMetric = pipelineTelemetry != null
                 ? pipelineTelemetry.totalTracksFound
@@ -3982,6 +3984,14 @@ public class ImageDisplayUtils {
                 int unclassifiedTransientCount = countTotalTransientDetections(unclassifiedTransients);
                 report.println("<div class='astro-note'>Local rescue candidates and local activity clusters are engine-side residual outputs from JTransient. Rescue candidates are mined from <strong>unclassifiedTransients</strong>, then the remaining leftovers are clustered into broader local activity groups for manual review. This run ended with <strong>" + unclassifiedTransientCount + "</strong> unclassified transient detections before residual analysis.</div>");
                 report.println("</div>");
+
+                if (insufficientFramesAfterQuality) {
+                    report.println("<div class='panel'>");
+                    report.println("<h2>Quality-Control Guardrail</h2>");
+                    report.println("<p>Only <strong>" + pipelineTelemetry.totalFramesKept + "</strong> frames remained after quality control. SpacePixels needs at least <strong>" + ImageProcessing.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS + "</strong> usable frames before multi-frame tracking and deep-stack review are meaningful, so those downstream sections were skipped for this run.</p>");
+                    report.println("<div class='astro-note'>The quality-control tables below still show which frames were rejected and why.</div>");
+                    report.println("</div>");
+                }
 
                 report.println("<div class='panel'>");
                 report.println("<h2>Astrometric Context</h2>");
