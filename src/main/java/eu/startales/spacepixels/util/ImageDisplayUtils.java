@@ -3809,8 +3809,10 @@ public class ImageDisplayUtils {
 
         if (!exportDir.exists()) exportDir.mkdirs();
 
+        boolean hasMasterShieldDiagnostics = masterStackData != null && masterVetoMask != null;
+
         // --- EXPORT MASTER DIAGNOSTICS ---
-        if (masterStackData != null && masterVetoMask != null) {
+        if (hasMasterShieldDiagnostics) {
             BufferedImage masterImg = createDisplayImage(masterStackData);
             saveTrackImageLossless(masterImg, new File(exportDir, "master_stack.png"));
 
@@ -4122,10 +4124,14 @@ public class ImageDisplayUtils {
                 report.println("<div class='flex-container' style='margin-bottom: 15px;'>");
                 report.println("<div class='metric-box'><span class='metric-value'>" + (masterStars != null ? masterStars.size() : 0) + "</span><span class='metric-label'>Master Map Objects</span></div>");
                 report.println("</div>");
-                report.println("<div class='image-container'>");
-                report.println("<div><a href='master_stack.png' target='_blank'><img src='master_stack.png' style='max-width: 400px;' alt='Master Stack' /></a><br/><center><small>Deep Median Stack</small></center></div>");
-                report.println("<div><a href='master_mask_overlay.png' target='_blank'><img src='master_mask_overlay.png' style='max-width: 400px;' alt='Mask Overlay' /></a><br/><center><small>Binary Footprint Mask (Red)</small></center></div>");
-                report.println("</div>");
+                if (hasMasterShieldDiagnostics) {
+                    report.println("<div class='image-container'>");
+                    report.println("<div><a href='master_stack.png' target='_blank'><img src='master_stack.png' style='max-width: 400px;' alt='Master Stack' /></a><br/><center><small>Deep Median Stack</small></center></div>");
+                    report.println("<div><a href='master_mask_overlay.png' target='_blank'><img src='master_mask_overlay.png' style='max-width: 400px;' alt='Mask Overlay' /></a><br/><center><small>Binary Footprint Mask (Red)</small></center></div>");
+                    report.println("</div>");
+                } else {
+                    report.println("<div class='astro-note'>Preview images were not produced for this run, so the master shield and veto-mask links are omitted.</div>");
+                }
                 report.println("</div>");
 
                 // --- NEW: DITHER & DRIFT DIAGNOSTICS ---
@@ -4201,26 +4207,30 @@ public class ImageDisplayUtils {
                 report.println("<div class='panel compact-diagnostics-panel'>");
                 report.println("<h2>Phase 3: Stationary Star Purification</h2>");
                 report.println("<p class='compact-note'>Master-mask purification removes stationary point-like residues and same-mask stationary streaks before the moving-object linker runs. The per-frame breakdown is shown below in a scrollable compact table.</p>");
-                report.println("<div class='flex-container' style='margin-bottom: 10px;'>");
-                report.println("<div class='metric-box compact'><span class='metric-value'>" + linkerTelemetry.totalStationaryStarsPurged + "</span><span class='metric-label'>Stationary Stars Purged</span></div>");
-                report.println("<div class='metric-box compact'><span class='metric-value'>" + linkerTelemetry.totalStationaryStreaksPurged + "</span><span class='metric-label'>Stationary Streaks Purged</span></div>");
-                report.println("</div>");
-                report.println("<div class='scroll-box compact-table-box'>");
-                report.println("<table><thead><tr><th>Frame Index</th><th>Filename</th><th>Initial Point Sources</th><th>Stars Purged</th><th>Surviving Transients</th></tr></thead><tbody>");
+                if (linkerTelemetry != null) {
+                    report.println("<div class='flex-container' style='margin-bottom: 10px;'>");
+                    report.println("<div class='metric-box compact'><span class='metric-value'>" + linkerTelemetry.totalStationaryStarsPurged + "</span><span class='metric-label'>Stationary Stars Purged</span></div>");
+                    report.println("<div class='metric-box compact'><span class='metric-value'>" + linkerTelemetry.totalStationaryStreaksPurged + "</span><span class='metric-label'>Stationary Streaks Purged</span></div>");
+                    report.println("</div>");
+                    report.println("<div class='scroll-box compact-table-box'>");
+                    report.println("<table><thead><tr><th>Frame Index</th><th>Filename</th><th>Initial Point Sources</th><th>Stars Purged</th><th>Surviving Transients</th></tr></thead><tbody>");
 
-                for (TrackerTelemetry.FrameStarMapStat starStat : linkerTelemetry.frameStarMapStats) {
-                    String fName = "Unknown";
-                    if (starStat.frameIndex < pipelineTelemetry.frameExtractionStats.size()) {
-                        fName = pipelineTelemetry.frameExtractionStats.get(starStat.frameIndex).filename;
+                    for (TrackerTelemetry.FrameStarMapStat starStat : linkerTelemetry.frameStarMapStats) {
+                        String fName = "Unknown";
+                        if (starStat.frameIndex < pipelineTelemetry.frameExtractionStats.size()) {
+                            fName = pipelineTelemetry.frameExtractionStats.get(starStat.frameIndex).filename;
+                        }
+                        report.println("<tr><td>" + (starStat.frameIndex + 1) + "</td>");
+                        report.println("<td>" + escapeHtml(fName) + "</td>");
+                        report.println("<td>" + starStat.initialPointSources + "</td>");
+                        report.println("<td style='color: #ff9933;'>" + starStat.purgedStars + "</td>");
+                        report.println("<td style='color: #44ff44; font-weight: bold;'>" + starStat.survivingTransients + "</td></tr>");
                     }
-                    report.println("<tr><td>" + (starStat.frameIndex + 1) + "</td>");
-                    report.println("<td>" + escapeHtml(fName) + "</td>");
-                    report.println("<td>" + starStat.initialPointSources + "</td>");
-                    report.println("<td style='color: #ff9933;'>" + starStat.purgedStars + "</td>");
-                    report.println("<td style='color: #44ff44; font-weight: bold;'>" + starStat.survivingTransients + "</td></tr>");
+                    report.println("</tbody></table>");
+                    report.println("</div>");
+                } else {
+                    report.println("<div class='astro-note'>Stationary-star purification telemetry was not available for this run, so the detailed Phase 3 breakdown was skipped.</div>");
                 }
-                report.println("</tbody></table>");
-                report.println("</div>");
                 report.println("</div>");
             }
 
