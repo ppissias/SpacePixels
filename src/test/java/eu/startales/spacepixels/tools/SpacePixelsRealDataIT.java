@@ -19,9 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -33,11 +31,6 @@ import static org.junit.Assert.fail;
 public class SpacePixelsRealDataIT {
 
     private static final String TESTDATA_ROOT_PROPERTY = "spacepixels.testdata.root";
-    private static final String[] GENERATED_DIRECTORY_PREFIXES = {
-            "_spacepixels_prepared_mono16_",
-            "_spacepixels_xisf_mono16",
-            "detections_"
-    };
 
     @Test
     public void runsPreparationApiAndCliAgainstEachDatasetDirectory() throws Exception {
@@ -70,7 +63,6 @@ public class SpacePixelsRealDataIT {
     }
 
     private static void runSingleDataset(Path datasetDirectory) throws Exception {
-        Set<Path> originalChildren = listImmediateDirectories(datasetDirectory);
         Path tempUserHome = Files.createTempDirectory("spacepixels-realdata-home");
         Path tempConfigFile = Files.createTempFile("spacepixels-realdata-profile", ".json");
         String originalUserHome = System.getProperty("user.home");
@@ -109,46 +101,31 @@ public class SpacePixelsRealDataIT {
                     new PrintStream(stderrBytes, true, StandardCharsets.UTF_8.name()));
 
             assertEquals(stderrBytes.toString(StandardCharsets.UTF_8.name()), 0, exitCode);
+            String cliOutput = stdoutBytes.toString(StandardCharsets.UTF_8.name());
+            String reportPath = extractCliValue(cliOutput, "Report file:");
+            assertTrue("CLI did not report a generated report path for " + datasetDirectory, reportPath != null && !reportPath.isBlank());
+            System.out.println("Real-data report for " + datasetDirectory.getFileName() + ": " + reportPath);
         } finally {
             if (originalUserHome == null) {
                 System.clearProperty("user.home");
             } else {
                 System.setProperty("user.home", originalUserHome);
             }
-            cleanupGeneratedDirectories(datasetDirectory, originalChildren);
             Files.deleteIfExists(tempConfigFile);
             deleteRecursively(tempUserHome);
         }
     }
 
-    private static Set<Path> listImmediateDirectories(Path directory) throws Exception {
-        try (Stream<Path> stream = Files.list(directory)) {
-            return stream.filter(Files::isDirectory)
-                    .map(Path::toAbsolutePath)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
+    private static String extractCliValue(String cliOutput, String prefix) {
+        if (cliOutput == null || prefix == null) {
+            return null;
         }
-    }
-
-    private static void cleanupGeneratedDirectories(Path datasetDirectory, Set<Path> originalChildren) throws Exception {
-        Set<Path> currentChildren = listImmediateDirectories(datasetDirectory);
-        for (Path child : currentChildren) {
-            if (originalChildren.contains(child.toAbsolutePath())) {
-                continue;
-            }
-            String directoryName = child.getFileName().toString();
-            if (matchesGeneratedDirectory(directoryName)) {
-                deleteRecursively(child);
+        for (String line : cliOutput.split("\\R")) {
+            if (line.startsWith(prefix)) {
+                return line.substring(prefix.length()).trim();
             }
         }
-    }
-
-    private static boolean matchesGeneratedDirectory(String directoryName) {
-        for (String prefix : GENERATED_DIRECTORY_PREFIXES) {
-            if (directoryName.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return false;
+        return null;
     }
 
     private static void deleteRecursively(Path directory) throws Exception {

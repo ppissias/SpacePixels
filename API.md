@@ -43,6 +43,15 @@ The API runs the standard SpacePixels detection pipeline on a directory of align
 - the raw JTransient `PipelineResult`
 - optional HTML report/export paths
 
+When `generateReport(true)` is enabled, SpacePixels writes the report into a new
+`detections_<timestamp>` directory under the directory that was actually processed.
+That means:
+
+- with `FAIL_IF_NOT_READY`, the report is written next to the original input files
+- with `AUTO_PREPARE_TO_16BIT_MONO`, the report is written under the prepared working directory if input preparation created one
+
+Library consumers should use `getExportDirectory()` and `getReportFile()` rather than guessing the output path.
+
 ## Input preparation modes
 
 `InputPreparationMode` controls how strictly the API treats the input directory:
@@ -76,7 +85,7 @@ SpacePixelsPipelineResult result = api.run(
 
 System.out.println("Prepared input directory: " + result.getPreparedInputDirectory());
 System.out.println("Report file: " + result.getReportFile());
-System.out.println("Track count: " + result.getPipelineResult().linkedTracks.size());
+System.out.println("Track count: " + result.getPipelineResult().tracks.size());
 ```
 
 Use this mode when your input directory is already detection-ready and you want the standard HTML report on disk.
@@ -185,3 +194,4 @@ try {
 - `AUTO_PREPARE_TO_16BIT_MONO` is more forgiving and is best when input format may vary.
 - The API returns a defensive copy for exposed configs and FITS metadata arrays.
 - The public artifact currently contains GUI code as well, but GUI classes are not part of the supported API contract.
+- Do not run multiple Auto-Tune-enabled API calls concurrently in the same JVM. The current implementation temporarily adjusts shared JTransient Auto-Tune state while a tuning run is active. If you need parallel execution, prefer non-Auto-Tune runs or serialize Auto-Tune usage.

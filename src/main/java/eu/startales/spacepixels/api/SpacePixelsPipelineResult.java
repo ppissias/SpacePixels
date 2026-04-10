@@ -154,6 +154,9 @@ public final class SpacePixelsPipelineResult {
     /**
      * Returns the export directory created for report output.
      *
+     * <p>When report generation is enabled, this directory is the generated
+     * {@code detections_<timestamp>} folder under the directory that was actually processed.
+     *
      * @return export directory, or {@code null} when report generation was disabled
      */
     public File getExportDirectory() {
@@ -162,6 +165,8 @@ public final class SpacePixelsPipelineResult {
 
     /**
      * Returns the generated HTML report file.
+     *
+     * <p>This file lives under {@link #getExportDirectory()} when report generation is enabled.
      *
      * @return HTML report file, or {@code null} when report generation was disabled
      */

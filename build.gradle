@@ -21,20 +21,32 @@ def githubRepoUrl = 'https://github.com/ppissias/SpacePixels'
 def githubRepoScmUrl = 'https://github.com/ppissias/SpacePixels.git'
 def centralArtifactId = 'spacepixels'
 def centralStagingRepository = layout.buildDirectory.dir('repos/central-staging')
-def pomDeveloperId = providers.gradleProperty('pomDeveloperId').orElse('ppissias')
-def pomDeveloperName = providers.gradleProperty('pomDeveloperName').orElse('Petros Pissias')
-def pomDeveloperEmail = providers.gradleProperty('pomDeveloperEmail').orElse('petrospis@gmail.com')
-def pomDeveloperOrganization = providers.gradleProperty('pomDeveloperOrganization').orElse('GitHub')
-def pomDeveloperOrganizationUrl = providers.gradleProperty('pomDeveloperOrganizationUrl').orElse('https://github.com/ppissias')
-def inMemorySigningKey = providers.gradleProperty('signingKey').orNull
+
+def requireNonBlankGradleProperty = { String propertyName ->
+    def propertyValue = providers.gradleProperty(propertyName).orNull
+    if (propertyValue == null || propertyValue.trim().isEmpty()) {
+        throw new GradleException(
+                "Missing required Gradle property '${propertyName}'. " +
+                        "Define it in gradle.properties or in %USERPROFILE%\\.gradle\\gradle.properties.")
+    }
+    return propertyValue.trim()
+}
+
+def pomDeveloperId = requireNonBlankGradleProperty('pomDeveloperId')
+def pomDeveloperName = requireNonBlankGradleProperty('pomDeveloperName')
+def pomDeveloperEmail = requireNonBlankGradleProperty('pomDeveloperEmail')
+def pomDeveloperOrganization = requireNonBlankGradleProperty('pomDeveloperOrganization')
+def pomDeveloperOrganizationUrl = requireNonBlankGradleProperty('pomDeveloperOrganizationUrl')
+
+def inMemorySigningKey = providers.gradleProperty('signingKey')
+        .map { it.replace("\\n", "\n") }
+        .orNull
 def inMemorySigningPassword = providers.gradleProperty('signingPassword').orNull
 def hasInMemorySigning = inMemorySigningKey != null && inMemorySigningPassword != null
 def hasLegacySigning = findProperty('signing.keyId') != null &&
         findProperty('signing.password') != null &&
         findProperty('signing.secretKeyRingFile') != null
 def signingConfigured = hasInMemorySigning || hasLegacySigning
-def localJarDependencies = { fileTree(dir: 'lib', include: '*.jar').files.collect { it.name }.sort() }
-
 repositories {
     mavenCentral()
 }
@@ -60,6 +72,10 @@ javadoc {
     options.encoding = 'UTF-8'
     if (options.respondsTo('addBooleanOption')) {
         options.addBooleanOption('html5', true)
+        options.addBooleanOption('quiet', true)
+    }
+    if (options.respondsTo('addStringOption')) {
+        options.addStringOption('Xdoclint:none', '-quiet')
     }
 }
 
@@ -68,7 +84,8 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.13.2'
     implementation 'com.google.guava:guava:33.5.0-jre'
     implementation 'com.formdev:flatlaf:3.4'
-    implementation fileTree(dir: 'lib', include: '*.jar')
+    implementation 'io.github.ppissias.jplatesolve:jplatesolve:1.0.0'
+    implementation 'io.github.ppissias.jtransient:jtransient:1.0.0'
     // Use JUnit test framework
     testImplementation 'junit:junit:4.13.2'
 }
@@ -203,11 +220,11 @@ publishing {
 
                 developers {
                     developer {
-                        id = pomDeveloperId.get()
-                        name = pomDeveloperName.get()
-                        email = pomDeveloperEmail.get()
-                        organization = pomDeveloperOrganization.get()
-                        organizationUrl = pomDeveloperOrganizationUrl.get()
+                        id = pomDeveloperId
+                        name = pomDeveloperName
+                        email = pomDeveloperEmail
+                        organization = pomDeveloperOrganization
+                        organizationUrl = pomDeveloperOrganizationUrl
                     }
                 }
 
@@ -230,17 +247,9 @@ publishing {
 
 tasks.register('validateCentralReleaseConfiguration') {
     group = 'publishing'
-    description = 'Checks that signing credentials and dependency coordinates are configured for Maven Central bundle generation.'
+    description = 'Checks that signing credentials are configured for Maven Central bundle generation.'
 
     doLast {
-        def unresolvedLocalJars = localJarDependencies()
-        if (!unresolvedLocalJars.isEmpty()) {
-            throw new GradleException(
-                    "Cannot publish SpacePixels to Maven Central while local lib/*.jar dependencies remain: " +
-                            unresolvedLocalJars.join(', ') +
-                            ". Replace them with published Maven coordinates first.")
-        }
-
         if (!signingConfigured) {
             throw new GradleException(
                     'Central bundle generation requires signing credentials. ' +

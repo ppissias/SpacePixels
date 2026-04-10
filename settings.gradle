@@ -8,3 +8,33 @@
  */
 
 rootProject.name = 'SpacePixels'
+
+def isTruthy = { Object value ->
+    value != null && value.toString().trim().equalsIgnoreCase('true')
+}
+
+def isLocalBuildEnabled = { String propertyName ->
+    def projectProperty = gradle.startParameter.projectProperties[propertyName]
+    if (projectProperty != null) {
+        return isTruthy(projectProperty)
+    }
+
+    def envName = propertyName.replaceAll(/([a-z])([A-Z])/, '$1_$2').toUpperCase(java.util.Locale.ROOT)
+    return isTruthy(System.getenv(envName))
+}
+
+if (isLocalBuildEnabled('useLocalJTransientBuild')) {
+    includeBuild('../JTransient') {
+        dependencySubstitution {
+            substitute module('io.github.ppissias.jtransient:jtransient') using project(':')
+        }
+    }
+}
+
+if (isLocalBuildEnabled('useLocalJPlateSolveBuild')) {
+    includeBuild('../JPlateSolve') {
+        dependencySubstitution {
+            substitute module('io.github.ppissias.jplatesolve:jplatesolve') using project(':')
+        }
+    }
+}

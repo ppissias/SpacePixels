@@ -13,6 +13,11 @@ package eu.startales.spacepixels.api;
  * This API accepts an input directory plus optional detection configuration, input preparation,
  * auto-tuning, progress reporting, and report-export options. It always returns the in-memory
  * pipeline result and can optionally export the standard HTML report alongside it.
+ *
+ * <p>When report generation is enabled, callers should use the returned
+ * {@link SpacePixelsPipelineResult#getExportDirectory()} and
+ * {@link SpacePixelsPipelineResult#getReportFile()} values rather than assuming a hard-coded
+ * output path.
  */
 public interface SpacePixelsPipelineApi {
     /**

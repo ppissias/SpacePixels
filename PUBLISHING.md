@@ -14,10 +14,6 @@ SpacePixels is configured to generate a Maven Central-compatible upload bundle w
 
 The build uses the same local staging and bundle flow as JPlateSolve. Instead of pushing directly to the Central Portal from Gradle, it stages a signed Maven repository under `build/repos/central-staging` and then zips that repository into a Central Portal upload bundle.
 
-Important constraint:
-
-- Bundle generation is intentionally blocked while local `lib/*.jar` dependencies still exist. Replace those local JARs with published Maven coordinates first, otherwise downstream API consumers would get an incomplete POM.
-
 ## Local configuration
 
 1. Edit `gradle.properties` in the project root or define the same properties in `%USERPROFILE%\.gradle\gradle.properties`.
