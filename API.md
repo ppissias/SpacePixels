@@ -174,7 +174,7 @@ Typical usage patterns:
 
 `SpacePixelsPipelineApi.run(...)` throws `SpacePixelsPipelineException` when input preparation, validation, Auto-Tune, pipeline execution, or report generation fails.
 
-Example:
+Example: 
 
 ```java
 try {
