@@ -219,12 +219,20 @@ final class DetectionReportAstrometry {
     static String buildDeepStackIdentificationHtml(Context astrometryContext,
                                                    SourceExtractor.DetectedObject detection,
                                                    String liveRenderSlotId) {
+        return buildDeepStackIdentificationHtml(astrometryContext, detection, liveRenderSlotId, null);
+    }
+
+    static String buildDeepStackIdentificationHtml(Context astrometryContext,
+                                                   SourceExtractor.DetectedObject detection,
+                                                   String liveRenderSlotId,
+                                                   String liveRenderSidecarBaseName) {
         SolarSystemQueryTarget queryTarget = buildSingleDetectionQueryTarget(astrometryContext, detection);
         return buildSolarSystemIdentificationHtml(astrometryContext, queryTarget,
                 "Reference epoch for stack lookup",
                 "Search SkyBoT",
                 "SkyBoT search radius",
                 liveRenderSlotId,
+                liveRenderSidecarBaseName,
                 false);
     }
 
@@ -236,24 +244,40 @@ final class DetectionReportAstrometry {
     static String buildTrackSolarSystemIdentificationHtml(Context astrometryContext,
                                                           TrackLinker.Track track,
                                                           String liveRenderSlotId) {
+        return buildTrackSolarSystemIdentificationHtml(astrometryContext, track, liveRenderSlotId, null);
+    }
+
+    static String buildTrackSolarSystemIdentificationHtml(Context astrometryContext,
+                                                          TrackLinker.Track track,
+                                                          String liveRenderSlotId,
+                                                          String liveRenderSidecarBaseName) {
         SolarSystemQueryTarget queryTarget = buildTrackQueryTarget(astrometryContext, track);
         return buildSolarSystemIdentificationHtml(astrometryContext, queryTarget,
                 "Reference epoch for track lookup",
                 "Search SkyBoT (Track Midpoint)",
                 "SkyBoT search radius",
                 liveRenderSlotId,
+                liveRenderSidecarBaseName,
                 false);
     }
 
     static String buildMovingTrackSolarSystemIdentificationHtml(Context astrometryContext,
                                                                 TrackLinker.Track track,
                                                                 String liveRenderSlotId) {
+        return buildMovingTrackSolarSystemIdentificationHtml(astrometryContext, track, liveRenderSlotId, null);
+    }
+
+    static String buildMovingTrackSolarSystemIdentificationHtml(Context astrometryContext,
+                                                                TrackLinker.Track track,
+                                                                String liveRenderSlotId,
+                                                                String liveRenderSidecarBaseName) {
         SolarSystemQueryTarget queryTarget = buildTrackQueryTarget(astrometryContext, track);
         return buildSolarSystemIdentificationHtml(astrometryContext, queryTarget,
                 "Reference epoch for track lookup",
                 "Search SkyBoT (Track Midpoint)",
                 "SkyBoT search radius",
                 liveRenderSlotId,
+                liveRenderSidecarBaseName,
                 true);
     }
 
@@ -265,12 +289,20 @@ final class DetectionReportAstrometry {
     static String buildConfirmedStreakTrackSatCheckerHtml(Context astrometryContext,
                                                           TrackLinker.Track track,
                                                           String liveRenderSlotId) {
-        return buildTrackSatCheckerHtml(astrometryContext, track, liveRenderSlotId, true);
+        return buildConfirmedStreakTrackSatCheckerHtml(astrometryContext, track, liveRenderSlotId, null);
+    }
+
+    static String buildConfirmedStreakTrackSatCheckerHtml(Context astrometryContext,
+                                                          TrackLinker.Track track,
+                                                          String liveRenderSlotId,
+                                                          String liveRenderSidecarFileName) {
+        return buildTrackSatCheckerHtml(astrometryContext, track, liveRenderSlotId, liveRenderSidecarFileName, true);
     }
 
     private static String buildTrackSatCheckerHtml(Context astrometryContext,
                                                    TrackLinker.Track track,
                                                    String liveRenderSlotId,
+                                                   String liveRenderSidecarFileName,
                                                    boolean useSimpleLabels) {
         StringBuilder html = new StringBuilder();
         html.append("<div class='astro-note'>");
@@ -341,7 +373,13 @@ final class DetectionReportAstrometry {
                 .append(".");
         html.append("<div class='id-links'>");
         if (liveRenderSlotId != null && !liveRenderSlotId.isEmpty()) {
-            html.append(buildLiveRenderButtonHtml("satchecker", satCheckerUrl, liveRenderSlotId, "Render SatChecker Results Here"));
+            html.append(buildLiveRenderButtonHtml(
+                    "satchecker",
+                    satCheckerUrl,
+                    liveRenderSlotId,
+                    "Render SatChecker Results Here",
+                    liveRenderSidecarFileName,
+                    "SatChecker Tight Candidate Results"));
         }
         html.append("<a class='id-link' href='")
                 .append(satCheckerUrl)
@@ -366,6 +404,13 @@ final class DetectionReportAstrometry {
         }
         html.append("</div>");
         return html.toString();
+    }
+
+    private static String buildTrackSatCheckerHtml(Context astrometryContext,
+                                                   TrackLinker.Track track,
+                                                   String liveRenderSlotId,
+                                                   boolean useSimpleLabels) {
+        return buildTrackSatCheckerHtml(astrometryContext, track, liveRenderSlotId, null, useSimpleLabels);
     }
 
     static String buildTrackSkyRateSummaryHtml(Context astrometryContext,
@@ -443,6 +488,7 @@ final class DetectionReportAstrometry {
                                                              String buttonLabel,
                                                              String radiusLabel,
                                                              String liveJplRenderSlotId,
+                                                             String liveJplRenderSidecarBaseName,
                                                              boolean useSimpleJplLabels) {
         StringBuilder html = new StringBuilder();
         html.append("<div class='astro-note'>");
@@ -525,9 +571,21 @@ final class DetectionReportAstrometry {
             String neoJplLabel = useSimpleJplLabels ? "Open JPL NEO Recovery Raw JSON in Browser" : "JPL NEO Recovery Raw JSON";
             html.append("<div class='id-links'>");
             if (liveJplRenderSlotId != null && !liveJplRenderSlotId.isEmpty()) {
-                html.append(buildLiveRenderButtonHtml("jpl", nominalJplUrl, liveJplRenderSlotId, "Render JPL Results Here"));
+                html.append(buildLiveRenderButtonHtml(
+                        "jpl",
+                        nominalJplUrl,
+                        liveJplRenderSlotId,
+                        "Render JPL Results Here",
+                        buildLiveRenderSidecarFileName(liveJplRenderSidecarBaseName, "exact"),
+                        "JPL Exact FOV Results"));
                 if (neoRecoveryJplUrl != null) {
-                    html.append(buildLiveRenderButtonHtml("jpl", neoRecoveryJplUrl, liveJplRenderSlotId, "Render JPL NEO Recovery Results Here"));
+                    html.append(buildLiveRenderButtonHtml(
+                            "jpl",
+                            neoRecoveryJplUrl,
+                            liveJplRenderSlotId,
+                            "Render JPL NEO Recovery Results Here",
+                            buildLiveRenderSidecarFileName(liveJplRenderSidecarBaseName, "neo"),
+                            "JPL NEO Recovery Results"));
                 }
             }
             html.append("<a class='id-link' href='").append(nominalJplUrl).append("' target='_blank' rel='noopener noreferrer'>").append(exactJplLabel).append("</a>");
@@ -1631,10 +1689,27 @@ final class DetectionReportAstrometry {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
-    private static String buildLiveRenderButtonHtml(String provider,
-                                                    String targetUrl,
-                                                    String slotId,
-                                                    String buttonLabel) {
+    static String buildLiveRenderButtonHtml(String provider,
+                                            String targetUrl,
+                                            String slotId,
+                                            String buttonLabel) {
+        return buildLiveRenderButtonHtml(provider, targetUrl, slotId, buttonLabel, null, null);
+    }
+
+    static String buildLiveRenderButtonHtml(String provider,
+                                            String targetUrl,
+                                            String slotId,
+                                            String buttonLabel,
+                                            String sidecarFileName) {
+        return buildLiveRenderButtonHtml(provider, targetUrl, slotId, buttonLabel, sidecarFileName, null);
+    }
+
+    static String buildLiveRenderButtonHtml(String provider,
+                                            String targetUrl,
+                                            String slotId,
+                                            String buttonLabel,
+                                            String sidecarFileName,
+                                            String renderTitle) {
         if (provider == null || provider.isEmpty()
                 || targetUrl == null || targetUrl.isEmpty()
                 || slotId == null || slotId.isEmpty()
@@ -1652,9 +1727,38 @@ final class DetectionReportAstrometry {
                 + escapeHtml(encodedTarget)
                 + "' data-slot-id='"
                 + escapeHtml(slotId)
+                + "' data-sidecar-file='"
+                + escapeHtml(normalizeLiveRenderSidecarFileName(sidecarFileName))
+                + "' data-render-title='"
+                + escapeHtml(renderTitle)
                 + "'>"
                 + escapeHtml(buttonLabel)
                 + "</button>";
+    }
+
+    private static String normalizeLiveRenderSidecarFileName(String sidecarFileName) {
+        String trimmed = sidecarFileName == null ? null : sidecarFileName.trim();
+        if (trimmed == null || trimmed.isEmpty()) {
+            return null;
+        }
+        return trimmed.toLowerCase(Locale.US).endsWith(".json") ? trimmed : trimmed + ".json";
+    }
+
+    private static String buildLiveRenderSidecarFileName(String sidecarBaseName, String variantSuffix) {
+        String trimmedBaseName = sidecarBaseName == null ? null : sidecarBaseName.trim();
+        if (trimmedBaseName != null && trimmedBaseName.isEmpty()) {
+            trimmedBaseName = null;
+        }
+        String trimmedVariantSuffix = variantSuffix == null ? null : variantSuffix.trim();
+        if (trimmedVariantSuffix != null && trimmedVariantSuffix.isEmpty()) {
+            trimmedVariantSuffix = null;
+        }
+        if (trimmedBaseName == null) {
+            return null;
+        }
+        return trimmedVariantSuffix == null
+                ? trimmedBaseName + ".json"
+                : trimmedBaseName + "_" + trimmedVariantSuffix + ".json";
     }
 
     private static String buildLiveRenderContainerHtml(String slotId) {

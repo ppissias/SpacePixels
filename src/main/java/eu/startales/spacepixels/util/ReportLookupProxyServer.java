@@ -33,6 +33,9 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
@@ -52,12 +55,16 @@ public final class ReportLookupProxyServer {
 
     public static final int PORT = 47831;
     public static final String BASE_URL = "http://127.0.0.1:" + PORT;
+    public static final String PERSISTED_LOOKUP_CACHE_SCRIPT_ID = "spacepixels-persisted-live-results";
+    public static final String PERSISTED_LOOKUP_CACHE_START_MARKER = "<!-- SPACEPIXELS_PERSISTED_LOOKUP_CACHE_START -->";
+    public static final String PERSISTED_LOOKUP_CACHE_END_MARKER = "<!-- SPACEPIXELS_PERSISTED_LOOKUP_CACHE_END -->";
 
     private static final String FETCH_PATH = "/api/report/fetch";
     private static final int CONNECT_TIMEOUT_MS = 10_000;
     private static final int SATCHECKER_READ_TIMEOUT_MS = 60_000;
     private static final int JPL_READ_TIMEOUT_MS = 300_000;
     private static final int MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+    private static final int MAX_SIDECAR_BYTES = MAX_RESPONSE_BYTES + (256 * 1024);
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
     private static final ReportLookupProxyServer INSTANCE = new ReportLookupProxyServer();
 
@@ -149,6 +156,8 @@ public final class ReportLookupProxyServer {
             Map<String, String> queryParameters = parseQuery(exchange.getRequestURI().getRawQuery());
             String provider = trimToNull(queryParameters.get("provider"));
             String encodedTarget = trimToNull(queryParameters.get("target"));
+            String reportUrl = trimToNull(queryParameters.get("report"));
+            String sidecarFileName = trimToNull(queryParameters.get("sidecar"));
 
             if (provider == null || encodedTarget == null) {
                 writeJson(exchange, 400, createError("Missing report lookup parameters."));
@@ -182,7 +191,26 @@ public final class ReportLookupProxyServer {
                 return;
             }
 
+            final Path reportPath;
+            final Path sidecarPath;
+            try {
+                reportPath = resolveReportPath(reportUrl);
+                sidecarPath = resolveSidecarPath(reportUrl, sidecarFileName);
+            } catch (IllegalArgumentException e) {
+                writeJson(exchange, 400, createError(e.getMessage()));
+                return;
+            }
+
+            JsonObject cachedSidecarResponse = tryLoadMatchingSidecarResponse(sidecarPath, provider, validatedUri.toString());
+            if (cachedSidecarResponse != null) {
+                persistResponseInReportCache(reportPath, sidecarFileName, cachedSidecarResponse);
+                writeJson(exchange, 200, cachedSidecarResponse);
+                return;
+            }
+
             JsonObject response = proxyLookup(provider, validatedUri.toString());
+            writeSidecarResponse(sidecarPath, response);
+            persistResponseInReportCache(reportPath, sidecarFileName, response);
             writeJson(exchange, 200, response);
         }
     }
@@ -206,6 +234,7 @@ public final class ReportLookupProxyServer {
             response.addProperty("sourceUrl", targetUrl);
             response.addProperty("fetchedAtUtc", DateTimeFormatter.ISO_INSTANT.format(Instant.now()));
             response.addProperty("upstreamStatus", upstreamStatus);
+            response.addProperty("cacheSource", "live");
 
             JsonElement payload = tryParseJson(body);
             if (payload == null) {
@@ -229,6 +258,7 @@ public final class ReportLookupProxyServer {
             error.addProperty("ok", false);
             error.addProperty("provider", provider);
             error.addProperty("sourceUrl", targetUrl);
+            error.addProperty("cacheSource", "live");
             error.addProperty("message", "Report lookup failed: " + e.getMessage());
             return error;
         } finally {
@@ -460,6 +490,240 @@ public final class ReportLookupProxyServer {
         return normalized;
     }
 
+    static Path resolveReportPath(String reportUrl) {
+        String trimmedReportUrl = trimToNull(reportUrl);
+        if (trimmedReportUrl == null) {
+            return null;
+        }
+
+        final URI reportUri;
+        try {
+            reportUri = URI.create(trimmedReportUrl);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Report URL could not be parsed.");
+        }
+
+        if (!"file".equalsIgnoreCase(reportUri.getScheme())
+                || reportUri.getRawQuery() != null
+                || reportUri.getRawFragment() != null) {
+            throw new IllegalArgumentException("Report sidecar caching only supports local file reports.");
+        }
+
+        final Path reportPath;
+        try {
+            reportPath = Paths.get(reportUri).normalize();
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Report path could not be resolved.");
+        }
+
+        Path reportFileName = reportPath.getFileName();
+        if (reportFileName == null || !ImageDisplayUtils.detectionReportName.equals(reportFileName.toString())) {
+            throw new IllegalArgumentException("Report sidecar caching only supports detection_report.html.");
+        }
+        if (!Files.isRegularFile(reportPath)) {
+            throw new IllegalArgumentException("Report file could not be found for sidecar caching.");
+        }
+        return reportPath;
+    }
+
+    static Path resolveSidecarPath(String reportUrl, String sidecarFileName) {
+        String trimmedSidecarFileName = normalizeSidecarFileNameForPath(sidecarFileName);
+        Path reportPath = resolveReportPath(reportUrl);
+        if (reportPath == null && trimmedSidecarFileName == null) {
+            return null;
+        }
+        if (reportPath == null || trimmedSidecarFileName == null) {
+            throw new IllegalArgumentException("Report sidecar caching requires both report and sidecar parameters.");
+        }
+
+        Path reportDirectory = reportPath.getParent();
+        if (reportDirectory == null) {
+            throw new IllegalArgumentException("Report sidecar caching requires a report directory.");
+        }
+
+        Path sidecarPath = reportDirectory.resolve(trimmedSidecarFileName).normalize();
+        if (!reportDirectory.equals(sidecarPath.getParent())) {
+            throw new IllegalArgumentException("Report sidecar file name must stay within the report folder.");
+        }
+        return sidecarPath;
+    }
+
+    private static String normalizeSidecarFileNameForPath(String sidecarFileName) {
+        String trimmed = trimToNull(sidecarFileName);
+        if (trimmed == null) {
+            return null;
+        }
+        if (!trimmed.matches("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}(\\.json)?$")) {
+            throw new IllegalArgumentException("Report sidecar file name is invalid.");
+        }
+        return trimmed.toLowerCase(Locale.US).endsWith(".json") ? trimmed : trimmed + ".json";
+    }
+
+    static JsonObject readPersistedLookupCache(Path reportPath) {
+        if (reportPath == null || !Files.isRegularFile(reportPath)) {
+            return createEmptyPersistedLookupCache();
+        }
+        try {
+            return extractPersistedLookupCache(Files.readString(reportPath, StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            return createEmptyPersistedLookupCache();
+        }
+    }
+
+    static JsonObject readSidecarResponse(Path sidecarPath) {
+        if (sidecarPath == null || !Files.isRegularFile(sidecarPath)) {
+            return null;
+        }
+        try {
+            long fileSize = Files.size(sidecarPath);
+            if (fileSize > MAX_SIDECAR_BYTES) {
+                return null;
+            }
+            try (InputStream inputStream = Files.newInputStream(sidecarPath)) {
+                JsonElement parsed = tryParseJson(readLimitedUtf8(inputStream, MAX_SIDECAR_BYTES));
+                return parsed != null && parsed.isJsonObject() ? parsed.getAsJsonObject() : null;
+            }
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static JsonObject tryLoadMatchingSidecarResponse(Path sidecarPath, String provider, String sourceUrl) {
+        JsonObject cachedResponse = readSidecarResponse(sidecarPath);
+        if (cachedResponse == null) {
+            return null;
+        }
+        if (!provider.equals(getString(cachedResponse, "provider"))
+                || !sourceUrl.equals(getString(cachedResponse, "sourceUrl"))) {
+            return null;
+        }
+
+        JsonObject response = cachedResponse.deepCopy();
+        response.addProperty("cacheSource", "sidecar");
+        return response;
+    }
+
+    private static void writeSidecarResponse(Path sidecarPath, JsonObject response) {
+        if (sidecarPath == null || !isCacheableSidecarResponse(response)) {
+            return;
+        }
+        try {
+            Files.createDirectories(sidecarPath.getParent());
+            Files.writeString(sidecarPath, GSON.toJson(response), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            Logger.getLogger(ReportLookupProxyServer.class.getName())
+                    .warning("Failed to write report sidecar JSON " + sidecarPath + ": " + e.getMessage());
+        }
+    }
+
+    private static boolean isCacheableSidecarResponse(JsonObject response) {
+        return response != null
+                && getBoolean(response, "ok", false)
+                && trimToNull(getString(response, "provider")) != null
+                && trimToNull(getString(response, "sourceUrl")) != null;
+    }
+
+    static void persistResponseInReportCache(Path reportPath, String sidecarFileName, JsonObject response) {
+        String trimmedSidecarFileName = trimToNull(sidecarFileName);
+        if (reportPath == null || trimmedSidecarFileName == null || !isCacheableSidecarResponse(response)) {
+            return;
+        }
+
+        try {
+            String reportHtml = Files.readString(reportPath, StandardCharsets.UTF_8);
+            JsonObject cache = extractPersistedLookupCache(reportHtml);
+            JsonObject entries = getObject(cache, "entries");
+            if (entries == null) {
+                entries = new JsonObject();
+                cache.add("entries", entries);
+            }
+            entries.add(trimmedSidecarFileName, response.deepCopy());
+            Files.writeString(
+                    reportPath,
+                    upsertPersistedLookupCacheBlock(reportHtml, cache),
+                    StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            Logger.getLogger(ReportLookupProxyServer.class.getName())
+                    .warning("Failed to persist report lookup cache in " + reportPath + ": " + e.getMessage());
+        }
+    }
+
+    private static JsonObject createEmptyPersistedLookupCache() {
+        JsonObject cache = new JsonObject();
+        cache.addProperty("version", 1);
+        cache.add("entries", new JsonObject());
+        return cache;
+    }
+
+    private static JsonObject extractPersistedLookupCache(String reportHtml) {
+        if (reportHtml == null || reportHtml.isEmpty()) {
+            return createEmptyPersistedLookupCache();
+        }
+
+        int markerStart = reportHtml.indexOf(PERSISTED_LOOKUP_CACHE_START_MARKER);
+        int markerEnd = markerStart >= 0
+                ? reportHtml.indexOf(PERSISTED_LOOKUP_CACHE_END_MARKER, markerStart + PERSISTED_LOOKUP_CACHE_START_MARKER.length())
+                : -1;
+        if (markerStart < 0 || markerEnd < 0) {
+            return createEmptyPersistedLookupCache();
+        }
+
+        int scriptStart = reportHtml.indexOf("<script", markerStart);
+        int contentStart = scriptStart >= 0 ? reportHtml.indexOf('>', scriptStart) : -1;
+        int scriptEnd = contentStart >= 0 ? reportHtml.indexOf("</script>", contentStart) : -1;
+        if (scriptStart < 0 || contentStart < 0 || scriptEnd < 0 || scriptEnd > markerEnd) {
+            return createEmptyPersistedLookupCache();
+        }
+
+        JsonElement parsed = tryParseJson(reportHtml.substring(contentStart + 1, scriptEnd).trim());
+        JsonObject cache = parsed != null && parsed.isJsonObject() ? parsed.getAsJsonObject() : createEmptyPersistedLookupCache();
+        if (!cache.has("version")) {
+            cache.addProperty("version", 1);
+        }
+        if (!cache.has("entries") || !cache.get("entries").isJsonObject()) {
+            cache.add("entries", new JsonObject());
+        }
+        return cache;
+    }
+
+    private static String upsertPersistedLookupCacheBlock(String reportHtml, JsonObject cache) {
+        String block = buildPersistedLookupCacheBlock(cache);
+        int markerStart = reportHtml.indexOf(PERSISTED_LOOKUP_CACHE_START_MARKER);
+        int markerEnd = markerStart >= 0
+                ? reportHtml.indexOf(PERSISTED_LOOKUP_CACHE_END_MARKER, markerStart + PERSISTED_LOOKUP_CACHE_START_MARKER.length())
+                : -1;
+        if (markerStart >= 0 && markerEnd >= 0) {
+            return reportHtml.substring(0, markerStart)
+                    + block
+                    + reportHtml.substring(markerEnd + PERSISTED_LOOKUP_CACHE_END_MARKER.length());
+        }
+
+        int bodyEnd = reportHtml.lastIndexOf("</body>");
+        if (bodyEnd >= 0) {
+            return reportHtml.substring(0, bodyEnd)
+                    + block
+                    + System.lineSeparator()
+                    + reportHtml.substring(bodyEnd);
+        }
+        return reportHtml + System.lineSeparator() + block;
+    }
+
+    private static String buildPersistedLookupCacheBlock(JsonObject cache) {
+        return PERSISTED_LOOKUP_CACHE_START_MARKER
+                + System.lineSeparator()
+                + "<script type='application/json' id='"
+                + PERSISTED_LOOKUP_CACHE_SCRIPT_ID
+                + "'>"
+                + escapeHtmlUnsafeJsonForScriptTag(GSON.toJson(cache))
+                + "</script>"
+                + System.lineSeparator()
+                + PERSISTED_LOOKUP_CACHE_END_MARKER;
+    }
+
+    private static String escapeHtmlUnsafeJsonForScriptTag(String json) {
+        return json == null ? "" : json.replace("<", "\\u003c");
+    }
+
     private static void addCorsHeaders(Headers headers) {
         headers.set("Access-Control-Allow-Origin", "*");
         headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -590,6 +854,17 @@ public final class ReportLookupProxyServer {
         }
         try {
             return parent.get(fieldName).getAsInt();
+        } catch (Exception ignored) {
+            return defaultValue;
+        }
+    }
+
+    private static boolean getBoolean(JsonObject parent, String fieldName, boolean defaultValue) {
+        if (parent == null || fieldName == null || !parent.has(fieldName) || parent.get(fieldName).isJsonNull()) {
+            return defaultValue;
+        }
+        try {
+            return parent.get(fieldName).getAsBoolean();
         } catch (Exception ignored) {
             return defaultValue;
         }

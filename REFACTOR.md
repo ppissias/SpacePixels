@@ -1,6 +1,6 @@
 # Refactor Candidates by Class Size
 
-Snapshot date: 2026-04-09
+Snapshot date: 2026-04-15
 
 Method used:
 - Count Java source lines under `src/main/java`
@@ -11,11 +11,11 @@ Method used:
 
 | Rank | Class | Lines | Why it matters |
 | --- | --- | ---: | --- |
-| 1 | `ImageDisplayUtils` | 4176 | Report export, image rendering, HTML/CSS/JS generation, and export settings all live together |
-| 2 | `ImageProcessing` | 2534 | FITS I/O, pipeline orchestration, stretch, plate solving, WCS writeback, and config persistence are mixed |
-| 3 | `DetectionReportAstrometry` | 1443 | Astrometry math, query target construction, URL building, and HTML fragments are mixed |
-| 4 | `DetectionConfigurationPanel` | 1043 | Swing form layout, config binding, persistence, constraint logic, preview, and auto-tune actions are mixed |
-| 5 | `MainApplicationPanel` | 817 | Main UI composition, task launching, event handling, table behavior, and report opening are mixed |
+| 1 | `ImageDisplayUtils` | 5160 | Report export, image rendering, HTML/CSS/JS generation, and export settings still live together, and the file has grown further with report-side lookup rendering |
+| 2 | `ImageProcessing` | 2989 | FITS I/O, pipeline orchestration, stretch, plate solving, WCS writeback, and config persistence are mixed |
+| 3 | `DetectionReportAstrometry` | 1781 | Astrometry math, query target construction, URL building, and HTML fragments are mixed |
+| 4 | `DetectionConfigurationPanel` | 1227 | Swing form layout, config binding, persistence, constraint logic, preview, and auto-tune actions are mixed |
+| 5 | `MainApplicationPanel` | 967 | Main UI composition, task launching, event handling, table behavior, and report opening are mixed |
 
 ## Common themes across these classes
 
@@ -25,71 +25,104 @@ Method used:
 - Mutable static settings make export behavior harder to reason about and harder to test.
 - Reflection-based compatibility logic is useful, but it is currently spread into UI classes instead of being isolated behind adapters.
 
-## 1. `ImageDisplayUtils` (4176 lines)
+## 1. `ImageDisplayUtils` (5160 lines)
 
 ### Current responsibility clusters
 
 - Low-level image display rendering and auto-stretch
-- Crop calculations and mask overlays
+- Crop/footprint geometry and mask overlays
 - GIF and PNG generation
 - Global maps, kinematic compass, and creative tribute rendering
 - Report section ordering and per-card HTML generation
 - Embedded CSS and JavaScript generation for live lookup rendering
+- Top-level detection report export orchestration in `exportTrackVisualizations(...)`
 - Export-time configuration via mutable static fields
+
+### Status check since the previous snapshot
+
+- Some duplication has already been reduced inside the class.
+  - `CropBounds` now delegates to shared crop-extents helpers.
+  - Footprint sizing is partially centralized via `computeFootprintRadius(...)` and `computeSquareCropSize(...)`.
+  - Representative-frame sampling now shares `addEvenlySpacedIndices(...)`.
+- Several rendering concerns are already partially broken into helper methods.
+  - Global trajectory map drawing uses dedicated marker/track helpers.
+  - Detection/timing HTML has a growing set of focused `build...Html(...)` helpers.
+- This is helpful, but it is still intra-class cleanup.
+  - The architectural problem remains: one 5000-line class still owns export policy, raster rendering, report assembly, and report client-side behavior.
 
 ### Main problems
 
-- The file is doing both rendering and report orchestration.
+- `exportTrackVisualizations(...)` is still the real subsystem boundary, and it spans report shell creation, section ordering, asset export, and file output.
 - HTML, CSS, JavaScript, image rendering, and export policy are tightly coupled.
+- The file now contains both report document chrome and domain-specific section logic, which makes even small report edits high-risk.
 - Static mutable configuration (`autoStretchBlackSigma`, `gifBlinkSpeedMs`, `trackCropPadding`, etc.) makes testing and per-run overrides harder.
-- Report changes now require touching a class that also owns image math and export filesystem behavior.
+- Report changes still require touching a class that also owns image math and export filesystem behavior.
 
 ### Refactor plan
 
-1. Introduce an immutable export request model.
+1. Introduce an explicit export request/settings model.
    - Suggested types: `DetectionReportExportRequest`, `DetectionReportExportResult`, `ExportVisualizationSettings`
-   - Goal: stop passing large loose argument lists into the exporter
+   - Goal: stop passing large loose argument lists into the exporter and stop mutating renderer globals directly
 
-2. Extract rendering primitives from report writing.
-   - Suggested class: `TrackVisualizationRenderer`
-   - Move PNG/GIF/map generation here
-   - Keep no HTML string building in this class
-
-3. Extract HTML assembly from image rendering.
-   - Suggested class: `DetectionReportHtmlWriter`
-   - Move section ordering, card layout, CSS, and report shell generation here
-
-4. Split specialized report sections into smaller collaborators.
+2. Extract report chrome before touching section logic.
    - Suggested classes:
-     - `StreakReportSectionWriter`
+     - `DetectionReportChromeWriter`
+     - `ReportClientScriptWriter`
+   - Move the HTML document shell, CSS block, persisted lookup cache markup, and embedded live-render JS here
+   - This is the cleanest low-risk seam because it depends on little image math
+
+3. Extract shared geometry and pure rendering helpers.
+   - Suggested classes:
+     - `TrackCropGeometry`
+     - `TrackVisualizationRenderer`
+     - `GlobalMapRenderer`
+   - Move crop bounds, footprint sizing, PNG/GIF rendering, and map drawing here
+   - Keep HTML generation out of these classes
+
+4. Split specialized report sections out of `exportTrackVisualizations(...)`.
+   - Suggested classes:
+     - `DetectionSummarySectionWriter`
+     - `SingleStreakReportSectionWriter`
+     - `StreakTrackReportSectionWriter`
      - `MovingTargetReportSectionWriter`
      - `SlowMoverReportSectionWriter`
-     - `AnomalyReportSectionWriter`
-     - `ReportClientScriptWriter`
+     - `ResidualAnalysisSectionWriter`
+     - `GlobalMapsSectionWriter`
 
 5. Isolate optional “creative” rendering.
    - Suggested class: `CreativeTributeRenderer`
-   - This section is visually and structurally different enough to be its own module
+   - This code is visually and structurally different enough to be its own module
 
-6. Keep `ImageDisplayUtils.exportTrackVisualizations(...)` as a compatibility facade at first.
-   - First version should delegate to `DetectionReportExporter`
-   - Delete the facade only after all call sites are stable
+6. Introduce `DetectionReportExporter` as the orchestration boundary.
+   - `ImageDisplayUtils.exportTrackVisualizations(...)` should become a compatibility facade that delegates to it
+   - Delete the facade only after call sites and tests are stable
 
 ### Good first extraction order
 
 1. `ExportVisualizationSettings`
-2. `DetectionReportExporter`
-3. `TrackVisualizationRenderer`
-4. `DetectionReportHtmlWriter`
-5. `ReportClientScriptWriter`
+2. `ReportClientScriptWriter`
+3. `DetectionReportChromeWriter`
+4. `TrackCropGeometry`
+5. `TrackVisualizationRenderer`
+6. `DetectionReportExporter`
+
+### Migration notes
+
+- Do not start by moving every renderer at once.
+  - The leaf seams are the report chrome and crop/geometry helpers.
+- Do not mix creative tribute extraction into the first pass.
+  - It is self-contained, but it is also optional and noisy.
+- Keep file names and report layout stable during the first split.
+  - The goal is to reduce coupling first, not redesign the report.
 
 ### Expected payoff
 
 - Report changes become safer and faster
 - Rendering code becomes testable in isolation
-- Future report features do not require editing a 4000+ line file
+- Client-side report behavior stops being embedded in an image utility class
+- Future report features do not require editing a 5000+ line file
 
-## 2. `ImageProcessing` (2534 lines)
+## 2. `ImageProcessing` (2989 lines)
 
 ### Current responsibility clusters
 
@@ -159,7 +192,7 @@ Method used:
 - Plate-solving changes no longer risk detection behavior
 - Easier future support for non-GUI or batch workflows
 
-## 3. `DetectionReportAstrometry` (1443 lines)
+## 3. `DetectionReportAstrometry` (1781 lines)
 
 ### Current responsibility clusters
 
@@ -217,7 +250,7 @@ Method used:
 - Cleaner separation between astrometry rules and report text
 - Easier reuse if lookup rendering expands outside the report
 
-## 4. `DetectionConfigurationPanel` (1043 lines)
+## 4. `DetectionConfigurationPanel` (1227 lines)
 
 ### Current responsibility clusters
 
@@ -286,7 +319,7 @@ Method used:
 - Safer addition of new config fields
 - Less risk of breaking persistence when changing widget layout
 
-## 5. `MainApplicationPanel` (817 lines)
+## 5. `MainApplicationPanel` (967 lines)
 
 ### Current responsibility clusters
 
@@ -377,9 +410,10 @@ This is the order I would use for actual implementation.
 
 - `./gradlew.bat compileJava`
 - `./gradlew.bat test`
+- `./gradlew.bat test --tests eu.startales.spacepixels.util.ImageDisplayUtilsTest`
+- `./gradlew.bat test --tests eu.startales.spacepixels.util.DetectionReportAstrometryTest`
 - Standard detection report export still works
 - Iterative report export still works
 - Plate solving still writes WCS headers correctly
 - Settings load/save still works
 - Existing report links and live-render actions still work
-

@@ -229,6 +229,35 @@ public class DetectionReportAstrometryTest {
     }
 
     @Test
+    public void includesSidecarMetadataOnLiveRenderButtons() {
+        String html = DetectionReportAstrometry.buildLiveRenderButtonHtml(
+                "jpl",
+                "https://ssd-api.jpl.nasa.gov/sb_ident.api?foo=bar",
+                "moving-track-jpl-2",
+                "Render JPL Results Here",
+                "jpl_track_02_exact.json",
+                "JPL Exact FOV Results");
+
+        assertTrue(html.contains("data-provider='jpl'"));
+        assertTrue(html.contains("data-slot-id='moving-track-jpl-2'"));
+        assertTrue(html.contains("data-sidecar-file='jpl_track_02_exact.json'"));
+        assertTrue(html.contains("data-render-title='JPL Exact FOV Results'"));
+    }
+
+    @Test
+    public void normalizesSidecarFileNamesToJsonExtension() {
+        String html = DetectionReportAstrometry.buildLiveRenderButtonHtml(
+                "satchecker",
+                "https://satchecker.cps.iau.org/fov/satellite-passes/?foo=bar",
+                "streak-track-satchecker-1",
+                "Render SatChecker Results Here",
+                "satchecker_track_01",
+                "SatChecker Tight Candidate Results");
+
+        assertTrue(html.contains("data-sidecar-file='satchecker_track_01.json'"));
+    }
+
+    @Test
     public void flagsSiderealLikeRaDriftAsPotentialGeo() {
         assertTrue(DetectionReportAstrometry.isNearSiderealRaRate(54148.0));
         assertNotNull(DetectionReportAstrometry.classifyTrackMotionByRaRate(54148.0));

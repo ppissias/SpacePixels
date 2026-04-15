@@ -58,7 +58,7 @@ public class ApplicationWindow {
     private static final int RELEASE_CHECK_TIMEOUT_MS = 4000;
 
     private JFrame frmIpodImage;
-    private final String version = "2026.04-04";
+    private final String version = "2026.04-05";
 
     // --- EVENT BUS INSTANCE ---
     private final EventBus eventBus = new EventBus("SpacePixelsBus");

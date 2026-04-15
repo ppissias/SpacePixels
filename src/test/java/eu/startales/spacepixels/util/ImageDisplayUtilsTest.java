@@ -60,6 +60,7 @@ public class ImageDisplayUtilsTest {
             assertTrue(reportHtml.contains("Stationary-star purification telemetry was not available for this run"));
             assertFalse(reportHtml.contains("href='master_stack.png'"));
             assertFalse(reportHtml.contains("href='master_mask_overlay.png'"));
+            assertTrue(reportHtml.contains(ReportLookupProxyServer.PERSISTED_LOOKUP_CACHE_SCRIPT_ID));
         } finally {
             if (Files.exists(exportDir)) {
                 Files.walk(exportDir)

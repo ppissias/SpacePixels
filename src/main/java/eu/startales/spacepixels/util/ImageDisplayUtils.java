@@ -96,48 +96,18 @@ public class ImageDisplayUtils {
         public final int trackBoxWidth, trackBoxHeight, fixedCenterX, fixedCenterY, startX, startY;
 
         public CropBounds(TrackLinker.Track track, int padding) {
-            double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
-            double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
-
-            for (SourceExtractor.DetectedObject pt : track.points) {
-                double objectRadius = 0;
-                if (pt.pixelArea > 0) {
-                    if (pt.isStreak) objectRadius = Math.sqrt((pt.pixelArea * pt.elongation) / Math.PI);
-                    else objectRadius = Math.sqrt(pt.pixelArea / Math.PI);
-                }
-                if (pt.x - objectRadius < minX) minX = pt.x - objectRadius;
-                if (pt.x + objectRadius > maxX) maxX = pt.x + objectRadius;
-                if (pt.y - objectRadius < minY) minY = pt.y - objectRadius;
-                if (pt.y + objectRadius > maxY) maxY = pt.y + objectRadius;
-            }
-
-            if (minX == Double.MAX_VALUE) minX = 0; if (maxX == -Double.MAX_VALUE) maxX = 0;
-            if (minY == Double.MAX_VALUE) minY = 0; if (maxY == -Double.MAX_VALUE) maxY = 0;
-
-            trackBoxWidth = (int) Math.round(maxX - minX) + padding;
-            trackBoxHeight = (int) Math.round(maxY - minY) + padding;
-            fixedCenterX = (int) Math.round((minX + maxX) / 2.0);
-            fixedCenterY = (int) Math.round((minY + maxY) / 2.0);
-
-            startX = fixedCenterX - (trackBoxWidth / 2);
-            startY = fixedCenterY - (trackBoxHeight / 2);
+            this(resolveTrackCropExtents(track), padding);
         }
 
         public CropBounds(SourceExtractor.DetectedObject detection, int padding) {
-            double objectRadius = 0;
-            if (detection != null && detection.pixelArea > 0) {
-                if (detection.isStreak) {
-                    objectRadius = Math.sqrt((detection.pixelArea * detection.elongation) / Math.PI);
-                } else {
-                    objectRadius = Math.sqrt(detection.pixelArea / Math.PI);
-                }
-            }
+            this(resolveDetectionCropExtents(detection), padding);
+        }
 
-            double minX = detection == null ? 0 : detection.x - objectRadius;
-            double maxX = detection == null ? 0 : detection.x + objectRadius;
-            double minY = detection == null ? 0 : detection.y - objectRadius;
-            double maxY = detection == null ? 0 : detection.y + objectRadius;
-
+        private CropBounds(double[] bounds, int padding) {
+            double minX = bounds[0];
+            double maxX = bounds[1];
+            double minY = bounds[2];
+            double maxY = bounds[3];
             trackBoxWidth = (int) Math.round(maxX - minX) + padding;
             trackBoxHeight = (int) Math.round(maxY - minY) + padding;
             fixedCenterX = (int) Math.round((minX + maxX) / 2.0);
@@ -146,6 +116,60 @@ public class ImageDisplayUtils {
             startX = fixedCenterX - (trackBoxWidth / 2);
             startY = fixedCenterY - (trackBoxHeight / 2);
         }
+    }
+
+    private static double[] resolveTrackCropExtents(TrackLinker.Track track) {
+        double[] bounds = new double[]{Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE};
+        if (track != null && track.points != null) {
+            for (SourceExtractor.DetectedObject point : track.points) {
+                includeDetectionExtents(bounds, point);
+            }
+        }
+        return normalizeCropExtents(bounds);
+    }
+
+    private static double[] resolveDetectionCropExtents(SourceExtractor.DetectedObject detection) {
+        double[] bounds = new double[]{Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE};
+        includeDetectionExtents(bounds, detection);
+        return normalizeCropExtents(bounds);
+    }
+
+    private static void includeDetectionExtents(double[] bounds, SourceExtractor.DetectedObject detection) {
+        if (bounds == null || detection == null) {
+            return;
+        }
+        double radius = computeBoundingFootprintRadius(detection);
+        bounds[0] = Math.min(bounds[0], detection.x - radius);
+        bounds[1] = Math.max(bounds[1], detection.x + radius);
+        bounds[2] = Math.min(bounds[2], detection.y - radius);
+        bounds[3] = Math.max(bounds[3], detection.y + radius);
+    }
+
+    private static double[] normalizeCropExtents(double[] bounds) {
+        if (bounds[0] == Double.MAX_VALUE) bounds[0] = 0.0;
+        if (bounds[1] == -Double.MAX_VALUE) bounds[1] = 0.0;
+        if (bounds[2] == Double.MAX_VALUE) bounds[2] = 0.0;
+        if (bounds[3] == -Double.MAX_VALUE) bounds[3] = 0.0;
+        return bounds;
+    }
+
+    private static double computeFootprintRadius(double pixelArea, boolean useElongation, double elongation) {
+        if (pixelArea <= 0.0) {
+            return 0.0;
+        }
+        double effectiveArea = useElongation ? pixelArea * elongation : pixelArea;
+        return Math.sqrt(effectiveArea / Math.PI);
+    }
+
+    private static double computeBoundingFootprintRadius(SourceExtractor.DetectedObject detection) {
+        if (detection == null) {
+            return 0.0;
+        }
+        return computeFootprintRadius(detection.pixelArea, detection.isStreak, detection.elongation);
+    }
+
+    private static int computeSquareCropSize(double footprintRadius, int minimumSize, int padding) {
+        return Math.max(minimumSize, (int) Math.round(footprintRadius * 2.0) + padding);
     }
 
     private static class CreativeTributeLayout {
@@ -257,14 +281,7 @@ public class ImageDisplayUtils {
         java.util.Collections.sort(mandatoryList);
 
         if (mandatoryList.size() >= maxFrames) {
-            if (maxFrames == 1) {
-                selected.add(mandatoryList.get(0));
-            } else {
-                for (int i = 0; i < maxFrames; i++) {
-                    int idx = (int) Math.round(i * (mandatoryList.size() - 1) / (double) (maxFrames - 1));
-                    selected.add(mandatoryList.get(idx));
-                }
-            }
+            addEvenlySpacedIndices(selected, mandatoryList, maxFrames, true);
             return new ArrayList<>(selected);
         }
 
@@ -277,17 +294,27 @@ public class ImageDisplayUtils {
 
         int needed = maxFrames - selected.size();
         if (needed > 0 && !available.isEmpty()) {
-            if (needed == 1) {
-                selected.add(available.get(available.size() / 2));
-            } else {
-                for (int i = 0; i < needed; i++) {
-                    int idx = (int) Math.round(i * (available.size() - 1) / (double) (needed - 1));
-                    selected.add(available.get(idx));
-                }
-            }
+            addEvenlySpacedIndices(selected, available, needed, false);
         }
 
         return new ArrayList<>(selected);
+    }
+
+    private static void addEvenlySpacedIndices(Set<Integer> selected,
+                                               List<Integer> source,
+                                               int count,
+                                               boolean preferFirstWhenSingle) {
+        if (selected == null || source == null || source.isEmpty() || count <= 0) {
+            return;
+        }
+        if (count == 1) {
+            selected.add(source.get(preferFirstWhenSingle ? 0 : source.size() / 2));
+            return;
+        }
+        for (int i = 0; i < count; i++) {
+            int idx = (int) Math.round(i * (source.size() - 1) / (double) (count - 1));
+            selected.add(source.get(idx));
+        }
     }
 
     // =================================================================
@@ -1771,7 +1798,7 @@ public class ImageDisplayUtils {
         int cy = creativeY(detection.y, layout);
         double elongation = Math.max(1.0, detection.elongation);
         double semiMajorAxis = detection.pixelArea > 0
-                ? Math.sqrt((detection.pixelArea * elongation) / Math.PI)
+                ? computeFootprintRadius(detection.pixelArea, true, elongation)
                 : 9.0;
         double measuredLength = Math.max(18.0, semiMajorAxis * 2.0);
         double length = measuredLength * lengthScale * Math.max(0.95, Math.min(1.25, layout.scale));
@@ -2192,8 +2219,8 @@ public class ImageDisplayUtils {
         int cy = (int) Math.round(detection.y);
 
         // Dynamically scale the crop box to ensure we capture the entire elongated footprint plus padding
-        double objectRadius = detection.pixelArea > 0 ? Math.sqrt((detection.pixelArea * detection.elongation) / Math.PI) : 0;
-        int cropSize = Math.max(150, (int) Math.round(objectRadius * 2) + 100);
+        double objectRadius = computeFootprintRadius(detection.pixelArea, true, detection.elongation);
+        int cropSize = computeSquareCropSize(objectRadius, 150, 100);
         int startX = cx - (cropSize / 2);
         int startY = cy - (cropSize / 2);
         short[][] maskReferenceData = masterStackData != null ? masterStackData : primaryStackData;
@@ -2337,7 +2364,8 @@ public class ImageDisplayUtils {
         report.print(DetectionReportAstrometry.buildDeepStackIdentificationHtml(
                 astrometryContext,
                 detection,
-                "deep-stack-jpl-" + detectionTitle.replaceAll("[^A-Za-z0-9]+", "-").toLowerCase(Locale.US)));
+                "deep-stack-jpl-" + detectionTitle.replaceAll("[^A-Za-z0-9]+", "-").toLowerCase(Locale.US),
+                "jpl_deep_stack_" + sanitizeSidecarSlug(detectionTitle, "stack")));
         report.println("</div>");
     }
 
@@ -2541,7 +2569,8 @@ public class ImageDisplayUtils {
         report.print(DetectionReportAstrometry.buildTrackSolarSystemIdentificationHtml(
                 astrometryContext,
                 track,
-                "local-rescue-jpl-" + counter));
+                "local-rescue-jpl-" + counter,
+                String.format(Locale.US, "jpl_local_rescue_%02d", counter)));
         report.println("</div>");
     }
 
@@ -3355,6 +3384,15 @@ public class ImageDisplayUtils {
         return String.format(Locale.US, "[%d, %d]", pixelX, pixelY);
     }
 
+    private static String sanitizeSidecarSlug(String value, String fallback) {
+        String sanitized = value == null ? "" : value.toLowerCase(Locale.US).replaceAll("[^a-z0-9]+", "_");
+        sanitized = sanitized.replaceAll("^_+|_+$", "");
+        if (sanitized.isEmpty()) {
+            return fallback;
+        }
+        return sanitized.length() > 48 ? sanitized.substring(0, 48) : sanitized;
+    }
+
     private static String escapeHtml(String value) {
         if (value == null) {
             return "";
@@ -3378,12 +3416,20 @@ public class ImageDisplayUtils {
     }
 
     private static void appendLiveReportRenderingScript(java.io.PrintWriter report) {
+        report.println(ReportLookupProxyServer.PERSISTED_LOOKUP_CACHE_START_MARKER);
+        report.println("<script type='application/json' id='"
+                + escapeHtml(ReportLookupProxyServer.PERSISTED_LOOKUP_CACHE_SCRIPT_ID)
+                + "'>{\"version\":1,\"entries\":{}}</script>");
+        report.println(ReportLookupProxyServer.PERSISTED_LOOKUP_CACHE_END_MARKER);
         report.println("<script>");
         report.println("(function () {");
         report.println("  const REPORT_PROXY_BASE_URL = '" + escapeJsString(ReportLookupProxyServer.getServiceBaseUrl()) + "';");
         report.println("  const REPORT_PROXY_FETCH_URL = REPORT_PROXY_BASE_URL + '/api/report/fetch';");
+        report.println("  const PERSISTED_LOOKUP_CACHE_SCRIPT_ID = '" + escapeJsString(ReportLookupProxyServer.PERSISTED_LOOKUP_CACHE_SCRIPT_ID) + "';");
         report.println("  const JPL_MAX_RENDER_ROWS = 250;");
         report.println("  const liveLookupCache = new Map();");
+        report.println("  const liveRenderSlotState = new Map();");
+        report.println("  const persistedLookupCache = readPersistedLookupCache();");
         report.println("");
         report.println("  function escapeHtml(value) {");
         report.println("    if (value === null || value === undefined) return '';");
@@ -3420,15 +3466,108 @@ public class ImageDisplayUtils {
         report.println("    return \"<details class='live-raw-json'><summary>Show Raw JSON</summary><pre>\" + escapeHtml(JSON.stringify(payload, null, 2)) + \"</pre></details>\";");
         report.println("  }");
         report.println("");
-        report.println("  function renderLookupUnavailable(slot, provider, error) {");
-        report.println("    const providerLabel = provider === 'satchecker' ? 'SatChecker' : 'JPL';");
-        report.println("    const details = error && error.message ? \"<div class='live-caption'>Technical detail: \" + escapeHtml(error.message) + \"</div>\" : '';");
-        report.println("    slot.innerHTML = \"<div class='live-render-panel error'><div class='live-render-title'>Live in-report rendering is unavailable</div><p class='live-caption'>SpacePixels is not reachable on \" + escapeHtml(REPORT_PROXY_BASE_URL) + \". Start SpacePixels to use <strong>Render \" + providerLabel + \" Results Here</strong>. The browser link above still works.</p>\" + details + \"</div>\";");
+        report.println("  function readPersistedLookupCache() {");
+        report.println("    const element = document.getElementById(PERSISTED_LOOKUP_CACHE_SCRIPT_ID);");
+        report.println("    if (!element) {");
+        report.println("      return { entries: {} };");
+        report.println("    }");
+        report.println("    try {");
+        report.println("      const parsed = JSON.parse(element.textContent || '{}');");
+        report.println("      if (!parsed || typeof parsed !== 'object') {");
+        report.println("        return { entries: {} };");
+        report.println("      }");
+        report.println("      if (!parsed.entries || typeof parsed.entries !== 'object') {");
+        report.println("        parsed.entries = {};");
+        report.println("      }");
+        report.println("      return parsed;");
+        report.println("    } catch (error) {");
+        report.println("      return { entries: {} };");
+        report.println("    }");
         report.println("  }");
         report.println("");
-        report.println("  function renderErrorResponse(slot, response) {");
+        report.println("  function buildRenderMeta(response) {");
+        report.println("    if (response && response.cacheSource === 'saved-report') {");
+        report.println("      return response.fetchedAtUtc ? 'Loaded from saved report cache | Original fetch ' + response.fetchedAtUtc : 'Loaded from saved report cache';");
+        report.println("    }");
+        report.println("    if (response && response.cacheSource === 'sidecar') {");
+        report.println("      return response.fetchedAtUtc ? 'Loaded from saved sidecar | Original fetch ' + response.fetchedAtUtc : 'Loaded from saved sidecar';");
+        report.println("    }");
+        report.println("    return response && response.fetchedAtUtc ? 'Fetched ' + response.fetchedAtUtc : 'Fetched just now';");
+        report.println("  }");
+        report.println("");
+        report.println("  function buildDefaultRenderTitle(provider) {");
+        report.println("    return provider === 'satchecker' ? 'SatChecker Results' : 'JPL Results';");
+        report.println("  }");
+        report.println("");
+        report.println("  function buildEntryKey(provider, target, sidecarFile) {");
+        report.println("    return sidecarFile || (provider + '|' + target);");
+        report.println("  }");
+        report.println("");
+        report.println("  function buildEntryState(button, kind, payload) {");
+        report.println("    const provider = button.getAttribute('data-provider');");
+        report.println("    const target = button.getAttribute('data-target');");
+        report.println("    const sidecarFile = button.getAttribute('data-sidecar-file');");
+        report.println("    const slotId = button.getAttribute('data-slot-id');");
+        report.println("    const renderTitle = button.getAttribute('data-render-title') || buildDefaultRenderTitle(provider);");
+        report.println("    const renderOrder = Number(button.getAttribute('data-render-order') || '0');");
+        report.println("    return {");
+        report.println("      key: buildEntryKey(provider, target, sidecarFile),");
+        report.println("      kind: kind,");
+        report.println("      provider: provider,");
+        report.println("      target: target,");
+        report.println("      sidecarFile: sidecarFile,");
+        report.println("      slotId: slotId,");
+        report.println("      renderTitle: renderTitle,");
+        report.println("      renderOrder: Number.isFinite(renderOrder) ? renderOrder : 0,");
+        report.println("      response: payload && payload.response ? payload.response : null,");
+        report.println("      error: payload && payload.error ? payload.error : null");
+        report.println("    };");
+        report.println("  }");
+        report.println("");
+        report.println("  function ensureSlotState(slotId) {");
+        report.println("    if (!liveRenderSlotState.has(slotId)) {");
+        report.println("      liveRenderSlotState.set(slotId, new Map());");
+        report.println("    }");
+        report.println("    return liveRenderSlotState.get(slotId);");
+        report.println("  }");
+        report.println("");
+        report.println("  function upsertSlotEntry(entry) {");
+        report.println("    if (!entry || !entry.slotId || !entry.key) {");
+        report.println("      return;");
+        report.println("    }");
+        report.println("    const slot = document.getElementById(entry.slotId);");
+        report.println("    if (!slot) {");
+        report.println("      return;");
+        report.println("    }");
+        report.println("    ensureSlotState(entry.slotId).set(entry.key, entry);");
+        report.println("    renderSlotEntries(slot, entry.slotId);");
+        report.println("  }");
+        report.println("");
+        report.println("  function renderSlotEntries(slot, slotId) {");
+        report.println("    const state = ensureSlotState(slotId);");
+        report.println("    const entries = Array.from(state.values()).sort(function (left, right) {");
+        report.println("      if (left.renderOrder !== right.renderOrder) {");
+        report.println("        return left.renderOrder - right.renderOrder;");
+        report.println("      }");
+        report.println("      return String(left.renderTitle || '').localeCompare(String(right.renderTitle || ''));");
+        report.println("    });");
+        report.println("    slot.innerHTML = entries.map(buildPanelHtml).join('');");
+        report.println("  }");
+        report.println("");
+        report.println("  function buildLoadingPanelHtml(title) {");
+        report.println("    return \"<div class='live-render-panel'><div class='live-render-heading'><div class='live-render-title'>\" + escapeHtml(title) + \"</div><div class='live-render-meta'>Loading...</div></div><div class='live-caption'>Loading saved or live report data from SpacePixels...</div></div>\";");
+        report.println("  }");
+        report.println("");
+        report.println("  function buildLookupUnavailablePanelHtml(provider, error, title) {");
+        report.println("    const providerLabel = provider === 'satchecker' ? 'SatChecker' : 'JPL';");
+        report.println("    const details = error && error.message ? \"<div class='live-caption'>Technical detail: \" + escapeHtml(error.message) + \"</div>\" : '';");
+        report.println("    return \"<div class='live-render-panel error'><div class='live-render-heading'><div class='live-render-title'>\" + escapeHtml(title) + \"</div><div class='live-render-meta'>Unavailable</div></div><p class='live-caption'>SpacePixels is not reachable on \" + escapeHtml(REPORT_PROXY_BASE_URL) + \". Start SpacePixels to use <strong>Render \" + providerLabel + \" Results Here</strong>. The browser link above still works.</p>\" + details + \"</div>\";");
+        report.println("  }");
+        report.println("");
+        report.println("  function buildErrorResponseHtml(response, title) {");
         report.println("    const message = response && response.message ? response.message : 'The live lookup did not return usable data.';");
         report.println("    let html = \"<div class='live-render-panel error'><div class='live-render-title'>Live lookup failed</div><p class='live-caption'>\" + escapeHtml(message) + \"</p>\";");
+        report.println("    html = \"<div class='live-render-panel error'><div class='live-render-heading'><div class='live-render-title'>\" + escapeHtml(title) + \"</div><div class='live-render-meta'>Lookup failed</div></div><p class='live-caption'>\" + escapeHtml(message) + \"</p>\";");
         report.println("    if (response && response.upstreamStatus) {");
         report.println("      html += \"<div class='live-caption'>Upstream HTTP status: \" + escapeHtml(response.upstreamStatus) + \"</div>\";");
         report.println("    }");
@@ -3436,10 +3575,10 @@ public class ImageDisplayUtils {
         report.println("      html += buildRawJsonDetails(response.payload);");
         report.println("    }");
         report.println("    html += \"</div>\";");
-        report.println("    slot.innerHTML = html;");
+        report.println("    return html;");
         report.println("  }");
         report.println("");
-        report.println("  function renderSatCheckerResponse(slot, response) {");
+        report.println("  function buildSatCheckerResponseHtml(response, title) {");
         report.println("    const normalized = response.normalized || {};");
         report.println("    const candidates = safeArray(normalized.candidates).slice();");
         report.println("    candidates.sort(function (a, b) {");
@@ -3458,7 +3597,7 @@ public class ImageDisplayUtils {
         report.println("      return String(a.displayName || '').localeCompare(String(b.displayName || ''));");
         report.println("    });");
         report.println("");
-        report.println("    let html = \"<div class='live-render-panel'><div class='live-render-heading'><div class='live-render-title'>Rendered SatChecker Results</div><div class='live-render-meta'>Fetched \" + escapeHtml(response.fetchedAtUtc || 'just now') + \"</div></div>\";");
+        report.println("    let html = \"<div class='live-render-panel'><div class='live-render-heading'><div class='live-render-title'>\" + escapeHtml(title) + \"</div><div class='live-render-meta'>\" + escapeHtml(buildRenderMeta(response)) + \"</div></div>\";");
         report.println("    html += \"<div class='live-mini-grid'>\";");
         report.println("    html += buildMetricCard('Satellites', normalized.totalSatellites !== undefined ? normalized.totalSatellites : candidates.length);");
         report.println("    html += buildMetricCard('Positions', normalized.totalPositionResults !== undefined ? normalized.totalPositionResults : 'n/a');");
@@ -3499,10 +3638,10 @@ public class ImageDisplayUtils {
         report.println("");
         report.println("    html += buildRawJsonDetails(response.payload);");
         report.println("    html += \"</div>\";");
-        report.println("    slot.innerHTML = html;");
+        report.println("    return html;");
         report.println("  }");
         report.println("");
-        report.println("  function renderJplResponse(slot, response) {");
+        report.println("  function buildJplResponseHtml(response, title) {");
         report.println("    const normalized = response.normalized || {};");
         report.println("    const fields = safeArray(normalized.fields);");
         report.println("    const allRows = safeArray(normalized.rows).slice();");
@@ -3521,7 +3660,7 @@ public class ImageDisplayUtils {
         report.println("    }");
         report.println("");
         report.println("    const displayedRows = allRows.slice(0, JPL_MAX_RENDER_ROWS);");
-        report.println("    let html = \"<div class='live-render-panel'><div class='live-render-heading'><div class='live-render-title'>Rendered JPL Results</div><div class='live-render-meta'>Fetched \" + escapeHtml(response.fetchedAtUtc || 'just now') + \"</div></div>\";");
+        report.println("    let html = \"<div class='live-render-panel'><div class='live-render-heading'><div class='live-render-title'>\" + escapeHtml(title) + \"</div><div class='live-render-meta'>\" + escapeHtml(buildRenderMeta(response)) + \"</div></div>\";");
         report.println("    html += \"<div class='live-mini-grid'>\";");
         report.println("    html += buildMetricCard('Result Set', normalized.resultSetLabel || 'Candidates');");
         report.println("    html += buildMetricCard('Matches', normalized.matchCount !== undefined ? normalized.matchCount : allRows.length);");
@@ -3561,37 +3700,66 @@ public class ImageDisplayUtils {
         report.println("");
         report.println("    html += buildRawJsonDetails(response.payload);");
         report.println("    html += \"</div>\";");
-        report.println("    slot.innerHTML = html;");
+        report.println("    return html;");
         report.println("  }");
         report.println("");
-        report.println("  function renderResponse(slot, response) {");
-        report.println("    if (!response || response.ok !== true) {");
-        report.println("      renderErrorResponse(slot, response || { message: 'The live lookup returned no data.' });");
-        report.println("      return;");
+        report.println("  function buildPanelHtml(entry) {");
+        report.println("    if (!entry) {");
+        report.println("      return '';");
         report.println("    }");
-        report.println("    if (response.provider === 'satchecker') {");
-        report.println("      renderSatCheckerResponse(slot, response);");
-        report.println("      return;");
+        report.println("    if (entry.kind === 'loading') {");
+        report.println("      return buildLoadingPanelHtml(entry.renderTitle);");
         report.println("    }");
-        report.println("    if (response.provider === 'jpl') {");
-        report.println("      renderJplResponse(slot, response);");
-        report.println("      return;");
+        report.println("    if (entry.kind === 'unavailable') {");
+        report.println("      return buildLookupUnavailablePanelHtml(entry.provider, entry.error, entry.renderTitle);");
         report.println("    }");
-        report.println("    renderErrorResponse(slot, { message: 'Unknown live lookup provider returned by SpacePixels.' });");
+        report.println("    if (!entry.response || entry.response.ok !== true) {");
+        report.println("      return buildErrorResponseHtml(entry.response || { message: 'The live lookup returned no data.' }, entry.renderTitle);");
+        report.println("    }");
+        report.println("    if (entry.response.provider === 'satchecker') {");
+        report.println("      return buildSatCheckerResponseHtml(entry.response, entry.renderTitle);");
+        report.println("    }");
+        report.println("    if (entry.response.provider === 'jpl') {");
+        report.println("      return buildJplResponseHtml(entry.response, entry.renderTitle);");
+        report.println("    }");
+        report.println("    return buildErrorResponseHtml({ message: 'Unknown live lookup provider returned by SpacePixels.' }, entry.renderTitle);");
+        report.println("  }");
+        report.println("");
+        report.println("  function seedButtonRenderOrder() {");
+        report.println("    Array.from(document.querySelectorAll('.render-live-link')).forEach(function (button, index) {");
+        report.println("      button.setAttribute('data-render-order', String(index));");
+        report.println("    });");
+        report.println("  }");
+        report.println("");
+        report.println("  function seedPersistedLookupResults() {");
+        report.println("    const entries = persistedLookupCache && persistedLookupCache.entries ? persistedLookupCache.entries : {};");
+        report.println("    Array.from(document.querySelectorAll('.render-live-link')).forEach(function (button) {");
+        report.println("      const sidecarFile = button.getAttribute('data-sidecar-file');");
+        report.println("      if (!sidecarFile || !entries[sidecarFile]) {");
+        report.println("        return;");
+        report.println("      }");
+        report.println("      const persistedResponse = Object.assign({}, entries[sidecarFile], { cacheSource: 'saved-report' });");
+        report.println("      const provider = button.getAttribute('data-provider');");
+        report.println("      const target = button.getAttribute('data-target');");
+        report.println("      if (provider && target) {");
+        report.println("        liveLookupCache.set(provider + '|' + target, persistedResponse);");
+        report.println("      }");
+        report.println("      upsertSlotEntry(buildEntryState(button, 'response', { response: persistedResponse }));");
+        report.println("    });");
         report.println("  }");
         report.println("");
         report.println("  function loadLiveLookup(button) {");
         report.println("    const provider = button.getAttribute('data-provider');");
         report.println("    const target = button.getAttribute('data-target');");
+        report.println("    const sidecarFile = button.getAttribute('data-sidecar-file');");
         report.println("    const slotId = button.getAttribute('data-slot-id');");
-        report.println("    const slot = slotId ? document.getElementById(slotId) : null;");
-        report.println("    if (!provider || !target || !slot) {");
+        report.println("    if (!provider || !target || !slotId) {");
         report.println("      return;");
         report.println("    }");
         report.println("");
         report.println("    const cacheKey = provider + '|' + target;");
         report.println("    if (liveLookupCache.has(cacheKey)) {");
-        report.println("      renderResponse(slot, liveLookupCache.get(cacheKey));");
+        report.println("      upsertSlotEntry(buildEntryState(button, 'response', { response: liveLookupCache.get(cacheKey) }));");
         report.println("      return;");
         report.println("    }");
         report.println("");
@@ -3599,18 +3767,24 @@ public class ImageDisplayUtils {
         report.println("    button.setAttribute('data-original-label', originalLabel);");
         report.println("    button.disabled = true;");
         report.println("    button.textContent = 'Loading...';");
-        report.println("    slot.innerHTML = \"<div class='live-render-panel'><div class='live-caption'>Loading live report data from SpacePixels...</div></div>\";");
+        report.println("    upsertSlotEntry(buildEntryState(button, 'loading'));");
         report.println("");
-        report.println("    fetch(REPORT_PROXY_FETCH_URL + '?provider=' + encodeURIComponent(provider) + '&target=' + encodeURIComponent(target))");
+        report.println("    let requestUrl = REPORT_PROXY_FETCH_URL + '?provider=' + encodeURIComponent(provider) + '&target=' + encodeURIComponent(target);");
+        report.println("    if (sidecarFile) {");
+        report.println("      const reportUrl = window.location.href.split('#')[0].split('?')[0];");
+        report.println("      requestUrl += '&report=' + encodeURIComponent(reportUrl) + '&sidecar=' + encodeURIComponent(sidecarFile);");
+        report.println("    }");
+        report.println("");
+        report.println("    fetch(requestUrl)");
         report.println("      .then(function (httpResponse) {");
         report.println("        return httpResponse.json();");
         report.println("      })");
         report.println("      .then(function (response) {");
         report.println("        liveLookupCache.set(cacheKey, response);");
-        report.println("        renderResponse(slot, response);");
+        report.println("        upsertSlotEntry(buildEntryState(button, 'response', { response: response }));");
         report.println("      })");
         report.println("      .catch(function (error) {");
-        report.println("        renderLookupUnavailable(slot, provider, error);");
+        report.println("        upsertSlotEntry(buildEntryState(button, 'unavailable', { error: error }));");
         report.println("      })");
         report.println("      .finally(function () {");
         report.println("        button.disabled = false;");
@@ -3626,6 +3800,9 @@ public class ImageDisplayUtils {
         report.println("    event.preventDefault();");
         report.println("    loadLiveLookup(button);");
         report.println("  });");
+        report.println("");
+        report.println("  seedButtonRenderOrder();");
+        report.println("  seedPersistedLookupResults();");
         report.println("})();");
         report.println("</script>");
     }
@@ -4411,7 +4588,8 @@ public class ImageDisplayUtils {
                     report.print(DetectionReportAstrometry.buildConfirmedStreakTrackSatCheckerHtml(
                             astrometryContext,
                             track,
-                            "streak-track-satchecker-" + counter));
+                            "streak-track-satchecker-" + counter,
+                            String.format(Locale.US, "satchecker_track_%02d", counter)));
                     report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(
                             astrometryContext,
                             track,
@@ -4563,11 +4741,8 @@ public class ImageDisplayUtils {
 
                     for (int i = 0; i < track.points.size(); i++) {
                         SourceExtractor.DetectedObject pt = track.points.get(i);
-                        double objectRadius = 0;
-                        if (pt.pixelArea > 0) {
-                            objectRadius = pt.isStreak ? Math.sqrt((pt.pixelArea * pt.elongation) / Math.PI) : Math.sqrt(pt.pixelArea / Math.PI);
-                        }
-                        int tightCropSize = Math.max(50, (int) Math.round(objectRadius * 2) + 24); // Diameter + 24px padding
+                        double objectRadius = computeBoundingFootprintRadius(pt);
+                        int tightCropSize = computeSquareCropSize(objectRadius, 50, 24); // Diameter + 24px padding
                         short[][] tightCropData = robustEdgeAwareCrop(rawFrames.get(pt.sourceFrameIndex), (int) Math.round(pt.x), (int) Math.round(pt.y), tightCropSize, tightCropSize);
                         BufferedImage tightImg = createDisplayImage(tightCropData);
                         String tightFileName = "moving_track_" + counter + "_pt_" + (i + 1) + "_tight.png";
@@ -4595,7 +4770,8 @@ public class ImageDisplayUtils {
                     report.print(DetectionReportAstrometry.buildMovingTrackSolarSystemIdentificationHtml(
                             astrometryContext,
                             track,
-                            "moving-track-jpl-" + counter));
+                            "moving-track-jpl-" + counter,
+                            String.format(Locale.US, "jpl_track_%02d", counter)));
                     report.println("</div>");
                     counter++;
                 }
