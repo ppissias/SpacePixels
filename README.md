@@ -112,11 +112,11 @@ For the underlying detection logic and the meaning of the engine configuration o
 - Blinks aligned frames for traditional visual inspection.
 - Plate-solves images through ASTAP or Astrometry.net and uses WCS for RA/Dec overlays and report links.
 - Batch-converts color FITS to monochrome and batch-stretches imported datasets.
-- Includes headless utilities for batch detection and artificial star injection.
+- Includes headless utilities for batch detection.
 
-## Official Java API
+## Java API
 
-The official supported Java integration surface is [`eu.startales.spacepixels.api`](src/main/java/eu/startales/spacepixels/api).
+The supported Java integration surface is [`eu.startales.spacepixels.api`](src/main/java/eu/startales/spacepixels/api).
 
 For setup, request/result behavior, and usage examples, see [API.md](API.md).
 

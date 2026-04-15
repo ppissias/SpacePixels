@@ -5107,7 +5107,7 @@ public class ImageDisplayUtils {
                 report.println("<div>");
                 report.println("<h4 style='color: #ddd; margin-bottom: 5px;'>The Kinematic Compass</h4>");
                 report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>A radar chart mapping the velocity and heading of confirmed moving object tracks and confirmed streak tracks using a logarithmic scale to highlight both slow asteroids and fast satellites. Orbital constellations often clump together into distinct vectors, revealing satellite swarms or shared orbital planes. Suspected streak tracks are intentionally excluded here because same-frame groupings do not provide reliable inter-frame velocity vectors.</p>");
-                report.println("<a href='kinematic_compass.png' target='_blank'><img src='kinematic_compass.png' style='display: block; margin: 0 auto; width: 100%; max-width: 600px; border: 1px solid #444; border-radius: 6px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);' alt='Kinematic Compass' /></a>");
+                report.println("<a href='kinematic_compass.png' target='_blank' style='display: block; max-width: 600px; margin: 0 auto;'><img src='kinematic_compass.png' class='native-size-image' style='border: 1px solid #444; border-radius: 6px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);' alt='Kinematic Compass' /></a>");
                 report.println("</div>");
                 report.println("</div>");
             }
