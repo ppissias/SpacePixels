@@ -56,13 +56,13 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 <br/>*Sample Detection - minor planet Valeria (data credit Klangwolke @ Cloudynights)*
 
 ![Sample Detection](https://startales.eu/various_files/detections/Valeria-moving_track_1_star_centric.gif)
-<br/>*Sample Detection - minor planet Valeria*
+<br/>*Sample Detection - minor planet Valeria (data credit Klangwolke @ Cloudynights)*
 
 ![Sample Detection](https://startales.eu/various_files/detections/Sutoku-Screenshot.png)
-<br/>*Sample Detection - asteroid Sutoku*
+<br/>*Sample Detection - asteroid Sutoku (data credit Klangwolke @ Cloudynights)*
 
 ![Sample Detection](https://startales.eu/various_files/detections/Sutoku-micro_drift_1_context.gif)
-<br/>*Sample Detection - asteroid Sutoku*
+<br/>*Sample Detection - asteroid Sutoku (data credit Klangwolke @ Cloudynights)*
 
 
 ![Sample Detection](https://startales.eu/various_files/aptrack_1_star_centric.gif)
