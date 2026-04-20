@@ -22,22 +22,6 @@ def githubRepoScmUrl = 'https://github.com/ppissias/SpacePixels.git'
 def centralArtifactId = 'spacepixels'
 def centralStagingRepository = layout.buildDirectory.dir('repos/central-staging')
 
-def requireNonBlankGradleProperty = { String propertyName ->
-    def propertyValue = providers.gradleProperty(propertyName).orNull
-    if (propertyValue == null || propertyValue.trim().isEmpty()) {
-        throw new GradleException(
-                "Missing required Gradle property '${propertyName}'. " +
-                        "Define it in gradle.properties or in %USERPROFILE%\\.gradle\\gradle.properties.")
-    }
-    return propertyValue.trim()
-}
-
-def pomDeveloperId = requireNonBlankGradleProperty('pomDeveloperId')
-def pomDeveloperName = requireNonBlankGradleProperty('pomDeveloperName')
-def pomDeveloperEmail = requireNonBlankGradleProperty('pomDeveloperEmail')
-def pomDeveloperOrganization = requireNonBlankGradleProperty('pomDeveloperOrganization')
-def pomDeveloperOrganizationUrl = requireNonBlankGradleProperty('pomDeveloperOrganizationUrl')
-
 def inMemorySigningKey = providers.gradleProperty('signingKey')
         .map { it.replace("\\n", "\n") }
         .orNull
@@ -220,11 +204,11 @@ publishing {
 
                 developers {
                     developer {
-                        id = pomDeveloperId
-                        name = pomDeveloperName
-                        email = pomDeveloperEmail
-                        organization = pomDeveloperOrganization
-                        organizationUrl = pomDeveloperOrganizationUrl
+                        id = providers.gradleProperty('pomDeveloperId')
+                        name = providers.gradleProperty('pomDeveloperName')
+                        email = providers.gradleProperty('pomDeveloperEmail')
+                        organization = providers.gradleProperty('pomDeveloperOrganization')
+                        organizationUrl = providers.gradleProperty('pomDeveloperOrganizationUrl')
                     }
                 }
 
@@ -256,6 +240,18 @@ tasks.register('validateCentralReleaseConfiguration') {
                             'Set ORG_GRADLE_PROJECT_signingKey and ORG_GRADLE_PROJECT_signingPassword, ' +
                             'or configure signing.keyId/signing.password/signing.secretKeyRingFile.')
         }
+        
+        def checkNotBlank = { String propName ->
+            def prop = providers.gradleProperty(propName).orNull
+            if (prop == null || prop.trim().isEmpty()) {
+                throw new GradleException("Missing required Gradle property for publication: '${propName}'.")
+            }
+        }
+        checkNotBlank('pomDeveloperId')
+        checkNotBlank('pomDeveloperName')
+        checkNotBlank('pomDeveloperEmail')
+        checkNotBlank('pomDeveloperOrganization')
+        checkNotBlank('pomDeveloperOrganizationUrl')
     }
 }
 
