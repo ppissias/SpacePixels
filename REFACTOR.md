@@ -2,6 +2,10 @@
 
 Snapshot date: 2026-04-24
 
+Architecture reference:
+- Stable facade and subsystem documentation now lives in [HIGH_LEVEL_DESIGN.md](HIGH_LEVEL_DESIGN.md).
+- Keep this file focused on refactor targets, extraction order, and verification notes.
+
 Method used:
 - Count Java source lines under `src/main/java` on the current worktree
 - Sort descending by line count
