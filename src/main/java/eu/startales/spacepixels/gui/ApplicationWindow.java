@@ -19,7 +19,7 @@ import eu.startales.spacepixels.events.FitsImportStartedEvent;
 import eu.startales.spacepixels.tasks.FitsImportTask;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
-import eu.startales.spacepixels.util.ReportLookupProxyServer;
+import eu.startales.spacepixels.util.reporting.ReportLookupProxyServer;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;

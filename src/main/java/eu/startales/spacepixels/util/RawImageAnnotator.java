@@ -19,6 +19,10 @@ import java.awt.BasicStroke;
 import java.awt.RenderingHints;
 import java.util.List;
 
+/**
+ * UI-side overlay helper that draws centroid boxes and streak guides directly over rendered raw
+ * frames for manual inspection.
+ */
 public class RawImageAnnotator {
 
     // =================================================================

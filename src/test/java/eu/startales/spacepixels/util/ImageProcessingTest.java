@@ -217,7 +217,7 @@ public class ImageProcessingTest {
                 Collections.emptyList(),
                 maximumStack);
 
-        PipelineResult sanitized = ImageProcessing.suppressLatePhaseOutputsWhenTooFewFramesRemain(original);
+        PipelineResult sanitized = DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain(original);
 
         assertTrue(sanitized.tracks.isEmpty());
         assertTrue(sanitized.anomalies.isEmpty());
@@ -259,7 +259,7 @@ public class ImageProcessingTest {
                 Collections.emptyList(),
                 null);
 
-        assertSame(original, ImageProcessing.suppressLatePhaseOutputsWhenTooFewFramesRemain(original));
+        assertSame(original, DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain(original));
     }
 
     private static Map<String, String> createAstrometrySolveInfo(String wcsLink) {

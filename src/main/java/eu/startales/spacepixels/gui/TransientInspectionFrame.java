@@ -1,7 +1,7 @@
 package eu.startales.spacepixels.gui;
 
+import eu.startales.spacepixels.util.DisplayImageRenderer;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageDisplayUtils;
 import eu.startales.spacepixels.util.RawImageAnnotator;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
@@ -139,7 +139,7 @@ public class TransientInspectionFrame extends JFrame {
         updateCurrentWcsSolution(fileInfo);
         cursorStatusLabel.setText(buildDefaultCursorStatus());
 
-        BufferedImage grayImage = ImageDisplayUtils.createDisplayImage(frame.pixelData);
+        BufferedImage grayImage = DisplayImageRenderer.createDisplayImage(frame.pixelData);
         BufferedImage displayImage = new BufferedImage(grayImage.getWidth(), grayImage.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = displayImage.createGraphics();
         g2d.drawImage(grayImage, 0, 0, null);

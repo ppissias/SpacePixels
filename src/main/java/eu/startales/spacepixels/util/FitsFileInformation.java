@@ -22,8 +22,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Holds high level information for a FITS file
- *
+ * Mutable metadata container for one imported FITS file, including basic image dimensions,
+ * monochrome/color state, raw header cards, and normalized observation timestamps used by the
+ * detection pipeline and report export.
  */
 public class FitsFileInformation {
     private static final DateTimeFormatter PIPELINE_TIMESTAMP_FORMAT =

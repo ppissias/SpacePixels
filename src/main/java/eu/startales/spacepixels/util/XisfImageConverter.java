@@ -35,6 +35,10 @@ import java.util.Set;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 
+/**
+ * Converts PixInsight XISF images into monochrome FITS files that SpacePixels can ingest through
+ * the same batch-import path used for native FITS sequences.
+ */
 public final class XisfImageConverter {
 
     private static final byte[] MONOLITHIC_SIGNATURE = "XISF0100".getBytes(StandardCharsets.US_ASCII);

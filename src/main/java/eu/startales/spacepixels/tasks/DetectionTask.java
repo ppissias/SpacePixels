@@ -22,8 +22,8 @@ import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 import eu.startales.spacepixels.events.DetectionFinishedEvent;
 import eu.startales.spacepixels.events.DetectionStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
+import eu.startales.spacepixels.util.DisplayImageRenderer;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageDisplayUtils;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.RawImageAnnotator;
 
@@ -84,7 +84,7 @@ public class DetectionTask implements Runnable {
                         else starCount++;
                     }
 
-                    BufferedImage grayImage = ImageDisplayUtils.createDisplayImage(debugImage);
+                    BufferedImage grayImage = DisplayImageRenderer.createDisplayImage(debugImage);
                     BufferedImage finalImageToDisplay = new BufferedImage(grayImage.getWidth(), grayImage.getHeight(), BufferedImage.TYPE_INT_RGB);
                     Graphics2D g2d = finalImageToDisplay.createGraphics();
                     g2d.drawImage(grayImage, 0, 0, null);

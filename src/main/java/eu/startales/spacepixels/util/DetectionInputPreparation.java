@@ -165,20 +165,20 @@ public final class DetectionInputPreparation {
             Object kernel = imageHdu.getKernel();
 
             if (kernel instanceof short[][]) {
-                return ImageProcessing.createFitsFromData(kernel, originalHeader);
+                return FitsPixelConverter.createFitsFromData(kernel, originalHeader);
             }
             if (kernel instanceof short[][][]) {
-                short[][] monoKernel = ImageProcessing.convertColorKernelToMono(kernel);
-                return ImageProcessing.createFitsFromData(monoKernel, originalHeader);
+                short[][] monoKernel = FitsPixelConverter.convertColorKernelToMono(kernel);
+                return FitsPixelConverter.createFitsFromData(monoKernel, originalHeader);
             }
             if (kernel instanceof float[][] || kernel instanceof int[][]) {
-                short[][] monoKernel = ImageProcessing.standardizeTo16BitMono(kernel);
-                return ImageProcessing.createFitsFromData(monoKernel, originalHeader);
+                short[][] monoKernel = FitsPixelConverter.standardizeTo16BitMono(kernel);
+                return FitsPixelConverter.createFitsFromData(monoKernel, originalHeader);
             }
             if (kernel instanceof float[][][] || kernel instanceof int[][][]) {
-                short[][][] colorKernel = ImageProcessing.standardizeTo16BitColor(kernel);
-                short[][] monoKernel = ImageProcessing.extractLuminance(colorKernel);
-                return ImageProcessing.createFitsFromData(monoKernel, originalHeader);
+                short[][][] colorKernel = FitsPixelConverter.standardizeTo16BitColor(kernel);
+                short[][] monoKernel = FitsPixelConverter.extractLuminance(colorKernel);
+                return FitsPixelConverter.createFitsFromData(monoKernel, originalHeader);
             }
 
             throw new IOException("Unsupported FITS kernel type in " + inputFile.getName() + ": " + kernel.getClass().getName());

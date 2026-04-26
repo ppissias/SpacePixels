@@ -1,7 +1,8 @@
 package eu.startales.spacepixels.config;
 
-import eu.startales.spacepixels.util.ImageDisplayUtils;
+import eu.startales.spacepixels.util.DisplayImageRenderer;
 import eu.startales.spacepixels.util.RawImageAnnotator;
+import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import org.junit.Test;
 
 import java.io.StringReader;
@@ -53,11 +54,11 @@ public class SpacePixelsVisualizationPreferencesIOTest {
         int originalStreakCentroidBoxRadius = RawImageAnnotator.streakCentroidBoxRadius;
         int originalPointSourceMinBoxRadius = RawImageAnnotator.pointSourceMinBoxRadius;
         int originalDynamicBoxPadding = RawImageAnnotator.dynamicBoxPadding;
-        double originalAutoStretchBlackSigma = ImageDisplayUtils.autoStretchBlackSigma;
-        double originalAutoStretchWhiteSigma = ImageDisplayUtils.autoStretchWhiteSigma;
-        int originalGifBlinkSpeedMs = ImageDisplayUtils.gifBlinkSpeedMs;
-        int originalTrackCropPadding = ImageDisplayUtils.trackCropPadding;
-        boolean originalIncludeAiCreativeReportSections = ImageDisplayUtils.includeAiCreativeReportSections;
+        double originalAutoStretchBlackSigma = DisplayImageRenderer.autoStretchBlackSigma;
+        double originalAutoStretchWhiteSigma = DisplayImageRenderer.autoStretchWhiteSigma;
+        int originalGifBlinkSpeedMs = DetectionReportGenerator.gifBlinkSpeedMs;
+        int originalTrackCropPadding = DetectionReportGenerator.trackCropPadding;
+        boolean originalIncludeAiCreativeReportSections = DetectionReportGenerator.includeAiCreativeReportSections;
 
         SpacePixelsVisualizationPreferences preferences = new SpacePixelsVisualizationPreferences();
         preferences.streakLineScaleFactor = 6.2d;
@@ -77,21 +78,21 @@ public class SpacePixelsVisualizationPreferencesIOTest {
             assertEquals(8, RawImageAnnotator.streakCentroidBoxRadius);
             assertEquals(5, RawImageAnnotator.pointSourceMinBoxRadius);
             assertEquals(7, RawImageAnnotator.dynamicBoxPadding);
-            assertEquals(0.6d, ImageDisplayUtils.autoStretchBlackSigma, 0.0d);
-            assertEquals(3.8d, ImageDisplayUtils.autoStretchWhiteSigma, 0.0d);
-            assertEquals(150, ImageDisplayUtils.gifBlinkSpeedMs);
-            assertEquals(140, ImageDisplayUtils.trackCropPadding);
-            assertTrue(ImageDisplayUtils.includeAiCreativeReportSections);
+            assertEquals(0.6d, DisplayImageRenderer.autoStretchBlackSigma, 0.0d);
+            assertEquals(3.8d, DisplayImageRenderer.autoStretchWhiteSigma, 0.0d);
+            assertEquals(150, DetectionReportGenerator.gifBlinkSpeedMs);
+            assertEquals(140, DetectionReportGenerator.trackCropPadding);
+            assertTrue(DetectionReportGenerator.includeAiCreativeReportSections);
         } finally {
             RawImageAnnotator.streakLineScaleFactor = originalStreakLineScaleFactor;
             RawImageAnnotator.streakCentroidBoxRadius = originalStreakCentroidBoxRadius;
             RawImageAnnotator.pointSourceMinBoxRadius = originalPointSourceMinBoxRadius;
             RawImageAnnotator.dynamicBoxPadding = originalDynamicBoxPadding;
-            ImageDisplayUtils.autoStretchBlackSigma = originalAutoStretchBlackSigma;
-            ImageDisplayUtils.autoStretchWhiteSigma = originalAutoStretchWhiteSigma;
-            ImageDisplayUtils.gifBlinkSpeedMs = originalGifBlinkSpeedMs;
-            ImageDisplayUtils.trackCropPadding = originalTrackCropPadding;
-            ImageDisplayUtils.includeAiCreativeReportSections = originalIncludeAiCreativeReportSections;
+            DisplayImageRenderer.autoStretchBlackSigma = originalAutoStretchBlackSigma;
+            DisplayImageRenderer.autoStretchWhiteSigma = originalAutoStretchWhiteSigma;
+            DetectionReportGenerator.gifBlinkSpeedMs = originalGifBlinkSpeedMs;
+            DetectionReportGenerator.trackCropPadding = originalTrackCropPadding;
+            DetectionReportGenerator.includeAiCreativeReportSections = originalIncludeAiCreativeReportSections;
         }
     }
 }

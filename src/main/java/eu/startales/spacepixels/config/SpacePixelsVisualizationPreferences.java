@@ -7,8 +7,9 @@
  */
 package eu.startales.spacepixels.config;
 
-import eu.startales.spacepixels.util.ImageDisplayUtils;
+import eu.startales.spacepixels.util.DisplayImageRenderer;
 import eu.startales.spacepixels.util.RawImageAnnotator;
+import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 
 /**
  * User-level rendering and export preferences that do not affect detection results.
@@ -19,11 +20,11 @@ public class SpacePixelsVisualizationPreferences {
     public int streakCentroidBoxRadius = RawImageAnnotator.streakCentroidBoxRadius;
     public int pointSourceMinBoxRadius = RawImageAnnotator.pointSourceMinBoxRadius;
     public int dynamicBoxPadding = RawImageAnnotator.dynamicBoxPadding;
-    public double autoStretchBlackSigma = ImageDisplayUtils.autoStretchBlackSigma;
-    public double autoStretchWhiteSigma = ImageDisplayUtils.autoStretchWhiteSigma;
-    public int gifBlinkSpeedMs = ImageDisplayUtils.gifBlinkSpeedMs;
-    public int trackCropPadding = ImageDisplayUtils.trackCropPadding;
-    public boolean includeAiCreativeReportSections = ImageDisplayUtils.includeAiCreativeReportSections;
+    public double autoStretchBlackSigma = DisplayImageRenderer.autoStretchBlackSigma;
+    public double autoStretchWhiteSigma = DisplayImageRenderer.autoStretchWhiteSigma;
+    public int gifBlinkSpeedMs = DetectionReportGenerator.gifBlinkSpeedMs;
+    public int trackCropPadding = DetectionReportGenerator.trackCropPadding;
+    public boolean includeAiCreativeReportSections = DetectionReportGenerator.includeAiCreativeReportSections;
 
     public static SpacePixelsVisualizationPreferences captureCurrent() {
         return new SpacePixelsVisualizationPreferences();
@@ -34,10 +35,10 @@ public class SpacePixelsVisualizationPreferences {
         RawImageAnnotator.streakCentroidBoxRadius = streakCentroidBoxRadius;
         RawImageAnnotator.pointSourceMinBoxRadius = pointSourceMinBoxRadius;
         RawImageAnnotator.dynamicBoxPadding = dynamicBoxPadding;
-        ImageDisplayUtils.autoStretchBlackSigma = autoStretchBlackSigma;
-        ImageDisplayUtils.autoStretchWhiteSigma = autoStretchWhiteSigma;
-        ImageDisplayUtils.gifBlinkSpeedMs = gifBlinkSpeedMs;
-        ImageDisplayUtils.trackCropPadding = trackCropPadding;
-        ImageDisplayUtils.includeAiCreativeReportSections = includeAiCreativeReportSections;
+        DisplayImageRenderer.autoStretchBlackSigma = autoStretchBlackSigma;
+        DisplayImageRenderer.autoStretchWhiteSigma = autoStretchWhiteSigma;
+        DetectionReportGenerator.gifBlinkSpeedMs = gifBlinkSpeedMs;
+        DetectionReportGenerator.trackCropPadding = trackCropPadding;
+        DetectionReportGenerator.includeAiCreativeReportSections = includeAiCreativeReportSections;
     }
 }

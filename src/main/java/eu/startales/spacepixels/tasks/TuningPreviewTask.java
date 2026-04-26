@@ -3,8 +3,8 @@ package eu.startales.spacepixels.tasks;
 import com.google.common.eventbus.EventBus;
 import eu.startales.spacepixels.events.TuningPreviewFinishedEvent;
 import eu.startales.spacepixels.events.TuningPreviewStartedEvent;
+import eu.startales.spacepixels.util.DisplayImageRenderer;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageDisplayUtils;
 import eu.startales.spacepixels.util.RawImageAnnotator;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.SourceExtractor;
@@ -70,7 +70,7 @@ public class TuningPreviewTask implements Runnable {
                     targetFile.getFileName(), displayIndex, totalFiles, pointCount, streakCount);
 
             // Render
-            BufferedImage grayImage = ImageDisplayUtils.createDisplayImage(debugImage);
+            BufferedImage grayImage = DisplayImageRenderer.createDisplayImage(debugImage);
             
             // Convert the Grayscale canvas to an RGB canvas so colored overlays actually show up!
             BufferedImage previewImage = new BufferedImage(grayImage.getWidth(), grayImage.getHeight(), BufferedImage.TYPE_INT_RGB);

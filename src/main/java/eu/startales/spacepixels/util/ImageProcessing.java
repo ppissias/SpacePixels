@@ -9,10 +9,7 @@
  */
 package eu.startales.spacepixels.util;
 
-import io.github.ppissias.jplatesolve.astap.ASTAPInterface;
-import io.github.ppissias.jplatesolve.astrometrydotnet.AstrometryDotNet;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
-import io.github.ppissias.jplatesolve.astrometrydotnet.SubmitFileRequest;
 
 import nom.tam.fits.*;
 import nom.tam.util.Cursor;
@@ -23,20 +20,13 @@ import eu.startales.spacepixels.config.SpacePixelsAppConfigIO;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
-import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
-import io.github.ppissias.jtransient.engine.ImageFrame;
-import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 import javax.swing.*;
-import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
-import java.net.URL;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -51,33 +41,16 @@ import java.util.concurrent.Future;
 /**
  * High-level FITS processing facade for SpacePixels.
  *
- * <p>This class owns the end-to-end workflow around FITS import validation, image conversion,
- * preview/stretch generation, plate-solving persistence, and handoff to the JTransient detection
- * engine. It also applies small SpacePixels-specific safeguards around engine configuration before
- * running the pipeline.</p>
+ * <p>This class coordinates FITS import validation, image conversion, preview/stretch generation,
+ * report handoff, and the JTransient detection pipeline. Specialized WCS/plate-solving behavior is
+ * delegated to focused collaborators so the public processing API can remain stable while the
+ * implementation is split into smaller responsibilities.</p>
  */
 public class ImageProcessing {
-    static final int MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS = 3;
+    public static final int MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS =
+            DetectionPipelineSupport.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS;
     private static final DateTimeFormatter TRACE_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS 'UTC'").withZone(ZoneOffset.UTC);
-
-    private static final Set<String> FIXED_WCS_HEADER_KEYS = Set.of(
-            "WCSAXES",
-            "RADESYS",
-            "RADECSYS",
-            "LONPOLE",
-            "LATPOLE",
-            "EQUINOX",
-            "EPOCH",
-            "WCSNAME",
-            "A_ORDER",
-            "B_ORDER",
-            "AP_ORDER",
-            "BP_ORDER",
-            "A_DMAX",
-            "B_DMAX",
-            "AP_DMAX",
-            "BP_DMAX");
 
     @FunctionalInterface
     public interface DetectionSafetyPrompt {
@@ -99,15 +72,15 @@ public class ImageProcessing {
         public final int localActivityClusters;
         public final int potentialSlowMovers;
 
-        private DetectionSummary(int totalDetections,
-                                 int singleStreaks,
-                                 int streakTracks,
-                                 int movingTargets,
-                                 int anomalies,
-                                 int suspectedStreakTracks,
-                                 int slowMoverCandidates,
-                                 int localRescueCandidates,
-                                 int localActivityClusters) {
+        DetectionSummary(int totalDetections,
+                         int singleStreaks,
+                         int streakTracks,
+                         int movingTargets,
+                         int anomalies,
+                         int suspectedStreakTracks,
+                         int slowMoverCandidates,
+                         int localRescueCandidates,
+                         int localActivityClusters) {
             this.totalDetections = totalDetections;
             this.singleStreaks = singleStreaks;
             this.streakTracks = streakTracks;
@@ -132,11 +105,11 @@ public class ImageProcessing {
         private final List<short[][]> rawFramesForExport;
         private final long pipelineDurationMillis;
 
-        private PipelineExecutionData(PipelineResult pipelineResult,
-                                      DetectionConfig effectiveConfig,
-                                      FitsFileInformation[] filesInformation,
-                                      List<short[][]> rawFramesForExport,
-                                      long pipelineDurationMillis) {
+        PipelineExecutionData(PipelineResult pipelineResult,
+                              DetectionConfig effectiveConfig,
+                              FitsFileInformation[] filesInformation,
+                              List<short[][]> rawFramesForExport,
+                              long pipelineDurationMillis) {
             this.pipelineResult = pipelineResult;
             this.effectiveConfig = effectiveConfig == null ? null : effectiveConfig.clone();
             this.filesInformation = filesInformation == null ? new FitsFileInformation[0] : filesInformation.clone();
@@ -203,130 +176,11 @@ public class ImageProcessing {
                 displayWithoutTimestamp));
     }
 
-    private static void logPipelineFrameTimingPayload(String stageLabel,
-                                                      List<ImageFrame> frames,
-                                                      FitsFileInformation[] filesInfo) {
-        if (frames == null) {
-            System.out.println("\n--- " + stageLabel + " JTransient Frame Timing Payload ---");
-            System.out.println("No frames prepared for JTransient.");
-            return;
-        }
-
-        int validTimestamps = 0;
-        System.out.println("\n--- " + stageLabel + " JTransient Frame Timing Payload ---");
-        for (int i = 0; i < frames.size(); i++) {
-            ImageFrame frame = frames.get(i);
-            if (frame.timestamp > 0L) {
-                validTimestamps++;
-            }
-
-            FitsFileInformation fileInfo = null;
-            if (filesInfo != null && frame.sequenceIndex >= 0 && frame.sequenceIndex < filesInfo.length) {
-                fileInfo = filesInfo[frame.sequenceIndex];
-            } else if (filesInfo != null && i >= 0 && i < filesInfo.length) {
-                fileInfo = filesInfo[i];
-            }
-
-            String diagnostics = fileInfo != null
-                    ? fileInfo.getObservationTimestampDiagnostics()
-                    : "No matching FitsFileInformation entry was found for this frame.";
-
-            System.out.println(String.format(
-                    Locale.US,
-                    "[%03d] sequenceIndex=%d | file='%s' | payloadTimestamp=%d | payloadUtc='%s' | exposureMs=%d | %s",
-                    i,
-                    frame.sequenceIndex,
-                    frame.filename,
-                    frame.timestamp,
-                    formatTraceTimestamp(frame.timestamp),
-                    frame.exposureDuration,
-                    diagnostics));
-        }
-        System.out.println(String.format(
-                Locale.US,
-                "JTransient payload summary: %d/%d frames carry a usable timestamp.",
-                validTimestamps,
-                frames.size()));
-    }
-
     private static String formatTraceTimestamp(long timestampMillis) {
         if (timestampMillis <= 0L) {
             return "N/A";
         }
         return TRACE_TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(timestampMillis));
-    }
-
-    /**
-     * Clones the user config and applies runtime-only adjustments derived from the actual frame
-     * count of the current run.
-     *
-     * <p>The current adjustment keeps the slow-mover middle-fraction below the effective maximum
-     * order statistic so small runs do not accidentally collapse into a pure maximum stack.</p>
-     */
-    static DetectionConfig createEffectiveDetectionConfig(DetectionConfig baseConfig, int frameCount) {
-        if (baseConfig == null) {
-            return null;
-        }
-
-        DetectionConfig effectiveConfig = baseConfig.clone();
-        if (!effectiveConfig.enableSlowMoverDetection) {
-            return effectiveConfig;
-        }
-
-        double adjustedFraction = clampSlowMoverStackMiddleFraction(effectiveConfig.slowMoverStackMiddleFraction, frameCount);
-        if (Double.compare(adjustedFraction, effectiveConfig.slowMoverStackMiddleFraction) != 0) {
-            System.out.printf(
-                    Locale.US,
-                    "Adjusting slowMoverStackMiddleFraction from %.4f to %.4f for %d frames so the slow-mover stack stays one frame below the maximum stack.%n",
-                    effectiveConfig.slowMoverStackMiddleFraction,
-                    adjustedFraction,
-                    frameCount);
-            effectiveConfig.slowMoverStackMiddleFraction = adjustedFraction;
-        }
-
-        return effectiveConfig;
-    }
-
-    /**
-     * Lowers the requested slow-mover stack fraction only when the engine would otherwise pick the
-     * same order statistic as the maximum stack for the given number of frames.
-     */
-    static double clampSlowMoverStackMiddleFraction(double requestedFraction, int frameCount) {
-        double boundedFraction = Math.max(0.0, Math.min(1.0, requestedFraction));
-        if (frameCount <= 1) {
-            return boundedFraction;
-        }
-
-        int maximumAllowedIndex = frameCount - 2;
-        if (computeSlowMoverStackOrderIndex(frameCount, boundedFraction) <= maximumAllowedIndex) {
-            return boundedFraction;
-        }
-
-        int requestedRoundedWindow = (int) Math.round(frameCount * boundedFraction);
-        int safeRoundedWindow = requestedRoundedWindow;
-
-        // Match the engine's rounded-window bucketing, but never let the selected sample hit the pure maximum.
-        while (safeRoundedWindow > 0
-                && computeSlowMoverStackOrderIndex(frameCount, safeRoundedWindow / (double) frameCount) > maximumAllowedIndex) {
-            safeRoundedWindow--;
-        }
-
-        return safeRoundedWindow / (double) frameCount;
-    }
-
-    /**
-     * Mirrors the JTransient slow-mover stack bucket math so SpacePixels can reason about the
-     * selected per-pixel order statistic before invoking the engine.
-     */
-    static int computeSlowMoverStackOrderIndex(int frameCount, double fraction) {
-        if (frameCount <= 0) {
-            return -1;
-        }
-
-        double boundedFraction = Math.max(0.0, Math.min(1.0, fraction));
-        int roundedWindow = (int) Math.round(frameCount * boundedFraction);
-        int centerIndex = (frameCount - 1) / 2;
-        return Math.min(frameCount - 1, centerIndex + (roundedWindow / 2));
     }
 
     /**
@@ -372,9 +226,12 @@ public class ImageProcessing {
     // Uses a cached pool to dynamically spin up threads based on available CPU cores
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
-    private final AstrometryDotNet astrometryNetInterface = new AstrometryDotNet();
     private final AppConfig appConfig;
     private final File appConfigFile;
+    private final PlateSolveService plateSolveService;
+    private final StandardDetectionPipelineService standardDetectionPipelineService;
+    private final IterativeDetectionPipelineService iterativeDetectionPipelineService;
+    private final FitsVisualizationRenderer fitsVisualizationRenderer;
 
     private FitsFileInformation[] cachedFileInfo;
 
@@ -404,6 +261,10 @@ public class ImageProcessing {
             }
         }
         this.appConfig = (loadedConfig != null) ? loadedConfig : new AppConfig();
+        this.plateSolveService = new PlateSolveService(this.appConfig);
+        this.standardDetectionPipelineService = new StandardDetectionPipelineService(this.appConfig);
+        this.iterativeDetectionPipelineService = new IterativeDetectionPipelineService(this.appConfig, this.standardDetectionPipelineService);
+        this.fitsVisualizationRenderer = new FitsVisualizationRenderer();
     }
 
     // =========================================================================
@@ -568,31 +429,8 @@ public class ImageProcessing {
      * session report plus associated visualizations.
      */
     public File detectObjects(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
-        PipelineExecutionData executionData = runDetectionPipeline(config, progressListener);
-
-        if (safetyPrompt != null) {
-            DetectionSummary detectionSummary = summarizeDetections(executionData.getPipelineResult());
-            if (!safetyPrompt.shouldProceed(detectionSummary)) {
-                System.out.println("Report generation aborted by UI callback. Detection count: " + detectionSummary.totalDetections);
-                return null;
-            }
-        }
-
-        System.out.println("\n--- PHASE 5: Exporting Visualizations ---");
-        if (progressListener != null) {
-            progressListener.onProgressUpdate(90, "Exporting tracks and generating HTML report...");
-        }
-
-        try {
-            File reportFile = exportDetectionReport(executionData);
-            if (progressListener != null) {
-                progressListener.onProgressUpdate(100, "Finished!");
-            }
-            return reportFile;
-        } catch (IOException e) {
-            System.err.println("Failed to export visualizations: " + e.getMessage());
-        }
-        return null;
+        if (this.cachedFileInfo == null) getFitsfileInformation();
+        return standardDetectionPipelineService.detectObjects(config, this.cachedFileInfo, safetyPrompt, progressListener);
     }
 
     /**
@@ -600,88 +438,15 @@ public class ImageProcessing {
      * any report artifacts to disk.
      */
     public PipelineExecutionData runDetectionPipeline(DetectionConfig config, TransientEngineProgressListener progressListener) throws Exception {
-        long startTime = System.currentTimeMillis();
-
         if (this.cachedFileInfo == null) getFitsfileInformation();
-        int numFrames = this.cachedFileInfo.length;
-
-        System.out.println("\n--- Loading " + numFrames + " FITS files for JTransient Engine ---");
-
-        List<ImageFrame> framesForLibrary = new ArrayList<>();
-        List<short[][]> rawFramesForExport = new ArrayList<>();
-
-        for (int i = 0; i < numFrames; i++) {
-
-            if (progressListener != null) {
-                int percent = (int) (((float) i / numFrames) * 20);
-                progressListener.onProgressUpdate(percent, "Loading frame " + (i + 1) + " of " + numFrames + "...");
-            }
-
-            File currentFile = new File(this.cachedFileInfo[i].getFilePath());
-            try (Fits fitsFile = new Fits(currentFile)) {
-                BasicHDU<?> hdu = getImageHDU(fitsFile);
-                Object kernel = hdu.getKernel();
-
-                if (!(kernel instanceof short[][])) {
-                    throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString());
-                }
-
-                short[][] imageData = (short[][]) kernel;
-                long timestamp = this.cachedFileInfo[i].getObservationTimestamp();
-                long exposure = this.cachedFileInfo[i].getExposureDurationMillis();
-                framesForLibrary.add(new ImageFrame(i, currentFile.getName(), imageData, timestamp, exposure));
-                rawFramesForExport.add(imageData);
-            }
-        }
-
-        logPipelineFrameTimingPayload("Standard pipeline", framesForLibrary, this.cachedFileInfo);
-
-        System.out.println("\n--- Passing data to JTransient Engine ---");
-        if (progressListener != null) {
-            progressListener.onProgressUpdate(20, "Initializing JTransient Engine...");
-        }
-
-        DetectionConfig effectiveConfig = createEffectiveDetectionConfig(config, framesForLibrary.size());
-
-        JTransientEngine engine = new JTransientEngine();
-        JTransientEngine.DEBUG = true;
-
-        PipelineResult result;
-        try {
-            result = engine.runPipeline(framesForLibrary, effectiveConfig, progressListener);
-        } finally {
-            engine.shutdown();
-        }
-        result = suppressLatePhaseOutputsWhenTooFewFramesRemain(result);
-
-        long pipelineDuration = System.currentTimeMillis() - startTime;
-        System.out.println("Total Pipeline Time: " + pipelineDuration + "ms");
-
-        return new PipelineExecutionData(result, effectiveConfig, this.cachedFileInfo, rawFramesForExport, pipelineDuration);
+        return standardDetectionPipelineService.runDetectionPipeline(config, this.cachedFileInfo, progressListener);
     }
 
     /**
      * Exports the HTML report and visualization bundle for a previously executed pipeline run.
      */
     public File exportDetectionReport(PipelineExecutionData executionData) throws IOException {
-        if (executionData == null) {
-            throw new IllegalArgumentException("executionData must not be null");
-        }
-
-        FitsFileInformation[] filesInformation = executionData.getFilesInformation();
-        if (filesInformation.length == 0) {
-            return null;
-        }
-
-        File exportDir = createDetectionsDirectory(new File(filesInformation[0].getFilePath()));
-        ImageDisplayUtils.exportTrackVisualizations(
-                executionData.getPipelineResult(),
-                executionData.getRawFramesForExport(),
-                filesInformation,
-                exportDir,
-                executionData.getEffectiveConfig(),
-                appConfig);
-        return new File(exportDir, ImageDisplayUtils.detectionReportName);
+        return standardDetectionPipelineService.exportDetectionReport(executionData);
     }
 
 // =========================================================================
@@ -693,341 +458,13 @@ public class ImageProcessing {
      * across several pass sizes while sharing a single global master stack.
      */
     public File detectSlowObjectsIterative(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener, int maxFramesLimit) throws Exception {
-        long startTime = System.currentTimeMillis();
-
         if (this.cachedFileInfo == null) getFitsfileInformation();
-        int numFrames = this.cachedFileInfo.length;
-
-        if (numFrames < 5) {
-            System.out.println("Not enough frames for iterative detection. Falling back to standard pipeline.");
-            return detectObjects(config, safetyPrompt, progressListener);
-        }
-
-        System.out.println("\n--- Starting ITERATIVE PIPELINE for " + numFrames + " FITS files (On-Demand Loading) ---");
-
-        File parentDir = new File(this.cachedFileInfo[0].getFilePath()).getParentFile();
-        if (parentDir == null) {
-            parentDir = new File(System.getProperty("user.dir"));
-        }
-        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        File masterDir = new File(parentDir, "iterative_detections_" + timestamp);
-
-        if (!masterDir.exists()) {
-            masterDir.mkdirs();
-        }
-
-        // Calculate the absolute highest pass we will perform based on the user limit
-        int targetMaxLimit = (maxFramesLimit > 0 && maxFramesLimit < numFrames) ? maxFramesLimit : numFrames;
-        if (targetMaxLimit < 5) {
-            targetMaxLimit = 5;
-        }
-
-        System.out.println("\n--- Extracting Timestamps & Exposures for Temporal Spacing ---");
-        long[] frameTimestamps = new long[numFrames];
-        long[] frameExposures = new long[numFrames];
-        boolean hasValidTime = true;
-        for (int i = 0; i < numFrames; i++) {
-            frameTimestamps[i] = this.cachedFileInfo[i].getObservationTimestamp();
-            frameExposures[i] = this.cachedFileInfo[i].getExposureDurationMillis();
-            if (frameTimestamps[i] == -1) {
-                hasValidTime = false;
-            }
-        }
-
-        System.out.println("\n--- Generating Global Master Map from " + targetMaxLimit + " globally spaced frames ---");
-        TransientEngineProgressListener masterListener = (percent, msg) -> {
-            if (progressListener != null) {
-                progressListener.onProgressUpdate(percent / 5, "Global Master Map: " + msg); // Uses 0-20%
-            }
-        };
-
-        JTransientEngine globalEngine = new JTransientEngine();
-        List<ImageFrame> masterFrames = new ArrayList<>();
-
-        List<Integer> masterIndices = getSampledIndices(frameTimestamps, hasValidTime, numFrames, targetMaxLimit);
-        for (int idx : masterIndices) {
-            File currentFile = new File(this.cachedFileInfo[idx].getFilePath());
-            try (Fits fitsFile = new Fits(currentFile)) {
-                BasicHDU<?> hdu = getImageHDU(fitsFile);
-                Object kernel = hdu.getKernel();
-                if (!(kernel instanceof short[][])) {
-                    throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString() + " in file " + currentFile.getName());
-                }
-                masterFrames.add(new ImageFrame(idx, currentFile.getName(), (short[][]) kernel, frameTimestamps[idx], frameExposures[idx]));
-            }
-        }
-
-        short[][] providedMasterStack = globalEngine.generateMasterStack(masterFrames, config, masterListener);
-        masterFrames.clear(); // Free memory
-        System.gc(); // Encourage GC to reclaim the loaded frames
-
-        // Calculate total iterations to scale the progress bar properly
-        int totalIterations = (int) Math.ceil((targetMaxLimit - 4.0) / 5.0);
-        int currentIteration = 0;
-        List<ImageDisplayUtils.IterationSummary> summaries = new ArrayList<>();
-
-        // 3. The Iteration Loop (5, 10, 15... up to the user's maximum limit)
-        for (int k = 5; k <= targetMaxLimit; k += 5) {
-            System.out.println("\n>>> RUNNING ITERATION: " + k + " Frames (Time-Spaced)");
-
-            // --- PROGRESS UPDATE: The SCALED Listener ---
-            // We map the engine's 0-100% output to fit within this specific iteration's window (20% to 100%)
-            final int basePercent = 20 + (int) (((float) currentIteration / totalIterations) * 80);
-            final int nextBasePercent = 20 + (int) (((float) (currentIteration + 1) / totalIterations) * 80);
-
-            final int currentK = k;
-            TransientEngineProgressListener scaledListener = (enginePercent, message) -> {
-                if (progressListener != null) {
-                    int scaledPercent = basePercent + (int) ((enginePercent / 100.0f) * (nextBasePercent - basePercent));
-                    progressListener.onProgressUpdate(scaledPercent, "Pass " + currentK + " frames: " + message);
-                }
-            };
-
-            // --- ON-DEMAND LOADING for the engine ---
-            if (progressListener != null) {
-                // Use the scaled listener to show progress within the current iteration's slice
-                scaledListener.onProgressUpdate(0, "Loading " + k + " frames for engine...");
-            }
-
-            List<Integer> sampledIndices = getSampledIndices(frameTimestamps, hasValidTime, numFrames, k);
-
-            List<ImageFrame> spacedSubset = new ArrayList<>();
-            for (int index : sampledIndices) {
-                File currentFile = new File(this.cachedFileInfo[index].getFilePath());
-                try (Fits fitsFile = new Fits(currentFile)) {
-                    BasicHDU<?> hdu = getImageHDU(fitsFile);
-                    Object kernel = hdu.getKernel();
-                    if (!(kernel instanceof short[][])) {
-                        throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString() + " in file " + currentFile.getName());
-                    }
-                    short[][] imageData = (short[][]) kernel;
-                    // The ImageFrame needs the original index in the full sequence
-                    spacedSubset.add(new ImageFrame(index, currentFile.getName(), imageData, frameTimestamps[index], frameExposures[index]));
-                }
-            }
-
-            logPipelineFrameTimingPayload("Iterative pass " + k, spacedSubset, this.cachedFileInfo);
-
-            DetectionConfig effectiveConfig = createEffectiveDetectionConfig(config, spacedSubset.size());
-
-            JTransientEngine engine = new JTransientEngine();
-            // Pass the SCALED listener and the pre-computed Master Stack to the engine
-            PipelineResult result = engine.runPipeline(spacedSubset, effectiveConfig, scaledListener, providedMasterStack);
-            engine.shutdown();
-
-            DetectionSummary detectionSummary = summarizeDetections(result);
-            if (safetyPrompt != null && !safetyPrompt.shouldProceed(detectionSummary)) {
-                System.out.println("Iteration " + k + " aborted by UI callback due to high detection count. Stopping further iterations.");
-                break;
-            }
-
-            // --- ON-DEMAND LOADING for the export ---
-            // This is I/O intensive but perfectly memory-safe for very large datasets!
-            if (progressListener != null) {
-                scaledListener.onProgressUpdate(95, "Generating report (on-demand disk reads)...");
-            }
-
-            final FitsFileInformation[] currentFitsFiles = this.cachedFileInfo;
-            List<short[][]> rawFramesForExport = new java.util.AbstractList<short[][]>() {
-                @Override
-                public short[][] get(int index) {
-                    try {
-                        File currentFile = new File(currentFitsFiles[index].getFilePath());
-                        try (Fits fitsFile = new Fits(currentFile)) {
-                            BasicHDU<?> hdu = getImageHDU(fitsFile);
-                            Object kernel = hdu.getKernel();
-                            if (!(kernel instanceof short[][])) {
-                                throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass().toString() + " in file " + currentFile.getName());
-                            }
-                            return (short[][]) kernel;
-                        }
-                    } catch (Exception e) {
-                        throw new RuntimeException("Failed to read frame " + index + " on demand: " + e.getMessage(), e);
-                    }
-                }
-
-                @Override
-                public int size() {
-                    return currentFitsFiles.length;
-                }
-            };
-
-            File iterationDir = new File(masterDir, k + "_frames");
-            iterationDir.mkdirs();
-
-            try {
-                ImageDisplayUtils.exportTrackVisualizations(result, rawFramesForExport, this.cachedFileInfo, iterationDir, effectiveConfig, appConfig);
-
-            } catch (IOException e) {
-                System.err.println("Failed to export visualization for iteration " + k + ": " + e.getMessage());
-            }
-
-            int anomalyCount = result.anomalies == null ? 0 : result.anomalies.size();
-            summaries.add(new ImageDisplayUtils.IterationSummary(k, k + "_frames", result.tracks.size(), anomalyCount));
-
-            currentIteration++;
-        }
-
-        // --- PROGRESS UPDATE: Finished! ---
-        if (progressListener != null) {
-            progressListener.onProgressUpdate(100, "All iterative passes complete!");
-        }
-
-        File indexFile = new File(masterDir, "index.html");
-        try {
-            ImageDisplayUtils.exportIterativeIndexReport(masterDir, summaries);
-            System.out.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
-            return indexFile;
-        } catch (IOException e) {
-            System.err.println("Failed to write iterative index report: " + e.getMessage());
-        }
-
-        System.out.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
-        return masterDir;
-    }
-
-    /**
-     * Condenses the engine result into coarse detection categories for UI confirmation prompts.
-     */
-    private static DetectionSummary summarizeDetections(PipelineResult result) {
-        List<TrackLinker.Track> tracks = result.tracks != null ? result.tracks : Collections.emptyList();
-        List<TrackLinker.AnomalyDetection> anomalies = result.anomalies != null ? result.anomalies : Collections.emptyList();
-        int suspectedStreakTracks = 0;
-        int singleStreaks = 0;
-        int streakTracks = 0;
-        int movingTargets = 0;
-
-        for (TrackLinker.Track track : tracks) {
-            if (track == null || track.points == null || track.points.isEmpty()) {
-                continue;
-            }
-
-            if (track.isSuspectedStreakTrack) {
-                suspectedStreakTracks++;
-                continue;
-            }
-
-            if (track.points.size() == 1) {
-                singleStreaks++;
-            } else if (track.isStreakTrack) {
-                streakTracks++;
-            } else {
-                movingTargets++;
-            }
-        }
-
-        SlowMoverAnalysis slowMoverAnalysis = result.slowMoverAnalysis != null
-                ? result.slowMoverAnalysis
-                : SlowMoverAnalysis.empty();
-        int slowMoverCandidates = !slowMoverAnalysis.candidates.isEmpty()
-                ? slowMoverAnalysis.candidates.size()
-                : (result.slowMoverCandidates == null ? 0 : result.slowMoverCandidates.size());
-        ResidualTransientAnalysis residualAnalysis = result.residualTransientAnalysis != null
-                ? result.residualTransientAnalysis
-                : ResidualTransientAnalysis.empty();
-        int localRescueCandidates = residualAnalysis.localRescueCandidates.size();
-        int localActivityClusters = residualAnalysis.localActivityClusters.size();
-        int anomalyCount = anomalies.size();
-
-        return new DetectionSummary(
-                singleStreaks + streakTracks + movingTargets + anomalyCount + suspectedStreakTracks
-                        + slowMoverCandidates + localRescueCandidates + localActivityClusters,
-                singleStreaks,
-                streakTracks,
-                movingTargets,
-                anomalyCount,
-                suspectedStreakTracks,
-                slowMoverCandidates,
-                localRescueCandidates,
-                localActivityClusters);
-    }
-
-    static PipelineResult suppressLatePhaseOutputsWhenTooFewFramesRemain(PipelineResult result) {
-        if (result == null || result.telemetry == null) {
-            return result;
-        }
-
-        int keptFrames = result.telemetry.totalFramesKept;
-        if (keptFrames >= MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS) {
-            return result;
-        }
-
-        System.out.println(
-                "Only " + keptFrames
-                        + " frames remained after quality control. Suppressing downstream multi-frame report outputs.");
-
-        result.telemetry.totalTracksFound = 0;
-        result.telemetry.totalAnomaliesFound = 0;
-        result.telemetry.totalSuspectedStreakTracksFound = 0;
-        result.telemetry.trackerTelemetry = null;
-        result.telemetry.slowMoverTelemetry = null;
-
-        return new PipelineResult(
-                Collections.emptyList(),
-                result.telemetry,
-                result.masterStackData,
-                result.masterStars == null ? Collections.emptyList() : result.masterStars,
-                SlowMoverAnalysis.empty(),
-                null,
-                null,
-                Collections.emptyList(),
-                Collections.emptyList(),
-                result.allTransients == null ? Collections.emptyList() : result.allTransients,
-                result.unclassifiedTransients == null ? Collections.emptyList() : result.unclassifiedTransients,
-                ResidualTransientAnalysis.empty(),
-                result.masterVetoMask,
-                result.driftPoints == null ? Collections.emptyList() : result.driftPoints,
-                result.maximumStackData);
-    }
-
-    /**
-     * Chooses a deterministic subset of frame indices, preferring timestamp spacing when valid
-     * times are available and falling back to index spacing otherwise.
-     */
-    private List<Integer> getSampledIndices(long[] times, boolean hasValidTime, int maxLimit, int k) {
-        List<Integer> indices = new ArrayList<>();
-
-        if (hasValidTime && maxLimit > 1) {
-            long startTime = times[0];
-            long endTime = times[maxLimit - 1];
-            long duration = endTime - startTime;
-
-            if (duration > 0) {
-                indices.add(0);
-                for (int i = 1; i < k - 1; i++) {
-                    long targetTime = startTime + (long) (i * duration / (double) (k - 1));
-                    int bestIdx = 0;
-                    long minDiff = Long.MAX_VALUE;
-                    for (int j = 0; j < maxLimit; j++) {
-                        long diff = Math.abs(times[j] - targetTime);
-                        if (diff < minDiff) {
-                            minDiff = diff;
-                            bestIdx = j;
-                        }
-                    }
-                    if (!indices.contains(bestIdx)) {
-                        indices.add(bestIdx);
-                    }
-                }
-                if (!indices.contains(maxLimit - 1)) {
-                    indices.add(maxLimit - 1);
-                }
-                Collections.sort(indices);
-
-                // Valid return only if time-based extraction found enough unique timestamps
-                if (indices.size() == k) {
-                    return indices;
-                }
-            }
-        }
-
-        // Fallback: Pure array-index spacing
-        indices.clear();
-        for (int i = 0; i < k; i++) {
-            int index = (int) Math.round(i * (maxLimit - 1) / (double) (k - 1));
-            indices.add(index);
-        }
-        return indices;
+        return iterativeDetectionPipelineService.detectSlowObjectsIterative(
+                config,
+                this.cachedFileInfo,
+                safetyPrompt,
+                progressListener,
+                maxFramesLimit);
     }
 
 // =========================================================================
@@ -1485,28 +922,7 @@ public class ImageProcessing {
      * external tooling.
      */
     public Future<PlateSolveResult> solve(String fitsFileFullPath, boolean astap, boolean astrometry) throws FitsException, IOException {
-        ApplicationWindow.logger.info("trying to solve image astap=" + astap + " astrometry=" + astrometry);
-
-        if (astap) {
-            String astapPath = appConfig.astapExecutablePath;
-            if (astapPath != null && (!"".equals(astapPath))) {
-                File astapPathFile = new File(astapPath);
-                if (astapPathFile.exists()) {
-                    Future<PlateSolveResult> task = ASTAPInterface.solveImage(astapPathFile, fitsFileFullPath);
-                    return task;
-                }
-            }
-            throw new IOException("ASTAP executable path is not correct:" + astapPath);
-        } else if (astrometry) {
-            try {
-                astrometryNetInterface.login();
-                SubmitFileRequest typicalParamsRequest = SubmitFileRequest.builder().withPublicly_visible("y").withScale_units("degwidth").withScale_lower(0.1f).withScale_upper(180.0f).withDownsample_factor(2f).withRadius(10f).build();
-                return astrometryNetInterface.customSolve(new File(fitsFileFullPath), typicalParamsRequest);
-            } catch (IOException | InterruptedException e) {
-                JOptionPane.showMessageDialog(new JFrame(), "Could not solve image with astrometry.net :" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            }
-        }
-        return null;
+        return plateSolveService.solve(fitsFileFullPath, astap, astrometry);
     }
 
     /**
@@ -1515,34 +931,10 @@ public class ImageProcessing {
      */
     public void applyWCSHeader(String wcsHeaderFile, int stretchFactor, int iterations, boolean stretch, StretchAlgorithm algo) throws IOException, FitsException {
         File[] fitsFileInformation = getFitsFilesDetails();
-        Fits[] fitsFiles = new Fits[fitsFileInformation.length];
-        for (int i = 0; i < fitsFiles.length; i++) {
-            fitsFiles[i] = new Fits(fitsFileInformation[i]);
-        }
-
-        Fits wcsHeaderFITS = new Fits(wcsHeaderFile);
-        Header wcsHeaderFITSHeader = getImageHDU(wcsHeaderFITS).getHeader();
-        String[] wcsHeaderElements = {"CTYPE", "CUNIT1", "CUNIT2", "WCSAXES", "IMAGEW", "IMAGEH", "A_ORDER", "B_ORDER", "AP_ORDER", "BP_ORDER", "CRPIX", "CRVAL", "CDELT", "CROTA", "CD1_", "CD2_", "EQUINOX", "LONPOLE", "LATPOLE", "A_", "B_", "AP_", "BP_"};
-
-        for (int i = 0; i < fitsFiles.length; i++) {
-            Header headerHDU = getImageHDU(fitsFiles[i]).getHeader();
-            Cursor<String, HeaderCard> wcsHeaderFITSHeaderIter = wcsHeaderFITSHeader.iterator();
-
-            while (wcsHeaderFITSHeaderIter.hasNext()) {
-                HeaderCard wcsHeaderFITSHeaderCard = wcsHeaderFITSHeaderIter.next();
-                String wcsHeaderKey = wcsHeaderFITSHeaderCard.getKey();
-                for (String wcsKeyword : wcsHeaderElements) {
-                    if (wcsHeaderKey.startsWith(wcsKeyword)) {
-                        headerHDU.deleteKey(wcsHeaderKey);
-                        headerHDU.addLine(wcsHeaderFITSHeaderCard);
-                        break;
-                    }
-                }
-            }
-            writeUpdatedFITSFile(fitsFileInformation[i], fitsFiles[i], stretchFactor, iterations, stretch, algo);
-        }
-        wcsHeaderFITS.close();
-        closeFitsFiles(fitsFiles);
+        plateSolveService.applyWCSHeader(
+                wcsHeaderFile,
+                fitsFileInformation,
+                (fitsFile, fits) -> writeUpdatedFITSFile(fitsFile, fits, stretchFactor, iterations, stretch, algo));
     }
 
     /**
@@ -1558,372 +950,15 @@ public class ImageProcessing {
     }
 
     /**
-     * Downloads a remote file to disk and returns the number of bytes written.
-     */
-    public static int downloadFile(URL fileURL, String targetFilePath) throws IOException {
-        ApplicationWindow.logger.info("downloading : " + fileURL.toString() + " to " + targetFilePath);
-        File targetfile = new File(targetFilePath);
-        if (targetfile.exists()) {
-            targetfile.delete();
-            ApplicationWindow.logger.info("deleted pre-existing : " + targetFilePath);
-        }
-
-        BufferedInputStream in = new BufferedInputStream(fileURL.openStream());
-        FileOutputStream fileOutputStream = new FileOutputStream(targetFilePath);
-        byte dataBuffer[] = new byte[1024];
-        int bytesRead;
-        int totalBytesRead = 0;
-        while ((bytesRead = in.read(dataBuffer, 0, 1024)) != -1) {
-            fileOutputStream.write(dataBuffer, 0, bytesRead);
-            totalBytesRead += bytesRead;
-        }
-        fileOutputStream.close();
-        return totalBytesRead;
-    }
-
-    /**
      * Safely injects Plate Solve WCS coordinates directly into the original FITS header.
      * Uses a temporary file swap to prevent data corruption.
      */
     public Map<String, String> updateFitsHeaderWithWCS(String fitsFileFullPath, Map<String, String> wcsData) throws Exception {
-        if (wcsData == null || wcsData.isEmpty()) {
-            throw new IOException("No WCS solution metadata was provided.");
-        }
-
-        File originalFile = new File(fitsFileFullPath);
-        File tempFile = new File(fitsFileFullPath + ".tmp");
-        Map<String, String> updatedHeader;
-
-        try (Fits fits = new Fits(originalFile)) {
-            BasicHDU<?> hdu = getImageHDU(fits);
-            if (hdu == null || hdu.getHeader() == null) {
-                throw new IOException("Could not locate an image header in " + originalFile.getName());
-            }
-
-            Header header = hdu.getHeader();
-            clearExistingWcsHeader(header);
-            clearLegacySolveMetadata(header);
-
-            List<HeaderCard> wcsHeaderCards = resolveWcsHeaderCards(wcsData);
-            for (HeaderCard card : wcsHeaderCards) {
-                header.addLine(card.copy());
-            }
-
-            writeSolveProvenance(header, wcsData);
-            updatedHeader = extractHeaderMap(header);
-            fits.write(tempFile);
-        }
-
-        if (originalFile.delete()) {
-            if (!tempFile.renameTo(originalFile)) {
-                throw new IOException("Failed to rename temporary FITS file back to original.");
-            }
-        } else {
-            throw new IOException("Failed to delete original FITS file to overwrite it.");
-        }
-
-        return updatedHeader;
+        return plateSolveService.updateFitsHeaderWithWCS(fitsFileFullPath, wcsData);
     }
 
     public void cleanupSolveArtifacts(String fitsFileFullPath, PlateSolveResult result) {
-        if (fitsFileFullPath == null || fitsFileFullPath.isEmpty()) {
-            return;
-        }
-
-        deleteFileQuietly(getLegacySolveResultFile(fitsFileFullPath));
-        deleteFileQuietly(getLegacyWcsSidecarFile(fitsFileFullPath, ".wcs"));
-        deleteFileQuietly(getLegacyWcsSidecarFile(fitsFileFullPath, ".WCS"));
-        deleteFileQuietly(getLegacyAstapIniFile(fitsFileFullPath));
-
-        if (result == null || result.getSolveInformation() == null) {
-            return;
-        }
-
-        deleteFileQuietly(resolveLocalFileReference(normalizeExternalUrl(getSolveMetadataValue(result.getSolveInformation(), "wcs_link"))));
-        deleteFileQuietly(resolveLocalFileReference(normalizeExternalUrl(getSolveMetadataValue(result.getSolveInformation(), "annotated_image_link"))));
-    }
-
-    private List<HeaderCard> resolveWcsHeaderCards(Map<String, String> wcsData) throws Exception {
-        String wcsLink = normalizeExternalUrl(getSolveMetadataValue(wcsData, "wcs_link"));
-        if (wcsLink != null && !wcsLink.isEmpty()) {
-            List<HeaderCard> cards = loadWcsHeaderCardsFromReference(wcsLink);
-            if (!cards.isEmpty()) {
-                return cards;
-            }
-        }
-
-        List<HeaderCard> cards = buildWcsHeaderCardsFromMetadata(wcsData);
-        if (!cards.isEmpty()) {
-            return cards;
-        }
-
-        throw new IOException("The solve result did not provide a usable WCS header.");
-    }
-
-    private List<HeaderCard> loadWcsHeaderCardsFromReference(String wcsReference) throws Exception {
-        File localWcsFile = resolveLocalFileReference(wcsReference);
-        if (localWcsFile != null) {
-            return readWcsHeaderCards(localWcsFile);
-        }
-
-        File temporaryWcsFile = Files.createTempFile("spacepixels-wcs-", ".fits").toFile();
-        try {
-            downloadFile(new URL(wcsReference), temporaryWcsFile.getAbsolutePath());
-            return readWcsHeaderCards(temporaryWcsFile);
-        } catch (Exception error) {
-            throw new IOException("Could not import WCS header from " + wcsReference + ": " + error.getMessage(), error);
-        } finally {
-            Files.deleteIfExists(temporaryWcsFile.toPath());
-        }
-    }
-
-    private File resolveLocalFileReference(String reference) {
-        if (reference == null || reference.isEmpty()) {
-            return null;
-        }
-
-        try {
-            URL url = new URL(reference);
-            if ("file".equalsIgnoreCase(url.getProtocol())) {
-                return new File(url.toURI());
-            }
-            return null;
-        } catch (Exception ignored) {
-            File file = new File(reference);
-            return file.isAbsolute() || file.exists() ? file : null;
-        }
-    }
-
-    private List<HeaderCard> readWcsHeaderCards(File wcsFitsFile) throws Exception {
-        try (Fits wcsFits = new Fits(wcsFitsFile)) {
-            BasicHDU<?> hdu = getImageHDU(wcsFits);
-            if (hdu == null || hdu.getHeader() == null) {
-                return Collections.emptyList();
-            }
-
-            List<HeaderCard> cards = new ArrayList<>();
-            Cursor<String, HeaderCard> iterator = hdu.getHeader().iterator();
-            while (iterator.hasNext()) {
-                HeaderCard card = iterator.next();
-                if (isWcsHeaderKey(card.getKey())) {
-                    cards.add(card.copy());
-                }
-            }
-            return cards;
-        }
-    }
-
-    private List<HeaderCard> buildWcsHeaderCardsFromMetadata(Map<String, String> metadata) throws HeaderCardException {
-        if (metadata == null || metadata.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        Header temporaryHeader = new Header();
-        for (Map.Entry<String, String> entry : metadata.entrySet()) {
-            if (entry.getKey() == null || entry.getValue() == null) {
-                continue;
-            }
-
-            String key = entry.getKey().toUpperCase(Locale.US);
-            if (!isWcsHeaderKey(key)) {
-                continue;
-            }
-
-            writeHeaderValue(temporaryHeader, key, entry.getValue());
-        }
-
-        List<HeaderCard> cards = new ArrayList<>();
-        Cursor<String, HeaderCard> iterator = temporaryHeader.iterator();
-        while (iterator.hasNext()) {
-            HeaderCard card = iterator.next();
-            if (isWcsHeaderKey(card.getKey())) {
-                cards.add(card.copy());
-            }
-        }
-        return cards;
-    }
-
-    private void clearExistingWcsHeader(Header header) {
-        if (header == null) {
-            return;
-        }
-
-        List<String> keysToDelete = new ArrayList<>();
-        Cursor<String, HeaderCard> iterator = header.iterator();
-        while (iterator.hasNext()) {
-            HeaderCard card = iterator.next();
-            if (isWcsHeaderKey(card.getKey())) {
-                keysToDelete.add(card.getKey());
-            }
-        }
-
-        for (String key : keysToDelete) {
-            if (header.containsKey(key)) {
-                header.deleteKey(key);
-            }
-        }
-    }
-
-    private void clearLegacySolveMetadata(Header header) {
-        if (header == null) {
-            return;
-        }
-
-        for (String key : new String[]{"RA", "DEC", "PIXSCALE", "PARITY", "RADIUS", "SOURCE", "WCS_LINK", "PLTSOLVD", "WARNING", "ERROR"}) {
-            if (header.containsKey(key)) {
-                header.deleteKey(key);
-            }
-        }
-    }
-
-    private boolean isWcsHeaderKey(String key) {
-        if (key == null || key.isEmpty()) {
-            return false;
-        }
-
-        String upperKey = key.toUpperCase(Locale.US);
-        return FIXED_WCS_HEADER_KEYS.contains(upperKey)
-                || upperKey.matches("CTYPE\\d+")
-                || upperKey.matches("CRPIX\\d+")
-                || upperKey.matches("CRVAL\\d+")
-                || upperKey.matches("CUNIT\\d+")
-                || upperKey.matches("CDELT\\d+")
-                || upperKey.matches("CROTA\\d+")
-                || upperKey.matches("CD\\d+_\\d+")
-                || upperKey.matches("PC\\d+_\\d+")
-                || upperKey.matches("PV\\d+_\\d+")
-                || upperKey.matches("PS\\d+_\\d+")
-                || upperKey.matches("A_\\d+_\\d+")
-                || upperKey.matches("B_\\d+_\\d+")
-                || upperKey.matches("AP_\\d+_\\d+")
-                || upperKey.matches("BP_\\d+_\\d+");
-    }
-
-    private String getSolveMetadataValue(Map<String, String> metadata, String key) {
-        if (metadata == null || metadata.isEmpty() || key == null || key.isEmpty()) {
-            return null;
-        }
-
-        String direct = metadata.get(key);
-        if (direct != null) {
-            return direct;
-        }
-
-        for (Map.Entry<String, String> entry : metadata.entrySet()) {
-            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
-                return entry.getValue();
-            }
-        }
-
-        return null;
-    }
-
-    private String normalizeExternalUrl(String value) {
-        if (value == null) {
-            return null;
-        }
-
-        String normalized = value.trim();
-        if (normalized.startsWith("'") && normalized.endsWith("'") && normalized.length() > 1) {
-            normalized = normalized.substring(1, normalized.length() - 1).trim();
-        }
-
-        normalized = normalized.replace("\\:", ":").replace("\\=", "=");
-        return normalized.isEmpty() ? null : normalized;
-    }
-
-    private void writeSolveProvenance(Header header, Map<String, String> wcsData) throws HeaderCardException {
-        String source = getSolveMetadataValue(wcsData, "source");
-        if (source != null && !source.isEmpty()) {
-            writeHeaderValue(header, "SOURCE", source);
-        }
-
-        String wcsLink = normalizeExternalUrl(getSolveMetadataValue(wcsData, "wcs_link"));
-        if (wcsLink != null && isRemoteReference(wcsLink)) {
-            writeHeaderValue(header, "WCS_LINK", wcsLink);
-        }
-    }
-
-    private boolean isRemoteReference(String reference) {
-        if (reference == null || reference.isEmpty()) {
-            return false;
-        }
-
-        try {
-            URL url = new URL(reference);
-            return !"file".equalsIgnoreCase(url.getProtocol());
-        } catch (Exception ignored) {
-            return false;
-        }
-    }
-
-    private Map<String, String> extractHeaderMap(Header header) {
-        Map<String, String> headerMap = new HashMap<>();
-        if (header == null) {
-            return headerMap;
-        }
-
-        Cursor<String, HeaderCard> iterator = header.iterator();
-        while (iterator.hasNext()) {
-            HeaderCard card = iterator.next();
-            if (card.getKey() != null && card.getValue() != null) {
-                headerMap.put(card.getKey(), card.getValue());
-            }
-        }
-        return headerMap;
-    }
-
-    private File getLegacySolveResultFile(String fitsFileFullPath) {
-        int extensionIndex = fitsFileFullPath.lastIndexOf('.');
-        String basePath = extensionIndex >= 0 ? fitsFileFullPath.substring(0, extensionIndex) : fitsFileFullPath;
-        return new File(basePath + "_result.ini");
-    }
-
-    private File getLegacyWcsSidecarFile(String fitsFileFullPath, String extension) {
-        int extensionIndex = fitsFileFullPath.lastIndexOf('.');
-        String basePath = extensionIndex >= 0 ? fitsFileFullPath.substring(0, extensionIndex) : fitsFileFullPath;
-        return new File(basePath + extension);
-    }
-
-    private File getLegacyAstapIniFile(String fitsFileFullPath) {
-        int extensionIndex = fitsFileFullPath.lastIndexOf('.');
-        String basePath = extensionIndex >= 0 ? fitsFileFullPath.substring(0, extensionIndex) : fitsFileFullPath;
-        return new File(basePath + ".ini");
-    }
-
-    private void deleteFileQuietly(File file) {
-        if (file == null || !file.isFile()) {
-            return;
-        }
-
-        try {
-            Files.deleteIfExists(file.toPath());
-        } catch (IOException ignored) {
-        }
-    }
-
-    private void writeHeaderValue(Header header, String key, String value) throws HeaderCardException {
-        if (header == null || key == null || key.isEmpty() || value == null) {
-            return;
-        }
-
-        if (header.containsKey(key)) {
-            header.deleteKey(key);
-        }
-
-        try {
-            if (value.contains(".")) {
-                header.addValue(key, Double.parseDouble(value), "SpacePixels WCS");
-            } else {
-                header.addValue(key, Integer.parseInt(value), "SpacePixels WCS");
-            }
-        } catch (NumberFormatException e) {
-            String cleanValue = value;
-            if (cleanValue.startsWith("'") && cleanValue.endsWith("'")) {
-                cleanValue = cleanValue.substring(1, cleanValue.length() - 1).trim();
-            }
-            header.addValue(key, cleanValue, "SpacePixels WCS");
-        }
+        plateSolveService.cleanupSolveArtifacts(fitsFileFullPath, result);
     }
 
     /**
@@ -2007,36 +1042,8 @@ public class ImageProcessing {
      */
     private Fits convertToMono(Fits colorFITSImage) throws FitsException, IOException {
         BasicHDU<?> originalHDU = getImageHDU(colorFITSImage);
-        Object monoKernelData = convertColorKernelToMono(originalHDU.getKernel());
-        Fits updatedFits = new Fits();
-        updatedFits.addHDU(FitsFactory.hduFactory(monoKernelData));
-
-        Cursor<String, HeaderCard> updatedFitsHeaderIterator = updatedFits.getHDU(0).getHeader().iterator();
-        while (updatedFitsHeaderIterator.hasNext()) {
-            updatedFitsHeaderIterator.next();
-            updatedFitsHeaderIterator.remove();
-        }
-
-        Cursor<String, HeaderCard> originalHeader = originalHDU.getHeader().iterator();
-        while (originalHeader.hasNext()) {
-            HeaderCard originalHeaderCard = originalHeader.next();
-            updatedFits.getHDU(0).getHeader().addLine(originalHeaderCard);
-        }
-
-        Cursor<String, HeaderCard> headerCursor = updatedFits.getHDU(0).getHeader().iterator();
-        headerCursor.setKey("NAXIS");
-        if (headerCursor.hasNext()) {
-            headerCursor.next();
-            headerCursor.remove();
-            headerCursor.add(new HeaderCard("NAXIS", 2, "replaced"));
-        }
-
-        headerCursor.setKey("NAXIS3");
-        if (headerCursor.hasNext()) {
-            headerCursor.next();
-            headerCursor.remove();
-        }
-        return updatedFits;
+        Object monoKernelData = FitsPixelConverter.convertColorKernelToMono(originalHDU.getKernel());
+        return FitsPixelConverter.createFitsFromData(monoKernelData, originalHDU.getHeader());
     }
 
     /**
@@ -2141,8 +1148,8 @@ public class ImageProcessing {
 
                 if (isColor) {
                     // 1. Convert to 16-bit Color
-                    short[][][] color16 = standardizeTo16BitColor(kernel);
-                    Fits colorFits = createFitsFromData(color16, origHeader);
+                    short[][][] color16 = FitsPixelConverter.standardizeTo16BitColor(kernel);
+                    Fits colorFits = FitsPixelConverter.createFitsFromData(color16, origHeader);
                     String colorName = addDirectory(file, "_16bit_color");
                     writeFitsWithSuffix(colorFits, colorName, "_16bit_color");
 
@@ -2151,8 +1158,8 @@ public class ImageProcessing {
                     printFitsDebugInfo("CONVERTED 16-BIT COLOR", new File(finalColorPath));
 
                     // 2. Extract Luminance to 16-bit Mono
-                    short[][] mono16 = extractLuminance(color16);
-                    Fits monoFits = createFitsFromData(mono16, origHeader);
+                    short[][] mono16 = FitsPixelConverter.extractLuminance(color16);
+                    Fits monoFits = FitsPixelConverter.createFitsFromData(mono16, origHeader);
 
                     // Note: No manual header hacking needed here anymore!
                     // createFitsFromData safely handles NAXIS and NAXIS3 automatically.
@@ -2166,8 +1173,8 @@ public class ImageProcessing {
 
                 } else {
                     // Convert to 16-bit Mono
-                    short[][] mono16 = standardizeTo16BitMono(kernel);
-                    Fits monoFits = createFitsFromData(mono16, origHeader);
+                    short[][] mono16 = FitsPixelConverter.standardizeTo16BitMono(kernel);
+                    Fits monoFits = FitsPixelConverter.createFitsFromData(mono16, origHeader);
                     String monoName = addDirectory(file, "_16bit_converted");
                     if (targetDir == null) targetDir = new File(monoName).getParentFile();
                     writeFitsWithSuffix(monoFits, monoName, "_16bit");
@@ -2182,43 +1189,6 @@ public class ImageProcessing {
             SwingUtilities.invokeLater(() -> progressDialog.dispose());
         }
         return targetDir;
-    }
-
-    /**
-     * Builds a new FITS container from converted pixel data while preserving non-structural header
-     * cards and restoring the unsigned-16-bit interpretation through `BZERO`/`BSCALE`.
-     */
-    static Fits createFitsFromData(Object newData, Header originalHeader) throws FitsException, IOException {
-        Fits updatedFits = new Fits();
-        BasicHDU<?> newHDU = FitsFactory.hduFactory(newData);
-        updatedFits.addHDU(newHDU);
-
-        Header newHeader = newHDU.getHeader();
-
-        java.util.List<String> structuralKeys = java.util.Arrays.asList(
-                "SIMPLE", "BITPIX", "NAXIS", "NAXIS1", "NAXIS2", "NAXIS3",
-                "EXTEND", "BZERO", "BSCALE"
-        );
-
-        Cursor<String, HeaderCard> originalCursor = originalHeader.iterator();
-        while (originalCursor.hasNext()) {
-            HeaderCard card = originalCursor.next();
-            String key = card.getKey();
-
-            if (key != null && !structuralKeys.contains(key)) {
-                if (!newHeader.containsKey(key)) {
-                    newHeader.addLine(card);
-                }
-            }
-        }
-
-        // --- THE CRITICAL FIX ---
-        // Explicitly tell the FITS format that this signed 16-bit array
-        // actually represents unsigned 0-65535 data!
-        newHeader.addValue("BZERO", 32768.0, "offset data range to that of unsigned short");
-        newHeader.addValue("BSCALE", 1.0, "default scaling factor");
-
-        return updatedFits;
     }
 
 // =========================================================================
@@ -2290,673 +1260,31 @@ public class ImageProcessing {
     }
 
     /**
-     * Converts supported mono kernels into the signed-short storage layout used for unsigned 16-bit
-     * FITS export.
-     */
-    static short[][] standardizeTo16BitMono(Object kernel) throws IOException {
-        if (kernel instanceof float[][]) {
-            float[][] floatData = (float[][]) kernel;
-            int height = floatData.length;
-            int width = floatData[0].length;
-            short[][] shortData = new short[height][width];
-
-            float maxVal = -Float.MAX_VALUE;
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    if (floatData[y][x] > maxVal) maxVal = floatData[y][x];
-                }
-            }
-            // Standard FITS floats are 0.0 to 1.0, but hot pixels/bright stars
-            // frequently overshoot to values like 1.14 or 2.5.
-            float scaleFactor = (maxVal <= 10.0f && maxVal > 0.0f) ? 65535.0f : 1.0f;
-
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    float trueVal = floatData[y][x] * scaleFactor;
-                    if (trueVal < 0) trueVal = 0;
-                    if (trueVal > 65535) trueVal = 65535;
-
-                    // The FITS Shift: Map 0...65535 down to -32768...32767
-                    int shiftedVal = Math.round(trueVal) - 32768;
-                    shortData[y][x] = (short) shiftedVal;
-                }
-            }
-            return shortData;
-        } else if (kernel instanceof int[][]) {
-            int[][] intData = (int[][]) kernel;
-            int height = intData.length;
-            int width = intData[0].length;
-            short[][] shortData = new short[height][width];
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    int trueVal = intData[y][x];
-                    if (trueVal < 0) trueVal = 0;
-                    if (trueVal > 65535) trueVal = 65535;
-
-                    // The FITS Shift
-                    shortData[y][x] = (short) (trueVal - 32768);
-                }
-            }
-            return shortData;
-        }
-        throw new IOException("Unsupported FITS format for Mono Standardization");
-    }
-
-    /**
-     * Converts supported color kernels into a 16-bit signed-short RGB cube suitable for FITS
-     * export and later luminance extraction.
-     */
-    static short[][][] standardizeTo16BitColor(Object kernel) throws IOException {
-        if (kernel instanceof float[][][]) {
-            float[][][] floatData = (float[][][]) kernel;
-            int depth = floatData.length;
-            int height = floatData[0].length;
-            int width = floatData[0][0].length;
-            short[][][] shortData = new short[depth][height][width];
-
-            float maxVal = -Float.MAX_VALUE;
-            for (int z = 0; z < depth; z++) {
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        if (floatData[z][y][x] > maxVal) maxVal = floatData[z][y][x];
-                    }
-                }
-            }
-            // Standard FITS floats are 0.0 to 1.0, but hot pixels/bright stars
-            // frequently overshoot to values like 1.14 or 2.5.
-            float scaleFactor = (maxVal <= 10.0f && maxVal > 0.0f) ? 65535.0f : 1.0f;
-
-            for (int z = 0; z < depth; z++) {
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        float trueVal = floatData[z][y][x] * scaleFactor;
-                        if (trueVal < 0) trueVal = 0;
-                        if (trueVal > 65535) trueVal = 65535;
-
-                        // The FITS Shift
-                        int shiftedVal = Math.round(trueVal) - 32768;
-                        shortData[z][y][x] = (short) shiftedVal;
-                    }
-                }
-            }
-            return shortData;
-        } else if (kernel instanceof int[][][]) {
-            int[][][] intData = (int[][][]) kernel;
-            int depth = intData.length;
-            int height = intData[0].length;
-            int width = intData[0][0].length;
-            short[][][] shortData = new short[depth][height][width];
-            for (int z = 0; z < depth; z++) {
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        int trueVal = intData[z][y][x];
-                        if (trueVal < 0) trueVal = 0;
-                        if (trueVal > 65535) trueVal = 65535;
-
-                        // The FITS Shift
-                        shortData[z][y][x] = (short) (trueVal - 32768);
-                    }
-                }
-            }
-            return shortData;
-        }
-        throw new IOException("Unsupported FITS format for Color Standardization");
-    }
-
-    /**
-     * Produces a simple luminance plane from a 16-bit RGB cube using an equal-channel average.
-     */
-    static short[][] extractLuminance(short[][][] color16) {
-        int height = color16[0].length;
-        int width = color16[0][0].length;
-        short[][] monoData = new short[height][width];
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                // Standard algebraic average safely maintains the FITS BZERO shift
-                int r = color16[0][y][x];
-                int g = color16[1][y][x];
-                int b = color16[2][y][x];
-                monoData[y][x] = (short) ((r + g + b) / 3);
-            }
-        }
-        return monoData;
-    }
-
-    /**
-     * Converts an in-memory 16-bit color cube to a mono plane without changing the FITS container.
-     */
-    static short[][] convertColorKernelToMono(Object kernelData) throws FitsException {
-        if (kernelData instanceof short[][][]) {
-            short[][][] data = (short[][][]) kernelData;
-            short[][] monoData = new short[data[0].length][data[0][0].length];
-
-            for (int i = 0; i < data[0].length; i++) {
-                for (int j = 0; j < data[0][i].length; j++) {
-                    short val1 = data[0][i][j];
-                    short val2 = data[1][i][j];
-                    short val3 = data[2][i][j];
-
-                    int average = ((val1 + val2 + val3) / 3);
-                    monoData[i][j] = (short) average;
-                }
-            }
-            return monoData;
-
-        } else {
-            throw new FitsException("Cannot convert to mono. Expected 16-bit color (short[][][]), but received type=" + kernelData.getClass().getName());
-        }
-    }
-
-    /**
      * Applies the selected stretch algorithm directly to a FITS image in memory.
      */
     public void stretchFITSImage(Fits fitsImage, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException, IOException {
-        BasicHDU<?> hdu = getImageHDU(fitsImage);
-        Object kernelData = hdu.getKernel();
-
-        if (kernelData instanceof short[][]) {
-            short[][] data = (short[][]) kernelData;
-            short[][] stretchedData = (short[][]) stretchImageData(data, stretchFactor, iterations, data[0].length, data.length, algo);
-            for (int i = 0; i < data.length; i++) {
-                for (int j = 0; j < data[i].length; j++) {
-                    data[i][j] = stretchedData[i][j];
-                }
-            }
-
-        } else if (kernelData instanceof int[][]) {
-            int[][] data = (int[][]) kernelData;
-
-        } else if (kernelData instanceof float[][]) {
-            float[][] data = (float[][]) kernelData;
-
-        } else if (kernelData instanceof short[][][]) {
-            short[][][] data = (short[][][]) kernelData;
-
-            short[][] stretchedRedData = (short[][]) stretchImageData(data[0], stretchFactor, iterations, data[0][0].length, data[0].length, algo);
-            short[][] stretchedGreenData = (short[][]) stretchImageData(data[1], stretchFactor, iterations, data[1][0].length, data[1].length, algo);
-            short[][] stretchedBlueData = (short[][]) stretchImageData(data[2], stretchFactor, iterations, data[2][0].length, data[2].length, algo);
-
-            for (int i = 0; i < data[0].length; i++) {
-                for (int j = 0; j < data[0][i].length; j++) {
-                    if (algo.equals(StretchAlgorithm.EXTREME)) {
-                        short max = stretchedRedData[i][j];
-                        if (max < stretchedGreenData[i][j]) {
-                            max = stretchedGreenData[i][j];
-                        }
-                        if (max < stretchedBlueData[i][j]) {
-                            max = stretchedBlueData[i][j];
-                        }
-                        stretchedRedData[i][j] = max;
-                        stretchedGreenData[i][j] = max;
-                        stretchedBlueData[i][j] = max;
-                    }
-
-                    data[0][i][j] = (short) (stretchedRedData[i][j]);
-                    data[1][i][j] = (short) (stretchedGreenData[i][j]);
-                    data[2][i][j] = (short) (stretchedBlueData[i][j]);
-                }
-            }
-        } else if (kernelData instanceof int[][][]) {
-            int[][][] data = (int[][][]) kernelData;
-        } else if (kernelData instanceof float[][][]) {
-            float[][][] data = (float[][][]) kernelData;
-        } else {
-            throw new FitsException("Cannot understand file, it has a type=" + kernelData.getClass().getName());
-        }
+        fitsVisualizationRenderer.stretchFitsImage(fitsImage, stretchFactor, iterations, algo);
     }
 
     /**
      * Builds a quick-look preview image from raw FITS kernel data without applying any stretch.
      */
     public BufferedImage getImagePreview(Object kernelData) throws FitsException {
-        BufferedImage ret = new BufferedImage(350, 350, BufferedImage.TYPE_INT_ARGB);
-
-        if (kernelData instanceof short[][]) {
-            short[][] data = (short[][]) kernelData;
-
-            int imageHeight = data.length;
-            int imageWidth = data[0].length;
-
-            if (imageWidth > 350) imageWidth = 350;
-            if (imageHeight > 350) imageHeight = 350;
-
-            for (int i = 0; i < imageHeight; i++) {
-                for (int j = 0; j < imageWidth; j++) {
-                    int convertedValue = ((int) data[i][j]) + ((int) Short.MAX_VALUE);
-                    float intensity = ((float) convertedValue) / (2 * (float) Short.MAX_VALUE);
-                    ret.setRGB(j, i, new Color(intensity, intensity, intensity, 1.0f).getRGB());
-                }
-            }
-        } else if (kernelData instanceof int[][]) {
-            int[][] data = (int[][]) kernelData;
-        } else if (kernelData instanceof float[][]) {
-            float[][] data = (float[][]) kernelData;
-        } else if (kernelData instanceof short[][][]) {
-            short[][][] data = (short[][][]) kernelData;
-
-            int imageHeight = data[0].length;
-            int imageWidth = data[0][0].length;
-
-            if (imageWidth > 350) imageWidth = 350;
-            if (imageHeight > 350) imageHeight = 350;
-
-            for (int i = 0; i < imageHeight; i++) {
-                for (int j = 0; j < imageWidth; j++) {
-                    int convertedValueR = ((int) data[0][i][j]) + ((int) Short.MAX_VALUE) + 1;
-                    float intensityR = ((float) convertedValueR) / (2 * (float) Short.MAX_VALUE);
-
-                    int convertedValueG = ((int) data[1][i][j]) + ((int) Short.MAX_VALUE) + 1;
-                    float intensityG = ((float) convertedValueG) / (2 * (float) Short.MAX_VALUE);
-
-                    int convertedValueB = ((int) data[2][i][j]) + ((int) Short.MAX_VALUE) + 1;
-                    float intensityB = ((float) convertedValueB) / (2 * (float) Short.MAX_VALUE);
-
-                    ret.setRGB(j, i, new Color(intensityR, intensityG, intensityB, 1.0f).getRGB());
-                }
-            }
-        } else if (kernelData instanceof int[][][]) {
-            int[][][] data = (int[][][]) kernelData;
-        } else if (kernelData instanceof float[][][]) {
-            float[][][] data = (float[][][]) kernelData;
-        } else {
-            throw new FitsException("Cannot understand file, it has a type=" + kernelData.getClass().getName());
-        }
-        return ret;
-    }
-
-    /**
-     * Renders a stretched preview image at the requested output size from raw FITS kernel data.
-     */
-    private BufferedImage getStretchedImage(Object kernelData, int width, int height, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException {
-        BufferedImage ret = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-
-        if (kernelData instanceof short[][]) {
-            short[][] data = (short[][]) kernelData;
-
-            int imageHeight = data.length;
-            int imageWidth = data[0].length;
-
-            if (imageWidth > width) imageWidth = width;
-            if (imageHeight > height) imageHeight = height;
-
-            short[][] stretchedData = (short[][]) stretchImageData(data, stretchFactor, iterations, imageWidth, imageHeight, algo);
-
-            for (int i = 0; i < imageHeight; i++) {
-                for (int j = 0; j < imageWidth; j++) {
-                    int absValue = ((int) stretchedData[i][j]) + ((int) Short.MAX_VALUE) + 1;
-                    if (absValue > 2 * Short.MAX_VALUE) absValue = 2 * Short.MAX_VALUE;
-                    float intensity = (((float) absValue) / ((float) (2 * Short.MAX_VALUE)));
-                    try {
-                        ret.setRGB(j, i, new Color(intensity, intensity, intensity, 1.0f).getRGB());
-                    } catch (IllegalArgumentException e) {
-                        throw (e);
-                    }
-                }
-            }
-        } else if (kernelData instanceof int[][]) {
-            int[][] data = (int[][]) kernelData;
-        } else if (kernelData instanceof float[][]) {
-            float[][] data = (float[][]) kernelData;
-        } else if (kernelData instanceof short[][][]) {
-            short[][][] data = (short[][][]) kernelData;
-
-            short[][] stretchedDataRed = (short[][]) stretchImageData(data[0], stretchFactor, iterations, width, height, algo);
-            short[][] stretchedDataGreen = (short[][]) stretchImageData(data[1], stretchFactor, iterations, width, height, algo);
-            short[][] stretchedDataBlue = (short[][]) stretchImageData(data[2], stretchFactor, iterations, width, height, algo);
-
-            int imageHeight = data[0].length;
-            int imageWidth = data[0][0].length;
-
-            if (imageWidth > width) imageWidth = width;
-            if (imageHeight > height) imageHeight = height;
-
-            for (int i = 0; i < imageHeight; i++) {
-                for (int j = 0; j < imageWidth; j++) {
-                    int absValueRed = ((int) stretchedDataRed[i][j]) + ((int) Short.MAX_VALUE) + 1;
-                    if (absValueRed > 2 * Short.MAX_VALUE) absValueRed = 2 * Short.MAX_VALUE;
-                    float intensityRed = (((float) absValueRed) / ((float) (2 * Short.MAX_VALUE)));
-
-                    int absValueGreen = ((int) stretchedDataGreen[i][j]) + ((int) Short.MAX_VALUE) + 1;
-                    if (absValueGreen > 2 * Short.MAX_VALUE) absValueGreen = 2 * Short.MAX_VALUE;
-                    float intensityGreen = (((float) absValueGreen) / ((float) (2 * Short.MAX_VALUE)));
-
-                    int absValueBlue = ((int) stretchedDataBlue[i][j]) + ((int) Short.MAX_VALUE) + 1;
-                    if (absValueBlue > 2 * Short.MAX_VALUE) absValueBlue = 2 * Short.MAX_VALUE;
-                    float intensityBlue = (((float) absValueBlue) / ((float) (2 * Short.MAX_VALUE)));
-
-                    if (algo.equals(StretchAlgorithm.EXTREME)) {
-                        float maxValue = absValueRed;
-                        if (maxValue < absValueGreen) maxValue = absValueGreen;
-                        if (maxValue < absValueBlue) maxValue = absValueBlue;
-
-                        intensityRed = (((float) maxValue) / ((float) (2 * Short.MAX_VALUE)));
-                        intensityGreen = intensityRed;
-                        intensityBlue = intensityRed;
-                    }
-
-                    try {
-                        Color targetColor = new Color(intensityRed, intensityGreen, intensityBlue, 1.0f);
-                        ret.setRGB(j, i, targetColor.getRGB());
-                    } catch (IllegalArgumentException e) {
-                        throw (e);
-                    }
-                }
-            }
-        } else if (kernelData instanceof int[][][]) {
-            int[][][] data = (int[][][]) kernelData;
-        } else if (kernelData instanceof float[][][]) {
-            float[][][] data = (float[][][]) kernelData;
-        } else {
-            throw new FitsException("Cannot understand file, it has a type=" + kernelData.getClass().getName());
-        }
-        return ret;
+        return fitsVisualizationRenderer.getImagePreview(kernelData);
     }
 
     /**
      * Convenience wrapper that renders a 350x350 stretched preview.
      */
     public BufferedImage getStretchedImagePreview(Object kernelData, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException {
-        return getStretchedImage(kernelData, 350, 350, stretchFactor, iterations, algo);
+        return fitsVisualizationRenderer.getStretchedImagePreview(kernelData, stretchFactor, iterations, algo);
     }
 
     /**
      * Convenience wrapper that renders a stretched preview at the caller's requested size.
      */
     public BufferedImage getStretchedImageFullSize(Object kernelData, int width, int height, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException {
-        return getStretchedImage(kernelData, width, height, stretchFactor, iterations, algo);
-    }
-
-    /**
-     * Dispatches raw image data to the concrete stretch implementation selected by the caller.
-     */
-    private Object stretchImageData(Object kernelData, int intensity, int iterations, int width, int height, StretchAlgorithm algo) throws FitsException {
-        switch (algo) {
-            case ENHANCE_HIGH:
-                return stretchImageEnhanceHigh(kernelData, intensity, iterations, width, height);
-            case ENHANCE_LOW:
-                return stretchImageEnhanceLow(kernelData, intensity, iterations, width, height);
-            case EXTREME:
-                return stretchImageEnhanceExtreme(kernelData, intensity, iterations, width, height);
-            case ASINH:
-                return stretchImageAsinh(kernelData, intensity, iterations, width, height);
-            default:
-                return stretchImageEnhanceLow(kernelData, intensity, iterations, width, height);
-        }
-    }
-
-    /**
-     * Applies an aggressive repeated multiplicative stretch intended to quickly brighten faint
-     * detail in mono data.
-     */
-    private Object stretchImageEnhanceHigh(Object kernelData, int intensity, int iterations, int width, int height) throws FitsException {
-        if (kernelData instanceof short[][]) {
-            short[][] data = (short[][]) kernelData;
-            short[][] returnData = new short[height][width];
-
-            for (int i = 0; i < height; i++) {
-                for (int j = 0; j < width; j++) {
-                    returnData[i][j] = data[i][j];
-                }
-            }
-
-            for (int iteration = 0; iteration < iterations; iteration++) {
-                short minimumValue = Short.MAX_VALUE;
-                for (int i = 0; i < height; i++) {
-                    for (int j = 0; j < width; j++) {
-                        int absValue = (int) returnData[i][j] - (int) Short.MIN_VALUE;
-                        float newValue = (float) absValue * ((float) 1 + ((float) intensity / (float) 100));
-                        newValue = newValue - Short.MAX_VALUE;
-
-                        if (newValue > Short.MAX_VALUE) {
-                            returnData[i][j] = Short.MAX_VALUE;
-                        } else {
-                            returnData[i][j] = (short) newValue;
-                        }
-
-                        if (minimumValue > returnData[i][j]) {
-                            minimumValue = returnData[i][j];
-                        }
-                    }
-                }
-
-                int minimumValueDistanceFromZero = (int) minimumValue - (int) Short.MIN_VALUE;
-                if (minimumValueDistanceFromZero > 2 * (int) Short.MAX_VALUE) {
-                    minimumValueDistanceFromZero = 2 * (int) Short.MAX_VALUE;
-                }
-
-                for (int i = 0; i < height; i++) {
-                    for (int j = 0; j < width; j++) {
-                        returnData[i][j] = (short) ((int) returnData[i][j] - minimumValueDistanceFromZero);
-                    }
-                }
-            }
-            return returnData;
-        } else if (kernelData instanceof int[][]) {
-            int[][] data = (int[][]) kernelData;
-            return null;
-        } else if (kernelData instanceof float[][]) {
-            float[][] data = (float[][]) kernelData;
-            return null;
-        } else {
-            throw new FitsException("Cannot understand file, it has a type=" + kernelData.getClass().getName());
-        }
-    }
-
-    /**
-     * Applies a softer adaptive stretch that favors dim regions more than already bright pixels.
-     */
-    private Object stretchImageEnhanceLow(Object kernelData, int intensity, int iterations, int width, int height) throws FitsException {
-        if (kernelData instanceof short[][]) {
-            short[][] data = (short[][]) kernelData;
-            short[][] returnData = new short[height][width];
-
-            for (int i = 0; i < height; i++) {
-                for (int j = 0; j < width; j++) {
-                    returnData[i][j] = data[i][j];
-                }
-            }
-
-            for (int iteration = 0; iteration < iterations; iteration++) {
-                short minimumValue = Short.MAX_VALUE;
-                short maximumValue = Short.MIN_VALUE;
-
-                for (int i = 0; i < height; i++) {
-                    for (int j = 0; j < width; j++) {
-                        int absValue = (int) returnData[i][j] - (int) Short.MIN_VALUE;
-                        float scale = 1 - (((float) absValue) / (2 * ((float) Short.MAX_VALUE)));
-                        float newValue = (float) absValue * ((float) 1 + ((((float) intensity / (float) 100)) * scale));
-                        newValue = newValue - Short.MAX_VALUE;
-
-                        if (newValue > Short.MAX_VALUE) {
-                            returnData[i][j] = Short.MAX_VALUE;
-                        } else {
-                            returnData[i][j] = (short) newValue;
-                        }
-
-                        if (minimumValue > returnData[i][j]) {
-                            minimumValue = returnData[i][j];
-                        }
-                        if (maximumValue < returnData[i][j]) {
-                            maximumValue = returnData[i][j];
-                        }
-                    }
-                }
-
-                int minimumValueDistanceFromZero = (int) minimumValue - (int) Short.MIN_VALUE;
-                if (minimumValueDistanceFromZero > 2 * (int) Short.MAX_VALUE) {
-                    minimumValueDistanceFromZero = 2 * (int) Short.MAX_VALUE;
-                }
-                int maximumValueDistanceFromMax = (int) Short.MAX_VALUE - (int) maximumValue;
-                if (maximumValueDistanceFromMax > 2 * (int) Short.MAX_VALUE) {
-                    maximumValueDistanceFromMax = 2 * (int) Short.MAX_VALUE;
-                }
-
-                float stretchCoefficient = 1 + (((float) maximumValueDistanceFromMax) / (2 * (float) Short.MAX_VALUE));
-
-                for (int i = 0; i < height; i++) {
-                    for (int j = 0; j < width; j++) {
-                        int absValue = (int) returnData[i][j] - (int) Short.MIN_VALUE - minimumValueDistanceFromZero;
-                        float newValue = ((float) absValue) * stretchCoefficient;
-                        newValue = newValue - Short.MAX_VALUE;
-
-                        if (newValue > Short.MAX_VALUE) {
-                            returnData[i][j] = Short.MAX_VALUE;
-                        } else {
-                            returnData[i][j] = (short) newValue;
-                        }
-                    }
-                }
-            }
-            return returnData;
-        } else if (kernelData instanceof int[][]) {
-            int[][] data = (int[][]) kernelData;
-            return null;
-        } else if (kernelData instanceof float[][]) {
-            float[][] data = (float[][]) kernelData;
-            return null;
-        } else {
-            throw new FitsException("Cannot understand file, it has a type=" + kernelData.getClass().getName());
-        }
-    }
-
-    /**
-     * Isolates only the strongest excursions above the average background for a high-contrast
-     * detection-style preview.
-     */
-    private Object stretchImageEnhanceExtreme(Object kernelData, int threshold, int intensity, int width, int height) throws FitsException {
-        if (kernelData instanceof short[][]) {
-            short[][] data = (short[][]) kernelData;
-            short[][] returnData = new short[height][width];
-
-            long allPixelSumValue = 0;
-            for (int i = 0; i < height; i++) {
-                for (int j = 0; j < width; j++) {
-                    allPixelSumValue += (data[i][j] - (int) Short.MIN_VALUE);
-                }
-            }
-
-            float averageNoiseLevel = ((float) allPixelSumValue) / ((float) width * height);
-
-            for (int i = 0; i < height; i++) {
-                for (int j = 0; j < width; j++) {
-                    returnData[i][j] = data[i][j];
-                    int absValue = (int) returnData[i][j] - (int) Short.MIN_VALUE;
-
-                    if (absValue >= averageNoiseLevel + 10 * threshold) {
-                        float newValue = (((float) intensity) / (float) 20) * (2 * ((float) Short.MAX_VALUE));
-                        newValue = newValue - Short.MAX_VALUE;
-
-                        if (newValue > Short.MAX_VALUE) {
-                            returnData[i][j] = Short.MAX_VALUE;
-                        } else {
-                            returnData[i][j] = (short) newValue;
-                        }
-                    }
-                }
-            }
-            return returnData;
-        } else if (kernelData instanceof int[][]) {
-            int[][] data = (int[][]) kernelData;
-            return null;
-        } else if (kernelData instanceof float[][]) {
-            float[][] data = (float[][]) kernelData;
-            return null;
-        } else {
-            throw new FitsException("Cannot understand file, it has a type=" + kernelData.getClass().getName());
-        }
-    }
-
-    /**
-     * Applies an asinh stretch using histogram-derived black and white points for a more
-     * photographic preview.
-     */
-    private Object stretchImageAsinh(Object kernelData, int blackPointPercent, int stretchStrength, int width, int height) throws FitsException {
-        if (kernelData instanceof short[][]) {
-            short[][] data = (short[][]) kernelData;
-            short[][] returnData = new short[height][width];
-
-            int sourceHeight = data.length;
-            int sourceWidth = data[0].length;
-            int[] histogram = new int[(2 * Short.MAX_VALUE) + 2];
-
-            for (int i = 0; i < sourceHeight; i++) {
-                for (int j = 0; j < sourceWidth; j++) {
-                    histogram[data[i][j] - Short.MIN_VALUE]++;
-                }
-            }
-
-            long totalPixels = (long) sourceHeight * sourceWidth;
-            int blackPointValue = percentileFromHistogram(histogram, totalPixels, blackPointPercent / 100.0);
-            int whitePointValue = percentileFromHistogram(histogram, totalPixels, 0.999);
-
-            if (whitePointValue <= blackPointValue) {
-                whitePointValue = blackPointValue + 1;
-            }
-
-            double usableRange = whitePointValue - blackPointValue;
-            double stretchScale = Math.max(1.0, stretchStrength);
-            double normalization = asinh(stretchScale);
-
-            for (int i = 0; i < height; i++) {
-                for (int j = 0; j < width; j++) {
-                    double absValue = data[i][j] - Short.MIN_VALUE;
-                    double normalizedValue = (absValue - blackPointValue) / usableRange;
-                    if (normalizedValue < 0.0) {
-                        normalizedValue = 0.0;
-                    } else if (normalizedValue > 1.0) {
-                        normalizedValue = 1.0;
-                    }
-
-                    double stretchedValue = asinh(normalizedValue * stretchScale) / normalization;
-                    int unsignedValue = (int) Math.round(stretchedValue * ((2.0 * Short.MAX_VALUE) + 1.0));
-                    if (unsignedValue < 0) {
-                        unsignedValue = 0;
-                    } else if (unsignedValue > (2 * Short.MAX_VALUE) + 1) {
-                        unsignedValue = (2 * Short.MAX_VALUE) + 1;
-                    }
-
-                    returnData[i][j] = (short) (unsignedValue + Short.MIN_VALUE);
-                }
-            }
-            return returnData;
-        } else if (kernelData instanceof int[][]) {
-            int[][] data = (int[][]) kernelData;
-            return null;
-        } else if (kernelData instanceof float[][]) {
-            float[][] data = (float[][]) kernelData;
-            return null;
-        } else {
-            throw new FitsException("Cannot understand file, it has a type=" + kernelData.getClass().getName());
-        }
-    }
-
-    /**
-     * Small math helper for the asinh stretch implementation.
-     */
-    private static double asinh(double value) {
-        return Math.log(value + Math.sqrt((value * value) + 1.0));
-    }
-
-    /**
-     * Resolves a percentile from a histogram without needing to sort the full image sample set.
-     */
-    private static int percentileFromHistogram(int[] histogram, long totalPixels, double percentile) {
-        if (totalPixels <= 0) {
-            return 0;
-        }
-
-        long targetCount = Math.max(0L, Math.min(totalPixels - 1, (long) Math.floor((totalPixels - 1) * percentile)));
-        long runningCount = 0;
-
-        for (int value = 0; value < histogram.length; value++) {
-            runningCount += histogram[value];
-            if (runningCount > targetCount) {
-                return value;
-            }
-        }
-
-        return histogram.length - 1;
+        return fitsVisualizationRenderer.getStretchedImageFullSize(kernelData, width, height, stretchFactor, iterations, algo);
     }
 
     /**

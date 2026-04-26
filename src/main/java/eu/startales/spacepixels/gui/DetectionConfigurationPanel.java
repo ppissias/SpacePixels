@@ -24,6 +24,7 @@ import eu.startales.spacepixels.tasks.AutoTuneTask;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 import eu.startales.spacepixels.util.*;
+import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -571,9 +572,9 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createTabIntro("Visualization-only controls for exported reports and review imagery. These settings do not change detection results; they only affect presentation, contrast stretch, and animation cadence."));
 
         panel.add(createSectionHeader("Display Stretch & Animation"));
-        spinAutoBlackSigma = addRow(panel, "Auto Stretch Black Sigma", "Controls how far below the image mean the automatic black point is placed when stretching exported imagery. Higher values darken the background more aggressively.", doubleSpinnerModel(ImageDisplayUtils.autoStretchBlackSigma, 0.0, 10.0, 0.1));
-        spinAutoWhiteSigma = addRow(panel, "Auto Stretch White Sigma", "Controls how far above the image mean the automatic white point is placed when stretching exported imagery. Higher values preserve more bright-core detail but can reduce contrast on faint structure.", doubleSpinnerModel(ImageDisplayUtils.autoStretchWhiteSigma, 0.1, 20.0, 0.1));
-        spinGifBlinkSpeed = addRow(panel, "GIF Blink Speed (ms)", "Frame delay used for exported animated GIFs. Lower values blink faster; higher values slow the inspection cadence.", intSpinnerModel(ImageDisplayUtils.gifBlinkSpeedMs, 50, 5000, 10));
+        spinAutoBlackSigma = addRow(panel, "Auto Stretch Black Sigma", "Controls how far below the image mean the automatic black point is placed when stretching rendered imagery. Higher values darken the background more aggressively.", doubleSpinnerModel(DisplayImageRenderer.autoStretchBlackSigma, 0.0, 10.0, 0.1));
+        spinAutoWhiteSigma = addRow(panel, "Auto Stretch White Sigma", "Controls how far above the image mean the automatic white point is placed when stretching rendered imagery. Higher values preserve more bright-core detail but can reduce contrast on faint structure.", doubleSpinnerModel(DisplayImageRenderer.autoStretchWhiteSigma, 0.1, 20.0, 0.1));
+        spinGifBlinkSpeed = addRow(panel, "GIF Blink Speed (ms)", "Frame delay used for exported animated GIFs. Lower values blink faster; higher values slow the inspection cadence.", intSpinnerModel(DetectionReportGenerator.gifBlinkSpeedMs, 50, 5000, 10));
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Raw Image Annotations"));
@@ -584,7 +585,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Image Cropping"));
-        spinCropPadding = addRow(panel, "Track Crop Border Padding", "Export-only setting that adds extra border around cropped track images.", intSpinnerModel(ImageDisplayUtils.trackCropPadding, 0, 2000, 10));
+        spinCropPadding = addRow(panel, "Track Crop Border Padding", "Export-only setting that adds extra border around cropped track images.", intSpinnerModel(DetectionReportGenerator.trackCropPadding, 0, 2000, 10));
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Optional Report Sections"));
@@ -592,7 +593,7 @@ public class DetectionConfigurationPanel extends JPanel {
                 panel,
                 "Include AI Creative Report Sections",
                 "Adds the Skyprint and Kinematic Compass tribute panels to exported reports. This toggle is saved with visualization preferences, not with detection profiles.",
-                ImageDisplayUtils.includeAiCreativeReportSections);
+                DetectionReportGenerator.includeAiCreativeReportSections);
 
         return panel;
     }
@@ -874,11 +875,11 @@ public class DetectionConfigurationPanel extends JPanel {
             RawImageAnnotator.streakCentroidBoxRadius = ((Number) spinStreakCentroidRad.getValue()).intValue();
             RawImageAnnotator.pointSourceMinBoxRadius = ((Number) spinPointBoxRad.getValue()).intValue();
             RawImageAnnotator.dynamicBoxPadding = ((Number) spinBoxPad.getValue()).intValue();
-            ImageDisplayUtils.autoStretchBlackSigma = ((Number) spinAutoBlackSigma.getValue()).doubleValue();
-            ImageDisplayUtils.autoStretchWhiteSigma = ((Number) spinAutoWhiteSigma.getValue()).doubleValue();
-            ImageDisplayUtils.gifBlinkSpeedMs = ((Number) spinGifBlinkSpeed.getValue()).intValue();
-            ImageDisplayUtils.trackCropPadding = ((Number) spinCropPadding.getValue()).intValue();
-            ImageDisplayUtils.includeAiCreativeReportSections = chkIncludeAiCreativeReportSections != null && chkIncludeAiCreativeReportSections.isSelected();
+            DisplayImageRenderer.autoStretchBlackSigma = ((Number) spinAutoBlackSigma.getValue()).doubleValue();
+            DisplayImageRenderer.autoStretchWhiteSigma = ((Number) spinAutoWhiteSigma.getValue()).doubleValue();
+            DetectionReportGenerator.gifBlinkSpeedMs = ((Number) spinGifBlinkSpeed.getValue()).intValue();
+            DetectionReportGenerator.trackCropPadding = ((Number) spinCropPadding.getValue()).intValue();
+            DetectionReportGenerator.includeAiCreativeReportSections = chkIncludeAiCreativeReportSections != null && chkIncludeAiCreativeReportSections.isSelected();
 
         } catch (Exception ex) {
             System.err.println("Error applying settings to memory: " + ex.getMessage());

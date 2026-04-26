@@ -8,7 +8,7 @@
  *
  */
 
-package eu.startales.spacepixels.util;
+package eu.startales.spacepixels.util.reporting;
 
 import javax.imageio.*;
 import javax.imageio.metadata.*;
@@ -20,6 +20,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.awt.image.BufferedImage;
 
+/**
+ * Small ImageIO-based helper for writing animated GIF sequences used by report previews and blink visualizations.
+ */
 public class GifSequenceWriter {
     protected ImageWriter gifWriter;
     protected ImageWriteParam imageWriteParam;

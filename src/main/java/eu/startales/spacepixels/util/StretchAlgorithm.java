@@ -9,6 +9,10 @@
  */
 package eu.startales.spacepixels.util;
 
+/**
+ * Enumerates the preview stretch presets exposed by the UI together with their parameter labels,
+ * valid ranges, and default values.
+ */
 public enum StretchAlgorithm {
     ASINH("Asinh", "Black Point (%)", 0, 50, 10, "Stretch Strength", 1, 50, 10),
     ENHANCE_LOW("Enhance Low", "Intensity Threshold", 0, 100, 50, "Application Iterations", 1, 20, 1),

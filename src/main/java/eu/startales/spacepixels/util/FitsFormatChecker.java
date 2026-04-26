@@ -6,8 +6,15 @@ import nom.tam.fits.BasicHDU;
 
 import java.io.File;
 
+/**
+ * Lightweight FITS header probe that classifies supported monochrome and color formats without
+ * reading the full pixel array into memory.
+ */
 public class FitsFormatChecker {
 
+    /**
+     * Supported FITS storage layouts recognized by the import pipeline.
+     */
     public enum FitsFormat {
         MONO_16BIT,
         MONO_32BIT_INT,
