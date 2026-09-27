@@ -1470,6 +1470,7 @@ public class DetectionReportGenerator {
                 BufferedImage creativeTributeImage = CreativeTributeRenderer.createCreativeTributeImage(
                         creativeBgData,
                         allTransients,
+                        unclassifiedTransients,
                         anomalies,
                         singleStreaks,
                         streakTracks,
@@ -1481,17 +1482,41 @@ public class DetectionReportGenerator {
                 saveTrackImageLossless(creativeTributeImage, new File(exportDir, creativeFileName));
 
                 int rawTransientCount = CreativeTributeRenderer.countTotalTransientDetections(allTransients);
+                int unclassifiedTransientCount = CreativeTributeRenderer.countTotalTransientDetections(unclassifiedTransients);
+                int streakLikeTransientCount = CreativeTributeRenderer.countStreakLikeTransientDetections(allTransients);
+                int pointTransientCount = Math.max(0, rawTransientCount - streakLikeTransientCount);
                 int confirmedTrackCount = summary.confirmedLinkedTrackCount;
                 int suspectedTrackCount = summary.suspectedStreakTrackCount;
                 int deepStackHintCount = summary.potentialSlowMoverCount;
                 double longestPath = CreativeTributeRenderer.computeLongestTrackPathPx(streakTracks, movingTargets);
                 String dominantMotion = CreativeTributeRenderer.computeDominantMotionLabel(movingTargets, streakTracks);
+                String peakFrameLabel = CreativeTributeRenderer.computePeakTransientFrameLabel(allTransients);
+                String creativeInterpretation = CreativeTributeRenderer.buildCreativeSignalInterpretation(
+                        allTransients,
+                        unclassifiedTransients,
+                        anomalies,
+                        singleStreaks,
+                        streakTracks,
+                        suspectedStreakTracks,
+                        movingTargets,
+                        slowMoverCandidates);
 
-                report.println("<div class='panel' style='background: linear-gradient(180deg, #453049 0%, #2b2b2b 100%); border: 1px solid #5f536a;'>");
-                report.println("<h2>The AI's Perspective: Skyprint of the Session</h2>");
-                report.println("<p style='color: #c7bfd6; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>A creative tribute by Codex. This poster compresses the whole run into one image: faint time-mapped transient dust for everything that flashed through the extractor, separate paths for moving object tracks, confirmed streak tracks, and suspected streak groupings, plus distinct markers for anomaly pulses and deep-stack hints.</p>");
-                report.println("<a href='" + creativeFileName + "' target='_blank'><img src='" + creativeFileName + "' class='native-size-image' style='border: 1px solid #666; border-radius: 6px;' alt='Creative Tribute Skyprint' /></a>");
-                report.println("<p style='font-size: 13px; color: #b8b0c7; margin-bottom: 0;'>This session stitched together <strong style='color:#ffffff;'>" + rawTransientCount + "</strong> raw transients, produced <strong style='color:#ffffff;'>" + confirmedTrackCount + "</strong> confirmed linked tracks, flagged <strong style='color:#ffffff;'>" + suspectedTrackCount + "</strong> suspected streak tracks, surfaced <strong style='color:#ffffff;'>" + summary.anomalyCount + "</strong> single-frame anomalies, and left <strong style='color:#ffffff;'>" + deepStackHintCount + "</strong> deep-stack hints on the table. The dominant confirmed linked motion trends toward <strong style='color:#ffffff;'>" + dominantMotion + "</strong>, and the longest confirmed path spans <strong style='color:#ffffff;'>" + String.format(Locale.US, "%.1f px", longestPath) + "</strong>.</p>");
+                report.println("<div class='panel' style='background: linear-gradient(180deg, #24303a 0%, #2b2b2b 100%); border: 1px solid #53606a;'>");
+                report.println("<h2>The AI's Perspective: Signal Weave</h2>");
+                report.println("<p style='color: #c7d2dc; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>A creative analysis by Codex. I treated the report output as a signal field: every post-veto transient becomes time-colored dust, unclassified leftovers become amber residue, moving targets become blue paths, confirmed streaks become gold vectors, suspected streak groupings become red paths, and rescued anomalies become magenta pulses.</p>");
+                report.println("<a href='" + creativeFileName + "' target='_blank'><img src='" + creativeFileName + "' class='native-size-image' style='border: 1px solid #666; border-radius: 6px;' alt='Creative Signal Weave report image' /></a>");
+                report.println("<div class='flex-container' style='margin-top: 16px; margin-bottom: 4px;'>");
+                report.println("<div class='metric-box compact' style='border-left-color:#96dcff;'><span class='metric-value'>" + rawTransientCount + "</span><span class='metric-label'>All transients</span></div>");
+                report.println("<div class='metric-box compact' style='border-left-color:#88d8ff;'><span class='metric-value'>" + pointTransientCount + "</span><span class='metric-label'>Point-like dust</span></div>");
+                report.println("<div class='metric-box compact' style='border-left-color:#ffcc66;'><span class='metric-value'>" + streakLikeTransientCount + "</span><span class='metric-label'>Streak-like dust</span></div>");
+                report.println("<div class='metric-box compact' style='border-left-color:#ffae5c;'><span class='metric-value'>" + unclassifiedTransientCount + "</span><span class='metric-label'>Unresolved residue</span></div>");
+                report.println("<div class='metric-box compact' style='border-left-color:#4da6ff;'><span class='metric-value'>" + confirmedTrackCount + "</span><span class='metric-label'>Confirmed tracks</span></div>");
+                report.println("<div class='metric-box compact' style='border-left-color:#ff80a0;'><span class='metric-value'>" + suspectedTrackCount + "</span><span class='metric-label'>Suspected streaks</span></div>");
+                report.println("<div class='metric-box compact' style='border-left-color:#ff66cc;'><span class='metric-value'>" + summary.anomalyCount + "</span><span class='metric-label'>Anomalies</span></div>");
+                report.println("<div class='metric-box compact' style='border-left-color:#ba7aff;'><span class='metric-value'>" + deepStackHintCount + "</span><span class='metric-label'>Deep-stack hints</span></div>");
+                report.println("</div>");
+                report.println("<p style='font-size: 13px; color: #c2ccd5; margin-bottom: 8px;'>" + escapeHtml(creativeInterpretation) + "</p>");
+                report.println("<p style='font-size: 13px; color: #aeb8c3; margin-bottom: 0;'>Peak transient activity: <strong style='color:#ffffff;'>" + escapeHtml(peakFrameLabel) + "</strong>. Dominant confirmed linked motion: <strong style='color:#ffffff;'>" + escapeHtml(dominantMotion) + "</strong>. Longest confirmed path: <strong style='color:#ffffff;'>" + String.format(Locale.US, "%.1f px", longestPath) + "</strong>.</p>");
                 report.println("</div>");
             }
 

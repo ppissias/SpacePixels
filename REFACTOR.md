@@ -1,303 +1,322 @@
-# Refactor Candidates by Class Size
+# Refactor Strategy
 
-Snapshot date: 2026-04-24
+Snapshot date: 2026-09-24
 
 Architecture reference:
-- Stable facade and subsystem documentation now lives in [HIGH_LEVEL_DESIGN.md](HIGH_LEVEL_DESIGN.md).
-- Keep this file focused on refactor targets, extraction order, and verification notes.
+- Stable facade and subsystem documentation lives in [HIGH_LEVEL_DESIGN.md](HIGH_LEVEL_DESIGN.md).
+- Keep this file focused on current refactor targets, extraction order, and verification notes.
 
 Method used:
-- Count Java source lines under `src/main/java` on the current worktree
-- Sort descending by line count
-- Cross-check the largest classes against the completed reporting refactor work and current verification results
+- Count Java source lines under `src/main/java` on the current worktree.
+- Sort descending by line count.
+- Re-check the largest classes against the current extraction state, not only against raw size.
 
-## Top 5 largest classes
+## Current largest classes
 
-| Rank | Class | Lines | Why it matters now |
+| Rank | Class | Lines | Current read |
 | --- | --- | ---: | --- |
-| 1 | `ImageProcessing` | 2568 | Still mixes FITS I/O, detection orchestration, export coordination, plate solving, and WCS persistence |
-| 2 | `DetectionReportAstrometry` | 1580 | Still mixes astrometry math, query-target building, URL generation, and report-facing HTML |
-| 3 | `DetectionReportGenerator` | 1348 | Now much smaller, but it still owns report orchestration plus a leftover mix of helper methods |
-| 4 | `DetectionConfigurationPanel` | 1044 | Still combines Swing layout, binding, persistence, compatibility logic, and controller behavior |
-| 5 | `TargetVisualizationSectionWriter` | 953 | The main remaining large per-section report writer, with streak, moving-target, anomaly, and overlay logic mixed together |
+| 1 | `DetectionReportGenerator` | 1576 | Still a report facade plus leftover static rendering/helper functions. Large, but no longer the main architectural problem. |
+| 2 | `CreativeTributeRenderer` | 1320 | Large by design after the Signal Weave work. It is self-contained creative rendering, so size alone is not a reason to split it now. |
+| 3 | `ImageProcessing` | 1317 | Much smaller than the previous snapshot. Still owns FITS import/preparation, metadata loading, conversion, WCS writeback, preview helpers, and facade methods. |
+| 4 | `DetectionConfigurationPanel` | 1228 | The strongest current refactor candidate. It mixes Swing layout, config binding, persistence, runtime visualization settings, constraints, preview, and auto-tune actions. |
+| 5 | `TargetVisualizationSectionWriter` | 1056 | Still the largest report section writer. Worth splitting only when target-report feature work resumes. |
+| 6 | `MainApplicationPanel` | 967 | GUI workflow coordinator. Better handled after service/facade boundaries are clearer. |
+| 7 | `DetectionReportAstrometry` | 877 | Still large, but many originally proposed extractions already happened. Treat as mostly stabilized. |
+| 8 | `XisfImageConverter` | 850 | Focused but sizeable. Do not split unless XISF import behavior changes. |
 
 ## What changed since the previous snapshot
 
-- The old `ImageDisplayUtils`-centric report note is now obsolete.
-  - Report export code now lives under `eu.startales.spacepixels.util.reporting`.
-- The report/export subsystem was materially split into focused classes:
-  - `DetectionReportDocumentWriter`
-  - `ReportClientScriptWriter`
-  - `ExportVisualizationSettings`
-  - `DetectionReportContext`
-  - `DetectionReportSummary`
-  - `TrackCropGeometry`
-  - `TrackVisualizationRenderer`
-  - `TargetVisualizationSectionWriter`
-  - `ResidualReviewSectionWriter`
-  - `DeepStackReportSectionWriter`
-  - `PipelineDiagnosticsSectionWriter`
-  - `GlobalMapsSectionWriter`
-  - `CreativeTributeRenderer`
-  - `ReportLookupProxyServer`
-- `DetectionReportGenerator` is down to 1348 lines and is now primarily an orchestration facade instead of the old all-in-one export subsystem.
-- Top-level documentation has been added across `util.reporting`.
-- Real-data verification was run on 2026-04-24 with `./gradlew realDataTest`.
-  - Fresh report bundles matched the previous baseline bundles for all 5 datasets.
-  - All non-HTML assets were byte-identical.
-  - The only HTML deltas were runtime-dependent `Processing Time` values in 4 datasets.
-
-## Common themes across the remaining large classes
-
-- The biggest remaining classes still mix orchestration with detailed formatting or persistence behavior.
-- Report code is in much better shape than before, but astrometry and the main target-visualization section still concentrate too many responsibilities.
-- UI classes continue to act as both views and controllers.
-- Static runtime settings still exist, but they are now more isolated than they were before the report split.
-
-## 1. Detection report/export subsystem (status: largely complete for this pass)
-
-### Current state
-
-- The first major refactor round here is complete enough to stop.
-- The report subsystem now has clear package-level structure and real-data regression coverage.
-- `DetectionReportGenerator` still contains some rendering helpers and orchestration glue, but the previous 5000-line export knot is gone.
-
-### Completed extractions
-
-- Report shell and shared document scaffolding:
-  - `DetectionReportDocumentWriter`
-  - `ReportClientScriptWriter`
-- Export settings and shared models:
-  - `ExportVisualizationSettings`
-  - `DetectionReportContext`
-  - `DetectionReportSummary`
-- Shared rendering helpers:
-  - `TrackCropGeometry`
-  - `TrackVisualizationRenderer`
-  - `GifSequenceWriter`
-- Focused report sections:
-  - `TargetVisualizationSectionWriter`
-  - `ResidualReviewSectionWriter`
-  - `DeepStackReportSectionWriter`
-  - `PipelineDiagnosticsSectionWriter`
-  - `GlobalMapsSectionWriter`
-- Optional creative output:
-  - `CreativeTributeRenderer`
-
-### Remaining debt
-
-- `DetectionReportGenerator` is still larger than ideal.
-- `DetectionReportAstrometry` remains tightly coupled to report concerns.
-- `TargetVisualizationSectionWriter` is now the biggest single report-section class.
-
-### Recommendation
-
-- Do not keep splitting `DetectionReportGenerator` just to chase line count.
-- Treat the report refactor as stable for now.
-- If report work resumes, the next target should be `DetectionReportAstrometry`, not another small extraction from `DetectionReportGenerator`.
-
-## 2. `DetectionReportAstrometry` (1580 lines)
-
-### Why this is the next target
-
-- It is now the highest-friction class inside the reporting layer.
-- It mixes four different change axes:
-  - astrometry context creation
-  - query-target construction
-  - external URL generation
-  - report-facing HTML wording and layout
-- Any change to lookup strategy currently risks report wording, and vice versa.
-
-### Current responsibility clusters
-
-- Build astrometry context from FITS metadata and app config
-- Estimate query radii and track timing windows
-- Compute sky rates, apparent motion, and motion classification
-- Build SkyBoT, JPL, SatChecker, Stellarium, and sky-viewer URLs
-- Format report-facing HTML fragments for identification sections
-- Resolve observer-site and observatory-code rules
-
-### Refactor plan
-
-1. Extract astrometry context creation.
-   - Suggested class: `AstrometryContextFactory`
-   - Move WCS, observer-site, and session-midpoint construction here
-
-2. Extract query-target building.
-   - Suggested classes:
-     - `SolarSystemQueryTargetFactory`
-     - `SatCheckerQueryTargetFactory`
+The old plan is partly obsolete.
+
+- `DetectionReportAstrometry` no longer deserves to be the top refactor target.
+  - These extractions already exist:
+    - `AstrometryContextFactory`
+    - `SolarSystemQueryTargetFactory`
+    - `SatCheckerQueryTargetFactory`
+    - `JplSbIdentUrlBuilder`
+    - `SatCheckerUrlBuilder`
+    - `SkyViewerHtmlBuilder`
+    - `AstrometryIdentificationHtmlBuilder`
+    - `SolarSystemQueryTarget`
+    - `SatCheckerQueryTarget`
+- `ImageProcessing` has already been reduced materially.
+  - Standard pipeline orchestration lives in `StandardDetectionPipelineService`.
+  - Iterative pipeline orchestration lives in `IterativeDetectionPipelineService`.
+  - Shared pipeline helpers live in `DetectionPipelineSupport`.
+  - Headless input preparation lives in `DetectionInputPreparation`.
+  - Plate solving has a dedicated `PlateSolveService`.
+- The reporting layer grew again because the optional AI creative section was enhanced.
+  - `CreativeTributeRenderer` is now one of the largest classes, but it is cohesive and isolated.
+  - Do not split it simply because it is large.
+- The documentation and report feature set now include richer object-identification links:
+  - SkyBoT and JPL for moving-object tracks
+  - SatChecker for streak tracks
+  - Stellarium Web context links for both
+
+## Revised strategy
+
+The next round should not be line-count driven. Use volatility and responsibility boundaries:
+
+1. Split code that changes for different reasons.
+2. Keep self-contained rendering code together unless it blocks a real change.
+3. Preserve existing public/report behavior first; move code behind facades before changing behavior.
+4. Prefer testable data/binding/persistence seams over cosmetic class splitting.
+
+## Recommended next sequence
+
+### 1. `DetectionConfigurationPanel`
+
+This is the best next target.
+
+Why:
+- It is a large Swing form and a controller at the same time.
+- It owns widget construction, config-to-widget binding, widget-to-config binding, persistence, optional-field compatibility, runtime visualization preferences, constraints, preview, and auto-tune actions.
+- Recent work added more visualization/report preferences, so this class will keep attracting unrelated changes.
+
+Recommended extraction order:
+
+1. `DetectionSettingsPersistenceService`
+   - Own loading/saving:
+     - `spacepixels_detection_profile.json`
+     - legacy detection profile migration
+     - `spacepixels_visualization.json`
+   - Keep file-location decisions out of the panel.
+
+2. `DetectionConfigCompatibilityAdapter`
+   - Own optional-field reflection helpers.
+   - Preserve compatibility with older/newer JTransient configs without scattering reflection through UI code.
+
+3. `DetectionConfigBinder`
+   - Own `DetectionConfig -> controls` and `controls -> DetectionConfig`.
+   - This is the most valuable seam because it can be tested without full UI workflows.
+
+4. `VisualizationPreferencesBinder`
+   - Bind export-only controls to `ExportVisualizationSettings` / visualization preferences.
+   - Keep detection profile fields separate from report/export preferences.
+
+5. Tab builders only after binding is clean.
+   - Possible classes:
+     - `BasicTuningTabBuilder`
+     - `ObjectDetectionTabBuilder`
+     - `StreakDetectionTabBuilder`
+     - `MovingObjectsTabBuilder`
+     - `AdvancedVisualizationTabBuilder`
+
+What not to do:
+- Do not start by splitting every tab into a class while the binding code is still embedded in the panel.
+- Do not change config file formats during this refactor.
+
+Verification:
+- `gradlew.bat test`
+- Manually verify:
+  - load saved detection profile
+  - load saved visualization preferences
+  - save configuration
+  - load defaults
+  - preview detection settings
+  - auto-tune updates controls
+
+### 2. `ImageProcessing`
+
+This is the best non-UI target after the config panel.
+
+Current state:
+- It is no longer responsible for the full standard/iterative pipeline internals.
+- It is still the main facade for import, FITS metadata, conversion, WCS persistence, preview rendering, and report triggering.
+
+Recommended extraction order:
+
+1. `FitsSequenceImportService`
+   - Move GUI import discovery and validation:
+     - `getFitsFilesDetails`
+     - GUI metadata loading
+     - XISF redirect/import handling
+     - compressed FITS checks
+     - color/bit-depth readiness decisions
+
+2. `FitsMetadataService`
+   - Move metadata extraction and consistency validation:
+     - `getFitsfileInformation`
+     - `getFitsfileInformationHeadless`
+     - `loadFitsMetadataHeadless`
+     - timestamp diagnostics
+
+3. `FitsPreparationService`
+   - Consolidate GUI preparation with the existing headless `DetectionInputPreparation` behavior.
+   - The goal is to reduce duplicate rules for:
+     - compressed FITS
+     - 32-bit to 16-bit conversion
+     - color to mono conversion
+     - XISF-only directories
+
+4. `WcsHeaderService`
+   - Move WCS header writeback and solve-artifact cleanup:
+     - `applyWCSHeader`
+     - `updateFitsHeaderWithWCS`
+     - `cleanupSolveArtifacts`
+
+5. Keep `ImageProcessing` as a facade.
+   - Do not remove the facade while GUI and API callers still depend on it.
+
+What not to do:
+- Do not merge GUI import behavior and headless batch behavior in one large rewrite.
+- Do not change generated working-directory naming unless there is a compatibility reason.
+- Do not move preview/stretch code in the same pass as input-preparation changes.
+
+Verification:
+- `gradlew.bat test`
+- GUI import checks for:
+  - normal 16-bit mono FITS
+  - compressed `.fz`
+  - 32-bit FITS
+  - color FITS
+  - XISF-only directory
+- Headless API/batch input-preparation tests.
+
+### 3. `DetectionReportGenerator`
+
+Do not treat this as the next major refactor just because it is currently the largest class.
+
+Current state:
+- It is mostly a report facade and compatibility surface.
+- Some helper clusters still belong elsewhere, but report behavior is sensitive and already has many moving parts.
+
+Reasonable future extractions:
+
+1. `ReportImageAssetRenderer`
+   - Move display image, mask overlays, cropped mask overlays, and shared image-writing helpers.
+
+2. `ReportGlobalMapRenderer`
+   - Move remaining global-map and diagnostic-map image methods that do not belong in `GlobalMapsSectionWriter`.
+
+3. `KinematicCompassRenderer`
+   - Move the Gemini creative compass if that feature changes again.
+
+4. `IterativeIndexReportWriter`
+   - Move iterative index export if iterative reporting grows.
 
-3. Extract URL builders.
-   - Suggested classes:
-     - `SkybotUrlBuilder`
-     - `JplSbIdentUrlBuilder`
-     - `SatCheckerUrlBuilder`
-     - `SkyViewerUrlBuilder`
+What not to do:
+- Do not split `DetectionReportGenerator` in tiny pieces just to reduce line count.
+- Do not rename report asset files unless the report output contract is intentionally changing.
 
-4. Extract report-facing HTML builders.
-   - Suggested classes:
-     - `AstrometryIdentificationHtmlBuilder`
-     - `SkyCoordinateHtmlFormatter`
+Verification:
+- `gradlew.bat test`
+- `gradlew.bat realDataTest` for report-affecting changes
+- Compare generated report bundles against a baseline.
 
-5. Keep `DetectionReportAstrometry` as a thin package-private facade at first.
-   - Minimize churn in existing report code
-   - Preserve current behavior while the pieces settle
+### 4. `CreativeTributeRenderer`
 
-### Good first extraction order
+Leave it alone for now.
 
-1. `AstrometryContextFactory`
-2. `SolarSystemQueryTargetFactory`
-3. `JplSbIdentUrlBuilder` and `SatCheckerUrlBuilder`
-4. `AstrometryIdentificationHtmlBuilder`
+Why:
+- It is large, but the feature is cohesive.
+- It is optional, isolated, and intentionally visual.
+- Splitting it now would mostly create navigation overhead.
 
-### Expected payoff
+Only split if one of these happens:
+- The creative section gets multiple independent themes.
+- You need unit tests for metric/interpretation logic separate from Java2D rendering.
+- The renderer becomes hard to change without breaking layout.
 
-- Safer changes to external lookup rules
-- Cleaner separation between astrometry logic and report wording
-- Easier testing of URL/query generation without HTML noise
+Possible future split:
+- `CreativeSignalSummaryBuilder`
+- `CreativeTributeLayout`
+- `CreativeTributePainter`
+- `CreativeSignalTextBuilder`
 
-## 3. `ImageProcessing` (2568 lines)
+Do not do this now unless feature work resumes in that area.
 
-### Current responsibility clusters
+### 5. `TargetVisualizationSectionWriter`
 
-- FITS file discovery and metadata loading
-- Headless metadata validation
-- Standard detection pipeline orchestration
-- Iterative detection pipeline orchestration
-- Batch mono conversion and batch stretch
-- Plate solving
-- WCS header writeback and cleanup
-- Export coordination
-- App-config loading and saving
+Hold until target-report work resumes.
 
-### Main problems
+Why:
+- It contains several presentation paths, but they are still one report section.
+- Splitting it while no target-report feature is being changed risks churn without payoff.
 
-- This is still multiple services hidden behind one facade.
-- FITS I/O, pipeline execution, export triggering, and plate-solving persistence are separate change axes.
-- The class is broad enough that unrelated changes still collide here.
+Split only when needed:
+- `SingleStreakSectionWriter`
+- `StreakTrackSectionWriter`
+- `MovingTargetSectionWriter`
+- `AnomalySectionWriter`
+- optional `SkyOrientationOverlayRenderer`
 
-### Refactor plan
+Verification:
+- `gradlew.bat test`
+- `gradlew.bat realDataTest`
+- Confirm generated GIFs, crops, identification links, and live-render links still work.
 
-1. Extract detection pipeline orchestration.
-   - Suggested classes:
-     - `DetectionPipelineService`
-     - `IterativeDetectionService`
+### 6. `MainApplicationPanel`
 
-2. Extract export coordination.
-   - Suggested class: `DetectionExportCoordinator`
+Do this after `ImageProcessing` is cleaner.
 
-3. Extract FITS loading and metadata handling.
-   - Suggested classes:
-     - `FitsSequenceLoader`
-     - `FitsMetadataService`
+Likely extraction targets:
+- import workflow controller
+- detection launch controller
+- blink/preview action controller
+- report-opening/result handling
 
-4. Extract plate-solving behavior.
-   - Suggested classes:
-     - `PlateSolveService`
-     - `WcsHeaderService`
+Do not split it before the service/facade APIs it calls are stable.
 
-5. Keep `ImageProcessing` as a facade during migration.
+## Work I would not prioritize now
 
-### Recommended timing
+- More `DetectionReportAstrometry` splitting.
+  - The important seams already exist.
+  - Further work should be driven by lookup-feature changes, not size.
+- Splitting `CreativeTributeRenderer`.
+  - It is large but cohesive.
+- Splitting every report section writer.
+  - Use feature pressure as the trigger.
+- Replacing static helpers broadly.
+  - Static package-private helpers are acceptable where they are pure formatting/rendering utilities.
 
-- This is the best next project-wide target after the reporting layer is left alone.
-- It is not the best immediate target if the current work remains report-focused.
+## Suggested near-term plan
 
-## 4. `DetectionConfigurationPanel` (1044 lines)
+If the next goal is maintainability:
 
-### Current responsibility clusters
+1. Refactor `DetectionConfigurationPanel` persistence and binding.
+2. Refactor `ImageProcessing` import/metadata/preparation seams.
+3. Clean small report helper clusters from `DetectionReportGenerator` only if report work continues.
 
-- Build settings tabs and rows
-- Bind Swing widgets to `DetectionConfig`
-- Load and save detection/visualization preferences
-- Apply UI values into runtime export settings
-- Handle compatibility logic for optional config fields
-- Coordinate preview and auto-tune actions
+If the next goal is new report features:
 
-### Main problems
+1. Keep `DetectionConfigurationPanel` unchanged.
+2. Add the feature in the relevant report writer.
+3. Extract only the helper class needed by that feature.
+4. Run real-data report comparison.
 
-- The class is both a large Swing form and the binding/persistence layer for that form.
-- Compatibility logic and controller behavior are mixed directly into UI code.
-- The panel still has too much knowledge of where runtime settings live.
+If the next goal is API/headless robustness:
 
-### Refactor plan
+1. Start with `ImageProcessing` plus `DetectionInputPreparation`.
+2. Make GUI and headless preparation rules share the same service-level logic.
+3. Add tests around FITS/XISF/compression/bit-depth preparation before touching GUI code.
 
-1. Extract `DetectionConfigCompatibilityAdapter`
-2. Extract `DetectionConfigBinder`
-3. Extract `DetectionSettingsPersistenceService`
-4. Extract `DetectionConfigConstraintController`
-5. Split tab builders only after the binding layer is clearer
+## Verification expectations
 
-## 5. `TargetVisualizationSectionWriter` (953 lines)
+Use the local path bootstrap before Gradle commands, for example:
 
-### Current responsibility clusters
+`cmd /c "call ""C:\Users\Petros Pissias\OneDrive - ESA\Desktop\dev\setpaths.bat"" && cd /d ""C:\Users\Petros Pissias\OneDrive - ESA\Desktop\dev\projects\SpacePixels"" && gradlew.bat test --no-daemon"`
 
-- Single-streak cards
-- Confirmed streak-track cards
-- Moving-target cards
-- Anomaly cards
-- Sky-orientation overlays and summary fragments
-- Per-card image export orchestration
+For each refactor round:
 
-### Main problems
+- `gradlew.bat compileJava`
+- `gradlew.bat test`
+- targeted GUI smoke checks for UI refactors
+- targeted API/batch checks for input-preparation refactors
 
-- It is now the largest single report section and contains several distinct presentation paths.
-- It is still reasonable as a single class for now, but it is the first section writer that will become painful again when new report features land.
+For report-affecting refactors:
 
-### Refactor plan
+- `gradlew.bat realDataTest`
+- compare fresh real-data reports against the prior baseline bundle
+- only runtime-dependent `Processing Time` values should differ when behavior is unchanged
+- standard detection report export still works
+- iterative report export still works
+- SkyBoT/JPL/SatChecker/Stellarium links still render
+- live-render actions still work
 
-1. Extract per-target-type writers if this class starts changing again.
-   - Suggested classes:
-     - `SingleStreakSectionWriter`
-     - `StreakTrackSectionWriter`
-     - `MovingTargetSectionWriter`
-     - `AnomalySectionWriter`
+For settings refactors:
 
-2. Extract sky-orientation overlay logic if it grows further.
-   - Suggested class: `SkyOrientationOverlayRenderer`
-
-### Recommendation
-
-- Do not split this yet unless feature work is already touching it.
-- Right now, `DetectionReportAstrometry` and `ImageProcessing` are higher-value targets.
-
-## Recommended overall sequence
-
-This is the order I would use for the next actual implementation rounds.
-
-1. `DetectionReportAstrometry`
-   - Best next target if we stay in the reporting layer
-   - Still has the clearest responsibility split left to make
-
-2. `ImageProcessing`
-   - Highest overall LOC
-   - Biggest non-report architectural payoff
-
-3. `DetectionConfigurationPanel`
-   - Worth doing after export/runtime settings boundaries are more stable
-
-4. `MainApplicationPanel`
-   - Best handled after service boundaries are clearer
-
-5. `TargetVisualizationSectionWriter`
-   - Only if report feature work resumes and this class starts growing again
-
-## What not to do in the next round
-
-- Do not keep refactoring `DetectionReportGenerator` just to reduce its line count further.
-- Do not rename report output files or paths unless there is a concrete bug or compatibility reason.
-- Do not mix astrometry-query strategy changes with UI work in the same pass.
-- Do not split every section writer unless there is active feature pressure.
-
-## Verification expectations for each refactor round
-
-- `./gradlew.bat compileJava`
-- `./gradlew.bat test`
-- `./gradlew.bat realDataTest` for report-affecting changes
-- Compare fresh real-data reports against the prior baseline bundle for each dataset
-  - Only runtime-dependent `Processing Time` values should differ when behavior is unchanged
-- Standard detection report export still works
-- Iterative report export still works
-- Existing report links and live-render actions still work
-- Settings load/save still works
+- saved detection profile loads
+- legacy detection profile migration still works
+- visualization preferences load and save separately
+- defaults can be restored without overwriting saved files until explicitly saved

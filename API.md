@@ -19,6 +19,7 @@ Supported public types:
 Other `eu.startales.spacepixels.*` packages should be treated as internal implementation details and may change between releases. The current public request/result model also exposes:
 
 - `io.github.ppissias.jtransient.config.DetectionConfig`
+- `io.github.ppissias.jtransient.engine.JTransientAutoTuner.AutoTuneProfile`
 - `io.github.ppissias.jtransient.engine.PipelineResult`
 - `eu.startales.spacepixels.util.FitsFileInformation`
 
@@ -34,7 +35,7 @@ The published artifact is the current single-module SpacePixels JAR, so it conta
 
 ## What the API does
 
-The API runs the standard SpacePixels detection pipeline on a directory of aligned FITS or XISF files and returns:
+The API runs the standard SpacePixels detection pipeline on a directory of aligned FITS files, or an XISF-only directory when input preparation is enabled, and returns:
 
 - the original and prepared input directories
 - validated FITS metadata
@@ -59,7 +60,7 @@ Library consumers should use `getExportDirectory()` and `getReportFile()` rather
 - `FAIL_IF_NOT_READY`
   Use this when the directory is already an uncompressed 16-bit monochrome FITS sequence.
 - `AUTO_PREPARE_TO_16BIT_MONO`
-  Use this when the input may be XISF, color FITS, or unsupported bit depth and you want SpacePixels to normalize it into a new detection-ready directory first.
+  Use this when the input may be an XISF-only directory, color FITS, or supported FITS data that is not already 16-bit monochrome, and you want SpacePixels to normalize it into a new detection-ready directory first.
 
 ## Example: basic pipeline run with report export
 

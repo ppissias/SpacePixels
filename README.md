@@ -107,10 +107,10 @@ For the underlying detection logic and the meaning of the engine configuration o
 - Runs a standard multi-frame detection pipeline for moving targets, streak tracks, single-frame streaks, and bright anomalies.
 - Searches the deep integrated stacks for ultra-slow movers and other elongated deep-stack candidates.
 - Provides an iterative detection mode for large datasets and very slow targets.
-- Generates an HTML report with diagnostics, GIFs, geometric overlays, global maps, and optional AI-themed summary sections.
+- Generates an HTML report with diagnostics, GIFs, geometric overlays, global maps, object-identification links, and optional AI-themed summary sections.
 - Supports manual transient inspection and frame-by-frame single-image detection preview.
 - Blinks aligned frames for traditional visual inspection.
-- Plate-solves images through ASTAP or Astrometry.net and uses WCS for RA/Dec overlays and report links.
+- Plate-solves images through ASTAP or Astrometry.net and uses WCS for RA/Dec overlays, SkyBoT/JPL moving-object identification, SatChecker satellite identification for streaks, and Stellarium Web context links.
 - Batch-converts color FITS to monochrome and batch-stretches imported datasets.
 - Includes headless utilities for batch detection.
 
@@ -124,7 +124,7 @@ For setup, request/result behavior, and usage examples, see [API.md](API.md).
 
 - Best results come from aligned, calibrated sub-exposures where the star field is already registered.
 - All frames in a sequence should share the same dimensions.
-- The GUI can import `.fit`, `.fits`, and `.fts` files. Compressed `.fz` inputs are detected and can be decompressed into a new directory during import.
+- The GUI can import FITS directories (`.fit`, `.fits`, `.fts`). Directories containing XISF files and no native FITS files are converted to 16-bit monochrome FITS during import. Compressed `.fz` inputs are detected and can be decompressed into a new directory during import.
 - The GUI can also standardize 32-bit FITS data down to 16-bit during import when needed.
 - Automated detection requires 16-bit monochrome frames. If you import color images, use `Batch Convert to Mono` before running the detection pipelines.
 - The headless batch detector is stricter than the GUI: it expects uncompressed 16-bit monochrome FITS files.
@@ -171,7 +171,7 @@ To generate a local distribution with launch scripts:
 
 ## Typical GUI workflow
 
-1. Import a directory of aligned FITS files from `File -> Import aligned fits files`.
+1. Import a directory of aligned FITS files, or a XISF-only directory, from `File -> Import aligned FITS/XISF files`.
 2. If the sequence is compressed or 32-bit, let SpacePixels decompress or standardize it first.
 3. If the sequence is color, run `Batch Convert to Mono`.
 4. Optionally configure ASTAP and observatory metadata in the `Astrometry Config` tab.
@@ -194,6 +194,7 @@ The standard pipeline exports an HTML session report plus PNG and GIF assets. De
 - Frame extraction statistics and stationary-star purification diagnostics
 - Track linking diagnostics
 - Target visualizations for moving tracks, streak tracks, single-frame streaks, and anomalies
+- WCS-aware identification helpers: SkyBoT and JPL Small-Body Identification for moving-object tracks, SatChecker for streak tracks, and Stellarium Web sky-context links for both moving tracks and streaks
 - Deep-stack anomalies and maximum-stack streak hints
 - Global trajectory and transient maps
 - Optional AI creative report sections
@@ -203,7 +204,7 @@ The AI creative sections are controlled by a session-only checkbox in `Detection
 
 ## Command-line utilities
 
-`build.gradle` keeps the generated application launcher in `bin`, adds dedicated command-line tool launchers there, and ships top-level `StartSpacePixels` wrappers that check Java before delegating to the generated launcher.
+`build.gradle` keeps the generated application launcher in `bin`, adds dedicated command-line tool launchers there, and ships top-level `StartSpacePixels` wrappers that delegate to the generated launcher.
 
 After building or unpacking a distribution, you should find:
 

@@ -29,7 +29,7 @@ The application combines:
 - automated transient detection and track linking
 - deep-stack analysis for ultra-slow movers
 - manual inspection tools such as blinking and transient browsing
-- plate solving and WCS-aware viewers
+- plate solving, WCS-aware viewers, and object-identification links
 - HTML report generation with diagnostics, maps, and animations
 
 ---
@@ -47,18 +47,20 @@ SpacePixels works best when the input frames are:
 
 SpacePixels is not a stacker. It expects the stars to stay fixed so that moving or transient objects can stand out against the stationary background.
 
-### Supported FITS handling
+### Supported image handling
 
 The GUI import pipeline can work with:
 
 - `.fit`, `.fits`, and `.fts`
 - compressed `.fz` FITS files
+- XISF-only directories
 - 16-bit and 32-bit FITS data
 - monochrome and color sequences
 
 Important distinction:
 
 - the GUI can decompress `.fz` data into a new directory during import
+- the GUI can convert XISF-only directories into detection-ready FITS files during import
 - the GUI can standardize 32-bit FITS to 16-bit during import
 - the detection engine itself runs on 16-bit monochrome frames
 - if you import color data, detection buttons remain disabled until you convert the sequence to monochrome
@@ -114,7 +116,7 @@ Tabs other than `Main` stay disabled until a sequence is imported successfully.
 
 The menu bar currently exposes a single import action:
 
-- `File -> Import aligned fits files`
+- `File -> Import aligned FITS/XISF files`
 
 ### Main tab
 
@@ -137,8 +139,8 @@ The `Main` tab contains:
 
 ### Basic import flow
 
-1. Open `File -> Import aligned fits files`.
-2. Select the directory containing your FITS sequence.
+1. Open `File -> Import aligned FITS/XISF files`.
+2. Select the directory containing your aligned FITS or XISF sequence.
 3. SpacePixels scans the folder and validates the frames.
 
 ### What SpacePixels may prompt you to do
@@ -146,10 +148,11 @@ The `Main` tab contains:
 Depending on the data, the import stage may prompt you to:
 
 - decompress `.fz` files into a new uncompressed directory
+- convert a XISF-only directory into a FITS working directory
 - standardize 32-bit images down to 16-bit
 - convert unsupported combinations into a supported working format
 
-If decompression creates a new directory, SpacePixels can automatically redirect the import to that new directory.
+If decompression, XISF conversion, or format standardization creates a new directory, SpacePixels can automatically redirect the import to that generated working directory.
 
 ### File table columns
 
@@ -305,83 +308,178 @@ The `Detection Settings` tab controls the JTransient profile and SpacePixels-spe
 - `Apply Settings`
   - updates the current in-memory session
 - `Save Configuration`
-  - saves the JTransient profile used as the default on future startups
+  - saves the JTransient detection profile and visualization preferences used as defaults on future startups
 - `Preview Detection Settings`
   - runs a preview extraction on the selected frame
 - `Auto-Tune Settings`
   - searches for a robust configuration automatically
+- `Load Defaults`
+  - loads a fresh JTransient `DetectionConfig` into the panel and current session without overwriting your saved profile unless you save afterward
 
 ### Auto-Tune behavior
 
-Auto-Tune uses:
+SpacePixels Auto-Tune is a fast configuration search, not a full detection run. It does not link tracks, run the slow-mover branch, or export a final `PipelineResult`.
 
-- the currently selected frames if you selected at least five frames, otherwise
+SpacePixels chooses the frame pool this way:
+
+- the currently selected frames if you selected at least four frames, otherwise
 - the full imported monochrome sequence
 
-It requires at least five usable monochrome frames.
+It requires at least four usable monochrome frames in the SpacePixels GUI. JTransient's standalone default sample size is five, but SpacePixels temporarily lowers the sample size when a valid smaller pool is available.
+
+For long sequences, the `Max Frames For Auto-Tuner` setting limits the candidate pool. When the sequence is longer than that limit, SpacePixels builds a deterministic pool from:
+
+- best-quality frames
+- median-quality frames
+- evenly spaced sequence coverage
+
+JTransient then:
+
+1. evaluates frame quality using the dedicated quality-analysis thresholds
+2. selects a representative sample from the candidate pool
+3. extracts several interior crops from those frames
+4. builds cropped median master stacks
+5. calibrates `maxStarJitter` from measured star displacement
+6. sweeps detection sigma, grow sigma, minimum detection pixels, and mask overlap
+7. validates the winning configuration on the same frozen crops
+
+Auto-Tune actively changes:
+
+- `detectionSigmaMultiplier`
+- `growSigmaMultiplier`
+- `minDetectionPixels`
+- `maxMaskOverlapFraction`
+- `maxStarJitter`
+
+Most other settings are preserved from your current base configuration. The `Conservative`, `Balanced`, and `Aggressive` profiles use the same search grid but different scoring policies:
+
+- `Conservative` suppresses transient leakage more strongly
+- `Balanced` is the default middle ground
+- `Aggressive` allows more leakage to preserve faint-target sensitivity
 
 ### Tab breakdown
 
 #### Basic Tuning
 
-Holds the most commonly used controls, including:
+Holds the core per-frame extraction controls:
 
 - detection sigma
 - grow sigma
 - minimum detection pixels
-- streak elongation threshold
-- star jitter and mask overlap limits
-- anomaly rescue
-- slow-mover stack detection
-- export stretch preferences
 
-#### Advanced Extractor
+These are usually the first fields to adjust manually:
 
-Contains lower-level extraction controls such as:
+- raise them when the report is flooded with noise
+- lower them cautiously when faint real sources are missed
 
-- edge margin
-- void suppression
-- master-map thresholds
-- slow-mover extraction parameters
-- single-streak and point-source thresholds
-- background clipping controls
+#### Object Detection
 
-#### Advanced Kinematics
+Controls master-star masking and low-level extraction safeguards:
 
-Controls the tracker and motion model, including:
+- master sigma and master minimum pixels for the stationary-star veto map
+- mask-overlap tolerance before an object is rejected as a stellar residual
+- physical edge margin
+- registration-void threshold and proximity radius
+- histogram background clipping iterations and factor
 
-- prediction tolerance
-- angle tolerance
-- maximum jump
-- frame-ratio requirements
-- rhythm consistency thresholds
+The engine may raise `voidProximityRadius` during border-drift diagnostics if the measured registration padding requires a safer value.
+
+#### Streak Detection
+
+Controls elongated-object classification and streak linking:
+
+- minimum elongation and footprint size for streak classification
+- minimum peak sigma for one-frame streak tracks
+- trajectory angle tolerance
+- timestamp-based streak time-consistency tolerance
+- binary-star-like shape veto for unmatched one-frame streak candidates
+
+Single-frame streaks that fail the peak-sigma or binary-star-like shape checks can still remain as standalone post-veto streak detections; they are just not promoted to one-point streak tracks.
+
+#### Moving Objects
+
+Controls point-source track construction:
+
+- strict exposure kinematics
+- optional geometric track linking when timestamps are present
+- base star-jitter radius
+- prediction-line tolerance
+- minimum track-length ratio and absolute cap
+- maximum geometric jump
+- FWHM and surface-brightness consistency ratios
 - time-based velocity tolerance
-- FWHM and surface-brightness ratios
+- geometric rhythm checks
+
+When valid timestamps are available, JTransient tries the time-based point linker first. If timestamps are missing, the geometric linker is forced because it is the only point-track path. If timestamps are available, `Enable Geometric Track Linking` controls whether the geometric fallback also runs.
+
+#### Anomaly Detection
+
+Controls the final one-frame rescue stage:
+
+- anomaly rescue master switch
+- minimum peak sigma
+- minimum integrated sigma
+- minimum footprint sizes
+- peak-sigma floor for broad diffuse anomalies
+- suspected same-frame streak line tolerance
+
+Rescued anomalies can remain as standalone peak- or integrated-sigma anomalies. Rescued anomalies from the same frame can also be grouped into suspected streak tracks when their centroids form a convincing line.
+
+#### Slow Movers
+
+Controls the deep-stack branch for ultra-slow movers:
+
+- slow-mover branch enable switch
+- slow-mover stack extraction sigma, grow sigma, and minimum pixels
+- slow-mover stack middle fraction
+- dynamic elongation baseline multiplier
+- median-stack support overlap bounds
+- residual-footprint filtering in `slowMoverStack - medianStack`
+
+This branch is separate from ordinary frame-to-frame point linking. It is designed for objects that move so slowly that they are better revealed in a specialized stack than as isolated per-frame points.
+
+#### Residual Analysis
+
+Controls the final pass over leftover point detections that were not consumed by confirmed tracks, streak tracks, suspected streak groupings, or standalone anomalies:
+
+- residual transient analysis master switch
+- local rescue candidates
+- local activity clusters
+- local activity cluster radius
+- minimum unique frames for activity clusters
+
+Local rescue candidates can surface weak patterns such as micro-drift, sparse local drift, or local repeaters. Local activity clusters are broader review groups, not confirmed moving objects.
 
 #### Quality Control
 
-Contains frame-quality rejection controls and single-frame quality extraction settings:
+Contains frame sampling, session rejection, and quality-extraction settings:
 
+- maximum candidate frames for Auto-Tune
 - minimum frames for analysis
 - sigma-based star-count, FWHM, eccentricity, and background rejection
+- bright-star eccentricity filtering
 - absolute minimum tolerance envelopes
-- dedicated quality-analysis extraction settings
+- dedicated quality-analysis extraction thresholds
+
+These controls affect both pipeline frame rejection and the quality-based candidate pool that SpacePixels prepares for Auto-Tune. The quality-side grow sigma is deliberately separate from the main detection grow sigma, so previous tuning output does not feed back into frame sampling.
 
 #### Advanced Visualization
 
 Contains visualization-only controls such as:
 
+- automatic report stretch black and white sigma
+- GIF blink speed
 - streak line scale
 - streak centroid box radius
 - point-source box radius
 - dynamic box padding
 - track crop padding
 
-It also contains a session-only checkbox:
+It also contains:
 
 - `Include AI Creative Report Sections`
 
-This controls the optional AI-themed report sections and is intentionally not persisted when you save the detection configuration.
+These settings do not change detection results. They are saved as SpacePixels visualization preferences, separately from the JTransient detection profile.
 
 ---
 
@@ -425,27 +523,122 @@ This mode is useful for:
 
 ### Standard pipeline
 
-The standard pipeline:
+The standard pipeline uses JTransient's full `runPipeline(...)` entry point. It runs the detector end to end and then exports SpacePixels report assets.
 
-1. loads the full monochrome sequence
-2. builds the master stacks and masks
-3. extracts per-frame transients
-4. purifies them against the stationary background
-5. links valid tracks
-6. exports the HTML report and image assets
+High-level workflow:
+
+1. load the monochrome sequence in chronological order
+2. measure border drift and registration padding
+3. extract sources from each frame in parallel
+4. measure per-frame quality in parallel
+5. reject outlier frames for the session
+6. build or reuse the median master stack
+7. extract the stationary master-star map
+8. optionally run the slow-mover stack analysis
+9. filter per-frame detections against the stationary-star veto mask
+10. link fast streaks
+11. link point-like movers with the time-based linker when timestamps are available
+12. optionally run the geometric point linker, or force it when timestamps are missing
+13. rescue strong one-frame anomalies
+14. group collinear rescued anomalies into suspected same-frame streak tracks
+15. consolidate streak tracks
+16. analyze leftover residual point transients
+17. build the maximum stack for visualization
+18. export the HTML report and image assets
 
 The output folder is created next to your data and named like:
 
 `detections_YYYYMMDD_HHMMSS`
 
-### Deep Stack Anomalies
+### How source extraction works
+
+For each frame, JTransient estimates the background with histogram sigma clipping. It then uses two thresholds:
+
+- a strict seed threshold from `detectionSigmaMultiplier`
+- a lower grow threshold from `growSigmaMultiplier`
+
+Pixels above the seed threshold start a blob. The blob grows through neighboring pixels while they remain above the grow threshold. After that, JTransient measures centroid, flux, peak sigma, integrated sigma, elongation, angle, and approximate FWHM.
+
+Objects smaller than `minDetectionPixels` are discarded. Elongated objects whose footprint is large enough become streak candidates. Other detections remain point-like candidates. Edge and registration-void filters remove objects likely caused by physical borders or black padding from alignment.
+
+### Frame quality and rejection
+
+The quality analyzer runs a stricter extraction pass using the `Quality Control` thresholds. It measures:
+
+- star count
+- background median and noise
+- median FWHM
+- median eccentricity
+- bright-star median eccentricity when enough bright stars are available
+
+The session evaluator compares each frame against the session median using MAD-derived sigma estimates. Frames can be rejected for low star count, high FWHM, high eccentricity, high bright-star eccentricity, or background deviation. The absolute minimum tolerance fields keep these envelopes from becoming unrealistically tight on very stable data.
+
+Rejected frames are excluded from stacking and tracking, and the report records the rejection telemetry.
+
+### Stationary-star veto
+
+The median master stack represents the stable sky. JTransient extracts master stars from that stack and builds a veto mask. Detections whose footprints overlap that mask too strongly are treated as stationary-star residuals and removed from the transient pool.
+
+The veto mask is dilated from `maxStarJitter`, which represents the expected residual star wobble after registration. Auto-Tune measures this value from sampled stars.
+
+### Track linking
+
+JTransient separates streak-like and point-like detections before linking.
+
+Streak handling:
+
+- links multi-frame streak fragments by angle, direction, line consistency, and time or rhythm consistency
+- promotes high-confidence one-frame streaks when they pass the single-streak significance and shape checks
+- preserves unmatched post-veto streak detections for reporting even when they are not promoted to tracks
+
+Point-source handling:
+
+- uses timestamp-aware velocity linking first when usable timestamps are present
+- applies strict exposure kinematics when enabled and exposure durations are available
+- can run a geometric fallback when timestamps are present and `Enable Geometric Track Linking` is enabled
+- always uses the geometric linker when timestamps are missing
+- checks FWHM and surface-brightness consistency between linked detections
+
+The geometric linker also prunes near-stationary steps and validates steady motion rhythm so random residuals are less likely to become tracks.
+
+### Anomalies and residuals
+
+After confirmed tracks are removed, the anomaly rescue pass scans remaining transient detections.
+
+It can rescue:
+
+- compact high-peak-sigma events
+- broader high-integrated-sigma events
+
+Rescued same-frame anomalies can be grouped into suspected streak tracks if their centroids are collinear. After that, residual analysis can mine leftover non-streak point detections for weaker local patterns and optional broader activity clusters. Residual-analysis results are review aids; they are exported separately from confirmed tracks and standalone anomalies.
+
+### Slow-mover and deep-stack analysis
 
 If deep-stack detection is enabled, SpacePixels also searches for ultra-slow movers and elongated stack features that do not behave like ordinary stars.
 
-This covers:
+The slow-mover branch builds a specialized stack from the upper end of a middle band of sorted pixel values. This is different from a plain maximum stack: it favors semi-persistent weak structure while avoiding many one-frame flashes.
 
-- candidates found in the slow-mover stack
-- transient streaks found in the master maximum stack
+Slow-mover candidates are filtered by:
+
+- dynamic elongation relative to the field baseline
+- minimum and maximum median-stack support overlap
+- optional positive residual flux in `slowMoverStack - medianStack`
+
+The standard report can also use the maximum stack for visual diagnostics and elongated transient hints.
+
+### Main result categories
+
+The standard pipeline can produce:
+
+- confirmed moving-object tracks
+- confirmed streak tracks
+- one-frame streak tracks
+- suspected same-frame streak tracks
+- standalone peak- or integrated-sigma anomalies
+- slow-mover stack candidates
+- residual local rescue candidates
+- residual local activity clusters
+- unclassified post-veto transients for diagnostics
 
 ### Iterative pipeline
 
@@ -453,12 +646,13 @@ The iterative pipeline is designed for:
 
 - very large datasets
 - datasets where the standard full-baseline run may be too memory-heavy
+- very slow or sparse targets that may benefit from several temporally spaced passes
 
 Workflow:
 
 1. Click `Detect Iteratively (Large Datasets)`.
 2. Enter a maximum frame limit, or leave it empty or zero to use the full range.
-3. SpacePixels runs multiple temporally spaced passes.
+3. SpacePixels runs multiple temporally spaced pipeline passes.
 4. A master iterative summary report is generated with links to the per-pass reports.
 
 The iterative summary is an index page plus subfolders such as `5_frames`, `10_frames`, and so on.
@@ -480,6 +674,7 @@ The standard session report is a dark-themed HTML dashboard. Depending on the da
 - `Frame Extraction Statistics`
 - `Phase 3: Stationary Star Purification`
 - `Track Linking Diagnostics`
+- slow-mover and residual-analysis diagnostics when populated
 
 ### Target sections
 
@@ -488,7 +683,9 @@ Under `Target Visualizations`, SpacePixels can produce:
 - `Single Streaks`
 - `Multi-Frame Streak Tracks`
 - `Moving Target Tracks`
+- suspected same-frame streak tracks
 - `High-Energy Anomalies (Optical Flashes)`
+- residual local rescue or activity review sections when populated
 
 These sections include combinations of:
 
@@ -498,12 +695,21 @@ These sections include combinations of:
 - per-frame coordinate lists
 - WCS-aware links and identification helpers when astrometry is available
 
+The identification helpers are split by target type:
+
+- Moving-object tracks get SkyBoT cone searches and JPL Small-Body Identification links for asteroid, comet, and NEO candidate checks.
+- Confirmed streak tracks get SatChecker satellite-pass lookups using the measured streak midpoint, time window, observing site, and field-of-view geometry.
+- Moving-object tracks and streak tracks both get Stellarium Web links so you can inspect the same sky position and observing time in external sky context.
+- When supported by the generated report, SatChecker and JPL results can also be rendered inside the report for quick inspection before opening the raw service response.
+
 ### Deep-stack sections
 
 If enabled and populated, the report can also include:
 
 - `Deep Stack Anomalies (Ultra-Slow Mover Candidates)`
 - `Master Maximum Stack Transient Streaks`
+
+Deep-stack candidates should be treated as review candidates. They are useful for surfacing ultra-slow or semi-persistent features, but they are separate from ordinary frame-to-frame confirmed tracks.
 
 ### Global map sections
 
@@ -519,12 +725,14 @@ These sections summarize the full night in a single view and help reveal:
 
 ### Optional AI report sections
 
-If you enable the session-only checkbox in `Detection Settings -> Advanced Visualization`, the report also includes:
+If you enable the checkbox in `Detection Settings -> Advanced Visualization`, the report also includes:
 
-- `The AI's Perspective: Skyprint of the Session`
+- `The AI's Perspective: Signal Weave`
 - `The AI's Perspective: Hidden Rhythms`
 
 These are optional visual summaries and are off by default.
+
+The toggle is saved with SpacePixels visualization preferences when you use `Save Configuration`; it is not part of the JTransient detection profile.
 
 ### Iterative summary report
 
@@ -570,7 +778,17 @@ When WCS is available, SpacePixels uses it for:
 - cursor RA/Dec in the single-frame and transient viewers
 - report astrometric context
 - track and streak coordinate displays
-- solar-system lookup and identification links
+- SkyBoT and JPL Small-Body Identification links for moving-object tracks
+- SatChecker satellite-identification links for streak tracks
+- Stellarium Web links for both moving-object and streak sky context
+
+### Report identification links
+
+For moving-object tracks, SpacePixels builds SkyBoT and JPL Small-Body Identification queries from the measured track sky position, observation time, search radius, and available observer metadata. SkyBoT is useful for solar-system cone searches, while JPL Small-Body Identification provides a second small-body check and a wider NEO-recovery fallback.
+
+For confirmed streak tracks, SpacePixels builds SatChecker queries from the measured streak midpoint, the time window covered by the track, the observing site, and a tight field-of-view radius. These links are intended for satellite candidate identification.
+
+For both moving tracks and streak tracks, SpacePixels also adds Stellarium Web links. These open an external sky-context view at the relevant observing time and target position, using WCS-derived coordinates when available.
 
 ---
 
@@ -587,8 +805,9 @@ Usage pattern:
 Important limitations:
 
 - the directory must contain uncompressed 16-bit monochrome FITS files
-- the config file must be a valid SpacePixels detection-profile JSON
+- the config file must be a valid SpacePixels detection-profile JSON with flat JTransient `DetectionConfig` fields plus `autoTuneMaxCandidateFrames`
 - packaged distributions include `config/default_detection_profile.json`
+- if `--auto-tune` is supplied, the tuned configuration is used for the pipeline run and exported with the report
 
 Gradle example:
 
@@ -597,7 +816,7 @@ Gradle example:
 - Linux/macOS:
   - `./gradlew batchDetect -PbatchArgs="\"/data/sequence\" \"src/dist/config/default_detection_profile.json\" --auto-tune aggressive"`
 
-Internally, `BatchDetectionCli` now reuses the same public Java pipeline API described below.
+Internally, `BatchDetectionCli` reuses the same public Java pipeline API described below. It keeps strict input behavior by using `FAIL_IF_NOT_READY`, but it still uses SpacePixels' candidate-pool builder when Auto-Tune is enabled.
 
 ### Embedded Java pipeline API
 
@@ -671,6 +890,7 @@ Practical notes:
 - if Auto-Tune is requested and fails, the API throws `SpacePixelsPipelineException`; it does not silently fall back to the base configuration
 - the prepared directory is kept on disk and returned to the caller when automatic preparation is used
 - `BatchDetectionCli` keeps its current strict behavior by using `FAIL_IF_NOT_READY`
+- Auto-Tune-enabled API runs should not be executed concurrently in the same JVM because the implementation temporarily adjusts shared JTransient Auto-Tune sample-size state
 
 ### Artificial star injection
 
@@ -733,5 +953,6 @@ Check:
 ### Saved settings behavior
 
 - `Astrometry Config -> Save Configuration` stores app-level settings such as ASTAP and observer metadata.
-- `Detection Settings -> Save Configuration` stores the JTransient detection profile.
-- `Include AI Creative Report Sections` is session-only and is not saved intentionally.
+- `Detection Settings -> Save Configuration` stores the JTransient detection profile in `spacepixels_detection_profile.json`.
+- Visualization-only report/export preferences are stored separately in `spacepixels_visualization.json`.
+- `Include AI Creative Report Sections` is a visualization preference, not a detection-profile field.
