@@ -20,7 +20,9 @@ import java.io.File;
 import java.io.IOException;
 
 public class ConfigurationPanel extends JPanel {
-    private static final int CONFIG_TEXT_COLUMN_WIDTH = 560;
+    private static final int CONFIG_TEXT_COLUMN_WIDTH = 680;
+    private static final int CONFIG_TEXT_FIELD_WIDTH = 190;
+    private static final int CONFIG_TEXT_FIELD_HEIGHT = 26;
 
     // link to main window
     private final ApplicationWindow mainAppWindow;
@@ -79,13 +81,13 @@ public class ConfigurationPanel extends JPanel {
         latTextField = new JTextField();
         mainContent.add(createConfigRow(
                 "Site Latitude (N)",
-                "Observation site latitude for accurate celestial annotation.<br><b>Format:</b> signed decimal degrees. Use positive values for north and negative values for south, e.g. <code>37.9838</code> or <code>-24.6272</code>.",
+                "Observation site latitude for accurate celestial annotation. If a supported latitude value exists in the FITS header, SpacePixels uses the FITS header value; this field is the fallback.<br><b>Format:</b> signed decimal degrees. Use positive values for north and negative values for south, e.g. <code>37.9838</code> or <code>-24.6272</code>.",
                 latTextField));
 
         longTextField = new JTextField();
         mainContent.add(createConfigRow(
                 "Site Longitude (E)",
-                "Observation site longitude for accurate celestial annotation.<br><b>Format:</b> signed decimal degrees. Use positive values for east and negative values for west, e.g. <code>23.7275</code> or <code>-70.4030</code>.",
+                "Observation site longitude for accurate celestial annotation. If a supported longitude value exists in the FITS header, SpacePixels uses the FITS header value; this field is the fallback.<br><b>Format:</b> signed decimal degrees. Use positive values for east and negative values for west, e.g. <code>23.7275</code> or <code>-70.4030</code>.",
                 longTextField));
 
         // --- SECTION 3: SOLVING PARAMETERS ---
@@ -280,10 +282,7 @@ public class ConfigurationPanel extends JPanel {
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
         titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // Constrain the HTML width so longer astrometry/help text wraps instead of clipping.
-        JLabel descLabel = new JLabel("<html><div style='width: " + CONFIG_TEXT_COLUMN_WIDTH + "px;'>" + description + "</div></html>");
-        descLabel.setFont(descLabel.getFont().deriveFont(Font.PLAIN, 12f));
-        descLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        JEditorPane descLabel = createDescriptionPane(description);
         descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         textPanel.add(titleLabel);
@@ -300,9 +299,9 @@ public class ConfigurationPanel extends JPanel {
         // Right side: Input Control
         JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         if (inputControl instanceof JTextField) {
-            inputControl.setPreferredSize(new Dimension(150, 26));
+            inputControl.setPreferredSize(new Dimension(CONFIG_TEXT_FIELD_WIDTH, CONFIG_TEXT_FIELD_HEIGHT));
         } else if (inputControl instanceof JSpinner) {
-            inputControl.setPreferredSize(new Dimension(80, 26));
+            inputControl.setPreferredSize(new Dimension(80, CONFIG_TEXT_FIELD_HEIGHT));
         }
         inputWrapper.add(inputControl);
 
@@ -314,5 +313,43 @@ public class ConfigurationPanel extends JPanel {
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         return row;
+    }
+
+    private JEditorPane createDescriptionPane(String description) {
+        JEditorPane descriptionPane = new JEditorPane();
+        descriptionPane.setContentType("text/html");
+        descriptionPane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
+        descriptionPane.setEditable(false);
+        descriptionPane.setFocusable(false);
+        descriptionPane.setOpaque(false);
+        descriptionPane.setBorder(null);
+        descriptionPane.setMargin(new Insets(0, 0, 0, 0));
+        descriptionPane.setFont(descriptionPane.getFont().deriveFont(Font.PLAIN, 12f));
+        descriptionPane.setForeground(UIManager.getColor("Label.disabledForeground"));
+        descriptionPane.setText(wrapDescriptionHtml(description));
+        descriptionPane.setCaretPosition(0);
+
+        descriptionPane.setSize(CONFIG_TEXT_COLUMN_WIDTH, Short.MAX_VALUE);
+        Dimension preferredSize = descriptionPane.getPreferredSize();
+        Dimension descriptionSize = new Dimension(CONFIG_TEXT_COLUMN_WIDTH, preferredSize.height);
+        descriptionPane.setPreferredSize(descriptionSize);
+        descriptionPane.setMinimumSize(descriptionSize);
+        descriptionPane.setMaximumSize(descriptionSize);
+
+        return descriptionPane;
+    }
+
+    private String wrapDescriptionHtml(String description) {
+        Color textColor = UIManager.getColor("Label.disabledForeground");
+        if (textColor == null) {
+            textColor = Color.GRAY;
+        }
+
+        return String.format(
+                "<html><body style='margin: 0; padding: 0; color: rgb(%d,%d,%d);'>%s</body></html>",
+                textColor.getRed(),
+                textColor.getGreen(),
+                textColor.getBlue(),
+                description);
     }
 }

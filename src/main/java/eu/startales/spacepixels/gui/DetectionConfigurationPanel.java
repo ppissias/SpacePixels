@@ -592,7 +592,7 @@ public class DetectionConfigurationPanel extends JPanel {
         chkIncludeAiCreativeReportSections = addCheckboxRow(
                 panel,
                 "Include AI Creative Report Sections",
-                "Adds the Skyprint and Kinematic Compass tribute panels to exported reports. This toggle is saved with visualization preferences, not with detection profiles.",
+                "These optional reporting sections gave AI agents freedom to visualize the detection data in their own way. You can see the results by enabling them.",
                 DetectionReportGenerator.includeAiCreativeReportSections);
 
         return panel;

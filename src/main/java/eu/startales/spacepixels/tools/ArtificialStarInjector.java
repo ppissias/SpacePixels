@@ -24,6 +24,11 @@ import java.util.Random;
  */
 public class ArtificialStarInjector {
 
+    private static final double TEST_STAR_START_X = 400.0;
+    private static final double TEST_STAR_START_Y = 400.0;
+    private static final double TEST_STAR_ANGLE_DEGREES = 45.0;
+    private static final double TEST_STAR_ANGLE_RAD = Math.toRadians(TEST_STAR_ANGLE_DEGREES);
+
     private static class ArtificialStar {
         double startX, startY;
         double angleRad;
@@ -53,6 +58,7 @@ public class ArtificialStarInjector {
             System.out.println("    (Injects 15 stars into the sequence, each moving a total of 10 pixels");
             System.out.println("     across the entire sequence. The peak of each star will be 4500 ADU above the local background,");
             System.out.println("     and a star size (FWHM) of 4.0 pixels)");
+            System.out.println("     The first star always starts at X=400, Y=400 and moves 45 degrees toward the bottom right.");
             return;
         }
 
@@ -108,12 +114,31 @@ public class ArtificialStarInjector {
             width = axes[1];
         }
 
-        // 3. Generate random trajectories for the artificial stars
+        if (numStars > 0 && (TEST_STAR_START_X >= width || TEST_STAR_START_Y >= height)) {
+            throw new IllegalArgumentException(String.format(java.util.Locale.US,
+                    "Deterministic test star start X=%.0f, Y=%.0f is outside image dimensions %dx%d.",
+                    TEST_STAR_START_X, TEST_STAR_START_Y, width, height));
+        }
+
+        // 3. Generate trajectories for the artificial stars
         Random random = new Random();
         List<ArtificialStar> targets = new ArrayList<>();
 
-        System.out.println("Generating " + numStars + " random trajectories...");
-        for (int i = 0; i < numStars; i++) {
+        if (numStars > 0) {
+            targets.add(new ArtificialStar(
+                    TEST_STAR_START_X,
+                    TEST_STAR_START_Y,
+                    TEST_STAR_ANGLE_RAD,
+                    totalMovement,
+                    peakBrightness,
+                    opticalSigma));
+            System.out.printf("Added deterministic test star at X: %.2f, Y: %.2f, angle: %.1f degrees.\n",
+                    TEST_STAR_START_X, TEST_STAR_START_Y, TEST_STAR_ANGLE_DEGREES);
+        }
+
+        int randomStarCount = Math.max(0, numStars - 1);
+        System.out.println("Generating " + randomStarCount + " random trajectories...");
+        for (int i = 0; i < randomStarCount; i++) {
             // Keep them slightly away from the absolute edges
             double startX = 50 + (random.nextDouble() * (width - 100));
             double startY = 50 + (random.nextDouble() * (height - 100));
