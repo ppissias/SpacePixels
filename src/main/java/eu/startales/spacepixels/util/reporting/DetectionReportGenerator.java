@@ -1464,7 +1464,16 @@ public class DetectionReportGenerator {
             // =================================================================
             ResidualReviewSectionWriter.writeSection(report, reportContext);
 
+            // =================================================================
+            // LOCAL RESCUE
+            // =================================================================
+
             GlobalMapsSectionWriter.writeSections(report, reportContext, localRescueTracks, allTransients);
+
+            // =================================================================
+            // UNCLASSIFIED TRANSIENTS
+            // =================================================================
+            UnclassifiedTransientSectionWriter.writeSection(report, reportContext, allTransients, unclassifiedTransients);
 
             // =================================================================
             // 6. CREATIVE TRIBUTE

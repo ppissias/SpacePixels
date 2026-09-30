@@ -312,7 +312,7 @@ final class CreativeTributeRenderer {
         int balanceY = y + 30;
         drawSignalCompositionBar(g2d, textX, balanceY, leftPanelWidth - 48, 12, signalSummary);
 
-        y = balanceY + 34;
+        y = balanceY + 44;
         g2d.setFont(detailFont.deriveFont(Font.PLAIN, Math.max(11.0f, detailFont.getSize2D() - 1.0f)));
         g2d.setColor(new Color(220, 220, 220));
         String framesLine;

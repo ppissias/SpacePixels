@@ -718,6 +718,7 @@ Maximum-stack candidates are review aids for elongated or semi-persistent featur
 
 - `Global Trajectory Map`
 - `Global Transient Maps`
+- `Unclassified Transient Inspector`
 
 These sections summarize the full night in a single view and help reveal:
 
@@ -725,6 +726,8 @@ These sections summarize the full night in a single view and help reveal:
 - hot columns and sensor defects
 - unlinked transients
 - clustered motion patterns
+
+The unclassified inspector uses the median stack as a quiet background and colors exact detected source footprints from blue (early frames) to red (late frames). Hover over a marker for basic source data; select it to inspect an enlarged local cutout with the footprint overlaid and detailed measurements. It shows detections left after tracks, anomalies, and local rescue candidates have been accounted for. Local activity clusters remain visible because they are review groupings rather than classified objects.
 
 ### Optional AI report sections
 

@@ -197,6 +197,7 @@ The standard pipeline exports an HTML session report plus PNG and GIF assets. De
 - WCS-aware identification helpers: SkyBoT and JPL Small-Body Identification for moving-object tracks, SatChecker for streak tracks, and Stellarium Web sky-context links for both moving tracks and streaks
 - Deep-stack anomalies and maximum-stack streak hints
 - Global trajectory and transient maps
+- Interactive unclassified-transient map with time-colored source footprints and markers, metadata, and a zoomed inspection view
 - Optional AI creative report sections
 
 The AI creative sections are controlled by a session-only checkbox in `Detection Settings -> Advanced Visualization -> Optional Report Sections`. They are off by default and are not persisted with the saved detection profile.
