@@ -300,6 +300,13 @@ public class DetectionConfigurationPanel extends JPanel {
                 SpacePixelsDetectionProfile detectionProfile = SpacePixelsDetectionProfileIO.load(reader);
                 jTransientConfig = detectionProfile.getDetectionConfig();
                 autoTuneMaxCandidateFrames = detectionProfile.getAutoTuneMaxCandidateFrames();
+                try (FileReader migrationReader = new FileReader(profileToLoad)) {
+                    if (SpacePixelsDetectionProfileIO.needsMigration(migrationReader)) {
+                        SwingUtilities.invokeLater(() -> offerDetectionProfileMigration(profileToLoad, detectionProfile));
+                    }
+                } catch (Exception e) {
+                    System.err.println("Failed to inspect detection profile for migration: " + e.getMessage());
+                }
                 return;
             } catch (Exception e) {
                 System.err.println("Failed to load detection profile, falling back to defaults: " + e.getMessage());
@@ -308,6 +315,34 @@ public class DetectionConfigurationPanel extends JPanel {
         jTransientConfig = new DetectionConfig();
         autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
         SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
+    }
+
+    private void offerDetectionProfileMigration(File profileToLoad, SpacePixelsDetectionProfile detectionProfile) {
+        int choice = JOptionPane.showConfirmDialog(
+                this,
+                "Your saved detection profile has missing or unrecognized settings.\n\n"
+                        + "Migrate it now? Supported and renamed settings will be kept,\n"
+                        + "unrecognized fields removed, and remaining missing fields set to current defaults.\n"
+                        + "The original file will be kept as a backup.\n"
+                        + "If this profile came from a newer SpacePixels version, choose No.",
+                "Migrate Detection Profile",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE);
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        try {
+            File backup = SpacePixelsDetectionProfileIO.migrate(profileToLoad, detectionProfileFile, detectionProfile);
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Detection profile migrated to:\n" + detectionProfileFile.getAbsolutePath()
+                            + "\n\nOriginal profile kept at:\n" + backup.getAbsolutePath(),
+                    "Migration Complete",
+                    JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Failed to migrate detection profile: " + e.getMessage(), "Migration Failed", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private void loadVisualizationPreferences() {

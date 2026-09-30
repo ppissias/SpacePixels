@@ -962,3 +962,5 @@ Check:
 - `Detection Settings -> Save Configuration` stores the JTransient detection profile in `spacepixels_detection_profile.json`.
 - Visualization-only report/export preferences are stored separately in `spacepixels_visualization.json`.
 - `Include AI Creative Report Sections` is a visualization preference, not a detection-profile field.
+- At startup, SpacePixels offers to migrate a saved detection profile with missing or unrecognized fields. Accepting keeps supported and renamed settings, fills remaining missing fields from current code defaults, removes unrecognized fields, and preserves the original as a backup. Declining leaves the saved file unchanged; decline if the profile came from a newer SpacePixels version.
+- These fallback values come from `DetectionConfig` and SpacePixels, not from the packaged `config/default_detection_profile.json` example.

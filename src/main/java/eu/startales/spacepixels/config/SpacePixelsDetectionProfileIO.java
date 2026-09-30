@@ -14,9 +14,14 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 /**
  * Reads and writes SpacePixels detection-profile JSON while keeping compatibility with JTransient's
@@ -41,12 +46,7 @@ public final class SpacePixelsDetectionProfileIO {
     }
 
     public static SpacePixelsDetectionProfile load(Reader reader) throws IOException {
-        JsonElement rootElement = JsonParser.parseReader(reader);
-        if (rootElement == null || rootElement.isJsonNull() || !rootElement.isJsonObject()) {
-            throw new IOException("Configuration file did not contain a JSON object.");
-        }
-
-        JsonObject root = rootElement.getAsJsonObject();
+        JsonObject root = readRoot(reader);
         migrateLegacyQualityFields(root);
         DetectionConfig detectionConfig = GSON.fromJson(root, DetectionConfig.class);
         if (detectionConfig == null) {
@@ -65,6 +65,41 @@ public final class SpacePixelsDetectionProfileIO {
 
         setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
         return new SpacePixelsDetectionProfile(detectionConfig, autoTuneMaxCandidateFrames);
+    }
+
+    public static boolean needsMigration(Reader reader) throws IOException {
+        JsonObject saved = readRoot(reader);
+        JsonObject current = GSON.toJsonTree(new DetectionConfig()).getAsJsonObject();
+        current.addProperty(AUTO_TUNE_MAX_CANDIDATE_FRAMES_FIELD, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES);
+        return !saved.keySet().equals(current.keySet());
+    }
+
+    public static File migrate(File sourceFile, File targetFile, SpacePixelsDetectionProfile detectionProfile) throws IOException {
+        Path source = sourceFile.toPath().toAbsolutePath().normalize();
+        Path target = targetFile.toPath().toAbsolutePath().normalize();
+        Path temporary = Files.createTempFile(target.getParent(), target.getFileName().toString() + ".", ".tmp");
+        try {
+            try (Writer writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
+                write(writer, detectionProfile);
+            }
+
+            if (!source.equals(target)) {
+                Files.move(temporary, target);
+                return sourceFile;
+            }
+
+            Path backup = Files.createTempFile(source.getParent(), source.getFileName().toString() + ".backup-", ".json");
+            try {
+                Files.copy(source, backup, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException ex) {
+                Files.deleteIfExists(backup);
+                throw ex;
+            }
+            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            return backup.toFile();
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
     }
 
     public static void write(Writer writer, SpacePixelsDetectionProfile detectionProfile) {
@@ -87,6 +122,14 @@ public final class SpacePixelsDetectionProfileIO {
         activeAutoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.normalizeAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
     }
 
+    private static JsonObject readRoot(Reader reader) throws IOException {
+        JsonElement rootElement = JsonParser.parseReader(reader);
+        if (rootElement == null || rootElement.isJsonNull() || !rootElement.isJsonObject()) {
+            throw new IOException("Configuration file did not contain a JSON object.");
+        }
+        return rootElement.getAsJsonObject();
+    }
+
     private static void migrateLegacyQualityFields(JsonObject root) {
         if (!root.has(QUALITY_GROW_SIGMA_MULTIPLIER_FIELD)) {
             JsonElement growSigma = root.get(LEGACY_GROW_SIGMA_MULTIPLIER_FIELD);
@@ -101,5 +144,6 @@ public final class SpacePixelsDetectionProfileIO {
                 root.add(QUALITY_MAX_ELONGATION_FOR_FWHM_FIELD, legacyMaxElongation.deepCopy());
             }
         }
+        root.remove(LEGACY_MAX_ELONGATION_FOR_FWHM_FIELD);
     }
 }
