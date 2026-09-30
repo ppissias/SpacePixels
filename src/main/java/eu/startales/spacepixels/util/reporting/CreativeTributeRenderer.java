@@ -307,7 +307,7 @@ final class CreativeTributeRenderer {
         drawCreativeMetric(g2d, textX, y, "anomalies", String.valueOf(signalSummary.anomalyCount), new Color(255, 102, 204), detailFont);
         drawCreativeMetric(g2d, textX + metricColumnGap, y, "unresolved", formatCompactCount(signalSummary.unclassifiedTransientCount), new Color(255, 174, 92), detailFont);
         drawCreativeMetric(g2d, textX + (metricColumnGap * 2), y, "peak frame", peakFrameValue(signalSummary), new Color(166, 255, 180), detailFont);
-        drawCreativeMetric(g2d, textX + (metricColumnGap * 3), y, "deep hints", String.valueOf(signalSummary.deepStackHintCount), new Color(186, 122, 255), detailFont);
+        drawCreativeMetric(g2d, textX + (metricColumnGap * 3), y, "shape hints", String.valueOf(signalSummary.deepStackHintCount), new Color(186, 122, 255), detailFont);
 
         int balanceY = y + 30;
         drawSignalCompositionBar(g2d, textX, balanceY, leftPanelWidth - 48, 12, signalSummary);

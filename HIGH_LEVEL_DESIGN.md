@@ -424,7 +424,7 @@ GUI/API/CLI
 -> DetectionReportGenerator
 ```
 
-The effective config is a clone of the caller config with runtime-safe adjustments, currently including slow-mover stack fraction clamping for small frame counts.
+The effective config is a clone of the caller config. JTransient builds the slow-mover maximum stack from quality-filtered frames.
 
 ### Auto-Tune Flow
 

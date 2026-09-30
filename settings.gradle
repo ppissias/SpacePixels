@@ -14,7 +14,7 @@ def isTruthy = { Object value ->
 }
 
 def isLocalBuildEnabled = { String propertyName ->
-    def projectProperty = gradle.startParameter.projectProperties[propertyName]
+    def projectProperty = providers.gradleProperty(propertyName).orNull
     if (projectProperty != null) {
         return isTruthy(projectProperty)
     }

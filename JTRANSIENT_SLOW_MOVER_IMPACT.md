@@ -1,85 +1,95 @@
 # JTransient Slow-Mover Algorithm Impact on SpacePixels
 
-Source reviewed: `../JTransient/SlowMoverAlgorithm.md`
+Sources reviewed: the current sibling `../JTransient` implementation and SpacePixels call sites.
 
-This note maps the proposed JTransient slow-mover redesign onto this SpacePixels repository. The algorithm itself lives in JTransient; SpacePixels mainly supplies configuration, calls `JTransientEngine`, summarizes `PipelineResult`, and renders report artifacts.
+This note maps the **implemented, currently uncommitted** JTransient slow-mover redesign onto SpacePixels. It describes the sibling JTransient working tree, not the published JAR. SpacePixels currently supplies configuration, calls `JTransientEngine`, summarizes `PipelineResult`, and renders report artifacts; its Java sources have not yet been migrated.
 
 ## Algorithm Change Summary
 
-JTransient's slow-mover branch is expected to move from a percentile/deep-stack candidate image to a maximum-stack envelope candidate image:
+JTransient now uses the maximum stack instead of the percentile/deep-stack image:
 
-- `maximumStack` proposes the slow-mover candidate footprint.
-- `medianStack` is used to build an exact object-footprint mask for stationary/common structure.
-- Candidate acceptance uses a median-mask overlap band:
-  - minimum: `slowMoverMedianSupportOverlapFraction`
-  - maximum: `slowMoverMedianSupportMaxOverlapFraction`
-- The old residual-footprint check from `slowMoverStack - medianStack` is retired for the first maximum-stack implementation.
-- The old `slowMoverStackMiddleFraction` and strong `slowMoverBaselineMadMultiplier` controls become legacy-only unless JTransient keeps the old branch temporarily.
-- New shape controls are expected:
-  - `slowMoverMinElongationBaselineMadMultiplier`
-  - `slowMoverMaxElongation`
+- Sources extracted from `maximumStackData` provide candidate **raw-pixel footprints**.
+- Sources extracted independently from the median stack provide an exact, undilated `medianMask`; overlap is the fraction of candidate raw pixels inside this mask.
+- Filters run in order: minimum pixels, geometric axis-ratio window, optional fill factor, then minimum/maximum median-mask overlap. The defaults are axis ratio **1.35–3.20**, fill factor **0.0** (disabled), and median overlap **0.00–0.80**. The upper overlap bound rejects mostly stationary sources; a zero lower bound does not demand median-stack persistence.
+- No percentile slow-mover stack, dynamic MAD elongation baseline, or residual-flux subtraction participates in acceptance.
+- These are **morphology candidates**, not temporally confirmed or astrometrically measured slow movers. A one-frame elongated transient can still pass the current morphology filters.
+
+## Main JTransient Interface Changes
+
+### Configuration
+
+| `DetectionConfig` field | Status and meaning |
+| --- | --- |
+| `slowMoverMinAxisRatio` | **New**, default `1.35`; minimum oriented-footprint `majorExtent / minorExtent`. |
+| `slowMoverMaxAxisRatio` | **New**, default `3.20`; upper shape bound, beyond which the object is treated as too streak-like. |
+| `slowMoverMinFillFactor` | **New**, default `0.0`; optional minimum connected-pixel count / oriented bounding-box area. |
+| `slowMoverMedianSupportOverlapFraction` | Retained; minimum exact-mask overlap, default `0.00`. |
+| `slowMoverMedianSupportMaxOverlapFraction` | Retained; maximum exact-mask overlap, default changed to `0.80`. |
+| `masterSlowMoverSigmaMultiplier`, `masterSlowMoverGrowSigmaMultiplier`, `masterSlowMoverMinPixels` | Retained; used to extract objects from both maximum and median stacks. |
+| `slowMoverStackMiddleFraction`, `slowMoverBaselineMadMultiplier`, `enableSlowMoverResidualFootprintFiltering`, `slowMoverResidualFootprintMinFluxFraction` | Still public and `@Deprecated`, but **ignored** by the new detector. |
+
+`slowMoverMinElongationBaselineMadMultiplier` and `slowMoverMaxElongation` mentioned in the original proposal **were not added**. The primary gate is geometric `axisRatio`, **not** the existing moment-based `DetectedObject.elongation`.
+
+### Stack, Candidate, and Result API
+
+- `SlowMoverAnalyzer.analyze(List<ImageFrame>, short[][] medianStackData, DetectionConfig)` retains its signature but now builds a maximum stack. A new overload accepts a precomputed `short[][] maximumStackData`; `JTransientEngine` uses it so the maximum stack is built once from quality-filtered frames.
+- `SlowMoverAnalysis` adds `maximumStackData` and `medianMask`. Its existing `slowMoverStackData` and `medianVetoMask` fields remain **unannotated compatibility aliases** of those new fields. `candidates` remains a list of `SlowMoverCandidateResult`.
+- `PipelineResult.maximumStackData` remains the shared maximum stack. With slow-mover detection enabled, `PipelineResult.slowMoverStackData` aliases that same stack, `slowMoverMedianVetoMask` aliases the exact median mask, and `slowMoverCandidates` mirrors the accepted objects. The old `PipelineResult` constructor overload and `JTransientEngine.runPipeline(...)` signatures remain.
+- `SourceExtractor.DetectedObject` adds `majorExtent`, `minorExtent`, `axisRatio`, and `fillFactor`; `SourceExtractor.measureBlobGeometry(...)` and `BlobGeometry` expose the measurement. `elongation` and `angle` retain their moment-based meanings.
+- `SlowMoverCandidateDiagnostics.medianSupportOverlap` becomes `medianMaskOverlapFraction`; `footprintPixelCount` becomes `pixelCount`. New fields include `momentElongation`, `orientation`, `majorExtent`, `minorExtent`, `axisRatio`, `fillFactor`, `outsideMedianMaskFraction`, `estimatedMotionPixels`, `estimatedMotionDiameters`, and effective shape/mask thresholds. All residual-flux fields and the old seven-argument constructor are **removed**. Estimated motion is a shape proxy, not a measured track.
+- `SlowMoverSummaryTelemetry` and `PipelineTelemetry.SlowMoverTelemetry` replace dynamic-elongation/residual metrics with `rejectedBelowMinPixels`, `rejectedBelowMinAxisRatio`, `rejectedAboveMaxAxisRatio`, `rejectedLowFillFactor`, `evaluatedAgainstMedianMask`, the retained low/high median-overlap counters, and `candidatesDetected`. New thresholds are `minAxisRatioThreshold`, `maxAxisRatioThreshold`, and `minFillFactorThreshold`; `avgCandidateAxisRatio`, `avgMedianMaskOverlap`, and motion averages are exported. `candidateAxisRatios`, `candidateMomentElongations`, `candidateFillFactors`, and `candidateMedianMaskOverlaps` expose distributions useful for tuning. `avgMedianMaskOverlap` covers **all mask-evaluated components**, including vetoed ones; `candidateMedianSupportOverlaps` covers accepted candidates.
+
+The retained names `slowMoverStackData` and `medianVetoMask` are particularly risky: they **compile** but no longer refer to a distinct percentile stack or a dilated veto mask.
 
 ## Dependency Impact
 
-SpacePixels currently depends on:
+SpacePixels currently declares:
 
 ```gradle
 implementation 'io.github.ppissias.jtransient:jtransient:1.0.0'
 ```
 
-The sibling JTransient repo currently declares version `1.0.1`. After the algorithm lands and is published or installed locally, `build.gradle` in SpacePixels must be updated to the JTransient version that contains the new slow-mover API.
+The sibling JTransient repo declares `1.0.1`, but its working-tree changes are not yet published. Merely running SpacePixels against `1.0.0` will not exercise this implementation. The current SpacePixels `settings.gradle` offers a conditional composite build via `-PuseLocalJTransientBuild=true`; once the change is released, update the dependency to the **actual published version**.
 
-If JTransient keeps compatibility aliases (`slowMoverStackData`, `medianVetoMask`, legacy telemetry fields), SpacePixels can migrate incrementally. If those fields are removed, the files below will fail compilation and must be updated in the same pass as the dependency bump.
+The old telemetry and candidate-diagnostics fields **were removed**, so the report code below would fail to compile against the local JTransient sources. Deprecated config fields and stack aliases do not produce compile errors.
 
 ## SpacePixels Files Most Affected
 
 ### `src/main/java/eu/startales/spacepixels/gui/DetectionConfigurationPanel.java`
 
-This is the main SpacePixels change.
+This is the main user-facing configuration change.
 
 Current UI assumptions:
 
-- The tab text describes "deep-stack slow-mover detection".
-- `slowMoverStackMiddleFraction` is exposed as an active setting.
-- `slowMoverBaselineMadMultiplier` is exposed as the main elongation gate.
-- residual-footprint filtering is exposed through:
+- The tab still describes "deep-stack slow-mover detection".
+- `slowMoverStackMiddleFraction` and `slowMoverBaselineMadMultiplier` are presented as active settings, but JTransient ignores both.
+- Residual-footprint filtering is presented as active through:
   - `enableSlowMoverResidualFootprintFiltering`
   - `slowMoverResidualFootprintMinFluxFraction`
-- median support text describes overlap with a median-stack artifact mask for a slow-mover stack footprint.
+- Median-support tooltips describe a slow-mover percentile-stack footprint rather than the maximum-stack candidate's raw pixels.
 
 Required update:
 
-- Keep these controls:
-  - enable slow-mover detection
-  - `masterSlowMoverSigmaMultiplier`
-  - `masterSlowMoverGrowSigmaMultiplier`
-  - `masterSlowMoverMinPixels`
-  - `slowMoverMedianSupportOverlapFraction`
-  - `slowMoverMedianSupportMaxOverlapFraction`
-- Add controls for:
-  - `slowMoverMinElongationBaselineMadMultiplier`
-  - `slowMoverMaxElongation`
-- Reword median overlap tooltips so they clearly mean exact median-stack object-mask overlap measured against the maximum-stack candidate footprint.
-- Hide, remove, or move to a legacy section:
-  - `slowMoverStackMiddleFraction`
-  - `slowMoverBaselineMadMultiplier`
-  - residual-footprint filtering controls
+- Keep the enable switch, the three `masterSlowMover*` extraction controls, and both median-overlap controls. Explain that the lower overlap may be zero and the upper bound is a stationary-source veto.
+- Add controls for **`slowMoverMinAxisRatio`**, **`slowMoverMaxAxisRatio`**, and optional **`slowMoverMinFillFactor`**. Do not add the unimplemented proposal's elongation controls.
+- Remove the inactive percentile-stack, MAD-baseline, and residual-footprint controls, or make them visibly legacy-only if old-profile editing is required. Never present them as changing current detection.
+- Reword median-overlap tooltips to mean exact median-object raw-pixel mask overlap against maximum-stack candidate raw pixels.
 - Update declarations, `applySettingsToMemory()`, `updateSpinnersFromConfig()`, `normalizeDependentSpinners()`, and tooltip text.
-- Use optional reflection for new fields only if SpacePixels needs to run against both old and new JTransient jars during transition. Once the dependency is bumped definitively, direct field access is cleaner.
+- Remove the optional-reflection residual-control access rather than preserving an ineffective UI. Direct field access is appropriate once the new JTransient dependency is selected.
 
 ### `src/main/java/eu/startales/spacepixels/util/DetectionPipelineSupport.java`
 
-Current code mutates the effective config by clamping `slowMoverStackMiddleFraction` so the percentile slow-mover stack stays below the maximum stack.
+Current code mutates the effective config by clamping `slowMoverStackMiddleFraction` so a percentile slow-mover stack stays below the maximum stack. JTransient no longer reads that field.
 
 Required update:
 
-- Remove `clampSlowMoverStackMiddleFraction(...)` and `computeSlowMoverStackOrderIndex(...)` if JTransient no longer uses the percentile slow-mover stack.
+- Remove `clampSlowMoverStackMiddleFraction(...)` and `computeSlowMoverStackOrderIndex(...)`; the new JTransient detector no longer uses the percentile slow-mover stack.
 - Stop mutating `effectiveConfig.slowMoverStackMiddleFraction` in `createEffectiveDetectionConfig(...)`.
-- Update `suppressLatePhaseOutputsWhenTooFewFramesRemain(...)` if the `PipelineResult` constructor or slow-mover compatibility fields change.
+- `suppressLatePhaseOutputsWhenTooFewFramesRemain(...)` does **not** require a constructor change now: both `PipelineResult` overloads and legacy fields remain. Review it only if those aliases are removed later.
 
 ### `src/main/java/eu/startales/spacepixels/util/StandardDetectionPipelineService.java`
 
-No SpacePixels-side algorithm work is expected here if JTransient keeps `runPipeline(...)` signatures stable. It should continue to pass `ImageFrame` data and `DetectionConfig` to JTransient.
+No SpacePixels-side algorithm work is needed here: `runPipeline(...)` signatures remain stable, and it still passes `ImageFrame` data and `DetectionConfig` to JTransient.
 
 Check after the JTransient update:
 
@@ -88,12 +98,12 @@ Check after the JTransient update:
 
 ### `src/main/java/eu/startales/spacepixels/util/IterativeDetectionPipelineService.java`
 
-The iterative pipeline passes a provided median master stack into JTransient. The new maximum-stack slow-mover image should be generated inside JTransient from each pass's clean frames, not from the global median master.
+The iterative pipeline passes a provided median master stack into JTransient. The new maximum stack is built inside JTransient from each pass's quality-filtered frames, not passed as a new argument.
 
 Check after the JTransient update:
 
 - `runPipeline(spacedSubset, effectiveConfig, scaledListener, providedMasterStack)` still has the same meaning.
-- If JTransient adds a maximum-stack parameter, update this call site and make sure the maximum stack is pass-local, not the global master-stack sample.
+- No new maximum-stack parameter is required at this call site. Check only that each pass uses its own retained frames.
 
 ### `src/main/java/eu/startales/spacepixels/util/reporting/DetectionReportGenerator.java`
 
@@ -103,20 +113,13 @@ Current code normalizes slow-mover data from:
 - `slowMoverAnalysis.medianVetoMask`
 - `result.slowMoverStackData`
 - `result.slowMoverMedianVetoMask`
-- legacy residual and dynamic-elongation telemetry fields
+- legacy residual and dynamic-elongation telemetry fields in `hasMeaningfulSlowMoverTelemetry(...)` (**compile errors**)
 
 Required update:
 
-- Prefer new `SlowMoverAnalysis` fields if JTransient adds them, likely `maximumStackData` and `medianMask`.
-- Treat old `slowMoverStackData`/`medianVetoMask` as compatibility aliases only.
-- Update `hasMeaningfulSlowMoverTelemetry(...)` for new fields:
-  - minimum elongation threshold
-  - maximum elongation threshold
-  - rejected-below-min-elongation count
-  - rejected-above-max-elongation count
-  - baseline source, if exposed
-  - median-mask overlap averages and thresholds
-- Remove residual-footprint telemetry checks when the old branch is gone.
+- Prefer `slowMoverAnalysis.maximumStackData` and `slowMoverAnalysis.medianMask`; fall back to `result.maximumStackData` and the retained mask alias only when needed.
+- Update `hasMeaningfulSlowMoverTelemetry(...)` to use the **actual** size, axis-ratio, fill-factor, median-mask, and accepted-candidate counters. Do not look for a dynamic elongation baseline or residual-flux fields.
+- Avoid reporting the same maximum-stack pixels twice as separate "maximum" and "slow-mover" products.
 
 ### `src/main/java/eu/startales/spacepixels/util/reporting/DetectionReportContext.java`
 
@@ -127,54 +130,35 @@ Current context names are legacy-oriented:
 
 Required update:
 
-- Rename or add context fields for the new products:
-  - `slowMoverMaximumStackData`
-  - `slowMoverMedianMask`
-- Keep old names only if needed for compatibility with an old JTransient jar or a retained legacy report path.
+- Prefer the existing `maximumStackData` plus a `slowMoverMedianMask` field; remove the redundant `slowMoverStackData` context field when the report is migrated.
+- Keep old names only for an explicitly supported legacy report path, not as independent image products.
 
 ### `src/main/java/eu/startales/spacepixels/util/reporting/DeepStackReportSectionWriter.java`
 
-This report section has the largest semantic change.
+This report section has the largest semantic change and direct compile failures against the new candidate-diagnostics and summary-telemetry fields.
 
 Current report assumptions:
 
 - Section title is `Deep Stack Anomalies (Ultra-Slow Mover Candidates)`.
-- Text says candidates are objects in the master median stack or deep stack.
-- Primary crop is `Slow Mover Stack`.
+- Text says candidates are elongated objects in the master median stack.
+- Primary crop is `Slow Mover Stack`, which now duplicates `Maximum Stack`.
 - Difference image is `Slow Mover Stack - Median Stack`.
 - Telemetry cards include dynamic elongation and residual-footprint metrics.
 - Candidate cards print residual footprint flux fields from `SlowMoverCandidateDiagnostics`.
 
 Required update:
 
-- Rename the section to something like `Maximum-Stack Slow-Mover Candidates`.
-- Make the maximum-stack crop the primary candidate-envelope image.
+- Rename the section to `Maximum-Stack Slow-Mover Candidates` or similar, and explain that these are unconfirmed shape candidates, **not** median-stack detections.
+- Use the maximum-stack crop as the one primary candidate-envelope image; avoid duplicate maximum/slow-mover stack cards.
 - Keep the median-stack crop and exact median-mask overlay.
-- Remove the residual-footprint diff as an acceptance diagnostic. If a diff image remains useful, relabel it as inspection-only, for example `Maximum Stack - Median Stack`.
-- Update telemetry cards to show the new shape window:
-  - raw maximum-stack candidates
-  - below minimum elongation
-  - above maximum elongation
-  - median-mask stage
-  - rejected low median-mask overlap
-  - rejected high median-mask overlap
-  - final candidates
-- Update candidate stats to show:
-  - median-mask overlap
-  - outside-median-mask fraction
-  - footprint pixels
-  - candidate elongation and pixel area
-  - min/max elongation thresholds if exported
-- Remove direct use of residual diagnostics:
-  - `residualFootprintFluxFraction`
-  - `residualFootprintFlux`
-  - `slowMoverFootprintFlux`
-  - `medianFootprintFlux`
-  - `residualFootprintFilteringEnabled`
+- Remove the residual-footprint diff as an **acceptance** diagnostic. If kept, label it `Maximum Stack - Median Stack` and explicitly say it is inspection-only. Update `buildDeepStackMaskAndDiffExplanationHtml()`, which currently implies median support is generally required; the default lower overlap is zero.
+- Replace removed cards with `rawCandidatesExtracted`, `rejectedBelowMinPixels`, `rejectedBelowMinAxisRatio`, `rejectedAboveMaxAxisRatio`, `rejectedLowFillFactor`, `evaluatedAgainstMedianMask`, low/high overlap rejects, `candidatesDetected`, and effective axis-ratio/overlap thresholds.
+- Display candidate `axisRatio` (distinct from moment `elongation`), `fillFactor`, `pixelCount`, `medianMaskOverlapFraction`, `outsideMedianMaskFraction`, and optionally `estimatedMotionPixels`/`estimatedMotionDiameters` with a **shape-estimate** label.
+- Remove all residual-footprint flux/filter cards. Replace `candidateDiagnostics.medianSupportOverlap` with `medianMaskOverlapFraction` and `footprintPixelCount` with `pixelCount`.
 
 ### Report Labels and Summary Text
 
-These files do not necessarily need compile fixes, but their wording should be updated so reports do not describe the new branch as a percentile/deep-stack residual analysis:
+These files do not necessarily need compile fixes, but their wording should be checked so reports do not describe the new branch as a percentile/deep-stack residual analysis:
 
 - `src/main/java/eu/startales/spacepixels/tasks/DetectionTask.java`
 - `src/main/java/eu/startales/spacepixels/tasks/IterativeDetectionTask.java`
@@ -185,41 +169,47 @@ These files do not necessarily need compile fixes, but their wording should be u
 
 Suggested wording change:
 
-- Replace user-facing "deep-stack candidates" with "maximum-stack slow-mover candidates" or simply "slow-mover candidates".
-- Decide whether global-map labels should remain `DS#` for compatibility or become `SM#`.
+- Replace misleading user-facing "deep-stack anomalies" with "maximum-stack slow-mover candidates" where appropriate.
+- Decide whether global-map `DS#` identifiers remain for report/bookmark compatibility or become `SM#`; this is a presentation choice, not a JTransient API requirement.
 
 ## Configuration Persistence
 
-`SpacePixelsDetectionProfileIO` serializes the JTransient `DetectionConfig` directly.
+`SpacePixelsDetectionProfileIO` serializes the JTransient `DetectionConfig` directly with Gson.
 
 Migration implications:
 
-- Old saved profiles may contain retired fields:
-  - `slowMoverStackMiddleFraction`
-  - `slowMoverBaselineMadMultiplier`
-  - `enableSlowMoverResidualFootprintFiltering`
-  - `slowMoverResidualFootprintMinFluxFraction`
-- New profiles should include:
-  - `slowMoverMinElongationBaselineMadMultiplier`
-  - `slowMoverMaxElongation`
-- If JTransient removes old fields, Gson should ignore unknown JSON fields on load, but the UI must stop writing them once the controls are removed.
-- Add a profile IO test that loads old slow-mover JSON and verifies the new defaults are available after deserialization.
+- Old saved profiles may contain the four deprecated fields listed above. While those fields remain on `DetectionConfig`, Gson continues to read and write them even though the detector ignores them.
+- New profiles should contain `slowMoverMinAxisRatio`, `slowMoverMaxAxisRatio`, and `slowMoverMinFillFactor`; missing fields in old profiles should receive the JTransient `DetectionConfig` defaults. **Do not silently translate** an old MAD multiplier or stack fraction into an axis ratio: the thresholds measure different things.
+- If JTransient later removes those fields, Gson's default behavior ignores unknown JSON properties on load and omits removed fields on write. Verify this with an old-profile JSON fixture and a round-trip test rather than assuming persisted behavior.
 
 ## Public API Impact
 
-`SpacePixelsPipelineResult` exposes the raw JTransient `PipelineResult`. Any external caller reading slow-mover fields from that object will see JTransient's API change directly.
+`SpacePixelsPipelineResult` exposes the raw JTransient `PipelineResult`. External callers can therefore observe both the new result semantics and removed diagnostics/telemetry members.
 
 SpacePixels should document that:
 
-- accepted slow-mover candidates are now maximum-stack candidate envelopes
-- median support values mean exact median-mask overlap, not object-to-object matching
-- old `slowMoverStackData` and `slowMoverMedianVetoMask` are compatibility names if they still exist
+- Accepted slow-mover candidates are maximum-stack **morphology** footprints, not confirmed moving objects.
+- Median support is exact candidate-pixel / median-object-mask overlap, not object-to-object matching.
+- `slowMoverStackData`, `slowMoverMedianVetoMask`, and `SlowMoverAnalysis.medianVetoMask` still exist but are compatibility names with changed semantics.
 
-No change is expected to the high-level SpacePixels API method signatures unless JTransient changes `JTransientEngine.runPipeline(...)`.
+No high-level SpacePixels API signature change is needed because `JTransientEngine.runPipeline(...)` remains unchanged.
+
+## Should the Deprecated API Be Removed?
+
+**For a coordinated SpacePixels migration, yes, removing the four unused config fields and `MasterMapGenerator.createSlowMoverMasterStack(...)` from JTransient would be a reasonable fail-fast cleanup**—provided no other consumers require source/binary compatibility. It would surface direct stale reads/writes in `DetectionConfigurationPanel` and `DetectionPipelineSupport`. Do it as an intentional breaking API change, not merely to make the compiler noisy.
+
+However, removal alone is **not enough**:
+
+- The removed diagnostics and telemetry fields **will** produce compile errors in `DetectionReportGenerator` and `DeepStackReportSectionWriter` when compiled against the new JTransient sources.
+- SpacePixels accesses the residual config fields by **reflection** in its UI, so deleting those JTransient fields would **not** produce compiler errors there. Remove the stale UI controls explicitly.
+- The unannotated `slowMoverStackData`/`medianVetoMask` aliases continue to compile while changing meaning. Migrate their SpacePixels uses explicitly; if fail-fast discovery is the priority, consider removing these aliases and the old `PipelineResult` constructor in a separate coordinated breaking change.
+- If JTransient is used outside SpacePixels, deleting public fields/methods breaks source and binary compatibility. Keep them for a deprecation window, or make the removal part of a versioned breaking release. `-Xlint:deprecation` can expose direct deprecated uses without deleting APIs, but it does not catch reflection or unannotated aliases.
+
+**Recommended sequence:** first compile SpacePixels against the local JTransient sources and fix the already-broken diagnostics/reporting API; then decide whether to remove deprecated config/method/aliases before the final migration, based on whether backward compatibility is required. Either way, search and review the semantic aliases manually.
 
 ## Documentation Updates
 
-Update these docs after implementation:
+Update these SpacePixels docs during migration:
 
 - `README.md`
 - `MANUAL.md`
@@ -228,40 +218,43 @@ Update these docs after implementation:
 
 Specific stale statements already present:
 
-- `MANUAL.md` describes the slow-mover branch as a specialized stack from the upper end of a middle band of sorted pixel values.
-- `MANUAL.md` describes optional positive residual flux in `slowMoverStack - medianStack`.
+- `MANUAL.md` describes a percentile stack and optional positive residual-flux acceptance.
 - `HIGH_LEVEL_DESIGN.md` mentions runtime slow-mover stack fraction clamping.
 - `README.md` describes deep integrated stacks for ultra-slow movers.
 
 ## Test Impact
 
-Existing SpacePixels tests likely affected:
+Existing SpacePixels tests to review:
 
 - `src/test/java/eu/startales/spacepixels/util/ImageProcessingTest.java`
-  - constructs `PipelineResult`
-  - checks `slowMoverStackData`
-  - checks `slowMoverMedianVetoMask`
-  - creates `PipelineTelemetry.SlowMoverTelemetry`
+  - constructs `PipelineResult` and `PipelineTelemetry.SlowMoverTelemetry`; the retained constructor/fields mean these tests may still compile, but their semantics need checking
 - `src/test/java/eu/startales/spacepixels/config/SpacePixelsDetectionProfileIOTest.java`
-  - should gain old-to-new slow-mover profile migration coverage
-- report tests, if added later, should assert the new report labels and telemetry fields
+  - should gain an old-profile fixture and new-default/round-trip coverage
+- Add report assertions for non-duplicated maximum-stack imagery, exact-mask labels, and new telemetry/cards when report test fixtures are available.
 
 Recommended verification:
 
 ```powershell
-.\gradlew test
+.\gradlew -PuseLocalJTransientBuild=true compileJava
+.\gradlew -PuseLocalJTransientBuild=true test
 ```
 
-Then run at least one manual detection/export on a sequence with slow-mover detection enabled to inspect the generated HTML crops and labels.
+These commands use the conditional composite build in the current `settings.gradle`; without that flag SpacePixels still builds against published JTransient `1.0.0`. Then manually inspect at least one detection/export with slow-mover detection enabled. The migration has **not** been compiled or tested against the local JTransient in this documentation-only change.
 
 ## Suggested Migration Order
 
-1. Update the JTransient dependency to the version containing the new slow-mover API.
-2. Fix compile breaks around `DetectionConfig`, `SlowMoverAnalysis`, `SlowMoverSummaryTelemetry`, `SlowMoverCandidateDiagnostics`, and `PipelineResult`.
-3. Update `DetectionConfigurationPanel` controls and profile persistence behavior.
-4. Remove SpacePixels' percentile-stack fraction clamping from `DetectionPipelineSupport`.
-5. Update report data normalization in `DetectionReportGenerator` and `DetectionReportContext`.
-6. Rewrite `DeepStackReportSectionWriter` around maximum-stack envelopes and median-mask overlap.
-7. Update report labels, safety-prompt wording, README, manual, and high-level design docs.
-8. Update tests and run `.\gradlew test`.
+1. Use the local composite build (or a published version containing the implementation) and fix the existing removed diagnostics/telemetry compile errors.
+2. Replace the SpacePixels GUI's inactive controls with axis-ratio/fill-factor controls; remove percentile fraction clamping and verify old-profile loading.
+3. Normalize `SlowMoverAnalysis.maximumStackData`/`medianMask` in the report, and rewrite the deep-stack section around the new stage counters and candidate diagnostics.
+4. Update report labels and public-facing docs; add profile and report tests.
+5. Run the local-composite `compileJava` and `test` tasks, then manually inspect an HTML export.
 
+## Follow-up: Frame Support and Stationary Likelihood Heuristics
+
+JTransient now measures two additional 0–100 heuristics for each maximum-stack slow-mover candidate after the shape and median-mask gates. `DetectionConfig.slowMoverMinFrameSupport` defaults to `0.0`, so a candidate is rejected only when its measured frame-support percentage falls below a positive configured floor. `DetectionConfig.slowMoverMaxStationaryLikelihood` defaults to `100.0`, so a candidate is rejected only when its stationary-likelihood percentage exceeds a lower configured ceiling. Both measurements run with the defaults; neither new filter rejects candidates by default. The thresholds are clamped to 0–100 for use and reported as `minFrameSupportThreshold` and `maxStationaryLikelihoodThreshold`.
+
+Frame support is the percentage of usable, quality-filtered original frames in which a local background-subtracted aperture finds significant localized signal somewhere inside the maximum-stack candidate footprint. The aperture uses a fixed integrated signal-to-noise floor of 5 and can follow the source within that footprint. Stationary likelihood is the largest percentage of supported frame positions clustered near one location, using the configured star-jitter scale. It is a heuristic score, **not a calibrated probability or motion confirmation**; genuine motion below the positional resolution can also score high. Frame support is unavailable with fewer than two usable frames; stationarity is unavailable when fewer than three supported frames span at least half the retained sequence. No three-stage stack is generated.
+
+`SlowMoverCandidateDiagnostics` adds `frameSupportPercentage`, `stationaryLikelihoodPercentage`, `supportedFrameCount`, `usableFrameCount`, `frameSupportAvailable`, `stationaryLikelihoodAvailable`, `minFrameSupportThreshold`, and `maxStationaryLikelihoodThreshold`. SpacePixels should use each availability flag rather than interpreting its numeric percentage when the measurement is unavailable: frame support may have a computed percentage with only one usable frame, while `frameSupportAvailable` is `false`. The stack-only `SlowMoverAnalyzer.analyze(maximumStackData, medianStackData, config)` overload lacks original frames, so both measurements are unavailable and neither new gate vetoes its candidates. `JTransientEngine.runPipeline(...)` passes the retained frames and provides the measurements.
+
+`SlowMoverSummaryTelemetry` and `PipelineTelemetry.SlowMoverTelemetry` add `evaluatedAgainstFrames`, `frameEvidenceUnavailable`, `rejectedLowFrameSupport`, `rejectedHighStationaryLikelihood`, both effective thresholds, and accepted-candidate lists `candidateFrameSupportPercentages`, `candidateStationaryLikelihoodPercentages`, `candidateFrameSupportAvailable`, and `candidateStationaryLikelihoodAvailable`. The lists are ordered like `slowMoverAnalysis.candidates`. `evaluatedAgainstFrames` and `frameEvidenceUnavailable` count candidates with measurable and unavailable frame support respectively; stationarity has its own per-candidate availability flag. SpacePixels can display the two percentages beside each candidate, label unavailable measurements explicitly, and add UI controls for the two new config thresholds when it migrates to this JTransient build. Existing saved profiles without the fields use the disabled defaults.

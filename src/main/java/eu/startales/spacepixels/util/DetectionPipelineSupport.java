@@ -85,58 +85,7 @@ final class DetectionPipelineSupport {
             return null;
         }
 
-        DetectionConfig effectiveConfig = baseConfig.clone();
-        if (!effectiveConfig.enableSlowMoverDetection) {
-            return effectiveConfig;
-        }
-
-        double adjustedFraction = clampSlowMoverStackMiddleFraction(
-                effectiveConfig.slowMoverStackMiddleFraction,
-                frameCount);
-        if (Double.compare(adjustedFraction, effectiveConfig.slowMoverStackMiddleFraction) != 0) {
-            System.out.printf(
-                    Locale.US,
-                    "Adjusting slowMoverStackMiddleFraction from %.4f to %.4f for %d frames so the slow-mover stack stays one frame below the maximum stack.%n",
-                    effectiveConfig.slowMoverStackMiddleFraction,
-                    adjustedFraction,
-                    frameCount);
-            effectiveConfig.slowMoverStackMiddleFraction = adjustedFraction;
-        }
-
-        return effectiveConfig;
-    }
-
-    static double clampSlowMoverStackMiddleFraction(double requestedFraction, int frameCount) {
-        double boundedFraction = Math.max(0.0, Math.min(1.0, requestedFraction));
-        if (frameCount <= 1) {
-            return boundedFraction;
-        }
-
-        int maximumAllowedIndex = frameCount - 2;
-        if (computeSlowMoverStackOrderIndex(frameCount, boundedFraction) <= maximumAllowedIndex) {
-            return boundedFraction;
-        }
-
-        int requestedRoundedWindow = (int) Math.round(frameCount * boundedFraction);
-        int safeRoundedWindow = requestedRoundedWindow;
-
-        while (safeRoundedWindow > 0
-                && computeSlowMoverStackOrderIndex(frameCount, safeRoundedWindow / (double) frameCount) > maximumAllowedIndex) {
-            safeRoundedWindow--;
-        }
-
-        return safeRoundedWindow / (double) frameCount;
-    }
-
-    static int computeSlowMoverStackOrderIndex(int frameCount, double fraction) {
-        if (frameCount <= 0) {
-            return -1;
-        }
-
-        double boundedFraction = Math.max(0.0, Math.min(1.0, fraction));
-        int roundedWindow = (int) Math.round(frameCount * boundedFraction);
-        int centerIndex = (frameCount - 1) / 2;
-        return Math.min(frameCount - 1, centerIndex + (roundedWindow / 2));
+        return baseConfig.clone();
     }
 
     static ImageProcessing.DetectionSummary summarizeDetections(PipelineResult result) {

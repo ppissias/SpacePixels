@@ -171,6 +171,10 @@ Typical usage patterns:
 - inspect `getPreparedInputDirectory()` when `AUTO_PREPARE_TO_16BIT_MONO` is enabled
 - inspect `getReportFile()` when `generateReport(true)` is enabled
 
+JTransient's raw `PipelineResult` exposes slow-mover candidates as maximum-stack morphology footprints, not confirmed tracks. `slowMoverAnalysis.maximumStackData` is the shared maximum stack, and `slowMoverAnalysis.medianMask` is the exact mask of independently extracted median-stack source pixels. Candidate overlap is the fraction of candidate raw pixels inside that mask. The compatibility fields `slowMoverStackData`, `slowMoverMedianVetoMask`, and `SlowMoverAnalysis.medianVetoMask` refer to those same products despite their older names.
+
+Each slow-mover candidate's diagnostics include `frameSupportPercentage` (usable frames with localized signal inside its footprint) and `stationaryLikelihoodPercentage` (supported positions clustered near one location), plus supported/usable frame counts and availability flags. Check `frameSupportAvailable` and `stationaryLikelihoodAvailable` before displaying a percentage: a numeric frame-support value can exist even when too few frames make it unavailable. Stationary likelihood is a heuristic, not a calibrated probability or motion confirmation. `DetectionConfig.slowMoverMinFrameSupport` defaults to `0.0` and `slowMoverMaxStationaryLikelihood` to `100.0`, so neither gate rejects candidates by default; `PipelineTelemetry.SlowMoverTelemetry` also exposes effective thresholds, rejection counts, and accepted-candidate score lists.
+
 ## Error handling
 
 `SpacePixelsPipelineApi.run(...)` throws `SpacePixelsPipelineException` when input preparation, validation, Auto-Tune, pipeline execution, or report generation fails.

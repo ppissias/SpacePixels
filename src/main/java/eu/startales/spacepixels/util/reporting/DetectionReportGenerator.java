@@ -1281,16 +1281,21 @@ public class DetectionReportGenerator {
             return false;
         }
         return telemetry.rawCandidatesExtracted > 0
-                || telemetry.candidatesAboveElongationThreshold > 0
-                || telemetry.candidatesEvaluatedAgainstMasks > 0
+                || telemetry.evaluatedAgainstMedianMask > 0
                 || telemetry.candidatesDetected > 0
                 || telemetry.rejectedLowMedianSupport > 0
                 || telemetry.rejectedHighMedianSupport > 0
-                || telemetry.rejectedLowResidualFootprintSupport > 0
-                || telemetry.dynamicElongationThreshold > 0.0
-                || telemetry.avgMedianSupportOverlap > 0.0
-                || telemetry.avgResidualFootprintFluxFraction > 0.0
-                || telemetry.residualFootprintMinFluxFractionThreshold > 0.0;
+                || telemetry.rejectedBelowMinPixels > 0
+                || telemetry.rejectedBelowMinAxisRatio > 0
+                || telemetry.rejectedAboveMaxAxisRatio > 0
+                || telemetry.rejectedLowFillFactor > 0
+                || telemetry.evaluatedAgainstFrames > 0
+                || telemetry.frameEvidenceUnavailable > 0
+                || telemetry.rejectedLowFrameSupport > 0
+                || telemetry.rejectedHighStationaryLikelihood > 0
+                || telemetry.minAxisRatioThreshold > 0.0
+                || telemetry.minFrameSupportThreshold > 0.0
+                || telemetry.maxStationaryLikelihoodThreshold > 0.0;
     }
 
     // =================================================================
@@ -1331,11 +1336,11 @@ public class DetectionReportGenerator {
         SlowMoverAnalysis slowMoverAnalysis = result.slowMoverAnalysis != null
                 ? result.slowMoverAnalysis
                 : SlowMoverAnalysis.empty();
-        short[][] slowMoverStackData = slowMoverAnalysis.slowMoverStackData != null
-                ? slowMoverAnalysis.slowMoverStackData
-                : result.slowMoverStackData;
-        boolean[][] slowMoverMedianVetoMask = slowMoverAnalysis.medianVetoMask != null
-                ? slowMoverAnalysis.medianVetoMask
+        short[][] slowMoverStackData = slowMoverAnalysis.maximumStackData != null
+                ? slowMoverAnalysis.maximumStackData
+                : result.maximumStackData;
+        boolean[][] slowMoverMedianVetoMask = slowMoverAnalysis.medianMask != null
+                ? slowMoverAnalysis.medianMask
                 : result.slowMoverMedianVetoMask;
         List<SlowMoverCandidateResult> slowMoverCandidateResults = slowMoverAnalysis.candidates != null
                 ? slowMoverAnalysis.candidates

@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Writes the deep-stack report section covering ultra-slow-mover telemetry, candidate cards, and supporting
+ * Writes the maximum-stack slow-mover section covering morphology telemetry, candidate cards, and supporting
  * comparison imagery.
  */
 final class DeepStackReportSectionWriter {
@@ -42,28 +42,35 @@ final class DeepStackReportSectionWriter {
             return;
         }
 
-        report.println("<h2>Deep Stack Anomalies (Ultra-Slow Mover Candidates)</h2>");
-        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Objects in the master median stack that are significantly elongated compared to the rest of the star field. These may be ultra-slow moving targets that moved just enough to form a short streak, but too slowly to be rejected by the median filter.</p>");
+        report.println("<h2>Maximum-Stack Slow-Mover Candidates</h2>");
+        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Elongated maximum-stack footprints selected by morphology, exact median-mask overlap, and optional frame-evidence filters. Frame support is the share of usable frames with significant candidate-local signal. Stationary likelihood is the share of supported positions clustered near one spot; it is a heuristic, not a calibrated probability or motion confirmation.</p>");
 
         if (hasTelemetry) {
             report.println("<div class='panel'>");
             report.println("<h3 style='color: #ffffff; margin-top: 0;'>Slow-Mover Telemetry</h3>");
             report.println("<div class='flex-container' style='margin-bottom: 25px;'>");
             report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rawCandidatesExtracted), "Raw Candidates"));
-            report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.candidatesAboveElongationThreshold), "Above Elongation"));
-            report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.candidatesEvaluatedAgainstMasks), "Mask Stage"));
+            report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rejectedBelowMinPixels), "Below Min Pixels"));
+            report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rejectedBelowMinAxisRatio), "Below Min Axis Ratio"));
+            report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rejectedAboveMaxAxisRatio), "Above Max Axis Ratio"));
+            report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rejectedLowFillFactor), "Low Fill Factor"));
+            report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.evaluatedAgainstMedianMask), "Mask Stage"));
             report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.candidatesDetected), "Final Candidates"));
             report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rejectedLowMedianSupport), "Rejected Low Overlap"));
             report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rejectedHighMedianSupport), "Rejected High Overlap"));
-            report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rejectedLowResidualFootprintSupport), "Rejected Low Residual"));
-            report.println(compactMetricBox(String.format(Locale.US, "%.2f", context.slowMoverTelemetry.medianElongation), "Median Elongation"));
-            report.println(compactMetricBox(String.format(Locale.US, "%.2f", context.slowMoverTelemetry.madElongation), "MAD Elongation"));
-            report.println(compactMetricBox(String.format(Locale.US, "%.2f", context.slowMoverTelemetry.dynamicElongationThreshold), "Dynamic Threshold"));
+            report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.evaluatedAgainstFrames), "Frame Support Measured"));
+            report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.frameEvidenceUnavailable), "Frame Support Unavailable"));
+            report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rejectedLowFrameSupport), "Rejected Low Frame Support"));
+            report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rejectedHighStationaryLikelihood), "Rejected High Stationary Likelihood"));
+            report.println(compactMetricBox(String.format(Locale.US, "%.2f", context.slowMoverTelemetry.minAxisRatioThreshold), "Min Axis Ratio"));
+            report.println(compactMetricBox(String.format(Locale.US, "%.2f", context.slowMoverTelemetry.maxAxisRatioThreshold), "Max Axis Ratio"));
+            report.println(compactMetricBox(DetectionReportGenerator.formatPercent(context.slowMoverTelemetry.minFillFactorThreshold), "Min Fill Factor"));
+            report.println(compactMetricBox(String.format(Locale.US, "%.2f", context.slowMoverTelemetry.avgCandidateAxisRatio), "Avg Candidate Axis Ratio"));
             report.println(compactMetricBox(DetectionReportGenerator.formatPercent(context.slowMoverTelemetry.medianSupportOverlapThreshold), "Min Overlap"));
             report.println(compactMetricBox(DetectionReportGenerator.formatPercent(context.slowMoverTelemetry.medianSupportMaxOverlapThreshold), "Max Overlap"));
-            report.println(compactMetricBox(DetectionReportGenerator.formatPercent(context.slowMoverTelemetry.avgMedianSupportOverlap), "Average Overlap"));
-            report.println(compactMetricBox(DetectionReportGenerator.formatPercent(context.slowMoverTelemetry.residualFootprintMinFluxFractionThreshold), "Residual Flux Min"));
-            report.println(compactMetricBox(DetectionReportGenerator.formatPercent(context.slowMoverTelemetry.avgResidualFootprintFluxFraction), "Residual Flux Avg"));
+            report.println(compactMetricBox(DetectionReportGenerator.formatPercent(context.slowMoverTelemetry.avgMedianMaskOverlap), "Avg Evaluated Overlap"));
+            report.println(compactMetricBox(formatPercentage(context.slowMoverTelemetry.minFrameSupportThreshold), "Min Frame Support"));
+            report.println(compactMetricBox(formatPercentage(context.slowMoverTelemetry.maxStationaryLikelihoodThreshold), "Max Stationary Likelihood"));
             report.println("</div>");
             report.println(buildDeepStackMaskAndDiffExplanationHtml());
             report.println("</div>");
@@ -74,7 +81,7 @@ final class DeepStackReportSectionWriter {
         }
 
         if (!hasCandidates) {
-            report.println("<div class='panel'><p>No ultra-slow movers were detected that exceeded the dynamic threshold.</p></div>");
+            report.println("<div class='panel'><p>No maximum-stack candidates passed all enabled filters.</p></div>");
             return;
         }
 
@@ -121,13 +128,12 @@ final class DeepStackReportSectionWriter {
         int startX = cx - (cropSize / 2);
         int startY = cy - (cropSize / 2);
         short[][] maskReferenceData = context.masterStackData != null ? context.masterStackData : context.slowMoverStackData;
-        Double resolvedAuxiliaryMaskOverlap = candidateDiagnostics != null ? candidateDiagnostics.medianSupportOverlap : null;
+        Double resolvedAuxiliaryMaskOverlap = candidateDiagnostics != null ? candidateDiagnostics.medianMaskOverlapFraction : null;
 
         String prefix = "slow_mover_" + candidateNumber;
-        String primaryStackFileName = prefix + "_sm_stack.png";
+        String primaryStackFileName = prefix + "_maximum_stack.png";
         String masterFileName = null;
         String auxiliaryMaskFileName = prefix + "_median_mask.png";
-        String secondaryStackFileName = prefix + "_maximum_stack.png";
         String diffFileName = prefix + "_diff.png";
         String gifFileName = prefix + "_anim.gif";
         String shapeFileName = prefix + "_shape.png";
@@ -173,12 +179,6 @@ final class DeepStackReportSectionWriter {
                     maskReferenceData.length).fraction;
         }
 
-        if (context.maximumStackData != null) {
-            short[][] croppedSecondaryData = TrackVisualizationRenderer.robustEdgeAwareCrop(context.maximumStackData, cx, cy, cropSize, cropSize);
-            BufferedImage secondaryImage = TrackVisualizationRenderer.createDisplayImage(croppedSecondaryData, context.settings);
-            TrackVisualizationRenderer.saveLosslessPng(secondaryImage, new File(context.exportDir, secondaryStackFileName));
-        }
-
         BufferedImage shapeImage = TrackVisualizationRenderer.createSingleStreakShapeImage(
                 Collections.singletonList(detection),
                 cropSize,
@@ -213,16 +213,13 @@ final class DeepStackReportSectionWriter {
             report.println("<div><a href='" + masterFileName + "' target='_blank'><img src='" + masterFileName + "' style='max-width: 150px;' alt='Median Stack Crop' /></a><br/><center><small>Median Stack</small></center></div>");
         }
         if (context.slowMoverMedianVetoMask != null && context.masterStackData != null) {
-            report.println("<div><a href='" + auxiliaryMaskFileName + "' target='_blank'><img src='" + auxiliaryMaskFileName + "' style='max-width: 150px;' alt='Slow-Mover Median Mask Crop' /></a><br/><center><small>Slow-Mover Median Mask</small></center></div>");
+            report.println("<div><a href='" + auxiliaryMaskFileName + "' target='_blank'><img src='" + auxiliaryMaskFileName + "' style='max-width: 150px;' alt='Exact Median Mask Crop' /></a><br/><center><small>Exact Median Mask</small></center></div>");
         }
         if (croppedPrimaryData != null && context.masterStackData != null) {
-            report.println("<div><a href='" + diffFileName + "' target='_blank'><img src='" + diffFileName + "' style='max-width: 150px;' alt='Slow Mover Diff Crop' /></a><br/><center><small>Slow Mover Diff</small></center></div>");
-        }
-        if (context.maximumStackData != null) {
-            report.println("<div><a href='" + secondaryStackFileName + "' target='_blank'><img src='" + secondaryStackFileName + "' style='max-width: 150px;' alt='Maximum Stack Crop' /></a><br/><center><small>Maximum Stack</small></center></div>");
+            report.println("<div><a href='" + diffFileName + "' target='_blank'><img src='" + diffFileName + "' style='max-width: 150px;' alt='Maximum Minus Median Crop' /></a><br/><center><small>Maximum - Median (inspection only)</small></center></div>");
         }
         if (context.slowMoverStackData != null) {
-            report.println("<div><a href='" + primaryStackFileName + "' target='_blank'><img src='" + primaryStackFileName + "' style='max-width: 150px;' alt='Slow Mover Stack Crop' /></a><br/><center><small>Slow Mover Stack</small></center></div>");
+            report.println("<div><a href='" + primaryStackFileName + "' target='_blank'><img src='" + primaryStackFileName + "' style='max-width: 150px;' alt='Maximum Stack Crop' /></a><br/><center><small>Maximum Stack</small></center></div>");
         }
         if (!context.rawFrames.isEmpty()) {
             report.println("<div><a href='" + gifFileName + "' target='_blank'><img src='" + gifFileName + "' style='max-width: 150px;' alt='Sampled Time-Lapse' /></a><br/><center><small>Animation (Sampled)</small></center></div>");
@@ -233,7 +230,7 @@ final class DeepStackReportSectionWriter {
         StringBuilder deepStackStats = new StringBuilder();
         deepStackStats.append("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>")
                 .append(DetectionReportGenerator.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, detection.x, detection.y)))
-                .append("<br>Elongation: <span style='color:#fff;'>")
+                .append("<br>Moment Elongation: <span style='color:#fff;'>")
                 .append(String.format(Locale.US, "%.2f", detection.elongation))
                 .append("</span><br>Pixels: <span style='color:#fff;'>")
                 .append((int) detection.pixelArea)
@@ -244,33 +241,35 @@ final class DeepStackReportSectionWriter {
                     .append("</span>");
         }
         if (candidateDiagnostics != null) {
-            deepStackStats.append("<br>Residual Footprint Flux Fraction: <span style='color:#fff;'>")
-                    .append(DetectionReportGenerator.formatPercent(candidateDiagnostics.residualFootprintFluxFraction))
-                    .append("</span>");
-            Double residualFootprintThreshold = context.slowMoverTelemetry != null
-                    ? context.slowMoverTelemetry.residualFootprintMinFluxFractionThreshold
-                    : context.config.slowMoverResidualFootprintMinFluxFraction;
-            if (residualFootprintThreshold != null) {
-                deepStackStats.append(" <span style='color:#777;'>(threshold ")
-                        .append(DetectionReportGenerator.formatPercent(residualFootprintThreshold))
-                        .append(")</span>");
-            }
-            deepStackStats.append("<br>Residual Footprint Flux: <span style='color:#fff;'>")
-                    .append(String.format(Locale.US, "%.1f", candidateDiagnostics.residualFootprintFlux))
-                    .append("</span>");
-            deepStackStats.append("<br>Slow-Mover Footprint Flux: <span style='color:#fff;'>")
-                    .append(String.format(Locale.US, "%.1f", candidateDiagnostics.slowMoverFootprintFlux))
-                    .append("</span>");
-            deepStackStats.append("<br>Median Footprint Flux: <span style='color:#fff;'>")
-                    .append(String.format(Locale.US, "%.1f", candidateDiagnostics.medianFootprintFlux))
+            deepStackStats.append("<br>Axis Ratio: <span style='color:#fff;'>")
+                    .append(String.format(Locale.US, "%.2f", candidateDiagnostics.axisRatio))
+                    .append("</span><br>Fill Factor: <span style='color:#fff;'>")
+                    .append(DetectionReportGenerator.formatPercent(candidateDiagnostics.fillFactor))
+                    .append("</span><br>Outside Median Mask: <span style='color:#fff;'>")
+                    .append(DetectionReportGenerator.formatPercent(candidateDiagnostics.outsideMedianMaskFraction))
+                    .append("</span><br>Shape-Estimated Motion: <span style='color:#fff;'>")
+                    .append(String.format(Locale.US, "%.1f px (%.2f diameters)", candidateDiagnostics.estimatedMotionPixels, candidateDiagnostics.estimatedMotionDiameters))
                     .append("</span>");
             deepStackStats.append("<br>Footprint Pixels: <span style='color:#fff;'>")
-                    .append(candidateDiagnostics.footprintPixelCount)
-                    .append("</span>");
-            deepStackStats.append("<br>Residual Footprint Filter: <span style='color:#fff;'>")
-                    .append(candidateDiagnostics.residualFootprintFilteringEnabled ? "enabled" : "disabled")
+                    .append(candidateDiagnostics.pixelCount)
                     .append("</span>");
         }
+        deepStackStats.append("<br>Frame Support: <span style='color:#fff;'>");
+        if (candidateDiagnostics != null && candidateDiagnostics.frameSupportAvailable) {
+            deepStackStats.append(formatPercentage(candidateDiagnostics.frameSupportPercentage))
+                    .append(" (")
+                    .append(candidateDiagnostics.supportedFrameCount)
+                    .append("/")
+                    .append(candidateDiagnostics.usableFrameCount)
+                    .append(" usable frames)");
+        } else {
+            deepStackStats.append("Unavailable");
+        }
+        deepStackStats.append("</span><br>Stationary Likelihood (heuristic): <span style='color:#fff;'>")
+                .append(candidateDiagnostics != null && candidateDiagnostics.stationaryLikelihoodAvailable
+                        ? formatPercentage(candidateDiagnostics.stationaryLikelihoodPercentage)
+                        : "Unavailable")
+                .append("</span>");
         deepStackStats.append("</div>");
         report.println(deepStackStats);
         report.print(DetectionReportAstrometry.buildDeepStackIdentificationHtml(
@@ -471,8 +470,12 @@ final class DeepStackReportSectionWriter {
                 + "</div>";
     }
 
+    private static String formatPercentage(double value) {
+        return String.format(Locale.US, "%.1f%%", value);
+    }
+
     private static String buildDeepStackMaskAndDiffExplanationHtml() {
-        return "<div class='astro-note' style='margin-bottom: 18px;'><strong>Slow-Mover Median Mask</strong> shows the object footprints extracted from the ordinary median stack using the same strict slow-mover detection settings. It marks what the normal median stack already explains. A real ultra-slow mover should usually overlap this mask somewhat, because it still leaves some support in the median stack, but not so much that it is indistinguishable from a fully static source.<br><strong>Slow Mover Diff</strong> is the positive-only difference image <code>Slow Mover Stack - Median Stack</code>. Black means there is no extra signal in the slow-mover stack at that pixel; red highlights signal that becomes brighter in the slow-mover stack and can reveal faint ultra-slow motion.</div>";
+        return "<div class='astro-note' style='margin-bottom: 18px;'><strong>Exact Median Mask</strong> contains raw source pixels extracted independently from the median stack. Overlap is the fraction of maximum-stack candidate raw pixels inside that mask; zero minimum overlap does not require median persistence. High overlap can indicate a stationary source.<br><strong>Maximum - Median</strong> is a positive-only difference image for visual inspection. It does not participate in candidate acceptance.</div>";
     }
 
     private static String sanitizeSidecarSlug(String value, String fallback) {

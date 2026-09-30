@@ -27,7 +27,7 @@ SpacePixels is a Java desktop application for analyzing astronomical FITS sequen
 The application combines:
 
 - automated transient detection and track linking
-- deep-stack analysis for ultra-slow movers
+- maximum-stack morphology candidates for slow-mover review
 - manual inspection tools such as blinking and transient browsing
 - plate solving, WCS-aware viewers, and object-identification links
 - HTML report generation with diagnostics, maps, and animations
@@ -427,16 +427,15 @@ Rescued anomalies can remain as standalone peak- or integrated-sigma anomalies. 
 
 #### Slow Movers
 
-Controls the deep-stack branch for ultra-slow movers:
+Controls maximum-stack slow-mover morphology candidate selection:
 
 - slow-mover branch enable switch
-- slow-mover stack extraction sigma, grow sigma, and minimum pixels
-- slow-mover stack middle fraction
-- dynamic elongation baseline multiplier
-- median-stack support overlap bounds
-- residual-footprint filtering in `slowMoverStack - medianStack`
+- maximum- and median-stack extraction sigma, grow sigma, and minimum pixels
+- geometric minimum and maximum axis ratios, plus optional minimum fill factor
+- exact median-object mask overlap bounds (zero minimum permits no median persistence)
+- minimum frame support and maximum stationary likelihood, both on a 0–100 percentage scale
 
-This branch is separate from ordinary frame-to-frame point linking. It is designed for objects that move so slowly that they are better revealed in a specialized stack than as isolated per-frame points.
+This branch is separate from ordinary frame-to-frame point linking. Its candidates are shape-based review aids, not confirmed moving tracks.
 
 #### Residual Analysis
 
@@ -534,7 +533,7 @@ High-level workflow:
 5. reject outlier frames for the session
 6. build or reuse the median master stack
 7. extract the stationary master-star map
-8. optionally run the slow-mover stack analysis
+8. optionally extract maximum-stack slow-mover morphology candidates
 9. filter per-frame detections against the stationary-star veto mask
 10. link fast streaks
 11. link point-like movers with the time-based linker when timestamps are available
@@ -612,19 +611,23 @@ It can rescue:
 
 Rescued same-frame anomalies can be grouped into suspected streak tracks if their centroids are collinear. After that, residual analysis can mine leftover non-streak point detections for weaker local patterns and optional broader activity clusters. Residual-analysis results are review aids; they are exported separately from confirmed tracks and standalone anomalies.
 
-### Slow-mover and deep-stack analysis
+### Maximum-stack slow-mover analysis
 
-If deep-stack detection is enabled, SpacePixels also searches for ultra-slow movers and elongated stack features that do not behave like ordinary stars.
+If slow-mover detection is enabled, SpacePixels searches the maximum stack for elongated raw-pixel footprints.
 
-The slow-mover branch builds a specialized stack from the upper end of a middle band of sorted pixel values. This is different from a plain maximum stack: it favors semi-persistent weak structure while avoiding many one-frame flashes.
+JTransient builds the maximum stack from quality-filtered frames and extracts an exact raw-pixel mask independently from the median stack.
 
 Slow-mover candidates are filtered by:
 
-- dynamic elongation relative to the field baseline
-- minimum and maximum median-stack support overlap
-- optional positive residual flux in `slowMoverStack - medianStack`
+- minimum connected pixels and a geometric axis-ratio window
+- optional minimum oriented-box fill factor
+- minimum and maximum fraction of candidate raw pixels in the exact median mask
+- minimum frame support: the percentage of usable frames with significant localized signal inside the candidate footprint
+- maximum stationary likelihood: the percentage of supported frame positions clustered near one location
 
-The standard report can also use the maximum stack for visual diagnostics and elongated transient hints.
+Frame support and stationary likelihood are measured even with their default thresholds of 0% and 100%, respectively; those defaults reject no candidates. Raising the frame-support minimum or lowering the stationary-likelihood maximum enables the corresponding filter. A measurement can be unavailable when there are too few usable or supported frames; unavailable measurements do not reject candidates. Stationary likelihood is a heuristic, not a calibrated probability or confirmation of motion.
+
+The standard report shows the maximum stack, median mask, an inspection-only maximum-minus-median crop, and available frame-evidence scores for each candidate. A one-frame elongated transient can pass the morphology filters when the frame-support minimum remains at its default.
 
 ### Main result categories
 
@@ -635,7 +638,7 @@ The standard pipeline can produce:
 - one-frame streak tracks
 - suspected same-frame streak tracks
 - standalone peak- or integrated-sigma anomalies
-- slow-mover stack candidates
+- maximum-stack slow-mover morphology candidates
 - residual local rescue candidates
 - residual local activity clusters
 - unclassified post-veto transients for diagnostics
@@ -706,10 +709,10 @@ The identification helpers are split by target type:
 
 If enabled and populated, the report can also include:
 
-- `Deep Stack Anomalies (Ultra-Slow Mover Candidates)`
+- `Maximum-Stack Slow-Mover Candidates`
 - `Master Maximum Stack Transient Streaks`
 
-Deep-stack candidates should be treated as review candidates. They are useful for surfacing ultra-slow or semi-persistent features, but they are separate from ordinary frame-to-frame confirmed tracks.
+Maximum-stack candidates are review aids for elongated or semi-persistent features, separate from confirmed frame-to-frame tracks.
 
 ### Global map sections
 

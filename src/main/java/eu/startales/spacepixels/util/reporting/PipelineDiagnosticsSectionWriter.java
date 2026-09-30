@@ -91,7 +91,7 @@ final class PipelineDiagnosticsSectionWriter {
             report.println("</div>");
         }
         if (reportContext.config.enableSlowMoverDetection) {
-            report.println("<div class='astro-note'>Top-level counts are separated by category: <strong>" + summary.slowMoverCandidateCount + "</strong> deep-stack slow-mover candidates and <strong>" + summary.localRescueCandidateCount + "</strong> local rescue candidates.</div>");
+            report.println("<div class='astro-note'>Top-level counts are separated by category: <strong>" + summary.slowMoverCandidateCount + "</strong> maximum-stack shape candidates and <strong>" + summary.localRescueCandidateCount + "</strong> local rescue candidates.</div>");
         } else {
             report.println("<div class='astro-note'>Potential slow mover analysis was disabled for this session.</div>");
         }
@@ -101,7 +101,7 @@ final class PipelineDiagnosticsSectionWriter {
         if (summary.insufficientFramesAfterQuality) {
             report.println("<div class='panel'>");
             report.println("<h2>Quality-Control Guardrail</h2>");
-            report.println("<p>Only <strong>" + pipelineTelemetry.totalFramesKept + "</strong> frames remained after quality control. SpacePixels needs at least <strong>" + ImageProcessing.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS + "</strong> usable frames before multi-frame tracking and deep-stack review are meaningful, so those downstream sections were skipped for this run.</p>");
+            report.println("<p>Only <strong>" + pipelineTelemetry.totalFramesKept + "</strong> frames remained after quality control. SpacePixels needs at least <strong>" + ImageProcessing.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS + "</strong> usable frames before multi-frame tracking and maximum-stack candidate review are meaningful, so those downstream sections were skipped for this run.</p>");
             report.println("<div class='astro-note'>The quality-control tables below still show which frames were rejected and why.</div>");
             report.println("</div>");
         }

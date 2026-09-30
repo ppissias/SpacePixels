@@ -105,7 +105,7 @@ For the underlying detection logic and the meaning of the engine configuration o
 ## What SpacePixels does
 
 - Runs a standard multi-frame detection pipeline for moving targets, streak tracks, single-frame streaks, and bright anomalies.
-- Searches the deep integrated stacks for ultra-slow movers and other elongated deep-stack candidates.
+- Reviews maximum-stack elongated morphology candidates using geometric shape and exact median-mask overlap filters; these are not confirmed moving tracks.
 - Provides an iterative detection mode for large datasets and very slow targets.
 - Generates an HTML report with diagnostics, GIFs, geometric overlays, global maps, object-identification links, and optional AI-themed summary sections.
 - Supports manual transient inspection and frame-by-frame single-image detection preview.

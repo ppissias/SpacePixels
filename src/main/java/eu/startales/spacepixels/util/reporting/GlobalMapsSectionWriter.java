@@ -65,7 +65,7 @@ final class GlobalMapsSectionWriter {
         report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
         report.println("An overview of the classified track outputs and single-frame events plotted over the master background. " +
                 "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>SST#</strong> for suspected streak groupings, <strong>LR#</strong> for local rescue candidates). " +
-                "Local activity clusters are ringed as <strong>LC#</strong>, while deep-stack anomalies, single-frame anomalies, and single streaks are marked as <strong>DS#</strong>, <strong>A#</strong>, and <strong>S#</strong>.</p>");
+                "Local activity clusters are ringed as <strong>LC#</strong>, while maximum-stack slow-mover shape candidates, single-frame anomalies, and single streaks are marked as <strong>DS#</strong>, <strong>A#</strong>, and <strong>S#</strong>.</p>");
         report.println(buildGlobalTrajectoryLegendHtml(
                 reportContext.movingTargets.size(),
                 reportContext.streakTracks.size(),
@@ -152,7 +152,7 @@ final class GlobalMapsSectionWriter {
         appendGlobalTrajectoryLegendItem(html, "SST", "Suspected streak tracks", DetectionReportGenerator.GLOBAL_MAP_SUSPECTED_STREAK_COLOR, suspectedStreakCount);
         appendGlobalTrajectoryLegendItem(html, "LR", "Local rescue candidates", DetectionReportGenerator.GLOBAL_MAP_LOCAL_RESCUE_COLOR, localRescueCount);
         appendGlobalTrajectoryLegendItem(html, "LC", "Local activity clusters", DetectionReportGenerator.GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, localActivityCount);
-        appendGlobalTrajectoryLegendItem(html, "DS", "Deep-stack anomalies", DetectionReportGenerator.GLOBAL_MAP_DEEP_STACK_COLOR, deepStackCount);
+        appendGlobalTrajectoryLegendItem(html, "DS", "Maximum-stack shape candidates", DetectionReportGenerator.GLOBAL_MAP_DEEP_STACK_COLOR, deepStackCount);
         appendGlobalTrajectoryLegendItem(html, "A", "Single-frame anomalies", DetectionReportGenerator.GLOBAL_MAP_ANOMALY_COLOR, anomalyCount);
         appendGlobalTrajectoryLegendItem(html, "S", "Single streaks", DetectionReportGenerator.GLOBAL_MAP_SINGLE_STREAK_COLOR, singleStreakCount);
         html.append("</div>");
