@@ -69,7 +69,7 @@ dependencies {
     implementation 'com.google.guava:guava:33.5.0-jre'
     implementation 'com.formdev:flatlaf:3.4'
     implementation 'io.github.ppissias.jplatesolve:jplatesolve:1.0.0'
-    implementation 'io.github.ppissias.jtransient:jtransient:1.0.0'
+    implementation 'io.github.ppissias.jtransient:jtransient:1.0.1'
     // Use JUnit test framework
     testImplementation 'junit:junit:4.13.2'
 }
