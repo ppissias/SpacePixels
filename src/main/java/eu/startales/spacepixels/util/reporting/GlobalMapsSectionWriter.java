@@ -104,7 +104,7 @@ final class GlobalMapsSectionWriter {
         report.println("<a href='global_transient_map.png' target='_blank'><img src='global_transient_map.png' class='native-size-image' style='border: 1px solid #555; border-radius: 4px;' alt='Global Transient Map' /></a></div>");
         report.println("<div style='flex: 1; min-width: 400px;'>");
         report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Transient Cluster Map</h4>");
-        report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Cropped, downscaled, and dilated to make 'rainbows' (closely moving unlinked objects) highly visible. This map shows only point transients and not streaks. </p>");
+        report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Cropped, downscaled, and dilated. Rainbow like structures reveal closely moving objects. This map shows only point transients and not streaks. </p>");
         report.println("<div style='overflow-x: auto;'><a href='rainbow_cluster_map.png' target='_blank'><img src='rainbow_cluster_map.png' style='display: block; width: auto; max-width: none; height: auto; border: 1px solid #555; border-radius: 4px;' alt='Rainbow Cluster Map' /></a></div></div>");
         report.println("</div>");
         report.println("</div>");

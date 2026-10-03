@@ -241,6 +241,10 @@ public class DetectionConfigurationPanel extends JPanel {
             if (growSigma > detSigma) spinMasterSlowMoverGrowSigma.setValue(detSigma);
         });
 
+        // Basic tuning sigma changes are mirrored into the slow-mover sigma settings.
+        spinDetectionSigma.addChangeListener(e -> syncSlowMoverSigmasFromBasicTuning());
+        spinGrowSigma.addChangeListener(e -> syncSlowMoverSigmasFromBasicTuning());
+
         // A stationary threshold above the maximum jump makes geometric tracking self-contradictory.
         spinMaxJump.addChangeListener(e -> {
             double maxJump = ((Number) spinMaxJump.getValue()).doubleValue();
@@ -252,6 +256,18 @@ public class DetectionConfigurationPanel extends JPanel {
             double stationaryThreshold = ((Number) spinRhythmStatThresh.getValue()).doubleValue();
             if (stationaryThreshold > maxJump) spinRhythmStatThresh.setValue(maxJump);
         });
+    }
+
+    /**
+     * Copies the basic tuning Detection Sigma and Grow Sigma into the slow-mover Sigma and Grow Sigma.
+     * Values are read from the spinners so constraint adjustments made by other listeners are respected.
+     */
+    private void syncSlowMoverSigmasFromBasicTuning() {
+        double detSigma = ((Number) spinDetectionSigma.getValue()).doubleValue();
+        double growSigma = ((Number) spinGrowSigma.getValue()).doubleValue();
+        // Set sigma first so the slow-mover grow sigma constraint does not cap the new grow value.
+        setSpinnerValueClamped(spinMasterSlowMoverSigma, detSigma);
+        setSpinnerValueClamped(spinMasterSlowMoverGrowSigma, growSigma);
     }
 
     private void runAutoTuner() {
@@ -1062,6 +1078,8 @@ public class DetectionConfigurationPanel extends JPanel {
 
                 if (result.success) {
                     updateSpinnersFromConfig(result.optimizedConfig);
+                    // The tuner leaves slow-mover sigmas untouched; mirror the tuned basic sigmas into them.
+                    syncSlowMoverSigmasFromBasicTuning();
 
                     DetectionConfig appliedConfig = getJTransientConfig();
 
@@ -1089,7 +1107,8 @@ public class DetectionConfigurationPanel extends JPanel {
                                     "%s\n" +
                                     "• Min Pixels: %d\n" +
                                     "• Max Star Jitter: %s px\n" +
-                                    "• Max Mask Overlap Fraction: %s\n\n" +
+                                    "• Max Mask Overlap Fraction: %s\n" +
+                                    "• Slow-Mover Sigma / Grow Sigma: %s / %s (copied from Detection / Grow Sigma)\n\n" +
                                     "Telemetry: Detected %d stable stars with a %.1f%% noise ratio.\n\n" +
                                     "Would you like to view the detailed mathematical evaluation report?",
                             detectionMsg,
@@ -1097,6 +1116,8 @@ public class DetectionConfigurationPanel extends JPanel {
                             appliedConfig.minDetectionPixels,
                             formatSpinnerValue(spinStarJitter),
                             formatSpinnerValue(spinMaxMaskOverlapFraction),
+                            formatSpinnerValue(spinMasterSlowMoverSigma),
+                            formatSpinnerValue(spinMasterSlowMoverGrowSigma),
                             result.bestStarCount,
                             (result.bestTransientRatio * 100)
                     );
