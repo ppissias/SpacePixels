@@ -40,53 +40,53 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 <a href="https://startales.eu/various_files/detections_20260327_104830/detection_report.html" target="_blank">Sample SpacePixels report</a> <br/>
 <a href="https://startales.eu/various_files/detections_20260327_104437/detection_report.html" target="_blank">Sample SpacePixels report (artificial slow mover injected)</a> <br/>
 
-![Main Interface](https://startales.eu/various_files/detections/user-interface-04-04.png)
+![Main Interface](docs/images/user-interface-04-04.png)
 <br/>*The SpacePixels Main Workspace.*
 
-![Sample Detection](https://startales.eu/various_files/detections/streak-track-1.png)
+![Sample Detection](docs/images/streak-track-1.png)
 <br/>*Sample Detection - Streak track*
 
-![Sample Detection](https://startales.eu/various_files/detections/Prokne-detection.png)
+![Sample Detection](docs/images/Prokne-detection.png)
 <br/>*Sample Detection - asteroid Prokne (data credit Klangwolke @ Cloudynights)*
 
-![Sample Detection](https://startales.eu/various_files/detections/Prokne-moving_track_2_star_centric.gif)
+![Sample Detection](docs/images/Prokne-moving_track_2_star_centric.gif)
 <br/>*Sample Detection - asteroid Prokne (data credit Klangwolke @ Cloudynights)*
 
-![Sample Detection](https://startales.eu/various_files/detections/Valeria-Screenshot.png)
+![Sample Detection](docs/images/Valeria-Screenshot.png)
 <br/>*Sample Detection - minor planet Valeria (data credit Klangwolke @ Cloudynights)*
 
-![Sample Detection](https://startales.eu/various_files/detections/Valeria-moving_track_1_star_centric.gif)
+![Sample Detection](docs/images/Valeria-moving_track_1_star_centric.gif)
 <br/>*Sample Detection - minor planet Valeria (data credit Klangwolke @ Cloudynights)*
 
-![Sample Detection](https://startales.eu/various_files/detections/Sutoku-Screenshot.png)
+![Sample Detection](docs/images/Sutoku-Screenshot.png)
 <br/>*Sample Detection - asteroid Sutoku (data credit Klangwolke @ Cloudynights)*
 
-![Sample Detection](https://startales.eu/various_files/detections/Sutoku-micro_drift_1_context.gif)
+![Sample Detection](docs/images/Sutoku-micro_drift_1_context.gif)
 <br/>*Sample Detection - asteroid Sutoku (data credit Klangwolke @ Cloudynights)*
 
 
-![Sample Detection](https://startales.eu/various_files/aptrack_1_star_centric.gif)
+![Sample Detection](docs/images/aptrack_1_star_centric.gif)
 <br/>*Sample Detection - Comet Africano 2019*
 
-![Sample Detection](https://startales.eu/various_files/aptrack_1_object_centric.gif)
+![Sample Detection](docs/images/aptrack_1_object_centric.gif)
 <br/>*Sample Detection - Comet Africano 2019*
 
-![Sample Detection](https://startales.eu/various_files/track_5_object_centric.gif)
+![Sample Detection](docs/images/track_5_object_centric.gif)
 *Sample Detection - Apophis asteroid 2021 (raw images credit Duncan Warren), object-centric view.*
 
-![Sample Detection](https://startales.eu/various_files/track_5_star_centric.gif)
+![Sample Detection](docs/images/track_5_star_centric.gif)
 <br/>*Sample Detection - Apophis asteroid 2021 (raw images credit Duncan Warren), star-centric view.*
 
-![Sample Detection](https://startales.eu/various_files/streak_track_3_star_centric.gif)
+![Sample Detection](docs/images/streak_track_3_star_centric.gif)
 <br/>*Sample Detection - streak track.*
 
-![Sample Detection](https://startales.eu/various_files/anomaly_17_context.gif)
+![Sample Detection](docs/images/anomaly_17_context.gif)
 <br/> *Sample Detection - high-energy anomaly, data credit cloudynights user TheStarsabove.*
 
 ## Video Tutorial
 
 <a href="https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ" target="_blank">
-  <img src="https://img.youtube.com/vi/7XBdYh0Wn7A/mqdefault.jpg" alt="Watch the SpacePixels video tutorial on YouTube" width="320"/>
+  <img src="docs/images/video-tutorial-thumbnail.jpg" alt="Watch the SpacePixels video tutorial on YouTube" width="320"/>
 </a>
 
 [Watch the video tutorial on YouTube](https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ)
