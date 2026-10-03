@@ -10,5 +10,6 @@ jgoodies-forms-1.8.0-sources.jar
 .classpath
 gradle.properties
 AGENTS.md
+.idea/
 
 
