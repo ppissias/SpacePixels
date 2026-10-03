@@ -25,6 +25,12 @@ But what exactly are we throwing away? Those rejected pixels and artifacts are o
 
 **SpacePixels is the exact opposite of a stacking tool.** It was built to mine that discarded data. Instead of averaging out movement to hide it, SpacePixels actively hunts for movement across your sub-exposures to reveal the hidden transients you captured while you were focused on the deep-sky target.
 
+![SpacePixels alongside a classic astrophotography workflow](docs/images/SpacePixels-Overall-Astro-Workflow-updated.png)
+*Overall workflow: aligned frames can be stacked for a final image or analyzed by SpacePixels for moving and transient objects.*
+
+![SpacePixels detection workflow](docs/images/SpacePixels-Detection-Workflow-updated.png)
+*Detection workflow: SpacePixels checks frames, finds and links candidates, then presents results for review.*
+
 ## 📸 Screenshots & Output
 
 Many thanks to Klangwolke at Cloudynights for providing amazing data for this report.
