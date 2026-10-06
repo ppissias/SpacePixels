@@ -146,7 +146,7 @@ public final class ReportLookupProxyServer {
                 return;
             }
 
-            if (!"satchecker".equals(provider) && !"jpl".equals(provider)) {
+            if (!"satchecker".equals(provider) && !"jpl".equals(provider) && !"vsx".equals(provider)) {
                 writeJson(exchange, 400, createError("Unsupported report lookup provider."));
                 return;
             }

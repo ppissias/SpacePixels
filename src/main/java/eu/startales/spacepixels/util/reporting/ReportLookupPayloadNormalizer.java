@@ -23,7 +23,92 @@ final class ReportLookupPayloadNormalizer {
         if ("jpl".equals(provider)) {
             return normalizeJplPayload(payload);
         }
+        if ("vsx".equals(provider)) {
+            return normalizeVsxPayload(payload);
+        }
         return new JsonObject();
+    }
+
+    /**
+     * Normalizes a VizieR TAP JSON result ({@code metadata} column list plus {@code data} rows) from the
+     * VSX catalogue into matches ordered by separation.
+     */
+    static JsonObject normalizeVsxPayload(JsonElement payload) {
+        JsonObject normalized = new JsonObject();
+        JsonArray matches = new JsonArray();
+        normalized.add("matches", matches);
+        if (payload == null || !payload.isJsonObject()) {
+            return normalized;
+        }
+        JsonObject root = payload.getAsJsonObject();
+        JsonArray metadata = getArray(root, "metadata");
+        JsonArray data = getArray(root, "data");
+        if (metadata == null || data == null) {
+            return normalized;
+        }
+        Map<String, Integer> columns = new java.util.HashMap<>();
+        for (int c = 0; c < metadata.size(); c++) {
+            JsonObject column = asObject(metadata.get(c));
+            String name = column != null ? getString(column, "name") : null;
+            if (name != null) {
+                columns.put(name, c);
+            }
+        }
+        for (JsonElement rowElement : data) {
+            if (rowElement == null || !rowElement.isJsonArray()) {
+                continue;
+            }
+            JsonArray row = rowElement.getAsJsonArray();
+            JsonObject match = new JsonObject();
+            String name = vsxString(row, columns, "Name");
+            addStringProperty(match, "name", name);
+            addStringProperty(match, "type", vsxString(row, columns, "Type"));
+            addFiniteProperty(match, "maxMag", vsxDouble(row, columns, "max"));
+            addStringProperty(match, "maxBand", vsxString(row, columns, "n_max"));
+            addFiniteProperty(match, "minMag", vsxDouble(row, columns, "min"));
+            addStringProperty(match, "minBand", vsxString(row, columns, "n_min"));
+            // VSX flags a minimum that is really an amplitude ('Y' in the VizieR copy, '(' on the VSX site).
+            // A real minimum magnitude is always numerically larger than the maximum, so a smaller value is
+            // an amplitude even without the flag.
+            String minFlag = vsxString(row, columns, "f_min");
+            double maxMag = vsxDouble(row, columns, "max");
+            double minMag = vsxDouble(row, columns, "min");
+            boolean amplitude = (minFlag != null && (minFlag.contains("(") || minFlag.equalsIgnoreCase("Y")))
+                    || (Double.isFinite(maxMag) && Double.isFinite(minMag) && minMag < maxMag);
+            match.addProperty("minIsAmplitude", amplitude);
+            addFiniteProperty(match, "periodDays", vsxDouble(row, columns, "Period"));
+            addFiniteProperty(match, "separationArcsec", vsxDouble(row, columns, "dist_arcsec"));
+            double oid = vsxDouble(row, columns, "OID");
+            if (Double.isFinite(oid)) {
+                long id = (long) oid;
+                match.addProperty("oid", id);
+                match.addProperty("vsxUrl", "https://www.aavso.org/vsx/index.php?view=detail.top&oid=" + id);
+            }
+            matches.add(match);
+        }
+        normalized.addProperty("matchCount", matches.size());
+        return normalized;
+    }
+
+    private static String vsxString(JsonArray row, Map<String, Integer> columns, String name) {
+        Integer index = columns.get(name);
+        if (index == null || index >= row.size() || row.get(index) == null || row.get(index).isJsonNull()) {
+            return null;
+        }
+        String value = row.get(index).getAsString().trim();
+        return value.isEmpty() ? null : value;
+    }
+
+    private static double vsxDouble(JsonArray row, Map<String, Integer> columns, String name) {
+        Integer index = columns.get(name);
+        if (index == null || index >= row.size() || row.get(index) == null || row.get(index).isJsonNull()) {
+            return Double.NaN;
+        }
+        try {
+            return row.get(index).getAsDouble();
+        } catch (Exception e) {
+            return Double.NaN;
+        }
     }
 
     private static JsonObject normalizeSatCheckerPayload(JsonElement payload) {

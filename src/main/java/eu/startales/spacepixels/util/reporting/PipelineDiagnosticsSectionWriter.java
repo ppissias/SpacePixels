@@ -78,6 +78,12 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<div class='metric-box'><span class='metric-value'>" + potentialSlowMoverMetric + "</span><span class='metric-label'>Potential Slow Movers</span></div>");
         report.println("<div class='metric-box'><span class='metric-value'>" + summary.localRescueCandidateCount + "</span><span class='metric-label'>Local Rescue Candidates</span></div>");
         report.println("<div class='metric-box'><span class='metric-value'>" + summary.localActivityClusterCount + "</span><span class='metric-label'>Local Activity Clusters</span></div>");
+        String variableStarMetric = !reportContext.config.enableVariableStarDetection
+                ? "Off"
+                : pipelineTelemetry.photometryTelemetry == null ? "n/a"
+                : "NOT_READY".equals(pipelineTelemetry.photometryTelemetry.verdict) ? "Not ready"
+                : String.valueOf(pipelineTelemetry.photometryTelemetry.highConfidence);
+        report.println("<div class='metric-box'><span class='metric-value'>" + variableStarMetric + "</span><span class='metric-label'>Variable-Star Candidates</span></div>");
         report.println("</div>");
         report.println("<div class='astro-note'>JTransient returned <strong>" + summary.returnedTrackCount + "</strong> track-like detections overall: <strong>" + summary.singleStreakCount + "</strong> single-frame streaks, <strong>" + summary.confirmedLinkedTrackCount + "</strong> confirmed linked tracks, and <strong>" + summary.suspectedStreakTrackCount + "</strong> suspected streak groupings.</div>");
         if (!reportContext.anomalies.isEmpty()) {

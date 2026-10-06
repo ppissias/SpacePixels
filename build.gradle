@@ -170,7 +170,7 @@ tasks.register('realDataTest', JavaExec) {
     mainClass = 'eu.startales.spacepixels.tools.SpacePixelsRealDataMain'
     classpath = sourceSets.test.runtimeClasspath
     jvmArgs = batchDetectJvmArgs
-    systemProperty 'spacepixels.testdata.root', 'C:/Users/petro/Documents/astro-data/tests'
+    systemProperty 'spacepixels.testdata.root', project.findProperty('realDataRoot') ?: 'C:/Users/petro/Documents/astro-data/tests'
     shouldRunAfter tasks.named('test')
 }
 

@@ -26,6 +26,11 @@ final class ReportLookupUpstreamClient {
     private static final int JPL_READ_TIMEOUT_MS = 300_000;
     private static final int MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 
+    /** VizieR TAP service hosting the AAVSO International Variable Star Index (VSX), which is queried as JSON. */
+    static final String VSX_TAP_HOST = "tapvizier.cds.unistra.fr";
+    static final String VSX_TAP_PATH = "/TAPVizieR/tap/sync";
+    static final String VSX_TABLE = "B/vsx/vsx";
+
     private ReportLookupUpstreamClient() {
     }
 
@@ -99,6 +104,12 @@ final class ReportLookupUpstreamClient {
         } else if ("jpl".equals(provider)) {
             if (!"ssd-api.jpl.nasa.gov".equalsIgnoreCase(host) || !"/sb_ident.api".equals(path)) {
                 throw new IllegalArgumentException("Only JPL small-body identification lookups are allowed.");
+            }
+        } else if ("vsx".equals(provider)) {
+            String query = uri.getQuery();
+            if (!VSX_TAP_HOST.equalsIgnoreCase(host) || !VSX_TAP_PATH.equals(path)
+                    || query == null || !query.contains("FROM \"" + VSX_TABLE + "\"")) {
+                throw new IllegalArgumentException("Only VizieR VSX variable-star lookups are allowed.");
             }
         }
 

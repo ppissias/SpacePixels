@@ -462,6 +462,17 @@ Contains frame sampling, session rejection, and quality-extraction settings:
 
 These controls affect both pipeline frame rejection and the quality-based candidate pool that SpacePixels prepares for Auto-Tune. The quality-side grow sigma is deliberately separate from the main detection grow sigma, so previous tuning output does not feed back into frame sampling.
 
+#### Variable Stars
+
+Controls the optional stationary-star photometry stage, which looks for stars whose brightness changes during the session. It is off by default and is tuned to avoid false variables: a missed variable is preferred over a false one.
+
+- `Common Settings`: the master switch, how many stars are measured (0 = every usable star), the minimum star SNR, the variability score sigma, the minimum amplitude, the minimum number of frames and the minimum time span
+- `Apertures And Star Selection`: aperture and sky-ring radii in units of the measured FWHM, the elongation limit, the saturation fraction, the per-frame gradient fit and the registration-spread limit
+- `Linearity Checks`: check A (quantised data, sky clipped at zero), check B (bright stars must have the same shape as faint ones in every frame) and check D (bright and faint stars must respond equally to transparency changes)
+- `Candidate Gates`: the noise model size and the thresholds of the gates a candidate must pass: amplitude, persistence, split-half agreement, aperture consistency, systematics correlation and local consistency
+
+The linearity checks can only detect non-linearity, not prove linearity: use the original, unstretched sub-frames. Photometry is skipped in the iterative pipeline, because its time-spaced subsets would only repeat it on partial data.
+
 #### Advanced Visualization
 
 Contains visualization-only controls such as:
@@ -542,8 +553,9 @@ High-level workflow:
 14. group collinear rescued anomalies into suspected same-frame streak tracks
 15. consolidate streak tracks
 16. analyze leftover residual point transients
-17. build the maximum stack for visualization
-18. export the HTML report and image assets
+17. optionally measure stationary-star photometry and score variable-star candidates
+18. build the maximum stack for visualization
+19. export the HTML report and image assets
 
 The output folder is created next to your data and named like:
 
@@ -660,6 +672,8 @@ Workflow:
 
 The iterative summary is an index page plus subfolders such as `5_frames`, `10_frames`, and so on.
 
+Variable-star photometry is always disabled in iterative passes; run the standard pipeline to use it.
+
 ---
 
 ## 12. HTML report guide
@@ -713,6 +727,18 @@ If enabled and populated, the report can also include:
 - `Master Maximum Stack Transient Streaks`
 
 Maximum-stack candidates are review aids for elongated or semi-persistent features, separate from confirmed frame-to-frame tracks.
+
+### Variable-star photometry sections
+
+When `Enable Variable-Star Detection` is on, the report includes:
+
+- `Variable-Star Photometry`: the readiness verdict (Ready, Limited or Not ready) with plain-language reasons, and the session counts
+- `Photometry: Readiness Checks`: the measurements behind checks A, B and D, star and frame exclusions, and flagged measurements
+- `Photometry: Session Diagnostics`: the noise model (scatter against brightness with candidates highlighted), per-frame charts of zero point, response slope, linear range, FWHM, registration spread and crossed stars, and the check B concentration profiles of every frame
+- `Photometry: Variable-Star Candidates`: one card per high-confidence or possible candidate with its scores, gate results, light curve (with three constant comparison stars of similar brightness drawn below it) and cutouts of its brightest and faintest frame, plus a table of rejected candidates and the gates they failed. When the session is plate-solved, each card has a `Check VSX Here` button that looks the star up in the AAVSO International Variable Star Index (through CDS VizieR) and shows the catalogued variables nearby, with their type, range, period and separation, inside the report, plus `VSX in VizieR` and `SIMBAD` browser links. The in-report lookup needs SpacePixels to be running, like the other live lookups; results are saved into the report
+- `Photometry: Per-Frame Measurements`: every per-frame value, with excluded frames and their reasons
+
+Hover any chart mark for its details. The report folder also contains `photometry_stars.csv`, `photometry_lightcurves.csv` (candidates) and `photometry_frames.csv`. Magnitudes are instrumental and differential; candidates are not yet matched against variable-star catalogues.
 
 ### Global map sections
 

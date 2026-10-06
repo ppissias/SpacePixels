@@ -125,6 +125,8 @@ final class IterativeDetectionPipelineService {
             DetectionPipelineSupport.logPipelineFrameTimingPayload("Iterative pass " + k, spacedSubset, cachedFileInfo);
 
             DetectionConfig effectiveConfig = DetectionPipelineSupport.createEffectiveDetectionConfig(config, spacedSubset.size());
+            // Photometry needs the full session; time-spaced subsets would only repeat it on partial data.
+            effectiveConfig.enableVariableStarDetection = false;
 
             PipelineResult result;
             JTransientEngine engine = new JTransientEngine();

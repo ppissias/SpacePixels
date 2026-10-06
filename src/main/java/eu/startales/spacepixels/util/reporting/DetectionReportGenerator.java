@@ -1465,6 +1465,11 @@ public class DetectionReportGenerator {
             ResidualReviewSectionWriter.writeSection(report, reportContext);
 
             // =================================================================
+            // VARIABLE-STAR PHOTOMETRY
+            // =================================================================
+            PhotometryReportSectionWriter.writeSection(report, reportContext, result.variableStarAnalysis);
+
+            // =================================================================
             // LOCAL RESCUE
             // =================================================================
 

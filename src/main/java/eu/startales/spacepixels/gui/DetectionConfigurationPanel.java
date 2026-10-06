@@ -84,6 +84,20 @@ public class DetectionConfigurationPanel extends JPanel {
     private JSpinner spinQualitySigma, spinQualityGrowSigma, spinQualityMinPix, spinQualityBrightStarPeakSigmaOffset, spinQualityBrightStarMinStars, spinMaxElongFwhm, spinBrightStarEccentricitySigma;
     private JCheckBox chkEnableBrightStarEccentricityFilter;
 
+    // --- Variable-star photometry ---
+    private JCheckBox chkEnableVariableStarDetection, chkPhotometryFitPlane;
+    private JSpinner spinPhotometryMaxStars, spinPhotometryMinSnr, spinPhotometryMaxElongation, spinPhotometryApertureFwhmFactor;
+    private JSpinner spinPhotometryAnnulusInnerFwhmFactor, spinPhotometryAnnulusOuterFwhmFactor;
+    private JSpinner spinPhotometrySaturationFraction, spinPhotometryMaxRegistrationSpreadPixels;
+    private JSpinner spinLinearityMinDistinctLevels, spinLinearityMaxFloorClippedFraction;
+    private JSpinner spinLinearityMaxConcentrationDrift, spinLinearityMinRangeMag, spinLinearityMinStars;
+    private JSpinner spinLinearityMaxFrameSlope, spinLinearityMinZeroPointRangeMag;
+    private JSpinner spinLinearityMaxSlopeTrackingCorrelation, spinLinearityMaxFailingFrameFraction;
+    private JSpinner spinVariableMinFrames, spinVariableMinSpanMinutes, spinVariableNoiseModelNeighbors, spinVariableScoreSigma;
+    private JSpinner spinVariableMinAmplitudeMag, spinVariableLimitedMinAmplitudeMag, spinVariableAmplitudeNoiseFactor;
+    private JSpinner spinVariableMinPersistenceFrames, spinVariableMinSplitHalfCorrelation, spinVariableMaxApertureAmplitudeDifference;
+    private JSpinner spinVariableMaxSystematicsCorrelation, spinVariableSystematicsResponseFactor, spinVariableLocalRadiusPixels, spinVariableMaxLocalCorrelation;
+
     private JSpinner spinAutoTuneMaxCandidateFrames;
 
     private JSpinner spinStreakScale, spinStreakCentroidRad, spinPointBoxRad, spinBoxPad;
@@ -114,6 +128,7 @@ public class DetectionConfigurationPanel extends JPanel {
         tabbedPane.addTab("Slow Movers", buildScrollPane(buildSlowMoversPanel()));
         tabbedPane.addTab("Residual Analysis", buildScrollPane(buildResidualAnalysisPanel()));
         tabbedPane.addTab("Quality Control", buildScrollPane(buildQualityPanel()));
+        tabbedPane.addTab("Variable Stars", buildScrollPane(buildVariableStarsPanel()));
         tabbedPane.addTab("Advanced Visualization", buildScrollPane(buildAdvancedVisualizationPanel()));
 
         add(tabbedPane, BorderLayout.CENTER);
@@ -576,6 +591,60 @@ public class DetectionConfigurationPanel extends JPanel {
         return panel;
     }
 
+    private JPanel buildVariableStarsPanel() {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBorder(new EmptyBorder(10, 20, 20, 20));
+
+        panel.add(createTabIntro("Measure the brightness of stationary stars in every frame that passed quality control, check whether the frames respond linearly to light, and report stars whose brightness changes more than noise and shared systematics explain. The analysis is tuned to avoid false variables: a missed variable is preferred over a false one. Results and per-frame diagnostics appear in the pipeline telemetry."));
+
+        panel.add(createSectionHeader("Common Settings"));
+        chkEnableVariableStarDetection = addCheckboxRow(panel, "Enable Variable-Star Detection", "Run stationary-star photometry and variable-star detection after moving-object tracking.<br>Adds processing time proportional to stars x frames.", jTransientConfig.enableVariableStarDetection);
+        spinPhotometryMaxStars = addRow(panel, "Max Stars Measured", "Most stars measured; 0 measures every usable star (recommended).<br>A cap picks stars evenly across the field and the brightness range. Saturated stars are always skipped.", intSpinnerModel(jTransientConfig.photometryMaxStars, 0, 200000, 500));
+        spinPhotometryMinSnr = addRow(panel, "Min Star SNR", "Stars fainter than this median signal-to-noise ratio are measured and exported, but not used or scored.<br>0 disables the cut.", doubleSpinnerModel(jTransientConfig.photometryMinSnr, 0.0, 1000.0, 1.0));
+        spinVariableScoreSigma = addRow(panel, "Variability Score Sigma", "How far above same-brightness stars both the scatter score and the Stetson J score must be for a star to become a candidate.<br>Higher values give fewer, safer candidates.", doubleSpinnerModel(jTransientConfig.variableScoreSigma, 1.0, 50.0, 0.5));
+        spinVariableMinAmplitudeMag = addRow(panel, "Min Amplitude (mag)", "Smallest brightness change (95th minus 5th percentile) reported as high confidence.", doubleSpinnerModel(jTransientConfig.variableMinAmplitudeMag, 0.0, 5.0, 0.01));
+        spinVariableMinFrames = addRow(panel, "Min Frames", "Fewest usable measurements a star needs to be scored, and fewest frames the session must keep after the photometry checks.", intSpinnerModel(jTransientConfig.variableMinFrames, 3, 10000, 1));
+        spinVariableMinSpanMinutes = addRow(panel, "Min Time Span (minutes)", "Shortest time span of a candidate's measurements for a high-confidence result.<br>Ignored when the frames have no timestamps.", doubleSpinnerModel(jTransientConfig.variableMinSpanMinutes, 0.0, 1440.0, 5.0));
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createSectionHeader("Apertures And Star Selection"));
+        spinPhotometryApertureFwhmFactor = addRow(panel, "Aperture Radius (x FWHM)", "Photometry aperture radius in units of each frame's measured FWHM.", doubleSpinnerModel(jTransientConfig.photometryApertureFwhmFactor, 0.5, 5.0, 0.1));
+        spinPhotometryAnnulusInnerFwhmFactor = addRow(panel, "Sky Annulus Inner Radius (x FWHM)", "Inner radius of the sky ring. Stars with a bright neighbour inside this radius are not measured.", doubleSpinnerModel(jTransientConfig.photometryAnnulusInnerFwhmFactor, 1.0, 20.0, 0.1));
+        spinPhotometryAnnulusOuterFwhmFactor = addRow(panel, "Sky Annulus Outer Radius (x FWHM)", "Outer radius of the sky ring. Must be larger than the inner radius.", doubleSpinnerModel(jTransientConfig.photometryAnnulusOuterFwhmFactor, 1.5, 30.0, 0.1));
+        spinPhotometryMaxElongation = addRow(panel, "Max Star Elongation", "Master stars more elongated than this (blends, galaxies, trails) are not measured.", doubleSpinnerModel(jTransientConfig.photometryMaxElongation, 1.0, 5.0, 0.05));
+        spinPhotometrySaturationFraction = addRow(panel, "Saturation Fraction", "A measurement is flagged saturated when its peak pixel exceeds this fraction of the session saturation level.", doubleSpinnerModel(jTransientConfig.photometrySaturationFraction, 0.1, 1.0, 0.01));
+        chkPhotometryFitPlane = addCheckboxRow(panel, "Fit Per-Frame Gradient", "Fit a linear brightness gradient across the field in every frame, absorbing sky gradients and differential extinction.", jTransientConfig.photometryFitPlane);
+        spinPhotometryMaxRegistrationSpreadPixels = addRow(panel, "Max Registration Spread (px)", "Frames whose star positions scatter more than this around the median offset are excluded (rotation or poor alignment).", doubleSpinnerModel(jTransientConfig.photometryMaxRegistrationSpreadPixels, 0.0, 10.0, 0.05));
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createSectionHeader("Linearity Checks"));
+        spinLinearityMinDistinctLevels = addRow(panel, "A: Min Distinct Pixel Levels", "Fewer distinct pixel values suggest 8-bit or heavily quantised data; the session is refused.", intSpinnerModel(jTransientConfig.linearityMinDistinctLevels, 2, 65536, 64));
+        spinLinearityMaxFloorClippedFraction = addRow(panel, "A: Max Clipped Sky Fraction", "Largest share of sky pixels allowed at zero. More means negative sky noise was clipped and faint stars are biased; the session is limited.", doubleSpinnerModel(jTransientConfig.linearityMaxFloorClippedFraction, 0.0, 1.0, 0.005));
+        spinLinearityMaxConcentrationDrift = addRow(panel, "B: Max Concentration Drift", "Largest change of star concentration (flux in 0.7 x FWHM / flux in 2.5 x FWHM) from faint to bright stars inside the linear range.<br>Stretched data makes bright stars flatter.", doubleSpinnerModel(jTransientConfig.linearityMaxConcentrationDrift, 0.0, 0.5, 0.005));
+        spinLinearityMinRangeMag = addRow(panel, "B: Min Linear Range (mag)", "Frames whose linear magnitude range is narrower than this are excluded.", doubleSpinnerModel(jTransientConfig.linearityMinRangeMag, 0.0, 10.0, 0.1));
+        spinLinearityMinStars = addRow(panel, "B: Min Stars", "Fewest bright-enough stars a frame needs for the linearity check, and fewest measurable stars for photometry to run.", intSpinnerModel(jTransientConfig.linearityMinStars, 5, 5000, 5));
+        spinLinearityMaxFrameSlope = addRow(panel, "D: Max Response Slope (mag/mag)", "Largest allowed difference in how bright and faint stars respond within one frame. Failing frames are excluded.", doubleSpinnerModel(jTransientConfig.linearityMaxFrameSlope, 0.0, 0.5, 0.001));
+        spinLinearityMinZeroPointRangeMag = addRow(panel, "D: Min Transparency Range (mag)", "Below this change in transparency over the session, check D cannot confirm linearity and the session is limited.", doubleSpinnerModel(jTransientConfig.linearityMinZeroPointRangeMag, 0.0, 2.0, 0.01));
+        spinLinearityMaxSlopeTrackingCorrelation = addRow(panel, "D: Max Slope Tracking Correlation", "The session is refused when the response slope follows transparency or sky level at least this strongly.", doubleSpinnerModel(jTransientConfig.linearityMaxSlopeTrackingCorrelation, 0.0, 1.0, 0.05));
+        spinLinearityMaxFailingFrameFraction = addRow(panel, "B/D: Max Failing Frame Fraction", "Share of frames that may fail check B or D before the whole session is refused.", doubleSpinnerModel(jTransientConfig.linearityMaxFailingFrameFraction, 0.0, 1.0, 0.05));
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createSectionHeader("Candidate Gates"));
+        spinVariableNoiseModelNeighbors = addRow(panel, "Noise Model Neighbours", "Stars nearest in brightness used to estimate the expected scatter of each star.", intSpinnerModel(jTransientConfig.variableNoiseModelNeighbors, 5, 1000, 5));
+        spinVariableLimitedMinAmplitudeMag = addRow(panel, "Min Amplitude When Limited (mag)", "Smallest amplitude reported as high confidence when the linearity verdict is Limited.", doubleSpinnerModel(jTransientConfig.variableLimitedMinAmplitudeMag, 0.0, 5.0, 0.01));
+        spinVariableAmplitudeNoiseFactor = addRow(panel, "Amplitude Noise Factor", "The amplitude must also exceed this many times the expected scatter at the star's brightness.", doubleSpinnerModel(jTransientConfig.variableAmplitudeNoiseFactor, 0.0, 50.0, 0.5));
+        spinVariableMinPersistenceFrames = addRow(panel, "Min Persistence (frames)", "Fewest consecutive frames that must deviate in the same direction. Rejects single-frame events.", intSpinnerModel(jTransientConfig.variableMinPersistenceFrames, 1, 1000, 1));
+        spinVariableMinSplitHalfCorrelation = addRow(panel, "Min Split-Half Correlation", "Consecutive measurement pairs must agree at least this well. Rejects noise that only looks coherent.", doubleSpinnerModel(jTransientConfig.variableMinSplitHalfCorrelation, -1.0, 1.0, 0.05));
+        spinVariableMaxApertureAmplitudeDifference = addRow(panel, "Max Aperture Amplitude Difference", "Amplitudes measured with small and large apertures may differ by at most this fraction. Rejects neighbour leakage and seeing effects.", doubleSpinnerModel(jTransientConfig.variableMaxApertureAmplitudeDifference, 0.0, 5.0, 0.05));
+        spinVariableMaxSystematicsCorrelation = addRow(panel, "Max Systematics Correlation", "Light curves correlating more than this with transparency, FWHM, local sky or registration offsets are checked against the response factor below.<br>Correlation alone does not reject a star: real variables that brighten or fade steadily correlate with any steady drift.", doubleSpinnerModel(jTransientConfig.variableMaxSystematicsCorrelation, 0.0, 1.0, 0.05));
+        spinVariableSystematicsResponseFactor = addRow(panel, "Systematics Response Factor", "A correlated systematic rejects a candidate only if its amplitude is at most this many times the largest response that constant stars of similar brightness show to the same systematic.<br>Lower values reject fewer candidates.", doubleSpinnerModel(jTransientConfig.variableSystematicsResponseFactor, 0.0, 100.0, 0.5));
+        spinVariableLocalRadiusPixels = addRow(panel, "Local Comparison Radius (px)", "Radius within which nearby constant stars are checked for the same pattern.", doubleSpinnerModel(jTransientConfig.variableLocalRadiusPixels, 0.0, 5000.0, 10.0));
+        spinVariableMaxLocalCorrelation = addRow(panel, "Max Local Correlation", "Largest allowed median correlation with nearby constant stars. Rejects dust, dew and local gradients.", doubleSpinnerModel(jTransientConfig.variableMaxLocalCorrelation, 0.0, 1.0, 0.05));
+
+        return panel;
+    }
+
     private JPanel buildQualityPanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
@@ -926,6 +995,40 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.qualityBrightStarMinStars = ((Number) spinQualityBrightStarMinStars.getValue()).intValue();
             jTransientConfig.qualityMaxElongationForFwhm = ((Number) spinMaxElongFwhm.getValue()).doubleValue();
 
+            jTransientConfig.enableVariableStarDetection = chkEnableVariableStarDetection.isSelected();
+            jTransientConfig.photometryMaxStars = ((Number) spinPhotometryMaxStars.getValue()).intValue();
+            jTransientConfig.photometryMinSnr = ((Number) spinPhotometryMinSnr.getValue()).doubleValue();
+            jTransientConfig.photometryMaxElongation = ((Number) spinPhotometryMaxElongation.getValue()).doubleValue();
+            jTransientConfig.photometryApertureFwhmFactor = ((Number) spinPhotometryApertureFwhmFactor.getValue()).doubleValue();
+            jTransientConfig.photometryAnnulusInnerFwhmFactor = ((Number) spinPhotometryAnnulusInnerFwhmFactor.getValue()).doubleValue();
+            jTransientConfig.photometryAnnulusOuterFwhmFactor = ((Number) spinPhotometryAnnulusOuterFwhmFactor.getValue()).doubleValue();
+            jTransientConfig.photometrySaturationFraction = ((Number) spinPhotometrySaturationFraction.getValue()).doubleValue();
+            jTransientConfig.photometryFitPlane = chkPhotometryFitPlane.isSelected();
+            jTransientConfig.photometryMaxRegistrationSpreadPixels = ((Number) spinPhotometryMaxRegistrationSpreadPixels.getValue()).doubleValue();
+            jTransientConfig.linearityMinDistinctLevels = ((Number) spinLinearityMinDistinctLevels.getValue()).intValue();
+            jTransientConfig.linearityMaxFloorClippedFraction = ((Number) spinLinearityMaxFloorClippedFraction.getValue()).doubleValue();
+            jTransientConfig.linearityMaxConcentrationDrift = ((Number) spinLinearityMaxConcentrationDrift.getValue()).doubleValue();
+            jTransientConfig.linearityMinRangeMag = ((Number) spinLinearityMinRangeMag.getValue()).doubleValue();
+            jTransientConfig.linearityMinStars = ((Number) spinLinearityMinStars.getValue()).intValue();
+            jTransientConfig.linearityMaxFrameSlope = ((Number) spinLinearityMaxFrameSlope.getValue()).doubleValue();
+            jTransientConfig.linearityMinZeroPointRangeMag = ((Number) spinLinearityMinZeroPointRangeMag.getValue()).doubleValue();
+            jTransientConfig.linearityMaxSlopeTrackingCorrelation = ((Number) spinLinearityMaxSlopeTrackingCorrelation.getValue()).doubleValue();
+            jTransientConfig.linearityMaxFailingFrameFraction = ((Number) spinLinearityMaxFailingFrameFraction.getValue()).doubleValue();
+            jTransientConfig.variableMinFrames = ((Number) spinVariableMinFrames.getValue()).intValue();
+            jTransientConfig.variableMinSpanMinutes = ((Number) spinVariableMinSpanMinutes.getValue()).doubleValue();
+            jTransientConfig.variableNoiseModelNeighbors = ((Number) spinVariableNoiseModelNeighbors.getValue()).intValue();
+            jTransientConfig.variableScoreSigma = ((Number) spinVariableScoreSigma.getValue()).doubleValue();
+            jTransientConfig.variableMinAmplitudeMag = ((Number) spinVariableMinAmplitudeMag.getValue()).doubleValue();
+            jTransientConfig.variableLimitedMinAmplitudeMag = ((Number) spinVariableLimitedMinAmplitudeMag.getValue()).doubleValue();
+            jTransientConfig.variableAmplitudeNoiseFactor = ((Number) spinVariableAmplitudeNoiseFactor.getValue()).doubleValue();
+            jTransientConfig.variableMinPersistenceFrames = ((Number) spinVariableMinPersistenceFrames.getValue()).intValue();
+            jTransientConfig.variableMinSplitHalfCorrelation = ((Number) spinVariableMinSplitHalfCorrelation.getValue()).doubleValue();
+            jTransientConfig.variableMaxApertureAmplitudeDifference = ((Number) spinVariableMaxApertureAmplitudeDifference.getValue()).doubleValue();
+            jTransientConfig.variableMaxSystematicsCorrelation = ((Number) spinVariableMaxSystematicsCorrelation.getValue()).doubleValue();
+            jTransientConfig.variableSystematicsResponseFactor = ((Number) spinVariableSystematicsResponseFactor.getValue()).doubleValue();
+            jTransientConfig.variableLocalRadiusPixels = ((Number) spinVariableLocalRadiusPixels.getValue()).doubleValue();
+            jTransientConfig.variableMaxLocalCorrelation = ((Number) spinVariableMaxLocalCorrelation.getValue()).doubleValue();
+
             RawImageAnnotator.streakLineScaleFactor = ((Number) spinStreakScale.getValue()).doubleValue();
             RawImageAnnotator.streakCentroidBoxRadius = ((Number) spinStreakCentroidRad.getValue()).intValue();
             RawImageAnnotator.pointSourceMinBoxRadius = ((Number) spinPointBoxRad.getValue()).intValue();
@@ -982,6 +1085,12 @@ public class DetectionConfigurationPanel extends JPanel {
         double stationaryThreshold = ((Number) spinRhythmStatThresh.getValue()).doubleValue();
         if (stationaryThreshold > maxJump) {
             spinRhythmStatThresh.setValue(maxJump);
+        }
+
+        double annulusInner = ((Number) spinPhotometryAnnulusInnerFwhmFactor.getValue()).doubleValue();
+        double annulusOuter = ((Number) spinPhotometryAnnulusOuterFwhmFactor.getValue()).doubleValue();
+        if (annulusOuter <= annulusInner) {
+            setSpinnerValueClamped(spinPhotometryAnnulusOuterFwhmFactor, annulusInner + 0.5);
         }
     }
 
@@ -1219,6 +1328,40 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinQualityBrightStarPeakSigmaOffset, config.qualityBrightStarPeakSigmaOffset);
         setSpinnerValueClamped(spinQualityBrightStarMinStars, config.qualityBrightStarMinStars);
         setSpinnerValueClamped(spinMaxElongFwhm, config.qualityMaxElongationForFwhm);
+
+        chkEnableVariableStarDetection.setSelected(config.enableVariableStarDetection);
+        setSpinnerValueClamped(spinPhotometryMaxStars, config.photometryMaxStars);
+        setSpinnerValueClamped(spinPhotometryMinSnr, config.photometryMinSnr);
+        setSpinnerValueClamped(spinPhotometryMaxElongation, config.photometryMaxElongation);
+        setSpinnerValueClamped(spinPhotometryApertureFwhmFactor, config.photometryApertureFwhmFactor);
+        setSpinnerValueClamped(spinPhotometryAnnulusInnerFwhmFactor, config.photometryAnnulusInnerFwhmFactor);
+        setSpinnerValueClamped(spinPhotometryAnnulusOuterFwhmFactor, config.photometryAnnulusOuterFwhmFactor);
+        setSpinnerValueClamped(spinPhotometrySaturationFraction, config.photometrySaturationFraction);
+        chkPhotometryFitPlane.setSelected(config.photometryFitPlane);
+        setSpinnerValueClamped(spinPhotometryMaxRegistrationSpreadPixels, config.photometryMaxRegistrationSpreadPixels);
+        setSpinnerValueClamped(spinLinearityMinDistinctLevels, config.linearityMinDistinctLevels);
+        setSpinnerValueClamped(spinLinearityMaxFloorClippedFraction, config.linearityMaxFloorClippedFraction);
+        setSpinnerValueClamped(spinLinearityMaxConcentrationDrift, config.linearityMaxConcentrationDrift);
+        setSpinnerValueClamped(spinLinearityMinRangeMag, config.linearityMinRangeMag);
+        setSpinnerValueClamped(spinLinearityMinStars, config.linearityMinStars);
+        setSpinnerValueClamped(spinLinearityMaxFrameSlope, config.linearityMaxFrameSlope);
+        setSpinnerValueClamped(spinLinearityMinZeroPointRangeMag, config.linearityMinZeroPointRangeMag);
+        setSpinnerValueClamped(spinLinearityMaxSlopeTrackingCorrelation, config.linearityMaxSlopeTrackingCorrelation);
+        setSpinnerValueClamped(spinLinearityMaxFailingFrameFraction, config.linearityMaxFailingFrameFraction);
+        setSpinnerValueClamped(spinVariableMinFrames, config.variableMinFrames);
+        setSpinnerValueClamped(spinVariableMinSpanMinutes, config.variableMinSpanMinutes);
+        setSpinnerValueClamped(spinVariableNoiseModelNeighbors, config.variableNoiseModelNeighbors);
+        setSpinnerValueClamped(spinVariableScoreSigma, config.variableScoreSigma);
+        setSpinnerValueClamped(spinVariableMinAmplitudeMag, config.variableMinAmplitudeMag);
+        setSpinnerValueClamped(spinVariableLimitedMinAmplitudeMag, config.variableLimitedMinAmplitudeMag);
+        setSpinnerValueClamped(spinVariableAmplitudeNoiseFactor, config.variableAmplitudeNoiseFactor);
+        setSpinnerValueClamped(spinVariableMinPersistenceFrames, config.variableMinPersistenceFrames);
+        setSpinnerValueClamped(spinVariableMinSplitHalfCorrelation, config.variableMinSplitHalfCorrelation);
+        setSpinnerValueClamped(spinVariableMaxApertureAmplitudeDifference, config.variableMaxApertureAmplitudeDifference);
+        setSpinnerValueClamped(spinVariableMaxSystematicsCorrelation, config.variableMaxSystematicsCorrelation);
+        setSpinnerValueClamped(spinVariableSystematicsResponseFactor, config.variableSystematicsResponseFactor);
+        setSpinnerValueClamped(spinVariableLocalRadiusPixels, config.variableLocalRadiusPixels);
+        setSpinnerValueClamped(spinVariableMaxLocalCorrelation, config.variableMaxLocalCorrelation);
 
         // Push the visual changes to the underlying memory state immediately
         applySettingsToMemory();
