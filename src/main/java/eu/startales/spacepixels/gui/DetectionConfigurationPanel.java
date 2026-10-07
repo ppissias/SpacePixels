@@ -33,6 +33,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -53,7 +54,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private JSpinner spinDetectionSigma, spinMinPixels, spinEdgeMargin, spinGrowSigma, spinVoidFraction, spinVoidRadius;
     private JCheckBox chkEnableSlowMovers, chkEnableBinaryStarLikeStreakShapeVeto;
-    private JSpinner spinMasterSigma, spinMasterMinPix, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma;
+    private JSpinner spinMasterSigma, spinMasterGrowSigma, spinMasterMinPix, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma;
     private JSpinner spinSlowMoverMinAxisRatio, spinSlowMoverMaxAxisRatio, spinSlowMoverMinFillFactor;
     private JSpinner spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction;
     private JSpinner spinSlowMoverMinFrameSupport, spinSlowMoverMaxStationaryLikelihood;
@@ -104,9 +105,17 @@ public class DetectionConfigurationPanel extends JPanel {
     private JSpinner spinAutoBlackSigma, spinAutoWhiteSigma, spinGifBlinkSpeed, spinCropPadding;
     private JCheckBox chkIncludeAiCreativeReportSections;
 
-    private final JButton previewBtn = new JButton("Preview Detection Settings");
-    private final JButton autoTuneBtn = new JButton("Auto-Tune Settings");
-    private final JComboBox<JTransientAutoTuner.AutoTuneProfile> autoTuneProfileCombo = new JComboBox<>(JTransientAutoTuner.AutoTuneProfile.values());
+    private AutoTuneOverviewPanel overviewPanel;
+    private JTabbedPane settingsTabs;
+    private final JLabel footerStateLabel = new JLabel(" ");
+    private final JLabel footerMessageLabel = new JLabel(" ");
+
+    // Last saved state, for the unsaved-changes indicator and Revert.
+    private DetectionConfig savedConfig;
+    private int savedAutoTuneMaxCandidateFrames;
+    private SpacePixelsVisualizationPreferences savedVisualization;
+    private String savedSnapshot;
+    private boolean suppressAutoApply;
 
     public DetectionConfigurationPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
@@ -120,7 +129,9 @@ public class DetectionConfigurationPanel extends JPanel {
         JTabbedPane tabbedPane = new JTabbedPane();
 
         // Build and add the tabs
-        tabbedPane.addTab("Basic Tuning", buildScrollPane(buildBasicTuningPanel()));
+        overviewPanel = new AutoTuneOverviewPanel(new OverviewHost());
+        buildCoreSettings(overviewPanel);
+        tabbedPane.addTab("Overview", buildScrollPane(overviewPanel));
         tabbedPane.addTab("Object Detection", buildScrollPane(buildSourceExtractionPanel()));
         tabbedPane.addTab("Streak Detection", buildScrollPane(buildStreakDetectionPanel()));
         tabbedPane.addTab("Moving Objects", buildScrollPane(buildMovingObjectsPanel()));
@@ -132,115 +143,253 @@ public class DetectionConfigurationPanel extends JPanel {
         tabbedPane.addTab("Advanced Visualization", buildScrollPane(buildAdvancedVisualizationPanel()));
 
         add(tabbedPane, BorderLayout.CENTER);
+        settingsTabs = tabbedPane;
+        buildAnalyses(overviewPanel);
+        MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
+        if (mainPanel != null) {
+            mainPanel.bindVariableStarToggle(chkEnableVariableStarDetection.getModel());
+        }
 
         setupConstraints();
 
-        JButton applyBtn = new JButton("Apply Settings");
-        applyBtn.setToolTipText("Apply these parameters to the current detection engine session.");
-        applyBtn.addActionListener(e -> {
-            applySettingsToMemory();
-            JOptionPane.showMessageDialog(this, "Settings Applied Successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
-        });
-
-        JButton saveBtn = new JButton("Save Configuration");
-        saveBtn.setToolTipText("Save detection-profile and visualization preferences as the defaults for future startups.");
+        // Changes apply to the session as soon as they are made; only saving for the next start is explicit.
+        JButton saveBtn = new JButton("Save");
+        saveBtn.setToolTipText("Save the detection profile and visualization preferences as the defaults for future startups.");
         saveBtn.addActionListener(e -> savePersistedSettings());
 
+        JButton revertBtn = new JButton("Revert");
+        revertBtn.setToolTipText("Return every setting to the last saved state.");
+        revertBtn.addActionListener(e -> revertToSaved());
+
         JButton loadDefaultsBtn = new JButton("Load Defaults");
-        loadDefaultsBtn.setToolTipText("Reset the detection settings in this panel to a fresh DetectionConfig instance. This does not overwrite the saved profile unless you save afterward.");
+        loadDefaultsBtn.setToolTipText("Reset the detection settings to the DetectionConfig defaults for this session. The saved profile is unchanged until you click Save; Revert undoes it.");
         loadDefaultsBtn.addActionListener(e -> {
-            int choice = JOptionPane.showConfirmDialog(
-                    this,
-                    "Reset the detection settings in this panel to DetectionConfig defaults?\n\n" +
-                            "This updates the current in-memory session only. Your saved profile remains unchanged until you click Save Configuration.",
-                    "Load Detection Defaults",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE);
-            if (choice == JOptionPane.YES_OPTION) {
-                loadDetectionDefaults();
-                JOptionPane.showMessageDialog(this, "DetectionConfig defaults loaded into the panel and current session.", "Defaults Loaded", JOptionPane.INFORMATION_MESSAGE);
-            }
+            loadDetectionDefaults();
+            footerMessageLabel.setText("Defaults loaded. Revert restores the saved settings.");
         });
 
-        previewBtn.setToolTipText("Run object detection on the selected frame with the current settings and show the exact detection mask.");
-        previewBtn.addActionListener(e -> previewManager.showPreview(getJTransientConfig()));
+        footerStateLabel.setBorder(new EmptyBorder(0, 4, 0, 12));
+        footerMessageLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        JPanel footerText = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        footerText.add(footerStateLabel);
+        footerText.add(footerMessageLabel);
 
-        autoTuneBtn.setToolTipText("Mathematically sweeps settings to find the optimal signal-to-noise ratio for the current image sequence.");
-        autoTuneBtn.addActionListener(e -> runAutoTuner());
-        autoTuneBtn.setEnabled(false);
+        JPanel footerButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        footerButtons.add(revertBtn);
+        footerButtons.add(loadDefaultsBtn);
+        footerButtons.add(saveBtn);
 
-        autoTuneProfileCombo.setSelectedItem(JTransientAutoTuner.AutoTuneProfile.BALANCED);
-        autoTuneProfileCombo.setToolTipText("Select the tuning strategy (Conservative = lower noise, Aggressive = faint targets).");
-        autoTuneProfileCombo.setEnabled(false);
+        JPanel footer = new JPanel(new BorderLayout());
+        footer.setBorder(new EmptyBorder(10, 0, 0, 0));
+        footer.add(footerText, BorderLayout.CENTER);
+        footer.add(footerButtons, BorderLayout.EAST);
+        add(footer, BorderLayout.SOUTH);
 
-        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        bottomPanel.setBorder(new EmptyBorder(10, 0, 0, 0));
+        installAutoApply(tabbedPane);
+        applySettingsToMemory();
+        rememberSavedState();
+        updateSavedState();
+    }
 
-        bottomPanel.add(new JLabel("Tuning Profile: "));
-        bottomPanel.add(autoTuneProfileCombo);
-        bottomPanel.add(autoTuneBtn);
-        bottomPanel.add(previewBtn);
-        bottomPanel.add(loadDefaultsBtn);
-        bottomPanel.add(saveBtn);
-        bottomPanel.add(applyBtn);
+    /** The settings the Auto-Tuner chooses, shown on the Overview page. */
+    private void buildCoreSettings(AutoTuneOverviewPanel overview) {
+        spinDetectionSigma = createSpinner(doubleSpinnerModel(jTransientConfig.detectionSigmaMultiplier, 1.0, 20.0, 0.1));
+        overview.addCoreSetting("Detection in each frame", "Detection Sigma", "Minimum brightness threshold for starting a new detection. Higher values reduce noise; lower values detect fainter objects.", spinDetectionSigma);
+        spinGrowSigma = createSpinner(doubleSpinnerModel(jTransientConfig.growSigmaMultiplier, 0.1, 20.0, 0.1));
+        overview.addCoreSetting(null, "Grow Sigma (Hysteresis)", "Secondary threshold used to expand a detection after it starts during per-frame object detection. Lower values capture fainter edges; higher values keep detections tighter. It cannot exceed Detection Sigma. If it goes below Master Sigma, faint star wings detected in the frames may extend past the veto mask and leak as transients; the calibrated Auto-Tuner measures that trade-off.", spinGrowSigma);
+        spinMinPixels = createSpinner(intSpinnerModel(jTransientConfig.minDetectionPixels, 1, 2000, 1));
+        overview.addCoreSetting(null, "Min Detection Pixels", "Minimum blob size required for a detection to be kept. Higher values reject hot pixels and noise; lower values allow smaller sources.", spinMinPixels);
 
-        add(bottomPanel, BorderLayout.SOUTH);
+        spinMasterSigma = createSpinner(doubleSpinnerModel(jTransientConfig.masterSigmaMultiplier, 0.5, 15.0, 0.1));
+        overview.addCoreSetting("Star mask (master map)", "Master Sigma", "Detection threshold used when building the master star map. Lower values mask more faint stars and halos; higher values create a smaller, cleaner mask. Stars are seeded at this value and grown down to Master Grow Sigma (or this value when that is 0). A master shallower than the per-frame Grow Sigma hides less sky but lets more star wings leak; the calibrated Auto-Tuner measures that trade-off.", spinMasterSigma);
+        spinMasterGrowSigma = createSpinner(doubleSpinnerModel(jTransientConfig.masterGrowSigmaMultiplier, 0.0, 15.0, 0.1));
+        overview.addCoreSetting(null, "Master Grow Sigma", "Threshold for growing master-map stars after they are seeded at Master Sigma. A lower value covers the faint wings of stars without adding noise islands; 0 uses Master Sigma (no hysteresis). Cannot exceed Master Sigma.", spinMasterGrowSigma);
+        spinMasterMinPix = createSpinner(intSpinnerModel(jTransientConfig.masterMinDetectionPixels, 1, 2000, 1));
+        overview.addCoreSetting(null, "Master Min Pixels", "Minimum size required for a source to be included in the master star map. Lower values include fainter stars.", spinMasterMinPix);
+        spinMaxMaskOverlapFraction = createSpinner(doubleSpinnerModel(jTransientConfig.maxMaskOverlapFraction, 0.0, 1.0, 0.01));
+        overview.addCoreSetting(null, "Max Mask Overlap Fraction", "Maximum fraction of a point footprint that may overlap the master veto mask before it is rejected as likely stellar residual contamination.", spinMaxMaskOverlapFraction);
+    }
+
+    /** The analyses of a run, each switched on the Overview and in step with the checkbox on its detailed tab. */
+    private void buildAnalyses(AutoTuneOverviewPanel overview) {
+        overview.addAnalysis("Moving objects & streaks", "asteroids, satellites and other objects that move between frames; always on",
+                null, "Moving Objects");
+        overview.addAnalysis("Slow movers", "objects that barely move during the session (comets, distant asteroids), found in the stacked frames",
+                chkEnableSlowMovers.getModel(), "Slow Movers");
+        overview.addAnalysis("Anomaly rescue", "bright or large events seen in a single frame (flashes, glints)",
+                chkEnableAnomalyRescue.getModel(), "Anomaly Detection");
+        overview.addAnalysis("Residual analysis", "a last look at leftover detections for weak candidates and local activity",
+                chkEnableResidualTransientAnalysis.getModel(), "Residual Analysis");
+        overview.addAnalysis("Variable-star photometry", "light curves of the field stars and variable-star candidates, matched against AAVSO VSX "
+                + "when a frame is plate-solved; skipped in iterative mode", chkEnableVariableStarDetection.getModel(), "Variable Stars");
+    }
+
+    /** Callbacks of the Overview page. */
+    private final class OverviewHost implements AutoTuneOverviewPanel.Host {
+        @Override
+        public void startAutoTune(JTransientAutoTuner.AutoTuneProfile profile, AutoTunerRunner.Algorithm algorithm) {
+            runAutoTuner(profile, algorithm);
+        }
+
+        @Override
+        public void applyTunedConfig(DetectionConfig tuned) {
+            updateSpinnersFromConfig(tuned);
+            // The tuner leaves slow-mover sigmas untouched; mirror the tuned basic sigmas into them.
+            syncSlowMoverSigmasFromBasicTuning();
+            applySettingsToMemory();
+            updateSavedState();
+        }
+
+        @Override
+        public DetectionConfig currentConfig() {
+            return getJTransientConfig();
+        }
+
+        @Override
+        public void showPreview() {
+            previewManager.showPreview(getJTransientConfig());
+        }
+
+        @Override
+        public void showReport(String reportText) {
+            showTelemetryReportWindow(reportText);
+        }
+
+        @Override
+        public void showSettingsTab(String tabTitle) {
+            int index = settingsTabs.indexOfTab(tabTitle);
+            if (index >= 0) {
+                settingsTabs.setSelectedIndex(index);
+            }
+        }
+
+        @Override
+        public void tuningStateChanged() {
+            MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
+            if (mainPanel != null) {
+                mainPanel.refreshWorkflowStatus();
+            }
+        }
+    }
+
+    /** One-line description of the detection settings in use, for the main window. */
+    public String getSettingsSummary() {
+        return overviewPanel == null ? "Manual settings" : overviewPanel.settingsSummary();
+    }
+
+    // ==========================================
+    // AUTO-APPLY AND SAVED STATE
+    // ==========================================
+
+    /** Applies every edit to the session right away and refreshes the unsaved-changes indicator. */
+    private void installAutoApply(Container container) {
+        for (Component c : container.getComponents()) {
+            if (c instanceof JSpinner) {
+                ((JSpinner) c).addChangeListener(e -> onSettingEdited());
+            } else if (c instanceof JCheckBox) {
+                ((JCheckBox) c).addItemListener(e -> onSettingEdited());
+            } else if (c instanceof Container) {
+                installAutoApply((Container) c);
+            }
+        }
+    }
+
+    private void onSettingEdited() {
+        if (suppressAutoApply) {
+            return;
+        }
+        suppressAutoApply = true;
+        try {
+            applySettingsToMemory();
+        } finally {
+            suppressAutoApply = false;
+        }
+        footerMessageLabel.setText(" ");
+        updateSavedState();
+    }
+
+    private void rememberSavedState() {
+        savedConfig = jTransientConfig.clone();
+        savedAutoTuneMaxCandidateFrames = autoTuneMaxCandidateFrames;
+        savedVisualization = SpacePixelsVisualizationPreferences.captureCurrent();
+        savedSnapshot = currentSnapshot();
+    }
+
+    private String currentSnapshot() {
+        StringWriter writer = new StringWriter();
+        SpacePixelsDetectionProfileIO.write(writer, jTransientConfig, autoTuneMaxCandidateFrames);
+        SpacePixelsVisualizationPreferencesIO.write(writer, SpacePixelsVisualizationPreferences.captureCurrent());
+        return writer.toString();
+    }
+
+    private void updateSavedState() {
+        if (savedSnapshot == null) {
+            return;
+        }
+        boolean unsaved = !savedSnapshot.equals(currentSnapshot());
+        if (unsaved) {
+            footerStateLabel.setForeground(UIManager.getColor("Actions.Yellow") != null ? UIManager.getColor("Actions.Yellow") : new Color(0xE0A030));
+            footerStateLabel.setText("● Unsaved changes");
+            footerStateLabel.setToolTipText("The changes are already in use for this session. Save keeps them for the next start; Revert discards them.");
+        } else {
+            footerStateLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+            footerStateLabel.setText("✓ Saved settings in use");
+            footerStateLabel.setToolTipText(null);
+        }
+    }
+
+    private void revertToSaved() {
+        if (savedConfig == null) {
+            return;
+        }
+        jTransientConfig = savedConfig.clone();
+        updateSpinnersFromConfig(jTransientConfig);
+        savedVisualization.applyToRuntime();
+        updateVisualizationSpinnersFromRuntime();
+        setSpinnerValueClamped(spinAutoTuneMaxCandidateFrames, savedAutoTuneMaxCandidateFrames);
+        applySettingsToMemory();
+        overviewPanel.forgetTunedValues();
+        footerMessageLabel.setText("Reverted to the saved settings.");
+        updateSavedState();
+    }
+
+    private void updateVisualizationSpinnersFromRuntime() {
+        setSpinnerValueClamped(spinAutoBlackSigma, DisplayImageRenderer.autoStretchBlackSigma);
+        setSpinnerValueClamped(spinAutoWhiteSigma, DisplayImageRenderer.autoStretchWhiteSigma);
+        setSpinnerValueClamped(spinGifBlinkSpeed, DetectionReportGenerator.gifBlinkSpeedMs);
+        setSpinnerValueClamped(spinStreakScale, RawImageAnnotator.streakLineScaleFactor);
+        setSpinnerValueClamped(spinStreakCentroidRad, RawImageAnnotator.streakCentroidBoxRadius);
+        setSpinnerValueClamped(spinPointBoxRad, RawImageAnnotator.pointSourceMinBoxRadius);
+        setSpinnerValueClamped(spinBoxPad, RawImageAnnotator.dynamicBoxPadding);
+        setSpinnerValueClamped(spinCropPadding, DetectionReportGenerator.trackCropPadding);
+        chkIncludeAiCreativeReportSections.setSelected(DetectionReportGenerator.includeAiCreativeReportSections);
     }
 
     private void setupConstraints() {
-        // Ensure Detection Sigma >= Master Sigma
+        // Ensure Grow Sigma <= Detection Sigma. The master-map settings are independent of the per-frame
+        // settings: a master shallower than the per-frame grow hides less sky but lets more star wings leak.
         spinDetectionSigma.addChangeListener(e -> {
             double detSigma = ((Number) spinDetectionSigma.getValue()).doubleValue();
-            double masterSigma = ((Number) spinMasterSigma.getValue()).doubleValue();
-            if (detSigma < masterSigma) {
-                spinDetectionSigma.setValue(masterSigma);
-                detSigma = masterSigma;
-            }
-
-            // Ensure Master Sigma <= Grow Sigma <= Detection Sigma
             double growSigma = ((Number) spinGrowSigma.getValue()).doubleValue();
-            if (growSigma < masterSigma) {
-                spinGrowSigma.setValue(masterSigma);
-            } else if (detSigma < growSigma) {
+            if (detSigma < growSigma) {
                 spinGrowSigma.setValue(detSigma);
             }
         });
-        spinMasterSigma.addChangeListener(e -> {
-            double detSigma = ((Number) spinDetectionSigma.getValue()).doubleValue();
-            double masterSigma = ((Number) spinMasterSigma.getValue()).doubleValue();
-            if (masterSigma > detSigma) {
-                spinMasterSigma.setValue(detSigma);
-                masterSigma = detSigma;
-            }
-
-            double growSigma = ((Number) spinGrowSigma.getValue()).doubleValue();
-            if (growSigma < masterSigma) {
-                spinGrowSigma.setValue(masterSigma);
-            }
-        });
-
-        // Ensure Master Sigma <= Grow Sigma <= Detection Sigma
         spinGrowSigma.addChangeListener(e -> {
             double detSigma = ((Number) spinDetectionSigma.getValue()).doubleValue();
-            double masterSigma = ((Number) spinMasterSigma.getValue()).doubleValue();
             double growSigma = ((Number) spinGrowSigma.getValue()).doubleValue();
-            if (growSigma < masterSigma) {
-                spinGrowSigma.setValue(masterSigma);
-            } else if (growSigma > detSigma) {
+            if (growSigma > detSigma) {
                 spinGrowSigma.setValue(detSigma);
             }
         });
 
-        // Ensure Detection Min Pixels >= Master Min Pixels
-        spinMinPixels.addChangeListener(e -> {
-            int detPix = ((Number) spinMinPixels.getValue()).intValue();
-            int masterPix = ((Number) spinMasterMinPix.getValue()).intValue();
-            if (detPix < masterPix) spinMinPixels.setValue(masterPix);
-        });
-        spinMasterMinPix.addChangeListener(e -> {
-            int detPix = ((Number) spinMinPixels.getValue()).intValue();
-            int masterPix = ((Number) spinMasterMinPix.getValue()).intValue();
-            if (masterPix > detPix) spinMasterMinPix.setValue(detPix);
+        // Ensure Master Grow Sigma <= Master Sigma (0 means "same as Master Sigma").
+        spinMasterSigma.addChangeListener(e -> {
+            double masterSigma = ((Number) spinMasterSigma.getValue()).doubleValue();
+            double masterGrow = ((Number) spinMasterGrowSigma.getValue()).doubleValue();
+            if (masterGrow > masterSigma) {
+                spinMasterGrowSigma.setValue(masterSigma);
+            }
         });
 
         // Ensure Master Slow Mover Grow Sigma <= Master Slow Mover Detection Sigma
@@ -285,7 +434,7 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinMasterSlowMoverGrowSigma, growSigma);
     }
 
-    private void runAutoTuner() {
+    private void runAutoTuner(JTransientAutoTuner.AutoTuneProfile selectedProfile, AutoTunerRunner.Algorithm algorithm) {
         FitsFileInformation[] selectedFiles = mainAppWindow.getMainApplicationPanel().getSelectedFilesInformation();
         FitsFileInformation[] poolToUse;
 
@@ -309,13 +458,13 @@ public class DetectionConfigurationPanel extends JPanel {
 
         mainAppWindow.getEventBus().post(new EngineProgressUpdateEvent(0, "Initializing Mathematical Auto-Tuner..."));
 
-        JTransientAutoTuner.AutoTuneProfile selectedProfile = (JTransientAutoTuner.AutoTuneProfile) autoTuneProfileCombo.getSelectedItem();
         AutoTuneTask tuneTask = new AutoTuneTask(
                 mainAppWindow.getEventBus(),
                 poolToUse,
                 jTransientConfig,
                 autoTuneMaxCandidateFrames,
-                selectedProfile);
+                selectedProfile,
+                algorithm);
         new Thread(tuneTask).start();
     }
 
@@ -400,13 +549,11 @@ public class DetectionConfigurationPanel extends JPanel {
             SpacePixelsVisualizationPreferencesIO.write(
                     visualizationWriter,
                     SpacePixelsVisualizationPreferences.captureCurrent());
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Configuration saved successfully to:\n" +
-                            detectionProfileFile.getAbsolutePath() + "\n" +
-                            visualizationPreferencesFile.getAbsolutePath(),
-                    "Save Success",
-                    JOptionPane.INFORMATION_MESSAGE);
+            rememberSavedState();
+            updateSavedState();
+            footerMessageLabel.setText("Saved to " + detectionProfileFile.getParent());
+            footerMessageLabel.setToolTipText("<html>" + detectionProfileFile.getAbsolutePath() + "<br>"
+                    + visualizationPreferencesFile.getAbsolutePath() + "</html>");
         } catch (IOException e) {
             JOptionPane.showMessageDialog(this, "Failed to write configuration JSON: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
@@ -415,6 +562,8 @@ public class DetectionConfigurationPanel extends JPanel {
     private void loadDetectionDefaults() {
         jTransientConfig = new DetectionConfig();
         updateSpinnersFromConfig(jTransientConfig);
+        overviewPanel.forgetTunedValues();
+        updateSavedState();
     }
 
     public DetectionConfig getJTransientConfig() {
@@ -422,39 +571,13 @@ public class DetectionConfigurationPanel extends JPanel {
         return jTransientConfig;
     }
 
-    private JPanel buildBasicTuningPanel() {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBorder(new EmptyBorder(10, 20, 20, 20));
-
-        JLabel basicIntroLabel = new JLabel("<html><div style='color: #999999; font-size: 12px; padding-bottom: 10px; width: 450px;'>" +
-                "Make sure to run the Auto-Tuner by selecting a Tuning profile and clicking the Auto-Tune Settings button. Start here with the three core object-detection controls. Then move into the category tabs for streaks, moving objects, anomalies, slow movers, and detection safeguards. " +
-                "If you detect too many transients and false positives, increase Detection Sigma, Grow Sigma, and Min Detection Pixels. " +
-                "</div></html>");
-        basicIntroLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        panel.add(basicIntroLabel);
-
-        panel.add(createSectionHeader("Core Object Detection"));
-        spinDetectionSigma = addRow(panel, "Detection Sigma Multiplier", "Minimum brightness threshold for starting a new detection. Higher values reduce noise; lower values detect fainter objects.", doubleSpinnerModel(jTransientConfig.detectionSigmaMultiplier, 1.0, 20.0, 0.1));
-        spinGrowSigma = addRow(panel, "Grow Sigma (Hysteresis)", "Secondary threshold used to expand a detection after it starts during per-frame object detection. Lower values capture fainter edges; higher values keep detections tighter. For stable veto-mask behavior this should not go below Master Sigma, and the UI enforces that. The master veto map itself internally uses the master sigma for both seed and grow thresholds.", doubleSpinnerModel(jTransientConfig.growSigmaMultiplier, 0.1, 20.0, 0.1));
-        spinMinPixels = addRow(panel, "Min Detection Pixels", "Minimum blob size required for a detection to be kept. Higher values reject hot pixels and noise; lower values allow smaller sources.", intSpinnerModel(jTransientConfig.minDetectionPixels, 1, 2000, 1));
-
-        return panel;
-    }
-
     private JPanel buildSourceExtractionPanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        panel.add(createTabIntro("Controls for the master veto map and low-level detection safeguards. If you get false detections near the edge of the frame increase Void Proximity Radius."));
+        panel.add(createTabIntro("Low-level detection safeguards. The detection thresholds and the star-mask settings are on the Overview tab. If you get false detections near the edge of the frame increase Void Proximity Radius."));
 
-        panel.add(createSectionHeader("Common Settings"));
-        spinMasterSigma = addRow(panel, "Master Sigma Multiplier", "Detection threshold used when building the master star map. Lower values mask more faint stars and halos; higher values create a smaller, cleaner mask. For the master veto map, this value is used as both the seed and grow threshold to keep the mask tight, so per-frame Grow Sigma should not be set below it.", doubleSpinnerModel(jTransientConfig.masterSigmaMultiplier, 0.5, 15.0, 0.1));
-        spinMasterMinPix = addRow(panel, "Master Min Pixels", "Minimum size required for a source to be included in the master star map. Lower values include fainter stars.", intSpinnerModel(jTransientConfig.masterMinDetectionPixels, 1, 2000, 1));
-        spinMaxMaskOverlapFraction = addRow(panel, "Max Mask Overlap Fraction", "Maximum fraction of a point footprint that may overlap the master veto mask before it is rejected as likely stellar residual contamination.", doubleSpinnerModel(jTransientConfig.maxMaskOverlapFraction, 0.0, 1.0, 0.01));
-
-        panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Advanced Settings"));
         spinEdgeMargin = addRow(panel, "Edge Margin (Dead Zone)", "Rejects detections too close to the image edge, where alignment and stacking artifacts are common.", intSpinnerModel(jTransientConfig.edgeMarginPixels, 0, 2000, 1));
         spinVoidFraction = addRow(panel, "Void Threshold Fraction", "Pixels darker than this fraction of the local background are treated as registration void or padding, not real data.", doubleSpinnerModel(jTransientConfig.voidThresholdFraction, 0.0, 1.0, 0.01));
@@ -804,18 +927,28 @@ public class DetectionConfigurationPanel extends JPanel {
         return String.format("%." + decimals + "f", value.doubleValue());
     }
 
-    private JLabel createSectionHeader(String title) {
+    static Color accentColor() {
+        Color accentColor = UIManager.getColor("Component.accentColor");
+        return accentColor != null ? accentColor : Color.decode("#4285f4");
+    }
+
+    static JLabel createSectionHeader(String title) {
         JLabel headerLabel = new JLabel(title);
         headerLabel.setFont(headerLabel.getFont().deriveFont(Font.BOLD, 16f));
-
-        Color accentColor = UIManager.getColor("Component.accentColor");
-        if (accentColor == null) {
-            accentColor = Color.decode("#4285f4");
-        }
-        headerLabel.setForeground(accentColor);
+        headerLabel.setForeground(accentColor());
         headerLabel.setBorder(new EmptyBorder(10, 0, 10, 0));
         headerLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         return headerLabel;
+    }
+
+    private JSpinner createSpinner(SpinnerModel model) {
+        JSpinner spinner = new JSpinner(model);
+        if (model instanceof SpinnerNumberModel) {
+            configureSpinnerEditor(spinner);
+            spinner.addChangeListener(e -> configureSpinnerEditor(spinner));
+        }
+        spinner.setPreferredSize(new Dimension(80, 26));
+        return spinner;
     }
 
     private JSpinner addRow(JPanel parent, String title, String description, SpinnerModel model) {
@@ -846,12 +979,7 @@ public class DetectionConfigurationPanel extends JPanel {
         textPanel.setMaximumSize(textDim);
 
         JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        JSpinner spinner = new JSpinner(model);
-        if (model instanceof SpinnerNumberModel) {
-            configureSpinnerEditor(spinner);
-            spinner.addChangeListener(e -> configureSpinnerEditor(spinner));
-        }
-        spinner.setPreferredSize(new Dimension(80, 26));
+        JSpinner spinner = createSpinner(model);
         inputWrapper.add(spinner);
 
         row.add(textPanel);
@@ -910,6 +1038,8 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void applySettingsToMemory() {
+        boolean wasSuppressed = suppressAutoApply;
+        suppressAutoApply = true;
         try {
             commitAllSpinners();
             normalizeDependentSpinners();
@@ -922,6 +1052,7 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.voidProximityRadius = ((Number) spinVoidRadius.getValue()).intValue();
             jTransientConfig.enableSlowMoverDetection = chkEnableSlowMovers.isSelected();
             jTransientConfig.masterSigmaMultiplier = ((Number) spinMasterSigma.getValue()).doubleValue();
+            jTransientConfig.masterGrowSigmaMultiplier = ((Number) spinMasterGrowSigma.getValue()).doubleValue();
             jTransientConfig.masterMinDetectionPixels = ((Number) spinMasterMinPix.getValue()).intValue();
             jTransientConfig.masterSlowMoverSigmaMultiplier = ((Number) spinMasterSlowMoverSigma.getValue()).doubleValue();
             jTransientConfig.masterSlowMoverGrowSigmaMultiplier = ((Number) spinMasterSlowMoverGrowSigma.getValue()).doubleValue();
@@ -1041,28 +1172,17 @@ public class DetectionConfigurationPanel extends JPanel {
 
         } catch (Exception ex) {
             System.err.println("Error applying settings to memory: " + ex.getMessage());
+        } finally {
+            suppressAutoApply = wasSuppressed;
         }
     }
 
     private void normalizeDependentSpinners() {
         double detectionSigma = ((Number) spinDetectionSigma.getValue()).doubleValue();
         double masterSigma = ((Number) spinMasterSigma.getValue()).doubleValue();
-        if (detectionSigma < masterSigma) {
-            spinDetectionSigma.setValue(masterSigma);
-            detectionSigma = masterSigma;
-        }
-
         double growSigma = ((Number) spinGrowSigma.getValue()).doubleValue();
-        if (growSigma < masterSigma) {
-            spinGrowSigma.setValue(masterSigma);
-        } else if (growSigma > detectionSigma) {
+        if (growSigma > detectionSigma) {
             spinGrowSigma.setValue(detectionSigma);
-        }
-
-        int minPixels = ((Number) spinMinPixels.getValue()).intValue();
-        int masterMinPixels = ((Number) spinMasterMinPix.getValue()).intValue();
-        if (minPixels < masterMinPixels) {
-            spinMinPixels.setValue(masterMinPixels);
         }
 
         double slowMoverSigma = ((Number) spinMasterSlowMoverSigma.getValue()).doubleValue();
@@ -1087,6 +1207,11 @@ public class DetectionConfigurationPanel extends JPanel {
             spinRhythmStatThresh.setValue(maxJump);
         }
 
+        double masterGrow = ((Number) spinMasterGrowSigma.getValue()).doubleValue();
+        if (masterGrow > masterSigma) {
+            spinMasterGrowSigma.setValue(masterSigma);
+        }
+
         double annulusInner = ((Number) spinPhotometryAnnulusInnerFwhmFactor.getValue()).doubleValue();
         double annulusOuter = ((Number) spinPhotometryAnnulusOuterFwhmFactor.getValue()).doubleValue();
         if (annulusOuter <= annulusInner) {
@@ -1095,27 +1220,18 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void commitAllSpinners() {
-        Component[] tabs = ((JTabbedPane) getComponent(0)).getComponents();
-        for (Component tab : tabs) {
-            if (tab instanceof JScrollPane) {
-                JPanel viewport = (JPanel) ((JScrollPane) tab).getViewport().getView();
-                for (Component c : viewport.getComponents()) {
-                    if (c instanceof JPanel) {
-                        JPanel rowPanel = (JPanel) c;
-                        for (Component wrapper : rowPanel.getComponents()) {
-                            if (wrapper instanceof JPanel) {
-                                for (Component spinner : ((JPanel) wrapper).getComponents()) {
-                                    if (spinner instanceof JSpinner) {
-                                        try {
-                                            ((JSpinner) spinner).commitEdit();
-                                        } catch (Exception ignored) {
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+        commitSpinners(this);
+    }
+
+    private static void commitSpinners(Container container) {
+        for (Component c : container.getComponents()) {
+            if (c instanceof JSpinner) {
+                try {
+                    ((JSpinner) c).commitEdit();
+                } catch (Exception ignored) {
                 }
+            } else if (c instanceof Container) {
+                commitSpinners((Container) c);
             }
         }
     }
@@ -1124,127 +1240,44 @@ public class DetectionConfigurationPanel extends JPanel {
     @Subscribe
     public void onImportFinished(FitsImportFinishedEvent event) {
         EventQueue.invokeLater(() -> {
-
-            if (event.isSuccess()) {
-                FitsFileInformation[] filesInfo = event.getFilesInformation();
-                if (filesInfo == null || filesInfo.length == 0) {
-                    previewBtn.setEnabled(false);
-                    autoTuneBtn.setEnabled(false);
-                    autoTuneProfileCombo.setEnabled(false);
-                    return;
-                }
-
-                boolean existsColor = false;
-                for (FitsFileInformation fitsFile : filesInfo) {
-                    if (!fitsFile.isMonochrome()) {
-                        existsColor = true;
-                        break;
-                    }
-                }
-
-                if (!existsColor) {
-                    previewBtn.setEnabled(true);
-
-                    if (filesInfo.length >= SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
-                        autoTuneBtn.setEnabled(true);
-                        autoTuneProfileCombo.setEnabled(true);
-                    } else {
-                        autoTuneBtn.setEnabled(false);
-                        autoTuneProfileCombo.setEnabled(false);
-                    }
-                } else {
-                    previewBtn.setEnabled(false);
-                    autoTuneBtn.setEnabled(false);
-                    autoTuneProfileCombo.setEnabled(false);
+            if (!event.isSuccess()) {
+                return;
+            }
+            FitsFileInformation[] filesInfo = event.getFilesInformation();
+            if (filesInfo == null || filesInfo.length == 0) {
+                overviewPanel.setSession(null, 0, 0, 0, false);
+                return;
+            }
+            boolean existsColor = false;
+            for (FitsFileInformation fitsFile : filesInfo) {
+                if (!fitsFile.isMonochrome()) {
+                    existsColor = true;
+                    break;
                 }
             }
+            File firstFile = new File(filesInfo[0].getFilePath());
+            String sessionName = firstFile.getParentFile() != null ? firstFile.getParentFile().getName() : firstFile.getName();
+            boolean readyForTuning = !existsColor && filesInfo.length >= SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
+            overviewPanel.setSession(sessionName, filesInfo.length, filesInfo[0].getSizeWidth(), filesInfo[0].getSizeHeight(), readyForTuning);
         });
     }
 
     @Subscribe
     public void onAutoTuneStarted(AutoTuneStartedEvent event) {
         EventQueue.invokeLater(() -> {
-            autoTuneBtn.setEnabled(false);
-            autoTuneBtn.setText("Tuning... Please Wait");
-            autoTuneProfileCombo.setEnabled(false);
+            overviewPanel.tuneStarted();
             setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         });
     }
 
     @Subscribe
-    public void onAutoTuneFinished(eu.startales.spacepixels.events.AutoTuneFinishedEvent event) {
+    public void onAutoTuneFinished(AutoTuneFinishedEvent event) {
         EventQueue.invokeLater(() -> {
-            autoTuneBtn.setEnabled(true);
-            autoTuneBtn.setText("Auto-Tune Settings");
-            autoTuneProfileCombo.setEnabled(true);
             setCursor(Cursor.getDefaultCursor());
-
             if (event.getResult() != null && event.getResult().telemetryReport != null) {
                 System.out.println(event.getResult().telemetryReport);
             }
-            if (event.isSuccess() && event.getResult() != null) {
-                JTransientAutoTuner.AutoTunerResult result = event.getResult();
-
-                if (result.success) {
-                    updateSpinnersFromConfig(result.optimizedConfig);
-                    // The tuner leaves slow-mover sigmas untouched; mirror the tuned basic sigmas into them.
-                    syncSlowMoverSigmasFromBasicTuning();
-
-                    DetectionConfig appliedConfig = getJTransientConfig();
-
-                    boolean detectionSigmaAdjusted = Math.abs(appliedConfig.detectionSigmaMultiplier - result.optimizedConfig.detectionSigmaMultiplier) > 1e-9;
-                    boolean growSigmaAdjusted = Math.abs(appliedConfig.growSigmaMultiplier - result.optimizedConfig.growSigmaMultiplier) > 1e-9;
-
-                    String detectionMsg = detectionSigmaAdjusted
-                            ? String.format("• Detection Sigma: %s (raised to respect Master Sigma)", formatSpinnerValue(spinDetectionSigma))
-                            : String.format("• Detection Sigma: %s", formatSpinnerValue(spinDetectionSigma));
-
-                    String growMsg;
-                    if (growSigmaAdjusted) {
-                        String growAdjustmentReason = appliedConfig.growSigmaMultiplier > result.optimizedConfig.growSigmaMultiplier
-                                ? "raised to Master Sigma"
-                                : "capped to Detection Sigma";
-                        growMsg = String.format("• Grow Sigma: %s (%s)", formatSpinnerValue(spinGrowSigma), growAdjustmentReason);
-                    } else {
-                        growMsg = String.format("• Grow Sigma: %s", formatSpinnerValue(spinGrowSigma));
-                    }
-
-                    String summary = String.format(
-                            "Auto-Tuning Complete!\n\n" +
-                                    "Winning Settings Found:\n" +
-                                    "%s\n" +
-                                    "%s\n" +
-                                    "• Min Pixels: %d\n" +
-                                    "• Max Star Jitter: %s px\n" +
-                                    "• Max Mask Overlap Fraction: %s\n" +
-                                    "• Slow-Mover Sigma / Grow Sigma: %s / %s (copied from Detection / Grow Sigma)\n\n" +
-                                    "Telemetry: Detected %d stable stars with a %.1f%% noise ratio.\n\n" +
-                                    "Would you like to view the detailed mathematical evaluation report?",
-                            detectionMsg,
-                            growMsg,
-                            appliedConfig.minDetectionPixels,
-                            formatSpinnerValue(spinStarJitter),
-                            formatSpinnerValue(spinMaxMaskOverlapFraction),
-                            formatSpinnerValue(spinMasterSlowMoverSigma),
-                            formatSpinnerValue(spinMasterSlowMoverGrowSigma),
-                            result.bestStarCount,
-                            (result.bestTransientRatio * 100)
-                    );
-
-                    int choice = JOptionPane.showConfirmDialog(DetectionConfigurationPanel.this, summary, "Auto-Tuner Success", JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE);
-                    if (choice == JOptionPane.YES_OPTION) {
-                        showTelemetryReportWindow(result.telemetryReport);
-                    }
-                } else {
-                    JOptionPane.showMessageDialog(DetectionConfigurationPanel.this,
-                            "The Auto-Tuner could not find a stable star field that meets the strict noise limits.\n" +
-                                    "This usually happens if the images are too noisy, heavily clouded, or not aligned.\n\n" +
-                                    "Falling back to your current manual settings.",
-                            "Auto-Tuner Failed", JOptionPane.WARNING_MESSAGE);
-                }
-            } else {
-                JOptionPane.showMessageDialog(DetectionConfigurationPanel.this, "Auto-Tuning encountered a fatal error: " + event.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            }
+            overviewPanel.tuneFinished(event.isSuccess(), event.getMessage(), event.getResult());
         });
     }
 
@@ -1252,9 +1285,23 @@ public class DetectionConfigurationPanel extends JPanel {
      * Helper method to physically move the UI sliders to match a provided config.
      */
     private void updateSpinnersFromConfig(DetectionConfig config) {
+        // One apply at the end instead of one per spinner, so no half-updated configuration is normalized.
+        boolean wasSuppressed = suppressAutoApply;
+        suppressAutoApply = true;
+        try {
+            setSpinnersFromConfig(config);
+        } finally {
+            suppressAutoApply = wasSuppressed;
+        }
+        // Push the visual changes to the underlying memory state immediately
+        applySettingsToMemory();
+    }
+
+    private void setSpinnersFromConfig(DetectionConfig config) {
         setSpinnerValueClamped(spinMasterSigma, config.masterSigmaMultiplier);
         setSpinnerValueClamped(spinDetectionSigma, config.detectionSigmaMultiplier);
         setSpinnerValueClamped(spinGrowSigma, config.growSigmaMultiplier);
+        setSpinnerValueClamped(spinMasterGrowSigma, config.masterGrowSigmaMultiplier);
         setSpinnerValueClamped(spinMasterMinPix, config.masterMinDetectionPixels);
         setSpinnerValueClamped(spinMinPixels, config.minDetectionPixels);
         setSpinnerValueClamped(spinEdgeMargin, config.edgeMarginPixels);
@@ -1362,9 +1409,6 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinVariableSystematicsResponseFactor, config.variableSystematicsResponseFactor);
         setSpinnerValueClamped(spinVariableLocalRadiusPixels, config.variableLocalRadiusPixels);
         setSpinnerValueClamped(spinVariableMaxLocalCorrelation, config.variableMaxLocalCorrelation);
-
-        // Push the visual changes to the underlying memory state immediately
-        applySettingsToMemory();
     }
 
     private boolean getOptionalBooleanField(DetectionConfig config, String fieldName, boolean defaultValue) {

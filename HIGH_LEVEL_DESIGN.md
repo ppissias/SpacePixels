@@ -105,6 +105,8 @@ Main classes:
 - `ConfigurationPanel`
 - `StretchPanel`
 - `DetectionConfigurationPanel`
+- `AutoTuneOverviewPanel`
+- `WrapLayout`
 - `DetectionSequenceFrame`
 - `TransientInspectionFrame`
 - `TuningPreviewManager`
@@ -155,6 +157,7 @@ Important classes:
 - `IterativeDetectionPipelineService`
 - `DetectionPipelineSupport`
 - `AutoTuneCandidatePoolBuilder`
+- `AutoTunerRunner`
 - `PlateSolveService`
 - `FitsFileInformation`
 - `FitsFormatChecker`
@@ -190,8 +193,10 @@ Supporting groups:
   - `DeepStackReportSectionWriter`
   - `ResidualReviewSectionWriter`
   - `GlobalMapsSectionWriter`
+  - `PhotometryReportSectionWriter` (variable-star photometry: readiness, noise model, per-frame diagnostics, candidate light curves, CSV exports, VSX lookup buttons)
 - rendering helpers:
   - `TrackVisualizationRenderer`
+  - `PhotometrySvgChart`
   - `TrackCropGeometry`
   - `GifSequenceWriter`
   - `CreativeTributeRenderer`
@@ -237,12 +242,14 @@ Primary GUI workflow facade.
 
 Owns:
 
-- FITS metadata table
+- a workflow strip of four groups (1 Prepare, 2 Astrometry, 3 Inspect, 4 Detect) laid out by `WrapLayout`; each group has a status line
+- FITS metadata table, with a right-click menu for the frame actions
 - plate solve controls
 - blink controls
 - batch conversion and stretch controls
 - single-frame preview and manual transient inspection actions
 - standard and iterative detection launch actions
+- tooltips that explain why a button is disabled, and keyboard shortcuts
 - progress state and modal progress dialog
 
 Launches most GUI background tasks.
@@ -257,13 +264,29 @@ Owns:
 - `SpacePixelsDetectionProfile` load/save
 - `SpacePixelsVisualizationPreferences` load/save
 - current Auto-Tune candidate-frame limit
-- tuning profile selector
+- the Overview tab (`AutoTuneOverviewPanel`)
 - detection preview action through `TuningPreviewManager`
 - Auto-Tune launch through `AutoTuneTask`
+- applying every edit to the session right away, the unsaved-changes indicator, and Revert to the last saved state
 
-Design note:
+Design notes:
 
 - detection fields and visualization fields are intentionally stored in separate JSON files even though the same panel edits both.
+- the settings spinners stay owned by `DetectionConfigurationPanel`; `AutoTuneOverviewPanel` only lays out the core ones and talks back through a small `Host` interface.
+
+### `AutoTuneOverviewPanel`
+
+The first tab of the Detection Settings.
+
+Owns:
+
+- the tuner and profile choice and the run button
+- the profile table, built from `AutoTunerResult.calibration` (one calibrated run covers all profiles; `CalibratedAutoTuner.configFor(...)` applies a chosen row)
+- the expected false detections for the imported session (measured rate × megapixels × frames)
+- the core-settings layout with the markers for values set by Auto-Tune
+- the settings summary shown in the main window's Detect group
+
+A tune result belongs to the imported session and is cleared when another dataset is imported.
 
 ### `ImageProcessing`
 
@@ -329,7 +352,7 @@ Responsibilities:
 
 Design constraint:
 
-- Auto-Tune-enabled API calls should be serialized in a single JVM because the implementation temporarily adjusts shared JTransient Auto-Tune sample-size state.
+- API calls with the legacy auto-tuner should be serialized in a single JVM because it temporarily adjusts shared JTransient Auto-Tune sample-size state. The calibrated tuner (the default) has no shared state.
 
 ### `DetectionReportGenerator`
 
@@ -370,7 +393,7 @@ Optional localhost helper for live report enrichment.
 Responsibilities:
 
 - listen on loopback port `47831`
-- proxy trusted JPL and SatChecker lookup requests for static HTML reports
+- proxy trusted JPL, SatChecker and AAVSO VSX (through the CDS VizieR TAP service) lookup requests for static HTML reports
 - normalize and cache JSON lookup responses
 - persist lookup responses back into report-side cache data
 
@@ -429,10 +452,12 @@ The effective config is a clone of the caller config. JTransient builds the slow
 ### Auto-Tune Flow
 
 ```text
-DetectionConfigurationPanel or DefaultSpacePixelsPipelineApi
+DetectionConfigurationPanel (AutoTuneTask), DefaultSpacePixelsPipelineApi or BatchDetectionCli
 -> AutoTuneCandidatePoolBuilder
--> JTransientAutoTuner.tune(...)
--> AutoTunerResult.optimizedConfig
+-> AutoTunerRunner.run(..., profile, algorithm, ...)
+   -> CalibratedAutoTuner.tune(...)   (CALIBRATED, the default)
+   -> JTransientAutoTuner.tune(...)   (LEGACY)
+-> AutoTunerResult.optimizedConfig, summary, telemetryReport
 -> standard pipeline effective config
 ```
 
@@ -442,7 +467,7 @@ SpacePixels owns candidate-pool preparation:
 - otherwise the full imported sequence
 - for large sets, a deterministic mix of best-quality, median-quality, and evenly spaced frames
 
-JTransient owns the actual tuning search and validation.
+JTransient owns the actual tuning search and validation. `AutoTunerRunner` only selects the tuner (the `Tuner` box in the GUI, `--tuner` in the CLI, `autoTuneAlgorithm(...)` in the API) and the profile (conservative, balanced, aggressive, maximum).
 
 ### Iterative Detection Flow
 
@@ -618,7 +643,14 @@ Desktop:
 Headless/API:
 
 - progress is reported through `SpacePixelsProgressListener`
-- pipeline progress is scaled across preparation, Auto-Tune, engine execution, and report export phases
+- pipeline progress is scaled across preparation, Auto-Tune, engine execution, and report export phases, and only moves forward
+
+Progress ranges:
+
+- JTransient `runPipeline(...)` reports 0-100%: extraction up to 40%, frame rejection 42%, master stack 45-49%, track linking 50-90%, residual analysis 92%, photometry 93-99%
+- the standard pipeline shows frame loading at 0-20% and the engine at 20-100% of the detection run; the GUI shows the detection run as 0-90% and report export as 90-100%
+- the API shows input preparation up to 15%, Auto-Tune 15-35%, the detection run up to 90% and report export 90-100%
+- the iterative pipeline gives each pass an equal share; within a pass the engine takes 0-90% and report generation 95%
 
 JTransient:
 

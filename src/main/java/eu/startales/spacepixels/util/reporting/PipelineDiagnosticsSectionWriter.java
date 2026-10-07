@@ -39,7 +39,7 @@ final class PipelineDiagnosticsSectionWriter {
             writeRejectedFrames(report, pipelineTelemetry);
             writePipelineConfiguration(report, reportContext);
             writeMasterShieldDiagnostics(report, reportContext, summary);
-            writeDriftDiagnostics(report, reportContext, driftPoints);
+            writeDriftDiagnostics(report, reportContext, driftPoints, pipelineTelemetry.driftExcludedFrames);
             writeExtractionStatistics(report, pipelineTelemetry);
             writeStationaryStarPurification(report, pipelineTelemetry, linkerTelemetry);
         }
@@ -274,7 +274,8 @@ final class PipelineDiagnosticsSectionWriter {
 
     private static void writeDriftDiagnostics(PrintWriter report,
                                               DetectionReportContext reportContext,
-                                              List<SourceExtractor.Pixel> driftPoints) throws IOException {
+                                              List<SourceExtractor.Pixel> driftPoints,
+                                              List<Integer> excludedFrames) throws IOException {
         if (reportContext.rawFrames.isEmpty() || driftPoints == null || driftPoints.isEmpty()) {
             return;
         }
@@ -312,6 +313,14 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<h2>Dither & Sensor Drift Diagnostics</h2>");
         report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
         report.println("Shows how the image frame drifted across the session. Sensor dust or hot pixels move exactly along this trajectory, potentially creating false moving targets.</p>");
+        if (excludedFrames != null && !excludedFrames.isEmpty()) {
+            StringBuilder frames = new StringBuilder();
+            for (Integer index : excludedFrames) {
+                frames.append(frames.length() == 0 ? "" : ", ").append(index + 1);
+            }
+            report.println("<div class='astro-note'>Left out of the drift analysis as blank or failed registrations (less than half of the pixels hold image data): frame "
+                    + DetectionReportGenerator.escapeHtml(frames.toString()) + ".</div>");
+        }
         report.println("<div class='image-container'>");
         report.println("<div><a href='dither_drift_map.png' target='_blank'><img src='dither_drift_map.png' style='max-width: 300px;' alt='Drift Trajectory' /></a><br/><center><small>Drift Trajectory Map (Blue = Start, Red = End)</small></center></div>");
         report.println("<div><a href='" + cornerGifFile + "' target='_blank'><img src='" + cornerGifFile + "' style='max-width: 300px;' alt='Corners Sampled Time-Lapse' /></a><br/><center><small>4-Corners Sampled Time-Lapse</small></center></div>");
@@ -319,7 +328,7 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<div class='config-grid' style='grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));'>");
         for (int i = 0; i < driftPoints.size(); i++) {
             SourceExtractor.Pixel point = driftPoints.get(i);
-            report.println("<div class='config-item'><span style='color: #aaa;'>Frame " + (i + 1) + "</span> <span class='val'>" + DetectionReportGenerator.escapeHtml(DetectionReportGenerator.formatPixelCoordinateOnly(point.x, point.y)) + "</span></div>");
+            report.println("<div class='config-item'><span style='color: #aaa;'>Frame " + (point.value + 1) + "</span> <span class='val'>" + DetectionReportGenerator.escapeHtml(DetectionReportGenerator.formatPixelCoordinateOnly(point.x, point.y)) + "</span></div>");
         }
         report.println("</div></div></div>");
         report.println("</div>");

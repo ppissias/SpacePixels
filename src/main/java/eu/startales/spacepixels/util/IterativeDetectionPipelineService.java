@@ -131,7 +131,10 @@ final class IterativeDetectionPipelineService {
             PipelineResult result;
             JTransientEngine engine = new JTransientEngine();
             try {
-                result = engine.runPipeline(spacedSubset, effectiveConfig, scaledListener, providedMasterStack);
+                // The engine takes 0-90% of the pass; generating its report follows at 95%.
+                TransientEngineProgressListener engineListener =
+                        (percent, message) -> scaledListener.onProgressUpdate((int) (percent * 0.9), message);
+                result = engine.runPipeline(spacedSubset, effectiveConfig, engineListener, providedMasterStack);
             } finally {
                 engine.shutdown();
             }

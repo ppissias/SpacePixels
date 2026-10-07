@@ -169,7 +169,7 @@ The table shows per-file metadata such as:
 
 If the imported sequence contains color images:
 
-- `Batch Convert to Mono` is enabled
+- `Convert to Mono` is enabled
 - detection actions are disabled
 
 When the sequence is fully monochrome:
@@ -185,32 +185,46 @@ become available.
 
 ## 6. Main tab tools
 
-### Plate Solve
+The tools sit above the frame table in four groups, left to right in the order you normally use them: **1 Prepare**, **2 Astrometry**, **3 Inspect** and **4 Detect**. On a narrow window the groups wrap onto a second line.
 
-Runs plate solving on the selected frame.
+- Each group ends with a status line that uses what is already known: "✓ Monochrome, 18 frames" or "Colour frames: convert first", "2 / 18 solved", the number of selected frames, and the next step for detection.
+- When a button is disabled, its tooltip says why, for example "select at least 3 frames in the table" or "convert the frames to monochrome first".
+- Right-click the frame table for `Blink Selected`, `Preview Frame` and `Plate Solve Selected`.
+- Keyboard shortcuts: `Ctrl+D` Detect Moving Targets, `Ctrl+B` Blink Selected, `Ctrl+P` Preview Frame.
+- The progress bar of a running task is at the right end of the status bar.
 
-- You can choose `ASTAP` or `Astrometry.net (online)`.
-- `Show Solved Preview` becomes available once a solve succeeds.
+### 1 Prepare
 
-### Blink Selected
+#### Convert to Mono
+
+Converts imported color FITS data into 16-bit monochrome.
+
+- If stretching is enabled in the `Image Stretch` tab, the same stretch can be applied during export.
+- This is the normal preparation step for color data before running detection.
+- Disabled when all frames are already monochrome.
+
+#### Batch Stretch
+
+Applies the current stretch settings to all imported files and writes new FITS outputs. Requires stretching to be enabled in the `Image Stretch` tab.
+
+### 2 Astrometry
+
+#### Plate Solve Selected
+
+Runs plate solving on the selected frame with the solver chosen below the button: `ASTAP` (local) or `Astrometry.net (online)`.
+
+One solved frame is enough. The frames are aligned, so the report uses that solution for all of them. With it, the report gives sky coordinates, identifies moving objects with JPL and SkyBoT, and matches variable-star candidates against AAVSO VSX. Until a frame is solved, the group's status line reads "Solve one frame to identify objects".
+
+### 3 Inspect
+
+#### Blink Selected
 
 Plays the selected aligned frames as an animation.
 
 - Select at least three rows in the table.
 - This is useful for traditional visual hunting before or after automated detection.
 
-### Batch Convert to Mono
-
-Converts imported color FITS data into 16-bit monochrome.
-
-- If stretching is enabled in the `Image Stretch` tab, the same stretch can be applied during export.
-- This is the normal preparation step for color data before running detection.
-
-### Batch Stretch
-
-Applies the current stretch settings to all imported files and writes new FITS outputs.
-
-### Detect on Selected Frame
+#### Preview Frame
 
 Runs source extraction on the selected frame and opens the `Detection Sequence Viewer`.
 
@@ -220,17 +234,27 @@ Useful for:
 - stepping through the sequence with arrow keys
 - inspecting WCS-aware cursor coordinates when available
 
-### Manual Transient Inspection
+#### Manual Transient Inspection
 
 Runs the transient detector across the sequence and opens a dedicated frame browser of the purified transients.
 
-### Detect Moving Targets (Standard Pipeline)
+### 4 Detect
 
-Runs the full standard multi-frame detection and HTML export pipeline.
+#### Detect Moving Targets
 
-### Detect Iteratively (Large Datasets)
+The primary action (highlighted button). Runs the full standard multi-frame detection and HTML export pipeline.
+
+#### Detect Iteratively (large datasets)
 
 Runs the multi-pass iterative workflow intended for large datasets where the standard full run may be too memory-heavy.
+
+#### Variable-star photometry
+
+Switches the variable-star analysis on or off for the next `Detect Moving Targets` run. It is the same setting as `Enable Variable-Star Detection` in the `Variable Stars` tab and on the Overview, so all three stay in step. The analysis measures the field stars in every frame and reports light curves and variable-star candidates. The iterative mode skips it. To match candidates against AAVSO VSX, plate-solve one frame first.
+
+#### Edit settings…
+
+Opens the `Detection Settings` tab, where you can run Auto-Tune or adjust the thresholds.
 
 ---
 
@@ -303,18 +327,52 @@ The tab shows:
 
 The `Detection Settings` tab controls the JTransient profile and SpacePixels-specific visualization settings.
 
-### Buttons at the bottom
+### Applying and saving
 
-- `Apply Settings`
-  - updates the current in-memory session
-- `Save Configuration`
-  - saves the JTransient detection profile and visualization preferences used as defaults on future startups
-- `Preview Detection Settings`
-  - runs a preview extraction on the selected frame
-- `Auto-Tune Settings`
-  - searches for a robust configuration automatically
-- `Load Defaults`
-  - loads a fresh JTransient `DetectionConfig` into the panel and current session without overwriting your saved profile unless you save afterward
+Every change applies to the current session as soon as you make it; there is no Apply button. The footer shows `✓ Saved settings in use` or `● Unsaved changes`.
+
+- `Save` stores the JTransient detection profile and the visualization preferences as the defaults for future startups.
+- `Revert` returns every setting to the last saved state.
+- `Load Defaults` loads a fresh JTransient `DetectionConfig` into the current session. The saved profile is unchanged until you save, and `Revert` undoes it.
+
+### Overview tab
+
+The first tab is the starting point. It has three parts.
+
+**Auto-Tune**
+
+- `Tuner`, `Apply after run` and `Run Auto-Tune`.
+- How one run covers every profile: the calibrated tuner measures every combination of settings once (false detections and recovered synthetic stars). A profile is only a budget of false detections per megapixel per frame, so each profile then picks the most sensitive combination within its budget from the same measurements. Choosing the profile takes no extra measuring.
+- A table with the measured result of every profile, filled by one calibrated run:
+  - the profile and its budget, for example `Balanced (≤ 0.2)`;
+  - the chosen detection sigma, grow sigma and minimum pixels, and the star-mask sigma;
+  - false detections per megapixel per frame, with ⚠ when no setting met the profile's budget;
+  - the **expected false detections for this session** (measured rate × sensor megapixels × frames);
+  - the share of synthetic stars recovered, the SNR at which half are recovered, and the sky hidden by the star mask.
+- When the run finishes, the profile chosen in `Apply after run` is applied. To switch, select another row and click `Use Selected Profile`, or double-click the row; no re-run is needed.
+- The legacy tuner is different: its profile steers the search itself, so it tunes one profile per run and shows one row. With the legacy tuner selected, the box is labelled `Profile`.
+- `Measurement Report…` shows the full tuner report.
+- `Preview on Frame…` runs object detection on the frame selected in the Main tab and shows the detection mask.
+
+**Core Settings**
+
+- The settings the tuner chooses: detection sigma, grow sigma and minimum pixels for each frame, and master sigma, master grow sigma, master minimum pixels and mask overlap for the star mask.
+- A blue ● marks a value set by Auto-Tune, and its tooltip shows the value before. Editing the value removes the mark.
+- The main window's Detect group shows which settings are in use, for example "Settings: Balanced, auto-tuned, edited".
+
+**Analyses in This Run**
+
+What `Detect Moving Targets` looks for besides moving objects, each with a switch, a one-line purpose and a `Settings ›` link to its detailed tab:
+
+- Moving objects & streaks: always on
+- Slow movers
+- Anomaly rescue
+- Residual analysis
+- Variable-star photometry: skipped in iterative mode; VSX matching needs a plate-solved frame
+
+The switches are the same settings as the checkboxes on the detailed tabs.
+
+The tune result belongs to the imported session; importing another dataset clears the table.
 
 ### Auto-Tune behavior
 
@@ -333,7 +391,14 @@ For long sequences, the `Max Frames For Auto-Tuner` setting limits the candidate
 - median-quality frames
 - evenly spaced sequence coverage
 
-JTransient then:
+The profile box sets the sensitivity: `Conservative` (low, fewest false detections), `Balanced` (medium), `Aggressive` (high, close to the noise level) and `Maximum` (as sensitive as possible; for small sensors or targeted searches for a faint object).
+
+There are two tuners, selected with the `Tuner` box next to the profile box (and `--tuner` on the command line):
+
+- `Calibrated (measured)`, the default. It leaves out blank or badly registered frames, cuts crops from your frames (the centre and corners, or a grid on large sensors; small sensors are measured on more frames), and tries every combination of settings on them. For each combination it measures how many false detections it produces (noise from a negative image of the frames; star leakage, including hot pixels that follow the drift; and other real-frame artefacts above what the strictest settings see), how much sky the star mask hides, and how many synthetic stars shaped like yours it recovers at peak signal-to-noise 2 to 15. Pieces of satellite trails are recognised by a more sensitive streak pass and not counted as false detections. Each profile is a budget of false detections per megapixel per frame (Conservative 0.05, Balanced 0.2, Aggressive 0.6, Maximum 3.5); within that budget it picks the most sensitive settings, so each profile is never less sensitive than the one before it. `Maximum` is meant for small sensors or targeted searches for a faint object: because the budget is per megapixel, on a large sensor it leaves many more candidates to review. It also tunes the master map (`Master Sigma`, `Master Grow Sigma`, `Master Min Pixels`), and derives the candidate object sizes from your measured star FWHM. It needs at least five usable frames. The Overview table and the report show the measured false-detection rate, the share of synthetic sources recovered, the signal-to-noise at which half are recovered, and the masked sky fraction.
+- `Legacy (score-based)`, the original tuner, kept for comparison. Its steps are described below.
+
+The legacy tuner:
 
 1. evaluates frame quality using the dedicated quality-analysis thresholds
 2. selects a representative sample from the candidate pool
@@ -343,7 +408,7 @@ JTransient then:
 6. sweeps detection sigma, grow sigma, minimum detection pixels, and mask overlap
 7. validates the winning configuration on the same frozen crops
 
-Auto-Tune actively changes:
+The legacy tuner actively changes:
 
 - `detectionSigmaMultiplier`
 - `growSigmaMultiplier`
@@ -351,7 +416,7 @@ Auto-Tune actively changes:
 - `maxMaskOverlapFraction`
 - `maxStarJitter`
 
-Most other settings are preserved from your current base configuration. The `Conservative`, `Balanced`, and `Aggressive` profiles use the same search grid but different scoring policies:
+Most other settings are preserved from your current base configuration. The `Conservative`, `Balanced`, and `Aggressive` profiles use the same search grid but different scoring policies (`Maximum` is treated like `Aggressive`):
 
 - `Conservative` suppresses transient leakage more strongly
 - `Balanced` is the default middle ground
@@ -359,30 +424,22 @@ Most other settings are preserved from your current base configuration. The `Con
 
 ### Tab breakdown
 
-#### Basic Tuning
+#### Overview
 
-Holds the core per-frame extraction controls:
-
-- detection sigma
-- grow sigma
-- minimum detection pixels
-
-These are usually the first fields to adjust manually:
+Holds Auto-Tune and the core settings (see above). The per-frame detection sigma, grow sigma and minimum pixels are usually the first fields to adjust by hand:
 
 - raise them when the report is flooded with noise
 - lower them cautiously when faint real sources are missed
 
 #### Object Detection
 
-Controls master-star masking and low-level extraction safeguards:
+Controls the low-level extraction safeguards (the star-mask settings are on the Overview tab):
 
-- master sigma and master minimum pixels for the stationary-star veto map
-- mask-overlap tolerance before an object is rejected as a stellar residual
 - physical edge margin
 - registration-void threshold and proximity radius
 - histogram background clipping iterations and factor
 
-The engine may raise `voidProximityRadius` during border-drift diagnostics if the measured registration padding requires a safer value.
+The engine may raise `voidProximityRadius` during border-drift diagnostics if the measured registration padding requires a safer value. Frames where less than half of the pixels hold image data (blank frames, failed registrations) are left out of the drift analysis and rejected with the outlier frames; the report's drift section lists them. Frames that registration also rotated are measured correctly.
 
 #### Streak Detection
 
@@ -501,7 +558,7 @@ Use `Blink Selected` when you want a classic visual animation of a hand-picked s
 
 ### Detection Sequence Viewer
 
-Opened by `Detect on Selected Frame`.
+Opened by `Preview Frame`.
 
 Key behaviors:
 
@@ -665,7 +722,7 @@ The iterative pipeline is designed for:
 
 Workflow:
 
-1. Click `Detect Iteratively (Large Datasets)`.
+1. Click `Detect Iteratively (large datasets)`.
 2. Enter a maximum frame limit, or leave it empty or zero to use the full range.
 3. SpacePixels runs multiple temporally spaced pipeline passes.
 4. A master iterative summary report is generated with links to the per-pass reports.
@@ -733,12 +790,12 @@ Maximum-stack candidates are review aids for elongated or semi-persistent featur
 When `Enable Variable-Star Detection` is on, the report includes:
 
 - `Variable-Star Photometry`: the readiness verdict (Ready, Limited or Not ready) with plain-language reasons, and the session counts
-- `Photometry: Readiness Checks`: the measurements behind checks A, B and D, star and frame exclusions, and flagged measurements
+- `Photometry: Readiness Checks`: the measurements behind checks A, B and D, star and frame exclusions, and flagged measurements (saturated, non-linear, edge or void, crossing objects, isolated outliers, and contaminated shape: a hot pixel or cosmic ray on a star)
 - `Photometry: Session Diagnostics`: the noise model (scatter against brightness with candidates highlighted), per-frame charts of zero point, response slope, linear range, FWHM, registration spread and crossed stars, and the check B concentration profiles of every frame
 - `Photometry: Variable-Star Candidates`: one card per high-confidence or possible candidate with its scores, gate results, light curve (with three constant comparison stars of similar brightness drawn below it) and cutouts of its brightest and faintest frame, plus a table of rejected candidates and the gates they failed. When the session is plate-solved, each card has a `Check VSX Here` button that looks the star up in the AAVSO International Variable Star Index (through CDS VizieR) and shows the catalogued variables nearby, with their type, range, period and separation, inside the report, plus `VSX in VizieR` and `SIMBAD` browser links. The in-report lookup needs SpacePixels to be running, like the other live lookups; results are saved into the report
 - `Photometry: Per-Frame Measurements`: every per-frame value, with excluded frames and their reasons
 
-Hover any chart mark for its details. The report folder also contains `photometry_stars.csv`, `photometry_lightcurves.csv` (candidates) and `photometry_frames.csv`. Magnitudes are instrumental and differential; candidates are not yet matched against variable-star catalogues.
+Hover any chart mark for its details. The report folder also contains `photometry_stars.csv`, `photometry_lightcurves.csv` (candidates) and `photometry_frames.csv`. Magnitudes are instrumental and differential. Candidates are not matched against catalogues automatically; use the `Check VSX Here` button on each card.
 
 ### Global map sections
 
@@ -764,7 +821,7 @@ If you enable the checkbox in `Detection Settings -> Advanced Visualization`, th
 
 These are optional visual summaries and are off by default.
 
-The toggle is saved with SpacePixels visualization preferences when you use `Save Configuration`; it is not part of the JTransient detection profile.
+The toggle is saved with SpacePixels visualization preferences when you click `Save`; it is not part of the JTransient detection profile.
 
 ### Iterative summary report
 
@@ -790,7 +847,7 @@ Setup:
 1. Open `Astrometry Config`.
 2. Set the ASTAP executable path.
 3. Return to the `Main` tab.
-4. Select a frame and click `Plate Solve`.
+4. Select a frame and click `Plate Solve Selected`.
 
 ### Astrometry.net
 
@@ -832,7 +889,7 @@ For both moving tracks and streak tracks, SpacePixels also adds Stellarium Web l
 
 Usage pattern:
 
-`batchDetect <fits_directory> <detection_config.json> [--auto-tune <conservative|balanced|aggressive>]`
+`batchDetect <fits_directory> <detection_config.json> [--auto-tune <conservative|balanced|aggressive|maximum>] [--tuner <calibrated|legacy>]`
 
 Important limitations:
 
@@ -840,6 +897,9 @@ Important limitations:
 - the config file must be a valid SpacePixels detection-profile JSON with flat JTransient `DetectionConfig` fields plus `autoTuneMaxCandidateFrames`
 - packaged distributions include `config/default_detection_profile.json`
 - if `--auto-tune` is supplied, the tuned configuration is used for the pipeline run and exported with the report
+- `--tuner` selects the auto-tuner: `calibrated` (default) or `legacy`
+- with the Gradle task, `-PbatchMaxHeap=8g` sets a fixed JVM heap (otherwise up to 80% of RAM); large sessions, for example 33 frames of 61 megapixels, need about 11 GB
+- the CLI prints progress as `[Pipeline NN%]` lines; the percentage only moves forward
 
 Gradle example:
 
@@ -985,7 +1045,7 @@ Check:
 ### Saved settings behavior
 
 - `Astrometry Config -> Save Configuration` stores app-level settings such as ASTAP and observer metadata.
-- `Detection Settings -> Save Configuration` stores the JTransient detection profile in `spacepixels_detection_profile.json`.
+- `Detection Settings -> Save` stores the JTransient detection profile in `spacepixels_detection_profile.json`.
 - Visualization-only report/export preferences are stored separately in `spacepixels_visualization.json`.
 - `Include AI Creative Report Sections` is a visualization preference, not a detection-profile field.
 - At startup, SpacePixels offers to migrate a saved detection profile with missing or unrecognized fields. Accepting keeps supported and renamed settings, fills remaining missing fields from current code defaults, removes unrecognized fields, and preserves the original as a backup. Declining leaves the saved file unchanged; decline if the profile came from a newer SpacePixels version.

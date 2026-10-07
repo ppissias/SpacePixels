@@ -166,6 +166,7 @@ final class PhotometryReportSectionWriter {
         report.println(configItem("Flagged: Crossing Objects", String.valueOf(t.measurementsCrossing)));
         report.println(configItem("Flagged: Edge / Void", String.valueOf(t.measurementsEdgeOrVoid)));
         report.println(configItem("Flagged: Isolated Outliers", String.valueOf(t.measurementsOutlier)));
+        report.println(configItem("Flagged: Contaminated Shape", String.valueOf(t.measurementsContaminated)));
         report.println(configItem("Photometry Time", String.format(Locale.US, "%.2f s", t.processingTimeMs / 1000.0)));
         report.println("</div>");
         if (!t.gateFailureCounts.isEmpty()) {

@@ -9,6 +9,7 @@ package eu.startales.spacepixels.api;
 
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
+import eu.startales.spacepixels.util.AutoTunerRunner;
 import eu.startales.spacepixels.util.DetectionInputPreparation;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
@@ -52,7 +53,7 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
                     request.getInputPreparationMode() == InputPreparationMode.AUTO_PREPARE_TO_16BIT_MONO,
                     (percentage, message) -> emitScaledProgress(progressListener, 0, 15, percentage, message));
 
-            emitProgress(progressListener, 16, "Validating FITS metadata for pipeline execution...");
+            emitProgress(progressListener, 15, "Validating FITS metadata for pipeline execution...");
             ImageProcessing imageProcessing = ImageProcessing.getInstance(preparedDirectory.getPreparedInputDirectory());
             FitsFileInformation[] filesInfo = imageProcessing.getFitsfileInformationHeadless();
 
@@ -66,7 +67,9 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
                         pipelineBaseConfig.clone(),
                         request.getAutoTuneMaxCandidateFrames(),
                         request.getAutoTuneProfile(),
+                        request.getAutoTuneAlgorithm(),
                         (percentage, message) -> emitScaledProgress(progressListener, 15, 35, percentage, message));
+                System.out.println(autoTuneResult.telemetryReport);
                 pipelineBaseConfig = autoTuneResult.optimizedConfig.clone();
             }
 
@@ -115,6 +118,7 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
                                                                    DetectionConfig baseConfig,
                                                                    int autoTuneMaxCandidateFrames,
                                                                    JTransientAutoTuner.AutoTuneProfile profile,
+                                                                   AutoTunerRunner.Algorithm algorithm,
                                                                    SpacePixelsProgressListener progressListener) throws Exception {
         if (filesInfo == null || filesInfo.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
             throw new SpacePixelsPipelineException("Auto-Tune requires at least " + SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES +
@@ -134,16 +138,8 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
                         50 + (int) ((enginePercent / 100.0f) * 50),
                         "Tuning: " + message);
 
-        int originalSampleSize = JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE;
-        int effectiveSampleSize = Math.min(originalSampleSize, candidateFrames.size());
-
-        JTransientAutoTuner.AutoTunerResult result;
-        JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = effectiveSampleSize;
-        try {
-            result = JTransientAutoTuner.tune(candidateFrames, baseConfig, profile, autoTuneListener);
-        } finally {
-            JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = originalSampleSize;
-        }
+        JTransientAutoTuner.AutoTunerResult result =
+                AutoTunerRunner.run(candidateFrames, baseConfig, profile, algorithm, autoTuneListener);
 
         if (result == null || !result.success || result.optimizedConfig == null) {
             throw new SpacePixelsPipelineException("Auto-Tune did not return an optimized configuration.");

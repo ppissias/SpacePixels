@@ -25,7 +25,9 @@ import java.awt.event.MouseMotionAdapter;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -44,14 +46,29 @@ public class MainApplicationPanel extends JPanel {
     private volatile JTable table;
 
     private final JProgressBar progressBar = new JProgressBar();
-    private final JButton convertMonoButton = new JButton("Batch Convert to Mono");
+    private final JButton convertMonoButton = new JButton("Convert to Mono");
     private final JButton stretchButton = new JButton("Batch Stretch");
     private final JButton blinkButton = new JButton("Blink Selected");
-    private final JButton solveButton = new JButton("Plate Solve");
-    private final JButton detectSingleButton = new JButton("Detect on Selected Frame");
+    private final JButton solveButton = new JButton("Plate Solve Selected");
+    private final JButton detectSingleButton = new JButton("Preview Frame");
     private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
-    private final JButton detectBatchButton = new JButton("Detect Moving Targets (Standard Pipeline)");
-    private final JButton detectIterativelyButton = new JButton("Detect Iteratively (Large Datasets)");
+    private final JButton detectBatchButton = new JButton("Detect Moving Targets");
+    private final JButton detectIterativelyButton = new JButton("Detect Iteratively (large datasets)");
+    private final JRadioButton astapSolveRadio = new JRadioButton("ASTAP");
+    private final JRadioButton astrometryNetSolveRadio = new JRadioButton("Astrometry.net (online)");
+
+    // Workflow-strip status lines, built only from what is already known (headers, selection, solved flags)
+    private final JLabel prepareStatus = new JLabel();
+    private final JLabel astrometryStatus = new JLabel();
+    private final JLabel inspectStatus = new JLabel();
+    private final JLabel detectStatus = new JLabel();
+    // Shares its state with the Variable-Star Detection setting once the settings panel binds it.
+    private final JCheckBox variableStarCheck = new JCheckBox("Variable-star photometry");
+    // Tooltip of each action button while it is enabled; a disabled button adds the reason
+    private final Map<JButton, String> actionTooltips = new HashMap<>();
+    private final List<JPanel> workflowGroups = new ArrayList<>();
+    private volatile boolean uiLocked;
+    private boolean hasSolvedFrame;
 
     private final JLabel statusLabel = new JLabel(" Ready");
     // Map to hold the state of UI components
@@ -77,65 +94,64 @@ public class MainApplicationPanel extends JPanel {
         // ==========================================
         // TOP CONTROL AREA
         // ==========================================
-        JPanel topControlContainer = new JPanel();
-        topControlContainer.setLayout(new BoxLayout(topControlContainer, BoxLayout.Y_AXIS));
+        // A workflow strip: four labelled groups in the order of use, wrapping onto a second line when narrow.
+        setActionTooltip(convertMonoButton, "Extract luminance and convert all loaded FITS files to 16-bit monochrome. Applies stretch if enabled.");
+        setActionTooltip(stretchButton, "Apply the current non-linear stretch settings to all imported FITS files and save as new files.");
+        setActionTooltip(solveButton, "Calculate the celestial coordinates (WCS) for the selected frame.");
+        setActionTooltip(blinkButton, "Animate the selected frames in a new window for manual visual inspection (Ctrl+B).");
+        setActionTooltip(detectSingleButton, "Run the extraction engine on the selected frame to preview detected sources and streaks with the current settings (Ctrl+P).");
+        setActionTooltip(manualTransientInspectionButton, "Extract purified transients from all frames against the master background and navigate through them using arrow keys.");
+        setActionTooltip(detectBatchButton, "Run the full pipeline: detect, link and report moving objects across the whole sequence (Ctrl+D).");
+        setActionTooltip(detectIterativelyButton, "For datasets too large for the standard run: multiple temporally spaced passes across the sequence.");
+        for (JButton button : actionTooltips.keySet()) {
+            button.setEnabled(false);
+        }
 
-        // --- ROW 1 ---
-        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        astapSolveRadio.setToolTipText("Solve with ASTAP (configured in the Astrometry Config tab).");
+        astrometryNetSolveRadio.setToolTipText("Solve with the online nova.astrometry.net web service.");
+        ButtonGroup solverGroup = new ButtonGroup();
+        solverGroup.add(astapSolveRadio);
+        solverGroup.add(astrometryNetSolveRadio);
+        astapSolveRadio.setSelected(true);
 
-        solveButton.setToolTipText("Calculate the celestial coordinates (WCS) for the selected image.");
-        solveButton.setEnabled(false);
-        row1.add(solveButton);
+        // The primary action: accent colours of the look and feel, larger and bold.
+        detectBatchButton.putClientProperty("FlatLaf.style",
+                "font: +2 bold; background: $Button.default.background; foreground: $Button.default.foreground;"
+                        + " borderColor: $Button.default.borderColor; margin: 6,16,6,16");
 
-        JCheckBox astapSolveCheckbox = new JCheckBox("ASTAP");
-        astapSolveCheckbox.setToolTipText("Solve the image using ASTAP");
-        astapSolveCheckbox.setSelected(true);
-        row1.add(astapSolveCheckbox);
+        JPanel prepareGroup = workflowGroup("1  Prepare", prepareStatus,
+                buttonRow(convertMonoButton),
+                buttonRow(stretchButton));
+        JPanel astrometryGroup = workflowGroup("2  Astrometry", astrometryStatus,
+                buttonRow(solveButton),
+                buttonRow(new JLabel("Solver:"), astapSolveRadio, astrometryNetSolveRadio));
+        JPanel inspectGroup = workflowGroup("3  Inspect", inspectStatus,
+                buttonRow(blinkButton, detectSingleButton),
+                buttonRow(manualTransientInspectionButton));
+        JLabel editSettingsLink = new JLabel("<html><u>Edit settings…</u></html>");
+        editSettingsLink.setForeground(LINK_COLOR);
+        editSettingsLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        editSettingsLink.setToolTipText("Open the Detection Settings tab (Auto-Tune, thresholds, variable stars).");
+        editSettingsLink.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (!uiLocked) {
+                    mainAppWindow.getTabbedPane().setSelectedIndex(3);
+                }
+            }
+        });
+        JPanel detectGroup = workflowGroup("4  Detect", detectStatus,
+                buttonRow(detectBatchButton),
+                buttonRow(detectIterativelyButton),
+                buttonRow(variableStarCheck, editSettingsLink));
 
-        JCheckBox astrometrynetSolveCheckbox = new JCheckBox("Astrometry.net (online)");
-        astrometrynetSolveCheckbox.setToolTipText("Solve the image using the online nova.astrometry.net web services.");
-        row1.add(astrometrynetSolveCheckbox);
-
-        blinkButton.setToolTipText("Animate the selected frames in a new window for manual visual inspection.");
-        blinkButton.setEnabled(false);
-        row1.add(blinkButton);
-
-        // --- ROW 2 ---
-        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-
-        convertMonoButton.setToolTipText("Extract luminance and convert all loaded FITS files to 16-bit monochrome. Applies stretch if enabled.");
-        convertMonoButton.setEnabled(false);
-        row2.add(convertMonoButton);
-
-        stretchButton.setToolTipText("Apply the current non-linear stretch settings to all imported FITS files and save as new files.");
-        stretchButton.setEnabled(false);
-        row2.add(stretchButton);
-
-        detectSingleButton.setToolTipText("Run the extraction engine on the currently selected frame to preview detected sources and streaks.");
-        detectSingleButton.setEnabled(false);
-        row2.add(detectSingleButton);
-
-        manualTransientInspectionButton.setToolTipText("Extract purified transients from all frames against the master background and navigate through them using arrow keys.");
-        manualTransientInspectionButton.setEnabled(false);
-        row2.add(manualTransientInspectionButton);
-
-        detectBatchButton.setToolTipText("Run the fully automated multi-threaded pipeline to detect, link, and report moving objects across the entire sequence.");
-        detectBatchButton.setEnabled(false);
-        row2.add(detectBatchButton);
-
-        // Add the new button to the UI
-        detectIterativelyButton.setToolTipText("In case the dataset is too large to perform the standard detection, run multiple temporally spaced passes across the sequence");
-        detectIterativelyButton.setEnabled(false);
-        row2.add(detectIterativelyButton);
-
-        progressBar.setEnabled(true);
-        progressBar.setPreferredSize(new Dimension(150, 20));
-        row2.add(Box.createHorizontalStrut(10));
-        row2.add(progressBar);
-
-        topControlContainer.add(row1);
-        topControlContainer.add(row2);
-        add(topControlContainer, BorderLayout.NORTH);
+        JPanel workflowStrip = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 6));
+        workflowStrip.add(prepareGroup);
+        workflowStrip.add(astrometryGroup);
+        workflowStrip.add(inspectGroup);
+        workflowStrip.add(detectGroup);
+        add(workflowStrip, BorderLayout.NORTH);
+        refreshWorkflowStatus();
 
         // ==========================================
         // ACTION LISTENERS
@@ -255,32 +271,25 @@ public class MainApplicationPanel extends JPanel {
             )).start();
         });
 
-        astapSolveCheckbox.addActionListener(e -> {
-            if (astapSolveCheckbox.isSelected()) {
-                astrometrynetSolveCheckbox.setSelected(false);
-            }
-        });
-
-        astrometrynetSolveCheckbox.addActionListener(e -> {
-            if (astrometrynetSolveCheckbox.isSelected()) {
-                astapSolveCheckbox.setSelected(false);
-            }
-        });
-
         // ==========================================
         // MAIN TABLE AREA
         // ==========================================
         JScrollPane scrollPane = new JScrollPane();
         add(scrollPane, BorderLayout.CENTER);
 
-        JPanel statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        statusBar.setBorder(BorderFactory.createEtchedBorder());
-        statusBar.add(statusLabel);
+        JPanel statusBar = new JPanel(new BorderLayout(10, 0));
+        statusBar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createEtchedBorder(), BorderFactory.createEmptyBorder(2, 4, 2, 6)));
+        statusBar.add(statusLabel, BorderLayout.CENTER);
+        progressBar.setPreferredSize(new Dimension(150, 16));
+        statusBar.add(progressBar, BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
 
         table = new JTable();
         scrollPane.setViewportView(table);
         installEarthLinkSupport();
+        installTableContextMenu();
+        installShortcuts();
 
         table.getSelectionModel().addListSelectionListener(event -> {
             int selectedRow = table.getSelectedRow();
@@ -307,6 +316,7 @@ public class MainApplicationPanel extends JPanel {
             } else {
                 blinkButton.setEnabled(false);
             }
+            refreshWorkflowStatus();
         });
 
         solveButton.addActionListener(e -> {
@@ -322,8 +332,8 @@ public class MainApplicationPanel extends JPanel {
                     mainAppWindow.getImageProcessing(),
                     selectedFile.getFilePath(),
                     row,
-                    astapSolveCheckbox.isSelected(),
-                    astrometrynetSolveCheckbox.isSelected()
+                    astapSolveRadio.isSelected(),
+                    astrometryNetSolveRadio.isSelected()
             )).start();
         });
     }
@@ -384,6 +394,9 @@ public class MainApplicationPanel extends JPanel {
             convertMonoButton.setEnabled(false);
             setDetectionButtonsEnabled();
         }
+        // Plate solving updates the table; keep the solved count current.
+        model.addTableModelListener(e -> refreshWorkflowStatus());
+        refreshWorkflowStatus();
     }
 
     private void clearLoadedControls() {
@@ -393,6 +406,207 @@ public class MainApplicationPanel extends JPanel {
         convertMonoButton.setEnabled(false);
         stretchButton.setEnabled(false);
         setDetectionButtonsDisabled();
+        refreshWorkflowStatus();
+    }
+
+    // ==========================================
+    // WORKFLOW STRIP
+    // ==========================================
+
+    private JPanel workflowGroup(String title, JLabel status, JComponent... rows) {
+        // Every group is as tall as the tallest one, so the tops and the status lines line up.
+        JPanel group = new JPanel() {
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension own = super.getPreferredSize();
+                int height = own.height;
+                for (JPanel other : workflowGroups) {
+                    if (other != this) {
+                        height = Math.max(height, other.getLayout().preferredLayoutSize(other).height);
+                    }
+                }
+                return new Dimension(own.width, height);
+            }
+        };
+        workflowGroups.add(group);
+        group.setLayout(new BoxLayout(group, BoxLayout.Y_AXIS));
+        group.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createTitledBorder(title), BorderFactory.createEmptyBorder(0, 4, 4, 4)));
+        for (JComponent row : rows) {
+            row.setAlignmentX(Component.LEFT_ALIGNMENT);
+            group.add(row);
+        }
+        group.add(Box.createVerticalGlue());
+        status.setAlignmentX(Component.LEFT_ALIGNMENT);
+        status.setForeground(UIManager.getColor("Label.disabledForeground"));
+        status.setBorder(BorderFactory.createEmptyBorder(4, 4, 0, 0));
+        group.add(status);
+        return group;
+    }
+
+    private static JPanel buttonRow(JComponent... components) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        for (JComponent c : components) {
+            row.add(c);
+        }
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
+        return row;
+    }
+
+    /** Sets a button's tooltip; while the button is disabled the tooltip also says why. */
+    private void setActionTooltip(JButton button, String tooltip) {
+        actionTooltips.put(button, tooltip);
+        button.addPropertyChangeListener("enabled", e -> updateActionTooltip(button));
+        updateActionTooltip(button);
+    }
+
+    private void updateActionTooltip(JButton button) {
+        String tooltip = actionTooltips.get(button);
+        String reason = button.isEnabled() ? null : disabledReason(button);
+        button.setToolTipText(reason == null ? tooltip
+                : "<html>" + tooltip + "<br><i>Not available: " + reason + "</i></html>");
+    }
+
+    private String disabledReason(JButton button) {
+        if (uiLocked) {
+            return "wait until the current task has finished.";
+        }
+        int frames = table == null ? 0 : table.getRowCount();
+        if (frames == 0) {
+            return "import frames first (File → Import aligned FITS/XISF files).";
+        }
+        if (button == convertMonoButton) {
+            return "all frames are already monochrome.";
+        }
+        if (button == stretchButton) {
+            return "enable stretching in the Image Stretch tab first.";
+        }
+        if (button == solveButton) {
+            return table.getSelectedRow() < 0 ? "select one frame in the table." : "the selected frame is already solved.";
+        }
+        if (button == blinkButton) {
+            return "select at least 3 frames in the table.";
+        }
+        if (containsColorImages) {
+            return "convert the frames to monochrome first (1 Prepare).";
+        }
+        return null;
+    }
+
+    /** Updates the status line of every group and the disabled-button reasons. */
+    void refreshWorkflowStatus() {
+        int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
+        if (frames == 0) {
+            prepareStatus.setText("No frames imported");
+            astrometryStatus.setText(" ");
+            hasSolvedFrame = false;
+            inspectStatus.setText(" ");
+            detectStatus.setText("Import aligned frames to start");
+        } else {
+            prepareStatus.setText(containsColorImages ? "Colour frames: convert first" : "✓ Monochrome, " + frames + " frames");
+            int solved = 0;
+            for (int row = 0; row < frames; row++) {
+                if ("Yes".equalsIgnoreCase(String.valueOf(table.getValueAt(row, FitsFileTableModel.COL_SOLVED)))) {
+                    solved++;
+                }
+            }
+            // One solved frame is enough: the frames are aligned, so the report uses its solution for all of them.
+            astrometryStatus.setText(solved == 0 ? "Solve one frame to identify objects" : "✓ " + solved + " / " + frames + " solved");
+            astrometryStatus.setToolTipText(solved == 0
+                    ? "<html>No frame is plate-solved yet. One solved frame gives the report sky coordinates:<br>"
+                    + "moving objects are identified with JPL and SkyBoT, and variable-star candidates are matched against AAVSO VSX.</html>"
+                    : "<html>The report has sky coordinates: moving objects are identified with JPL and SkyBoT,<br>"
+                    + "and variable-star candidates are matched against AAVSO VSX.</html>");
+            hasSolvedFrame = solved > 0;
+            int selected = table.getSelectedRowCount();
+            inspectStatus.setText(selected == 0 ? "No frames selected" : selected + (selected == 1 ? " frame selected" : " frames selected"));
+            detectStatus.setText(containsColorImages ? "Convert to monochrome first" : "Settings: " + detectionSettingsSummary());
+        }
+        updateVariableStarTooltip();
+        for (JButton button : actionTooltips.keySet()) {
+            updateActionTooltip(button);
+        }
+    }
+
+    /**
+     * Shares the photometry switch with the Variable-Star Detection setting, so either place turns it on or off.
+     */
+    void bindVariableStarToggle(ButtonModel settingModel) {
+        variableStarCheck.setModel(settingModel);
+        variableStarCheck.addItemListener(e -> updateVariableStarTooltip());
+        updateVariableStarTooltip();
+    }
+
+    private void updateVariableStarTooltip() {
+        String text = "<html>Also measure the brightness of the field stars in every frame and look for variable stars<br>"
+                + "(light curves and candidates in the report). Runs with Detect Moving Targets; the iterative mode skips it.";
+        if (variableStarCheck.isSelected() && !hasSolvedFrame) {
+            text += "<br><i>Plate-solve one frame so the candidates can be matched against AAVSO VSX.</i>";
+        }
+        variableStarCheck.setToolTipText(text + "</html>");
+    }
+
+    private String detectionSettingsSummary() {
+        DetectionConfigurationPanel settings = mainAppWindow.getDetectionConfigurationPanel();
+        return settings == null ? "Manual settings" : settings.getSettingsSummary();
+    }
+
+    /** Right-click menu on the frame table for the actions on selected frames. */
+    private void installTableContextMenu() {
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem blinkItem = new JMenuItem("Blink Selected");
+        JMenuItem previewItem = new JMenuItem("Preview Frame");
+        JMenuItem solveItem = new JMenuItem("Plate Solve Selected");
+        blinkItem.addActionListener(e -> blinkButton.doClick());
+        previewItem.addActionListener(e -> detectSingleButton.doClick());
+        solveItem.addActionListener(e -> solveButton.doClick());
+        menu.add(blinkItem);
+        menu.add(previewItem);
+        menu.add(solveItem);
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                maybeShow(e);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                maybeShow(e);
+            }
+
+            private void maybeShow(MouseEvent e) {
+                if (!e.isPopupTrigger() || uiLocked) {
+                    return;
+                }
+                int row = table.rowAtPoint(e.getPoint());
+                if (row >= 0 && !table.isRowSelected(row)) {
+                    table.setRowSelectionInterval(row, row);
+                }
+                blinkItem.setEnabled(blinkButton.isEnabled());
+                previewItem.setEnabled(detectSingleButton.isEnabled());
+                solveItem.setEnabled(solveButton.isEnabled());
+                menu.show(table, e.getX(), e.getY());
+            }
+        });
+    }
+
+    /** Ctrl+D detect, Ctrl+B blink, Ctrl+P preview. */
+    private void installShortcuts() {
+        bindShortcut("detect", KeyStroke.getKeyStroke("ctrl D"), detectBatchButton);
+        bindShortcut("blink", KeyStroke.getKeyStroke("ctrl B"), blinkButton);
+        bindShortcut("preview", KeyStroke.getKeyStroke("ctrl P"), detectSingleButton);
+    }
+
+    private void bindShortcut(String name, KeyStroke key, JButton button) {
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(key, name);
+        getActionMap().put(name, new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                if (button.isEnabled() && !uiLocked) {
+                    button.doClick();
+                }
+            }
+        });
     }
 
     private void configureTableRenderers() {
@@ -564,6 +778,8 @@ public class MainApplicationPanel extends JPanel {
             entry.getKey().setEnabled(entry.getValue());
         }
         savedComponentStates.clear();
+        uiLocked = false;
+        refreshWorkflowStatus();
 
         mainAppWindow.setMenuState(true);
         mainAppWindow.getTabbedPane().setEnabledAt(1, true);
@@ -572,6 +788,7 @@ public class MainApplicationPanel extends JPanel {
     }
 
     private void lockUI() {
+        uiLocked = true;
         savedComponentStates.clear();
         saveAndDisableRecursive(this);
 

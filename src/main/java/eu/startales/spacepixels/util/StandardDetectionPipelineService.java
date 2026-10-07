@@ -40,7 +40,9 @@ final class StandardDetectionPipelineService {
                        FitsFileInformation[] cachedFileInfo,
                        ImageProcessing.DetectionSafetyPrompt safetyPrompt,
                        TransientEngineProgressListener progressListener) throws Exception {
-        ImageProcessing.PipelineExecutionData executionData = runDetectionPipeline(config, cachedFileInfo, progressListener);
+        // Detection takes 0-90% of the bar; exporting the report the rest.
+        ImageProcessing.PipelineExecutionData executionData = runDetectionPipeline(config, cachedFileInfo,
+                progressListener == null ? null : (percent, message) -> progressListener.onProgressUpdate((int) (percent * 0.9), message));
 
         if (safetyPrompt != null) {
             ImageProcessing.DetectionSummary detectionSummary = DetectionPipelineSupport.summarizeDetections(executionData.getPipelineResult());
@@ -115,7 +117,9 @@ final class StandardDetectionPipelineService {
 
         PipelineResult result;
         try {
-            result = engine.runPipeline(framesForLibrary, effectiveConfig, progressListener);
+            // Loading took 0-20%; the engine reports 0-100%, shown as 20-100%.
+            result = engine.runPipeline(framesForLibrary, effectiveConfig, progressListener == null ? null
+                    : (percent, message) -> progressListener.onProgressUpdate(20 + (int) (percent * 0.8), message));
         } finally {
             engine.shutdown();
         }

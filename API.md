@@ -20,6 +20,7 @@ Other `eu.startales.spacepixels.*` packages should be treated as internal implem
 
 - `io.github.ppissias.jtransient.config.DetectionConfig`
 - `io.github.ppissias.jtransient.engine.JTransientAutoTuner.AutoTuneProfile`
+- `eu.startales.spacepixels.util.AutoTunerRunner.Algorithm` (auto-tuner choice: `CALIBRATED`, the default, or `LEGACY`)
 - `io.github.ppissias.jtransient.engine.PipelineResult`
 - `eu.startales.spacepixels.util.FitsFileInformation`
 
@@ -124,6 +125,7 @@ import eu.startales.spacepixels.api.DefaultSpacePixelsPipelineApi;
 import eu.startales.spacepixels.api.InputPreparationMode;
 import eu.startales.spacepixels.api.SpacePixelsPipelineRequest;
 import eu.startales.spacepixels.api.SpacePixelsPipelineResult;
+import eu.startales.spacepixels.util.AutoTunerRunner;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 
@@ -134,6 +136,7 @@ SpacePixelsPipelineResult result = new DefaultSpacePixelsPipelineApi().run(
                 .detectionConfig(new DetectionConfig())
                 .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
                 .autoTuneProfile(JTransientAutoTuner.AutoTuneProfile.BALANCED)
+                .autoTuneAlgorithm(AutoTunerRunner.Algorithm.CALIBRATED)
                 .autoTuneMaxCandidateFrames(12)
                 .progressListener((percentage, message) ->
                         System.out.println(percentage + "% " + message))
@@ -146,6 +149,10 @@ System.out.println("Telemetry report available: " + (result.getAutoTuneTelemetry
 ```
 
 Use this when you want SpacePixels to optimize the effective detection configuration before running the standard pipeline.
+
+Profiles: `CONSERVATIVE`, `BALANCED`, `AGGRESSIVE` and `MAXIMUM` (as sensitive as possible; on large sensors it leaves many candidates, so it is meant for small sensors or targeted searches). `autoTuneAlgorithm(...)` selects the calibrated tuner (default), which measures false detections and sensitivity on the session, or the legacy score-based tuner, which treats `MAXIMUM` like `AGGRESSIVE`.
+
+Progress is reported from 0 to 100% and only moves forward: input preparation up to 15%, Auto-Tune 15-35% when enabled, the detection pipeline up to 90%, and report generation 90-100%.
 
 ## Result object overview
 
@@ -199,4 +206,4 @@ try {
 - `AUTO_PREPARE_TO_16BIT_MONO` is more forgiving and is best when input format may vary.
 - The API returns a defensive copy for exposed configs and FITS metadata arrays.
 - The public artifact currently contains GUI code as well, but GUI classes are not part of the supported API contract.
-- Do not run multiple Auto-Tune-enabled API calls concurrently in the same JVM. The current implementation temporarily adjusts shared JTransient Auto-Tune state while a tuning run is active. If you need parallel execution, prefer non-Auto-Tune runs or serialize Auto-Tune usage.
+- Do not run multiple API calls with the legacy auto-tuner concurrently in the same JVM. It temporarily adjusts shared JTransient Auto-Tune state while a tuning run is active. The calibrated tuner (the default) does not use shared state.

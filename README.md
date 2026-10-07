@@ -106,12 +106,16 @@ For the underlying detection logic and the meaning of the engine configuration o
 - [JTransient repository](https://github.com/ppissias/JTransient)
 - [JTransient algorithm overview](https://github.com/ppissias/JTransient/blob/main/ALGORITHM.md)
 - [JTransient configuration reference](https://github.com/ppissias/JTransient/blob/main/CONFIG.md)
+- [JTransient auto-tuners](https://github.com/ppissias/JTransient/blob/main/AUTOTUNER.md)
+- [JTransient variable-star photometry](https://github.com/ppissias/JTransient/blob/main/VariableStarAlgorithm.md)
 
 ## What SpacePixels does
 
 - Runs a standard multi-frame detection pipeline for moving targets, streak tracks, single-frame streaks, and bright anomalies.
 - Reviews maximum-stack elongated morphology candidates using geometric shape and exact median-mask overlap filters; these are not confirmed moving tracks.
 - Provides an iterative detection mode for large datasets and very slow targets.
+- Auto-tunes the detection settings for each session. The default calibrated tuner measures false detections and sensitivity on the session's own frames and offers four profiles: conservative, balanced, aggressive and maximum (as sensitive as possible, for small sensors or targeted searches for a faint object). The original score-based tuner is still available.
+- Optionally measures the photometry of the stationary stars and reports variable-star candidates with light curves, readiness checks and a lookup in the AAVSO VSX catalogue. Switch it on with the `Variable-star photometry` checkbox next to the Detect button; plate-solve one frame so candidates can be matched against VSX.
 - Generates an HTML report with diagnostics, GIFs, geometric overlays, global maps, object-identification links, and optional AI-themed summary sections.
 - Supports manual transient inspection and frame-by-frame single-image detection preview.
 - Blinks aligned frames for traditional visual inspection.
@@ -131,7 +135,7 @@ For setup, request/result behavior, and usage examples, see [API.md](API.md).
 - All frames in a sequence should share the same dimensions.
 - The GUI can import FITS directories (`.fit`, `.fits`, `.fts`). Directories containing XISF files and no native FITS files are converted to 16-bit monochrome FITS during import. Compressed `.fz` inputs are detected and can be decompressed into a new directory during import.
 - The GUI can also standardize 32-bit FITS data down to 16-bit during import when needed.
-- Automated detection requires 16-bit monochrome frames. If you import color images, use `Batch Convert to Mono` before running the detection pipelines.
+- Automated detection requires 16-bit monochrome frames. If you import color images, use `Convert to Mono` before running the detection pipelines.
 - The headless batch detector is stricter than the GUI: it expects uncompressed 16-bit monochrome FITS files.
 
 ## Installation and launch
@@ -178,13 +182,13 @@ To generate a local distribution with launch scripts:
 
 1. Import a directory of aligned FITS files, or a XISF-only directory, from `File -> Import aligned FITS/XISF files`.
 2. If the sequence is compressed or 32-bit, let SpacePixels decompress or standardize it first.
-3. If the sequence is color, run `Batch Convert to Mono`.
-4. Optionally configure ASTAP and observatory metadata in the `Astrometry Config` tab.
+3. If the sequence is color, run `Convert to Mono` (group 1 Prepare).
+4. Optionally configure ASTAP and observatory metadata in the `Astrometry Config` tab, and plate-solve one frame (group 2 Astrometry) so the report can identify asteroids (JPL, SkyBoT) and variable stars (AAVSO VSX).
 5. Optionally enable stretching in the `Image Stretch` tab for previews, blinking, and batch export.
-6. Adjust detection settings or use `Auto-Tune Settings` in the `Detection Settings` tab.
+6. Run Auto-Tune on the `Overview` page of the `Detection Settings` tab (one run measures all four profiles; pick one in the table), or adjust the settings by hand.
 7. Run either:
-   - `Detect Moving Targets (Standard Pipeline)`, or
-   - `Detect Iteratively (Large Datasets)` for large datasets where the standard full run may be too heavy.
+   - `Detect Moving Targets` (the standard pipeline, Ctrl+D), optionally with `Variable-star photometry` ticked, or
+   - `Detect Iteratively (large datasets)` for large datasets where the standard full run may be too heavy.
 8. When the run finishes, SpacePixels prompts you to open the generated HTML report or, for iterative runs, the results folder containing the per-pass reports.
 
 ## Report output
@@ -203,6 +207,7 @@ The standard pipeline exports an HTML session report plus PNG and GIF assets. De
 - Deep-stack anomalies and maximum-stack streak hints
 - Global trajectory and transient maps
 - Interactive unclassified-transient map with time-colored source footprints and markers, metadata, and a zoomed inspection view
+- Variable-star photometry (when enabled): readiness verdict and checks, noise model, per-frame diagnostics, candidate light curves, CSV exports, and a per-candidate button that looks the position up in AAVSO VSX
 - Optional AI creative report sections
 
 The AI creative sections are controlled by a session-only checkbox in `Detection Settings -> Advanced Visualization -> Optional Report Sections`. They are off by default and are not persisted with the saved detection profile.
@@ -248,7 +253,9 @@ Gradle task examples:
 - Linux/macOS:
   - `./gradlew batchDetect -PbatchArgs="\"/data/sequence\" \"src/dist/config/default_detection_profile.json\" --auto-tune aggressive"`
 
-`batchDetect` accepts a SpacePixels detection-profile JSON and can optionally run Auto-Tune with `conservative`, `balanced`, or `aggressive`.
+`batchDetect` accepts a SpacePixels detection-profile JSON and can optionally run Auto-Tune with `conservative`, `balanced`, `aggressive`, or `maximum`, using `--tuner calibrated` (default) or `--tuner legacy`.
+
+With the Gradle task, `-PbatchMaxHeap=8g` sets a fixed JVM heap instead of the default of up to 80% of RAM. Large sessions (for example 33 frames of 61 megapixels) need about 11 GB.
 
 ### Artificial star injection
 
@@ -269,6 +276,12 @@ Gradle task examples:
   - `./gradlew injectStars -PinjArgs="/data/sequence 15 10.0 4500 4.0"`
 
 This utility injects synthetic moving stars into a FITS sequence for testing and validation.
+
+## Testing
+
+- `gradlew test` runs the unit tests. `-PtestMaxHeap=6g` gives the test JVM a larger heap for the opt-in real-data diagnostics.
+- `gradlew realDataTest -PrealDataRoot=<folder>` runs the opt-in real-data integration tests against local datasets outside the repository.
+- `AutoTunerRealDataDiagnosticsIT` prints the calibrated auto-tuner's report for one dataset without running the pipeline. It is skipped unless `SPACEPIXELS_TUNER_DATASET` points to an aligned 16-bit FITS folder (optionally `SPACEPIXELS_TUNER_PROFILE` for a base profile and `SPACEPIXELS_TUNER_PREPARE=1` to convert colour or float input first).
 
 ## Publishing
 

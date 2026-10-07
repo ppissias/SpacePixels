@@ -20,6 +20,7 @@ import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
+import eu.startales.spacepixels.util.AutoTunerRunner;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 import java.util.List;
 import java.util.logging.Level;
@@ -31,17 +32,20 @@ public class AutoTuneTask implements Runnable {
     private final DetectionConfig baseConfig;
     private final int autoTuneMaxCandidateFrames;
     private final JTransientAutoTuner.AutoTuneProfile profile;
+    private final AutoTunerRunner.Algorithm algorithm;
 
     public AutoTuneTask(EventBus eventBus,
                         FitsFileInformation[] filesInfo,
                         DetectionConfig baseConfig,
                         int autoTuneMaxCandidateFrames,
-                        JTransientAutoTuner.AutoTuneProfile profile) {
+                        JTransientAutoTuner.AutoTuneProfile profile,
+                        AutoTunerRunner.Algorithm algorithm) {
         this.eventBus = eventBus;
         this.filesInfo = filesInfo;
         this.baseConfig = baseConfig;
         this.autoTuneMaxCandidateFrames = autoTuneMaxCandidateFrames;
         this.profile = profile;
+        this.algorithm = algorithm;
     }
 
     @Override
@@ -70,19 +74,9 @@ public class AutoTuneTask implements Runnable {
 
             eventBus.post(new EngineProgressUpdateEvent(50, "Starting mathematical tuning algorithms..."));
 
-            int originalSampleSize = JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE;
-            int effectiveSampleSize = Math.min(originalSampleSize, candidateFrames.size());
-            if (effectiveSampleSize != originalSampleSize) {
-                ApplicationWindow.logger.info("Temporarily lowering Auto-Tuner sample size from " + originalSampleSize + " to " + effectiveSampleSize + " to support the available frame count.");
-            }
-
-            JTransientAutoTuner.AutoTunerResult result;
-            JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = effectiveSampleSize;
-            try {
-                result = JTransientAutoTuner.tune(candidateFrames, baseConfig, profile, autoTuneListener);
-            } finally {
-                JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = originalSampleSize;
-            }
+            ApplicationWindow.logger.info("Auto-Tuner algorithm: " + algorithm + ", profile: " + profile);
+            JTransientAutoTuner.AutoTunerResult result =
+                    AutoTunerRunner.run(candidateFrames, baseConfig, profile, algorithm, autoTuneListener);
 
             eventBus.post(new EngineProgressUpdateEvent(100, "Auto-Tuning complete!"));
             eventBus.post(new AutoTuneFinishedEvent(true, "Auto-Tuning completed successfully.", result));

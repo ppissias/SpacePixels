@@ -157,9 +157,20 @@ tasks.register('batchDetect', JavaExec) {
     mainClass = 'eu.startales.spacepixels.tools.BatchDetectionCli'
     classpath = sourceSets.main.runtimeClasspath
     jvmArgs = batchDetectJvmArgs
+    // Opt-in fixed heap, e.g. -PbatchMaxHeap=8g (otherwise up to 80% of RAM)
+    if (project.hasProperty('batchMaxHeap')) {
+        maxHeapSize = project.property('batchMaxHeap')
+    }
 
     if (project.hasProperty('batchArgs')) {
         args org.apache.tools.ant.types.Commandline.translateCommandline(project.getProperty('batchArgs'))
+    }
+}
+
+// Opt-in larger heap for real-data diagnostic tests, e.g. -PtestMaxHeap=6g
+tasks.withType(Test).configureEach {
+    if (project.hasProperty('testMaxHeap')) {
+        maxHeapSize = project.property('testMaxHeap')
     }
 }
 
