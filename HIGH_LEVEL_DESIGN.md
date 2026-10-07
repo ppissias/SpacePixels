@@ -106,6 +106,7 @@ Main classes:
 - `StretchPanel`
 - `DetectionConfigurationPanel`
 - `AutoTuneOverviewPanel`
+- `SettingsNavigator`, `SettingRow`
 - `WrapLayout`
 - `DetectionSequenceFrame`
 - `TransientInspectionFrame`
@@ -264,7 +265,8 @@ Owns:
 - `SpacePixelsDetectionProfile` load/save
 - `SpacePixelsVisualizationPreferences` load/save
 - current Auto-Tune candidate-frame limit
-- the Overview tab (`AutoTuneOverviewPanel`)
+- the Overview page (`AutoTuneOverviewPanel`) and the page navigation (`SettingsNavigator`)
+- the default value of every setting row (`SettingRow`), captured once by moving the spinners to a fresh `DetectionConfig` and the built-in visualization values and back
 - detection preview action through `TuningPreviewManager`
 - Auto-Tune launch through `AutoTuneTask`
 - applying every edit to the session right away, the unsaved-changes indicator, and Revert to the last saved state
@@ -287,6 +289,18 @@ Owns:
 - the settings summary shown in the main window's Detect group
 
 A tune result belongs to the imported session and is cleared when another dataset is imported.
+
+### `SettingsNavigator` and `SettingRow`
+
+`SettingsNavigator` replaces the settings tabs with:
+
+- a grouped page list and the pages themselves (a `CardLayout`);
+- a search box and a "show only changed" filter that work across all pages;
+- collapsible expert sections.
+
+Sections are found from the header labels that `DetectionConfigurationPanel` marks with a client property.
+
+`SettingRow` is one setting on a page: its input, its default value and a `Reset` button. It marks itself when its value differs from the default and tells the navigator to refresh the filters and counts.
 
 ### `ImageProcessing`
 

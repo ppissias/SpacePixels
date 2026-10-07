@@ -38,6 +38,7 @@ import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class DetectionConfigurationPanel extends JPanel {
 
@@ -105,8 +106,19 @@ public class DetectionConfigurationPanel extends JPanel {
     private JSpinner spinAutoBlackSigma, spinAutoWhiteSigma, spinGifBlinkSpeed, spinCropPadding;
     private JCheckBox chkIncludeAiCreativeReportSections;
 
+    /** Client property marking a section header label on a settings page. */
+    static final String SECTION_HEADER = "spacepixels.sectionHeader";
+    /** Sections with expert settings; they start collapsed. */
+    private static final Set<String> EXPERT_SECTIONS = Set.of(
+            "Advanced Settings", "Linearity Checks", "Candidate Gates", "Absolute Minimum Tolerances", "Single Frame Analytics");
+    /** Names of the core settings on the Overview, so a search finds them there. */
+    private static final List<String> CORE_SETTING_TITLES = List.of(
+            "Detection Sigma", "Grow Sigma (Hysteresis)", "Min Detection Pixels", "Master Sigma", "Master Grow Sigma",
+            "Master Min Pixels", "Max Mask Overlap Fraction", "Auto-Tune");
+
     private AutoTuneOverviewPanel overviewPanel;
-    private JTabbedPane settingsTabs;
+    private SettingsNavigator navigator;
+    private final List<SettingRow> settingRows = new ArrayList<>();
     private final JLabel footerStateLabel = new JLabel(" ");
     private final JLabel footerMessageLabel = new JLabel(" ");
 
@@ -119,6 +131,8 @@ public class DetectionConfigurationPanel extends JPanel {
 
     public DetectionConfigurationPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
+        // The built-in visualization values, before the saved preferences replace them.
+        SpacePixelsVisualizationPreferences visualizationDefaults = SpacePixelsVisualizationPreferences.captureCurrent();
         loadPersistedSettings();
 
         this.previewManager = new TuningPreviewManager(mainAppWindow);
@@ -126,24 +140,22 @@ public class DetectionConfigurationPanel extends JPanel {
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(10, 10, 10, 10));
 
-        JTabbedPane tabbedPane = new JTabbedPane();
-
-        // Build and add the tabs
+        // Pages in the navigation list, grouped; the rows register themselves with the navigator as they are built.
+        navigator = new SettingsNavigator();
         overviewPanel = new AutoTuneOverviewPanel(new OverviewHost());
         buildCoreSettings(overviewPanel);
-        tabbedPane.addTab("Overview", buildScrollPane(overviewPanel));
-        tabbedPane.addTab("Object Detection", buildScrollPane(buildSourceExtractionPanel()));
-        tabbedPane.addTab("Streak Detection", buildScrollPane(buildStreakDetectionPanel()));
-        tabbedPane.addTab("Moving Objects", buildScrollPane(buildMovingObjectsPanel()));
-        tabbedPane.addTab("Anomaly Detection", buildScrollPane(buildAnomalyDetectionPanel()));
-        tabbedPane.addTab("Slow Movers", buildScrollPane(buildSlowMoversPanel()));
-        tabbedPane.addTab("Residual Analysis", buildScrollPane(buildResidualAnalysisPanel()));
-        tabbedPane.addTab("Quality Control", buildScrollPane(buildQualityPanel()));
-        tabbedPane.addTab("Variable Stars", buildScrollPane(buildVariableStarsPanel()));
-        tabbedPane.addTab("Advanced Visualization", buildScrollPane(buildAdvancedVisualizationPanel()));
+        navigator.addPage(null, "Overview", overviewPanel, CORE_SETTING_TITLES);
+        navigator.addPage("DETECTION", "Object Detection", buildSourceExtractionPanel(), List.of());
+        navigator.addPage("DETECTION", "Streak Detection", buildStreakDetectionPanel(), List.of());
+        navigator.addPage("DETECTION", "Quality Control", buildQualityPanel(), List.of());
+        navigator.addPage("MOVING OBJECTS", "Track Linking", buildMovingObjectsPanel(), List.of());
+        navigator.addPage("MOVING OBJECTS", "Anomaly Detection", buildAnomalyDetectionPanel(), List.of());
+        navigator.addPage("MOVING OBJECTS", "Slow Movers", buildSlowMoversPanel(), List.of());
+        navigator.addPage("MOVING OBJECTS", "Residual Analysis", buildResidualAnalysisPanel(), List.of());
+        navigator.addPage("VARIABLE STARS", "Variable Stars", buildVariableStarsPanel(), List.of());
+        navigator.addPage("REPORT", "Report Visualization", buildAdvancedVisualizationPanel(), List.of());
 
-        add(tabbedPane, BorderLayout.CENTER);
-        settingsTabs = tabbedPane;
+        add(navigator, BorderLayout.CENTER);
         buildAnalyses(overviewPanel);
         MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
         if (mainPanel != null) {
@@ -151,6 +163,16 @@ public class DetectionConfigurationPanel extends JPanel {
         }
 
         setupConstraints();
+        captureDefaultValues(visualizationDefaults);
+        navigator.finishBuilding(EXPERT_SECTIONS);
+        getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("ctrl F"), "searchSettings");
+        getActionMap().put("searchSettings", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                navigator.searchField().requestFocusInWindow();
+                navigator.searchField().selectAll();
+            }
+        });
 
         // Changes apply to the session as soon as they are made; only saving for the next start is explicit.
         JButton saveBtn = new JButton("Save");
@@ -185,7 +207,7 @@ public class DetectionConfigurationPanel extends JPanel {
         footer.add(footerButtons, BorderLayout.EAST);
         add(footer, BorderLayout.SOUTH);
 
-        installAutoApply(tabbedPane);
+        installAutoApply(navigator);
         applySettingsToMemory();
         rememberSavedState();
         updateSavedState();
@@ -210,10 +232,39 @@ public class DetectionConfigurationPanel extends JPanel {
         overview.addCoreSetting(null, "Max Mask Overlap Fraction", "Maximum fraction of a point footprint that may overlap the master veto mask before it is rejected as likely stellar residual contamination.", spinMaxMaskOverlapFraction);
     }
 
+    /**
+     * Records the default value of every setting row: the spinners are moved to the built-in defaults, read, and moved
+     * back to the loaded values. No listener applies the defaults to the session meanwhile.
+     */
+    private void captureDefaultValues(SpacePixelsVisualizationPreferences visualizationDefaults) {
+        DetectionConfig loaded = jTransientConfig.clone();
+        SpacePixelsVisualizationPreferences loadedVisualization = SpacePixelsVisualizationPreferences.captureCurrent();
+        int loadedMaxFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
+        boolean wasSuppressed = suppressAutoApply;
+        suppressAutoApply = true;
+        try {
+            setSpinnersFromConfig(new DetectionConfig());
+            visualizationDefaults.applyToRuntime();
+            updateVisualizationSpinnersFromRuntime();
+            setSpinnerValueClamped(spinAutoTuneMaxCandidateFrames, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES);
+            for (SettingRow row : settingRows) {
+                row.captureDefault();
+            }
+
+            loadedVisualization.applyToRuntime();
+            updateVisualizationSpinnersFromRuntime();
+            setSpinnerValueClamped(spinAutoTuneMaxCandidateFrames, loadedMaxFrames);
+            setSpinnersFromConfig(loaded);
+            jTransientConfig = loaded;
+        } finally {
+            suppressAutoApply = wasSuppressed;
+        }
+    }
+
     /** The analyses of a run, each switched on the Overview and in step with the checkbox on its detailed tab. */
     private void buildAnalyses(AutoTuneOverviewPanel overview) {
         overview.addAnalysis("Moving objects & streaks", "asteroids, satellites and other objects that move between frames; always on",
-                null, "Moving Objects");
+                null, "Track Linking");
         overview.addAnalysis("Slow movers", "objects that barely move during the session (comets, distant asteroids), found in the stacked frames",
                 chkEnableSlowMovers.getModel(), "Slow Movers");
         overview.addAnalysis("Anomaly rescue", "bright or large events seen in a single frame (flashes, glints)",
@@ -257,10 +308,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
         @Override
         public void showSettingsTab(String tabTitle) {
-            int index = settingsTabs.indexOfTab(tabTitle);
-            if (index >= 0) {
-                settingsTabs.setSelectedIndex(index);
-            }
+            navigator.showPage(tabTitle);
         }
 
         @Override
@@ -578,7 +626,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
         panel.add(createTabIntro("Low-level detection safeguards. The detection thresholds and the star-mask settings are on the Overview tab. If you get false detections near the edge of the frame increase Void Proximity Radius."));
 
-        panel.add(createSectionHeader("Advanced Settings"));
+        panel.add(createSectionHeader("Detection Safeguards"));
         spinEdgeMargin = addRow(panel, "Edge Margin (Dead Zone)", "Rejects detections too close to the image edge, where alignment and stacking artifacts are common.", intSpinnerModel(jTransientConfig.edgeMarginPixels, 0, 2000, 1));
         spinVoidFraction = addRow(panel, "Void Threshold Fraction", "Pixels darker than this fraction of the local background are treated as registration void or padding, not real data.", doubleSpinnerModel(jTransientConfig.voidThresholdFraction, 0.0, 1.0, 0.01));
         spinVoidRadius = addRow(panel, "Void Proximity Radius", "How far to look for nearby void padding when rejecting edge or interpolation artifacts. Larger values are more aggressive.", intSpinnerModel(jTransientConfig.voidProximityRadius, 0, 200, 1));
@@ -850,13 +898,6 @@ public class DetectionConfigurationPanel extends JPanel {
         return introLabel;
     }
 
-    private JScrollPane buildScrollPane(JPanel content) {
-        JScrollPane scrollPane = new JScrollPane(content);
-        scrollPane.setBorder(null);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
-        return scrollPane;
-    }
-
     private SpinnerNumberModel doubleSpinnerModel(double value, double min, double max, double step) {
         return new SpinnerNumberModel(clampDouble(value, min, max), min, max, step);
     }
@@ -938,6 +979,7 @@ public class DetectionConfigurationPanel extends JPanel {
         headerLabel.setForeground(accentColor());
         headerLabel.setBorder(new EmptyBorder(10, 0, 10, 0));
         headerLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        headerLabel.putClientProperty(SECTION_HEADER, true);
         return headerLabel;
     }
 
@@ -952,48 +994,21 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private JSpinner addRow(JPanel parent, String title, String description, SpinnerModel model) {
-        JPanel row = new JPanel();
-        row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
-        row.setBorder(new EmptyBorder(5, 0, 15, 0));
-
-        JPanel textPanel = new JPanel();
-        textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
-
-        JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
-        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel descLabel = new JLabel("<html>" + description + "</html>");
-        descLabel.setFont(descLabel.getFont().deriveFont(Font.PLAIN, 12f));
-        descLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
-        descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        textPanel.add(titleLabel);
-        textPanel.add(Box.createVerticalStrut(3));
-        textPanel.add(descLabel);
-
-        // Increased height to 85px to safely accommodate multiple lines of description text
-        Dimension textDim = new Dimension(480, 85);
-        textPanel.setPreferredSize(textDim);
-        textPanel.setMinimumSize(textDim);
-        textPanel.setMaximumSize(textDim);
-
-        JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         JSpinner spinner = createSpinner(model);
-        inputWrapper.add(spinner);
-
-        row.add(textPanel);
-        row.add(Box.createHorizontalStrut(20));
-        row.add(inputWrapper);
-        row.add(Box.createHorizontalGlue());
-
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
-        parent.add(row);
-
+        addSettingRow(parent, title, description, spinner);
         return spinner;
     }
 
     private JCheckBox addCheckboxRow(JPanel parent, String title, String description, boolean defaultValue) {
+        JCheckBox checkBox = new JCheckBox();
+        checkBox.setSelected(defaultValue);
+        checkBox.setPreferredSize(new Dimension(80, 26));
+        addSettingRow(parent, title, description, checkBox);
+        return checkBox;
+    }
+
+    /** Adds a setting row (title, description, input and reset button) and registers it with the navigator. */
+    private void addSettingRow(JPanel parent, String title, String description, JComponent input) {
         JPanel row = new JPanel();
         row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
         row.setBorder(new EmptyBorder(5, 0, 15, 0));
@@ -1020,11 +1035,10 @@ public class DetectionConfigurationPanel extends JPanel {
         textPanel.setMinimumSize(textDim);
         textPanel.setMaximumSize(textDim);
 
-        JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        JCheckBox checkBox = new JCheckBox();
-        checkBox.setSelected(defaultValue);
-        checkBox.setPreferredSize(new Dimension(80, 26));
-        inputWrapper.add(checkBox);
+        SettingRow setting = new SettingRow(parent, row, titleLabel, title, description, input);
+        JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        inputWrapper.add(input);
+        inputWrapper.add(setting.resetButton());
 
         row.add(textPanel);
         row.add(Box.createHorizontalStrut(20));
@@ -1034,7 +1048,10 @@ public class DetectionConfigurationPanel extends JPanel {
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         parent.add(row);
 
-        return checkBox;
+        // Keep the row at its own height, so rows do not stretch when a filter leaves only a few of them on a page.
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
+        settingRows.add(setting);
+        navigator.registerRow(setting);
     }
 
     private void applySettingsToMemory() {

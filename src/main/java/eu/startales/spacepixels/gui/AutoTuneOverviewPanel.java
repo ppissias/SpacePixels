@@ -113,7 +113,7 @@ public class AutoTuneOverviewPanel extends JPanel {
 
         JLabel intro = new JLabel("<html><div style='color: #999999; font-size: 12px; padding-bottom: 6px; width: 780px;'>"
                 + "Start here. One Auto-Tune run measures how many false detections each setting causes and how many synthetic "
-                + "faint stars it still finds, for all four profiles. The other tabs hold the detailed settings."
+                + "faint stars it still finds, for all four profiles. The pages on the left hold the detailed settings."
                 + "</div></html>");
         add(left(intro));
 

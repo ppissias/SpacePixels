@@ -138,7 +138,11 @@ Implementation: mainly the toolbar layout of `MainApplicationPanel` (four titled
    - The Overview ends with "Analyses in This Run", in a column beside Core Settings, so the whole page fits without scrolling. Its switches share their `ButtonModel` with the checkboxes on the detailed tabs, so they always agree.
    - The Detect group has a "Variable-star photometry" checkbox, bound to the same setting.
    - The Astrometry group reads "Solve one frame to identify objects" until a frame is solved, with a tooltip that explains what solving enables.
-3. Left-hand navigation, changed-value markers, search, and collapsed expert blocks.
+3. Left-hand navigation, changed-value markers, search, and collapsed expert blocks. **Done** (2026-10-07):
+   - `SettingsNavigator` and `SettingRow` replace the 10 tabs with a grouped page list.
+   - Search box (Ctrl+F) and "Show only changed" filter, both with match counts per page.
+   - Settings that differ from their defaults are marked, with a `Reset` button each.
+   - Collapsible expert sections. "Moving Objects" is now "Track Linking", and "Advanced Visualization" is now "Report Visualization".
 4. The post-run summary.
 
 ### 4. Remove friction around Apply and Save

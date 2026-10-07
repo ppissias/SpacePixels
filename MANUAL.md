@@ -250,7 +250,7 @@ Runs the multi-pass iterative workflow intended for large datasets where the sta
 
 #### Variable-star photometry
 
-Switches the variable-star analysis on or off for the next `Detect Moving Targets` run. It is the same setting as `Enable Variable-Star Detection` in the `Variable Stars` tab and on the Overview, so all three stay in step. The analysis measures the field stars in every frame and reports light curves and variable-star candidates. The iterative mode skips it. To match candidates against AAVSO VSX, plate-solve one frame first.
+Switches the variable-star analysis on or off for the next `Detect Moving Targets` run. It is the same setting as `Enable Variable-Star Detection` on the `Variable Stars` page and on the Overview, so all three stay in step. The analysis measures the field stars in every frame and reports light curves and variable-star candidates. The iterative mode skips it. To match candidates against AAVSO VSX, plate-solve one frame first.
 
 #### Edit settings…
 
@@ -327,6 +327,36 @@ The tab shows:
 
 The `Detection Settings` tab controls the JTransient profile and SpacePixels-specific visualization settings.
 
+### Navigation, search and changed settings
+
+A page list on the left replaces the old row of tabs:
+
+| Group | Pages |
+|---|---|
+| (top) | `Overview` |
+| DETECTION | `Object Detection`, `Streak Detection`, `Quality Control` |
+| MOVING OBJECTS | `Track Linking`, `Anomaly Detection`, `Slow Movers`, `Residual Analysis` |
+| VARIABLE STARS | `Variable Stars` |
+| REPORT | `Report Visualization` |
+
+**Search.** The search box above the list (`Ctrl+F`) filters every page at once by setting name, description or section. The list shows the number of matches per page. If the open page has none, the first page with a match opens.
+
+**Show only changed.** Shows only the settings that differ from their built-in defaults. The checkbox shows how many there are. Without the filter, a dot after a page name marks a page with changed settings.
+
+**Changed settings.**
+
+- A setting that differs from its default shows its title in the accent colour.
+- A `Reset` button next to it restores the default, and its tooltip shows the default value.
+- Section headers count their changed settings.
+
+**Expert sections.** These start collapsed, showing for example "▸ Advanced Settings · 8 settings":
+
+- the `Advanced Settings` blocks;
+- `Linearity Checks` and `Candidate Gates` on `Variable Stars`;
+- `Absolute Minimum Tolerances` and `Single Frame Analytics` on `Quality Control`.
+
+Click the header to open or close one. While a search or the changed filter is active, matching settings inside collapsed sections are shown anyway.
+
 ### Applying and saving
 
 Every change applies to the current session as soon as you make it; there is no Apply button. The footer shows `✓ Saved settings in use` or `● Unsaved changes`.
@@ -335,9 +365,9 @@ Every change applies to the current session as soon as you make it; there is no 
 - `Revert` returns every setting to the last saved state.
 - `Load Defaults` loads a fresh JTransient `DetectionConfig` into the current session. The saved profile is unchanged until you save, and `Revert` undoes it.
 
-### Overview tab
+### Overview page
 
-The first tab is the starting point. It has three parts.
+The first page is the starting point. It has three parts.
 
 **Auto-Tune**
 
@@ -370,7 +400,7 @@ What `Detect Moving Targets` looks for besides moving objects, each with a switc
 - Residual analysis
 - Variable-star photometry: skipped in iterative mode; VSX matching needs a plate-solved frame
 
-The switches are the same settings as the checkboxes on the detailed tabs.
+The switches are the same settings as the checkboxes on the detailed pages.
 
 The tune result belongs to the imported session; importing another dataset clears the table.
 
@@ -422,7 +452,7 @@ Most other settings are preserved from your current base configuration. The `Con
 - `Balanced` is the default middle ground
 - `Aggressive` allows more leakage to preserve faint-target sensitivity
 
-### Tab breakdown
+### Page breakdown
 
 #### Overview
 
@@ -433,7 +463,7 @@ Holds Auto-Tune and the core settings (see above). The per-frame detection sigma
 
 #### Object Detection
 
-Controls the low-level extraction safeguards (the star-mask settings are on the Overview tab):
+Controls the low-level extraction safeguards (the star-mask settings are on the Overview page):
 
 - physical edge margin
 - registration-void threshold and proximity radius
@@ -453,7 +483,7 @@ Controls elongated-object classification and streak linking:
 
 Single-frame streaks that fail the peak-sigma or binary-star-like shape checks can still remain as standalone post-veto streak detections; they are just not promoted to one-point streak tracks.
 
-#### Moving Objects
+#### Track Linking
 
 Controls point-source track construction:
 
@@ -530,7 +560,7 @@ Controls the optional stationary-star photometry stage, which looks for stars wh
 
 The linearity checks can only detect non-linearity, not prove linearity: use the original, unstretched sub-frames. Photometry is skipped in the iterative pipeline, because its time-spaced subsets would only repeat it on partial data.
 
-#### Advanced Visualization
+#### Report Visualization
 
 Contains visualization-only controls such as:
 
@@ -814,7 +844,7 @@ The unclassified inspector uses the median stack as a quiet background and color
 
 ### Optional AI report sections
 
-If you enable the checkbox in `Detection Settings -> Advanced Visualization`, the report also includes:
+If you enable the checkbox in `Detection Settings -> Report Visualization`, the report also includes:
 
 - `The AI's Perspective: Signal Weave`
 - `The AI's Perspective: Hidden Rhythms`

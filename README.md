@@ -210,7 +210,7 @@ The standard pipeline exports an HTML session report plus PNG and GIF assets. De
 - Variable-star photometry (when enabled): readiness verdict and checks, noise model, per-frame diagnostics, candidate light curves, CSV exports, and a per-candidate button that looks the position up in AAVSO VSX
 - Optional AI creative report sections
 
-The AI creative sections are controlled by a session-only checkbox in `Detection Settings -> Advanced Visualization -> Optional Report Sections`. They are off by default and are not persisted with the saved detection profile.
+The AI creative sections are controlled by a session-only checkbox in `Detection Settings -> Report Visualization -> Optional Report Sections`. They are off by default and are not persisted with the saved detection profile.
 
 
 ## Command-line utilities
