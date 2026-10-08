@@ -114,7 +114,7 @@ For the underlying detection logic and the meaning of the engine configuration o
 - Runs a standard multi-frame detection pipeline for moving targets, streak tracks, single-frame streaks, and bright anomalies.
 - Reviews maximum-stack elongated morphology candidates using geometric shape and exact median-mask overlap filters; these are not confirmed moving tracks.
 - Provides an iterative detection mode for large datasets and very slow targets.
-- Auto-tunes the detection settings for each session. The default calibrated tuner measures false detections and sensitivity on the session's own frames and offers four profiles: conservative, balanced, aggressive and maximum (as sensitive as possible, for small sensors or targeted searches for a faint object). The original score-based tuner is still available.
+- Auto-tunes the detection settings for each session. The default calibrated tuner measures false detections and sensitivity on the session's own frames and offers four profiles: low, medium, high (the default) and maximum (as sensitive as possible, for small sensors or targeted searches for a faint object). The original score-based tuner is still available.
 - Optionally measures the photometry of the stationary stars and reports variable-star candidates with light curves, readiness checks and a lookup in the AAVSO VSX catalogue. Switch it on with the `Variable-star photometry` checkbox next to the Detect button; plate-solve one frame so candidates can be matched against VSX.
 - Generates an HTML report with diagnostics, GIFs, geometric overlays, global maps, object-identification links, and optional AI-themed summary sections.
 - Supports manual transient inspection and frame-by-frame single-image detection preview.
@@ -180,7 +180,7 @@ To generate a local distribution with launch scripts:
 
 ## Typical GUI workflow
 
-1. Import a directory of aligned FITS files, or a XISF-only directory, from `File -> Import aligned FITS/XISF files`.
+1. Import a directory of aligned FITS files, or a XISF-only directory, with `Import Aligned Frames…` (the first button of the `1 Prepare` group), or drop the folder onto the window.
 2. If the sequence is compressed or 32-bit, let SpacePixels decompress or standardize it first.
 3. If the sequence is color, run `Convert to Mono` (group 1 Prepare).
 4. Optionally configure ASTAP and observatory metadata in the `Astrometry Config` tab, and plate-solve one frame (group 2 Astrometry) so the report can identify asteroids (JPL, SkyBoT) and variable stars (AAVSO VSX).
@@ -241,19 +241,19 @@ Packaged launcher examples:
 
 - Windows:
   - `bin\\batchDetect.bat "C:\\astro\\sequence" "config\\default_detection_profile.json"`
-  - `bin\\batchDetect.bat "C:\\astro\\sequence" "config\\default_detection_profile.json" --auto-tune aggressive`
+  - `bin\\batchDetect.bat "C:\\astro\\sequence" "config\\default_detection_profile.json" --auto-tune high`
 - Linux/macOS:
-  - `bin/batchDetect "/data/sequence" "config/default_detection_profile.json" --auto-tune aggressive`
+  - `bin/batchDetect "/data/sequence" "config/default_detection_profile.json" --auto-tune high`
 
 Gradle task examples:
 
 - Windows:
   - `gradlew.bat batchDetect -PbatchArgs="\"C:\\astro\\sequence\" \"src\\dist\\config\\default_detection_profile.json\""`
-  - `gradlew.bat batchDetect -PbatchArgs="\"C:\\astro\\sequence\" \"src\\dist\\config\\default_detection_profile.json\" --auto-tune aggressive"`
+  - `gradlew.bat batchDetect -PbatchArgs="\"C:\\astro\\sequence\" \"src\\dist\\config\\default_detection_profile.json\" --auto-tune high"`
 - Linux/macOS:
-  - `./gradlew batchDetect -PbatchArgs="\"/data/sequence\" \"src/dist/config/default_detection_profile.json\" --auto-tune aggressive"`
+  - `./gradlew batchDetect -PbatchArgs="\"/data/sequence\" \"src/dist/config/default_detection_profile.json\" --auto-tune high"`
 
-`batchDetect` accepts a SpacePixels detection-profile JSON and can optionally run Auto-Tune with `conservative`, `balanced`, `aggressive`, or `maximum`, using `--tuner calibrated` (default) or `--tuner legacy`.
+`batchDetect` accepts a SpacePixels detection-profile JSON and can optionally run Auto-Tune with `low`, `medium`, `high` or `maximum` (the earlier names conservative, balanced and aggressive still work), using `--tuner calibrated` (default) or `--tuner legacy`.
 
 With the Gradle task, `-PbatchMaxHeap=8g` sets a fixed JVM heap instead of the default of up to 80% of RAM. Large sessions (for example 33 frames of 61 megapixels) need about 11 GB.
 

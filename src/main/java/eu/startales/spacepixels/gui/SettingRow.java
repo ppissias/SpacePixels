@@ -14,8 +14,8 @@ import java.awt.*;
 import java.util.Locale;
 
 /**
- * One setting on a detailed settings page: its row, its input, and its default value. A setting that differs from
- * its default shows its title in the accent colour and a button that resets it.
+ * One setting on a detailed settings page: its row, its input, and its saved value. A setting that differs from
+ * the saved configuration shows its title in the accent colour and a button that returns it to the saved value.
  */
 final class SettingRow {
 
@@ -28,7 +28,7 @@ final class SettingRow {
     private final JLabel titleLabel;
     private final Color normalTitleColor;
     private final JButton resetButton = new JButton("Reset");
-    private Object defaultValue;
+    private Object savedValue;
     private Runnable changeListener = () -> { };
 
     /** Section header label the row belongs to, set by the navigator. */
@@ -46,7 +46,7 @@ final class SettingRow {
         resetButton.putClientProperty("JButton.buttonType", "toolBarButton");
         resetButton.setFocusable(false);
         resetButton.setVisible(false);
-        resetButton.addActionListener(e -> resetToDefault());
+        resetButton.addActionListener(e -> resetToSaved());
 
         if (input instanceof JSpinner) {
             ((JSpinner) input).addChangeListener(e -> refresh());
@@ -70,20 +70,20 @@ final class SettingRow {
         return ((AbstractButton) input).isSelected();
     }
 
-    /** Records the current value as the default. */
-    void captureDefault() {
-        defaultValue = value();
+    /** Records the current value as the saved value (after loading or saving the configuration). */
+    void captureSaved() {
+        savedValue = value();
     }
 
     boolean isChanged() {
-        if (defaultValue == null) {
+        if (savedValue == null) {
             return false;
         }
         Object current = value();
-        if (current instanceof Number && defaultValue instanceof Number) {
-            return Math.abs(((Number) current).doubleValue() - ((Number) defaultValue).doubleValue()) > 1e-9;
+        if (current instanceof Number && savedValue instanceof Number) {
+            return Math.abs(((Number) current).doubleValue() - ((Number) savedValue).doubleValue()) > 1e-9;
         }
-        return !defaultValue.equals(current);
+        return !savedValue.equals(current);
     }
 
     boolean matches(String query) {
@@ -92,14 +92,14 @@ final class SettingRow {
                 || (section != null && section.title.toLowerCase(Locale.ROOT).contains(query));
     }
 
-    void resetToDefault() {
-        if (defaultValue == null) {
+    void resetToSaved() {
+        if (savedValue == null) {
             return;
         }
         if (input instanceof JSpinner) {
-            ((JSpinner) input).setValue(defaultValue);
+            ((JSpinner) input).setValue(savedValue);
         } else {
-            ((AbstractButton) input).setSelected((Boolean) defaultValue);
+            ((AbstractButton) input).setSelected((Boolean) savedValue);
         }
     }
 
@@ -107,8 +107,8 @@ final class SettingRow {
         boolean changed = isChanged();
         titleLabel.setForeground(changed ? DetectionConfigurationPanel.accentColor() : normalTitleColor);
         resetButton.setVisible(changed);
-        resetButton.setToolTipText(defaultValue == null ? null : "Reset to the default (" + format(defaultValue) + ")");
-        titleLabel.setToolTipText(changed ? "Differs from the default (" + format(defaultValue) + ")" : null);
+        resetButton.setToolTipText(savedValue == null ? null : "Back to the saved value (" + format(savedValue) + ")");
+        titleLabel.setToolTipText(changed ? "Changed since the last save (saved: " + format(savedValue) + ")" : null);
         changeListener.run();
     }
 

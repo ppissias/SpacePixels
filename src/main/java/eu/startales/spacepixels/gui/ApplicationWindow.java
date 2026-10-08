@@ -24,6 +24,7 @@ import eu.startales.spacepixels.util.reporting.ReportLookupProxyServer;
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.event.MouseAdapter;
@@ -74,8 +75,8 @@ public class ApplicationWindow {
 
     private final BlinkFrame blinkFrame = new BlinkFrame(getEventBus());
     private final JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
-    private final JMenu fileMenu = new JMenu("File");
-    private final JMenuItem importMenuItem = new JMenuItem("Import aligned FITS/XISF files");
+
+
     private final JLabel updateNoticeLabel = new JLabel();
 
     public static volatile boolean OOM_FLAG = false;
@@ -178,32 +179,62 @@ public class ApplicationWindow {
         setTabEnabled(stretchPanel, false);
         setTabEnabled(detectionConfigurationPanel, false);
 
-        JMenuBar menuBar = new JMenuBar();
-        frmIpodImage.setJMenuBar(menuBar);
-        menuBar.add(fileMenu);
-        menuBar.add(Box.createHorizontalGlue());
+        // No menu bar: importing is the first button of the Main tab's workflow strip (or a folder dropped on the
+        // window), and the "new version" notice sits at the right end of the status bar.
         updateNoticeLabel.setFont(updateNoticeLabel.getFont().deriveFont(Font.PLAIN, 11f));
         updateNoticeLabel.setForeground(new Color(155, 155, 155));
-        updateNoticeLabel.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 10));
+        updateNoticeLabel.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 4));
         updateNoticeLabel.setVisible(false);
-        menuBar.add(updateNoticeLabel);
+        mainApplicationPanel.setUpdateNotice(updateNoticeLabel);
 
-        // --- REFACTORED MENU LISTENER ---
-        importMenuItem.addActionListener(e -> {
-            logger.info("Will try to import FITS/XISF files.");
-            final JFileChooser fc = new JFileChooser();
-            fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-            fc.setDialogTitle("Directory containing aligned FITS or XISF images");
-
-            if (fc.showOpenDialog(frmIpodImage) == JFileChooser.APPROVE_OPTION) {
-                File file = fc.getSelectedFile();
-                // Hand the work off to the background task
-                new Thread(new FitsImportTask(eventBus, file)).start();
+        TransferHandler folderDrop = new TransferHandler() {
+            @Override
+            public boolean canImport(TransferSupport support) {
+                return support.isDataFlavorSupported(DataFlavor.javaFileListFlavor) && mainApplicationPanel.isImportEnabled();
             }
-        });
 
-        fileMenu.add(importMenuItem);
+            @Override
+            @SuppressWarnings("unchecked")
+            public boolean importData(TransferSupport support) {
+                if (!canImport(support)) {
+                    return false;
+                }
+                try {
+                    List<File> files = (List<File>) support.getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
+                    if (files.isEmpty()) {
+                        return false;
+                    }
+                    File dropped = files.get(0);
+                    importFolder(dropped.isDirectory() ? dropped : dropped.getParentFile());
+                    return true;
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Could not import the dropped folder", e);
+                    return false;
+                }
+            }
+        };
+        frmIpodImage.setTransferHandler(folderDrop);
+        mainApplicationPanel.installFolderDrop(folderDrop);
+
         startReleaseCheck();
+    }
+
+    /** Asks for a folder of aligned frames and imports it. */
+    public void chooseAndImportFolder() {
+        logger.info("Will try to import FITS/XISF files.");
+        final JFileChooser fc = new JFileChooser();
+        fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        fc.setDialogTitle("Folder containing aligned FITS or XISF images");
+        if (fc.showOpenDialog(frmIpodImage) == JFileChooser.APPROVE_OPTION) {
+            importFolder(fc.getSelectedFile());
+        }
+    }
+
+    /** Imports a folder of aligned frames in the background. */
+    public void importFolder(File folder) {
+        if (folder != null && folder.isDirectory()) {
+            new Thread(new FitsImportTask(eventBus, folder)).start();
+        }
     }
 
     // --- EVENT BUS SUBSCRIBERS ---
@@ -320,7 +351,7 @@ public class ApplicationWindow {
     }
 
     public void setMenuState(boolean state) {
-        importMenuItem.setEnabled(state);
+        mainApplicationPanel.setImportEnabled(state);
     }
 
     public BlinkFrame getBlinkFrame() {

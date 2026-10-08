@@ -58,7 +58,7 @@ public class AutoTunerRealDataDiagnosticsIT {
 
         long start = System.currentTimeMillis();
         JTransientAutoTuner.AutoTunerResult result = CalibratedAutoTuner.tune(pool, base,
-                JTransientAutoTuner.AutoTuneProfile.BALANCED, null);
+                JTransientAutoTuner.AutoTuneProfile.MEDIUM, null);
         System.out.println(result.telemetryReport);
         System.out.printf("Calibration wall time: %.1f s%n", (System.currentTimeMillis() - start) / 1000.0);
         assertTrue(result.telemetryReport, result.success);

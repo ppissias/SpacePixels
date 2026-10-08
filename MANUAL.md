@@ -119,11 +119,9 @@ The application is split into four tabs:
 
 Tabs other than `Main` stay disabled until a sequence is imported successfully.
 
-### File menu
+### Importing
 
-The menu bar currently exposes a single import action:
-
-- `File -> Import aligned FITS/XISF files`
+There is no menu bar. Import a sequence with `Import Aligned Frames…`, the first button of the `1 Prepare` group (highlighted until something is imported), or drop the folder onto the window. When a newer SpacePixels release exists, a "New version" notice appears at the right end of the status bar; click it to open the releases page.
 
 ### Main tab
 
@@ -146,7 +144,7 @@ The `Main` tab contains:
 
 ### Basic import flow
 
-1. Open `File -> Import aligned FITS/XISF files`.
+1. Click `Import Aligned Frames…` in the `1 Prepare` group and choose the folder, or drop the folder onto the window. Before anything is imported, this button is highlighted. There is no menu bar; when a newer release exists, a "New version" notice appears at the right end of the status bar.
 2. Select the directory containing your aligned FITS or XISF sequence.
 3. SpacePixels scans the folder and validates the frames.
 
@@ -251,6 +249,8 @@ Runs the transient detector across the sequence and opens a dedicated frame brow
 
 The primary action (highlighted button). Runs the full standard multi-frame detection and HTML export pipeline.
 
+If a run returns more than 50 detections (100 per pass in iterative mode), a **High Detection Count Warning** asks before the report is generated. It lists the results by kind: moving objects (tracks, streaks, suspected streak groupings), single-frame anomalies, slow-mover candidates (maximum stack), residual analysis (local rescue candidates and local activity clusters), variable stars, and whether a plate-solved frame is available for sky coordinates and identification. It also names the largest group. Many tracks or anomalies usually mean the Detection Sigma is too low.
+
 #### Detect Iteratively (large datasets)
 
 Runs the multi-pass iterative workflow intended for large datasets where the standard full run may be too memory-heavy.
@@ -352,13 +352,14 @@ A page list on the left replaces the old row of tabs:
 
 **Search.** The search box above the list (`Ctrl+F`) filters every page at once by setting name, description or section. The list shows the number of matches per page. If the open page has none, the first page with a match opens.
 
-**Show only changed.** Shows only the settings that differ from their built-in defaults. The checkbox shows how many there are. Without the filter, a dot after a page name marks a page with changed settings.
+**Show only unsaved changes.** Shows only the settings changed since the configuration was last saved, including the core settings on the Overview. The checkbox shows how many there are. Without the filter, a dot after a page name marks a page with unsaved changes.
 
-**Changed settings.**
+**Changed settings.** Changes are marked against your **saved configuration**. The built-in starting values only matter until you first save.
 
-- A setting that differs from its default shows its title in the accent colour.
-- A `Reset` button next to it restores the default, and its tooltip shows the default value.
+- A setting changed since the last save shows its name in the accent colour.
+- On the detailed pages, a `Reset` button next to it returns it to the saved value, and its tooltip shows that value.
 - Section headers count their changed settings.
+- `Save` makes the current values the saved ones, so all marks disappear. `Revert` returns every setting to the saved values.
 
 **Expert sections.** These start collapsed, showing for example "▸ Advanced Settings · 8 settings":
 
@@ -385,7 +386,7 @@ The first page is the starting point. It has three parts.
 - `Tuner`, `Apply after run` and `Run Auto-Tune`.
 - How one run covers every profile: the calibrated tuner measures every combination of settings once (noise detections and test stars found). A profile is only a budget of noise detections per megapixel per frame, so each profile then picks the most sensitive combination within its budget from the same measurements. Choosing the profile takes no extra measuring.
 - A table with the measured result of every profile, filled by one calibrated run:
-  - **Profile**, with its budget of noise detections, for example `Balanced (≤ 0.2)`;
+  - **Profile**, with its budget of noise detections, for example `Medium (≤ 0.4)`;
   - **Detection σ / grow / min px**: the per-frame detection settings;
   - **Star mask σ / grow / min px** and **Mask overlap**: the master star mask and how much a detection may overlap it;
   - **Noise detections / MPix / frame**: detections that are not real objects (noise peaks and star leftovers the settings let through), with ⚠ when no setting met the profile's budget;
@@ -394,16 +395,17 @@ The first page is the starting point. It has three parts.
   - **Detection limit (SNR)**: the peak signal-to-noise at which half of the test stars are found. Lower is more sensitive; halving it reaches objects about 0.75 mag fainter;
   - **Sky masked**: the share of the sky hidden by the star mask.
 - When the run finishes, the profile chosen in `Apply after run` is applied. To switch, select another row and click `Use Selected Profile`, or double-click the row; no re-run is needed.
-- The legacy tuner is different: its profile steers the search itself, so it tunes one profile per run and shows one row. With the legacy tuner selected, the box is labelled `Profile` and offers no `Maximum` (the legacy tuner would treat it like Aggressive).
+- The legacy tuner is different: its profile steers the search itself, so it tunes one profile per run and shows one row. With the legacy tuner selected, the box is labelled `Profile` and offers no `Maximum` (the legacy tuner would treat it like High).
 - Each tuner keeps its own last result for the session: switching the `Tuner` box shows that tuner's table, or an empty one if it has not run yet. The ● marks the applied profile only in the table of the tuner that produced it.
 - `Measurement Report…` shows the full tuner report.
 - `Preview on Frame…` runs object detection on the frame selected in the Main tab and shows the detection mask.
+- `Detect Moving Targets` is the same button as in the main window (same look, same action, `Ctrl+D` works here too), so you can run detection right after choosing a profile.
 
 **Core Settings**
 
 - The settings the tuner chooses: detection sigma, grow sigma and minimum pixels for each frame, and master sigma, master grow sigma, master minimum pixels and mask overlap for the star mask.
-- A blue ● marks a value set by Auto-Tune, and its tooltip shows the value before. Editing the value removes the mark.
-- The main window's Detect group shows which settings are in use, for example "Settings: Balanced, auto-tuned, edited".
+- A blue ● marks a value set by Auto-Tune, and its tooltip shows the value before. Editing the value, or saving, removes the mark. A blue name marks a change since the last save.
+- The main window's Detect group shows which settings are in use, for example "Settings: High, auto-tuned, edited".
 
 **Test Star Mask…** (under the star-mask settings) opens the **Star Mask Explorer**. Use it to try star mask settings and see the veto mask the detection run would use.
 
@@ -446,17 +448,17 @@ SpacePixels chooses the frame pool this way:
 
 It requires at least four usable monochrome frames in the SpacePixels GUI. JTransient's standalone default sample size is five, but SpacePixels temporarily lowers the sample size when a valid smaller pool is available.
 
-For long sequences, the `Max Frames For Auto-Tuner` setting limits the candidate pool. When the sequence is longer than that limit, SpacePixels builds a deterministic pool from:
+For long sequences, the `Frames Used by Auto-Tune (both tuners)` setting (default 30, on the Quality Control page) limits the frames given to either tuner; more frames give the calibrated tuner more measurements on small sensors and a master stack closer to the real run, fewer use less memory on large sensors. When the sequence is longer than that limit, SpacePixels builds a deterministic pool from:
 
 - best-quality frames
 - median-quality frames
 - evenly spaced sequence coverage
 
-The profile box sets the sensitivity: `Conservative` (low, fewest false detections), `Balanced` (medium), `Aggressive` (high, close to the noise level) and `Maximum` (as sensitive as possible; for small sensors or targeted searches for a faint object).
+The profile box sets the sensitivity: `Low` (fewest noise detections), `Medium`, `High` (close to the noise level; the default) and `Maximum` (as sensitive as possible; for small sensors or targeted searches for a faint object). SpacePixels remembers the profile you chose last. Earlier versions called the first three Conservative, Balanced and Aggressive; the command line still accepts those names.
 
 There are two tuners, selected with the `Tuner` box next to the profile box (and `--tuner` on the command line):
 
-- `Calibrated (measured)`, the default. It leaves out blank or badly registered frames, cuts crops from your frames (the centre and corners, or a grid on large sensors; small sensors are measured on more frames), and tries every combination of settings on them. For each combination it measures how many false detections it produces (noise from a negative image of the frames; star leakage, including hot pixels that follow the drift; and other real-frame artefacts above what the strictest settings see), how much sky the star mask hides, and how many synthetic stars shaped like yours it recovers at peak signal-to-noise 2 to 15. Pieces of satellite trails are recognised by a more sensitive streak pass and not counted as false detections. Each profile is a budget of false detections per megapixel per frame (Conservative 0.05, Balanced 0.2, Aggressive 0.6, Maximum 3.5); within that budget it picks the most sensitive settings, so each profile is never less sensitive than the one before it. `Maximum` is meant for small sensors or targeted searches for a faint object: because the budget is per megapixel, on a large sensor it leaves many more candidates to review. It also tunes the master map (`Master Sigma`, `Master Grow Sigma`, `Master Min Pixels`), and derives the candidate object sizes from your measured star FWHM. It needs at least five usable frames. The Overview table and the report show the measured false-detection rate, the share of synthetic sources recovered, the signal-to-noise at which half are recovered, and the masked sky fraction.
+- `Calibrated (measured)`, the default. It leaves out blank or badly registered frames, cuts crops from your frames (the centre and corners, or a grid on large sensors; small sensors are measured on more frames), and tries every combination of settings on them. For each combination it measures how many false detections it produces (noise from a negative image of the frames; star leakage, including hot pixels that follow the drift; and other real-frame artefacts above what the strictest settings see), how much sky the star mask hides, and how many synthetic stars shaped like yours it recovers at peak signal-to-noise 2 to 15. Pieces of satellite trails are recognised by a more sensitive streak pass and not counted as false detections. Each profile is a budget of false detections per megapixel per frame (Low 0.05, Medium 0.4, High 1.5, Maximum 3.5); within that budget it picks the most sensitive settings, so each profile is never less sensitive than the one before it. `Maximum` is meant for small sensors or targeted searches for a faint object: because the budget is per megapixel, on a large sensor it leaves many more candidates to review. It also tunes the master map (`Master Sigma`, `Master Grow Sigma`, `Master Min Pixels`), and derives the candidate object sizes from your measured star FWHM. It needs at least five usable frames. The Overview table and the report show the measured false-detection rate, the share of synthetic sources recovered, the signal-to-noise at which half are recovered, and the masked sky fraction.
 - `Legacy (score-based)`, the original tuner, kept for comparison. Its steps are described below.
 
 The legacy tuner:
@@ -477,11 +479,11 @@ The legacy tuner actively changes:
 - `maxMaskOverlapFraction`
 - `maxStarJitter`
 
-Most other settings are preserved from your current base configuration. The `Conservative`, `Balanced`, and `Aggressive` profiles use the same search grid but different scoring policies (`Maximum` is treated like `Aggressive`):
+Most other settings are preserved from your current base configuration. The `Low`, `Medium` and `High` profiles use the same search grid but different scoring policies (`Maximum` is treated like `High` and is not offered for the legacy tuner):
 
-- `Conservative` suppresses transient leakage more strongly
-- `Balanced` is the default middle ground
-- `Aggressive` allows more leakage to preserve faint-target sensitivity
+- `Low` suppresses transient leakage more strongly
+- `Medium` is the middle ground
+- `High` allows more leakage to preserve faint-target sensitivity
 
 ### Page breakdown
 
@@ -548,7 +550,7 @@ Rescued anomalies can remain as standalone peak- or integrated-sigma anomalies. 
 Controls maximum-stack slow-mover morphology candidate selection:
 
 - slow-mover branch enable switch
-- maximum- and median-stack extraction sigma, grow sigma, and minimum pixels
+- maximum- and median-stack extraction sigma, grow sigma, and minimum pixels. They are independent of the per-frame detection settings, because the stacks have different noise than single frames, and Auto-Tune does not change them.
 - geometric minimum and maximum axis ratios, plus optional minimum fill factor
 - exact median-object mask overlap bounds (zero minimum permits no median persistence)
 - minimum frame support and maximum stationary likelihood, both on a 0–100 percentage scale
@@ -952,7 +954,7 @@ For both moving tracks and streak tracks, SpacePixels also adds Stellarium Web l
 
 Usage pattern:
 
-`batchDetect <fits_directory> <detection_config.json> [--auto-tune <conservative|balanced|aggressive|maximum>] [--tuner <calibrated|legacy>]`
+`batchDetect <fits_directory> <detection_config.json> [--auto-tune <low|medium|high|maximum>] [--tuner <calibrated|legacy>]`
 
 Important limitations:
 
@@ -967,9 +969,9 @@ Important limitations:
 Gradle example:
 
 - Windows:
-  - `gradlew.bat batchDetect -PbatchArgs="\"C:\\astro\\sequence\" \"src\\dist\\config\\default_detection_profile.json\" --auto-tune aggressive"`
+  - `gradlew.bat batchDetect -PbatchArgs="\"C:\\astro\\sequence\" \"src\\dist\\config\\default_detection_profile.json\" --auto-tune high"`
 - Linux/macOS:
-  - `./gradlew batchDetect -PbatchArgs="\"/data/sequence\" \"src/dist/config/default_detection_profile.json\" --auto-tune aggressive"`
+  - `./gradlew batchDetect -PbatchArgs="\"/data/sequence\" \"src/dist/config/default_detection_profile.json\" --auto-tune high"`
 
 Internally, `BatchDetectionCli` reuses the same public Java pipeline API described below. It keeps strict input behavior by using `FAIL_IF_NOT_READY`, but it still uses SpacePixels' candidate-pool builder when Auto-Tune is enabled.
 
@@ -1002,7 +1004,7 @@ SpacePixelsPipelineApi api = new DefaultSpacePixelsPipelineApi();
 
 SpacePixelsPipelineRequest request = SpacePixelsPipelineRequest.builder(new File("C:\\astro\\sequence"))
         .detectionConfig(new DetectionConfig())
-        .autoTuneProfile(JTransientAutoTuner.AutoTuneProfile.BALANCED)
+        .autoTuneProfile(JTransientAutoTuner.AutoTuneProfile.MEDIUM)
         .inputPreparationMode(InputPreparationMode.AUTO_PREPARE_TO_16BIT_MONO)
         .generateReport(true)
         .progressListener((percentage, message) -> System.out.println(percentage + "% " + message))

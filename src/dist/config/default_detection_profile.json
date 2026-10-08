@@ -72,5 +72,5 @@
   "enableLocalActivityClusters": false,
   "localActivityClusterRadiusPixels": 10.0,
   "localActivityClusterMinFrames": 3,
-  "autoTuneMaxCandidateFrames": 20
+  "autoTuneMaxCandidateFrames": 30
 }

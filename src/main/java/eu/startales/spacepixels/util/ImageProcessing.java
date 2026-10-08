@@ -70,7 +70,10 @@ public class ImageProcessing {
         public final int slowMoverCandidates;
         public final int localRescueCandidates;
         public final int localActivityClusters;
-        public final int potentialSlowMovers;
+        /** Photometry verdict ("READY", "LIMITED", "NOT_READY") or null when variable-star detection did not run. */
+        public final String photometryVerdict;
+        public final int variableStarCandidates;
+        public final int possibleVariableStars;
 
         DetectionSummary(int totalDetections,
                          int singleStreaks,
@@ -80,7 +83,10 @@ public class ImageProcessing {
                          int suspectedStreakTracks,
                          int slowMoverCandidates,
                          int localRescueCandidates,
-                         int localActivityClusters) {
+                         int localActivityClusters,
+                         String photometryVerdict,
+                         int variableStarCandidates,
+                         int possibleVariableStars) {
             this.totalDetections = totalDetections;
             this.singleStreaks = singleStreaks;
             this.streakTracks = streakTracks;
@@ -90,7 +96,60 @@ public class ImageProcessing {
             this.slowMoverCandidates = slowMoverCandidates;
             this.localRescueCandidates = localRescueCandidates;
             this.localActivityClusters = localActivityClusters;
-            this.potentialSlowMovers = slowMoverCandidates + localRescueCandidates;
+            this.photometryVerdict = photometryVerdict;
+            this.variableStarCandidates = variableStarCandidates;
+            this.possibleVariableStars = possibleVariableStars;
+        }
+
+        /**
+         * The warning shown when a run returns many detections, grouped by kind of result. Slow-mover candidates
+         * (maximum stack) and local rescue candidates (residual analysis of leftover transients) are different
+         * analyses and are listed separately.
+         *
+         * @param plateSolved whether a plate-solved frame gives the report sky coordinates
+         * @param limit the count above which the warning is shown
+         */
+        public String warningMessage(boolean plateSolved, int limit) {
+            String photometry;
+            if (photometryVerdict == null || "NOT_RUN".equals(photometryVerdict)) {
+                photometry = "off";
+            } else if ("NOT_READY".equals(photometryVerdict)) {
+                photometry = "session not ready for photometry (see the report)";
+            } else {
+                photometry = variableStarCandidates + " candidates, " + possibleVariableStars + " possible";
+            }
+            return "The engine found " + totalDetections + " detections, more than the usual " + limit + ".\n\n"
+                    + "Moving objects:\n"
+                    + "   Moving-object tracks: " + movingTargets + "\n"
+                    + "   Streak tracks (multi-frame): " + streakTracks + "\n"
+                    + "   Single streaks: " + singleStreaks + "\n"
+                    + "   Suspected streak groupings: " + suspectedStreakTracks + "\n"
+                    + "Single-frame anomalies: " + anomalies + "\n"
+                    + "Slow-mover candidates (maximum stack): " + slowMoverCandidates + "\n"
+                    + "Residual analysis of leftover transients:\n"
+                    + "   Local rescue candidates: " + localRescueCandidates + "\n"
+                    + "   Local activity clusters: " + localActivityClusters + "\n"
+                    + "Variable stars: " + photometry + "\n"
+                    + "Astrometry: " + (plateSolved
+                    ? "a plate-solved frame is available, so the report has sky coordinates and online identification."
+                    : "no plate-solved frame, so the report has no sky coordinates or identification.") + "\n\n"
+                    + "Largest group: " + largestGroup() + ".\n"
+                    + "Generating image crops, GIFs and the HTML report for this many objects takes a long time and uses a lot of disk space.\n"
+                    + "Many tracks or anomalies usually mean the Detection Sigma is too low and noise was linked.\n\n"
+                    + "Do you want to generate the report anyway?";
+        }
+
+        private String largestGroup() {
+            String[] names = {"moving objects", "single-frame anomalies", "slow-mover candidates", "residual analysis"};
+            int[] counts = {movingTargets + streakTracks + singleStreaks + suspectedStreakTracks, anomalies,
+                    slowMoverCandidates, localRescueCandidates + localActivityClusters};
+            int best = 0;
+            for (int i = 1; i < counts.length; i++) {
+                if (counts[i] > counts[best]) {
+                    best = i;
+                }
+            }
+            return names[best] + " (" + counts[best] + ")";
         }
     }
 
@@ -475,6 +534,21 @@ public class ImageProcessing {
      * Loads FITS metadata for interactive use after validating compression state, format
      * consistency, dimensions, and optional auto-conversion paths.
      */
+    /** Whether any imported frame is plate-solved, which gives the report sky coordinates. */
+    public boolean hasPlateSolvedFrame() {
+        try {
+            FitsFileInformation[] files = cachedFileInfo != null ? cachedFileInfo : getFitsfileInformation();
+            for (FitsFileInformation file : files) {
+                if (file.isWcsSolved()) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+            // No frames: nothing is solved.
+        }
+        return false;
+    }
+
     public FitsFileInformation[] getFitsfileInformation() throws Exception {
         File[] fitsFileInformation = getFitsFilesDetails();
         int numFiles = fitsFileInformation.length;

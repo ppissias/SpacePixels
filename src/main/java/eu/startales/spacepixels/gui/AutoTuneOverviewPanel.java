@@ -85,6 +85,7 @@ public class AutoTuneOverviewPanel extends JPanel {
     private final JButton useProfileButton = new JButton("Use Selected Profile");
     private final JButton reportButton = new JButton("Measurement Report…");
     private final JButton previewButton = new JButton("Preview on Frame…");
+    private final JButton detectButton = new JButton("Detect Moving Targets");
     private final JLabel profileLabel = new JLabel();
     private final JLabel tableNoteLabel = new JLabel(" ");
     private final JLabel lastRunLabel = new JLabel(" ");
@@ -94,6 +95,9 @@ public class AutoTuneOverviewPanel extends JPanel {
 
     /** Core settings in display order, with their tuned-value markers. */
     private final Map<JSpinner, JLabel> coreMarkers = new LinkedHashMap<>();
+    private final Map<JSpinner, JLabel> coreLabels = new LinkedHashMap<>();
+    /** Saved value of each core setting, for marking changes since the last save. */
+    private java.util.function.Function<JSpinner, Number> savedValues = spinner -> null;
     private final Map<JSpinner, Number> tunedValues = new LinkedHashMap<>();
     private final Map<JSpinner, Number> valuesBeforeTune = new LinkedHashMap<>();
     private final JPanel coreGrid = new JPanel(new GridBagLayout());
@@ -109,6 +113,7 @@ public class AutoTuneOverviewPanel extends JPanel {
     private final Map<AutoTunerRunner.Algorithm, String> runTextByTuner = new EnumMap<>(AutoTunerRunner.Algorithm.class);
     private AutoTunerRunner.Algorithm runningAlgorithm;
     private AutoTuneProfile appliedProfile;
+    private boolean adjustingProfiles;
     /** The tuner whose result is applied, so the ● marker only shows in that tuner's table. */
     private AutoTunerRunner.Algorithm appliedAlgorithm;
     private String sessionName;
@@ -125,8 +130,10 @@ public class AutoTuneOverviewPanel extends JPanel {
         setBorder(new EmptyBorder(10, 20, 20, 20));
 
         JLabel intro = new JLabel("<html><div style='color: #999999; font-size: 12px; padding-bottom: 6px; width: 480px;'>"
-                + "Start here. One Auto-Tune run measures how many noise detections each setting lets through and how many faint synthetic test "
-                + "stars it still finds, for all four profiles. The pages on the left hold the detailed settings."
+                + "<b>Start here:</b> click <b>Run Auto-Tune</b>. It tests your frames and prepares a ready-to-use set of settings for "
+                + "each sensitivity profile, from <b>Low</b> (fewest false candidates) to <b>Maximum</b> (faintest objects, many more "
+                + "candidates to review). Pick the profile that suits your session in the table (<b>High</b> is the default), then click "
+                + "<b>Detect Moving Targets</b>. The pages on the left hold every setting in detail."
                 + "</div></html>");
         add(left(intro));
 
@@ -137,7 +144,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         JPanel coreColumn = column();
         coreColumn.add(left(DetectionConfigurationPanel.createSectionHeader("Core Settings")));
         coreColumn.add(left(hint("The settings Auto-Tune chooses. <span style='color: #4da6ff;'>●</span> marks a value set by "
-                + "Auto-Tune; editing it removes the mark. Hover a setting for its description.")));
+                + "Auto-Tune; a blue name marks a change since the last save. Save clears both. Hover a setting for its description.")));
         coreGrid.setBorder(new EmptyBorder(8, 0, 0, 0));
         coreColumn.add(left(coreGrid));
         coreColumn.add(Box.createVerticalGlue());
@@ -167,7 +174,9 @@ public class AutoTuneOverviewPanel extends JPanel {
         algorithmCombo.setSelectedItem(AutoTunerRunner.DEFAULT_ALGORITHM);
         algorithmCombo.setToolTipText("Calibrated measures noise, star leakage and sensitivity on your frames and covers all profiles in one run; "
                 + "Legacy is the original score-based tuner, kept for comparison, and tunes one profile per run.");
-        profileCombo.setSelectedItem(AutoTuneProfile.BALANCED);
+        // High unless the user chose another profile before (remembered between sessions).
+        profileCombo.setSelectedItem(savedProfile());
+        profileCombo.addActionListener(e -> rememberProfile());
         profileCombo.setRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
@@ -262,6 +271,8 @@ public class AutoTuneOverviewPanel extends JPanel {
         actions.add(useProfileButton);
         actions.add(reportButton);
         actions.add(previewButton);
+        actions.add(Box.createHorizontalStrut(14));
+        actions.add(detectButton);
         box.add(left(actions));
 
         statusLabel.setBorder(new EmptyBorder(8, 2, 0, 0));
@@ -270,6 +281,23 @@ public class AutoTuneOverviewPanel extends JPanel {
     }
 
     /** Adds a core setting row; the spinner stays owned by the settings panel. */
+    /**
+     * Makes the Detect Moving Targets button here the same as the main window's: same look, same action, and the
+     * same enabled state and tooltip (including the reason when it is not available).
+     */
+    void bindDetectButton(JButton mainButton, Runnable runDetection) {
+        detectButton.setText(mainButton.getText());
+        detectButton.putClientProperty("FlatLaf.style", MainApplicationPanel.PRIMARY_BUTTON_STYLE);
+        detectButton.addActionListener(e -> runDetection.run());
+        Runnable mirror = () -> {
+            detectButton.setEnabled(mainButton.isEnabled());
+            detectButton.setToolTipText(mainButton.getToolTipText());
+        };
+        mainButton.addPropertyChangeListener("enabled", e -> mirror.run());
+        mainButton.addPropertyChangeListener("ToolTipText", e -> mirror.run());
+        mirror.run();
+    }
+
     /** Adds a button under the core settings, enabled while frames are ready and no tune is running. */
     void addCoreAction(JButton button) {
         GridBagConstraints c = new GridBagConstraints();
@@ -318,6 +346,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         coreGrid.add(marker, c);
 
         coreMarkers.put(spinner, marker);
+        coreLabels.put(spinner, label);
         spinner.addChangeListener(e -> refreshMarkers());
     }
 
@@ -432,6 +461,20 @@ public class AutoTuneOverviewPanel extends JPanel {
         refreshMarkers();
     }
 
+    /**
+     * Removes the "set by Auto-Tune" marks after the settings were saved; the applied profile is kept, so the main
+     * window still says which profile the settings came from.
+     */
+    void clearTunedMarkers() {
+        tunedValues.clear();
+        valuesBeforeTune.clear();
+        refreshMarkers();
+        if (appliedProfile != null && !tuning) {
+            statusLabel.setForeground(UIManager.getColor("Label.foreground"));
+            statusLabel.setText(profileName(appliedProfile) + " settings saved; they are used for detection and kept for the next start.");
+        }
+    }
+
     /** One-line description of the settings in use, for the main window. */
     String settingsSummary() {
         if (appliedProfile == null) {
@@ -499,7 +542,38 @@ public class AutoTuneOverviewPanel extends JPanel {
         return false;
     }
 
+    /** Supplies the saved value of each core setting, so values changed since the last save are marked. */
+    void setSavedValues(java.util.function.Function<JSpinner, Number> savedValues) {
+        this.savedValues = savedValues;
+        refreshMarkers();
+    }
+
+    /** Number of core settings that differ from the saved configuration. */
+    int unsavedCoreCount() {
+        int count = 0;
+        for (JSpinner spinner : coreLabels.keySet()) {
+            Number saved = savedValues.apply(spinner);
+            if (saved != null && !sameValue((Number) spinner.getValue(), saved)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private void refreshUnsavedMarks() {
+        Color normal = UIManager.getColor("Label.foreground");
+        for (Map.Entry<JSpinner, JLabel> entry : coreLabels.entrySet()) {
+            Number saved = savedValues.apply(entry.getKey());
+            boolean unsaved = saved != null && !sameValue((Number) entry.getKey().getValue(), saved);
+            entry.getValue().setForeground(unsaved ? DetectionConfigurationPanel.accentColor() : normal);
+            entry.getValue().setToolTipText(unsaved
+                    ? "Changed since the last save (saved: " + formatNumber(saved) + ")"
+                    : entry.getKey().getToolTipText());
+        }
+    }
+
     private void refreshMarkers() {
+        refreshUnsavedMarks();
         for (Map.Entry<JSpinner, JLabel> entry : coreMarkers.entrySet()) {
             Number tuned = tunedValues.get(entry.getKey());
             boolean marked = tuned != null && sameValue((Number) entry.getKey().getValue(), tuned);
@@ -514,7 +588,7 @@ public class AutoTuneOverviewPanel extends JPanel {
             statusLabel.setForeground(UIManager.getColor("Label.foreground"));
             statusLabel.setText(profileName(appliedProfile) + " settings applied"
                     + (editedSinceTune() ? " · manual changes since the tune" : "")
-                    + ". They are in use for detection; Save keeps them for the next start.");
+                    + ". Click Detect Moving Targets to run; Save keeps them for the next start.");
         }
         host.tuningStateChanged();
     }
@@ -531,7 +605,7 @@ public class AutoTuneOverviewPanel extends JPanel {
     private void updateProfileLabel() {
         boolean calibrated = algorithmCombo.getSelectedItem() != AutoTunerRunner.Algorithm.LEGACY;
         profileLabel.setText(calibrated ? "Apply after run:" : "Profile:");
-        String profiles = "Conservative: fewest noise detections. Balanced: medium. Aggressive: close to the noise level.<br>"
+        String profiles = "Low: fewest noise detections. Medium: in between. High (default): close to the noise level.<br>"
                 + "Maximum: as sensitive as possible, with many more candidates to review (for small sensors or targeted searches for faint objects).";
         profileCombo.setToolTipText(calibrated
                 ? "<html>The run measures every setting once and picks the best one for <b>every</b> profile.<br>"
@@ -558,7 +632,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         refreshControls();
     }
 
-    /** The legacy tuner has no Maximum profile (it would tune like Aggressive), so it is not offered there. */
+    /** The legacy tuner has no Maximum profile (it would tune like High), so it is not offered there. */
     private void updateProfileChoices() {
         boolean legacy = selectedAlgorithm() == AutoTunerRunner.Algorithm.LEGACY;
         AutoTuneProfile current = (AutoTuneProfile) profileCombo.getSelectedItem();
@@ -568,8 +642,13 @@ public class AutoTuneOverviewPanel extends JPanel {
                 model.addElement(profile);
             }
         }
-        profileCombo.setModel(model);
-        profileCombo.setSelectedItem(legacy && current == AutoTuneProfile.MAXIMUM ? AutoTuneProfile.AGGRESSIVE : current);
+        adjustingProfiles = true;
+        try {
+            profileCombo.setModel(model);
+            profileCombo.setSelectedItem(legacy && current == AutoTuneProfile.MAXIMUM ? AutoTuneProfile.HIGH : current);
+        } finally {
+            adjustingProfiles = false;
+        }
     }
 
     /** Whether this profile of the shown tuner is the one applied to the settings. */
@@ -730,11 +809,32 @@ public class AutoTuneOverviewPanel extends JPanel {
     // ==========================================
 
     static String profileName(AutoTuneProfile profile) {
-        if (profile == null) {
-            return "";
+        return profile == null ? "" : profile.displayName();
+    }
+
+    private static final String PROFILE_PREFERENCE = "autoTune.profile";
+
+    /** The profile chosen last time, or High. */
+    private static AutoTuneProfile savedProfile() {
+        try {
+            String saved = java.util.prefs.Preferences.userNodeForPackage(AutoTuneOverviewPanel.class).get(PROFILE_PREFERENCE, null);
+            return saved == null ? AutoTuneProfile.HIGH : AutoTuneProfile.parse(saved);
+        } catch (Exception e) {
+            return AutoTuneProfile.HIGH;
         }
-        String name = profile.name().toLowerCase(Locale.ROOT);
-        return Character.toUpperCase(name.charAt(0)) + name.substring(1);
+    }
+
+    /** Remembers the profile the user chose (not the automatic switch when the legacy tuner hides Maximum). */
+    private void rememberProfile() {
+        AutoTuneProfile profile = (AutoTuneProfile) profileCombo.getSelectedItem();
+        if (adjustingProfiles || profile == null) {
+            return;
+        }
+        try {
+            java.util.prefs.Preferences.userNodeForPackage(AutoTuneOverviewPanel.class).put(PROFILE_PREFERENCE, profile.name());
+        } catch (Exception ignored) {
+            // Not remembered; the choice still applies to this session.
+        }
     }
 
     private static boolean sameValue(Number a, Number b) {

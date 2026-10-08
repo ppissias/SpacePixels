@@ -138,8 +138,6 @@ public class DetectionConfigurationPanel extends JPanel {
 
     public DetectionConfigurationPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
-        // The built-in visualization values, before the saved preferences replace them.
-        SpacePixelsVisualizationPreferences visualizationDefaults = SpacePixelsVisualizationPreferences.captureCurrent();
         loadPersistedSettings();
 
         this.previewManager = new TuningPreviewManager(mainAppWindow);
@@ -167,11 +165,23 @@ public class DetectionConfigurationPanel extends JPanel {
         MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
         if (mainPanel != null) {
             mainPanel.bindVariableStarToggle(chkEnableVariableStarDetection.getModel());
+            overviewPanel.bindDetectButton(mainPanel.getDetectButton(), mainPanel::runDetection);
         }
 
         setupConstraints();
-        captureDefaultValues(visualizationDefaults);
+        navigator.setExtraChangedCount("Overview", () -> overviewPanel.unsavedCoreCount());
         navigator.finishBuilding(EXPERT_SECTIONS);
+        // Ctrl+D runs Detect Moving Targets here too, as in the main window.
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ctrl D"), "detectMovingTargets");
+        getActionMap().put("detectMovingTargets", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                MainApplicationPanel main = mainAppWindow.getMainApplicationPanel();
+                if (main != null) {
+                    main.runDetection();
+                }
+            }
+        });
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("ctrl F"), "searchSettings");
         getActionMap().put("searchSettings", new AbstractAction() {
             @Override
@@ -243,35 +253,6 @@ public class DetectionConfigurationPanel extends JPanel {
                 + "and see the resulting veto mask on the stack, with statistics.</html>");
         testStarMaskButton.addActionListener(e -> openStarMaskExplorer());
         overview.addCoreAction(testStarMaskButton);
-    }
-
-    /**
-     * Records the default value of every setting row: the spinners are moved to the built-in defaults, read, and moved
-     * back to the loaded values. No listener applies the defaults to the session meanwhile.
-     */
-    private void captureDefaultValues(SpacePixelsVisualizationPreferences visualizationDefaults) {
-        DetectionConfig loaded = jTransientConfig.clone();
-        SpacePixelsVisualizationPreferences loadedVisualization = SpacePixelsVisualizationPreferences.captureCurrent();
-        int loadedMaxFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
-        boolean wasSuppressed = suppressAutoApply;
-        suppressAutoApply = true;
-        try {
-            setSpinnersFromConfig(new DetectionConfig());
-            visualizationDefaults.applyToRuntime();
-            updateVisualizationSpinnersFromRuntime();
-            setSpinnerValueClamped(spinAutoTuneMaxCandidateFrames, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES);
-            for (SettingRow row : settingRows) {
-                row.captureDefault();
-            }
-
-            loadedVisualization.applyToRuntime();
-            updateVisualizationSpinnersFromRuntime();
-            setSpinnerValueClamped(spinAutoTuneMaxCandidateFrames, loadedMaxFrames);
-            setSpinnersFromConfig(loaded);
-            jTransientConfig = loaded;
-        } finally {
-            suppressAutoApply = wasSuppressed;
-        }
     }
 
     /** The analyses of a run, each switched on the Overview and in step with the checkbox on its detailed tab. */
@@ -362,9 +343,9 @@ public class DetectionConfigurationPanel extends JPanel {
 
         @Override
         public void applyTunedConfig(DetectionConfig tuned) {
+            // The slow-mover thresholds are not copied: they apply to the maximum and median stacks, whose noise
+            // differs from the single frames the tuner measures.
             updateSpinnersFromConfig(tuned);
-            // The tuner leaves slow-mover sigmas untouched; mirror the tuned basic sigmas into them.
-            syncSlowMoverSigmasFromBasicTuning();
             applySettingsToMemory();
             updateSavedState();
         }
@@ -432,6 +413,22 @@ public class DetectionConfigurationPanel extends JPanel {
         }
         footerMessageLabel.setText(" ");
         updateSavedState();
+        navigator.refreshFilters();
+    }
+
+    /** The saved value of a core setting on the Overview, or null before anything is saved. */
+    private Number savedCoreValue(JSpinner spinner) {
+        if (savedConfig == null) {
+            return null;
+        }
+        if (spinner == spinDetectionSigma) return savedConfig.detectionSigmaMultiplier;
+        if (spinner == spinGrowSigma) return savedConfig.growSigmaMultiplier;
+        if (spinner == spinMinPixels) return savedConfig.minDetectionPixels;
+        if (spinner == spinMasterSigma) return savedConfig.masterSigmaMultiplier;
+        if (spinner == spinMasterGrowSigma) return savedConfig.masterGrowSigmaMultiplier;
+        if (spinner == spinMasterMinPix) return savedConfig.masterMinDetectionPixels;
+        if (spinner == spinMaxMaskOverlapFraction) return savedConfig.maxMaskOverlapFraction;
+        return null;
     }
 
     private void rememberSavedState() {
@@ -439,6 +436,9 @@ public class DetectionConfigurationPanel extends JPanel {
         savedAutoTuneMaxCandidateFrames = autoTuneMaxCandidateFrames;
         savedVisualization = SpacePixelsVisualizationPreferences.captureCurrent();
         savedSnapshot = currentSnapshot();
+        // The saved configuration is what changes are marked against (not the built-in starting values).
+        navigator.markAllSaved();
+        overviewPanel.setSavedValues(this::savedCoreValue);
     }
 
     private String currentSnapshot() {
@@ -531,10 +531,6 @@ public class DetectionConfigurationPanel extends JPanel {
             if (growSigma > detSigma) spinMasterSlowMoverGrowSigma.setValue(detSigma);
         });
 
-        // Basic tuning sigma changes are mirrored into the slow-mover sigma settings.
-        spinDetectionSigma.addChangeListener(e -> syncSlowMoverSigmasFromBasicTuning());
-        spinGrowSigma.addChangeListener(e -> syncSlowMoverSigmasFromBasicTuning());
-
         // A stationary threshold above the maximum jump makes geometric tracking self-contradictory.
         spinMaxJump.addChangeListener(e -> {
             double maxJump = ((Number) spinMaxJump.getValue()).doubleValue();
@@ -546,18 +542,6 @@ public class DetectionConfigurationPanel extends JPanel {
             double stationaryThreshold = ((Number) spinRhythmStatThresh.getValue()).doubleValue();
             if (stationaryThreshold > maxJump) spinRhythmStatThresh.setValue(maxJump);
         });
-    }
-
-    /**
-     * Copies the basic tuning Detection Sigma and Grow Sigma into the slow-mover Sigma and Grow Sigma.
-     * Values are read from the spinners so constraint adjustments made by other listeners are respected.
-     */
-    private void syncSlowMoverSigmasFromBasicTuning() {
-        double detSigma = ((Number) spinDetectionSigma.getValue()).doubleValue();
-        double growSigma = ((Number) spinGrowSigma.getValue()).doubleValue();
-        // Set sigma first so the slow-mover grow sigma constraint does not cap the new grow value.
-        setSpinnerValueClamped(spinMasterSlowMoverSigma, detSigma);
-        setSpinnerValueClamped(spinMasterSlowMoverGrowSigma, growSigma);
     }
 
     private void runAutoTuner(JTransientAutoTuner.AutoTuneProfile selectedProfile, AutoTunerRunner.Algorithm algorithm) {
@@ -676,6 +660,8 @@ public class DetectionConfigurationPanel extends JPanel {
                     visualizationWriter,
                     SpacePixelsVisualizationPreferences.captureCurrent());
             rememberSavedState();
+            // Saved values are simply the settings now: drop the "set by Auto-Tune" marks.
+            overviewPanel.clearTunedMarkers();
             updateSavedState();
             footerMessageLabel.setText("Saved to " + detectionProfileFile.getParent());
             footerMessageLabel.setToolTipText("<html>" + detectionProfileFile.getAbsolutePath() + "<br>"
@@ -799,7 +785,7 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        panel.add(createTabIntro("Find elongated shapes in the maximum stack and compare them with sources in the median stack. These are candidates to review, not confirmed moving objects."));
+        panel.add(createTabIntro("Find elongated shapes in the maximum stack and compare them with sources in the median stack. These are candidates to review, not confirmed moving objects. The sigma, grow and minimum pixels below apply to the stacks, whose noise differs from single frames, so they are set separately from the per-frame detection settings (Auto-Tune does not change them)."));
 
         panel.add(createSectionHeader("Common Settings"));
         chkEnableSlowMovers = addCheckboxRow(panel, "Enable Slow-Mover Detection", "Look for elongated shapes in the maximum stack after poor-quality frames are removed.<br>Results are candidates for review, not confirmed tracks.", jTransientConfig.enableSlowMoverDetection);
@@ -902,8 +888,8 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Auto-Tuner Candidate Pool"));
         spinAutoTuneMaxCandidateFrames = addRow(
                 panel,
-                "Max Frames For Auto-Tuner",
-                "Maximum number of frames SpacePixels will hand to the JTransient Auto-Tuner. When the sequence is longer than this, SpacePixels builds a deterministic pool using best-quality, median-quality, and evenly spaced frames.",
+                "Frames Used by Auto-Tune (both tuners)",
+                "Most frames given to Auto-Tune, for both the calibrated and the legacy tuner. When the session has more, SpacePixels picks the best-quality, median-quality and evenly spaced frames. More frames give the calibrated tuner more measurements on small sensors and a master stack closer to the real run; fewer frames use less memory on large sensors (about 120 MB per frame at 61 megapixels).",
                 intSpinnerModel(autoTuneMaxCandidateFrames, SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES, 5000, 1));
 
         panel.add(Box.createVerticalStrut(10));

@@ -135,7 +135,7 @@ SpacePixelsPipelineResult result = new DefaultSpacePixelsPipelineApi().run(
         SpacePixelsPipelineRequest.builder(new File("C:/astro/sequence"))
                 .detectionConfig(new DetectionConfig())
                 .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
-                .autoTuneProfile(JTransientAutoTuner.AutoTuneProfile.BALANCED)
+                .autoTuneProfile(JTransientAutoTuner.AutoTuneProfile.MEDIUM)
                 .autoTuneAlgorithm(AutoTunerRunner.Algorithm.CALIBRATED)
                 .autoTuneMaxCandidateFrames(12)
                 .progressListener((percentage, message) ->
@@ -150,7 +150,7 @@ System.out.println("Telemetry report available: " + (result.getAutoTuneTelemetry
 
 Use this when you want SpacePixels to optimize the effective detection configuration before running the standard pipeline.
 
-Profiles: `CONSERVATIVE`, `BALANCED`, `AGGRESSIVE` and `MAXIMUM` (as sensitive as possible; on large sensors it leaves many candidates, so it is meant for small sensors or targeted searches). `autoTuneAlgorithm(...)` selects the calibrated tuner (default), which measures false detections and sensitivity on the session, or the legacy score-based tuner, which treats `MAXIMUM` like `AGGRESSIVE`.
+Profiles: `LOW`, `MEDIUM`, `HIGH` and `MAXIMUM` (as sensitive as possible; on large sensors it leaves many candidates, so it is meant for small sensors or targeted searches). `autoTuneAlgorithm(...)` selects the calibrated tuner (default), which measures false detections and sensitivity on the session, or the legacy score-based tuner, which treats `MAXIMUM` like `HIGH`.
 
 Progress is reported from 0 to 100% and only moves forward: input preparation up to 15%, Auto-Tune 15-35% when enabled, the detection pipeline up to 90%, and report generation 90-100%.
 

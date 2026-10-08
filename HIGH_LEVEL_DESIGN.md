@@ -234,7 +234,7 @@ Responsibilities:
 
 - start the application
 - wire the four top-level tabs
-- launch import from the File menu
+- launch import (the Import Aligned Frames… button in the Main tab or a folder dropped on the window; there is no menu bar), and show the "new version" notice in the Main tab's status bar
 - enable tabs after successful import
 - listen for import and progress events
 - stop the report lookup proxy on window close
@@ -268,7 +268,7 @@ Owns:
 - `SpacePixelsVisualizationPreferences` load/save
 - current Auto-Tune candidate-frame limit
 - the Overview page (`AutoTuneOverviewPanel`) and the page navigation (`SettingsNavigator`)
-- the default value of every setting row (`SettingRow`), captured once by moving the spinners to a fresh `DetectionConfig` and the built-in visualization values and back
+- the saved value of every setting row (`SettingRow`) and of the Overview core settings, taken after loading and after each Save; changes are marked against it
 - detection preview action through `TuningPreviewManager`
 - Auto-Tune launch through `AutoTuneTask`
 - applying every edit to the session right away, the unsaved-changes indicator, and Revert to the last saved state
@@ -305,12 +305,12 @@ The Star Mask Explorer, opened from the Overview.
 `SettingsNavigator` replaces the settings tabs with:
 
 - a grouped page list and the pages themselves (a `CardLayout`);
-- a search box and a "show only changed" filter that work across all pages;
+- a search box and a "show only unsaved changes" filter that work across all pages;
 - collapsible expert sections.
 
 Sections are found from the header labels that `DetectionConfigurationPanel` marks with a client property.
 
-`SettingRow` is one setting on a page: its input, its default value and a `Reset` button. It marks itself when its value differs from the default and tells the navigator to refresh the filters and counts.
+`SettingRow` is one setting on a page: its input, its saved value and a `Reset` button. It marks itself when its value differs from the saved configuration and tells the navigator to refresh the filters and counts.
 
 ### `ImageProcessing`
 

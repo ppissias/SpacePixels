@@ -34,6 +34,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.google.common.eventbus.Subscribe;
 
 public class MainApplicationPanel extends JPanel {
+
+    /** Look of the primary action (Detect Moving Targets): accent colours of the look and feel, larger and bold. */
+    static final String PRIMARY_BUTTON_STYLE = "font: +2 bold; background: $Button.default.background; foreground: $Button.default.foreground;"
+            + " borderColor: $Button.default.borderColor; margin: 6,16,6,16";
     private static final Color LINK_COLOR = new Color(120, 180, 255);
 
     //link to main window
@@ -46,6 +50,8 @@ public class MainApplicationPanel extends JPanel {
     private volatile JTable table;
 
     private final JProgressBar progressBar = new JProgressBar();
+    private final JButton importButton = new JButton("Import Aligned Frames…");
+    private final JPanel updateNoticeHolder = new JPanel(new BorderLayout());
     private final JButton convertMonoButton = new JButton("Convert to Mono");
     private final JButton stretchButton = new JButton("Batch Stretch");
     private final JButton blinkButton = new JButton("Blink Selected");
@@ -95,6 +101,9 @@ public class MainApplicationPanel extends JPanel {
         // TOP CONTROL AREA
         // ==========================================
         // A workflow strip: four labelled groups in the order of use, wrapping onto a second line when narrow.
+        setActionTooltip(importButton, "Choose a folder of aligned FITS or XISF frames to import (or drop the folder onto the window). "
+                + "Compressed, 32-bit and XISF data are converted to a working folder first.");
+        importButton.addActionListener(e -> mainAppWindow.chooseAndImportFolder());
         setActionTooltip(convertMonoButton, "Extract luminance and convert all loaded FITS files to 16-bit monochrome. Applies stretch if enabled.");
         setActionTooltip(stretchButton, "Apply the current non-linear stretch settings to all imported FITS files and save as new files.");
         setActionTooltip(solveButton, "Calculate the celestial coordinates (WCS) for the selected frame.");
@@ -106,6 +115,8 @@ public class MainApplicationPanel extends JPanel {
         for (JButton button : actionTooltips.keySet()) {
             button.setEnabled(false);
         }
+        // Importing is the one action available before any frames are loaded.
+        importButton.setEnabled(true);
 
         astapSolveRadio.setToolTipText("Solve with ASTAP (configured in the Astrometry Config tab).");
         astrometryNetSolveRadio.setToolTipText("Solve with the online nova.astrometry.net web service.");
@@ -115,11 +126,10 @@ public class MainApplicationPanel extends JPanel {
         astapSolveRadio.setSelected(true);
 
         // The primary action: accent colours of the look and feel, larger and bold.
-        detectBatchButton.putClientProperty("FlatLaf.style",
-                "font: +2 bold; background: $Button.default.background; foreground: $Button.default.foreground;"
-                        + " borderColor: $Button.default.borderColor; margin: 6,16,6,16");
+        detectBatchButton.putClientProperty("FlatLaf.style", PRIMARY_BUTTON_STYLE);
 
         JPanel prepareGroup = workflowGroup("1  Prepare", prepareStatus,
+                buttonRow(importButton),
                 buttonRow(convertMonoButton),
                 buttonRow(stretchButton));
         JPanel astrometryGroup = workflowGroup("2  Astrometry", astrometryStatus,
@@ -282,7 +292,12 @@ public class MainApplicationPanel extends JPanel {
                 BorderFactory.createEtchedBorder(), BorderFactory.createEmptyBorder(2, 4, 2, 6)));
         statusBar.add(statusLabel, BorderLayout.CENTER);
         progressBar.setPreferredSize(new Dimension(150, 16));
-        statusBar.add(progressBar, BorderLayout.EAST);
+        // Right end: the "new version" notice (when a newer release exists) and the progress bar.
+        JPanel statusRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        statusRight.setOpaque(false);
+        statusRight.add(updateNoticeHolder);
+        statusRight.add(progressBar);
+        statusBar.add(statusRight, BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
 
         table = new JTable();
@@ -467,9 +482,12 @@ public class MainApplicationPanel extends JPanel {
         if (uiLocked) {
             return "wait until the current task has finished.";
         }
+        if (button == importButton) {
+            return "an import or another task is running.";
+        }
         int frames = table == null ? 0 : table.getRowCount();
         if (frames == 0) {
-            return "import frames first (File → Import aligned FITS/XISF files).";
+            return "import frames first (Import Aligned Frames…, or drop a folder on the window).";
         }
         if (button == convertMonoButton) {
             return "all frames are already monochrome.";
@@ -492,6 +510,8 @@ public class MainApplicationPanel extends JPanel {
     /** Updates the status line of every group and the disabled-button reasons. */
     void refreshWorkflowStatus() {
         int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
+        // The import button is the primary action until frames are loaded, then an ordinary button for another dataset.
+        importButton.putClientProperty("FlatLaf.style", frames == 0 ? PRIMARY_BUTTON_STYLE : null);
         if (frames == 0) {
             prepareStatus.setText("No frames imported");
             astrometryStatus.setText(" ");
@@ -765,6 +785,49 @@ public class MainApplicationPanel extends JPanel {
     /** The selected row (or -1) and the number of rows. */
     public int[] frameSelection() {
         return new int[]{table == null ? -1 : table.getSelectedRow(), table == null ? 0 : table.getRowCount()};
+    }
+
+    /** Enables or disables importing (the button and dropping folders), for example while an import runs. */
+    void setImportEnabled(boolean enabled) {
+        importButton.setEnabled(enabled);
+    }
+
+    boolean isImportEnabled() {
+        return importButton.isEnabled() && !uiLocked;
+    }
+
+    /** Shows the "new version" notice at the right end of the status bar. */
+    void setUpdateNotice(JComponent notice) {
+        updateNoticeHolder.removeAll();
+        updateNoticeHolder.setOpaque(false);
+        updateNoticeHolder.add(notice, BorderLayout.CENTER);
+        updateNoticeHolder.revalidate();
+        updateNoticeHolder.repaint();
+    }
+
+    /** Accepts a folder (or a file in it) dropped on the frame table or the empty area, and imports it. */
+    void installFolderDrop(TransferHandler handler) {
+        table.setTransferHandler(handler);
+        Container parent = table.getParent();
+        while (parent != null && !(parent instanceof JScrollPane)) {
+            parent = parent.getParent();
+        }
+        if (parent != null) {
+            ((JScrollPane) parent).setTransferHandler(handler);
+        }
+        setTransferHandler(handler);
+    }
+
+    /** The Detect Moving Targets button, so other views can offer the same action with the same enabling. */
+    JButton getDetectButton() {
+        return detectBatchButton;
+    }
+
+    /** Runs Detect Moving Targets exactly as its button does (ignored while disabled or busy). */
+    void runDetection() {
+        if (detectBatchButton.isEnabled() && !uiLocked) {
+            detectBatchButton.doClick();
+        }
     }
 
     public void selectFirstFileIfNoneSelected() {

@@ -1220,7 +1220,6 @@ public class DetectionReportGenerator {
         int slowMoverCandidateCount = slowMoverCandidates == null ? 0 : slowMoverCandidates.size();
         int localRescueCandidateCount = localRescueCandidates.size();
         int localActivityClusterCount = localActivityClusters.size();
-        int potentialSlowMoverCount = slowMoverCandidateCount + localRescueCandidateCount;
         int singleStreakCount = singleStreaks.size();
         int streakTrackCount = streakTracks.size();
         int movingTargetCount = movingTargets.size();
@@ -1247,7 +1246,6 @@ public class DetectionReportGenerator {
                 slowMoverCandidateCount,
                 localRescueCandidateCount,
                 localActivityClusterCount,
-                potentialSlowMoverCount,
                 singleStreakCount,
                 streakTrackCount,
                 movingTargetCount,
@@ -1507,7 +1505,7 @@ public class DetectionReportGenerator {
                 int pointTransientCount = Math.max(0, rawTransientCount - streakLikeTransientCount);
                 int confirmedTrackCount = summary.confirmedLinkedTrackCount;
                 int suspectedTrackCount = summary.suspectedStreakTrackCount;
-                int deepStackHintCount = summary.potentialSlowMoverCount;
+                int deepStackHintCount = summary.slowMoverCandidateCount;
                 double longestPath = CreativeTributeRenderer.computeLongestTrackPathPx(streakTracks, movingTargets);
                 String dominantMotion = CreativeTributeRenderer.computeDominantMotionLabel(movingTargets, streakTracks);
                 String peakFrameLabel = CreativeTributeRenderer.computePeakTransientFrameLabel(allTransients);

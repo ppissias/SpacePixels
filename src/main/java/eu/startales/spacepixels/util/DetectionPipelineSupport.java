@@ -13,6 +13,7 @@ import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
 import io.github.ppissias.jtransient.core.TrackLinker;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.PipelineResult;
+import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -127,6 +128,7 @@ final class DetectionPipelineSupport {
         int localRescueCandidates = residualAnalysis.localRescueCandidates.size();
         int localActivityClusters = residualAnalysis.localActivityClusters.size();
         int anomalyCount = anomalies.size();
+        PipelineTelemetry.PhotometryTelemetry photometry = result.telemetry != null ? result.telemetry.photometryTelemetry : null;
 
         return new ImageProcessing.DetectionSummary(
                 singleStreaks + streakTracks + movingTargets + anomalyCount + suspectedStreakTracks
@@ -138,7 +140,10 @@ final class DetectionPipelineSupport {
                 suspectedStreakTracks,
                 slowMoverCandidates,
                 localRescueCandidates,
-                localActivityClusters);
+                localActivityClusters,
+                photometry != null ? photometry.verdict : null,
+                photometry != null ? photometry.highConfidence : 0,
+                photometry != null ? photometry.possible : 0);
     }
 
     static PipelineResult suppressLatePhaseOutputsWhenTooFewFramesRemain(PipelineResult result) {

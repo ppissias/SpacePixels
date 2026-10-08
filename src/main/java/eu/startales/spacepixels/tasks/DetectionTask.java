@@ -118,18 +118,7 @@ public class DetectionTask implements Runnable {
                         SwingUtilities.invokeAndWait(() -> {
                             int choice = JOptionPane.showConfirmDialog(
                                     null,
-                                    "The engine found an unusually high number of detections (" + summary.totalDetections + ").\n\n" +
-                                            "Breakdown:\n" +
-                                            " - Moving target tracks (non-streak): " + summary.movingTargets + "\n" +
-                                            " - Confirmed multi-frame streak tracks: " + summary.streakTracks + "\n" +
-                                            " - Single streaks: " + summary.singleStreaks + "\n" +
-                                            " - Single-frame anomalies: " + summary.anomalies + "\n" +
-                                            " - Suspected streak tracks (anomaly groupings): " + summary.suspectedStreakTracks + "\n" +
-                                            " - Potential slow movers: " + summary.potentialSlowMovers + " (" + summary.slowMoverCandidates + " maximum-stack shape candidates, " + summary.localRescueCandidates + " local rescue candidates)\n" +
-                                            " - Broad local activity clusters: " + summary.localActivityClusters + "\n\n" +
-                                            "Generating image crops, GIFs, and an HTML report for this many objects will take a long time and consume significant disk space.\n" +
-                                            "This usually indicates the Detection Sigma was set too low and the engine linked background noise.\n\n" +
-                                            "Do you want to proceed with generating the report anyway?",
+                                    summary.warningMessage(preProcessing.hasPlateSolvedFrame(), safeDetectionLimit),
                                     "High Detection Count Warning",
                                     JOptionPane.YES_NO_OPTION,
                                     JOptionPane.WARNING_MESSAGE

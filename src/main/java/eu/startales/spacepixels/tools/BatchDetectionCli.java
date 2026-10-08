@@ -203,9 +203,10 @@ public class BatchDetectionCli {
 
     private static JTransientAutoTuner.AutoTuneProfile parseAutoTuneProfile(String value) {
         try {
-            return JTransientAutoTuner.AutoTuneProfile.valueOf(value.trim().toUpperCase(Locale.ROOT));
+            // Also accepts the names of earlier versions (conservative, balanced, aggressive).
+            return JTransientAutoTuner.AutoTuneProfile.parse(value);
         } catch (Exception e) {
-            throw new IllegalArgumentException("Unknown auto-tune profile '" + value + "'. Expected conservative, balanced, aggressive, or maximum.");
+            throw new IllegalArgumentException("Unknown auto-tune profile '" + value + "'. Expected low, medium, high or maximum.");
         }
     }
 
@@ -230,7 +231,7 @@ public class BatchDetectionCli {
         out.println("  SpacePixels - Batch Detection CLI");
         out.println("==================================================================");
         out.println("Usage:");
-        out.println("  java eu.startales.spacepixels.tools.BatchDetectionCli <fits_directory> <detection_config.json> [--auto-tune <conservative|balanced|aggressive|maximum>] [--tuner <calibrated|legacy>]");
+        out.println("  java eu.startales.spacepixels.tools.BatchDetectionCli <fits_directory> <detection_config.json> [--auto-tune <low|medium|high|maximum>] [--tuner <calibrated|legacy>]");
         out.println();
         out.println("Notes:");
         out.println("  - The input directory must contain only uncompressed 16-bit monochrome FITS files with identical dimensions.");
@@ -240,9 +241,9 @@ public class BatchDetectionCli {
         out.println("  - --tuner selects the auto-tuning algorithm: calibrated (default, measures noise and sensitivity) or legacy (original score-based tuner).");
         out.println();
         out.println("Packaged launcher example:");
-        out.println("  batchDetect.bat \"C:\\astro\\sequence\" \"config\\default_detection_profile.json\" --auto-tune aggressive");
+        out.println("  batchDetect.bat \"C:\\astro\\sequence\" \"config\\default_detection_profile.json\" --auto-tune high");
         out.println();
         out.println("Gradle example:");
-        out.println("  gradlew.bat batchDetect -PbatchArgs=\"\\\"C:\\\\astro\\\\sequence\\\" \\\"src\\\\dist\\\\config\\\\default_detection_profile.json\\\" --auto-tune aggressive\"");
+        out.println("  gradlew.bat batchDetect -PbatchArgs=\"\\\"C:\\\\astro\\\\sequence\\\" \\\"src\\\\dist\\\\config\\\\default_detection_profile.json\\\" --auto-tune high\"");
     }
 }

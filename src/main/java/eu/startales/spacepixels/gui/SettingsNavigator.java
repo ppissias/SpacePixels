@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.IntSupplier;
 
 /**
  * The Detection Settings navigation: a page list with group headings on the left, the pages on the right, a search
@@ -76,12 +77,13 @@ final class SettingsNavigator extends JPanel {
 
     private final List<SettingRow> rows = new ArrayList<>();
     private final Map<String, Page> pages = new LinkedHashMap<>();
+    private final Map<String, IntSupplier> extraChangedCounts = new LinkedHashMap<>();
     private final DefaultListModel<NavItem> navModel = new DefaultListModel<>();
     private final JList<NavItem> navList = new JList<>(navModel);
     private final CardLayout cards = new CardLayout();
     private final JPanel cardPanel = new JPanel(cards);
     private final JTextField searchField = new JTextField();
-    private final JCheckBox onlyChangedCheck = new JCheckBox("Show only changed");
+    private final JCheckBox onlyChangedCheck = new JCheckBox("Show only unsaved changes");
     private String lastGroup;
     private boolean ready;
 
@@ -107,7 +109,7 @@ final class SettingsNavigator extends JPanel {
                 applyFilters();
             }
         });
-        onlyChangedCheck.setToolTipText("Show only the settings that differ from their defaults.");
+        onlyChangedCheck.setToolTipText("Show only the settings changed since the configuration was last saved.");
         onlyChangedCheck.addItemListener(e -> applyFilters());
 
         navList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -225,6 +227,19 @@ final class SettingsNavigator extends JPanel {
         navList.setSelectedIndex(0);
     }
 
+    /** Takes the current values as the saved ones (after loading or saving the configuration) and refreshes the marks. */
+    void markAllSaved() {
+        for (SettingRow row : rows) {
+            row.captureSaved();
+        }
+        if (ready) {
+            for (SettingRow row : rows) {
+                row.refresh();
+            }
+            applyFilters();
+        }
+    }
+
     /** Shows the page with this title. */
     void showPage(String title) {
         for (int i = 0; i < navModel.size(); i++) {
@@ -280,6 +295,16 @@ final class SettingsNavigator extends JPanel {
     }
 
     /** Shows the rows that match the search and the changed filter, and updates headers and page counts. */
+    /** Counts settings changed since the last save that are not rows of the page (for example the Overview core settings). */
+    void setExtraChangedCount(String pageTitle, IntSupplier count) {
+        extraChangedCounts.put(pageTitle, count);
+    }
+
+    /** Re-evaluates the filters and counts after values changed outside a row. */
+    void refreshFilters() {
+        applyFilters();
+    }
+
     private void applyFilters() {
         if (!ready) {
             return;
@@ -311,6 +336,15 @@ final class SettingsNavigator extends JPanel {
                 page.matchCount += sectionMatches;
                 page.changedCount += sectionChanged;
             }
+            IntSupplier extraCount = extraChangedCounts.get(page.title);
+            if (extraCount != null) {
+                // Settings on the page that are not rows (the core settings on the Overview).
+                int extraChanged = extraCount.getAsInt();
+                page.changedCount += extraChanged;
+                if (onlyChanged && query.isEmpty()) {
+                    page.matchCount += extraChanged;
+                }
+            }
             if (!onlyChanged && !query.isEmpty()) {
                 for (String extra : page.extraSearchTitles) {
                     if (extra.toLowerCase(Locale.ROOT).contains(query)) {
@@ -324,7 +358,7 @@ final class SettingsNavigator extends JPanel {
             page.content.repaint();
         }
 
-        onlyChangedCheck.setText("Show only changed (" + totalChanged + ")");
+        onlyChangedCheck.setText("Show only unsaved changes (" + totalChanged + ")");
         navList.repaint();
 
         NavItem selected = navList.getSelectedValue();
@@ -404,7 +438,7 @@ final class SettingsNavigator extends JPanel {
                 label.setForeground(UIManager.getColor("Label.disabledForeground"));
             }
             label.setToolTipText(!filtering && page.changedCount > 0
-                    ? page.changedCount + (page.changedCount == 1 ? " setting differs" : " settings differ") + " from the defaults"
+                    ? page.changedCount + (page.changedCount == 1 ? " setting" : " settings") + " changed since the last save"
                     : null);
             return label;
         }

@@ -9,7 +9,6 @@ final class DetectionReportSummary {
     final int slowMoverCandidateCount;
     final int localRescueCandidateCount;
     final int localActivityClusterCount;
-    final int potentialSlowMoverCount;
     final int singleStreakCount;
     final int streakTrackCount;
     final int movingTargetCount;
@@ -28,7 +27,6 @@ final class DetectionReportSummary {
     DetectionReportSummary(int slowMoverCandidateCount,
                            int localRescueCandidateCount,
                            int localActivityClusterCount,
-                           int potentialSlowMoverCount,
                            int singleStreakCount,
                            int streakTrackCount,
                            int movingTargetCount,
@@ -46,7 +44,6 @@ final class DetectionReportSummary {
         this.slowMoverCandidateCount = slowMoverCandidateCount;
         this.localRescueCandidateCount = localRescueCandidateCount;
         this.localActivityClusterCount = localActivityClusterCount;
-        this.potentialSlowMoverCount = potentialSlowMoverCount;
         this.singleStreakCount = singleStreakCount;
         this.streakTrackCount = streakTrackCount;
         this.movingTargetCount = movingTargetCount;

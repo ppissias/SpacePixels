@@ -94,17 +94,7 @@ public class IterativeDetectionTask implements Runnable {
                     SwingUtilities.invokeAndWait(() -> {
                         int choice = JOptionPane.showConfirmDialog(
                                 null,
-                                "The iterative engine found a very high number of detections in this pass (" + summary.totalDetections + ").\n\n" +
-                                        "Breakdown:\n" +
-                                        " - Moving target tracks (non-streak): " + summary.movingTargets + "\n" +
-                                        " - Confirmed multi-frame streak tracks: " + summary.streakTracks + "\n" +
-                                        " - Single streaks: " + summary.singleStreaks + "\n" +
-                                        " - Single-frame anomalies: " + summary.anomalies + "\n" +
-                                        " - Suspected streak tracks (anomaly groupings): " + summary.suspectedStreakTracks + "\n" +
-                                        " - Potential slow movers: " + summary.potentialSlowMovers + " (" + summary.slowMoverCandidates + " maximum-stack shape candidates, " + summary.localRescueCandidates + " local rescue candidates)\n" +
-                                        " - Broad local activity clusters: " + summary.localActivityClusters + "\n\n" +
-                                        "Generating the HTML report will take a long time.\n" +
-                                        "Do you want to proceed?",
+                                "Iterative pass: " + summary.warningMessage(preProcessing.hasPlateSolvedFrame(), safeDetectionLimit),
                                 "High Detection Count Warning",
                                 JOptionPane.YES_NO_OPTION,
                                 JOptionPane.WARNING_MESSAGE
