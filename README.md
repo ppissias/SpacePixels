@@ -45,7 +45,7 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 <a href="https://startales.eu/various_files/detections_20260327_104057/detection_report.html" target="_blank">Sample SpacePixels report (Apophis)</a> <br/>
 <a href="https://startales.eu/various_files/detections_20260327_104830/detection_report.html" target="_blank">Sample SpacePixels report</a> <br/>
 
-![Main Interface](docs/images/user-interface-04-04.png)
+![Main Interface](docs/images/user-interface-2026-10-01.png)
 <br/>*The SpacePixels Main Workspace.*
 
 ![Sample Detection](docs/images/streak-track-1.png)
@@ -69,6 +69,9 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 ![Sample Detection](docs/images/Sutoku-micro_drift_1_context.gif)
 <br/>*Sample Detection - asteroid Sutoku (data credit Klangwolke @ Cloudynights)*
 
+![Sample Detection](docs/images/variable-star-summary.png)
+![Sample Detection](docs/images/variable-star-detection.png)
+<br/>*Sample Detection - Variable star DK Per*
 
 ![Sample Detection](docs/images/aptrack_1_star_centric.gif)
 <br/>*Sample Detection - Comet Africano 2019*
