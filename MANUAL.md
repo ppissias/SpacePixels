@@ -1,6 +1,6 @@
 # SpacePixels User Manual
 
-<sub><i>Many thanks to Klangwolke at Cloudynights and Duncan Warren for providing the test data used in this manual.</i></sub>
+<sub><i>Many thanks to Klangwolke at Cloudynights and Duncan Warren for providing some of the test data used in this manual.</i></sub>
 
 SpacePixels finds what moves or changes in your astrophotography sessions: asteroids, comets, satellites, flashes and variable stars. You give it the aligned sub-exposures of a session, and it gives you an HTML report with every object it found, with crops, animations, maps and buttons that look the objects up in JPL, SkyBoT and other catalogues.
 
