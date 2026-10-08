@@ -145,8 +145,9 @@ public class ApplicationWindow {
 
         frmIpodImage = new JFrame();
         frmIpodImage.setTitle("SpacePixels" + " " + version);
-        frmIpodImage.setBounds(new Rectangle(50, 50, 1200, 650));
-        frmIpodImage.setResizable(false);
+        // Resizable, sized to the screen or restored from the last session.
+        WindowPlacement.install(frmIpodImage);
+        frmIpodImage.setResizable(true);
         frmIpodImage.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frmIpodImage.addWindowListener(new WindowAdapter() {
             @Override

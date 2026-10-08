@@ -103,11 +103,12 @@ Main classes:
 - `ApplicationWindow`
 - `MainApplicationPanel`
 - `ConfigurationPanel`
-- `StretchPanel`
+- `StretchPanel` (display stretch, remembered in Java preferences; whole-frame preview with `ZoomableImageView` and a histogram)
 - `DetectionConfigurationPanel`
 - `AutoTuneOverviewPanel`
 - `SettingsNavigator`, `SettingRow`
 - `WrapLayout`
+- `WindowPlacement`
 - `DetectionSequenceFrame`
 - `TransientInspectionFrame`
 - `TuningPreviewManager`
@@ -218,7 +219,7 @@ Desktop composition root.
 
 Owns:
 
-- main Swing frame and tab composition
+- main Swing frame and tab composition (resizable; size and position from `WindowPlacement`: screen-based default, restored from Java preferences, saved on close)
 - `MainApplicationPanel`
 - `ConfigurationPanel`
 - `StretchPanel`

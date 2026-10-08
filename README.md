@@ -184,7 +184,7 @@ To generate a local distribution with launch scripts:
 2. If the sequence is compressed or 32-bit, let SpacePixels decompress or standardize it first.
 3. If the sequence is color, run `Convert to Mono` (group 1 Prepare).
 4. Optionally configure ASTAP and observatory metadata in the `Astrometry Config` tab, and plate-solve one frame (group 2 Astrometry) so the report can identify asteroids (JPL, SkyBoT) and variable stars (AAVSO VSX).
-5. Optionally enable stretching in the `Image Stretch` tab for previews, blinking, and batch export.
+5. Optionally adjust the display stretch in the `Image Stretch` tab (used by Blink, the full-size viewer and the optional stretched copies; detection always uses the linear data).
 6. Run Auto-Tune on the `Overview` page of the `Detection Settings` tab (one run measures all four profiles; pick one in the table), or adjust the settings by hand.
 7. Run either:
    - `Detect Moving Targets` (the standard pipeline, Ctrl+D), optionally with `Variable-star photometry` ticked, or

@@ -103,7 +103,8 @@ final class PlateSolveService {
             try {
                 astrometryNetInterface.login();
                 SubmitFileRequest typicalParamsRequest = SubmitFileRequest.builder()
-                        .withPublicly_visible("y")
+                        // Private: the image is not shown in the public Astrometry.net gallery.
+                        .withPublicly_visible("n")
                         .withScale_units("degwidth")
                         .withScale_lower(0.1f)
                         .withScale_upper(180.0f)

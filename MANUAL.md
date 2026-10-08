@@ -103,6 +103,13 @@ To generate local distribution scripts:
 
 ## 4. Main window layout
 
+**Window size and position:**
+
+- On first start, the window opens at about 85 % of the usable screen area, centred, capped at 1500 × 950 on large screens and never larger than the screen. Its minimum size is 980 × 560.
+- It can be resized or maximised, and SpacePixels remembers the size, position and maximised state for the next start.
+- If the saved position no longer fits on any screen (for example, a monitor was removed), the default is used.
+- The settings pages follow the window width instead of scrolling sideways. On narrow windows, the Overview's two columns go under each other.
+
 The application is split into four tabs:
 
 - `Main`
@@ -199,13 +206,13 @@ The tools sit above the frame table in four groups, left to right in the order y
 
 Converts imported color FITS data into 16-bit monochrome.
 
-- If stretching is enabled in the `Image Stretch` tab, the same stretch can be applied during export.
+- If `Write stretched copies` is ticked in the `Image Stretch` tab, it also writes stretched copies into a separate `_mono_stretched` folder; the linear mono files used for detection are unchanged.
 - This is the normal preparation step for color data before running detection.
 - Disabled when all frames are already monochrome.
 
 #### Batch Stretch
 
-Applies the current stretch settings to all imported files and writes new FITS outputs. Requires stretching to be enabled in the `Image Stretch` tab.
+Applies the current stretch settings to all imported files and writes new FITS outputs. Available when `Write stretched copies` is ticked in the `Image Stretch` tab.
 
 ### 2 Astrometry
 
@@ -260,66 +267,70 @@ Opens the `Detection Settings` tab, where you can run Auto-Tune or adjust the th
 
 ## 7. Astrometry Config tab
 
-The `Astrometry Config` tab stores application-level astrometry settings.
+The `Astrometry Config` tab holds the plate solver and the observing site used to identify objects in the report.
 
-### External Tools
+### Plate Solving
 
-- `ASTAP Executable Path`
+- **`ASTAP Executable Path`**: points SpacePixels at your local ASTAP.
+  - Below the path, a status line shows whether ASTAP was found and which star databases sit next to it, for example `✓ ASTAP found · star database D50`.
+  - Without a star database ASTAP cannot solve. The status line then says so and links to the ASTAP download page; D50 is a good choice for most setups.
+  - `Check` repeats the check.
+- **`Astrometry.net (online)`** needs no installation. Images are submitted as **private**, so they do not appear in the public Astrometry.net gallery.
 
-Use this to point SpacePixels at your local ASTAP installation.
+One plate-solved frame is enough for the whole aligned sequence (see `Plate Solve Selected`).
 
-### Detection and annotation metadata
+### Observing Site
 
 - `IAU Observatory Code`
 - `Site Latitude (N)`
 - `Site Longitude (E)`
 
-These values help SpacePixels build better report annotations and observer context when WCS is available.
+These values improve the report's object identification (SkyBoT, JPL) and observer context.
 
-### Solving parameter placeholders
+- **Checked as you type:** the code must be 3 letters or digits, the latitude within ±90 and the longitude within ±180. Coordinates are decimal degrees, optionally with a decimal comma or a hemisphere letter (`24.6272S`). A short note under each field shows a problem in orange, or confirms the value.
+- **Which value is used:** if any imported frame has a site latitude or longitude in its FITS header (`SITELAT`, `OBSGEO-B`, `LAT-OBS`, `SITELONG`, `OBSGEO-L`, ...), the report uses the header value, and the note says so. Otherwise the field is used.
+- **`Fill Site from FITS Header`** copies the header's latitude and longitude into the fields, so they stay available as the fallback for sessions without headers.
 
-The panel also contains fields such as:
+### Applying and saving
 
-- focal length
-- pixel size
-- approximate RA
-- approximate DEC
+- Valid edits apply to the current session at once. While a field holds an invalid value, the last valid value stays in use.
+- The footer shows `✓ Saved settings in use` or `● Unsaved changes`.
+- `Save` keeps the values for the next start, and `Revert` returns to the last saved values.
 
-In the current GUI these are present as placeholders and some remain disabled. The `Deduce from FITS header` button can populate them from the selected FITS header when the metadata exists.
-
-### Saving
-
-`Save Configuration` stores the application-level settings for future sessions.
+The near-solve fields of earlier versions (focal length, pixel size, approximate RA/DEC) are no longer shown. Their stored values remain in the configuration file.
 
 ---
 
 ## 8. Image Stretch tab
 
-The `Image Stretch` tab controls preview and export-only stretch behavior.
+The `Image Stretch` tab sets the display stretch used by `Blink Selected`, `Show full size` and the optional stretched copies.
 
-### What the stretch tab affects
+- Detection always works on the linear data.
+- Report images use their own stretch (`Detection Settings -> Report Visualization`).
 
-- blinking output
-- batch-stretch export
-- stretch previews
+### Controls
 
-### Main controls
+- **Algorithm** (hover an entry for a description):
+  - `Asinh` (recommended): sets the black point at a percentile of the histogram and lifts faint signal with an arcsinh curve.
+  - `Enhance Low`: brightens faint pixels.
+  - `Enhance High`: boosts the brighter pixels.
+  - `Extreme`: shows every pixel above the noise level at one bright value; harsh, but faint objects stand out when blinking.
+- **Two sliders**, labelled per algorithm with their current values (for Asinh: `Black Point (%)` and `Stretch Strength`). `Reset to Defaults` restores the algorithm's defaults.
+- The algorithm and each algorithm's slider values are **remembered between sessions**.
+- **`Write stretched copies (Batch Stretch, Convert to Mono)`**: when ticked, `Batch Stretch` is available, and `Convert to Mono` also writes stretched copies into a separate `_mono_stretched` folder. The linear files used for detection are never changed.
 
-- `Enable Stretching (for blinking and batch export)`
-- stretch algorithm selector
-- intensity slider
-- iteration slider
+### Preview
 
-### Preview area
+The preview appears whenever the tab is open and a frame is selected; no checkbox is needed.
 
-The tab shows:
-
-- original image preview
-- stretched preview
+- Original (linear) and stretched views of the **whole frame**. Frames larger than 2400 pixels on their long side are reduced for display.
+- **Zoom and pan:** scroll to zoom around the cursor, drag to pan, double-click to fit. Both views zoom and pan together.
+- **`◀ Previous` / `Next ▶`** step through the frames. The label shows the frame number and file name, and the zoom is kept.
+- **Histograms** under both views, with logarithmic counts and the share of pixels clipped to black and to white. On the linear view, it shows where the sky background sits.
 
 ### Show full size
 
-`Show full size` opens a dedicated stretched sequence viewer so you can inspect the imported sequence at larger scale.
+`Show full size` opens a dedicated stretched sequence viewer, so you can inspect the imported sequence at full resolution with the same stretch.
 
 ---
 

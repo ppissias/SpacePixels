@@ -301,13 +301,9 @@ public class MainApplicationPanel extends JPanel {
                     solveButton.setEnabled(!isSolved);
                 }
 
-                if (mainAppWindow.getStretchPanel().isStretchEnabled()) {
-                    mainAppWindow.getStretchPanel().triggerPreviewUpdate();
-                }
+                mainAppWindow.getStretchPanel().onFrameSelectionChanged();
             } else {
-                if (mainAppWindow.getStretchPanel().isStretchEnabled()) {
-                    mainAppWindow.getStretchPanel().triggerPreviewUpdate();
-                }
+                mainAppWindow.getStretchPanel().onFrameSelectionChanged();
             }
 
             FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
@@ -479,7 +475,7 @@ public class MainApplicationPanel extends JPanel {
             return "all frames are already monochrome.";
         }
         if (button == stretchButton) {
-            return "enable stretching in the Image Stretch tab first.";
+            return "tick \"Write stretched copies\" in the Image Stretch tab first.";
         }
         if (button == solveButton) {
             return table.getSelectedRow() < 0 ? "select one frame in the table." : "the selected frame is already solved.";
@@ -753,6 +749,22 @@ public class MainApplicationPanel extends JPanel {
 
         FitsFileTableModel model = (FitsFileTableModel) table.getModel();
         return model.getFitsFileAt(row);
+    }
+
+    /** Moves the frame selection by {@code delta} rows (one frame selected), staying within the table. */
+    public void selectFrameOffset(int delta) {
+        int rows = table.getRowCount();
+        if (rows == 0) {
+            return;
+        }
+        int row = Math.max(0, Math.min(rows - 1, Math.max(0, table.getSelectedRow()) + delta));
+        table.setRowSelectionInterval(row, row);
+        table.scrollRectToVisible(table.getCellRect(row, 0, true));
+    }
+
+    /** The selected row (or -1) and the number of rows. */
+    public int[] frameSelection() {
+        return new int[]{table == null ? -1 : table.getSelectedRow(), table == null ? 0 : table.getRowCount()};
     }
 
     public void selectFirstFileIfNoneSelected() {

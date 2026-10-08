@@ -111,7 +111,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        JLabel intro = new JLabel("<html><div style='color: #999999; font-size: 12px; padding-bottom: 6px; width: 780px;'>"
+        JLabel intro = new JLabel("<html><div style='color: #999999; font-size: 12px; padding-bottom: 6px; width: 480px;'>"
                 + "Start here. One Auto-Tune run measures how many false detections each setting causes and how many synthetic "
                 + "faint stars it still finds, for all four profiles. The pages on the left hold the detailed settings."
                 + "</div></html>");
@@ -137,7 +137,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         analysesColumn.add(left(analysesGrid));
         analysesColumn.add(Box.createVerticalGlue());
 
-        JPanel columns = new JPanel(new GridLayout(1, 2, 40, 0));
+        JPanel columns = new JPanel(new TwoColumnLayout(40, 16));
         columns.setBorder(new EmptyBorder(10, 0, 0, 0));
         columns.add(coreColumn);
         columns.add(analysesColumn);
@@ -212,7 +212,8 @@ public class AutoTuneOverviewPanel extends JPanel {
             }
         });
         JScrollPane tableScroll = new JScrollPane(profileTable);
-        Dimension tableSize = new Dimension(Math.min(980, sum(widths) + 4), profileTable.getRowHeight() * 4 + 32);
+        // The table takes the page width; the preferred width only sets where it starts to squeeze its columns.
+        Dimension tableSize = new Dimension(640, profileTable.getRowHeight() * 4 + 32);
         tableScroll.setPreferredSize(tableSize);
         tableScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, tableSize.height));
         box.add(left(tableScroll));
@@ -478,7 +479,7 @@ public class AutoTuneOverviewPanel extends JPanel {
 
     private void showProblem(String text) {
         statusLabel.setForeground(warningColor());
-        statusLabel.setText("<html><div style='width: 700px;'>" + text + "</div></html>");
+        statusLabel.setText("<html><div style='width: 480px;'>" + text + "</div></html>");
     }
 
     /**
@@ -496,9 +497,9 @@ public class AutoTuneOverviewPanel extends JPanel {
                 + profiles + "</html>"
                 : "<html>The legacy tuner searches for this profile only; another profile needs another run.<br>" + profiles + "</html>");
         profileLabel.setToolTipText(profileCombo.getToolTipText());
-        tableNoteLabel.setText(calibrated
+        tableNoteLabel.setText("<html><div style='width: 480px;'>" + (calibrated
                 ? "One run measures every setting. Each profile then picks the most sensitive one within its budget of false detections per MPix per frame (the ≤ value)."
-                : "The legacy tuner tunes one profile per run.");
+                : "The legacy tuner tunes one profile per run.") + "</div></html>");
     }
 
     private void refreshControls() {
@@ -678,12 +679,94 @@ public class AutoTuneOverviewPanel extends JPanel {
         return color != null ? color : new Color(0xE0A030);
     }
 
-    private static int sum(int[] values) {
-        int total = 0;
-        for (int v : values) {
-            total += v;
+    /**
+     * Two components side by side, each taking half of the width, when both fit at their preferred widths; on a
+     * narrower page the second goes under the first.
+     */
+    static final class TwoColumnLayout implements LayoutManager {
+        private final int horizontalGap;
+        private final int verticalGap;
+        private Boolean lastSideBySide;
+
+        TwoColumnLayout(int horizontalGap, int verticalGap) {
+            this.horizontalGap = horizontalGap;
+            this.verticalGap = verticalGap;
         }
-        return total;
+
+        private boolean sideBySide(Container parent, Component first, Component second) {
+            int width = parent.getWidth();
+            if (width <= 0) {
+                return true;
+            }
+            Insets insets = parent.getInsets();
+            int halfWidth = (width - insets.left - insets.right - horizontalGap) / 2;
+            return halfWidth >= Math.max(first.getPreferredSize().width, second.getPreferredSize().width);
+        }
+
+        @Override
+        public Dimension preferredLayoutSize(Container parent) {
+            return size(parent, false);
+        }
+
+        @Override
+        public Dimension minimumLayoutSize(Container parent) {
+            return size(parent, true);
+        }
+
+        private Dimension size(Container parent, boolean minimum) {
+            Insets insets = parent.getInsets();
+            if (parent.getComponentCount() < 2) {
+                return new Dimension(insets.left + insets.right, insets.top + insets.bottom);
+            }
+            Component first = parent.getComponent(0);
+            Component second = parent.getComponent(1);
+            Dimension a = minimum ? first.getMinimumSize() : first.getPreferredSize();
+            Dimension b = minimum ? second.getMinimumSize() : second.getPreferredSize();
+            Dimension size = minimum || !sideBySide(parent, first, second)
+                    ? new Dimension(Math.max(a.width, b.width), a.height + verticalGap + b.height)
+                    : new Dimension(a.width + horizontalGap + b.width, Math.max(a.height, b.height));
+            if (minimum) {
+                size.height = a.height + verticalGap + b.height;
+            }
+            size.width += insets.left + insets.right;
+            size.height += insets.top + insets.bottom;
+            return size;
+        }
+
+        @Override
+        public void layoutContainer(Container parent) {
+            if (parent.getComponentCount() < 2) {
+                return;
+            }
+            Insets insets = parent.getInsets();
+            Component first = parent.getComponent(0);
+            Component second = parent.getComponent(1);
+            int width = parent.getWidth() - insets.left - insets.right;
+            boolean sideBySide = sideBySide(parent, first, second);
+            if (lastSideBySide != null && lastSideBySide != sideBySide) {
+                // The preferred height depends on the arrangement; let the page measure again.
+                SwingUtilities.invokeLater(parent::revalidate);
+            }
+            lastSideBySide = sideBySide;
+            if (sideBySide) {
+                int half = (width - horizontalGap) / 2;
+                int height = Math.max(first.getPreferredSize().height, second.getPreferredSize().height);
+                first.setBounds(insets.left, insets.top, half, height);
+                second.setBounds(insets.left + half + horizontalGap, insets.top, half, height);
+            } else {
+                int firstHeight = first.getPreferredSize().height;
+                first.setBounds(insets.left, insets.top, width, firstHeight);
+                second.setBounds(insets.left, insets.top + firstHeight + verticalGap, width, second.getPreferredSize().height);
+            }
+        }
+
+        @Override
+        public void addLayoutComponent(String name, Component comp) {
+        }
+
+        @Override
+        public void removeLayoutComponent(Component comp) {
+        }
     }
 
     private static JPanel column() {
