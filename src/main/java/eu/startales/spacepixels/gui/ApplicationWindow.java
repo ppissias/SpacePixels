@@ -55,6 +55,7 @@ public class ApplicationWindow {
     }
 
     private static final String RELEASES_PAGE_URL = "https://github.com/ppissias/SpacePixels/releases";
+    private static final String MANUAL_URL = "https://github.com/ppissias/SpacePixels/blob/master/MANUAL.md";
     private static final String LATEST_RELEASE_API_URL = "https://api.github.com/repos/ppissias/SpacePixels/releases/latest";
     private static final int RELEASE_CHECK_TIMEOUT_MS = 4000;
 
@@ -181,6 +182,7 @@ public class ApplicationWindow {
         setTabEnabled(configurationApplicationPanel, false);
         setTabEnabled(stretchPanel, false);
         setTabEnabled(detectionConfigurationPanel, false);
+        installManualLink();
 
         // No menu bar: importing is the first button of the Main tab's workflow strip (or a folder dropped on the
         // window), and the "new version" notice sits at the right end of the status bar.
@@ -486,19 +488,49 @@ public class ApplicationWindow {
         updateNoticeLabel.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                openReleasePage(latestRelease.htmlUrl);
+                openInBrowser(latestRelease.htmlUrl);
             }
         });
     }
 
-    private void openReleasePage(String releaseUrl) {
+    /** A "User Manual" link at the right end of the tab bar, so it is visible from every tab. */
+    private void installManualLink() {
+        JLabel manualLink = new JLabel("User Manual");
+        manualLink.setForeground(DetectionConfigurationPanel.accentColor());
+        manualLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        manualLink.setToolTipText("Open the SpacePixels user manual in your browser: workflows, the report and examples.");
+        manualLink.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 10));
+        manualLink.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                openInBrowser(MANUAL_URL);
+            }
+
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                manualLink.setText("<html><u>User Manual</u></html>");
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                manualLink.setText("User Manual");
+            }
+        });
+        // FlatLaf gives the trailing component the remaining width of the tab bar; keep the link at its right end.
+        JPanel trailing = new JPanel(new BorderLayout());
+        trailing.setOpaque(false);
+        trailing.add(manualLink, BorderLayout.EAST);
+        tabbedPane.putClientProperty("JTabbedPane.trailingComponent", trailing);
+    }
+
+    private void openInBrowser(String url) {
         if (!Desktop.isDesktopSupported()) {
             return;
         }
         try {
-            Desktop.getDesktop().browse(URI.create(releaseUrl));
+            Desktop.getDesktop().browse(URI.create(url));
         } catch (Exception e) {
-            logger.warning("Failed to open releases page: " + e.getMessage());
+            logger.warning("Failed to open " + url + ": " + e.getMessage());
         }
     }
 }

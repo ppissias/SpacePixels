@@ -62,7 +62,7 @@ The window has four tabs:
 | **Image Stretch** | how frames are displayed in the viewers |
 | **Detection Settings** | Auto-Tune and every detection setting |
 
-The other tabs open once frames are imported. Each group on the Main tab has a status line underneath that tells you what is ready and what is missing; when a button is greyed out, its tooltip says why.
+The other tabs open once frames are imported. Each group on the Main tab has a status line underneath that tells you what is ready and what is missing; when a button is greyed out, its tooltip says why. The **User Manual** link at the right end of the tab bar opens this manual in your browser.
 
 ---
 
