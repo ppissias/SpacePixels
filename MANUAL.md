@@ -383,15 +383,19 @@ The first page is the starting point. It has three parts.
 **Auto-Tune**
 
 - `Tuner`, `Apply after run` and `Run Auto-Tune`.
-- How one run covers every profile: the calibrated tuner measures every combination of settings once (false detections and recovered synthetic stars). A profile is only a budget of false detections per megapixel per frame, so each profile then picks the most sensitive combination within its budget from the same measurements. Choosing the profile takes no extra measuring.
+- How one run covers every profile: the calibrated tuner measures every combination of settings once (noise detections and test stars found). A profile is only a budget of noise detections per megapixel per frame, so each profile then picks the most sensitive combination within its budget from the same measurements. Choosing the profile takes no extra measuring.
 - A table with the measured result of every profile, filled by one calibrated run:
-  - the profile and its budget, for example `Balanced (≤ 0.2)`;
-  - the chosen detection sigma, grow sigma and minimum pixels, and the star-mask sigma;
-  - false detections per megapixel per frame, with ⚠ when no setting met the profile's budget;
-  - the **expected false detections for this session** (measured rate × sensor megapixels × frames);
-  - the share of synthetic stars recovered, the SNR at which half are recovered, and the sky hidden by the star mask.
+  - **Profile**, with its budget of noise detections, for example `Balanced (≤ 0.2)`;
+  - **Detection σ / grow / min px**: the per-frame detection settings;
+  - **Star mask σ / grow / min px** and **Mask overlap**: the master star mask and how much a detection may overlap it;
+  - **Noise detections / MPix / frame**: detections that are not real objects (noise peaks and star leftovers the settings let through), with ⚠ when no setting met the profile's budget;
+  - **Expected noise detections**: how many to expect in a full run on this session (measured rate × sensor megapixels × frames);
+  - **Test stars found**: the share of synthetic test stars (added at peak SNR 2–15) that the settings still find;
+  - **Detection limit (SNR)**: the peak signal-to-noise at which half of the test stars are found. Lower is more sensitive; halving it reaches objects about 0.75 mag fainter;
+  - **Sky masked**: the share of the sky hidden by the star mask.
 - When the run finishes, the profile chosen in `Apply after run` is applied. To switch, select another row and click `Use Selected Profile`, or double-click the row; no re-run is needed.
-- The legacy tuner is different: its profile steers the search itself, so it tunes one profile per run and shows one row. With the legacy tuner selected, the box is labelled `Profile`.
+- The legacy tuner is different: its profile steers the search itself, so it tunes one profile per run and shows one row. With the legacy tuner selected, the box is labelled `Profile` and offers no `Maximum` (the legacy tuner would treat it like Aggressive).
+- Each tuner keeps its own last result for the session: switching the `Tuner` box shows that tuner's table, or an empty one if it has not run yet. The ● marks the applied profile only in the table of the tuner that produced it.
 - `Measurement Report…` shows the full tuner report.
 - `Preview on Frame…` runs object detection on the frame selected in the Main tab and shows the detection mask.
 

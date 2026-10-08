@@ -25,6 +25,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -57,17 +58,22 @@ public class AutoTuneOverviewPanel extends JPanel {
         void showSettingsTab(String tabTitle);
     }
 
+    /** Two-line headings, so the table stays narrow enough for small windows. */
     private static final String[] COLUMNS = {
-            "Profile", "Detection σ / grow / min px", "Star mask σ", "False / MPix / frame",
-            "Expected false (session)", "Recovered", "SNR50", "Sky masked"};
+            "Profile", "Detection<br>σ / grow / min px", "Star mask<br>σ / grow / min px", "Mask<br>overlap",
+            "Noise detections<br>/ MPix / frame", "Expected noise<br>detections", "Test stars<br>found",
+            "Detection<br>limit (SNR)", "Sky<br>masked"};
     private static final String[] COLUMN_TOOLTIPS = {
-            "Sensitivity profile and its false-detection budget per megapixel per frame. ● marks the profile in use.",
+            "Sensitivity profile and its budget of noise detections per megapixel per frame. ● marks the profile in use.",
             "Per-frame detection threshold, grow threshold and minimum object size chosen for this profile.",
-            "Detection threshold of the master star mask that hides stars.",
-            "Measured false detections caused by these settings (noise and star leakage), per megapixel per frame. ⚠: no setting met the profile's budget, so the cleanest one was used.",
-            "False detections to expect in a full run on this session: the measured rate × sensor megapixels × frames.",
-            "Share of synthetic stars (peak SNR 2 to 15) that were detected and kept.",
-            "Peak signal-to-noise ratio at which half of the synthetic stars are recovered. Lower is more sensitive.",
+            "Master star mask: detection threshold, grow threshold and minimum size of the stars it hides.",
+            "Largest share of a detection that may overlap the star mask before it is vetoed as star residue.",
+            "Measured detections that are not real objects (noise peaks and star leftovers the settings let through), "
+                    + "per megapixel per frame. ⚠: no setting met the profile's budget, so the cleanest one was used.",
+            "Noise detections to expect in a full run on this session: the measured rate × sensor megapixels × frames.",
+            "Share of synthetic test stars (added at peak SNR 2 to 15) that the settings still find and keep.",
+            "Peak signal-to-noise ratio at which half of the test stars are found: the detection limit. Lower is more "
+                    + "sensitive; halving it reaches objects about 0.75 mag fainter.",
             "Share of the sky hidden by the star mask; nothing can be detected there."};
 
     private final Host host;
@@ -94,9 +100,15 @@ public class AutoTuneOverviewPanel extends JPanel {
     private final JPanel analysesGrid = new JPanel(new GridBagLayout());
     private int analysisRowCount;
 
+    /** The result shown in the table: the last run of the tuner selected in the Tuner box. */
     private JTransientAutoTuner.AutoTunerResult lastResult;
-    private AutoTunerRunner.Algorithm lastAlgorithm;
+    /** Last run of each tuner on this session, and its "Last run" line. */
+    private final Map<AutoTunerRunner.Algorithm, JTransientAutoTuner.AutoTunerResult> resultsByTuner = new EnumMap<>(AutoTunerRunner.Algorithm.class);
+    private final Map<AutoTunerRunner.Algorithm, String> runTextByTuner = new EnumMap<>(AutoTunerRunner.Algorithm.class);
+    private AutoTunerRunner.Algorithm runningAlgorithm;
     private AutoTuneProfile appliedProfile;
+    /** The tuner whose result is applied, so the ● marker only shows in that tuner's table. */
+    private AutoTunerRunner.Algorithm appliedAlgorithm;
     private String sessionName;
     private int sessionFrames;
     private int sessionWidth;
@@ -104,7 +116,6 @@ public class AutoTuneOverviewPanel extends JPanel {
     private boolean sessionReady;
     private boolean tuning;
     private long tuneStartedMillis;
-    private String tunedSessionText;
 
     AutoTuneOverviewPanel(Host host) {
         this.host = host;
@@ -112,8 +123,8 @@ public class AutoTuneOverviewPanel extends JPanel {
         setBorder(new EmptyBorder(10, 20, 20, 20));
 
         JLabel intro = new JLabel("<html><div style='color: #999999; font-size: 12px; padding-bottom: 6px; width: 480px;'>"
-                + "Start here. One Auto-Tune run measures how many false detections each setting causes and how many synthetic "
-                + "faint stars it still finds, for all four profiles. The pages on the left hold the detailed settings."
+                + "Start here. One Auto-Tune run measures how many noise detections each setting lets through and how many faint synthetic test "
+                + "stars it still finds, for all four profiles. The pages on the left hold the detailed settings."
                 + "</div></html>");
         add(left(intro));
 
@@ -169,7 +180,11 @@ public class AutoTuneOverviewPanel extends JPanel {
         runButton.addActionListener(e -> host.startAutoTune((AutoTuneProfile) profileCombo.getSelectedItem(),
                 (AutoTunerRunner.Algorithm) algorithmCombo.getSelectedItem()));
 
-        algorithmCombo.addActionListener(e -> updateProfileLabel());
+        algorithmCombo.addActionListener(e -> {
+            updateProfileLabel();
+            updateProfileChoices();
+            showResultsOf(selectedAlgorithm());
+        });
         updateProfileLabel();
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
@@ -192,13 +207,21 @@ public class AutoTuneOverviewPanel extends JPanel {
                 int column = columnAtPoint(e.getPoint());
                 return column < 0 ? null : COLUMN_TOOLTIPS[profileTable.convertColumnIndexToModel(column)];
             }
+
+            @Override
+            public Dimension getPreferredSize() {
+                // Room for the two-line headings (the look and feel sizes the header for one line).
+                Dimension size = super.getPreferredSize();
+                size.height = Math.max(size.height, 2 * getFontMetrics(getFont()).getHeight() + 10);
+                return size;
+            }
         });
         profileTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         profileTable.setRowHeight(26);
         profileTable.setFillsViewportHeight(true);
         profileTable.getTableHeader().setReorderingAllowed(false);
         profileTable.setDefaultRenderer(Object.class, new ProfileCellRenderer());
-        int[] widths = {165, 190, 95, 140, 165, 90, 70, 95};
+        int[] widths = {150, 130, 130, 70, 120, 105, 80, 85, 70};
         for (int i = 0; i < widths.length; i++) {
             profileTable.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         }
@@ -213,7 +236,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         });
         JScrollPane tableScroll = new JScrollPane(profileTable);
         // The table takes the page width; the preferred width only sets where it starts to squeeze its columns.
-        Dimension tableSize = new Dimension(640, profileTable.getRowHeight() * 4 + 32);
+        Dimension tableSize = new Dimension(640, profileTable.getRowHeight() * 4 + 48);
         tableScroll.setPreferredSize(tableSize);
         tableScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, tableSize.height));
         box.add(left(tableScroll));
@@ -344,6 +367,8 @@ public class AutoTuneOverviewPanel extends JPanel {
         sessionReady = readyForTuning;
         if (!sameSession) {
             lastResult = null;
+            resultsByTuner.clear();
+            runTextByTuner.clear();
             tableModel.fireTableDataChanged();
         }
         refreshControls();
@@ -351,6 +376,7 @@ public class AutoTuneOverviewPanel extends JPanel {
 
     void tuneStarted() {
         tuning = true;
+        runningAlgorithm = selectedAlgorithm();
         tuneStartedMillis = System.currentTimeMillis();
         statusLabel.setForeground(UIManager.getColor("Label.foreground"));
         statusLabel.setText("Auto-Tune is running; progress is shown in the status bar…");
@@ -367,16 +393,16 @@ public class AutoTuneOverviewPanel extends JPanel {
                     : "no stable star field met the noise limits (very noisy, clouded or unaligned frames).";
             showProblem("Auto-Tune found no usable settings: " + reason + " Your current settings are unchanged.");
         } else {
-            lastResult = result;
-            lastAlgorithm = (AutoTunerRunner.Algorithm) algorithmCombo.getSelectedItem();
+            AutoTunerRunner.Algorithm tuner = runningAlgorithm != null ? runningAlgorithm : selectedAlgorithm();
             long seconds = result.calibration != null
                     ? Math.round(result.calibration.elapsedSeconds)
                     : (System.currentTimeMillis() - tuneStartedMillis) / 1000;
-            tunedSessionText = String.format(Locale.US, "Last run: %s, %d frames, %d×%d (%.1f MPix) · %s tuner · %s",
+            resultsByTuner.put(tuner, result);
+            runTextByTuner.put(tuner, String.format(Locale.US, "Last run: %s, %d frames, %d×%d (%.1f MPix) · %s tuner · %s",
                     sessionName == null ? "session" : sessionName, sessionFrames, sessionWidth, sessionHeight,
-                    sessionMegapixels(), lastAlgorithm == AutoTunerRunner.Algorithm.LEGACY ? "legacy" : "calibrated",
-                    formatDuration(seconds));
-            tableModel.fireTableDataChanged();
+                    sessionMegapixels(), tuner == AutoTunerRunner.Algorithm.LEGACY ? "legacy" : "calibrated",
+                    formatDuration(seconds)));
+            showResultsOf(tuner);
             applyProfile((AutoTuneProfile) profileCombo.getSelectedItem());
         }
         refreshControls();
@@ -426,6 +452,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         tunedValues.clear();
         tunedValues.putAll(snapshotCoreValues());
         appliedProfile = lastResult.calibration != null ? profile : (AutoTuneProfile) profileCombo.getSelectedItem();
+        appliedAlgorithm = selectedAlgorithm();
         tableModel.fireTableDataChanged();
         selectTableRow(appliedProfile);
         refreshMarkers();
@@ -489,7 +516,7 @@ public class AutoTuneOverviewPanel extends JPanel {
     private void updateProfileLabel() {
         boolean calibrated = algorithmCombo.getSelectedItem() != AutoTunerRunner.Algorithm.LEGACY;
         profileLabel.setText(calibrated ? "Apply after run:" : "Profile:");
-        String profiles = "Conservative: fewest false detections. Balanced: medium. Aggressive: close to the noise level.<br>"
+        String profiles = "Conservative: fewest noise detections. Balanced: medium. Aggressive: close to the noise level.<br>"
                 + "Maximum: as sensitive as possible, with many more candidates to review (for small sensors or targeted searches for faint objects).";
         profileCombo.setToolTipText(calibrated
                 ? "<html>The run measures every setting once and picks the best one for <b>every</b> profile.<br>"
@@ -498,8 +525,41 @@ public class AutoTuneOverviewPanel extends JPanel {
                 : "<html>The legacy tuner searches for this profile only; another profile needs another run.<br>" + profiles + "</html>");
         profileLabel.setToolTipText(profileCombo.getToolTipText());
         tableNoteLabel.setText("<html><div style='width: 480px;'>" + (calibrated
-                ? "One run measures every setting. Each profile then picks the most sensitive one within its budget of false detections per MPix per frame (the ≤ value)."
+                ? "One run measures every setting. Each profile then picks the most sensitive one within its budget of noise detections per MPix per frame (the ≤ value)."
                 : "The legacy tuner tunes one profile per run.") + "</div></html>");
+    }
+
+    private AutoTunerRunner.Algorithm selectedAlgorithm() {
+        return (AutoTunerRunner.Algorithm) algorithmCombo.getSelectedItem();
+    }
+
+    /** Shows the last run of this tuner (or an empty table), so results of the other tuner are never mixed in. */
+    private void showResultsOf(AutoTunerRunner.Algorithm tuner) {
+        lastResult = resultsByTuner.get(tuner);
+        tableModel.fireTableDataChanged();
+        if (isApplied(appliedProfile)) {
+            selectTableRow(appliedProfile);
+        }
+        refreshControls();
+    }
+
+    /** The legacy tuner has no Maximum profile (it would tune like Aggressive), so it is not offered there. */
+    private void updateProfileChoices() {
+        boolean legacy = selectedAlgorithm() == AutoTunerRunner.Algorithm.LEGACY;
+        AutoTuneProfile current = (AutoTuneProfile) profileCombo.getSelectedItem();
+        DefaultComboBoxModel<AutoTuneProfile> model = new DefaultComboBoxModel<>();
+        for (AutoTuneProfile profile : AutoTuneProfile.values()) {
+            if (!(legacy && profile == AutoTuneProfile.MAXIMUM)) {
+                model.addElement(profile);
+            }
+        }
+        profileCombo.setModel(model);
+        profileCombo.setSelectedItem(legacy && current == AutoTuneProfile.MAXIMUM ? AutoTuneProfile.AGGRESSIVE : current);
+    }
+
+    /** Whether this profile of the shown tuner is the one applied to the settings. */
+    private boolean isApplied(AutoTuneProfile profile) {
+        return profile != null && profile == appliedProfile && appliedAlgorithm == selectedAlgorithm();
     }
 
     private void refreshControls() {
@@ -513,13 +573,14 @@ public class AutoTuneOverviewPanel extends JPanel {
         useProfileButton.setEnabled(lastResult != null && lastResult.calibration != null && !tuning
                 && profileTable.getSelectedRow() >= 0);
         if (lastResult != null) {
-            lastRunLabel.setText(tunedSessionText);
+            lastRunLabel.setText(runTextByTuner.getOrDefault(selectedAlgorithm(), " "));
         } else if (sessionName == null) {
             lastRunLabel.setText("Import monochrome frames to run Auto-Tune.");
         } else if (!sessionReady) {
             lastRunLabel.setText("Auto-Tune needs enough monochrome frames (convert colour frames first).");
         } else {
-            lastRunLabel.setText(String.format(Locale.US, "Not run yet for %s (%d frames, %.1f MPix).",
+            lastRunLabel.setText(String.format(Locale.US, "The %s tuner has not run yet for %s (%d frames, %.1f MPix).",
+                    selectedAlgorithm() == AutoTunerRunner.Algorithm.LEGACY ? "legacy" : "calibrated",
                     sessionName, sessionFrames, sessionMegapixels()));
         }
     }
@@ -568,20 +629,21 @@ public class AutoTuneOverviewPanel extends JPanel {
 
         @Override
         public String getColumnName(int column) {
-            return COLUMNS[column];
+            return "<html><center>" + COLUMNS[column] + "</center></html>";
         }
 
         @Override
         public Object getValueAt(int row, int column) {
             AutoTuneProfile profile = rows.get(row);
-            String name = (profile == appliedProfile ? "● " : "   ") + profileName(profile);
+            String name = (isApplied(profile) ? "● " : "   ") + profileName(profile);
             CalibratedAutoTuner.Calibration calibration = lastResult.calibration;
             if (calibration == null) {
                 DetectionConfig c = lastResult.optimizedConfig;
                 switch (column) {
                     case 0: return name;
                     case 1: return String.format(Locale.US, "%.2f / %.2f / %d", c.detectionSigmaMultiplier, c.growSigmaMultiplier, c.minDetectionPixels);
-                    case 2: return String.format(Locale.US, "%.2f", c.masterSigmaMultiplier);
+                    case 2: return String.format(Locale.US, "%.2f / %.2f / %d", c.masterSigmaMultiplier, c.masterGrowSigmaMultiplier, c.masterMinDetectionPixels);
+                    case 3: return String.format(Locale.US, "%.2f", c.maxMaskOverlapFraction);
                     default: return "—";
                 }
             }
@@ -594,11 +656,13 @@ public class AutoTuneOverviewPanel extends JPanel {
                 case 1:
                     return String.format(Locale.US, "%.2f / %.2f / %d", cand.sigma, cand.growSigma, cand.minPixels);
                 case 2:
-                    return String.format(Locale.US, "%.2f", cand.masterSigma);
+                    return String.format(Locale.US, "%.2f / %.2f / %d", cand.masterSigma, cand.masterGrowSigma, cand.masterMinPixels);
                 case 3:
+                    return String.format(Locale.US, "%.2f", cand.maskOverlap);
+                case 4:
                     return String.format(Locale.US, "%.2f", cand.falsePositivesPerMpixFrame)
                             + (calibration.withinBudget[profile.ordinal()] ? "" : "  ⚠");
-                case 4:
+                case 5:
                     if (frameArea <= 0) {
                         return "—";
                     }
@@ -606,11 +670,11 @@ public class AutoTuneOverviewPanel extends JPanel {
                         return "< " + formatCount(Math.ceil(cand.falsePositiveUpperPerMpixFrame * frameArea));
                     }
                     return "≈ " + formatCount(Math.round(cand.falsePositivesPerMpixFrame * frameArea));
-                case 5:
-                    return String.format(Locale.US, "%.0f %%", 100 * cand.recoveredFraction);
                 case 6:
-                    return Double.isNaN(cand.snr50) ? "—" : String.format(Locale.US, "%.1f", cand.snr50);
+                    return String.format(Locale.US, "%.0f %%", 100 * cand.recoveredFraction);
                 case 7:
+                    return Double.isNaN(cand.snr50) ? "—" : String.format(Locale.US, "%.1f", cand.snr50);
+                case 8:
                     return String.format(Locale.US, "%.1f %%", 100 * cand.maskCoverage);
                 default:
                     return "";
@@ -623,18 +687,18 @@ public class AutoTuneOverviewPanel extends JPanel {
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
             Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             AutoTuneProfile profile = tableModel.profileAt(row);
-            c.setFont(c.getFont().deriveFont(profile == appliedProfile ? Font.BOLD : Font.PLAIN));
+            c.setFont(c.getFont().deriveFont(isApplied(profile) ? Font.BOLD : Font.PLAIN));
             setHorizontalAlignment(column == 0 ? LEFT : CENTER);
-            boolean overBudget = column == 3 && lastResult != null && lastResult.calibration != null
+            boolean overBudget = column == 4 && lastResult != null && lastResult.calibration != null
                     && !lastResult.calibration.withinBudget[profile.ordinal()];
             if (!isSelected) {
                 c.setForeground(overBudget ? warningColor() : table.getForeground());
             }
-            if (column == 0 && profile == appliedProfile && !isSelected) {
+            if (column == 0 && isApplied(profile) && !isSelected) {
                 c.setForeground(DetectionConfigurationPanel.accentColor());
             }
             if (overBudget) {
-                setToolTipText(String.format(Locale.US, "No setting met the %s budget of %.2f per MPix per frame; the cleanest one was used.",
+                setToolTipText(String.format(Locale.US, "No setting met the %s budget of %.2f noise detections per MPix per frame; the cleanest one was used.",
                         profileName(profile), CalibratedAutoTuner.FALSE_POSITIVE_BUDGET_PER_MPIX_FRAME[profile.ordinal()]));
             } else {
                 setToolTipText(null);
