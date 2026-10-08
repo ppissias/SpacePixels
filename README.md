@@ -99,6 +99,8 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 
 [Watch the video tutorial on YouTube](https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ)
 
+*A new tutorial using the latest version is on the way.*
+
 
 ## JTransient engine documentation
 
