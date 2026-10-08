@@ -13,10 +13,13 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.logging.Logger;
+import java.util.stream.IntStream;
 
 /**
  * Handles sidecar JSON persistence and embedded report cache storage for live lookup responses.
@@ -26,6 +29,7 @@ final class ReportLookupCacheStore {
     private static final int MAX_SIDECAR_BYTES = (10 * 1024 * 1024) + (256 * 1024);
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
     private static final Logger LOGGER = Logger.getLogger(ReportLookupCacheStore.class.getName());
+    private static final Object[] FILE_LOCKS = IntStream.range(0, 128).mapToObj(index -> new Object()).toArray();
 
     private ReportLookupCacheStore() {
     }
@@ -92,10 +96,12 @@ final class ReportLookupCacheStore {
         if (reportPath == null || !Files.isRegularFile(reportPath)) {
             return createEmptyPersistedLookupCache();
         }
-        try {
-            return extractPersistedLookupCache(Files.readString(reportPath, StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            return createEmptyPersistedLookupCache();
+        synchronized (fileLock(reportPath)) {
+            try {
+                return extractPersistedLookupCache(Files.readString(reportPath, StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                return createEmptyPersistedLookupCache();
+            }
         }
     }
 
@@ -103,17 +109,19 @@ final class ReportLookupCacheStore {
         if (sidecarPath == null || !Files.isRegularFile(sidecarPath)) {
             return null;
         }
-        try {
-            long fileSize = Files.size(sidecarPath);
-            if (fileSize > MAX_SIDECAR_BYTES) {
+        synchronized (fileLock(sidecarPath)) {
+            try {
+                long fileSize = Files.size(sidecarPath);
+                if (fileSize > MAX_SIDECAR_BYTES) {
+                    return null;
+                }
+                try (InputStream inputStream = Files.newInputStream(sidecarPath)) {
+                    JsonElement parsed = tryParseJson(readLimitedUtf8(inputStream, MAX_SIDECAR_BYTES));
+                    return parsed != null && parsed.isJsonObject() ? parsed.getAsJsonObject() : null;
+                }
+            } catch (IOException e) {
                 return null;
             }
-            try (InputStream inputStream = Files.newInputStream(sidecarPath)) {
-                JsonElement parsed = tryParseJson(readLimitedUtf8(inputStream, MAX_SIDECAR_BYTES));
-                return parsed != null && parsed.isJsonObject() ? parsed.getAsJsonObject() : null;
-            }
-        } catch (IOException e) {
-            return null;
         }
     }
 
@@ -136,11 +144,13 @@ final class ReportLookupCacheStore {
         if (sidecarPath == null || !isCacheableSidecarResponse(response)) {
             return;
         }
-        try {
-            Files.createDirectories(sidecarPath.getParent());
-            Files.writeString(sidecarPath, GSON.toJson(response), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            LOGGER.warning("Failed to write report sidecar JSON " + sidecarPath + ": " + e.getMessage());
+        synchronized (fileLock(sidecarPath)) {
+            try {
+                Files.createDirectories(sidecarPath.toAbsolutePath().getParent());
+                writeAtomically(sidecarPath, GSON.toJson(response));
+            } catch (IOException e) {
+                LOGGER.warning("Failed to write report sidecar JSON " + sidecarPath + ": " + e.getMessage());
+            }
         }
     }
 
@@ -150,21 +160,39 @@ final class ReportLookupCacheStore {
             return;
         }
 
-        try {
-            String reportHtml = Files.readString(reportPath, StandardCharsets.UTF_8);
-            JsonObject cache = extractPersistedLookupCache(reportHtml);
-            JsonObject entries = getObject(cache, "entries");
-            if (entries == null) {
-                entries = new JsonObject();
-                cache.add("entries", entries);
+        synchronized (fileLock(reportPath)) {
+            try {
+                String reportHtml = Files.readString(reportPath, StandardCharsets.UTF_8);
+                JsonObject cache = extractPersistedLookupCache(reportHtml);
+                JsonObject entries = getObject(cache, "entries");
+                if (entries == null) {
+                    entries = new JsonObject();
+                    cache.add("entries", entries);
+                }
+                entries.add(trimmedSidecarFileName, response.deepCopy());
+                writeAtomically(reportPath, upsertPersistedLookupCacheBlock(reportHtml, cache));
+            } catch (IOException e) {
+                LOGGER.warning("Failed to persist report lookup cache in " + reportPath + ": " + e.getMessage());
             }
-            entries.add(trimmedSidecarFileName, response.deepCopy());
-            Files.writeString(
-                    reportPath,
-                    upsertPersistedLookupCacheBlock(reportHtml, cache),
-                    StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            LOGGER.warning("Failed to persist report lookup cache in " + reportPath + ": " + e.getMessage());
+        }
+    }
+
+    private static Object fileLock(Path path) {
+        return FILE_LOCKS[Math.floorMod(path.toAbsolutePath().normalize().hashCode(), FILE_LOCKS.length)];
+    }
+
+    private static void writeAtomically(Path path, String contents) throws IOException {
+        Path target = path.toAbsolutePath().normalize();
+        Path temporary = Files.createTempFile(target.getParent(), ".spacepixels-cache-", ".tmp");
+        try {
+            Files.writeString(temporary, contents, StandardCharsets.UTF_8);
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException unsupported) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
         }
     }
 

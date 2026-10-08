@@ -66,6 +66,7 @@ public final class XisfImageConverter {
         if (directory == null || !directory.isDirectory()) {
             return directory;
         }
+        FitsSequenceValidator.validateDirectoryExtensions(directory);
 
         if (containsFilesWithExtensions(directory, FITS_EXTENSIONS)) {
             return directory;

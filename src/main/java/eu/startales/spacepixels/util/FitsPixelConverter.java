@@ -16,6 +16,7 @@ import nom.tam.fits.HeaderCard;
 import nom.tam.util.Cursor;
 
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.util.List;
 
 /**
@@ -55,87 +56,61 @@ final class FitsPixelConverter {
     }
 
     static short[][] standardizeTo16BitMono(Object kernel) throws IOException {
-        if (kernel instanceof float[][]) {
-            float[][] floatData = (float[][]) kernel;
-            int height = floatData.length;
-            int width = floatData[0].length;
-            short[][] shortData = new short[height][width];
+        return standardizeTo16BitMono(kernel, null);
+    }
 
-            float maxVal = -Float.MAX_VALUE;
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    if (floatData[y][x] > maxVal) {
-                        maxVal = floatData[y][x];
-                    }
-                }
-            }
-            float scaleFactor = (maxVal <= 10.0f && maxVal > 0.0f) ? 65535.0f : 1.0f;
-
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    shortData[y][x] = toUnsigned16Storage(floatData[y][x] * scaleFactor);
-                }
-            }
-            return shortData;
-        } else if (kernel instanceof int[][]) {
-            int[][] intData = (int[][]) kernel;
-            int height = intData.length;
-            int width = intData[0].length;
-            short[][] shortData = new short[height][width];
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    shortData[y][x] = toUnsigned16Storage(intData[y][x]);
-                }
-            }
-            return shortData;
+    static short[][] standardizeTo16BitMono(Object kernel, Header header) throws IOException {
+        if (!(kernel instanceof short[][] || kernel instanceof int[][] || kernel instanceof float[][])) {
+            throw new IOException("Unsupported FITS format for Mono Standardization");
         }
-        throw new IOException("Unsupported FITS format for Mono Standardization");
+        return standardizePlanes(new Object[]{kernel}, kernel instanceof float[][], header)[0];
     }
 
     static short[][][] standardizeTo16BitColor(Object kernel) throws IOException {
-        if (kernel instanceof float[][][]) {
-            float[][][] floatData = (float[][][]) kernel;
-            int depth = floatData.length;
-            int height = floatData[0].length;
-            int width = floatData[0][0].length;
-            short[][][] shortData = new short[depth][height][width];
+        return standardizeTo16BitColor(kernel, null);
+    }
 
-            float maxVal = -Float.MAX_VALUE;
-            for (int z = 0; z < depth; z++) {
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        if (floatData[z][y][x] > maxVal) {
-                            maxVal = floatData[z][y][x];
+    static short[][][] standardizeTo16BitColor(Object kernel, Header header) throws IOException {
+        if (!(kernel instanceof short[][][] || kernel instanceof int[][][] || kernel instanceof float[][][])) {
+            throw new IOException("Unsupported FITS format for Color Standardization");
+        }
+        return standardizePlanes((Object[]) kernel, kernel instanceof float[][][], header);
+    }
+
+    private static short[][][] standardizePlanes(Object[] planes, boolean floatingPoint, Header header) throws IOException {
+        double offset = header == null ? 0.0 : header.getDoubleValue("BZERO", 0.0);
+        double scale = header == null ? 1.0 : header.getDoubleValue("BSCALE", 1.0);
+        if (!Double.isFinite(offset) || !Double.isFinite(scale)) {
+            throw new IOException("FITS BZERO and BSCALE must be finite.");
+        }
+        Object[] firstPlane = (Object[]) planes[0];
+        int height = firstPlane.length;
+        int width = Array.getLength(firstPlane[0]);
+        double maximum = Double.NEGATIVE_INFINITY;
+        if (floatingPoint) {
+            for (Object plane : planes) {
+                for (Object row : (Object[]) plane) {
+                    for (int column = 0; column < width; column++) {
+                        double physicalValue = Array.getDouble(row, column) * scale + offset;
+                        if (Double.isFinite(physicalValue)) {
+                            maximum = Math.max(maximum, physicalValue);
                         }
                     }
                 }
             }
-            float scaleFactor = (maxVal <= 10.0f && maxVal > 0.0f) ? 65535.0f : 1.0f;
-
-            for (int z = 0; z < depth; z++) {
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        shortData[z][y][x] = toUnsigned16Storage(floatData[z][y][x] * scaleFactor);
-                    }
-                }
-            }
-            return shortData;
-        } else if (kernel instanceof int[][][]) {
-            int[][][] intData = (int[][][]) kernel;
-            int depth = intData.length;
-            int height = intData[0].length;
-            int width = intData[0][0].length;
-            short[][][] shortData = new short[depth][height][width];
-            for (int z = 0; z < depth; z++) {
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        shortData[z][y][x] = toUnsigned16Storage(intData[z][y][x]);
-                    }
-                }
-            }
-            return shortData;
         }
-        throw new IOException("Unsupported FITS format for Color Standardization");
+        double normalization = floatingPoint && maximum > 0.0 && maximum <= 10.0 ? 65535.0 : 1.0;
+        short[][][] result = new short[planes.length][height][width];
+        for (int channel = 0; channel < planes.length; channel++) {
+            Object[] rows = (Object[]) planes[channel];
+            for (int row = 0; row < height; row++) {
+                for (int column = 0; column < width; column++) {
+                    double physicalValue = Array.getDouble(rows[row], column) * scale + offset;
+                    result[channel][row][column] = toUnsigned16Storage(physicalValue * normalization);
+                }
+            }
+        }
+        return result;
     }
 
     static short[][] extractLuminance(short[][][] color16) {
@@ -163,25 +138,8 @@ final class FitsPixelConverter {
                         + kernelData.getClass().getName());
     }
 
-    private static short toUnsigned16Storage(float value) {
-        float clamped = value;
-        if (clamped < 0) {
-            clamped = 0;
-        }
-        if (clamped > 65535) {
-            clamped = 65535;
-        }
+    private static short toUnsigned16Storage(double value) {
+        double clamped = Double.isNaN(value) ? 0.0 : Math.max(0.0, Math.min(65535.0, value));
         return (short) (Math.round(clamped) - 32768);
-    }
-
-    private static short toUnsigned16Storage(int value) {
-        int clamped = value;
-        if (clamped < 0) {
-            clamped = 0;
-        }
-        if (clamped > 65535) {
-            clamped = 65535;
-        }
-        return (short) (clamped - 32768);
     }
 }

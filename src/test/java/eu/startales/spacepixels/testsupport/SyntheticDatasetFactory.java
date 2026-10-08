@@ -223,6 +223,10 @@ public final class SyntheticDatasetFactory {
         try (Fits fits = new Fits()) {
             BasicHDU<?> hdu = Fits.makeHDU(data);
             Header header = hdu.getHeader();
+            if (data instanceof short[][] || data instanceof short[][][]) {
+                header.addValue("BZERO", 32768.0, null);
+                header.addValue("BSCALE", 1.0, null);
+            }
             for (Map.Entry<String, Object> entry : headerValues.entrySet()) {
                 addHeaderValue(header, entry.getKey(), entry.getValue());
             }

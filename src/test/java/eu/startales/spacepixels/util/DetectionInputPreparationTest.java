@@ -88,4 +88,55 @@ public class DetectionInputPreparationTest {
             }
         }
     }
+
+    @Test
+    public void preparationAppliesUnsigned32BitOffsetWithoutLosingPrecision() throws Exception {
+        assertScaledPreparation(new int[][]{{Integer.MIN_VALUE + 1000, Integer.MIN_VALUE + 4000}},
+                2147483648.0, 1.0, new int[]{1000, 4000});
+    }
+
+    @Test
+    public void preparationAppliesFloatingPointScalingBeforeNormalization() throws Exception {
+        assertScaledPreparation(new float[][]{{1.0f, 2.0f}}, 100.0, 900.0, new int[]{1000, 1900});
+    }
+
+    @Test
+    public void preparationAppliesColorScalingBeforeExtractingLuminance() throws Exception {
+        int[] values = {Integer.MIN_VALUE + 1000, Integer.MIN_VALUE + 4000};
+        assertScaledPreparation(new int[][][]{{values}, {values}, {values}},
+                2147483648.0, 1.0, new int[]{1000, 4000});
+    }
+
+    @Test
+    public void preparationNormalizesScaled16BitDataInsteadOfRelabelingRawPixels() throws Exception {
+        assertScaledPreparation(new short[][]{{-6000, 0, 2000}}, 10000.0, 2.0, new int[]{0, 10000, 14000});
+    }
+
+    private static void assertScaledPreparation(Object kernel, double offset, double scale, int[] expected) throws Exception {
+        Path inputDirectory = Files.createTempDirectory("spacepixels-scaled-fits");
+        File originalFile = inputDirectory.resolve("scaled.fit").toFile();
+        try (Fits fits = new Fits()) {
+            BasicHDU<?> hdu = Fits.makeHDU(kernel);
+            hdu.getHeader().addValue("BZERO", offset, null);
+            hdu.getHeader().addValue("BSCALE", scale, null);
+            hdu.getHeader().addValue("DATE-OBS", "2026-04-08T01:00:00", null);
+            fits.addHDU(hdu);
+            fits.write(originalFile);
+        }
+        byte[] originalBytes = Files.readAllBytes(originalFile.toPath());
+        DetectionInputPreparation.PreparedDirectory prepared =
+                DetectionInputPreparation.prepareInputDirectory(inputDirectory.toFile(), true, null);
+        assertTrue(prepared.isInputWasPrepared());
+        try (Fits fits = new Fits(new File(prepared.getPreparedInputDirectory(), "scaled.fit"))) {
+            BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
+            short[][] data = (short[][]) hdu.getKernel();
+            assertEquals(32768.0, hdu.getHeader().getDoubleValue("BZERO"), 0.0);
+            assertEquals(1.0, hdu.getHeader().getDoubleValue("BSCALE"), 0.0);
+            assertEquals("2026-04-08T01:00:00", hdu.getHeader().getStringValue("DATE-OBS"));
+            for (int column = 0; column < expected.length; column++) {
+                assertEquals(expected[column], data[0][column] + 32768);
+            }
+        }
+        org.junit.Assert.assertArrayEquals(originalBytes, Files.readAllBytes(originalFile.toPath()));
+    }
 }

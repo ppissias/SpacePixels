@@ -74,6 +74,7 @@ public final class DetectionInputPreparation {
         if (!inputDirectory.exists() || !inputDirectory.isDirectory()) {
             throw new IOException("Input path is not a directory: " + inputDirectory.getAbsolutePath());
         }
+        FitsSequenceValidator.validateDirectoryExtensions(inputDirectory);
 
         if (!autoPrepare) {
             return new PreparedDirectory(inputDirectory, inputDirectory, false);
@@ -97,6 +98,7 @@ public final class DetectionInputPreparation {
         if (fitsFiles.length == 0) {
             throw new IOException("No FITS files in directory: " + workingDirectory.getAbsolutePath());
         }
+        FitsSequenceValidator.validate(fitsFiles);
 
         emitProgress(progressListener, 72, "Validating whether the FITS inputs are already detection-ready...");
         if (allFilesDetectionReady(fitsFiles)) {
@@ -142,7 +144,10 @@ public final class DetectionInputPreparation {
                 return false;
             }
 
-            return imageHdu.getHeader().getIntValue("BITPIX", 0) == 16;
+            Header header = imageHdu.getHeader();
+            return header.getIntValue("BITPIX", 0) == 16
+                    && header.getDoubleValue("BZERO", 0.0) == 32768.0
+                    && header.getDoubleValue("BSCALE", 1.0) == 1.0;
         }
     }
 
@@ -164,19 +169,12 @@ public final class DetectionInputPreparation {
             Header originalHeader = imageHdu.getHeader();
             Object kernel = imageHdu.getKernel();
 
-            if (kernel instanceof short[][]) {
-                return FitsPixelConverter.createFitsFromData(kernel, originalHeader);
-            }
-            if (kernel instanceof short[][][]) {
-                short[][] monoKernel = FitsPixelConverter.convertColorKernelToMono(kernel);
+            if (kernel instanceof short[][] || kernel instanceof float[][] || kernel instanceof int[][]) {
+                short[][] monoKernel = FitsPixelConverter.standardizeTo16BitMono(kernel, originalHeader);
                 return FitsPixelConverter.createFitsFromData(monoKernel, originalHeader);
             }
-            if (kernel instanceof float[][] || kernel instanceof int[][]) {
-                short[][] monoKernel = FitsPixelConverter.standardizeTo16BitMono(kernel);
-                return FitsPixelConverter.createFitsFromData(monoKernel, originalHeader);
-            }
-            if (kernel instanceof float[][][] || kernel instanceof int[][][]) {
-                short[][][] colorKernel = FitsPixelConverter.standardizeTo16BitColor(kernel);
+            if (kernel instanceof short[][][] || kernel instanceof float[][][] || kernel instanceof int[][][]) {
+                short[][][] colorKernel = FitsPixelConverter.standardizeTo16BitColor(kernel, originalHeader);
                 short[][] monoKernel = FitsPixelConverter.extractLuminance(colorKernel);
                 return FitsPixelConverter.createFitsFromData(monoKernel, originalHeader);
             }
@@ -228,7 +226,7 @@ public final class DetectionInputPreparation {
     }
 
     private static File[] listFilesWithExtensions(File directory, String[] extensions) {
-        File[] files = directory.listFiles((dir, name) -> hasExtension(name, extensions));
+        File[] files = directory.listFiles(file -> file.isFile() && hasExtension(file.getName(), extensions));
         if (files == null) {
             return new File[0];
         }

@@ -35,7 +35,8 @@ public class FitsImportTask implements Runnable {
     public void run() {
         // 1. Tell the UI to lock up and show progress
         eventBus.post(new FitsImportStartedEvent());
-
+        ImageProcessing imgProcessing = null;
+        boolean ownershipTransferred = false;
         try {
             File importDirectory = XisfImageConverter.prepareDirectoryForFitsImport(
                     directory,
@@ -46,12 +47,13 @@ public class FitsImportTask implements Runnable {
             }
 
             // 2. Do the heavy lifting
-            ImageProcessing imgProcessing = ImageProcessing.getInstance(importDirectory);
+            imgProcessing = ImageProcessing.getInstance(importDirectory);
             FitsFileInformation[] filesInfo = imgProcessing.getFitsfileInformation();
             eventBus.post(new EngineProgressUpdateEvent(100, "Import complete."));
 
             // 3. Post success with the extracted data
-            eventBus.post(new FitsImportFinishedEvent(true, null, imgProcessing, filesInfo));
+            eventBus.post(new FitsImportFinishedEvent(true, null, filesInfo.length == 0 ? null : imgProcessing, filesInfo));
+            ownershipTransferred = filesInfo.length > 0;
 
         } catch (ImageProcessing.RedirectImportException e) {
             // The user opted to automatically load the newly converted directory!
@@ -61,6 +63,10 @@ public class FitsImportTask implements Runnable {
             ApplicationWindow.logger.log(Level.SEVERE, "Error loading FITS files", e);
             // 3. Post failure
             eventBus.post(new FitsImportFinishedEvent(false, e.getMessage(), null, null));
+        } finally {
+            if (!ownershipTransferred && imgProcessing != null) {
+                imgProcessing.close();
+            }
         }
     }
 }

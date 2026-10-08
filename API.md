@@ -56,6 +56,18 @@ Library consumers should use `getExportDirectory()` and `getReportFile()` rather
 
 ## Input preparation modes
 
+All imported images must use the same extension (case-insensitive). FITS frames must also share
+their BITPIX storage type, mono/RGB layout, dimensions and compression state. These checks run
+before automatic FITS conversion, so conversion cannot hide a mixed sequence. Compressed suffixes
+such as `.fit.fz` and `.fits.fz` are treated as different extensions.
+
+Timing must be consistent: every frame must have a parseable observation timestamp, or none may
+have one. Timed sequences sort by timestamp, with filename as a tie breaker; untimed sequences
+sort by filename. Malformed timestamps count as unavailable.
+
+FITS normalization applies the original `BSCALE` and `BZERO` in double precision before clipping
+to unsigned 16-bit storage. The API closes its import executor on both success and failure.
+
 `InputPreparationMode` controls how strictly the API treats the input directory:
 
 - `FAIL_IF_NOT_READY`

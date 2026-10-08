@@ -153,6 +153,9 @@ public class ApplicationWindow {
         frmIpodImage.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
+                if (imagePreProcessing != null) {
+                    imagePreProcessing.close();
+                }
                 ReportLookupProxyServer.getInstance().stop();
             }
         });
@@ -268,6 +271,9 @@ public class ApplicationWindow {
                 }
 
                 // Update internal state
+                if (this.imagePreProcessing != null && this.imagePreProcessing != event.getImagePreProcessing()) {
+                    this.imagePreProcessing.close();
+                }
                 this.imagePreProcessing = event.getImagePreProcessing();
 
                 // Update UI components
@@ -330,6 +336,9 @@ public class ApplicationWindow {
     // --- HELPER METHODS ---
 
     private void clearImportedDataset() {
+        if (this.imagePreProcessing != null) {
+            this.imagePreProcessing.close();
+        }
         this.imagePreProcessing = null;
         mainApplicationPanel.setTableModel(new FitsFileTableModel(new FitsFileInformation[0]));
         setTabEnabled(configurationApplicationPanel, false);

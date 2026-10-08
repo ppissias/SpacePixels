@@ -148,6 +148,15 @@ The `Main` tab contains:
 2. Select the directory containing your aligned FITS or XISF sequence.
 3. SpacePixels scans the folder and validates the frames.
 
+The image files must all have the same extension (case-insensitive), and FITS files must all
+have the same bit depth/storage type, mono/RGB layout, dimensions and compression state.
+Mixed sequences are rejected before decompression or FITS standardization. Keep `.fit`, `.fits`,
+`.fts`, compressed FITS and XISF sequences in separate folders.
+
+Either every frame must have a usable observation timestamp, or none may have one. A mixture
+of timed and untimed files fails import; a malformed timestamp counts as untimed. Timed frames
+are ordered chronologically (filename breaks ties), while untimed frames are ordered by filename.
+
 ### What SpacePixels may prompt you to do
 
 Depending on the data, the import stage may prompt you to:

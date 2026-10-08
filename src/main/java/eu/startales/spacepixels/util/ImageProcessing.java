@@ -46,7 +46,7 @@ import java.util.concurrent.Future;
  * delegated to focused collaborators so the public processing API can remain stable while the
  * implementation is split into smaller responsibilities.</p>
  */
-public class ImageProcessing {
+public class ImageProcessing implements AutoCloseable {
     public static final int MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS =
             DetectionPipelineSupport.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS;
     private static final DateTimeFormatter TRACE_TIMESTAMP_FORMAT =
@@ -281,9 +281,8 @@ public class ImageProcessing {
 
     private final File alignedFitsFolderFullPath;
 
-    // --- NEW: Multi-threading Executor! ---
-    // Uses a cached pool to dynamically spin up threads based on available CPU cores
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final ExecutorService executor = Executors.newFixedThreadPool(
+            Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors())));
 
     private final AppConfig appConfig;
     private final File appConfigFile;
@@ -299,6 +298,11 @@ public class ImageProcessing {
      */
     public static synchronized ImageProcessing getInstance(File alignedFitsFolderFullPath) throws IOException, FitsException {
         return new ImageProcessing(alignedFitsFolderFullPath);
+    }
+
+    @Override
+    public void close() {
+        executor.shutdown();
     }
 
     /**
@@ -554,6 +558,7 @@ public class ImageProcessing {
         int numFiles = fitsFileInformation.length;
 
         if (numFiles == 0) return new FitsFileInformation[0];
+        FitsSequenceValidator.validate(fitsFileInformation);
 
         // --- NEW: COMPRESSION GATEKEEPER ---
         try (Fits firstFits = new Fits(fitsFileInformation[0])) {
@@ -800,16 +805,7 @@ public class ImageProcessing {
             throw new IOException("Multi-threaded file loading failed: " + e.getMessage(), e);
         }
 
-        // --- NEW: Sort chronologically based on DATE-OBS FITS header ---
-        Arrays.sort(ret, (a, b) -> {
-            long t1 = a.getObservationTimestamp();
-            long t2 = b.getObservationTimestamp();
-            if (t1 != -1 && t2 != -1) {
-                return Long.compare(t1, t2);
-            }
-            // Fallback to alphabetical if time isn't present
-            return a.getFileName().compareTo(b.getFileName());
-        });
+        FitsSequenceValidator.validateAndSort(ret);
 
         this.cachedFileInfo = ret;
         System.out.println("Finished loading metadata for " + numFiles + " files instantly.");
@@ -864,14 +860,7 @@ public class ImageProcessing {
             ret[i] = loadedResults[i].fileInfo;
         }
 
-        Arrays.sort(ret, (a, b) -> {
-            long t1 = a.getObservationTimestamp();
-            long t2 = b.getObservationTimestamp();
-            if (t1 != -1 && t2 != -1) {
-                return Long.compare(t1, t2);
-            }
-            return a.getFileName().compareTo(b.getFileName());
-        });
+        FitsSequenceValidator.validateAndSort(ret);
 
         this.cachedFileInfo = ret;
         System.out.println("Validated and loaded metadata for " + numFiles + " FITS files.");
@@ -960,24 +949,17 @@ public class ImageProcessing {
             throw new IOException("file:" + directory.getAbsolutePath() + " is not a directory");
         }
 
-        List<File> fitsFilesPath = new ArrayList<File>();
-        for (File f : directory.listFiles((dir, name) -> {
-            String[] acceptedFileTypes = {"fits", "fit", "fts", "Fits", "Fit", "FIT", "FTS", "Fts", "FITS", "fz", "Fz", "FZ"};
-            for (String acceptedFileEnd : acceptedFileTypes) {
-                if (name.endsWith(acceptedFileEnd)) {
-                    return true;
-                }
-            }
-            return false;
-        })) {
-            fitsFilesPath.add(f);
+        FitsSequenceValidator.validateDirectoryExtensions(directory);
+        File[] ret = directory.listFiles(file -> file.isFile()
+                && FitsSequenceValidator.imageExtension(file.getName()) != null
+                && !".xisf".equals(FitsSequenceValidator.imageExtension(file.getName())));
+        if (ret == null) {
+            throw new IOException("Could not list input directory: " + directory);
         }
-
-        if (fitsFilesPath.isEmpty()) {
+        if (ret.length == 0) {
             throw new IOException("No fits files in directory:" + directory.getAbsolutePath());
         }
 
-        File[] ret = fitsFilesPath.toArray(new File[]{});
         Arrays.sort(ret, Comparator.comparing(File::getAbsolutePath));
         return ret;
     }
@@ -1116,7 +1098,8 @@ public class ImageProcessing {
      */
     private Fits convertToMono(Fits colorFITSImage) throws FitsException, IOException {
         BasicHDU<?> originalHDU = getImageHDU(colorFITSImage);
-        Object monoKernelData = FitsPixelConverter.convertColorKernelToMono(originalHDU.getKernel());
+        Object monoKernelData = FitsPixelConverter.extractLuminance(
+                FitsPixelConverter.standardizeTo16BitColor(originalHDU.getKernel(), originalHDU.getHeader()));
         return FitsPixelConverter.createFitsFromData(monoKernelData, originalHDU.getHeader());
     }
 
@@ -1222,7 +1205,7 @@ public class ImageProcessing {
 
                 if (isColor) {
                     // 1. Convert to 16-bit Color
-                    short[][][] color16 = FitsPixelConverter.standardizeTo16BitColor(kernel);
+                    short[][][] color16 = FitsPixelConverter.standardizeTo16BitColor(kernel, origHeader);
                     Fits colorFits = FitsPixelConverter.createFitsFromData(color16, origHeader);
                     String colorName = addDirectory(file, "_16bit_color");
                     writeFitsWithSuffix(colorFits, colorName, "_16bit_color");
@@ -1247,7 +1230,7 @@ public class ImageProcessing {
 
                 } else {
                     // Convert to 16-bit Mono
-                    short[][] mono16 = FitsPixelConverter.standardizeTo16BitMono(kernel);
+                    short[][] mono16 = FitsPixelConverter.standardizeTo16BitMono(kernel, origHeader);
                     Fits monoFits = FitsPixelConverter.createFitsFromData(mono16, origHeader);
                     String monoName = addDirectory(file, "_16bit_converted");
                     if (targetDir == null) targetDir = new File(monoName).getParentFile();

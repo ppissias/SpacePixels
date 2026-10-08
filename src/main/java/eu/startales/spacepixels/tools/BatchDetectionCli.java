@@ -58,8 +58,6 @@ public class BatchDetectionCli {
 
     public static void main(String[] args) {
         int exitCode = execute(args, System.out, System.err);
-        // Exit explicitly: idle worker threads of cached thread pools would otherwise keep the JVM alive
-        // for up to a minute after the run has finished.
         System.exit(exitCode);
     }
 

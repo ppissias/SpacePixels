@@ -40,7 +40,7 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
     @Override
     public SpacePixelsPipelineResult run(SpacePixelsPipelineRequest request) throws SpacePixelsPipelineException {
         Objects.requireNonNull(request, "request");
-
+        ImageProcessing imageProcessing = null;
         try {
             DetectionConfig baseConfig = request.getDetectionConfig();
             if (baseConfig == null) {
@@ -54,7 +54,7 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
                     (percentage, message) -> emitScaledProgress(progressListener, 0, 15, percentage, message));
 
             emitProgress(progressListener, 15, "Validating FITS metadata for pipeline execution...");
-            ImageProcessing imageProcessing = ImageProcessing.getInstance(preparedDirectory.getPreparedInputDirectory());
+            imageProcessing = ImageProcessing.getInstance(preparedDirectory.getPreparedInputDirectory());
             FitsFileInformation[] filesInfo = imageProcessing.getFitsfileInformationHeadless();
 
             JTransientAutoTuner.AutoTunerResult autoTuneResult = null;
@@ -111,6 +111,10 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
             throw e;
         } catch (Exception e) {
             throw new SpacePixelsPipelineException("SpacePixels pipeline execution failed: " + e.getMessage(), e);
+        } finally {
+            if (imageProcessing != null) {
+                imageProcessing.close();
+            }
         }
     }
 
