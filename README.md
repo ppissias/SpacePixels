@@ -206,7 +206,7 @@ The standard pipeline exports an HTML session report plus PNG and GIF assets. De
 - WCS-aware identification helpers: SkyBoT and JPL Small-Body Identification for moving-object tracks, SatChecker for streak tracks, and Stellarium Web sky-context links for both moving tracks and streaks
 - Deep-stack anomalies and maximum-stack streak hints
 - Global trajectory and transient maps
-- Interactive unclassified-transient map with time-colored source footprints and markers, metadata, and a zoomed inspection view
+- Interactive unclassified-transient map with time-colored source footprints and markers, metadata, and a zoomed inspection view that animates the detection frame and the two nearest quality-checked frames on either side
 - Variable-star photometry (when enabled): readiness verdict and checks, noise model, per-frame diagnostics, candidate light curves, CSV exports, and a per-candidate button that looks the position up in AAVSO VSX
 - Optional AI creative report sections
 

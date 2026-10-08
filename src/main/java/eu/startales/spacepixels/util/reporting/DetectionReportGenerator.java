@@ -1478,7 +1478,8 @@ public class DetectionReportGenerator {
             // =================================================================
             // UNCLASSIFIED TRANSIENTS
             // =================================================================
-            UnclassifiedTransientSectionWriter.writeSection(report, reportContext, allTransients, unclassifiedTransients);
+            UnclassifiedTransientSectionWriter.writeSection(report, reportContext, allTransients, unclassifiedTransients,
+                    UnclassifiedTransientSectionWriter.rejectedFrameIndices(pipelineTelemetry));
 
             // =================================================================
             // 6. CREATIVE TRIBUTE

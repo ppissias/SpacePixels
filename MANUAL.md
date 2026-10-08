@@ -842,6 +842,8 @@ These sections summarize the full night in a single view and help reveal:
 
 The unclassified inspector uses the median stack as a quiet background and colors exact detected source footprints from blue (early frames) to red (late frames). Hover over a marker for basic source data; select it to inspect an enlarged local cutout with the footprint overlaid and detailed measurements. It shows detections left after tracks, anomalies, and local rescue candidates have been accounted for. Local activity clusters remain visible because they are review groupings rather than classified objects.
 
+The enlarged cutout plays a short animation of the same 80 × 80 pixel region in the detection frame and the nearest two frames on each side that passed quality control. Rejected frames (blank frames, failed registrations, outliers) are skipped, as the detection skipped them, and the label shows the real frame numbers. All frames share the stretch of the detection frame, so a transient visibly appears and disappears, and the frame label marks the detection frame. Use `Pause` (then click the image to step through the frames) or switch to the median-stack cutout with its footprint overlay. Each animation is a small PNG strip in `unclassified_frames/`, loaded only when its marker is selected. At most 500 detections get one (the strongest by peak sigma), so busy sessions keep a moderate report size.
+
 ### Optional AI report sections
 
 If you enable the checkbox in `Detection Settings -> Report Visualization`, the report also includes:
