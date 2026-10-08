@@ -15,11 +15,8 @@ import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 
-import nom.tam.fits.Fits;
 
 import javax.swing.*;
-import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 
@@ -40,26 +37,8 @@ public class ManualTransientInspectionTask implements Runnable {
 
         try {
             FitsFileInformation[] filesInfo = preProcessing.getFitsfileInformation();
-            int numFrames = filesInfo.length;
-
-            List<ImageFrame> framesForLibrary = new ArrayList<>();
-            for (int i = 0; i < numFrames; i++) {
-                if (ApplicationWindow.OOM_FLAG) throw new OutOfMemoryError("Global OOM triggered");
-
-                int percent = (int) (((float) i / numFrames) * 20);
-                eventBus.post(new EngineProgressUpdateEvent(percent, "Loading frame " + (i + 1) + " of " + numFrames + "..."));
-
-                File currentFile = new File(filesInfo[i].getFilePath());
-                try (Fits fitsFile = new Fits(currentFile)) {
-                    Object kernel = fitsFile.getHDU(0).getKernel();
-                    if (!(kernel instanceof short[][])) {
-                        throw new Exception("Cannot process: Expected short[][]");
-                    }
-                    long timestamp = filesInfo[i].getObservationTimestamp();
-                    long exposure = filesInfo[i].getExposureDurationMillis();
-                    framesForLibrary.add(new ImageFrame(i, currentFile.getName(), (short[][]) kernel, timestamp, exposure));
-                }
-            }
+            List<ImageFrame> framesForLibrary = SessionFrameLoader.loadAll(filesInfo,
+                    (percent, message) -> eventBus.post(new EngineProgressUpdateEvent(percent, message)), 20);
 
             TransientEngineProgressListener progressListener = (percentage, message) -> {
                 if (ApplicationWindow.OOM_FLAG) throw new OutOfMemoryError("Global OOM triggered");

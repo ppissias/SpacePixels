@@ -21,8 +21,10 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.tasks.AutoTuneTask;
+import eu.startales.spacepixels.tasks.StarMaskStackTask;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
+import io.github.ppissias.jtransient.engine.JTransientEngine;
 import eu.startales.spacepixels.util.*;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 
@@ -118,6 +120,11 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private AutoTuneOverviewPanel overviewPanel;
     private SettingsNavigator navigator;
+
+    // Master stack of the Star Mask Explorer, kept for the session.
+    private JTransientEngine.MasterStackResult cachedMasterStack;
+    private FitsFileInformation[] cachedStackFiles;
+    private String cachedStackKey;
     private final List<SettingRow> settingRows = new ArrayList<>();
     private final JLabel footerStateLabel = new JLabel(" ");
     private final JLabel footerMessageLabel = new JLabel(" ");
@@ -230,6 +237,12 @@ public class DetectionConfigurationPanel extends JPanel {
         overview.addCoreSetting(null, "Master Min Pixels", "Minimum size required for a source to be included in the master star map. Lower values include fainter stars.", spinMasterMinPix);
         spinMaxMaskOverlapFraction = createSpinner(doubleSpinnerModel(jTransientConfig.maxMaskOverlapFraction, 0.0, 1.0, 0.01));
         overview.addCoreSetting(null, "Max Mask Overlap Fraction", "Maximum fraction of a point footprint that may overlap the master veto mask before it is rejected as likely stellar residual contamination.", spinMaxMaskOverlapFraction);
+
+        JButton testStarMaskButton = new JButton("Test Star Mask…");
+        testStarMaskButton.setToolTipText("<html>Build the master stack as a detection run would, then try star mask settings "
+                + "and see the resulting veto mask on the stack, with statistics.</html>");
+        testStarMaskButton.addActionListener(e -> openStarMaskExplorer());
+        overview.addCoreAction(testStarMaskButton);
     }
 
     /**
@@ -273,6 +286,71 @@ public class DetectionConfigurationPanel extends JPanel {
                 chkEnableResidualTransientAnalysis.getModel(), "Residual Analysis");
         overview.addAnalysis("Variable-star photometry", "light curves of the field stars and variable-star candidates, matched against AAVSO VSX "
                 + "when a frame is plate-solved; skipped in iterative mode", chkEnableVariableStarDetection.getModel(), "Variable Stars");
+    }
+
+    // ==========================================
+    // STAR MASK EXPLORER
+    // ==========================================
+
+    /**
+     * Opens the Star Mask Explorer. The master stack is built once per session (as a detection run builds it) and
+     * kept while the frames and the settings that shape the stack stay the same.
+     */
+    private void openStarMaskExplorer() {
+        FitsFileInformation[] files;
+        try {
+            files = mainAppWindow.getImageProcessing().getFitsfileInformation();
+        } catch (Exception e) {
+            return;
+        }
+        if (files == null || files.length == 0) {
+            return;
+        }
+        DetectionConfig config = getJTransientConfig();
+        String stackKey = masterStackKey(config);
+        if (cachedMasterStack != null && cachedStackFiles == files && stackKey.equals(cachedStackKey)) {
+            showStarMaskExplorer(files);
+            return;
+        }
+        new Thread(new StarMaskStackTask(mainAppWindow.getEventBus(), files, config.clone(), result -> {
+            cachedMasterStack = result;
+            cachedStackFiles = files;
+            cachedStackKey = stackKey;
+            showStarMaskExplorer(files);
+        })).start();
+    }
+
+    private void showStarMaskExplorer(FitsFileInformation[] files) {
+        File first = new File(files[0].getFilePath());
+        String sessionName = first.getParentFile() != null ? first.getParentFile().getName() : first.getName();
+        StarMaskExplorerFrame.Settings current = new StarMaskExplorerFrame.Settings(
+                ((Number) spinMasterSigma.getValue()).doubleValue(),
+                ((Number) spinMasterGrowSigma.getValue()).doubleValue(),
+                ((Number) spinMasterMinPix.getValue()).intValue(),
+                ((Number) spinStarJitter.getValue()).doubleValue());
+        new StarMaskExplorerFrame(mainAppWindow.getFrame(), sessionName, cachedMasterStack, getJTransientConfig(), current,
+                this::applyStarMaskSettings).setVisible(true);
+    }
+
+    /** Writes the explorer's values into the settings (they then count as manual changes). */
+    private void applyStarMaskSettings(StarMaskExplorerFrame.Settings settings) {
+        setSpinnerValueClamped(spinMasterSigma, settings.masterSigma);
+        setSpinnerValueClamped(spinMasterGrowSigma, settings.masterGrowSigma);
+        setSpinnerValueClamped(spinMasterMinPix, settings.masterMinPixels);
+        setSpinnerValueClamped(spinStarJitter, settings.starJitter);
+    }
+
+    /** The settings that shape the master stack: everything except the star mask values the explorer varies. */
+    private static String masterStackKey(DetectionConfig config) {
+        DetectionConfig key = config.clone();
+        key.masterSigmaMultiplier = 0;
+        key.masterGrowSigmaMultiplier = 0;
+        key.masterMinDetectionPixels = 0;
+        key.maxStarJitter = 0;
+        key.maxMaskOverlapFraction = 0;
+        StringWriter writer = new StringWriter();
+        SpacePixelsDetectionProfileIO.write(writer, key, 0);
+        return writer.toString();
     }
 
     /** Callbacks of the Overview page. */
@@ -1261,6 +1339,8 @@ public class DetectionConfigurationPanel extends JPanel {
                 return;
             }
             FitsFileInformation[] filesInfo = event.getFilesInformation();
+            cachedMasterStack = null;
+            cachedStackFiles = null;
             if (filesInfo == null || filesInfo.length == 0) {
                 overviewPanel.setSession(null, 0, 0, 0, false);
                 return;

@@ -109,6 +109,7 @@ Main classes:
 - `SettingsNavigator`, `SettingRow`
 - `WrapLayout`
 - `WindowPlacement`
+- `StarMaskExplorerFrame`
 - `DetectionSequenceFrame`
 - `TransientInspectionFrame`
 - `TuningPreviewManager`
@@ -290,6 +291,14 @@ Owns:
 - the settings summary shown in the main window's Detect group
 
 A tune result belongs to the imported session and is cleared when another dataset is imported.
+
+### `StarMaskExplorerFrame`
+
+The Star Mask Explorer, opened from the Overview.
+
+- `StarMaskStackTask` loads the frames (with `SessionFrameLoader`, shared with Manual Transient Inspection) and calls `JTransientEngine.generateMasterStackWithDetails(...)`, so the stack comes from the pipeline's own frame selection.
+- `DetectionConfigurationPanel` keeps the stack for the session. The key is the imported files plus every setting except the star mask values.
+- For trial values the frame calls `MasterReferenceAnalyzer.analyzeFromMasterStack(...)` and `MasterVetoMask.build(...)`, the same code as the pipeline, in a background worker. It shows the mask as a one-bit overlay on `ZoomableImageView`.
 
 ### `SettingsNavigator` and `SettingRow`
 

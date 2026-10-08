@@ -56,6 +56,8 @@ final class ZoomableImageView extends JComponent {
 
     private final ViewState state;
     private BufferedImage image;
+    private BufferedImage overlay;
+    private boolean overlayVisible = true;
     private String placeholder = "No preview";
     private Point dragStart;
     private double dragCenterX;
@@ -111,6 +113,17 @@ final class ZoomableImageView extends JComponent {
         addMouseListener(mouse);
         addMouseMotionListener(mouse);
         addMouseWheelListener(mouse);
+    }
+
+    /** An image of the same size drawn over the main one, for example a mask with transparent pixels. */
+    void setOverlay(BufferedImage overlay) {
+        this.overlay = overlay;
+        repaint();
+    }
+
+    void setOverlayVisible(boolean visible) {
+        this.overlayVisible = visible;
+        repaint();
     }
 
     void setImage(BufferedImage image) {
@@ -172,6 +185,12 @@ final class ZoomableImageView extends JComponent {
                 ? RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR : RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         g2.drawImage(image, (int) Math.round(left), (int) Math.round(top),
                 (int) Math.round(drawWidth), (int) Math.round(drawHeight), null);
+        if (overlay != null && overlayVisible) {
+            // Same size as the image, so it is drawn over exactly the same area.
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            g2.drawImage(overlay, (int) Math.round(left), (int) Math.round(top),
+                    (int) Math.round(drawWidth), (int) Math.round(drawHeight), null);
+        }
         if (state.zoom > 1.0) {
             String label = String.format("%.1f×", state.zoom);
             g2.setColor(new Color(10, 12, 20, 190));

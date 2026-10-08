@@ -405,6 +405,18 @@ The first page is the starting point. It has three parts.
 - A blue ● marks a value set by Auto-Tune, and its tooltip shows the value before. Editing the value removes the mark.
 - The main window's Detect group shows which settings are in use, for example "Settings: Balanced, auto-tuned, edited".
 
+**Test Star Mask…** (under the star-mask settings) opens the **Star Mask Explorer**. Use it to try star mask settings and see the veto mask the detection run would use.
+
+- **Master stack:** built exactly as in a detection run, with the same drift check, quality settings and frame selection, then the median. A line names the basis, for example "Median of 14 frames … Quality control left out frames 9, 10, 13, 18".
+  - The first opening loads all frames, with the same progress display as Manual Transient Inspection.
+  - The stack is then kept for the session. It is rebuilt only for another dataset or after changing settings that shape the stack, such as the quality settings.
+- **Mask:** shown in orange over the stack, built by the same JTransient code as in the pipeline. Scroll to zoom, drag to pan, double-click to fit. `Show mask` toggles the overlay.
+- **Values:** `Master Sigma`, `Master Grow Sigma`, `Master Min Pixels` and `Star Jitter Radius` (the mask is widened by half of it, at least 1 pixel). They start from the current settings, and the mask is recomputed shortly after each change.
+- **Statistics:** sky masked, number of masked stars and the largest star, each compared with the current settings.
+- **Buttons:** `Apply to Settings` writes the four values into the settings, where they count as manual changes. `Reset` returns to the starting values.
+
+The explorer's "sky masked" is the real whole-frame mask. The Auto-Tune table's `Sky masked` is measured on 1024-pixel crops. On frames with a sky gradient it can be noticeably higher, because the noise level, and with it the thresholds, are estimated per crop.
+
 **Analyses in This Run**
 
 What `Detect Moving Targets` looks for besides moving objects, each with a switch, a one-line purpose and a `Settings ›` link to its detailed tab:

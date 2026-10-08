@@ -74,7 +74,8 @@ public class AutoTuneOverviewPanel extends JPanel {
             "Share of synthetic test stars (added at peak SNR 2 to 15) that the settings still find and keep.",
             "Peak signal-to-noise ratio at which half of the test stars are found: the detection limit. Lower is more "
                     + "sensitive; halving it reaches objects about 0.75 mag fainter.",
-            "Share of the sky hidden by the star mask; nothing can be detected there."};
+            "Share of the sky hidden by the star mask; nothing can be detected there. Measured on the tuner's crops, where it can "
+                    + "be higher than on the whole frame; Test Star Mask… shows the whole-frame mask."};
 
     private final Host host;
 
@@ -96,6 +97,7 @@ public class AutoTuneOverviewPanel extends JPanel {
     private final Map<JSpinner, Number> tunedValues = new LinkedHashMap<>();
     private final Map<JSpinner, Number> valuesBeforeTune = new LinkedHashMap<>();
     private final JPanel coreGrid = new JPanel(new GridBagLayout());
+    private final List<JButton> coreActions = new ArrayList<>();
     private int coreRowCount;
     private final JPanel analysesGrid = new JPanel(new GridBagLayout());
     private int analysisRowCount;
@@ -268,6 +270,19 @@ public class AutoTuneOverviewPanel extends JPanel {
     }
 
     /** Adds a core setting row; the spinner stays owned by the settings panel. */
+    /** Adds a button under the core settings, enabled while frames are ready and no tune is running. */
+    void addCoreAction(JButton button) {
+        GridBagConstraints c = new GridBagConstraints();
+        c.anchor = GridBagConstraints.WEST;
+        c.gridx = 0;
+        c.gridy = coreRowCount++;
+        c.gridwidth = 3;
+        c.insets = new Insets(8, 12, 0, 0);
+        coreGrid.add(button, c);
+        coreActions.add(button);
+        refreshControls();
+    }
+
     void addCoreSetting(String group, String title, String description, JSpinner spinner) {
         GridBagConstraints c = new GridBagConstraints();
         c.anchor = GridBagConstraints.WEST;
@@ -569,6 +584,9 @@ public class AutoTuneOverviewPanel extends JPanel {
         algorithmCombo.setEnabled(canTune);
         profileCombo.setEnabled(!tuning);
         previewButton.setEnabled(sessionReady && !tuning);
+        for (JButton action : coreActions) {
+            action.setEnabled(sessionReady && !tuning);
+        }
         reportButton.setEnabled(lastResult != null && !tuning);
         useProfileButton.setEnabled(lastResult != null && lastResult.calibration != null && !tuning
                 && profileTable.getSelectedRow() >= 0);
