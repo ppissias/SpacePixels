@@ -41,11 +41,23 @@ public class StarMaskExplorerFrameTest {
     }
 
     @Test
-    public void reduceKeepsEveryNthPixel() {
-        short[][] data = new short[9][9];
-        data[6][3] = 77;
-        short[][] reduced = StarMaskExplorerFrame.reduce(data, 3);
-        assertEquals(3, reduced.length);
-        assertEquals(77, reduced[2][1]);
+    public void overlayLevelsHalveDownToAbout512PixelsAndKeepMaskedPixels() {
+        boolean[][] mask = new boolean[3000][4000];
+        mask[1500][2001] = true;
+        java.util.List<BufferedImage> levels = StarMaskExplorerFrame.overlayLevels(mask, new Color(255, 140, 0, 125));
+        // 4000 / 2^k > 512 for k = 0..2, plus the first level at or below 512 px: 4000, 2000, 1000, 500.
+        assertEquals(4, levels.size());
+        assertEquals(4000, levels.get(0).getWidth());
+        assertEquals(500, levels.get(3).getWidth());
+        assertEquals(125, levels.get(3).getRGB(2001 / 8, 1500 / 8) >>> 24);
+    }
+
+    @Test
+    public void zoomedOutViewsDrawFromTheMatchingReducedCopy() {
+        assertEquals(0, ZoomableImageView.levelFor(1.0));
+        assertEquals(0, ZoomableImageView.levelFor(4.0));
+        assertEquals(0, ZoomableImageView.levelFor(0.6));
+        assertEquals(1, ZoomableImageView.levelFor(0.5));
+        assertEquals(3, ZoomableImageView.levelFor(0.11));
     }
 }

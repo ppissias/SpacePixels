@@ -23,6 +23,7 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferByte;
 import java.awt.image.IndexColorModel;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -62,15 +63,12 @@ final class StarMaskExplorerFrame extends JFrame {
         }
     }
 
-    /** Longest side of the displayed stack; larger stacks are shown reduced (the mask keeps every masked pixel). */
-    static final int MAX_DISPLAY_SIDE = 4096;
     private static final Color MASK_COLOR = new Color(255, 140, 0, 125);
 
     private final short[][] stack;
     private final DetectionConfig baseConfig;
     private final Settings initial;
     private final Consumer<Settings> apply;
-    private final int step;
 
     private final ZoomableImageView view = new ZoomableImageView(new ZoomableImageView.ViewState());
     private final JSpinner sigmaSpinner;
@@ -81,6 +79,7 @@ final class StarMaskExplorerFrame extends JFrame {
     private final JLabel starsLabel = new JLabel(" ");
     private final JLabel largestLabel = new JLabel(" ");
     private final JLabel statusLabel = new JLabel(" ");
+    private final JLabel widthLabel = new JLabel(" ");
     private final Timer debounce;
     private final AtomicInteger generation = new AtomicInteger();
     private MaskStatistics initialStatistics;
@@ -92,7 +91,6 @@ final class StarMaskExplorerFrame extends JFrame {
         this.baseConfig = baseConfig.clone();
         this.initial = initial;
         this.apply = apply;
-        this.step = Math.max(1, (int) Math.ceil(Math.max(stack.length, stack[0].length) / (double) MAX_DISPLAY_SIDE));
 
         sigmaSpinner = spinner(new SpinnerNumberModel(initial.masterSigma, 0.5, 15.0, 0.1));
         growSpinner = spinner(new SpinnerNumberModel(initial.masterGrowSigma, 0.0, 15.0, 0.1));
@@ -102,8 +100,9 @@ final class StarMaskExplorerFrame extends JFrame {
         debounce.setRepeats(false);
 
         view.setPlaceholder("Rendering the master stack…");
-        view.setToolTipText("Scroll to zoom, drag to pan, double-click to fit.");
-        view.setImage(DisplayImageRenderer.createDisplayImage(reduce(stack, step)));
+        view.setToolTipText("Scroll to zoom down to single pixels, drag to pan, double-click to switch between fit and 100 %.");
+        // Full resolution: zooming in shows the real pixels of the master stack.
+        view.setImage(DisplayImageRenderer.createDisplayImage(stack));
 
         setLayout(new BorderLayout());
         add(view, BorderLayout.CENTER);
@@ -136,16 +135,51 @@ final class StarMaskExplorerFrame extends JFrame {
         addRow(grid, 2, "Master Min Pixels", minPixelsSpinner,
                 "Smallest star included in the mask. Lower values include fainter, smaller stars.");
         addRow(grid, 3, "Star Jitter Radius", jitterSpinner,
-                "The mask is widened around every star by half of this radius (at least 1 pixel).");
+                "The mask is widened around every star by round(jitter / 2) pixels, at least 1. "
+                        + "The widening therefore changes only in steps: at 3.0, 5.0, 7.0 and so on.");
+        GridBagConstraints c = new GridBagConstraints();
+        c.gridx = 0;
+        c.gridy = 4;
+        c.gridwidth = 2;
+        c.anchor = GridBagConstraints.WEST;
+        c.insets = new Insets(0, 0, 3, 0);
+        widthLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        grid.add(widthLabel, c);
+        jitterSpinner.addChangeListener(e -> updateWideningLabel());
+        updateWideningLabel();
         grid.setMaximumSize(grid.getPreferredSize());
         panel.add(left(grid));
 
         JCheckBox showMask = new JCheckBox("Show mask", true);
         showMask.addItemListener(e -> view.setOverlayVisible(showMask.isSelected()));
+        // Hold to compare: the bare median stack while pressed, the mask again when released (also the Space bar).
+        JButton holdButton = new JButton("Hold to See the Stack Only");
+        holdButton.setToolTipText("Press and hold (or hold the Space bar) to hide the mask and see the median stack; release to see the mask again.");
+        holdButton.getModel().addChangeListener(e -> view.setOverlayVisible(showMask.isSelected() && !holdButton.getModel().isPressed()));
+        JRootPane root = getRootPane();
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("pressed SPACE"), "hideMask");
+        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("released SPACE"), "showMask");
+        root.getActionMap().put("hideMask", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                view.setOverlayVisible(false);
+            }
+        });
+        root.getActionMap().put("showMask", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                view.setOverlayVisible(showMask.isSelected());
+            }
+        });
+        JPanel maskRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        maskRow.add(showMask);
+        maskRow.add(Box.createHorizontalStrut(10));
+        maskRow.add(holdButton);
+        maskRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, maskRow.getPreferredSize().height));
         panel.add(Box.createVerticalStrut(6));
-        panel.add(left(showMask));
-        panel.add(left(muted("Scroll to zoom, drag to pan, double-click to fit. Orange areas are masked: "
-                + "a detection that overlaps them by more than the Max Mask Overlap Fraction is vetoed.")));
+        panel.add(left(maskRow));
+        panel.add(left(muted("Scroll to zoom down to single pixels, drag to pan, double-click to switch between fit and 100 %. "
+                + "Orange areas are masked: a detection that overlaps them by more than the Max Mask Overlap Fraction is vetoed.")));
 
         panel.add(Box.createVerticalStrut(8));
         panel.add(left(DetectionConfigurationPanel.createSectionHeader("Statistics")));
@@ -216,7 +250,7 @@ final class StarMaskExplorerFrame extends JFrame {
                 DetectionConfig config = configFor(baseConfig, settings);
                 List<SourceExtractor.DetectedObject> stars = MasterReferenceAnalyzer.analyzeFromMasterStack(stack, config).masterStars;
                 boolean[][] mask = MasterVetoMask.build(stars, stack[0].length, stack.length, settings.starJitter);
-                return new Object[]{statistics(stars, mask), overlay(mask, step, MASK_COLOR)};
+                return new Object[]{statistics(stars, mask), overlayLevels(mask, MASK_COLOR)};
             }
 
             @Override
@@ -230,7 +264,9 @@ final class StarMaskExplorerFrame extends JFrame {
                     if (initialStatistics == null) {
                         initialStatistics = statistics;
                     }
-                    view.setOverlay((BufferedImage) result[1]);
+                    @SuppressWarnings("unchecked")
+                    List<BufferedImage> levels = (List<BufferedImage>) result[1];
+                    view.setOverlayLevels(levels);
                     showStatistics(statistics);
                     statusLabel.setText(" ");
                 } catch (Exception e) {
@@ -293,20 +329,26 @@ final class StarMaskExplorerFrame extends JFrame {
         return image;
     }
 
-    /** Every {@code step}-th pixel of the stack, for display. */
-    static short[][] reduce(short[][] data, int step) {
-        if (step == 1) {
-            return data;
-        }
-        int height = (data.length + step - 1) / step;
-        int width = (data[0].length + step - 1) / step;
-        short[][] reduced = new short[height][width];
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                reduced[y][x] = data[y * step][x * step];
+    /**
+     * The mask overlay at full resolution and reduced by 2, 4, 8 … (down to about 512 pixels), for drawing zoomed
+     * out; every reduced pixel that covers a masked pixel stays masked.
+     */
+    static List<BufferedImage> overlayLevels(boolean[][] mask, Color color) {
+        List<BufferedImage> levels = new ArrayList<>();
+        int longest = Math.max(mask.length, mask[0].length);
+        for (int step = 1; ; step *= 2) {
+            levels.add(overlay(mask, step, color));
+            if (longest / step <= 512) {
+                break;
             }
         }
-        return reduced;
+        return levels;
+    }
+
+    /** Shows how many pixels the jitter radius widens the mask by, and where the next step is. */
+    private void updateWideningLabel() {
+        int radius = MasterVetoMask.dilationRadius(((Number) jitterSpinner.getValue()).doubleValue());
+        widthLabel.setText("Mask widened by " + radius + " px · next step at " + (2 * radius + 1) + ".0");
     }
 
     // ==========================================

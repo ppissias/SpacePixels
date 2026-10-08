@@ -410,8 +410,12 @@ The first page is the starting point. It has three parts.
 - **Master stack:** built exactly as in a detection run, with the same drift check, quality settings and frame selection, then the median. A line names the basis, for example "Median of 14 frames … Quality control left out frames 9, 10, 13, 18".
   - The first opening loads all frames, with the same progress display as Manual Transient Inspection.
   - The stack is then kept for the session. It is rebuilt only for another dataset or after changing settings that shape the stack, such as the quality settings.
-- **Mask:** shown in orange over the stack, built by the same JTransient code as in the pipeline. Scroll to zoom, drag to pan, double-click to fit. `Show mask` toggles the overlay.
-- **Values:** `Master Sigma`, `Master Grow Sigma`, `Master Min Pixels` and `Star Jitter Radius` (the mask is widened by half of it, at least 1 pixel). They start from the current settings, and the mask is recomputed shortly after each change.
+- **Mask:** shown in orange over the master stack at full resolution, built by the same JTransient code as in the pipeline.
+  - Scroll to zoom down to single pixels (up to 800 %, with the scale shown as a percentage), drag to pan, and double-click to switch between the fitted view and 100 %.
+  - `Show mask` toggles the overlay. Hold `Hold to See the Stack Only`, or the Space bar, to see the bare median stack; release it to see the mask again.
+- **Values:** `Master Sigma`, `Master Grow Sigma`, `Master Min Pixels` and `Star Jitter Radius`. They start from the current settings, and the mask is recomputed shortly after each change.
+  - The jitter radius widens the mask by `round(jitter / 2)` pixels, at least 1, as in the detection run. It therefore changes only in steps: every value below 3.0 widens by 1 px, 3.0 to 4.9 by 2 px, 5.0 to 6.9 by 3 px, and so on.
+  - A note under the field shows the current widening and the next step.
 - **Statistics:** sky masked, number of masked stars and the largest star, each compared with the current settings.
 - **Buttons:** `Apply to Settings` writes the four values into the settings, where they count as manual changes. `Reset` returns to the starting values.
 

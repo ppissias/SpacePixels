@@ -172,6 +172,13 @@ Implementation: mainly the toolbar layout of `MainApplicationPanel` (four titled
 - A results summary in the application: tracks found, anomalies, unclassified detections, and the settings or profile used, with buttons to open the report or its folder.
 - A per-dataset run history (date, tuner, profile, key counts), so several profiles can be compared directly. This makes a built-in version of the tuner comparison table in `02_spacepixels-test-data/tuner-comparison-2026-10-07.md`.
 
+### Note: Image Stretch preview resolution
+
+The stretch preview reduces frames to at most 2400 px on the long side (`GeneratePreviewsTask.MAX_PREVIEW_SIDE`), by keeping every n-th pixel. That is a factor of 4 on a 61 MPix sensor, so zooming in shows enlarged reduced pixels, and small stars can fall between the kept pixels.
+
+- **Decision (2026-10-08):** left as it is for now. The preview is for judging the stretch, and `Show full size` gives the full-resolution view.
+- **If it is revisited:** render at full resolution, as the Star Mask Explorer does (the shared `ZoomableImageView` already draws large images efficiently), or reduce by averaging instead of picking pixels.
+
 ### 7. Smaller points
 
 - The variable-star photometry switch is in the 9th tab. A checkbox next to the Detect buttons ("also run variable-star photometry"), noting that iterative mode skips it, would make the feature visible.

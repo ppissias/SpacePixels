@@ -23,11 +23,18 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 /**
- * An image fitted into the component, with mouse-wheel zoom around the cursor, drag to pan and double-click to fit.
- * Views that share a {@link ViewState} zoom and pan together.
+ * An image fitted into the component, with mouse-wheel zoom around the cursor down to single image pixels, drag to
+ * pan, and double-click to switch between the fitted view and 100 % (one image pixel per screen pixel). Views that
+ * share a {@link ViewState} zoom and pan together.
+ *
+ * <p>Zoomed out, a large image is drawn from smoothed half-size copies (computed once), which is fast and avoids the
+ * shimmer of shrinking a huge image. An optional overlay of the same size is drawn on top; its reduced copies can be
+ * supplied so that thin features (for example single masked pixels) stay visible.</p>
  */
 final class ZoomableImageView extends JComponent {
 
@@ -52,11 +59,18 @@ final class ZoomableImageView extends JComponent {
         }
     }
 
+    /** Largest zoom relative to the fitted view, for small images. */
     static final double MAX_ZOOM = 16.0;
+    /** Screen pixels per image pixel at the deepest zoom, whatever the image size. */
+    static final double MAX_PIXEL_SCALE = 8.0;
+    /** Reduced copies are made down to this size. */
+    private static final int SMALLEST_LEVEL_SIDE = 512;
 
     private final ViewState state;
     private BufferedImage image;
-    private BufferedImage overlay;
+    /** The image and its half-size copies (level k is reduced by 2^k), built when first needed. */
+    private List<BufferedImage> imageLevels = Collections.emptyList();
+    private List<BufferedImage> overlayLevels = Collections.emptyList();
     private boolean overlayVisible = true;
     private String placeholder = "No preview";
     private Point dragStart;
@@ -67,7 +81,7 @@ final class ZoomableImageView extends JComponent {
         this.state = state;
         state.views.add(this);
         setPreferredSize(new Dimension(400, 300));
-        setToolTipText("Scroll to zoom, drag to pan, double-click to fit. Both previews move together.");
+        setToolTipText("Scroll to zoom, drag to pan, double-click to switch between fit and 100 %. Both previews move together.");
         MouseAdapter mouse = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -89,25 +103,21 @@ final class ZoomableImageView extends JComponent {
 
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2) {
+                if (e.getClickCount() != 2 || image == null) {
+                    return;
+                }
+                if (state.zoom > 1.0) {
                     state.reset();
+                } else {
+                    zoomAround(e.getX(), e.getY(), 1.0 / fitScale());
                 }
             }
 
             @Override
             public void mouseWheelMoved(MouseWheelEvent e) {
-                if (image == null) {
-                    return;
+                if (image != null) {
+                    zoomAround(e.getX(), e.getY(), state.zoom * Math.pow(1.25, -e.getPreciseWheelRotation()));
                 }
-                // Keep the image point under the cursor in place while zooming.
-                double before = scale();
-                double pointX = imageX(e.getX(), before);
-                double pointY = imageY(e.getY(), before);
-                state.zoom = Math.max(1.0, Math.min(MAX_ZOOM, state.zoom * Math.pow(1.25, -e.getPreciseWheelRotation())));
-                double after = scale();
-                state.centerX = clamp(pointX - (e.getX() - getWidth() / 2.0) / (after * image.getWidth()));
-                state.centerY = clamp(pointY - (e.getY() - getHeight() / 2.0) / (after * image.getHeight()));
-                state.repaintAll();
             }
         };
         addMouseListener(mouse);
@@ -115,9 +125,35 @@ final class ZoomableImageView extends JComponent {
         addMouseWheelListener(mouse);
     }
 
+    /** Sets the zoom, keeping the image point under the screen position in place. */
+    private void zoomAround(int screenX, int screenY, double zoom) {
+        double before = scale();
+        double pointX = imageX(screenX, before);
+        double pointY = imageY(screenY, before);
+        state.zoom = Math.max(1.0, Math.min(maxZoom(), zoom));
+        double after = scale();
+        state.centerX = clamp(pointX - (screenX - getWidth() / 2.0) / (after * image.getWidth()));
+        state.centerY = clamp(pointY - (screenY - getHeight() / 2.0) / (after * image.getHeight()));
+        state.repaintAll();
+    }
+
+    /** Deep enough to reach {@link #MAX_PIXEL_SCALE} screen pixels per image pixel, and at least {@link #MAX_ZOOM}. */
+    private double maxZoom() {
+        double fit = fitScale();
+        return fit <= 0 ? MAX_ZOOM : Math.max(MAX_ZOOM, MAX_PIXEL_SCALE / fit);
+    }
+
     /** An image of the same size drawn over the main one, for example a mask with transparent pixels. */
     void setOverlay(BufferedImage overlay) {
-        this.overlay = overlay;
+        setOverlayLevels(overlay == null ? Collections.emptyList() : Collections.singletonList(overlay));
+    }
+
+    /**
+     * The overlay and its reduced copies: entry k is reduced by 2^k. Missing levels fall back to the closest finer
+     * one.
+     */
+    void setOverlayLevels(List<BufferedImage> levels) {
+        this.overlayLevels = levels;
         repaint();
     }
 
@@ -126,8 +162,13 @@ final class ZoomableImageView extends JComponent {
         repaint();
     }
 
+    boolean isOverlayVisible() {
+        return overlayVisible;
+    }
+
     void setImage(BufferedImage image) {
         this.image = image;
+        this.imageLevels = image == null ? Collections.emptyList() : Collections.singletonList(image);
         repaint();
     }
 
@@ -136,13 +177,17 @@ final class ZoomableImageView extends JComponent {
         repaint();
     }
 
-    /** Screen pixels per image pixel: the fit-to-view scale times the zoom. */
-    private double scale() {
+    /** Screen pixels per image pixel at zoom 1 (the whole image fitted into the view). */
+    private double fitScale() {
         if (image == null || getWidth() <= 0 || getHeight() <= 0) {
             return 0;
         }
-        double fit = Math.min(getWidth() / (double) image.getWidth(), getHeight() / (double) image.getHeight());
-        return fit * state.zoom;
+        return Math.min(getWidth() / (double) image.getWidth(), getHeight() / (double) image.getHeight());
+    }
+
+    /** Screen pixels per image pixel: the fit-to-view scale times the zoom. */
+    private double scale() {
+        return fitScale() * state.zoom;
     }
 
     private double imageX(int screenX, double scale) {
@@ -155,6 +200,42 @@ final class ZoomableImageView extends JComponent {
 
     private static double clamp(double value) {
         return Math.max(0, Math.min(1, value));
+    }
+
+    /** The reduction level to draw from: the coarsest copy that still has at least one pixel per screen pixel. */
+    static int levelFor(double scale) {
+        if (scale >= 1.0 || scale <= 0) {
+            return 0;
+        }
+        return (int) Math.floor(Math.log(1.0 / scale) / Math.log(2.0));
+    }
+
+    private BufferedImage imageLevel(int level) {
+        if (imageLevels.size() == 1 && image != null && Math.max(image.getWidth(), image.getHeight()) > SMALLEST_LEVEL_SIDE * 2) {
+            imageLevels = halvings(image);
+        }
+        return imageLevels.get(Math.min(level, imageLevels.size() - 1));
+    }
+
+    /** Smoothed half-size copies, down to {@link #SMALLEST_LEVEL_SIDE}. */
+    private static List<BufferedImage> halvings(BufferedImage source) {
+        List<BufferedImage> levels = new ArrayList<>();
+        levels.add(source);
+        BufferedImage current = source;
+        while (Math.max(current.getWidth(), current.getHeight()) > SMALLEST_LEVEL_SIDE) {
+            int width = Math.max(1, current.getWidth() / 2);
+            int height = Math.max(1, current.getHeight() / 2);
+            int type = current.getType() == BufferedImage.TYPE_CUSTOM ? BufferedImage.TYPE_INT_ARGB : current.getType();
+            BufferedImage half = new BufferedImage(width, height, type);
+            Graphics2D g = half.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.drawImage(current, 0, 0, width, height, null);
+            g.dispose();
+            levels.add(half);
+            current = half;
+        }
+        return levels;
     }
 
     @Override
@@ -181,18 +262,22 @@ final class ZoomableImageView extends JComponent {
         if (drawHeight <= getHeight()) {
             top = (getHeight() - drawHeight) / 2;
         }
-        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, state.zoom > 2
+        int x = (int) Math.round(left);
+        int y = (int) Math.round(top);
+        int w = (int) Math.round(drawWidth);
+        int h = (int) Math.round(drawHeight);
+        int level = levelFor(scale);
+
+        // Enlarged pixels stay sharp so single pixels can be judged; reduced views are smoothed.
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, scale >= 1.0
                 ? RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR : RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        g2.drawImage(image, (int) Math.round(left), (int) Math.round(top),
-                (int) Math.round(drawWidth), (int) Math.round(drawHeight), null);
-        if (overlay != null && overlayVisible) {
-            // Same size as the image, so it is drawn over exactly the same area.
+        g2.drawImage(imageLevel(level), x, y, w, h, null);
+        if (!overlayLevels.isEmpty() && overlayVisible) {
             g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-            g2.drawImage(overlay, (int) Math.round(left), (int) Math.round(top),
-                    (int) Math.round(drawWidth), (int) Math.round(drawHeight), null);
+            g2.drawImage(overlayLevels.get(Math.min(level, overlayLevels.size() - 1)), x, y, w, h, null);
         }
         if (state.zoom > 1.0) {
-            String label = String.format("%.1f×", state.zoom);
+            String label = String.format(Locale.US, "%.0f %%", scale * 100);
             g2.setColor(new Color(10, 12, 20, 190));
             g2.fillRect(6, 6, g2.getFontMetrics().stringWidth(label) + 10, 18);
             g2.setColor(Color.WHITE);
