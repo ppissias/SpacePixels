@@ -36,7 +36,7 @@ repositories {
 }
 // Add your group and version here
 group = 'eu.startales.spacepixels'
-version = '2026.09-01'
+version = '2026.10-01'
 description = 'SpacePixels desktop application and Java API for moving and transient object detection in aligned astronomical image sequences.'
 
 base {
@@ -69,7 +69,7 @@ dependencies {
     implementation 'com.google.guava:guava:33.5.0-jre'
     implementation 'com.formdev:flatlaf:3.4'
     implementation 'io.github.ppissias.jplatesolve:jplatesolve:1.0.0'
-    implementation 'io.github.ppissias.jtransient:jtransient:1.0.1'
+    implementation 'io.github.ppissias.jtransient:jtransient:1.0.2'
     // Use JUnit test framework
     testImplementation 'junit:junit:4.13.2'
 }
