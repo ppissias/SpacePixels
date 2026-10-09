@@ -58,7 +58,7 @@ final class PhotometryReportSectionWriter {
         GATE_DESCRIPTIONS.put("SPLIT_HALF", "Consecutive measurement pairs agree");
         GATE_DESCRIPTIONS.put("APERTURE", "Small and large apertures give the same amplitude");
         GATE_DESCRIPTIONS.put("SYSTEMATICS", "Not correlated with transparency, FWHM, sky or offsets");
-        GATE_DESCRIPTIONS.put("LOCAL", "Nearby constant stars do not share the pattern");
+        GATE_DESCRIPTIONS.put("LOCAL", "Nearby constant stars do not share the pattern with a similar amplitude");
         GATE_DESCRIPTIONS.put("LINEARITY", "Never saturated or brighter than the linear limit");
     }
 
@@ -215,6 +215,7 @@ final class PhotometryReportSectionWriter {
         }
         report.println(starFunnelHtml(t));
         report.println(frameFunnelHtml(t));
+        report.println(apertureChoicesHtml(t));
         long flagged = t.measurementsSaturated + t.measurementsNonlinear + t.measurementsCrossing + t.measurementsEdgeOrVoid
                 + t.measurementsOutlier + t.measurementsContaminated;
         if (flagged > 0) {
@@ -319,6 +320,35 @@ final class PhotometryReportSectionWriter {
                 + funnelBar(t.framesAnalyzed, t.framesAnalyzed, "#5b6670", t.framesAnalyzed + " analysed", "")
                 + funnelBar(t.framesUsed, t.framesAnalyzed, PhotometrySvgChart.SERIES_BLUE, t.framesUsed + " used", reasons.toString())
                 + "</div>";
+    }
+
+    /**
+     * The measuring aperture of each brightness range, merged where neighbouring ranges share it, with the scatter
+     * reduction against the main aperture.
+     */
+    private static String apertureChoicesHtml(PipelineTelemetry.PhotometryTelemetry t) {
+        if (t.apertureChoices.isEmpty()) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        int start = 0;
+        for (int k = 1; k <= t.apertureChoices.size(); k++) {
+            boolean end = k == t.apertureChoices.size() || t.apertureChoices.get(k).fwhmFactor != t.apertureChoices.get(start).fwhmFactor;
+            if (!end) {
+                continue;
+            }
+            PipelineTelemetry.PhotometryApertureChoice first = t.apertureChoices.get(start);
+            PipelineTelemetry.PhotometryApertureChoice last = t.apertureChoices.get(k - 1);
+            double best = 0;
+            for (int i = start; i < k; i++) {
+                best = Math.min(best, t.apertureChoices.get(i).scatterChange);
+            }
+            parts.add(String.format(Locale.US, "%.2f to %.2f: <strong>%.1f&times; FWHM</strong> (%.1f px)%s", first.magFrom, last.magTo,
+                    first.fwhmFactor, first.radiusPixels, best < 0 ? String.format(Locale.US, ", up to %.0f%% less scatter", -100 * best) : ""));
+            start = k;
+        }
+        return "<div class='astro-note'>Measuring aperture by brightness (instrumental mag), chosen from the scatter of the constant stars: "
+                + String.join("; ", parts) + ".</div>";
     }
 
     private static void appendReason(StringBuilder text, int count, String reason) {
@@ -619,6 +649,7 @@ final class PhotometryReportSectionWriter {
         report.println(compactMetric(formatMag(star.systematicsLimitMag, 3), "Systematics Limit (mag)"));
         report.println(compactMetric(formatMag(star.maxFrameToFrameSystematicsCorrelation, 2), "Frame-to-Frame Systematics r"));
         report.println(compactMetric(formatMag(star.localCorrelation, 2) + " <span style='font-size:10px; color:#999;'>n=" + star.localComparisonStars + "</span>", "Local r"));
+        report.println(compactMetric(formatMag(star.localSharedFraction, 2), "Local shared"));
         report.println("</div>");
         report.println("</div></details>");
 
