@@ -129,11 +129,11 @@ If a run finds a very large number of objects, a **High Detection Count Warning*
 
 ## 4. Reading the report
 
-The report starts with a summary, then the objects, then the diagnostics. Its sections follow the kinds of results:
+The report starts with an overview, then the results; the processing diagnostics come last, collapsed. Its sections follow the kinds of results:
 
 | Result | What it is | Typical objects |
 |---|---|---|
-| **Moving target tracks** (T#) | a point that moves in a straight line at a steady speed through several frames | asteroids, comets |
+| **Moving-object tracks** (T#) | a point that moves in a straight line at a steady speed through several frames | asteroids, comets |
 | **Streaks** (S#) and **streak tracks** (ST#) | elongated trails, in one frame or several | satellites, aircraft, fast asteroids |
 | **Suspected streak tracks** (SST#) | fragments of a faint trail in one frame | faint satellites |
 | **Single-frame anomalies** (A#) | a bright point in one frame only | flashes, glints, cosmic rays |
@@ -172,6 +172,12 @@ The **Map of All Detections** draws every result over the whole field, with its 
 ![Unclassified Transient Inspector](docs/images/manual/report-inspector.png)
 
 Everything that was detected but did not become a result is shown here, coloured from blue (early frames) to red (late frames). Click a circle to see a short animation of that spot (two frames before and after the detection) and its measurements. This is where you look when you expect an object that the report did not find.
+
+### Optional AI sections
+
+With **Include AI Creative Report Sections** ticked (Detection Settings, Report Visualization), the report ends with two sections where AI assistants present the session in their own way. Codex's **Signal Weave** draws every detection as one picture. Claude's **The Night, Retold** puts the session back in time order: one timeline with every frame (rejected ones in red), the sky background and seeing through the night, every track, streak and flash at its time and a small light curve per variable star, followed by a short account of the night written from the measured numbers.
+
+![The Night, Retold](docs/images/manual/ai-night-retold.png)
 
 ---
 
@@ -247,13 +253,17 @@ The same 61-megapixel session with photometry switched on:
 
 ![Variable-star summary](docs/images/manual/variable-stars-summary.png)
 
-The verdict **Ready** means the data passed the linearity checks. SpacePixels measured 60,963 stars, scored 29,380 of them and reported 27 high-confidence and 11 possible variable stars. A **Limited** or **Not ready** verdict says in plain words why, and for Not ready what could help (for example unstretched frames or a longer sequence).
+The verdict **Ready** means the data passed the linearity checks. SpacePixels measured 61,175 stars, scored 29,799 of them and reported 29 high-confidence and 12 possible variable stars. A **Limited** or **Not ready** verdict says in plain words why, and for Not ready what could help (for example unstretched frames or a longer sequence).
 
-The candidates are first listed in a table: tier, position, amplitude, the shape of the change (faded, brightened, dipped and recovered…) and any failed check. **Identify all in VSX** looks every candidate up in the AAVSO Variable Star Index and fills the **Known As** column; this needs SpacePixels running, and the results are saved into the report. Each candidate then has a card with a one-line summary and its light curve, drawn above three constant stars of similar brightness for comparison:
+The candidates are first listed in a table: tier, position, amplitude, the shape of the change (faded, brightened, dipped and recovered…) and any failed check. **Identify all in VSX** looks every candidate up in the AAVSO Variable Star Index and fills the **Known As** column; this needs SpacePixels running, and the results are saved into the report. In this session, 24 of the 41 candidates are catalogued variables:
+
+![The candidate table after Identify all in VSX](docs/images/manual/variable-stars-table.png)
+
+Each candidate then has a card with a one-line summary and its light curve, drawn above three constant stars of similar brightness for comparison; **Statistics** opens the detailed measures:
 
 ![A variable-star candidate](docs/images/manual/variable-star-candidate.png)
 
-**Check VSX Here** looks the star up in the AAVSO Variable Star Index: candidate V1 is the catalogued δ Scuti star ASASSN-V J063632.76+064632.3, 5″ away, with a period of 2.5 hours. The light curve shows it rising and falling by 0.4 magnitudes within the 72 minutes of the session. A candidate without a VSX match may be a new variable, or a false one: check its light curve, the comparison stars and the cutouts before reporting it.
+**Check VSX Here** looks one star up: candidate V1 is the catalogued δ Scuti star ASASSN-V J063632.76+064632.3, 5″ away, with a period of 2.5 hours. The light curve shows it rising and falling by 0.43 magnitudes within the 75 minutes of the session. A candidate without a VSX match may be a new variable, or a false one: check its light curve, the comparison stars and the cutouts before reporting it.
 
 ---
 
