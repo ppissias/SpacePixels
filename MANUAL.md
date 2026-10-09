@@ -30,6 +30,7 @@ SpacePixels is the opposite of a stacker: it looks for what changes between your
 - **calibrated** frames (darks and flats), although uncalibrated data also works, with more noise detections;
 - frames from **one session and one camera setup**, all with the same size;
 - **timestamps** in the FITS headers (`DATE-OBS`), so speeds and object identification work.
+- **unprocessed** data (i.e. just raw images, calibrated and aligned)
 
 Supported files: FITS (`.fit`, `.fits`, `.fts`), compressed FITS (`.fz`) and XISF, 16 or 32 bit, monochrome or colour. SpacePixels offers to convert what the detection needs (decompression, 16 bit, monochrome) when you import. Keep one sequence per folder: all files in a folder must have the same type, bit depth, size and layout, and either all frames have timestamps or none.
 
