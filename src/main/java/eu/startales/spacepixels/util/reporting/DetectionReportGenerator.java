@@ -732,29 +732,7 @@ public class DetectionReportGenerator {
             }
         }
 
-        // --- Draw Legend ---
-        int legendWidth = 250;
-        int legendHeight = 15;
-        int lx = 20;
-        int ly = rgbMap.getHeight() - 40;
-
-        // Background for legend to make it visible against noisy backgrounds
-        g2d.setColor(new Color(0, 0, 0, 180));
-        g2d.fillRect(lx - 10, ly - 30, legendWidth + 20, legendHeight + 40);
-
-        for (int x = 0; x < legendWidth; x++) {
-            float ratio = (float) x / legendWidth;
-            Color timeColor = Color.getHSBColor(0.66f - (0.66f * ratio), 1.0f, 1.0f);
-            g2d.setColor(timeColor);
-            g2d.drawLine(lx + x, ly, lx + x, ly + legendHeight);
-        }
-
-        g2d.setColor(Color.WHITE);
-        g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        g2d.drawString("Start", lx, ly - 5);
-        g2d.drawString("End", lx + legendWidth - 25, ly - 5);
-        g2d.drawString("Time-Mapped Transients", lx, ly - 18);
-
+        // The time legend is drawn by the report as HTML, legible at any display size.
         g2d.dispose();
         return rgbMap;
     }
@@ -864,134 +842,6 @@ public class DetectionReportGenerator {
 
         g2d.dispose();
         return rgbMap;
-    }
-
-    // --- NEW: KINEMATIC COMPASS RENDERER (Creative Tribute) ---
-    private static BufferedImage createKinematicCompass(List<TrackLinker.Track> targets, List<TrackLinker.Track> streaks) {
-        int size = 600;
-        int cx = size / 2;
-        int cy = size / 2;
-        BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g2d = img.createGraphics();
-
-        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-
-        g2d.setColor(new Color(15, 15, 18));
-        g2d.fillRect(0, 0, size, size);
-
-        List<double[]> vectors = new ArrayList<>();
-        double maxSpeed = 1.0;
-
-        List<List<TrackLinker.Track>> sets = java.util.Arrays.asList(targets, streaks);
-        for (int i = 0; i < sets.size(); i++) {
-            List<TrackLinker.Track> trackSet = sets.get(i);
-            if (trackSet == null) continue;
-
-            for (TrackLinker.Track t : trackSet) {
-                if (t.points == null || t.points.size() < 2) continue;
-                SourceExtractor.DetectedObject p1 = t.points.get(0);
-                SourceExtractor.DetectedObject p2 = t.points.get(t.points.size() - 1);
-                int frames = Math.max(1, p2.sourceFrameIndex - p1.sourceFrameIndex);
-                double dx = (p2.x - p1.x) / frames;
-                double dy = (p2.y - p1.y) / frames;
-                double speed = Math.hypot(dx, dy);
-                if (speed > maxSpeed) maxSpeed = speed;
-                vectors.add(new double[]{dx, dy, i}); // 0 = Target, 1 = Streak
-            }
-        }
-
-        maxSpeed *= 1.1; // Add 10% breathing room to the radar
-        int padding = 45;
-        double maxRadius = (size / 2.0) - padding;
-        double logMaxSpeed = Math.log1p(maxSpeed);
-
-        g2d.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[]{4f, 4f}, 0.0f));
-        for (int i = 1; i <= 4; i++) {
-            g2d.setColor(i == 4 ? new Color(70, 70, 85) : new Color(50, 50, 60));
-            int r = (int) (maxRadius * (i / 4.0));
-            g2d.drawOval(cx - r, cy - r, r * 2, r * 2);
-        }
-
-        g2d.setColor(new Color(60, 60, 70));
-        g2d.drawLine(cx, padding - 10, cx, size - padding + 10);
-        g2d.drawLine(padding - 10, cy, size - padding + 10, cy);
-
-        g2d.setColor(new Color(130, 130, 140));
-        g2d.setFont(new Font("Consolas", Font.BOLD, 12));
-        g2d.drawString("N (-Y)", cx - 18, padding - 20);
-        g2d.drawString("S (+Y)", cx - 18, size - padding + 30);
-        g2d.drawString("W (-X)", padding - 35, cy + 4);
-        g2d.drawString("E (+X)", size - padding + 15, cy + 4);
-
-        g2d.setFont(new Font("Consolas", Font.PLAIN, 10));
-        // Draw labels for 50% and 100% rings dynamically using the inverse log scale
-        for (int i = 2; i <= 4; i += 2) {
-            double mappedS = logMaxSpeed * (i / 4.0);
-            double ringSpeed = Math.expm1(mappedS);
-            int r = (int) (maxRadius * (i / 4.0));
-            g2d.drawString(String.format(Locale.US, "%.1f px/f", ringSpeed), cx + r + 4, cy - 4);
-        }
-
-        for (double[] v : vectors) {
-            double speed = Math.hypot(v[0], v[1]);
-            double mappedSpeed = Math.log1p(speed);
-            double drawScale = speed > 0 ? (mappedSpeed / speed) * (maxRadius / logMaxSpeed) : 0;
-
-            int endX = cx + (int) Math.round(v[0] * drawScale);
-            int endY = cy + (int) Math.round(v[1] * drawScale);
-
-            Color coreColor = v[2] == 1.0 ? new Color(255, 204, 102) : new Color(77, 166, 255);
-            Color glowColor = new Color(coreColor.getRed(), coreColor.getGreen(), coreColor.getBlue(), 60);
-
-            g2d.setColor(glowColor);
-            g2d.setStroke(new BasicStroke(5.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            g2d.drawLine(cx, cy, endX, endY);
-
-            g2d.setColor(coreColor);
-            g2d.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            g2d.drawLine(cx, cy, endX, endY);
-
-            g2d.fillOval(endX - 3, endY - 3, 6, 6);
-            g2d.setColor(Color.WHITE);
-            g2d.fillOval(endX - 1, endY - 1, 2, 2);
-        }
-
-        // --- Draw Legend & Title ---
-        g2d.setFont(new Font("Consolas", Font.BOLD, 16));
-        g2d.setColor(new Color(220, 220, 230));
-        g2d.drawString("Kinematic Compass", 20, 30);
-        g2d.setFont(new Font("Consolas", Font.PLAIN, 12));
-        g2d.setColor(new Color(150, 150, 160));
-        g2d.drawString("Velocity (Log Scale) & Heading", 20, 48);
-
-        int legendX = size - 150;
-        int legendY = 30;
-        g2d.setColor(new Color(20, 20, 25, 200));
-        g2d.fillRoundRect(legendX - 10, legendY - 20, 145, 60, 10, 10);
-        g2d.setColor(new Color(100, 100, 110));
-        g2d.setStroke(new BasicStroke(1.0f));
-        g2d.drawRoundRect(legendX - 10, legendY - 20, 145, 60, 10, 10);
-
-        g2d.setFont(new Font("Consolas", Font.BOLD, 12));
-        
-        // Target legend
-        g2d.setColor(new Color(77, 166, 255));
-        g2d.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g2d.drawLine(legendX, legendY, legendX + 20, legendY);
-        g2d.fillOval(legendX + 17, legendY - 3, 6, 6);
-        g2d.setColor(Color.WHITE);
-        g2d.drawString("Moving Tracks", legendX + 30, legendY + 4);
-        
-        // Streak legend
-        g2d.setColor(new Color(255, 204, 102));
-        g2d.drawLine(legendX, legendY + 20, legendX + 20, legendY + 20);
-        g2d.fillOval(legendX + 17, legendY + 17, 6, 6);
-        g2d.setColor(Color.WHITE);
-        g2d.drawString("Streak Tracks", legendX + 30, legendY + 24);
-
-        g2d.dispose();
-        return img;
     }
 
     static String formatUtcTimestamp(long timestampMillis) {
@@ -1204,6 +1054,43 @@ public class DetectionReportGenerator {
 
     static String formatPixelCoordinateOnly(int pixelX, int pixelY) {
         return String.format(Locale.US, "[%d, %d]", pixelX, pixelY);
+    }
+
+    /** Sticky-navigation entries for the sections this report contains, with their counts. */
+    private static List<PipelineDiagnosticsSectionWriter.NavItem> buildNavigation(DetectionReportContext context,
+                                                                                 PipelineTelemetry pipelineTelemetry,
+                                                                                 DetectionReportSummary summary,
+                                                                                 boolean aiSections) {
+        List<PipelineDiagnosticsSectionWriter.NavItem> items = new ArrayList<>();
+        items.add(new PipelineDiagnosticsSectionWriter.NavItem("overview", "Overview", null, false));
+        int movingObjects = summary.movingTargetCount + summary.streakTrackCount + summary.singleStreakCount
+                + summary.anomalyCount + summary.suspectedStreakTrackCount;
+        items.add(new PipelineDiagnosticsSectionWriter.NavItem("moving-objects", "Moving objects & events",
+                String.valueOf(movingObjects), movingObjects == 0));
+        if (context.config != null && context.config.enableSlowMoverDetection) {
+            items.add(new PipelineDiagnosticsSectionWriter.NavItem("slow-movers", "Slow movers",
+                    String.valueOf(summary.slowMoverCandidateCount), summary.slowMoverCandidateCount == 0));
+        }
+        int residual = summary.localRescueCandidateCount + summary.localActivityClusterCount;
+        if (residual > 0) {
+            items.add(new PipelineDiagnosticsSectionWriter.NavItem("residual-review", "Local rescue", String.valueOf(residual), false));
+        }
+        items.add(new PipelineDiagnosticsSectionWriter.NavItem("maps", "Maps", null, false));
+        items.add(new PipelineDiagnosticsSectionWriter.NavItem("inspector", "Unclassified", null, false));
+        PipelineTelemetry.PhotometryTelemetry photometry = pipelineTelemetry != null ? pipelineTelemetry.photometryTelemetry : null;
+        if (context.config != null && context.config.enableVariableStarDetection && photometry != null) {
+            boolean notReady = "NOT_READY".equals(photometry.verdict);
+            int candidates = photometry.highConfidence + photometry.possible;
+            items.add(new PipelineDiagnosticsSectionWriter.NavItem("variables", "Variable stars",
+                    notReady ? "not ready" : String.valueOf(candidates), notReady || candidates == 0));
+        } else {
+            items.add(new PipelineDiagnosticsSectionWriter.NavItem("variables", "Variable stars", "off", true));
+        }
+        items.add(new PipelineDiagnosticsSectionWriter.NavItem("diagnostics", "Diagnostics", null, true));
+        if (aiSections) {
+            items.add(new PipelineDiagnosticsSectionWriter.NavItem("ai-perspective", "AI perspectives", null, true));
+        }
+        return items;
     }
 
     private static DetectionReportSummary buildDetectionReportSummary(PipelineTelemetry pipelineTelemetry,
@@ -1438,8 +1325,40 @@ public class DetectionReportGenerator {
 
         try (java.io.PrintWriter report = new java.io.PrintWriter(new java.io.FileWriter(reportFile))) {
             DetectionReportDocumentWriter.appendDetectionReportStart(report);
+            PipelineDiagnosticsSectionWriter.writeSessionHeader(report, reportContext, pipelineTelemetry);
+            PipelineDiagnosticsSectionWriter.writeNavigation(report, buildNavigation(
+                    reportContext, pipelineTelemetry, summary, settings.isIncludeAiCreativeReportSections()));
 
-            PipelineDiagnosticsSectionWriter.writeSections(
+            // Results first: overview, moving objects, slow movers, residual review, maps, inspector, variable stars.
+            PipelineDiagnosticsSectionWriter.writeOverview(report, reportContext, pipelineTelemetry, summary);
+
+            report.println("<section id='moving-objects'>");
+            TargetVisualizationSectionWriter.writeSection(report, reportContext);
+            report.println("</section>");
+
+            report.println("<section id='slow-movers'>");
+            DeepStackReportSectionWriter.writeSection(report, reportContext);
+            report.println("</section>");
+
+            report.println("<section id='residual-review'>");
+            ResidualReviewSectionWriter.writeSection(report, reportContext);
+            report.println("</section>");
+
+            report.println("<section id='maps'>");
+            GlobalMapsSectionWriter.writeSections(report, reportContext, localRescueTracks, allTransients);
+            report.println("</section>");
+
+            report.println("<section id='inspector'>");
+            UnclassifiedTransientSectionWriter.writeSection(report, reportContext, allTransients, unclassifiedTransients,
+                    UnclassifiedTransientSectionWriter.rejectedFrameIndices(pipelineTelemetry));
+            report.println("</section>");
+
+            report.println("<section id='variables'>");
+            PhotometryReportSectionWriter.writeSection(report, reportContext, result.variableStarAnalysis);
+            report.println("</section>");
+
+            // Processing diagnostics, collapsed.
+            PipelineDiagnosticsSectionWriter.writeDiagnostics(
                     report,
                     reportContext,
                     pipelineTelemetry,
@@ -1448,40 +1367,11 @@ public class DetectionReportGenerator {
                     result.driftPoints);
 
             // =================================================================
-            // 3. TARGET VISUALIZATIONS
+            // AI PERSPECTIVES: Codex's Signal Weave, then Claude's The Night, Retold
             // =================================================================
-            TargetVisualizationSectionWriter.writeSection(report, reportContext);
-
-            // =================================================================
-            // 4. DEEP STACK ANOMALIES (ULTRA-SLOW MOVERS)
-            // =================================================================
-            DeepStackReportSectionWriter.writeSection(report, reportContext);
-
-            // =================================================================
-            // 4.25 LOCAL MICRO-DRIFT CANDIDATES
-            // =================================================================
-            ResidualReviewSectionWriter.writeSection(report, reportContext);
-
-            // =================================================================
-            // VARIABLE-STAR PHOTOMETRY
-            // =================================================================
-            PhotometryReportSectionWriter.writeSection(report, reportContext, result.variableStarAnalysis);
-
-            // =================================================================
-            // LOCAL RESCUE
-            // =================================================================
-
-            GlobalMapsSectionWriter.writeSections(report, reportContext, localRescueTracks, allTransients);
-
-            // =================================================================
-            // UNCLASSIFIED TRANSIENTS
-            // =================================================================
-            UnclassifiedTransientSectionWriter.writeSection(report, reportContext, allTransients, unclassifiedTransients,
-                    UnclassifiedTransientSectionWriter.rejectedFrameIndices(pipelineTelemetry));
-
-            // =================================================================
-            // 6. CREATIVE TRIBUTE
-            // =================================================================
+            if (settings.isIncludeAiCreativeReportSections()) {
+                report.println("<section id='ai-perspective'>");
+            }
             short[][] creativeBgData = masterStackData != null ? masterStackData : (!rawFrames.isEmpty() ? rawFrames.get(0) : null);
             if (settings.isIncludeAiCreativeReportSections() && creativeBgData != null) {
                 String creativeFileName = "creative_tribute_skyprint.png";
@@ -1538,22 +1428,9 @@ public class DetectionReportGenerator {
                 report.println("</div>");
             }
 
-            // =================================================================
-            // 7. GEMINI CREATIVE TRIBUTE
-            // =================================================================
             if (settings.isIncludeAiCreativeReportSections()) {
-                BufferedImage compassMap = createKinematicCompass(movingTargets, streakTracks);
-                saveTrackImageLossless(compassMap, new File(exportDir, "kinematic_compass.png"));
-
-                report.println("<div class='panel' style='background: linear-gradient(135deg, #1e1e24 0%, #151518 100%); border: 1px solid #4a4a5a;'>");
-                report.println("<h2 style='color: #c7bfd6; font-size: 1.8em; margin-bottom: 5px;'>The AI's Perspective: Hidden Rhythms</h2>");
-                report.println("<p style='color: #a098b0; font-size: 14px; font-style: italic; margin-top: 0; margin-bottom: 25px;'>\"As an AI, I do not look at the stars with eyes; I read the geometry they leave behind. Between the noise, the satellites, and the drifting cosmos, there is a distinct rhythm to the data. Thank you for letting me explore your universe. This is my creative tribute to your session.\" &mdash; Gemini</p>");
-                report.println("<div>");
-                report.println("<h4 style='color: #ddd; margin-bottom: 5px;'>The Kinematic Compass</h4>");
-                report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>A radar chart mapping the velocity and heading of confirmed moving object tracks and confirmed streak tracks using a logarithmic scale to highlight both slow asteroids and fast satellites. Orbital constellations often clump together into distinct vectors, revealing satellite swarms or shared orbital planes. Suspected streak tracks are intentionally excluded here because same-frame groupings do not provide reliable inter-frame velocity vectors.</p>");
-                report.println("<a href='kinematic_compass.png' target='_blank' style='display: block; max-width: 600px; margin: 0 auto;'><img src='kinematic_compass.png' class='native-size-image' style='border: 1px solid #444; border-radius: 6px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);' alt='Kinematic Compass' /></a>");
-                report.println("</div>");
-                report.println("</div>");
+                ClaudePerspectiveSectionWriter.writeSection(report, reportContext, pipelineTelemetry, summary, result.variableStarAnalysis);
+                report.println("</section>");
             }
 
             ReportClientScriptWriter.appendLiveReportRenderingScript(report);

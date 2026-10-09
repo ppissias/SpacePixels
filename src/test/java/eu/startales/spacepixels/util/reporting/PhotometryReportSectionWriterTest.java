@@ -55,13 +55,16 @@ public class PhotometryReportSectionWriterTest {
         File exportDir = temporaryFolder.newFolder();
         String html = render(result, rawFrames, config, exportDir);
 
-        assertTrue(html.contains("Variable-Star Photometry"));
+        assertTrue(html.contains("<h2>Variable Stars</h2>"));
         assertTrue(html.contains("Ready"));
-        assertTrue(html.contains("Photometry: Readiness Checks"));
+        assertTrue(html.contains("Variable Stars: Readiness Checks"));
+        assertTrue(html.contains("every readiness check passed"));
+        assertTrue(html.contains("id='variable-candidates'"));
+        assertTrue(html.contains("href='#variable-v1'"));
         assertTrue(html.contains("Noise model"));
         assertTrue(html.contains("V1 &middot; High confidence"));
         assertTrue(html.contains("<svg"));
-        assertTrue(html.contains("Photometry: Per-Frame Measurements"));
+        assertTrue(html.contains("Variable Stars: Per-Frame Measurements"));
         assertTrue(new File(exportDir, "photometry_stars.csv").isFile());
         assertTrue(new File(exportDir, "photometry_lightcurves.csv").isFile());
         assertTrue(new File(exportDir, "photometry_frames.csv").isFile());

@@ -42,9 +42,8 @@ final class ResidualReviewSectionWriter {
             short[][] background = context.masterStackData != null
                     ? context.masterStackData
                     : (!context.rawFrames.isEmpty() ? context.rawFrames.get(0) : null);
-            report.println("<h2>Local Rescue Candidates (Residual Heuristic Analysis)</h2>");
-            report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Engine-side JTransient rescue analysis over <strong>unclassifiedTransients</strong>. These candidates highlight faint local motion spanning just a few pixels, sparse coherent local drifts across a handful of frames, plus short same-location repeats that are worth manual inspection.</p>");
-            report.println("<div class='astro-note' style='margin-bottom: 15px;'>These detections are no longer a SpacePixels-side post-pass. They come directly from JTransient residual analysis after the normal track, anomaly, and suspected-streak branches have already finished.</div>");
+            report.println("<h2 id='local-rescue'>Local Rescue Candidates</h2>");
+            report.println("<p class='section-lede'>A second look at the detections the tracker left unexplained. These candidates are faint local motions of just a few pixels, sparse but consistent drifts over a handful of frames, or short repeats at the same spot. They are worth a manual look; none is a confirmed object.</p>");
 
             int counter = 1;
             for (ResidualTransientAnalysis.LocalRescueCandidate candidate : context.localRescueCandidates) {
@@ -57,8 +56,8 @@ final class ResidualReviewSectionWriter {
             short[][] background = context.masterStackData != null
                     ? context.masterStackData
                     : (!context.rawFrames.isEmpty() ? context.rawFrames.get(0) : null);
-            report.println("<h2>Local Activity Clusters (Residual Review Buckets)</h2>");
-            report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Broad engine-side spatial clusters built from leftover detections after local rescue candidates have already consumed their points. These are not object confirmations; they are review buckets for persistent same-area activity.</p>");
+            report.println("<h2 id='activity-clusters'>Local Activity Clusters</h2>");
+            report.println("<p class='section-lede'>Groups of leftover detections that keep appearing in the same area, after the local rescue candidates took their points. They are places to review, not confirmed objects.</p>");
 
             int counter = 1;
             for (ResidualTransientAnalysis.LocalActivityCluster cluster : context.localActivityClusters) {
@@ -275,7 +274,7 @@ final class ResidualReviewSectionWriter {
                 + " <span style='background: #7a4b14; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>"
                 + String.format(Locale.US, "%.0f px Linkage", cluster.linkageRadiusPixels)
                 + "</span></div>");
-        report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>Broad engine-side residual review cluster built by JTransient after rescue-consumed points are removed. This is not a confirmed object category; it highlights persistent same-area activity worth manual inspection.</div>");
+        report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>Leftover detections that keep appearing in the same area. Not a confirmed object; a place worth checking by eye.</div>");
         report.println("<div class='image-container'>");
         if (backgroundSource != null) {
             report.println("<div><a href='" + backgroundFileName + "' target='_blank'><img src='" + backgroundFileName + "' alt='Reference Crop' /></a><br/><center><small>Reference Crop</small></center></div>");
@@ -373,12 +372,12 @@ final class ResidualReviewSectionWriter {
 
     private static String buildLocalRescueNote(ResidualTransientAnalysis.LocalRescueKind kind) {
         if (kind == ResidualTransientAnalysis.LocalRescueKind.LOCAL_REPEAT) {
-            return "Engine-side residual rescue built by JTransient from unclassified transients after normal track, anomaly, and suspected-streak classification. This candidate is a tight local repeater rather than a strong kinematic track.";
+            return "Found among the detections the tracker left unexplained. It repeats at nearly the same spot rather than moving clearly, so check it by eye.";
         }
         if (kind == ResidualTransientAnalysis.LocalRescueKind.SPARSE_LOCAL_DRIFT) {
-            return "Engine-side residual rescue built by JTransient from unclassified transients after normal track, anomaly, and suspected-streak classification. This candidate shows coherent local drift across a sparse set of frames, so it would be missed by stricter contiguous-frame linking.";
+            return "Found among the detections the tracker left unexplained. It drifts consistently across a few frames that are not consecutive, which the normal track linking would miss.";
         }
-        return "Engine-side residual rescue built by JTransient from unclassified transients after normal track, anomaly, and suspected-streak classification. These are not confirmed tracks; manual verification is recommended.";
+        return "Found among the detections the tracker left unexplained. Not a confirmed track; check it by eye.";
     }
 
     private static BufferedImage createMicroDriftTrailImage(TrackLinker.Track track,

@@ -42,12 +42,12 @@ final class DeepStackReportSectionWriter {
             return;
         }
 
-        report.println("<h2>Maximum-Stack Slow-Mover Candidates</h2>");
-        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Elongated maximum-stack footprints selected by morphology, exact median-mask overlap, and optional frame-evidence filters. Frame support is the share of usable frames with significant candidate-local signal. Stationary likelihood is the share of supported positions clustered near one spot; it is a heuristic, not a calibrated probability or motion confirmation.</p>");
+        report.println("<h2>Slow-Mover Candidates</h2>");
+        report.println("<p class='section-lede'>An object that moves only a few pixels during the whole session leaves a short, elongated smear in the maximum stack (the brightest value of every pixel). These candidates were picked by that shape and because they do not overlap a star of the median stack. <strong>Frame support</strong> is the share of usable frames with signal at the candidate; <strong>stationary likelihood</strong> is the share of those positions that cluster in one spot, so a high value points to a star or a defect rather than motion. Both are heuristics, not confirmations.</p>");
 
         if (hasTelemetry) {
             report.println("<div class='panel'>");
-            report.println("<h3 style='color: #ffffff; margin-top: 0;'>Slow-Mover Telemetry</h3>");
+            report.println("<h3 style='color: #ffffff; margin-top: 0;'>How the Candidates Were Selected</h3>");
             report.println("<div class='flex-container' style='margin-bottom: 25px;'>");
             report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rawCandidatesExtracted), "Raw Candidates"));
             report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rejectedBelowMinPixels), "Below Min Pixels"));

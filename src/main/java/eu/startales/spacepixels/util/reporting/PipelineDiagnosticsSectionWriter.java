@@ -1,7 +1,10 @@
 package eu.startales.spacepixels.util.reporting;
 
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
+import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.WcsCoordinateTransformer;
+import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import io.github.ppissias.jtransient.telemetry.TrackerTelemetry;
@@ -12,28 +15,229 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.Field;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * Emits the pipeline-summary, diagnostics, configuration, and quality-control sections that appear
- * before the per-target report cards.
+ * Emits the session header, navigation and overview at the top of the report, and the processing
+ * diagnostics (quality control, configuration, masks, extraction, linking) collapsed near its end.
  */
 final class PipelineDiagnosticsSectionWriter {
 
     private PipelineDiagnosticsSectionWriter() {
     }
 
-    static void writeSections(PrintWriter report,
+    /**
+     * Writes the one-line session header under the report title: field, time span, frames, camera and
+     * plate-solve status, taken from the FITS headers and the aligned WCS.
+     */
+    static void writeSessionHeader(PrintWriter report,
+                                   DetectionReportContext reportContext,
+                                   PipelineTelemetry pipelineTelemetry) {
+        List<String> items = new ArrayList<>();
+        FitsFileInformation[] files = reportContext.fitsFiles;
+        FitsFileInformation first = files != null && files.length > 0 ? files[0] : null;
+        int width = first != null ? first.getSizeWidth() : 0;
+        int height = first != null ? first.getSizeHeight() : 0;
+
+        WcsCoordinateTransformer transformer = reportContext.astrometryContext.hasAstrometricSolution()
+                ? reportContext.astrometryContext.getTransformer() : null;
+        if (transformer != null && width > 0 && height > 0) {
+            WcsCoordinateTransformer.SkyCoordinate centre = transformer.pixelToSky(width / 2.0, height / 2.0);
+            WcsCoordinateTransformer.SkyCoordinate step = transformer.pixelToSky(width / 2.0 + 1.0, height / 2.0);
+            double scaleArcsec = angularSeparationDeg(centre, step) * 3600.0;
+            String field = WcsCoordinateTransformer.formatRa(centre.getRaDegrees()) + " "
+                    + WcsCoordinateTransformer.formatDec(centre.getDecDegrees());
+            items.add(headerItem("Field", DetectionReportGenerator.escapeHtml(field)
+                    + String.format(Locale.US, " &middot; %.1f&deg; &times; %.1f&deg; &middot; %.2f&Prime;/px",
+                    width * scaleArcsec / 3600.0, height * scaleArcsec / 3600.0, scaleArcsec)));
+        }
+
+        long firstTime = Long.MAX_VALUE;
+        long lastTime = Long.MIN_VALUE;
+        if (files != null) {
+            for (FitsFileInformation file : files) {
+                long t = file != null ? file.getObservationTimestamp() : -1L;
+                if (t > 0) {
+                    firstTime = Math.min(firstTime, t);
+                    lastTime = Math.max(lastTime, t + Math.max(0L, file.getExposureDurationMillis()));
+                }
+            }
+        }
+        if (firstTime != Long.MAX_VALUE) {
+            DateTimeFormatter day = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneOffset.UTC);
+            DateTimeFormatter clock = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneOffset.UTC);
+            long minutes = Math.round((lastTime - firstTime) / 60000.0);
+            items.add(headerItem("Session", day.format(Instant.ofEpochMilli(firstTime)) + " &middot; "
+                    + clock.format(Instant.ofEpochMilli(firstTime)) + "&ndash;" + clock.format(Instant.ofEpochMilli(lastTime))
+                    + " UTC (" + formatDuration(minutes) + ")"));
+        }
+
+        if (pipelineTelemetry != null) {
+            items.add(headerItem("Frames", pipelineTelemetry.totalFramesKept + " of " + pipelineTelemetry.totalFramesLoaded + " kept"));
+        }
+        if (first != null) {
+            String filter = headerValue(first, "FILTER");
+            if (first.getExposureDurationMillis() > 0) {
+                items.add(headerItem("Exposure", formatSeconds(first.getExposureDurationMillis() / 1000.0)
+                        + (filter != null ? " &middot; " + DetectionReportGenerator.escapeHtml(filter) : "")));
+            }
+            String camera = headerValue(first, "INSTRUME");
+            String telescope = headerValue(first, "TELESCOP");
+            if (camera != null || telescope != null) {
+                String text = camera != null && telescope != null && !camera.equals(telescope)
+                        ? DetectionReportGenerator.escapeHtml(camera) + " &middot; " + DetectionReportGenerator.escapeHtml(telescope)
+                        : DetectionReportGenerator.escapeHtml(camera != null ? camera : telescope);
+                items.add(headerItem("Camera", text));
+            }
+            if (width > 0 && height > 0) {
+                items.add(headerItem("Image", width + " &times; " + height + " px"));
+            }
+        }
+        items.add(headerItem("Astrometry", transformer != null ? "plate-solved" : "not plate-solved (sky lookups off)"));
+
+        report.println("<div class='session-header'>");
+        for (String item : items) {
+            report.println(item);
+        }
+        report.println("</div>");
+    }
+
+    /** One entry of the sticky section navigation. */
+    static final class NavItem {
+        final String anchor;
+        final String label;
+        final String count;
+        final boolean muted;
+
+        NavItem(String anchor, String label, String count, boolean muted) {
+            this.anchor = anchor;
+            this.label = label;
+            this.count = count;
+            this.muted = muted;
+        }
+    }
+
+    /** Writes the sticky navigation bar that links every report section, with its count where useful. */
+    static void writeNavigation(PrintWriter report, List<NavItem> items) {
+        report.println("<nav class='report-nav'><span class='nav-title'>Jump to</span>");
+        for (NavItem item : items) {
+            report.println("<a href='#" + item.anchor + "'" + (item.muted ? " class='nav-muted'" : "") + ">"
+                    + DetectionReportGenerator.escapeHtml(item.label)
+                    + (item.count != null ? "<span class='nav-count'>" + DetectionReportGenerator.escapeHtml(item.count) + "</span>" : "")
+                    + "</a>");
+        }
+        report.println("</nav>");
+    }
+
+    /**
+     * Writes the results-first overview: what was found (each card jumps to its section) and a compact
+     * line of processing figures.
+     */
+    static void writeOverview(PrintWriter report,
                               DetectionReportContext reportContext,
                               PipelineTelemetry pipelineTelemetry,
-                              TrackerTelemetry linkerTelemetry,
-                              DetectionReportSummary summary,
-                              List<SourceExtractor.Pixel> driftPoints) throws IOException {
+                              DetectionReportSummary summary) {
+        if (pipelineTelemetry == null) {
+            return;
+        }
+        report.println("<div class='panel' id='overview'>");
+        report.println("<h2>Overview</h2>");
+        report.println("<p class='section-lede'>What this session found. Click a card to jump to its section.</p>");
+        // Categories that found something get a card; empty and switched-off ones share one line.
+        List<String> cards = new ArrayList<>();
+        List<String> empty = new ArrayList<>();
+        addResult(cards, empty, summary.movingTargetCount, "Moving-object tracks", "moving-targets");
+        addResult(cards, empty, summary.streakTrackCount, "Streak tracks", "streak-tracks");
+        addResult(cards, empty, summary.singleStreakCount, "Single-frame streaks", "single-streaks");
+        addResult(cards, empty, summary.anomalyCount, "Single-frame anomalies", "anomalies");
+        addResult(cards, empty, summary.suspectedStreakTrackCount, "Suspected streak tracks", "streak-tracks");
+        if (reportContext.config.enableSlowMoverDetection) {
+            addResult(cards, empty, summary.slowMoverCandidateCount, "Slow-mover candidates", "slow-movers");
+        } else {
+            empty.add("slow movers (switched off)");
+        }
+        addResult(cards, empty, summary.localRescueCandidateCount, "Local rescue candidates", "local-rescue");
+        addResult(cards, empty, summary.localActivityClusterCount, "Local activity clusters", "activity-clusters");
+        PipelineTelemetry.PhotometryTelemetry photometry = pipelineTelemetry.photometryTelemetry;
+        if (!reportContext.config.enableVariableStarDetection) {
+            empty.add("variable stars (switched off)");
+        } else if (photometry == null) {
+            empty.add("variable stars (not run)");
+        } else if ("NOT_READY".equals(photometry.verdict)) {
+            cards.add(textCard("Not ready", "Variable stars", "variables", false));
+        } else if (photometry.highConfidence + photometry.possible == 0) {
+            empty.add("variable stars");
+        } else {
+            String value = photometry.highConfidence + (photometry.possible > 0
+                    ? " <span style='color:#888; font-size: 16px;'>+ " + photometry.possible + " possible</span>" : "");
+            cards.add(textCard(value, "Variable stars", "variable-candidates", false));
+        }
+        report.println("<div class='flex-container'>");
+        if (cards.isEmpty()) {
+            report.println(textCard("&ndash;", "Nothing found", null, false));
+        }
+        for (String card : cards) {
+            report.println(card);
+        }
+        report.println("</div>");
+        if (!empty.isEmpty()) {
+            report.println("<div class='astro-note' style='margin-top: -6px; margin-bottom: 14px;'>Nothing found: "
+                    + DetectionReportGenerator.escapeHtml(String.join(", ", empty)) + ".</div>");
+        }
+
+        report.println("<div class='flex-container' style='margin-bottom: 4px;'>");
+        report.println(compactCard(pipelineTelemetry.totalFramesKept + " <span style='color:#888;'>of " + pipelineTelemetry.totalFramesLoaded + "</span>", "Frames kept"));
+        report.println(compactCard(String.format(Locale.US, "%.1f s", pipelineTelemetry.processingTimeMs / 1000.0), "Detection time"));
+        report.println(compactCard(String.valueOf(pipelineTelemetry.totalRawObjectsExtracted), "Objects extracted"));
+        report.println(compactCard(String.valueOf(summary.masterStarCount), "Stars in the master map"));
+        report.println("</div>");
+
+        report.println("<div class='astro-note'>" + plural(summary.returnedTrackCount, "track-like detection") + " in total: "
+                + plural(summary.singleStreakCount, "single-frame streak") + ", "
+                + plural(summary.confirmedLinkedTrackCount, "linked track") + " and "
+                + plural(summary.suspectedStreakTrackCount, "suspected streak grouping") + ".</div>");
+        if (!reportContext.anomalies.isEmpty()) {
+            String split = summary.peakSigmaAnomalyCount + " found by their peak brightness, "
+                    + summary.integratedSigmaAnomalyCount + " by their integrated brightness"
+                    + (summary.otherAnomalyCount > 0 ? ", " + summary.otherAnomalyCount + " other" : "");
+            report.println("<div class='astro-note'>Anomalies: " + split + " (the order used on the anomaly cards and the A# map labels).</div>");
+        }
+        if (reportContext.config.enableSlowMoverDetection) {
+            report.println("<div class='astro-note'>Local rescue candidates and activity clusters come from a second look at the "
+                    + plural(summary.unclassifiedTransientCount, "detection") + " the tracker left unexplained: rescue candidates are short, consistent motions; the rest are grouped into activity clusters for manual review.</div>");
+        } else {
+            report.println("<div class='astro-note'>Slow-mover analysis was switched off for this session.</div>");
+        }
+        report.println("</div>");
+
+        if (summary.insufficientFramesAfterQuality) {
+            report.println("<div class='panel'>");
+            report.println("<h2>Too Few Frames After Quality Control</h2>");
+            report.println("<p>Only <strong>" + pipelineTelemetry.totalFramesKept + "</strong> frames remained after quality control. SpacePixels needs at least <strong>" + ImageProcessing.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS + "</strong> usable frames before multi-frame tracking and maximum-stack candidate review are meaningful, so those sections were skipped for this run.</p>");
+            report.println("<div class='astro-note'>The quality-control tables under Diagnostics show which frames were rejected and why.</div>");
+            report.println("</div>");
+        }
+    }
+
+    /**
+     * Writes the processing diagnostics (astrometry, quality control, configuration, masks, extraction and
+     * linking) as one collapsible group near the end of the report.
+     */
+    static void writeDiagnostics(PrintWriter report,
+                                 DetectionReportContext reportContext,
+                                 PipelineTelemetry pipelineTelemetry,
+                                 TrackerTelemetry linkerTelemetry,
+                                 DetectionReportSummary summary,
+                                 List<SourceExtractor.Pixel> driftPoints) throws IOException {
+        report.println("<details class='report-group' id='diagnostics'>");
+        report.println("<summary>Diagnostics<span class='summary-note'>Astrometry, frame quality control, configuration, star mask, extraction and track linking. Click to expand.</span></summary>");
         if (pipelineTelemetry != null) {
-            writePipelineOverview(report, reportContext, pipelineTelemetry, summary);
             writeAstrometricContext(report, reportContext);
             writeFrameQualityStatistics(report, pipelineTelemetry);
             writeRejectedFrames(report, pipelineTelemetry);
@@ -43,74 +247,75 @@ final class PipelineDiagnosticsSectionWriter {
             writeExtractionStatistics(report, pipelineTelemetry);
             writeStationaryStarPurification(report, pipelineTelemetry, linkerTelemetry);
         }
-
         if (linkerTelemetry != null) {
             writeTrackLinkingDiagnostics(report, linkerTelemetry, summary);
         }
+        report.println("</details>");
     }
 
-    private static void writePipelineOverview(PrintWriter report,
-                                              DetectionReportContext reportContext,
-                                              PipelineTelemetry pipelineTelemetry,
-                                              DetectionReportSummary summary) {
-        report.println("<div class='panel'>");
-        report.println("<h2>Pipeline Summary</h2>");
-        report.println("<div class='flex-container'>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + String.format(Locale.US, "%.2f", pipelineTelemetry.processingTimeMs / 1000.0) + "s</span><span class='metric-label'>Processing Time</span></div>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + pipelineTelemetry.totalFramesLoaded + "</span><span class='metric-label'>Total Frames</span></div>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + pipelineTelemetry.totalFramesKept + " <span style='color:#555; font-size: 16px;'>/ " + pipelineTelemetry.totalFramesRejected + "</span></span><span class='metric-label'>Kept / Rejected</span></div>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + pipelineTelemetry.totalRawObjectsExtracted + "</span><span class='metric-label'>Raw Objects Extracted</span></div>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + summary.masterStarCount + "</span><span class='metric-label'>Master Stars</span></div>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + summary.returnedTrackCount + "</span><span class='metric-label'>Tracks Returned</span></div>");
-        report.println("</div>");
-        report.println("</div>");
-
-        report.println("<div class='panel'>");
-        report.println("<h2>Detection Breakdown</h2>");
-        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Final report sections summarized up front so confirmed tracks, anomalies, suspected streak tracks, and potential slow movers are visible immediately.</p>");
-        report.println("<div class='flex-container'>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + summary.singleStreakCount + "</span><span class='metric-label'>Streaks</span></div>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + summary.streakTrackCount + "</span><span class='metric-label'>Streak Tracks</span></div>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + summary.movingTargetCount + "</span><span class='metric-label'>Moving Object Tracks</span></div>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + summary.anomalyCount + "</span><span class='metric-label'>Single-Frame Anomalies</span></div>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + summary.suspectedStreakTrackCount + "</span><span class='metric-label'>Suspected Streak Tracks</span></div>");
-        String potentialSlowMoverMetric = reportContext.config.enableSlowMoverDetection ? String.valueOf(summary.slowMoverCandidateCount) : "Off";
-        report.println("<div class='metric-box'><span class='metric-value'>" + potentialSlowMoverMetric + "</span><span class='metric-label'>Potential Slow Movers</span></div>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + summary.localRescueCandidateCount + "</span><span class='metric-label'>Local Rescue Candidates</span></div>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + summary.localActivityClusterCount + "</span><span class='metric-label'>Local Activity Clusters</span></div>");
-        String variableStarMetric = !reportContext.config.enableVariableStarDetection
-                ? "Off"
-                : pipelineTelemetry.photometryTelemetry == null ? "n/a"
-                : "NOT_READY".equals(pipelineTelemetry.photometryTelemetry.verdict) ? "Not ready"
-                : String.valueOf(pipelineTelemetry.photometryTelemetry.highConfidence);
-        report.println("<div class='metric-box'><span class='metric-value'>" + variableStarMetric + "</span><span class='metric-label'>Variable-Star Candidates</span></div>");
-        report.println("</div>");
-        report.println("<div class='astro-note'>JTransient returned <strong>" + summary.returnedTrackCount + "</strong> track-like detections overall: <strong>" + summary.singleStreakCount + "</strong> single-frame streaks, <strong>" + summary.confirmedLinkedTrackCount + "</strong> confirmed linked tracks, and <strong>" + summary.suspectedStreakTrackCount + "</strong> suspected streak groupings.</div>");
-        if (!reportContext.anomalies.isEmpty()) {
-            report.println("<div class='astro-note'>Single-frame anomaly type split shown below matches the order used in the anomaly cards and A# map labels.</div>");
-            report.println("<div class='flex-container'>");
-            report.println("<div class='metric-box compact'><span class='metric-value'>" + summary.peakSigmaAnomalyCount + "</span><span class='metric-label'>Peak-Sigma Anomalies</span></div>");
-            report.println("<div class='metric-box compact'><span class='metric-value'>" + summary.integratedSigmaAnomalyCount + "</span><span class='metric-label'>Integrated-Sigma Anomalies</span></div>");
-            if (summary.otherAnomalyCount > 0) {
-                report.println("<div class='metric-box compact'><span class='metric-value'>" + summary.otherAnomalyCount + "</span><span class='metric-label'>Other / Unknown Anomalies</span></div>");
-            }
-            report.println("</div>");
-        }
-        if (reportContext.config.enableSlowMoverDetection) {
-            report.println("<div class='astro-note'>Top-level counts are separated by category: <strong>" + summary.slowMoverCandidateCount + "</strong> maximum-stack shape candidates and <strong>" + summary.localRescueCandidateCount + "</strong> local rescue candidates.</div>");
+    private static void addResult(List<String> cards, List<String> empty, int count, String label, String anchor) {
+        if (count > 0) {
+            cards.add(textCard(String.valueOf(count), label, anchor, false));
         } else {
-            report.println("<div class='astro-note'>Potential slow mover analysis was disabled for this session.</div>");
+            empty.add(label.toLowerCase(Locale.ROOT));
         }
-        report.println("<div class='astro-note'>Local rescue candidates and local activity clusters are engine-side residual outputs from JTransient. Rescue candidates are mined from <strong>unclassifiedTransients</strong>, then the remaining leftovers are clustered into broader local activity groups for manual review. This run ended with <strong>" + summary.unclassifiedTransientCount + "</strong> unclassified transient detections before residual analysis.</div>");
-        report.println("</div>");
+    }
 
-        if (summary.insufficientFramesAfterQuality) {
-            report.println("<div class='panel'>");
-            report.println("<h2>Quality-Control Guardrail</h2>");
-            report.println("<p>Only <strong>" + pipelineTelemetry.totalFramesKept + "</strong> frames remained after quality control. SpacePixels needs at least <strong>" + ImageProcessing.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS + "</strong> usable frames before multi-frame tracking and maximum-stack candidate review are meaningful, so those downstream sections were skipped for this run.</p>");
-            report.println("<div class='astro-note'>The quality-control tables below still show which frames were rejected and why.</div>");
-            report.println("</div>");
+    private static String textCard(String value, String label, String anchor, boolean quiet) {
+        String box = "<div class='metric-box" + (quiet ? " quiet" : "") + "'><span class='metric-value'>" + value
+                + "</span><span class='metric-label'>" + DetectionReportGenerator.escapeHtml(label) + "</span></div>";
+        return anchor != null ? "<a class='metric-link' href='#" + anchor + "'>" + box + "</a>" : box;
+    }
+
+    private static String compactCard(String value, String label) {
+        return "<div class='metric-box compact'><span class='metric-value'>" + value + "</span><span class='metric-label'>"
+                + DetectionReportGenerator.escapeHtml(label) + "</span></div>";
+    }
+
+    private static String headerItem(String label, String valueHtml) {
+        return "<span class='item'><span class='label'>" + label + "</span><b>" + valueHtml + "</b></span>";
+    }
+
+    /** A FITS header string value without quotes and padding, or null when absent or blank. */
+    private static String headerValue(FitsFileInformation file, String key) {
+        String value = file.getFitsHeader().get(key);
+        if (value == null) {
+            return null;
         }
+        value = value.trim();
+        if (value.startsWith("'")) {
+            value = value.substring(1);
+        }
+        int quote = value.indexOf('\'');
+        if (quote >= 0) {
+            value = value.substring(0, quote);
+        }
+        value = value.trim();
+        return value.isEmpty() ? null : value;
+    }
+
+    static String plural(int count, String noun) {
+        return count + " " + noun + (count == 1 ? "" : "s");
+    }
+
+    private static String formatDuration(long minutes) {
+        return minutes < 60 ? minutes + " min" : String.format(Locale.US, "%d h %02d min", minutes / 60, minutes % 60);
+    }
+
+    private static String formatSeconds(double seconds) {
+        return Math.abs(seconds - Math.rint(seconds)) < 1e-6
+                ? String.format(Locale.US, "%.0f s", seconds)
+                : String.format(Locale.US, "%.1f s", seconds);
+    }
+
+    private static double angularSeparationDeg(WcsCoordinateTransformer.SkyCoordinate a, WcsCoordinateTransformer.SkyCoordinate b) {
+        double ra1 = Math.toRadians(a.getRaDegrees());
+        double ra2 = Math.toRadians(b.getRaDegrees());
+        double de1 = Math.toRadians(a.getDecDegrees());
+        double de2 = Math.toRadians(b.getDecDegrees());
+        double sinDe = Math.sin((de2 - de1) / 2);
+        double sinRa = Math.sin((ra2 - ra1) / 2);
+        return Math.toDegrees(2 * Math.asin(Math.sqrt(sinDe * sinDe + Math.cos(de1) * Math.cos(de2) * sinRa * sinRa)));
     }
 
     private static void writeAstrometricContext(PrintWriter report, DetectionReportContext reportContext) {
@@ -122,8 +327,8 @@ final class PipelineDiagnosticsSectionWriter {
             report.println("<div class='metric-box'><span class='metric-value'>" + DetectionReportGenerator.escapeHtml(DetectionReportGenerator.formatUtcTimestamp(reportContext.astrometryContext.getSessionMidpointTimestampMillis())) + "</span><span class='metric-label'>Session Midpoint (UTC)</span></div>");
             String observerMetric = reportContext.astrometryContext.hasSkybotObserverCode()
                     ? DetectionReportGenerator.escapeHtml(reportContext.astrometryContext.getSkybotObserverCode())
-                    : "500";
-            report.println("<div class='metric-box'><span class='metric-value'>" + observerMetric + "</span><span class='metric-label'>SkyBoT Observer</span></div>");
+                    : "Geocentre";
+            report.println("<div class='metric-box'><span class='metric-value'>" + observerMetric + "</span><span class='metric-label'>Observer for SkyBoT</span></div>");
             report.println("</div>");
             report.println("<div class='astro-note'>WCS source: " + reportContext.astrometryContext.getWcsSummary() + ".");
             if (reportContext.astrometryContext.hasSkybotObserverCode()) {
@@ -150,10 +355,9 @@ final class PipelineDiagnosticsSectionWriter {
 
         report.println("<div class='panel compact-diagnostics-panel'>");
         report.println("<h2>Quality Control: Frame Quality Statistics</h2>");
-        report.println("<p class='compact-note'>Per-frame quality metrics after the session evaluator. Bright-star eccentricity is shown as <code>n/a</code> when too few bright stars qualified for that frame. For long sessions, the detailed table below is scrollable and keeps its column headers pinned.</p>");
+        report.println("<p class='compact-note'>Per-frame quality measurements and the session limits a frame had to meet. Bright-star eccentricity shows <code>n/a</code> when too few bright stars qualified in that frame." + (pipelineTelemetry.qualityThresholds.available ? "" : " No session limits could be derived for this run.") + "</p>");
         report.println("<div class='compact-threshold-grid'>");
-        report.println("<div class='config-item'><span>Thresholds Available</span><span class='val'>" + (pipelineTelemetry.qualityThresholds.available ? "Yes" : "No") + "</span></div>");
-        report.println("<div class='config-item'><span>Min Allowed Star Count</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.minAllowedStarCount) + "</span></div>");
+        report.println("<div class='config-item'><span>Min Allowed Star Count</span><span class='val'>" + (Double.isFinite(pipelineTelemetry.qualityThresholds.minAllowedStarCount) ? String.valueOf((long) Math.ceil(pipelineTelemetry.qualityThresholds.minAllowedStarCount)) : "n/a") + "</span></div>");
         report.println("<div class='config-item'><span>Max Allowed FWHM</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedFwhm) + "</span></div>");
         report.println("<div class='config-item'><span>Max Allowed Eccentricity</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedEccentricity) + "</span></div>");
         report.println("<div class='config-item'><span>Max Bright-Star Eccentricity</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedBrightStarEccentricity) + "</span></div>");
@@ -163,7 +367,7 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<div class='config-item'><span>Max Allowed Bg Median</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedBackgroundMedian) + "</span></div>");
         report.println("</div>");
         report.println("<div class='scroll-box compact-table-box'>");
-        report.println("<table><thead><tr><th>Frame Index</th><th>Filename</th><th>Bg Median</th><th>Bg Sigma</th><th>Median FWHM</th><th>Median Ecc</th><th>Bright-Star Median Ecc</th><th>Stars</th><th>Shape Stars</th><th>Bright Shape Stars</th><th>FWHM Stars</th><th>Status</th><th>Rejection Reason</th></tr></thead><tbody>");
+        report.println("<table><thead><tr><th>Frame</th><th>Filename</th><th>Bg Median</th><th>Bg Sigma</th><th>Median FWHM</th><th>Median Ecc</th><th>Bright-Star Median Ecc</th><th>Stars</th><th>Shape Stars</th><th>Bright Shape Stars</th><th>FWHM Stars</th><th>Status</th><th>Rejection Reason</th></tr></thead><tbody>");
         for (PipelineTelemetry.FrameQualityStat stat : pipelineTelemetry.frameQualityStats) {
             String statusLabel = stat.rejected ? "Rejected" : "Kept";
             String rejectionReason = (stat.rejectionReason == null || stat.rejectionReason.isBlank()) ? "-" : DetectionReportGenerator.escapeHtml(stat.rejectionReason);
@@ -194,7 +398,7 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<div class='panel compact-diagnostics-panel'>");
         report.println("<h2>Quality Control: Rejected Frames</h2>");
         report.println("<div class='scroll-box compact-table-box'>");
-        report.println("<table><tr><th>Frame Index</th><th>Filename</th><th>Median Ecc</th><th>Bright-Star Median Ecc</th><th>Bright Shape Stars</th><th>Rejection Reason</th></tr>");
+        report.println("<table><tr><th>Frame</th><th>Filename</th><th>Median Ecc</th><th>Bright-Star Median Ecc</th><th>Bright Shape Stars</th><th>Rejection Reason</th></tr>");
         for (PipelineTelemetry.FrameRejectionStat rej : pipelineTelemetry.rejectedFrames) {
             report.println("<tr><td>" + (rej.frameIndex + 1) + "</td>");
             report.println("<td>" + DetectionReportGenerator.escapeHtml(rej.filename) + "</td>");
@@ -225,17 +429,36 @@ final class PipelineDiagnosticsSectionWriter {
 
         report.println("<div class='panel'>");
         report.println("<h2>Pipeline Configuration</h2>");
-        report.println("<p style='font-size: 13px; color: #888; margin-top: -10px;'>Active tuning parameters used during this session. <a href='detection_config.json' target='_blank' style='color: #4da6ff; text-decoration: none;'>[View / Download JSON Profile]</a></p>");
-        report.println("<div class='scroll-box' style='padding: 10px;'><div class='config-grid'>");
-
+        report.println("<p style='font-size: 13px; color: #888; margin-top: -10px;'>Every detection parameter used in this session, as stored in the profile file. <a href='detection_config.json' target='_blank' style='color: #4da6ff; text-decoration: none;'>[View / Download JSON Profile]</a></p>");
+        // Values that differ from the built-in defaults come first and are highlighted.
+        DetectionConfig defaults = new DetectionConfig();
+        List<String> changed = new ArrayList<>();
+        List<String> unchanged = new ArrayList<>();
         for (Field field : reportContext.config.getClass().getDeclaredFields()) {
+            if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+                continue;
+            }
             try {
                 field.setAccessible(true);
                 Object value = field.get(reportContext.config);
-                report.println("<div class='config-item'><span>" + field.getName() + "</span> <span class='val'>" + value + "</span></div>");
+                Object defaultValue = field.get(defaults);
+                boolean differs = !java.util.Objects.equals(value, defaultValue);
+                String item = "<div class='config-item'" + (differs ? " style='border-left-color:#ff9933;' title='Default: "
+                        + DetectionReportGenerator.escapeHtml(String.valueOf(defaultValue)) + "'" : "") + "><span>" + field.getName()
+                        + "</span> <span class='val'" + (differs ? " style='color:#ffb366;'" : "") + ">" + DetectionReportGenerator.escapeHtml(String.valueOf(value)) + "</span></div>";
+                (differs ? changed : unchanged).add(item);
             } catch (IllegalAccessException e) {
                 // Silently ignore fields that cannot be accessed
             }
+        }
+        report.println("<p class='compact-note'>" + changed.size() + (changed.size() == 1 ? " value differs" : " values differ")
+                + " from the built-in defaults (orange, listed first; hover for the default).</p>");
+        report.println("<div class='scroll-box' style='padding: 10px;'><div class='config-grid'>");
+        for (String item : changed) {
+            report.println(item);
+        }
+        for (String item : unchanged) {
+            report.println(item);
         }
         report.println("</div></div></div>");
     }
@@ -246,14 +469,13 @@ final class PipelineDiagnosticsSectionWriter {
         boolean hasMasterShieldDiagnostics = reportContext.masterStackData != null && reportContext.masterVetoMask != null;
 
         report.println("<div class='panel'>");
-        report.println("<h2>Master Shield & Veto Mask</h2>");
+        report.println("<h2>Star Mask</h2>");
         report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
-        report.println("The raw median stack (Left) and the extracted Binary Veto Mask painted in red (Right). " +
-                "These are the detected objects in the master map extended by a max star jitter of <strong>" + reportContext.config.maxStarJitter + "</strong> pixels. " +
-                "During Phase 3, we calculate the overlap fraction of each transient against this mask to determine if it should be deleted (purged as a stationary star) or allowed to survive. " +
+        report.println("The median stack (left) and the star mask built from it, in red (right): every object of the median stack, grown by the allowed star jitter of <strong>" + reportContext.config.maxStarJitter + "</strong> pixels. " +
+                "A detection that overlaps this mask too much is treated as a star and removed before tracking. " +
                 "The maximum allowed overlap fraction is currently set to <strong>" + reportContext.config.maxMaskOverlapFraction + "</strong> (" + (int) (reportContext.config.maxMaskOverlapFraction * 100) + "%).</p>");
         report.println("<div class='flex-container' style='margin-bottom: 15px;'>");
-        report.println("<div class='metric-box'><span class='metric-value'>" + summary.masterMapObjectCount + "</span><span class='metric-label'>Master Map Objects</span></div>");
+        report.println("<div class='metric-box'><span class='metric-value'>" + summary.masterMapObjectCount + "</span><span class='metric-label'>Objects in the star mask</span></div>");
         report.println("</div>");
         if (hasMasterShieldDiagnostics) {
             BufferedImage masterImg = DetectionReportGenerator.createDisplayImage(reportContext.masterStackData);
@@ -263,8 +485,8 @@ final class PipelineDiagnosticsSectionWriter {
             TrackVisualizationRenderer.saveLosslessPng(masterMaskImg, new File(reportContext.exportDir, "master_mask_overlay.png"));
 
             report.println("<div class='image-container'>");
-            report.println("<div><a href='master_stack.png' target='_blank'><img src='master_stack.png' style='max-width: 400px;' alt='Master Stack' /></a><br/><center><small>Deep Median Stack</small></center></div>");
-            report.println("<div><a href='master_mask_overlay.png' target='_blank'><img src='master_mask_overlay.png' style='max-width: 400px;' alt='Mask Overlay' /></a><br/><center><small>Binary Footprint Mask (Red)</small></center></div>");
+            report.println("<div><a href='master_stack.png' target='_blank'><img src='master_stack.png' style='max-width: 400px;' alt='Master Stack' /></a><br/><center><small>Median stack</small></center></div>");
+            report.println("<div><a href='master_mask_overlay.png' target='_blank'><img src='master_mask_overlay.png' style='max-width: 400px;' alt='Mask Overlay' /></a><br/><center><small>Star mask (red)</small></center></div>");
             report.println("</div>");
         } else {
             report.println("<div class='astro-note'>Preview images were not produced for this run, so the master shield and veto-mask links are omitted.</div>");
@@ -338,15 +560,13 @@ final class PipelineDiagnosticsSectionWriter {
     private static void writeExtractionStatistics(PrintWriter report, PipelineTelemetry pipelineTelemetry) {
         report.println("<div class='panel compact-diagnostics-panel'>");
         report.println("<h2>Frame Extraction Statistics</h2>");
-        report.println("<p class='compact-note'>Detailed per-frame extraction diagnostics are shown in a scrollable compact table to keep long sequences readable without removing any rows.</p>");
+        report.println("<p class='compact-note'>Objects found in each frame and the detection thresholds used (background levels are in the quality-control table).</p>");
         report.println("<div class='scroll-box compact-table-box'>");
-        report.println("<table><thead><tr><th>Frame Index</th><th>Filename</th><th>Objects Extracted</th><th>Bg Median</th><th>Bg Sigma</th><th>Seed Threshold</th><th>Grow Threshold</th></tr></thead><tbody>");
+        report.println("<table><thead><tr><th>Frame</th><th>Filename</th><th>Objects Extracted</th><th>Seed Threshold</th><th>Grow Threshold</th></tr></thead><tbody>");
         for (PipelineTelemetry.FrameExtractionStat stat : pipelineTelemetry.frameExtractionStats) {
             report.println("<tr><td>" + (stat.frameIndex + 1) + "</td>");
             report.println("<td>" + DetectionReportGenerator.escapeHtml(stat.filename) + "</td>");
             report.println("<td>" + stat.objectCount + "</td>");
-            report.println("<td>" + String.format(Locale.US, "%.2f", stat.bgMedian) + "</td>");
-            report.println("<td>" + String.format(Locale.US, "%.2f", stat.bgSigma) + "</td>");
             report.println("<td>" + String.format(Locale.US, "%.2f", stat.seedThreshold) + "</td>");
             report.println("<td>" + String.format(Locale.US, "%.2f", stat.growThreshold) + "</td></tr>");
         }
@@ -359,15 +579,15 @@ final class PipelineDiagnosticsSectionWriter {
                                                         PipelineTelemetry pipelineTelemetry,
                                                         TrackerTelemetry linkerTelemetry) {
         report.println("<div class='panel compact-diagnostics-panel'>");
-        report.println("<h2>Phase 3: Stationary Star Purification</h2>");
-        report.println("<p class='compact-note'>Master-mask purification removes stationary point-like residues and same-mask stationary streaks before the moving-object linker runs. The per-frame breakdown is shown below in a scrollable compact table.</p>");
+        report.println("<h2>Star Removal Before Tracking</h2>");
+        report.println("<p class='compact-note'>Detections on the star mask are removed before the tracker links what is left. Per frame: point sources found, removed as stars, and left for tracking.</p>");
         if (linkerTelemetry != null) {
             report.println("<div class='flex-container' style='margin-bottom: 10px;'>");
-            report.println("<div class='metric-box compact'><span class='metric-value'>" + linkerTelemetry.totalStationaryStarsPurged + "</span><span class='metric-label'>Stationary Stars Purged</span></div>");
-            report.println("<div class='metric-box compact'><span class='metric-value'>" + linkerTelemetry.totalStationaryStreaksPurged + "</span><span class='metric-label'>Stationary Streaks Purged</span></div>");
+            report.println("<div class='metric-box compact'><span class='metric-value'>" + linkerTelemetry.totalStationaryStarsPurged + "</span><span class='metric-label'>Star detections removed</span></div>");
+            report.println("<div class='metric-box compact'><span class='metric-value'>" + linkerTelemetry.totalStationaryStreaksPurged + "</span><span class='metric-label'>Stationary streaks removed</span></div>");
             report.println("</div>");
             report.println("<div class='scroll-box compact-table-box'>");
-            report.println("<table><thead><tr><th>Frame Index</th><th>Filename</th><th>Initial Point Sources</th><th>Stars Purged</th><th>Surviving Transients</th></tr></thead><tbody>");
+            report.println("<table><thead><tr><th>Frame</th><th>Filename</th><th>Point Sources</th><th>Removed as Stars</th><th>Left for Tracking</th></tr></thead><tbody>");
             for (TrackerTelemetry.FrameStarMapStat starStat : linkerTelemetry.frameStarMapStats) {
                 String fileName = "Unknown";
                 if (starStat.frameIndex < pipelineTelemetry.frameExtractionStats.size()) {
@@ -382,7 +602,7 @@ final class PipelineDiagnosticsSectionWriter {
             report.println("</tbody></table>");
             report.println("</div>");
         } else {
-            report.println("<div class='astro-note'>Stationary-star purification telemetry was not available for this run, so the detailed Phase 3 breakdown was skipped.</div>");
+            report.println("<div class='astro-note'>Star-removal figures were not recorded for this run.</div>");
         }
         report.println("</div>");
     }
@@ -392,27 +612,27 @@ final class PipelineDiagnosticsSectionWriter {
                                                      DetectionReportSummary summary) {
         report.println("<div class='panel compact-diagnostics-panel'>");
         report.println("<h2>Track Linking Diagnostics</h2>");
-        report.println("<p class='compact-note'>Compact scrollable view with sticky headers for the track-link rejection phases and final acceptance summary.</p>");
+        report.println("<p class='compact-note'>How many candidate links each rule rejected, from the first pair of points to the final track.</p>");
         report.println("<div class='scroll-box compact-table-box'>");
-        report.println("<table><thead><tr><th>Filter Phase</th><th>Rejection Reason</th><th>Points Rejected</th></tr></thead><tbody>");
-        report.println("<tr><td>0. Single Streak</td><td>Binary-Star-Like Shape Veto</td><td>" + linkerTelemetry.rejectedBinaryStarStreakShape + "</td></tr>");
-        report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Non-Positive Time Delta</td><td>" + linkerTelemetry.countBaselineNonPositiveDelta + "</td></tr>");
-        report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Stationary / Jitter</td><td>" + linkerTelemetry.countBaselineJitter + "</td></tr>");
-        report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Exceeded Max Jump Velocity</td><td>" + linkerTelemetry.countBaselineJump + "</td></tr>");
-        report.println("<tr><td>1. Baseline (p1 &rarr; p2)</td><td>Morphological Size Mismatch</td><td>" + linkerTelemetry.countBaselineSize + "</td></tr>");
-        report.println("<tr><td>2. Track Search (p3)</td><td>Non-Positive Time Delta</td><td>" + linkerTelemetry.countP3NonPositiveDelta + "</td></tr>");
-        report.println("<tr><td>2. Track Search (p3)</td><td>Velocity Mismatch</td><td>" + linkerTelemetry.countP3VelocityMismatch + "</td></tr>");
-        report.println("<tr><td>2. Track Search (p3)</td><td>Off Predicted Trajectory Line</td><td>" + linkerTelemetry.countP3NotLine + "</td></tr>");
-        report.println("<tr><td>2. Track Search (p3)</td><td>Wrong Direction / Angle</td><td>" + linkerTelemetry.countP3WrongDirection + "</td></tr>");
-        report.println("<tr><td>2. Track Search (p3)</td><td>Exceeded Max Jump Velocity</td><td>" + linkerTelemetry.countP3Jump + "</td></tr>");
-        report.println("<tr><td>2. Track Search (p3)</td><td>Morphological Size Mismatch</td><td>" + linkerTelemetry.countP3Size + "</td></tr>");
+        report.println("<table><thead><tr><th>Stage</th><th>Rejection Reason</th><th>Links Rejected</th></tr></thead><tbody>");
+        report.println("<tr><td>0. Single-frame streak</td><td>Binary-Star-Like Shape Veto</td><td>" + linkerTelemetry.rejectedBinaryStarStreakShape + "</td></tr>");
+        report.println("<tr><td>1. First pair of points</td><td>Non-Positive Time Delta</td><td>" + linkerTelemetry.countBaselineNonPositiveDelta + "</td></tr>");
+        report.println("<tr><td>1. First pair of points</td><td>Stationary / Jitter</td><td>" + linkerTelemetry.countBaselineJitter + "</td></tr>");
+        report.println("<tr><td>1. First pair of points</td><td>Exceeded Max Jump Velocity</td><td>" + linkerTelemetry.countBaselineJump + "</td></tr>");
+        report.println("<tr><td>1. First pair of points</td><td>Morphological Size Mismatch</td><td>" + linkerTelemetry.countBaselineSize + "</td></tr>");
+        report.println("<tr><td>2. Third and later points</td><td>Non-Positive Time Delta</td><td>" + linkerTelemetry.countP3NonPositiveDelta + "</td></tr>");
+        report.println("<tr><td>2. Third and later points</td><td>Velocity Mismatch</td><td>" + linkerTelemetry.countP3VelocityMismatch + "</td></tr>");
+        report.println("<tr><td>2. Third and later points</td><td>Off Predicted Trajectory Line</td><td>" + linkerTelemetry.countP3NotLine + "</td></tr>");
+        report.println("<tr><td>2. Third and later points</td><td>Wrong Direction / Angle</td><td>" + linkerTelemetry.countP3WrongDirection + "</td></tr>");
+        report.println("<tr><td>2. Third and later points</td><td>Exceeded Max Jump Velocity</td><td>" + linkerTelemetry.countP3Jump + "</td></tr>");
+        report.println("<tr><td>2. Third and later points</td><td>Morphological Size Mismatch</td><td>" + linkerTelemetry.countP3Size + "</td></tr>");
         report.println("<tr><td>3. Final Track</td><td>Insufficient Track Length</td><td>" + linkerTelemetry.countTrackTooShort + "</td></tr>");
         report.println("<tr><td>3. Final Track</td><td>Erratic Kinematic Rhythm</td><td>" + linkerTelemetry.countTrackErraticRhythm + "</td></tr>");
         report.println("<tr><td>3. Final Track</td><td>Duplicate Track (Ignored)</td><td>" + linkerTelemetry.countTrackDuplicate + "</td></tr>");
         report.println("</tbody></table>");
         report.println("</div>");
         report.println("<p class='astro-note' style='margin-top: 12px;'>");
-        report.println("Confirmed phase outputs: <strong>" + linkerTelemetry.streakTracksFound + "</strong> accepted streak tracks, <strong>" + linkerTelemetry.pointTracksFound + "</strong> accepted point tracks, and <strong>" + summary.anomalyCount + "</strong> rescued anomalies.");
+        report.println("Accepted: <strong>" + linkerTelemetry.streakTracksFound + "</strong> streak tracks, <strong>" + linkerTelemetry.pointTracksFound + "</strong> point tracks and <strong>" + summary.anomalyCount + "</strong> single-frame anomalies.");
         if (summary.anomalyCount > 0) {
             report.println(" The anomaly split was <strong>" + summary.peakSigmaAnomalyCount + "</strong> peak-sigma and <strong>" + summary.integratedSigmaAnomalyCount + "</strong> integrated-sigma.");
             if (summary.otherAnomalyCount > 0) {

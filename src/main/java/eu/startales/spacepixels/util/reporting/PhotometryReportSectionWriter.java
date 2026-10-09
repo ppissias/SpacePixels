@@ -77,7 +77,7 @@ final class PhotometryReportSectionWriter {
         }
 
         PipelineTelemetry.PhotometryTelemetry telemetry = analysis.telemetry;
-        writeOverview(report, analysis, telemetry);
+        writeOverview(report, context, analysis, telemetry);
         writeReadinessChecks(report, context, telemetry);
         if (!analysis.frames.isEmpty()) {
             writeSessionCharts(report, context, analysis);
@@ -91,51 +91,138 @@ final class PhotometryReportSectionWriter {
     // Overview and readiness
     // =================================================================
 
-    private static void writeOverview(PrintWriter report, VariableStarAnalysis analysis,
+    private static void writeOverview(PrintWriter report, DetectionReportContext context, VariableStarAnalysis analysis,
                                       PipelineTelemetry.PhotometryTelemetry t) {
+        boolean notReady = "NOT_READY".equals(t.verdict);
         report.println("<div class='panel'>");
-        report.println("<h2>Variable-Star Photometry</h2>");
-        report.println("<p class='compact-note'>Forced aperture photometry of isolated stationary stars in every frame that passed quality control. "
-                + "Magnitudes are differential and instrumental: each star is compared with an ensemble of all measured stars, so changes in transparency cancel out. "
-                + "A star is reported only when its scatter and its frame-to-frame coherence both stand out from stars of the same brightness and it passes every gate. "
-                + "<a href='photometry_stars.csv' target='_blank' style='color:#4da6ff;'>[All stars CSV]</a> "
-                + "<a href='photometry_lightcurves.csv' target='_blank' style='color:#4da6ff;'>[Candidate light curves CSV]</a> "
-                + "<a href='photometry_frames.csv' target='_blank' style='color:#4da6ff;'>[Per-frame CSV]</a></p>");
+        report.println("<h2>Variable Stars</h2>");
+        report.println("<p class='section-lede'>Differential photometry of isolated stars in every frame that passed quality control: each star is compared with an ensemble of all measured stars, so changes in transparency cancel out. "
+                + "A star is reported when both its scatter and its frame-to-frame coherence stand out from stars of the same brightness and it passes the checks on its card. "
+                + "<a href='photometry_stars.csv' target='_blank'>[All stars CSV]</a> "
+                + "<a href='photometry_lightcurves.csv' target='_blank'>[Candidate light curves CSV]</a> "
+                + "<a href='photometry_frames.csv' target='_blank'>[Per-frame CSV]</a></p>");
 
         report.println("<div class='flex-container'>");
         report.println("<div class='metric-box' style='border-left-color:" + verdictColor(t.verdict) + ";'><span class='metric-value'>"
                 + verdictBadge(t.verdict) + "</span><span class='metric-label'>Readiness Verdict</span></div>");
         report.println(metricBox(t.framesUsed + " <span style='color:#777; font-size:16px;'>/ " + t.framesAnalyzed + "</span>", "Frames Used / Analysed"));
         report.println(metricBox(String.valueOf(t.starsSelected), "Stars Measured"));
-        report.println(metricBox(String.valueOf(t.starsScored), "Stars Scored"));
-        report.println(metricBox(String.valueOf(t.highConfidence), "High-Confidence Variables"));
-        report.println(metricBox(String.valueOf(t.possible), "Possible Variables"));
-        report.println(metricBox(String.valueOf(t.rejectedCandidates), "Rejected Candidates"));
+        if (!notReady) {
+            report.println(metricBox(String.valueOf(t.starsScored), "Stars Scored"));
+            report.println(metricBox(String.valueOf(t.highConfidence), "High-Confidence Variables"));
+            report.println(metricBox(String.valueOf(t.possible), "Possible Variables"));
+        }
         report.println(metricBox(formatMag(t.medianLinearRangeMag, 1), "Linear Range (mag)"));
         report.println(metricBox(formatMag(t.zeroPointRangeMag, 3), "Transparency Range (mag)"));
         report.println("</div>");
 
-        if (!t.readinessMessages.isEmpty()) {
-            report.println("<ul style='margin: 4px 0 8px 18px; padding: 0; font-size: 13px; line-height: 1.5;'>");
-            for (String message : t.readinessMessages) {
-                report.println("<li>" + DetectionReportGenerator.escapeHtml(message) + "</li>");
-            }
-            report.println("</ul>");
-        }
-        report.println("<div class='astro-note'><strong>Ready</strong> means no non-linearity was detected, not that linearity is proven: a pure power-law stretch from zero passes every image-based check. "
-                + "<strong>Limited</strong> sessions only report amplitudes of at least the limited-amplitude floor. "
-                + "<strong>Not ready</strong> sessions are not scored; their light curves are still exported for diagnosis. "
-                + "Candidates are not checked against variable-star catalogues yet, so an unlisted candidate needs independent confirmation.</div>");
+        report.println(verdictExplanationHtml(context, t));
+        report.println("<div class='astro-note'><strong>Ready</strong> means the checks found no sign of non-linear data, not that linearity is proven (a pure power-law stretch from zero passes every image-based check). "
+                + "<strong>Limited</strong> sessions only report amplitudes of at least " + formatMag(context.config.variableLimitedMinAmplitudeMag, 2) + " mag. "
+                + "<strong>Not ready</strong> sessions are not scored; their light curves are still exported for diagnosis.</div>");
         report.println("</div>");
+    }
+
+    /** The reason for the verdict in plain words, and for a Not ready session what could help. */
+    private static String verdictExplanationHtml(DetectionReportContext context, PipelineTelemetry.PhotometryTelemetry t) {
+        StringBuilder html = new StringBuilder("<div style='background:#2b2b2b; border-radius:6px; padding:12px 16px; margin: 4px 0 12px 0; font-size:14px; line-height:1.55; border-left:4px solid "
+                + verdictColor(t.verdict) + ";'>");
+        if ("READY".equals(t.verdict)) {
+            html.append("<strong>Ready:</strong> every readiness check passed, so all scored stars could be reported.");
+        } else if ("LIMITED".equals(t.verdict)) {
+            List<String> reasons = new ArrayList<>();
+            if ("LIMITED".equals(t.quantisationCheck)) {
+                reasons.add("sky noise is clipped at zero in " + formatPercent(t.medianFloorClippedFraction) + " of the sky pixels, which biases faint stars");
+            }
+            if ("LIMITED".equals(t.shapeLinearityCheck)) {
+                reasons.add("the verified linear range is only " + formatMag(t.medianLinearRangeMag, 1) + " mag ("
+                        + formatMag(context.config.linearityMinRangeMag + 1.0, 1) + " mag is needed for Ready)");
+            }
+            if ("INCONCLUSIVE".equals(t.responseCheck)) {
+                reasons.add(Double.isFinite(t.zeroPointRangeMag)
+                        ? "transparency barely changed during the session (" + formatMag(t.zeroPointRangeMag, 3) + " mag, at least "
+                        + formatMag(context.config.linearityMinZeroPointRangeMag, 2) + " mag is needed), so the response check could not confirm that bright and faint stars respond alike"
+                        : "the response check could not be run");
+            }
+            html.append("<strong>Limited because</strong> ").append(reasons.isEmpty() ? "a readiness check was inconclusive" : String.join("; ", reasons))
+                    .append(". Only variables with an amplitude of at least ").append(formatMag(context.config.variableLimitedMinAmplitudeMag, 2)).append(" mag are reported.");
+        } else if ("NOT_READY".equals(t.verdict)) {
+            html.append("<strong>Not ready:</strong> no star was scored, because:<ul style='margin:6px 0 4px 18px; padding:0;'>");
+            for (String message : t.readinessMessages) {
+                html.append("<li>").append(DetectionReportGenerator.escapeHtml(message)).append("</li>");
+            }
+            html.append("</ul>");
+            List<String> actions = new ArrayList<>();
+            boolean stretched = false;
+            boolean shortRange = false;
+            for (String message : t.readinessMessages) {
+                stretched |= message.contains("stretched or non-linear");
+                shortRange |= message.contains("needed to verify linearity");
+            }
+            if ("FAIL".equals(t.quantisationCheck)) {
+                actions.add("The frames look 8-bit or heavily quantised: use the original 16- or 32-bit data.");
+            }
+            if (stretched) {
+                actions.add("Use the original, unstretched frames. DSLR frames need a linear raw conversion, without a tone curve.");
+            }
+            if (shortRange) {
+                actions.add("Longer exposures or a richer star field give the star-shape check a longer magnitude range to verify.");
+            }
+            if ("FAIL".equals(t.responseCheck)) {
+                actions.add("Bright and faint stars respond differently to transparency changes: check the calibration and the raw conversion.");
+            }
+            if (t.framesUsed < context.config.variableMinFrames) {
+                actions.add("At least " + context.config.variableMinFrames + " usable frames are needed after the checks: capture a longer sequence.");
+            }
+            if (!actions.isEmpty()) {
+                html.append("<strong>What can help:</strong><ul style='margin:6px 0 0 18px; padding:0;'>");
+                for (String action : actions) {
+                    html.append("<li>").append(DetectionReportGenerator.escapeHtml(action)).append("</li>");
+                }
+                html.append("</ul>");
+            }
+        } else {
+            html.append("Photometry did not run for this session.");
+        }
+        return html.append("</div>").toString();
     }
 
     private static void writeReadinessChecks(PrintWriter report, DetectionReportContext context,
                                              PipelineTelemetry.PhotometryTelemetry t) {
         report.println("<div class='panel compact-diagnostics-panel'>");
-        report.println("<h2>Photometry: Readiness Checks</h2>");
-        report.println("<p class='compact-note'><strong>A</strong> looks for quantised (8-bit) data and sky noise clipped at zero. "
-                + "<strong>B</strong> checks, in every frame, that bright stars have the same shape as faint ones (concentration index = flux within 0.7 FWHM / flux within 2.5 FWHM); where bright stars become flatter, linearity ends. "
-                + "<strong>D</strong> checks that, when transparency changes, bright and faint stars change by the same amount.</p>");
+        report.println("<h2>Variable Stars: Readiness Checks</h2>");
+        report.println("<p class='compact-note'>Photometry needs linear data, where a star twice as bright gives twice the signal. These checks look for signs that it is not.</p>");
+        report.println("<div style='display:grid; grid-template-columns: max-content max-content 1fr; gap: 8px 14px; align-items: baseline; font-size: 13px; margin-bottom: 14px;'>");
+        report.println(checkRow(t.quantisationCheck, "A &middot; Data depth",
+                "No 8-bit or heavily quantised data, no sky noise clipped at zero.",
+                t.distinctPixelLevels + " distinct pixel levels; " + formatPercent(t.medianFloorClippedFraction) + " of sky pixels at zero."));
+        report.println(checkRow(t.shapeLinearityCheck, "B &middot; Star shapes",
+                "Bright stars keep the profile of faint ones; where they turn flatter, linearity ends.",
+                "Median verified linear range " + formatMag(t.medianLinearRangeMag, 2) + " mag; stars brighter than instrumental mag "
+                        + formatMag(t.medianLinearLimitMag, 2) + " are set aside; " + t.framesFailingShapeLinearity + " of " + t.framesAnalyzed + " frames failed."));
+        report.println(checkRow(t.responseCheck, "D &middot; Response",
+                "When transparency changes, bright and faint stars change by the same amount.",
+                "Transparency varied by " + formatMag(t.zeroPointRangeMag, 3) + " mag (at least " + formatMag(context.config.linearityMinZeroPointRangeMag, 2)
+                        + " mag is needed to judge); " + t.framesFailingResponse + " frames failed."));
+        report.println("</div>");
+        // A Not ready verdict already lists these messages as its reasons.
+        if (!t.readinessMessages.isEmpty() && !"NOT_READY".equals(t.verdict)) {
+            report.println("<ul style='margin: 0 0 12px 18px; padding: 0; font-size: 13px; line-height: 1.5;'>");
+            for (String message : t.readinessMessages) {
+                report.println("<li>" + DetectionReportGenerator.escapeHtml(message) + "</li>");
+            }
+            report.println("</ul>");
+        }
+        report.println(starFunnelHtml(t));
+        report.println(frameFunnelHtml(t));
+        long flagged = t.measurementsSaturated + t.measurementsNonlinear + t.measurementsCrossing + t.measurementsEdgeOrVoid
+                + t.measurementsOutlier + t.measurementsContaminated;
+        if (flagged > 0) {
+            report.println("<div class='astro-note'>Single measurements set aside: " + t.measurementsSaturated + " saturated, " + t.measurementsNonlinear + " non-linear, "
+                    + t.measurementsCrossing + " crossed by a moving object, " + t.measurementsEdgeOrVoid + " at an edge, "
+                    + t.measurementsOutlier + " isolated outliers, " + t.measurementsContaminated + " with a distorted shape (hot pixel, cosmic ray).</div>");
+        }
+        report.println("<details class='foldable-streak-details'><summary>All readiness figures</summary><div class='foldable-streak-body'>");
         report.println("<div class='compact-threshold-grid'>");
         report.println(configItem("A: Quantisation", statusBadge(t.quantisationCheck)));
         report.println(configItem("A: Distinct Pixel Levels", String.valueOf(t.distinctPixelLevels)));
@@ -169,15 +256,85 @@ final class PhotometryReportSectionWriter {
         report.println(configItem("Flagged: Contaminated Shape", String.valueOf(t.measurementsContaminated)));
         report.println(configItem("Photometry Time", String.format(Locale.US, "%.2f s", t.processingTimeMs / 1000.0)));
         report.println("</div>");
+        report.println("</div></details>");
         if (!t.gateFailureCounts.isEmpty()) {
             StringBuilder gates = new StringBuilder();
             for (Map.Entry<String, Integer> e : t.gateFailureCounts.entrySet()) {
                 if (gates.length() > 0) gates.append(", ");
                 gates.append(e.getKey()).append(": ").append(e.getValue());
             }
-            report.println("<div class='astro-note'>Candidate gate failures: " + DetectionReportGenerator.escapeHtml(gates.toString()) + "</div>");
+            report.println("<div class='astro-note'>Candidate checks failed: " + DetectionReportGenerator.escapeHtml(gates.toString()) + "</div>");
         }
         report.println("</div>");
+    }
+
+    private static String checkRow(String status, String name, String tests, String result) {
+        return "<div>" + statusBadge(status) + "</div><div style='color:#ffffff; font-weight:600; white-space:nowrap;'>" + name + "</div>"
+                + "<div><span style='color:#aab4bd;'>" + DetectionReportGenerator.escapeHtml(tests) + "</span><br>"
+                + DetectionReportGenerator.escapeHtml(result) + "</div>";
+    }
+
+    /** Stars from the master map to the scored set, as proportional bars with the reasons for each drop. */
+    private static String starFunnelHtml(PipelineTelemetry.PhotometryTelemetry t) {
+        int selectionRejects = t.starsRejectedCrowded + t.starsRejectedSaturated + t.starsRejectedEdgeOrVoid
+                + t.starsRejectedElongated + t.starsRejectedStreak + t.starsRejectedByCap;
+        int master = Math.max(t.masterStarsConsidered, t.starsSelected + selectionRejects);
+        if (master <= 0) {
+            return "";
+        }
+        int otherUnscored = Math.max(0, t.starsSelected - t.starsScored - t.starsExcludedLowSnr - t.starsExcludedMostlyNonlinear);
+        StringBuilder selection = new StringBuilder();
+        appendReason(selection, t.starsRejectedCrowded, "crowded");
+        appendReason(selection, t.starsRejectedElongated, "elongated");
+        appendReason(selection, t.starsRejectedStreak, "on a streak");
+        appendReason(selection, t.starsRejectedEdgeOrVoid, "at an edge");
+        appendReason(selection, t.starsRejectedSaturated, "saturated");
+        appendReason(selection, t.starsRejectedByCap, "over the star cap");
+        StringBuilder scoring = new StringBuilder();
+        if ("NOT_READY".equals(t.verdict)) {
+            scoring.append("no star is scored when the session is not ready");
+        } else {
+            appendReason(scoring, t.starsExcludedLowSnr, "too faint (below the minimum SNR)");
+            appendReason(scoring, t.starsExcludedMostlyNonlinear, "mostly non-linear");
+            appendReason(scoring, otherUnscored, "too few usable measurements");
+        }
+        return "<div style='font-size:12px; margin: 4px 0 12px 0;'><div style='color:#e6e6e6; font-weight:600; margin-bottom:6px;'>From the master map to scored stars</div>"
+                + funnelBar(master, master, "#5b6670", master + " stars in the master map", "")
+                + funnelBar(t.starsSelected, master, "#4f8fd0", t.starsSelected + " isolated enough to measure", selection.toString())
+                + funnelBar(t.starsScored, master, PhotometrySvgChart.SERIES_BLUE, t.starsScored + " scored", scoring.toString())
+                + "</div>";
+    }
+
+    /** Frames analysed by photometry and the frames each check set aside. */
+    private static String frameFunnelHtml(PipelineTelemetry.PhotometryTelemetry t) {
+        if (t.framesAnalyzed <= 0) {
+            return "";
+        }
+        StringBuilder reasons = new StringBuilder();
+        appendReason(reasons, t.framesExcludedShapeLinearity, "star shapes (B)");
+        appendReason(reasons, t.framesExcludedResponse, "response (D)");
+        appendReason(reasons, t.framesExcludedRegistration, "registration");
+        appendReason(reasons, t.framesExcludedTooFewStars, "too few stars");
+        return "<div style='font-size:12px; margin: 4px 0 12px 0;'><div style='color:#e6e6e6; font-weight:600; margin-bottom:6px;'>Frames</div>"
+                + funnelBar(t.framesAnalyzed, t.framesAnalyzed, "#5b6670", t.framesAnalyzed + " analysed", "")
+                + funnelBar(t.framesUsed, t.framesAnalyzed, PhotometrySvgChart.SERIES_BLUE, t.framesUsed + " used", reasons.toString())
+                + "</div>";
+    }
+
+    private static void appendReason(StringBuilder text, int count, String reason) {
+        if (count <= 0) {
+            return;
+        }
+        text.append(text.length() == 0 ? "set aside: " : ", ").append(count).append(' ').append(reason);
+    }
+
+    private static String funnelBar(int value, int total, String color, String label, String note) {
+        double percent = total > 0 ? Math.max(0.6, 100.0 * value / total) : 0;
+        return "<div style='display:flex; align-items:center; gap:10px; margin:3px 0;'>"
+                + "<div style='flex: 0 0 360px; background:#262626; border-radius:3px; height:14px;'><div style='width:"
+                + String.format(Locale.US, "%.1f", percent) + "%; height:100%; background:" + color + "; border-radius:3px;'></div></div>"
+                + "<div><span style='color:#ffffff;'>" + DetectionReportGenerator.escapeHtml(label) + "</span>"
+                + (note.isEmpty() ? "" : " <span style='color:#99a3ad;'>(" + DetectionReportGenerator.escapeHtml(note) + ")</span>") + "</div></div>";
     }
 
     // =================================================================
@@ -188,7 +345,7 @@ final class PhotometryReportSectionWriter {
         PipelineTelemetry.PhotometryTelemetry t = analysis.telemetry;
         List<PipelineTelemetry.PhotometryFrameStat> frames = analysis.frames;
         report.println("<div class='panel'>");
-        report.println("<h2>Photometry: Session Diagnostics</h2>");
+        report.println("<h2>Variable Stars: Session Diagnostics</h2>");
 
         // --- Noise model ---
         if (!t.noiseModel.isEmpty()) {
@@ -391,19 +548,20 @@ final class PhotometryReportSectionWriter {
             }
         }
 
-        report.println("<div class='panel'>");
-        report.println("<h2>Photometry: Variable-Star Candidates</h2>");
+        report.println("<div class='panel' id='variable-candidates'>");
+        report.println("<h2>Variable Stars: Candidates</h2>");
         if (!analysis.readiness.allowsScoring()) {
-            report.println("<p>The session did not pass the readiness checks, so no star was scored. See the messages and diagnostics above.</p>");
+            report.println("<p>The session did not pass the readiness checks, so no star was scored. The verdict above explains why.</p>");
             report.println("</div>");
             return;
         }
         if (cards.isEmpty()) {
-            report.println("<p>No star passed the variability scoring and the gates in this session.</p>");
+            report.println("<p>No star passed the variability scoring and the checks in this session.</p>");
         } else {
-            report.println("<p class='compact-note'>High-confidence candidates passed every gate; possible candidates failed exactly one. "
+            report.println("<p class='compact-note'>High-confidence candidates passed every check; possible candidates failed exactly one. "
                     + "Each light curve is drawn with three constant stars of similar brightness offset below it, on the same scale, so you can see what a constant star looks like in this session. "
                     + "Cutouts show the star in its brightest and faintest usable frame with the same display stretch.</p>");
+            writeCandidateTable(report, context, analysis, cards);
             int shown = 0;
             for (StarLightCurve star : cards) {
                 if (shown++ >= MAX_CANDIDATE_CARDS) break;
@@ -436,13 +594,15 @@ final class PhotometryReportSectionWriter {
                                            StarLightCurve star, int number) throws IOException {
         boolean high = star.tier == VariabilityTier.HIGH_CONFIDENCE;
         String tierColor = high ? PhotometrySvgChart.SERIES_BLUE : PhotometrySvgChart.SERIES_ORANGE;
-        report.println("<div class='detection-card' style='border-left-color:" + tierColor + ";'>");
+        report.println("<div class='detection-card' id='variable-v" + number + "' style='border-left-color:" + tierColor + ";'>");
         report.println("<div class='detection-title'>V" + number + " &middot; " + tierLabel(star.tier) + " &middot; star #" + star.id + "</div>");
-        report.println("<div class='astro-note' style='margin-top:-8px; margin-bottom:10px;'>"
+        report.println("<div class='astro-note' style='margin-top:-8px; margin-bottom:8px;'>"
                 + DetectionReportGenerator.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, star.x, star.y))
                 + "</div>");
+        report.println("<p style='font-size:14px; color:#e6e6e6; margin: 0 0 10px 0; line-height:1.5;'>" + DetectionReportGenerator.escapeHtml(plainSummary(analysis, star)) + "</p>");
         report.println(catalogueCrossCheckHtml(context, star, number));
 
+        report.println("<details class='foldable-streak-details'><summary>Statistics</summary><div class='foldable-streak-body'>");
         report.println("<div class='flex-container'>");
         report.println(compactMetric(formatMag(star.amplitude, 3), "Amplitude (mag)"));
         report.println(compactMetric(formatMag(star.meanMag, 2), "Mean Inst. Mag"));
@@ -460,6 +620,7 @@ final class PhotometryReportSectionWriter {
         report.println(compactMetric(formatMag(star.maxFrameToFrameSystematicsCorrelation, 2), "Frame-to-Frame Systematics r"));
         report.println(compactMetric(formatMag(star.localCorrelation, 2) + " <span style='font-size:10px; color:#999;'>n=" + star.localComparisonStars + "</span>", "Local r"));
         report.println("</div>");
+        report.println("</div></details>");
 
         // Gates
         report.println("<div style='display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;'>");
@@ -483,6 +644,134 @@ final class PhotometryReportSectionWriter {
         report.println(cutouts(context, analysis, star, number));
         report.println("</div>");
         report.println("</div>");
+    }
+
+    /**
+     * Compact table of every high-confidence and possible candidate, with an "Identify all in VSX" button
+     * that fills the "Known as" column through the lookup proxy (results are saved into the report).
+     */
+    private static void writeCandidateTable(PrintWriter report, DetectionReportContext context, VariableStarAnalysis analysis,
+                                            List<StarLightCurve> candidates) {
+        boolean sky = context.astrometryContext != null && context.astrometryContext.hasAstrometricSolution();
+        report.println("<div style='display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin: 8px 0 2px 0;'>");
+        if (sky) {
+            report.println("<button type='button' class='id-link vsx-identify-all'>Identify all in VSX</button>");
+            report.println("<span class='astro-note vsx-identify-status' style='margin:0;'>Looks every candidate up in the AAVSO VSX catalogue. Needs SpacePixels running; the results are saved into this report.</span>");
+        } else {
+            report.println("<span class='astro-note' style='margin:0;'>Plate-solve the session to identify the candidates in variable-star catalogues.</span>");
+        }
+        report.println("</div>");
+        report.println("<div class='scroll-box compact-table-box' style='max-height: 420px;'>");
+        report.println("<table><thead><tr><th>#</th><th>Tier</th><th>Position</th><th>Mean Inst. Mag</th><th>Amplitude</th><th>Time Span</th><th>Change</th><th>Failed Check</th>"
+                + (sky ? "<th>Known As (VSX)</th>" : "") + "</tr></thead><tbody>");
+        int number = 0;
+        for (StarLightCurve star : candidates) {
+            number++;
+            String label = "V" + number;
+            String name = number <= MAX_CANDIDATE_CARDS ? "<a href='#variable-v" + number + "'>" + label + "</a>" : label;
+            boolean high = star.tier == VariabilityTier.HIGH_CONFIDENCE;
+            report.print("<tr><td><strong>" + name + "</strong></td>"
+                    + "<td style='color:" + (high ? PhotometrySvgChart.SERIES_BLUE : PhotometrySvgChart.SERIES_ORANGE) + ";'>" + tierLabel(star.tier) + "</td>"
+                    + "<td>" + DetectionReportGenerator.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, star.x, star.y)) + "</td>"
+                    + "<td>" + formatMag(star.meanMag, 2) + "</td>"
+                    + "<td>" + formatMag(star.amplitude, 3) + " mag</td>"
+                    + "<td>" + (Double.isNaN(star.timeSpanMinutes) ? "n/a" : formatMag(star.timeSpanMinutes, 0) + " min") + "</td>"
+                    + "<td>" + DetectionReportGenerator.escapeHtml(describeChange(star)) + "</td>"
+                    + "<td" + (star.failedGates.isEmpty() ? "" : " class='alert'") + ">" + (star.failedGates.isEmpty() ? "&ndash;"
+                    : DetectionReportGenerator.escapeHtml(String.join(", ", star.failedGates))) + "</td>");
+            SkyTarget target = sky ? skyTarget(context, star.x, star.y) : null;
+            if (target != null) {
+                String sidecar = "photometry_v" + number + "_vsx.json";
+                String hidden = DetectionReportAstrometry.buildLiveRenderButtonHtml("vsx", vsxTapUrl(target), "photometry-v" + number + "-vsx-row",
+                        "VSX", sidecar, String.format(Locale.US, "AAVSO VSX within %.0f arcsec of V%d", target.radiusArcsec, number))
+                        .replace("<button ", "<button style='display:none' data-identify-all='1' ");
+                report.print("<td data-known-as-sidecar='" + sidecar + "'><span style='color:#777;'>not checked</span>" + hidden + "</td>");
+            } else if (sky) {
+                report.print("<td>&ndash;</td>");
+            }
+            report.println("</tr>");
+        }
+        report.println("</tbody></table></div>");
+    }
+
+    /** One plain sentence: how the star changed, by how much, how clearly, and which checks it passed. */
+    static String plainSummary(VariableStarAnalysis analysis, StarLightCurve star) {
+        StringBuilder text = new StringBuilder(describeChange(star));
+        text.append(" by ").append(formatMag(star.amplitude, 2)).append(" mag");
+        if (!Double.isNaN(star.timeSpanMinutes)) {
+            text.append(" over ").append(formatMag(star.timeSpanMinutes, 0)).append(" min");
+        }
+        if (Double.isFinite(star.excessScatter)) {
+            text.append("; its scatter is ").append(formatMag(star.excessScatter, 1)).append("× that of stars of the same brightness");
+        }
+        text.append('.');
+        if (star.failedGates.isEmpty()) {
+            text.append(" Passes all ").append(VariableStarAnalysis.GATE_NAMES.size()).append(" checks.");
+        } else {
+            String gate = star.failedGates.get(0);
+            text.append(" Fails ").append(star.failedGates.size() == 1 ? "one check" : star.failedGates.size() + " checks").append(": ")
+                    .append(gate).append(" (").append(GATE_DESCRIPTIONS.getOrDefault(gate, gate).toLowerCase(Locale.ROOT)).append(")")
+                    .append(star.failedGates.size() > 1 ? " and others" : "").append('.');
+        }
+        return text.toString();
+    }
+
+    /**
+     * Rough shape of a light curve from its smoothed usable points: a steady fade or rise, a dip that
+     * recovers, a peak that fades back, or variation up and down.
+     */
+    static String describeChange(StarLightCurve star) {
+        List<Double> values = new ArrayList<>();
+        for (int j = 0; j < star.deltaMag.length; j++) {
+            if (star.flags[j] == 0 && Double.isFinite(star.deltaMag[j])) {
+                values.add(star.deltaMag[j]);
+            }
+        }
+        int n = values.size();
+        if (n < 5) {
+            return "Varied";
+        }
+        double[] smooth = new double[n];
+        for (int i = 0; i < n; i++) {
+            int from = Math.max(0, i - 2);
+            int to = Math.min(n, i + 3);
+            double[] window = new double[to - from];
+            for (int k = from; k < to; k++) {
+                window[k - from] = values.get(k);
+            }
+            Arrays.sort(window);
+            smooth[i] = window[window.length / 2];
+        }
+        int faintest = 0;
+        int brightest = 0;
+        for (int i = 1; i < n; i++) {
+            if (smooth[i] > smooth[faintest]) faintest = i;
+            if (smooth[i] < smooth[brightest]) brightest = i;
+        }
+        double range = smooth[faintest] - smooth[brightest];
+        if (!(range > 0)) {
+            return "Varied";
+        }
+        int edge = Math.max(2, n / 5);
+        double start = 0;
+        double end = 0;
+        for (int i = 0; i < edge; i++) {
+            start += smooth[i] / edge;
+            end += smooth[n - 1 - i] / edge;
+        }
+        // Magnitudes: larger is fainter.
+        if (Math.abs(end - start) >= 0.6 * range) {
+            return end > start ? "Faded steadily" : "Brightened steadily";
+        }
+        boolean faintInside = faintest >= edge && faintest < n - edge;
+        boolean brightInside = brightest >= edge && brightest < n - edge;
+        if (faintInside && smooth[faintest] - start > 0.5 * range && smooth[faintest] - end > 0.5 * range) {
+            return "Dipped and recovered";
+        }
+        if (brightInside && start - smooth[brightest] > 0.5 * range && end - smooth[brightest] > 0.5 * range) {
+            return "Brightened and faded back";
+        }
+        return "Varied up and down";
     }
 
     /** Sky position and catalogue search radius of a star; null without an astrometric solution. */
@@ -633,7 +922,8 @@ final class PhotometryReportSectionWriter {
             boolean ok = star.flags[j] == 0;
             used[j] = ok ? v : Double.NaN;
             flagged[j] = ok ? Double.NaN : v;
-            String tip = String.format(Locale.US, "Frame %d (%s): Δmag %s ± %s", f.frameIndex + 1, f.filename, formatMag(v, 4), formatMag(star.magError[j], 4));
+            String tip = String.format(Locale.US, "Frame %d (%s)%s: Δmag %s ± %s", f.frameIndex + 1, f.filename,
+                    Double.isNaN(f.julianDate) ? "" : ", " + utcFromJulianDate(f.julianDate), formatMag(v, 4), formatMag(star.magError[j], 4));
             usedTips[j] = tip;
             flaggedTips[j] = tip + " | flags: " + String.join(", ", PhotometryFlags.describe(star.flags[j]));
         }
@@ -747,7 +1037,7 @@ final class PhotometryReportSectionWriter {
             return;
         }
         report.println("<div class='panel compact-diagnostics-panel'>");
-        report.println("<h2>Photometry: Per-Frame Measurements</h2>");
+        report.println("<h2>Variable Stars: Per-Frame Measurements</h2>");
         report.println("<p class='compact-note'>FWHM is measured by the photometry stage from bright-star moments. Z is the frame zero point (positive = fainter than the session median frame). "
                 + "Slope is check D's residual-against-magnitude slope. Stars counts are those used in the ensemble / measured.</p>");
         report.println("<div class='scroll-box compact-table-box'>");
@@ -885,8 +1175,16 @@ final class PhotometryReportSectionWriter {
             case "LIMITED": return "<span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>! LIMITED</span>";
             case "INCONCLUSIVE": return "<span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>? INCONCLUSIVE</span>";
             case "FAIL": return "<span style='color:" + PhotometrySvgChart.STATUS_CRITICAL + ";'>&#10005; FAIL</span>";
+            case "NOT_RUN": return "<span style='color:#8b949c;'>&ndash; NOT RUN</span>";
             default: return status;
         }
+    }
+
+    /** Mid-exposure time from a Julian date, as HH:mm:ss UTC. */
+    private static String utcFromJulianDate(double julianDate) {
+        long millis = Math.round((julianDate - 2440587.5) * 86_400_000.0);
+        return java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss 'UTC'")
+                .withZone(java.time.ZoneOffset.UTC).format(java.time.Instant.ofEpochMilli(millis));
     }
 
     private static String tierLabel(VariabilityTier tier) {

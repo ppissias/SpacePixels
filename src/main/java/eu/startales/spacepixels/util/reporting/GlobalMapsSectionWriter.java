@@ -61,9 +61,9 @@ final class GlobalMapsSectionWriter {
         TrackVisualizationRenderer.saveLosslessPng(globalMap, new File(reportContext.exportDir, "global_track_map.png"));
 
         report.println("<div class='panel'>");
-        report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Trajectory Map</h3>");
-        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
-        report.println("An overview of the classified track outputs and single-frame events plotted over the master background. " +
+        report.println("<h2>Map of All Detections</h2>");
+        report.println("<p class='section-lede'>");
+        report.println("Every classified track and single-frame event over the median stack. " +
                 "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>SST#</strong> for suspected streak groupings, <strong>LR#</strong> for local rescue candidates). " +
                 "Local activity clusters are ringed as <strong>LC#</strong>, while maximum-stack slow-mover shape candidates, single-frame anomalies, and single streaks are marked as <strong>DS#</strong>, <strong>A#</strong>, and <strong>S#</strong>.</p>");
         report.println(buildGlobalTrajectoryLegendHtml(
@@ -94,17 +94,18 @@ final class GlobalMapsSectionWriter {
         TrackVisualizationRenderer.saveLosslessPng(rainbowMap, new File(reportContext.exportDir, "rainbow_cluster_map.png"));
 
         report.println("<div class='panel'>");
-        report.println("<h3 style='color: #ffffff; margin-top: 0;'>Global Transient Maps</h3>");
-        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
-        report.println("Shows the full <strong>allTransients</strong> population carried into tracking after stationary-star vetoing. Colors map to time (Blue = Start, Red = End). This helps visualize noise floors, hot columns, surviving streak detections, and unlinked moving targets.</p>");
+        report.println("<h2>Time Maps of Everything That Survived the Star Mask</h2>");
+        report.println("<p class='section-lede'>");
+        report.println("Every detection that was not a star, before the tracker sorted it, coloured by time (blue = start, red = end). Useful for spotting noise patterns, hot columns, streaks and movers that were not linked into a track.</p>");
         report.println("<div class='image-container' style='flex-wrap: wrap;'>");
         report.println("<div style='flex: 1; min-width: 400px;'>");
         report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Exact Footprint Map</h4>");
-        report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Plots the exact raw pixels at a 1:1 scale. Both objects and streaks</p>");
-        report.println("<a href='global_transient_map.png' target='_blank'><img src='global_transient_map.png' class='native-size-image' style='border: 1px solid #555; border-radius: 4px;' alt='Global Transient Map' /></a></div>");
+        report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>The exact pixels of every detection, objects and streaks, at full resolution.</p>");
+        report.println("<a href='global_transient_map.png' target='_blank'><img src='global_transient_map.png' class='native-size-image' style='border: 1px solid #555; border-radius: 4px;' alt='Global Transient Map' /></a>");
+        report.println("<div style='display:flex; align-items:center; gap:10px; margin-top:8px; font-size:12px; color:#aaa;'><span>Start</span><span style='flex:0 0 220px; height:12px; border-radius:3px; background:linear-gradient(90deg, hsl(240,100%,50%), hsl(180,100%,50%), hsl(120,100%,50%), hsl(60,100%,50%), hsl(0,100%,50%));'></span><span>End</span></div></div>");
         report.println("<div style='flex: 1; min-width: 400px;'>");
         report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Transient Cluster Map</h4>");
-        report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Cropped, downscaled, and dilated. Rainbow like structures reveal closely moving objects. This map shows only point transients and not streaks. </p>");
+        report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Point detections only (no streaks), cropped, downscaled and dilated so close neighbours merge. A rainbow-like chain of dots is an object moving slowly across the frames.</p>");
         report.println("<div style='overflow-x: auto;'><a href='rainbow_cluster_map.png' target='_blank'><img src='rainbow_cluster_map.png' style='display: block; width: auto; max-width: none; height: auto; border: 1px solid #555; border-radius: 4px;' alt='Rainbow Cluster Map' /></a></div></div>");
         report.println("</div>");
         report.println("</div>");

@@ -32,7 +32,7 @@ final class TargetVisualizationSectionWriter {
     }
 
     static void writeSection(PrintWriter report, DetectionReportContext context) throws IOException {
-        report.println("<h2>Target Visualizations</h2>");
+        report.println("<h2>Moving Objects &amp; Single-Frame Events</h2>");
 
         if (context.singleStreaks.isEmpty()
                 && context.streakTracks.isEmpty()
@@ -59,9 +59,16 @@ final class TargetVisualizationSectionWriter {
         }
     }
 
+    /** A detection image with its footprint laid over it on hover (the footprint image is black outside the detection). */
+    static String footprintFigure(String imageFile, String footprintFile) {
+        return "<div class='footprint-figure'><a href='" + imageFile + "' target='_blank'><img src='" + imageFile + "' alt='Detection image' />"
+                + "<img class='footprint-overlay' src='" + footprintFile + "' alt='Detected footprint' /></a>"
+                + "<br/><center><small>Detection image &middot; hover to show the detected footprint in red (<a href='" + footprintFile + "' target='_blank'>open footprint</a>)</small></center></div>";
+    }
+
     private static void writeSingleStreaks(PrintWriter report,
                                            DetectionReportContext context) throws IOException {
-        report.println("<h3 style='color: #ff9933; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single Streaks</h3>");
+        report.println("<h3 id='single-streaks' style='color: #ff9933; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single-Frame Streaks</h3>");
         int counter = 1;
         for (TrackLinker.Track track : context.singleStreaks) {
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
@@ -97,8 +104,7 @@ final class TargetVisualizationSectionWriter {
             TrackVisualizationRenderer.saveLosslessPng(streakShapeImage, new File(context.exportDir, shapeFileName));
 
             report.println("<div class='image-container'>");
-            report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
-            report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
+            report.println(footprintFigure(streakFileName, shapeFileName));
             report.println("</div>");
 
             String entriesHtml = buildStreakPointEntriesHtml(track, context.astrometryContext, true);
@@ -130,7 +136,7 @@ final class TargetVisualizationSectionWriter {
 
     private static void writeStreakTracks(PrintWriter report,
                                           DetectionReportContext context) throws IOException {
-        report.println("<h3 style='color: #ffcc33; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Streak Tracks</h3>");
+        report.println("<h3 id='streak-tracks' style='color: #ffcc33; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Streak Tracks</h3>");
         if (!context.suspectedStreakTracks.isEmpty()) {
             report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Suspected streak tracks grouped from same-frame rescued anomalies are shown here alongside the confirmed multi-frame streak tracks.</p>");
         }
@@ -251,8 +257,7 @@ final class TargetVisualizationSectionWriter {
             TrackVisualizationRenderer.saveLosslessPng(streakShapeImage, new File(context.exportDir, shapeFileName));
 
             report.println("<div class='image-container'>");
-            report.println("<div><a href='" + streakFileName + "' target='_blank'><img src='" + streakFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
-            report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
+            report.println(footprintFigure(streakFileName, shapeFileName));
             report.println("</div>");
 
             String entriesHtml = buildStreakPointEntriesHtml(track, context.astrometryContext, true);
@@ -284,7 +289,7 @@ final class TargetVisualizationSectionWriter {
 
     private static void writeMovingTargets(PrintWriter report,
                                            DetectionReportContext context) throws IOException {
-        report.println("<h3 style='color: #4da6ff; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Moving Target Tracks</h3>");
+        report.println("<h3 id='moving-targets' style='color: #4da6ff; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Moving-Object Tracks</h3>");
         int counter = 1;
         for (TrackLinker.Track track : context.movingTargets) {
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
@@ -438,7 +443,7 @@ final class TargetVisualizationSectionWriter {
 
     private static void writeAnomalies(PrintWriter report,
                                        DetectionReportContext context) throws IOException {
-        report.println("<h3 style='color: #ff3333; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single-Frame Anomalies (Optical Flashes)</h3>");
+        report.println("<h3 id='anomalies' style='color: #ff3333; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single-Frame Anomalies (Optical Flashes)</h3>");
         report.println("<div class='astro-note' style='margin-bottom: 15px;'>Ordered by source frame index. If multiple anomalies land on the same frame, peak-sigma rescues are shown before integrated-sigma rescues.</div>");
         int counter = 1;
         for (TrackLinker.AnomalyDetection anomaly : context.anomalies) {

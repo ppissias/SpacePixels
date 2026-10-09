@@ -112,7 +112,41 @@ final class DetectionReportDocumentWriter {
             ".native-size-image { max-width: 100%; width: auto; height: auto; display: block; margin: 0 auto; }",
             ".map-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }",
             ".legend-pill { display: inline-flex; align-items: center; gap: 8px; background: #262626; border: 1px solid #444; border-radius: 999px; padding: 6px 10px; font-size: 12px; color: #d0d0d0; }",
-            ".legend-code { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; padding: 4px 8px; border-radius: 999px; color: #101010; font-weight: bold; letter-spacing: 0.4px; }"
+            ".legend-code { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; padding: 4px 8px; border-radius: 999px; color: #101010; font-weight: bold; letter-spacing: 0.4px; }",
+            // Links, navigation and section anchors
+            "a { color: #7fc2ff; }",
+            "a:visited { color: #a9c9ff; }",
+            "[id] { scroll-margin-top: 64px; }",
+            ".report-nav { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: -10px -30px 24px -30px; padding: 10px 30px; background: rgba(32, 34, 36, 0.96); border-bottom: 1px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.35); }",
+            ".report-nav a { color: #d6e6f5; text-decoration: none; font-size: 13px; padding: 5px 11px; border-radius: 999px; background: #33373b; border: 1px solid #474d53; white-space: nowrap; }",
+            ".report-nav a:hover { background: #3d4a57; border-color: #4da6ff; color: #ffffff; }",
+            ".report-nav a .nav-count { color: #4da6ff; font-weight: bold; margin-left: 5px; }",
+            ".report-nav a.nav-muted { color: #8b949c; }",
+            ".report-nav a.nav-muted .nav-count { color: #8b949c; }",
+            ".report-nav .nav-title { color: #ffffff; font-weight: bold; font-size: 14px; margin-right: 8px; }",
+            // Session header
+            ".session-header { display: flex; flex-wrap: wrap; gap: 8px 26px; margin: -14px 0 22px 0; color: #b8c2cc; font-size: 14px; }",
+            ".session-header .item { white-space: nowrap; }",
+            ".session-header .item b { color: #ffffff; font-weight: 600; }",
+            ".session-header .label { color: #8b949c; margin-right: 6px; }",
+            // Clickable overview cards and quiet zero counts
+            "a.metric-link { text-decoration: none; color: inherit; }",
+            "a.metric-link .metric-box { transition: background-color 0.15s ease, border-color 0.15s ease; }",
+            "a.metric-link:hover .metric-box { background-color: #34393e; border-left-color: #ffffff; }",
+            ".metric-box.quiet { opacity: 0.45; }",
+            ".section-lede { color: #b0b8c0; font-size: 14px; margin-top: -10px; margin-bottom: 15px; line-height: 1.5; }",
+            // Detection image with its footprint overlaid on hover
+            ".footprint-figure a { position: relative; display: inline-block; line-height: 0; }",
+            ".footprint-figure img.footprint-overlay { position: absolute; left: 0; top: 0; width: 100%; height: 100%; box-sizing: border-box; border: 1px solid transparent; background: transparent; mix-blend-mode: screen; opacity: 0; transition: opacity 0.15s ease; pointer-events: none; }",
+            ".footprint-figure a:hover img.footprint-overlay { opacity: 1; }",
+            // Collapsible diagnostics group
+            "details.report-group { margin-bottom: 30px; }",
+            "details.report-group > summary { cursor: pointer; list-style: none; background: #34373a; border: 1px solid #4a4f54; border-radius: 8px; padding: 16px 22px; color: #4da6ff; font-size: 1.5em; font-weight: bold; }",
+            "details.report-group > summary::-webkit-details-marker { display: none; }",
+            "details.report-group > summary::before { content: '\\25B6'; display: inline-block; font-size: 0.6em; margin-right: 12px; transform: translateY(-2px); }",
+            "details.report-group[open] > summary { margin-bottom: 20px; }",
+            "details.report-group[open] > summary::before { content: '\\25BC'; }",
+            "details.report-group > summary .summary-note { display: block; color: #9aa4ad; font-size: 0.55em; font-weight: normal; margin-top: 4px; }"
     };
 
     private static final String[] ITERATIVE_INDEX_STYLE_LINES = {
@@ -134,7 +168,7 @@ final class DetectionReportDocumentWriter {
     }
 
     static void appendDetectionReportStart(PrintWriter report) {
-        report.println("<!DOCTYPE html><html><head><title>Detection Report</title><style>");
+        report.println("<!DOCTYPE html><html><head><meta charset='utf-8'><title>SpacePixels Session Report</title><style>");
         for (String line : DETECTION_REPORT_STYLE_LINES) {
             report.println(line);
         }
@@ -143,7 +177,7 @@ final class DetectionReportDocumentWriter {
     }
 
     static void appendIterativeIndexReportStart(PrintWriter report) {
-        report.println("<!DOCTYPE html><html><head><title>Iterative Detection Summary</title><style>");
+        report.println("<!DOCTYPE html><html><head><meta charset='utf-8'><title>Iterative Detection Summary</title><style>");
         for (String line : ITERATIVE_INDEX_STYLE_LINES) {
             report.println(line);
         }

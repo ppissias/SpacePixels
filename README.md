@@ -200,20 +200,15 @@ To generate a local distribution with launch scripts:
 
 The standard pipeline exports an HTML session report plus PNG and GIF assets. Depending on the data and configuration, the report can include:
 
-- Pipeline summary and astrometric context
-- Rejected-frame diagnostics
-- Full detection configuration export (`detection_config.json`)
-- Master shield and veto-mask overlays
-- Dither and drift diagnostics
-- Frame extraction statistics and stationary-star purification diagnostics
-- Track linking diagnostics
+- A session header (field, time span, frames, camera, plate-solve status), a sticky section navigation and an overview whose cards jump to each result
 - Target visualizations for moving tracks, streak tracks, single-frame streaks, and anomalies
 - WCS-aware identification helpers: SkyBoT and JPL Small-Body Identification for moving-object tracks, SatChecker for streak tracks, and Stellarium Web sky-context links for both moving tracks and streaks
 - Deep-stack anomalies and maximum-stack streak hints
 - Global trajectory and transient maps
 - Interactive unclassified-transient map with time-colored source footprints and markers, metadata, and a zoomed inspection view that animates the detection frame and the two nearest quality-checked frames on either side
-- Variable-star photometry (when enabled): readiness verdict and checks, noise model, per-frame diagnostics, candidate light curves, CSV exports, and a per-candidate button that looks the position up in AAVSO VSX
-- Optional AI creative report sections
+- Variable-star photometry (when enabled): readiness verdict with its reasons, checks and star/frame funnels, noise model, per-frame diagnostics, a candidate table with "Identify all in VSX", candidate light curves, CSV exports
+- Collapsed diagnostics: astrometric context, frame quality control and rejected frames, the detection configuration (values that differ from the defaults highlighted, exported as `detection_config.json`), star mask, dither and drift, extraction, star removal and track linking
+- Optional AI perspective sections: Codex's "Signal Weave" and Claude's "The Night, Retold" (a timeline of the session and a short account of it)
 
 The AI creative sections are controlled by a session-only checkbox in `Detection Settings -> Report Visualization -> Optional Report Sections`. They are off by default and are not persisted with the saved detection profile.
 

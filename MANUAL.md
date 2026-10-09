@@ -141,11 +141,11 @@ The report starts with a summary, then the objects, then the diagnostics. Its se
 | **Local rescue candidates** (LR#) and **activity clusters** (LC#) | faint detections that line up or cluster | very faint movers, to be checked by eye |
 | **Variable stars** | stars whose brightness changes | variable stars (optional analysis) |
 
-### Summary
+### Overview
 
 ![Report summary](docs/images/manual/report-summary.png)
 
-The **Pipeline Summary** shows the frames used (frames rejected by quality control are listed further down with the reason) and the **Detection Breakdown** counts each kind of result.
+Under the title, one line describes the session: field, date and time span, frames kept, exposure, camera and whether the frames are plate-solved. The **Jump to** bar below it stays at the top of the window and leads to every section, with its count. The **Overview** has a card for each kind of result that was found (click a card to jump to it) and lists what was not found. The results come first; the processing details (quality control with the rejected frames and their reasons, configuration, star mask, extraction, track linking) are collected in the **Diagnostics** group near the end, collapsed until you click it.
 
 ### A moving object
 
@@ -165,7 +165,7 @@ A real object looks the same in every crop and moves evenly. A noise track jumps
 
 ![Global trajectory map](docs/images/manual/report-map.jpg)
 
-The **Global Trajectory Map** draws every result over the whole field, with its label (T1, ST2, A3…) and one colour per kind, counted in the legend above it. Here the long lines are satellite trails, and the magenta circles single-frame anomalies. The **Global Transient Maps** below it show every detection of every frame, which is useful to see where the noise is.
+The **Map of All Detections** draws every result over the whole field, with its label (T1, ST2, A3…) and one colour per kind, counted in the legend above it. Here the long lines are satellite trails, and the magenta circles single-frame anomalies. The **Time Maps** below it show every detection that was not a star, coloured by time, which is useful to see where the noise is.
 
 ### Unclassified Transient Inspector
 
@@ -247,7 +247,9 @@ The same 61-megapixel session with photometry switched on:
 
 ![Variable-star summary](docs/images/manual/variable-stars-summary.png)
 
-The verdict **Ready** means the data passed the linearity checks. SpacePixels measured 60,963 stars, scored 29,380 of them and reported 27 high-confidence and 11 possible variable stars. Each candidate has a card with its light curve, drawn above three constant stars of similar brightness for comparison:
+The verdict **Ready** means the data passed the linearity checks. SpacePixels measured 60,963 stars, scored 29,380 of them and reported 27 high-confidence and 11 possible variable stars. A **Limited** or **Not ready** verdict says in plain words why, and for Not ready what could help (for example unstretched frames or a longer sequence).
+
+The candidates are first listed in a table: tier, position, amplitude, the shape of the change (faded, brightened, dipped and recovered…) and any failed check. **Identify all in VSX** looks every candidate up in the AAVSO Variable Star Index and fills the **Known As** column; this needs SpacePixels running, and the results are saved into the report. Each candidate then has a card with a one-line summary and its light curve, drawn above three constant stars of similar brightness for comparison:
 
 ![A variable-star candidate](docs/images/manual/variable-star-candidate.png)
 
