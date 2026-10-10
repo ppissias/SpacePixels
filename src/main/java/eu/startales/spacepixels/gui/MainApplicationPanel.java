@@ -85,6 +85,8 @@ public class MainApplicationPanel extends JPanel {
 
     // --- CHANGED to AtomicBoolean for thread safety ---
     private final AtomicBoolean isBlinking = new AtomicBoolean(false);
+    /** The thread reading the frames of the current or last blink. */
+    private Thread blinkLoader;
 
     private DetectionSequenceFrame detectionSequenceFrame;
 
@@ -215,8 +217,15 @@ public class MainApplicationPanel extends JPanel {
             if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0 || !confirmBlinkMemory(selectedFitsFilesInfo)) {
                 return;
             }
+            if (blinkLoader != null && blinkLoader.isAlive()) {
+                // A stopped blink is still finishing the frame it was reading; its events would end the new one.
+                statusLabel.setText("Still stopping the previous blink, try again in a moment.");
+                return;
+            }
             isBlinking.set(true);
-            new Thread(new BlinkImagesTask(mainAppWindow.getEventBus(), selectedFitsFilesInfo, isBlinking)).start();
+            mainAppWindow.getBlinkFrame().showLoading(selectedFitsFilesInfo);
+            blinkLoader = new Thread(new BlinkImagesTask(mainAppWindow.getEventBus(), selectedFitsFilesInfo, isBlinking), "blink-loader");
+            blinkLoader.start();
         });
 
         detectSingleButton.addActionListener(e -> {
@@ -1037,8 +1046,10 @@ public class MainApplicationPanel extends JPanel {
 
     @Subscribe
     public void onBlinkLoadProgress(BlinkLoadProgressEvent event) {
-        EventQueue.invokeLater(() -> statusLabel.setText(String.format("Loading frame %d of %d for blinking...",
-                event.getLoaded() + 1, event.getTotal())));
+        EventQueue.invokeLater(() -> {
+            statusLabel.setText(String.format("Loading frame %d of %d for blinking...", event.getLoaded() + 1, event.getTotal()));
+            mainAppWindow.getBlinkFrame().showLoadProgress(event.getLoaded(), event.getTotal());
+        });
     }
 
     @Subscribe
@@ -1061,6 +1072,8 @@ public class MainApplicationPanel extends JPanel {
     public void onBlinkFinished(BlinkFinishedEvent event) {
         EventQueue.invokeLater(() -> {
             isBlinking.set(false);
+            // Hides the window if it still shows the loading progress.
+            mainAppWindow.getBlinkFrame().close();
             endBlink("Blinking stopped.");
             if (!event.isSuccess()) {
                 JOptionPane.showMessageDialog(this,

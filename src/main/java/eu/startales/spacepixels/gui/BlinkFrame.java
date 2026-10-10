@@ -22,8 +22,15 @@ import eu.startales.spacepixels.util.WcsSolutionResolver;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableCellRenderer;
+import javax.swing.table.TableColumn;
+import javax.swing.table.TableColumnModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
@@ -37,8 +44,9 @@ import java.util.prefs.Preferences;
 
 /**
  * Plays the selected frames in turn, the classic way of hunting moving objects by eye. The speed, the display
- * stretch (shared with the Image Stretch tab), the zoom and the frames in the loop can all change while it plays,
- * and the tracks of the last detection run can be drawn on top.
+ * stretch (shared with the Image Stretch tab) and the zoom can change while it plays, and the tracks of the last
+ * detection run can be drawn on top. The list on the left shows every frame; while paused, frames can be left out of
+ * the loop. The window opens as soon as the frames start loading and shows the progress.
  */
 public class BlinkFrame extends JFrame {
 
@@ -48,6 +56,10 @@ public class BlinkFrame extends JFrame {
     private static final int DEFAULT_MILLIS = 500;
     /** Steps of the speed slider; fine enough that a saved speed comes back as itself. */
     private static final int SPEED_STEPS = 1000;
+    private static final String BLINK_CARD = "blink";
+    private static final String LOADING_CARD = "loading";
+    private static final String SKIP_TOOLTIP = "Leave this frame out of the loop, for example a cloudy or trailed frame (S). "
+            + "Stepping by hand still shows it.";
 
     private final EventBus eventBus;
     private final BlinkView view = new BlinkView();
@@ -63,6 +75,18 @@ public class BlinkFrame extends JFrame {
     private final JLabel secondaryLabel = new JLabel();
     private final JLabel frameLabel = new JLabel(" ");
     private final JLabel cursorLabel = new JLabel(" ");
+    private final FrameTableModel frameModel = new FrameTableModel();
+    private final JTable frameTable = new JTable(frameModel);
+    private final JLabel framesHeader = new JLabel(" ");
+    private final JTextArea framesHint = new JTextArea();
+    private final CardLayout centerCards = new CardLayout();
+    private final JPanel center = new JPanel(centerCards);
+    private final JPanel loadingPanel = new JPanel(new GridBagLayout());
+    private final JProgressBar loadBar = new JProgressBar();
+    private final JLabel loadLabel = new JLabel(" ");
+    private final JLabel loadFileLabel = new JLabel(" ");
+    private final JComponent controls;
+    private final JComponent statusBar;
     private final Timer timer;
 
     private StretchPanel stretchPanel;
@@ -75,7 +99,9 @@ public class BlinkFrame extends JFrame {
     private boolean[] skipped;
     private int current;
     private boolean open;
-    private boolean adjusting;
+    /** Frames are being read for the next blink; the window shows the progress. */
+    private boolean loading;
+    private FitsFileInformation[] loadingFiles;
     private boolean stretchRefreshPending;
     /** Stretch tables of each frame for the current stretch; cleared when the stretch changes. */
     private final Map<BlinkSequence.Frame, byte[][]> tables = new HashMap<>();
@@ -96,9 +122,29 @@ public class BlinkFrame extends JFrame {
         JPanel contentPane = new JPanel(new BorderLayout(0, 6));
         contentPane.setBorder(new EmptyBorder(6, 6, 6, 6));
         setContentPane(contentPane);
-        contentPane.add(buildControls(), BorderLayout.NORTH);
-        contentPane.add(view, BorderLayout.CENTER);
-        contentPane.add(buildStatusBar(), BorderLayout.SOUTH);
+        controls = buildControls();
+        statusBar = buildStatusBar();
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildFrameList(), view);
+        split.setFocusable(false);
+        split.setContinuousLayout(true);
+        // The split pane would take the arrow keys to move its divider; they step frames here.
+        SwingUtilities.replaceUIInputMap(split, JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, null);
+        center.add(split, BLINK_CARD);
+        center.add(buildLoadingPanel(), LOADING_CARD);
+        contentPane.add(controls, BorderLayout.NORTH);
+        contentPane.add(center, BorderLayout.CENTER);
+        contentPane.add(statusBar, BorderLayout.SOUTH);
+
+        // Only the frame view takes the keyboard focus: a focused button would take Space for itself.
+        removeFocus(controls);
+        removeFocus(statusBar);
+        view.setFocusable(true);
+        view.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                view.requestFocusInWindow();
+            }
+        });
 
         view.setCursorListener(pixel -> {
             cursorPixel = pixel;
@@ -124,14 +170,12 @@ public class BlinkFrame extends JFrame {
      */
     void open(BlinkSequence sequence, FitsFileInformation[] files, StretchPanel stretchPanel, TrackOverlay overlay) {
         bindStretch(stretchPanel);
+        release();
         this.sequence = sequence;
         this.files = files;
         this.skipped = new boolean[sequence.getFrames().size()];
         this.current = 0;
         this.open = true;
-        tables.clear();
-        skyCoordinates.clear();
-        cursorPixel = null;
 
         Set<String> names = new HashSet<>();
         for (BlinkSequence.Frame frame : sequence.getFrames()) {
@@ -148,33 +192,83 @@ public class BlinkFrame extends JFrame {
                 : "Run Detect Moving Targets on this session to see its tracks here.");
         view.setOverlayVisible(tracksBox.isSelected());
 
-        File first = new File(sequence.getFrames().get(0).getInfo().getFilePath());
-        String session = first.getParentFile() != null ? first.getParentFile().getName() : first.getName();
-        setTitle("Blink · " + session + " · " + sequence.getFrames().size() + " frames");
+        setTitle("Blink · " + sessionName(sequence.getFrames().get(0).getInfo().getFilePath()) + " · "
+                + sequence.getFrames().size() + " frames");
+        frameModel.fireTableDataChanged();
+        updateLoopCount();
+        controls.setVisible(true);
+        statusBar.setVisible(true);
+        centerCards.show(center, BLINK_CARD);
         view.fit();
         showCurrent();
         if (!isVisible()) {
             setVisible(true);
         }
         toFront();
+        view.requestFocusInWindow();
         play();
     }
 
-    /** Ends the blink: stops, frees the frames and tells the main window. Does nothing when not blinking. */
-    void close() {
-        if (!open) {
-            setVisible(false);
+    /** Shows the window at once with the progress of reading these frames; {@link #open} then starts the blink. */
+    void showLoading(FitsFileInformation[] files) {
+        release();
+        loading = true;
+        loadingFiles = files;
+        loadBar.setMaximum(files.length);
+        showLoadProgress(0, files.length);
+        setTitle("Blink · " + sessionName(files[0].getFilePath()) + " · reading " + files.length + " frames");
+        controls.setVisible(false);
+        statusBar.setVisible(false);
+        centerCards.show(center, LOADING_CARD);
+        if (!isVisible()) {
+            setVisible(true);
+        }
+        toFront();
+        loadingPanel.requestFocusInWindow();
+    }
+
+    /** {@code loaded} of {@code total} frames are read. */
+    void showLoadProgress(int loaded, int total) {
+        if (!loading) {
             return;
         }
+        loadBar.setValue(loaded);
+        loadBar.setString(loaded + " / " + total);
+        loadLabel.setText(String.format(Locale.US, "Reading frame %d of %d…", Math.min(loaded + 1, total), total));
+        loadFileLabel.setText(loadingFiles != null && loaded < loadingFiles.length ? loadingFiles[loaded].getFileName() : " ");
+    }
+
+    /**
+     * Ends the blink, or the loading before it: stops, frees the frames and tells the main window. Only hides the
+     * window when neither is going on.
+     */
+    void close() {
+        boolean active = open || loading;
+        release();
+        setVisible(false);
+        if (active) {
+            eventBus.post(new BlinkFrameClosedEvent());
+        }
+    }
+
+    /** Stops and lets go of the frames of the current blink, if any. */
+    private void release() {
         open = false;
+        loading = false;
+        loadingFiles = null;
         timer.stop();
         sequence = null;
         files = null;
         tables.clear();
         skyCoordinates.clear();
+        cursorPixel = null;
         view.clear();
-        setVisible(false);
-        eventBus.post(new BlinkFrameClosedEvent());
+        frameModel.fireTableDataChanged();
+    }
+
+    private static String sessionName(String filePath) {
+        File file = new File(filePath);
+        return file.getParentFile() != null ? file.getParentFile().getName() : file.getName();
     }
 
     // ==========================================
@@ -194,9 +288,12 @@ public class BlinkFrame extends JFrame {
         speedSlider.addChangeListener(e -> speedChanged());
         fixWidth(speedLabel, "2000 ms (20.0 frames/s)");
 
-        skipBox.setToolTipText("Leave this frame out of the loop, for example a cloudy or trailed frame (S). "
-                + "Stepping by hand still shows it.");
-        skipBox.addActionListener(e -> toggleSkip());
+        skipBox.addActionListener(e -> {
+            if (open) {
+                setSkipped(current, skipBox.isSelected());
+                skipBox.setSelected(skipped[current]);
+            }
+        });
         tracksBox.addActionListener(e -> view.setOverlayVisible(tracksBox.isSelected()));
 
         JButton fitButton = new JButton("Fit");
@@ -234,9 +331,102 @@ public class BlinkFrame extends JFrame {
         return controls;
     }
 
+    /** The frames of the blink: the one shown is highlighted, and the tick says whether a frame is in the loop. */
+    private JComponent buildFrameList() {
+        frameTable.setFocusable(false);
+        frameTable.setRowSelectionAllowed(false);
+        frameTable.setShowGrid(false);
+        frameTable.setIntercellSpacing(new Dimension(0, 0));
+        frameTable.setFillsViewportHeight(true);
+        frameTable.getTableHeader().setReorderingAllowed(false);
+        TableColumnModel columns = frameTable.getColumnModel();
+        fixColumnWidth(columns.getColumn(0), 30);
+        fixColumnWidth(columns.getColumn(1), 40);
+        fixColumnWidth(columns.getColumn(3), 76);
+        columns.getColumn(0).setCellRenderer(new LoopCellRenderer());
+        TextCellRenderer textRenderer = new TextCellRenderer();
+        for (int column = 1; column < columns.getColumnCount(); column++) {
+            columns.getColumn(column).setCellRenderer(textRenderer);
+        }
+        frameTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                int row = frameTable.rowAtPoint(e.getPoint());
+                if (!open || row < 0 || !SwingUtilities.isLeftMouseButton(e)) {
+                    return;
+                }
+                // The tick works only while paused: during play the frame shown changes too fast to aim at.
+                boolean toggle = frameTable.columnAtPoint(e.getPoint()) == 0 && !timer.isRunning();
+                goTo(row);
+                if (toggle) {
+                    setSkipped(row, !skipped[row]);
+                }
+            }
+        });
+        JScrollPane scroll = new JScrollPane(frameTable);
+        scroll.setFocusable(false);
+
+        framesHint.setEditable(false);
+        framesHint.setFocusable(false);
+        framesHint.setOpaque(false);
+        framesHint.setLineWrap(true);
+        framesHint.setWrapStyleWord(true);
+        framesHint.setFont(UIManager.getFont("Label.font"));
+        framesHint.setForeground(UIManager.getColor("Label.disabledForeground"));
+
+        JPanel panel = new JPanel(new BorderLayout(0, 4));
+        panel.setBorder(new EmptyBorder(0, 0, 0, 4));
+        panel.add(framesHeader, BorderLayout.NORTH);
+        panel.add(scroll, BorderLayout.CENTER);
+        panel.add(framesHint, BorderLayout.SOUTH);
+        panel.setPreferredSize(new Dimension(360, 100));
+        panel.setMinimumSize(new Dimension(160, 0));
+        return panel;
+    }
+
+    private static void fixColumnWidth(TableColumn column, int width) {
+        column.setMinWidth(width);
+        column.setMaxWidth(width);
+        column.setPreferredWidth(width);
+    }
+
+    private JComponent buildLoadingPanel() {
+        loadLabel.setFont(loadLabel.getFont().deriveFont(Font.BOLD, loadLabel.getFont().getSize2D() + 2f));
+        loadBar.setStringPainted(true);
+        Dimension barSize = new Dimension(380, loadBar.getPreferredSize().height);
+        loadBar.setPreferredSize(barSize);
+        loadBar.setMaximumSize(barSize);
+        loadFileLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        JLabel note = new JLabel("Each frame is read once; the blink then plays from memory.");
+        note.setForeground(UIManager.getColor("Label.disabledForeground"));
+        JButton cancelButton = new JButton("Cancel");
+        cancelButton.setFocusable(false);
+        cancelButton.setToolTipText("Stop reading the frames (Esc).");
+        cancelButton.addActionListener(e -> close());
+
+        JPanel column = new JPanel();
+        column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
+        for (JComponent component : new JComponent[]{loadLabel, loadBar, loadFileLabel, note, cancelButton}) {
+            component.setAlignmentX(Component.CENTER_ALIGNMENT);
+        }
+        column.add(loadLabel);
+        column.add(Box.createVerticalStrut(10));
+        column.add(loadBar);
+        column.add(Box.createVerticalStrut(6));
+        column.add(loadFileLabel);
+        column.add(Box.createVerticalStrut(18));
+        column.add(note);
+        column.add(Box.createVerticalStrut(12));
+        column.add(cancelButton);
+        // Focusable, so that Esc works while nothing else in the window can take the focus.
+        loadingPanel.setFocusable(true);
+        loadingPanel.add(column);
+        return loadingPanel;
+    }
+
     private JComponent buildStatusBar() {
-        JLabel hint = new JLabel("Space play/pause · ← → step · ↑ ↓ speed · S skip frame · T tracks · F fit · 1 100 % · "
-                + "scroll to zoom, drag to pan · Esc closes");
+        JLabel hint = new JLabel("Space play/pause · ← → step · ↑ ↓ speed · S skip frame (paused) · T tracks · F fit · "
+                + "1 100 % · scroll to zoom, drag to pan · Esc closes");
         hint.setForeground(UIManager.getColor("Label.disabledForeground"));
         JPanel status = new JPanel(new BorderLayout(12, 2));
         status.add(frameLabel, BorderLayout.CENTER);
@@ -309,22 +499,29 @@ public class BlinkFrame extends JFrame {
         label.setText(text);
     }
 
+    private static void removeFocus(Container container) {
+        for (Component component : container.getComponents()) {
+            component.setFocusable(false);
+            if (component instanceof Container) {
+                removeFocus((Container) component);
+            }
+        }
+    }
+
     private static String longer(String a, String b) {
         return b.length() > a.length() ? b : a;
     }
 
     private void installKeyBindings() {
-        for (JComponent component : new JComponent[]{playButton, previousButton, nextButton, speedSlider, skipBox, tracksBox}) {
-            component.setFocusable(false);
-        }
         bind("SPACE", "playPause", this::togglePlay);
         bind("LEFT", "previous", () -> stepByHand(-1));
         bind("RIGHT", "next", () -> stepByHand(1));
         bind("UP", "faster", () -> speedSlider.setValue(Math.min(SPEED_STEPS, speedSlider.getValue() + SPEED_STEPS / 20)));
         bind("DOWN", "slower", () -> speedSlider.setValue(Math.max(0, speedSlider.getValue() - SPEED_STEPS / 20)));
         bind("S", "skip", () -> {
-            skipBox.setSelected(!skipBox.isSelected());
-            toggleSkip();
+            if (open) {
+                setSkipped(current, !skipped[current]);
+            }
         });
         bind("T", "tracks", () -> {
             if (tracksBox.isEnabled()) {
@@ -356,12 +553,31 @@ public class BlinkFrame extends JFrame {
             return;
         }
         timer.start();
-        playButton.setText("❚❚ Pause");
+        updatePlayState();
     }
 
     private void pause() {
         timer.stop();
-        playButton.setText("▶ Play");
+        updatePlayState();
+    }
+
+    /** Frames can be left out of the loop only while paused. */
+    private void updatePlayState() {
+        boolean playing = timer.isRunning();
+        playButton.setText(playing ? "❚❚ Pause" : "▶ Play");
+        skipBox.setEnabled(open && !playing);
+        skipBox.setToolTipText(playing ? "Pause (Space) to leave frames out of the loop." : SKIP_TOOLTIP);
+        framesHint.setText(playing
+                ? "Pause (Space) to choose the frames in the loop. Click a frame to show it."
+                : "Untick a frame, or press S, to leave it out of the loop. Click a frame to show it.");
+        frameTable.repaint();
+    }
+
+    /** Pauses and shows this frame. */
+    private void goTo(int index) {
+        pause();
+        current = index;
+        showCurrent();
     }
 
     private void togglePlay() {
@@ -394,19 +610,27 @@ public class BlinkFrame extends JFrame {
         showCurrent();
     }
 
-    private void toggleSkip() {
-        if (!open || adjusting) {
+    /** Puts a frame in or out of the loop. Ignored while playing; at least two frames stay in. */
+    private void setSkipped(int index, boolean skip) {
+        if (!open || timer.isRunning() || skipped[index] == skip) {
             return;
         }
-        boolean skip = skipBox.isSelected();
         if (skip && includedCount() <= 2) {
             Toolkit.getDefaultToolkit().beep();
-            skipBox.setSelected(false);
             frameLabel.setText(frameText() + " · at least two frames must stay in the loop");
             return;
         }
-        skipped[current] = skip;
-        frameLabel.setText(frameText());
+        skipped[index] = skip;
+        frameModel.fireTableRowsUpdated(index, index);
+        updateLoopCount();
+        if (index == current) {
+            skipBox.setSelected(skip);
+            frameLabel.setText(frameText());
+        }
+    }
+
+    private void updateLoopCount() {
+        framesHeader.setText(String.format(Locale.US, "Frames · %d of %d in the loop", includedCount(), skipped.length));
     }
 
     private int includedCount() {
@@ -463,14 +687,11 @@ public class BlinkFrame extends JFrame {
         BlinkSequence.Frame frame = sequence.getFrames().get(current);
         StretchAlgorithm algorithm = stretchPanel.getStretchAlgorithm();
         view.showFrame(frame, tablesFor(frame), algorithm == StretchAlgorithm.EXTREME && frame.getChannelCount() == 3);
-        adjusting = true;
-        try {
-            skipBox.setSelected(skipped[current]);
-        } finally {
-            adjusting = false;
-        }
+        skipBox.setSelected(skipped[current]);
         frameLabel.setText(frameText());
         updateCursorLabel();
+        frameTable.repaint();
+        frameTable.scrollRectToVisible(frameTable.getCellRect(current, 0, true));
     }
 
     private byte[][] tablesFor(BlinkSequence.Frame frame) {
@@ -529,6 +750,21 @@ public class BlinkFrame extends JFrame {
         return text.toString();
     }
 
+    /** Time since the first frame, "+12:30" or "+1:02:03"; empty when a capture time is missing. */
+    private String offsetText(int index) {
+        long start = sequence.getFrames().get(0).getInfo().getObservationTimestamp();
+        long timestamp = sequence.getFrames().get(index).getInfo().getObservationTimestamp();
+        if (start <= 0 || timestamp <= 0) {
+            return "";
+        }
+        long seconds = Math.round((timestamp - start) / 1000.0);
+        long abs = Math.abs(seconds);
+        String time = abs >= 3600
+                ? String.format(Locale.US, "%d:%02d:%02d", abs / 3600, abs / 60 % 60, abs % 60)
+                : String.format(Locale.US, "%d:%02d", abs / 60, abs % 60);
+        return (seconds < 0 ? "−" : "+") + time;
+    }
+
     static String formatElapsed(long seconds) {
         if (seconds < 60) {
             return seconds + " s";
@@ -575,5 +811,92 @@ public class BlinkFrame extends JFrame {
             skyCoordinates.put(frame, transformer);
         }
         return skyCoordinates.get(frame);
+    }
+
+    // ==========================================
+    // FRAME LIST
+    // ==========================================
+
+    private final class FrameTableModel extends AbstractTableModel {
+        private final String[] names = {"", "#", "Frame", "Time"};
+
+        @Override
+        public int getRowCount() {
+            return sequence == null ? 0 : sequence.getFrames().size();
+        }
+
+        @Override
+        public int getColumnCount() {
+            return names.length;
+        }
+
+        @Override
+        public String getColumnName(int column) {
+            return names[column];
+        }
+
+        @Override
+        public Class<?> getColumnClass(int column) {
+            return column == 0 ? Boolean.class : column == 1 ? Integer.class : String.class;
+        }
+
+        @Override
+        public Object getValueAt(int row, int column) {
+            switch (column) {
+                case 0:
+                    return !skipped[row];
+                case 1:
+                    return row + 1;
+                case 2:
+                    return sequence.getFrames().get(row).getInfo().getFileName();
+                default:
+                    return offsetText(row);
+            }
+        }
+    }
+
+    /** The row of the frame shown is highlighted; the table's own selection is not used. */
+    private void paintRow(JComponent cell, JTable table, int row) {
+        boolean shown = row == current;
+        cell.setBackground(shown ? UIManager.getColor("Table.selectionBackground") : table.getBackground());
+        cell.setForeground(shown ? UIManager.getColor("Table.selectionForeground") : table.getForeground());
+    }
+
+    private final class LoopCellRenderer extends JCheckBox implements TableCellRenderer {
+        LoopCellRenderer() {
+            setHorizontalAlignment(SwingConstants.CENTER);
+            setBorderPainted(false);
+            setOpaque(true);
+        }
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
+                                                       int row, int column) {
+            boolean playing = timer.isRunning();
+            setSelected(Boolean.TRUE.equals(value));
+            setEnabled(!playing);
+            paintRow(this, table, row);
+            setToolTipText(playing ? "Pause (Space) to change the frames in the loop."
+                    : "Untick to leave this frame out of the loop.");
+            return this;
+        }
+    }
+
+    private static final javax.swing.border.Border CELL_PADDING = new EmptyBorder(0, 6, 0, 6);
+
+    private final class TextCellRenderer extends DefaultTableCellRenderer {
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
+                                                       int row, int column) {
+            super.getTableCellRendererComponent(table, value, false, false, row, column);
+            setHorizontalAlignment(column == 2 ? SwingConstants.LEFT : SwingConstants.RIGHT);
+            setBorder(CELL_PADDING);
+            paintRow(this, table, row);
+            if (row != current && skipped[row]) {
+                setForeground(UIManager.getColor("Label.disabledForeground"));
+            }
+            setToolTipText(column == 2 ? value + (skipped[row] ? " (not in the loop)" : "") : null);
+            return this;
+        }
     }
 }
