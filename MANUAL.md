@@ -314,7 +314,7 @@ On Linux and macOS use `bin/batchDetect`. The profile can be `low`, `medium`, `h
 The **Detection Settings** tab has a list of pages on the left, a search box at the top (Ctrl+F) and **Save**, **Revert** and **Load Defaults** at the bottom.
 
 - **Overview**: Auto-Tune, the most important settings (detection, star mask and star jitter) and the analyses of a run: slow movers, anomaly rescue, residual analysis and variable stars, each with a switch and a link to its settings.
-- **Detection**: how objects are found in each frame (Object Detection, Streak Detection) and which frames are used (Quality Control, with a **Strictness** choice of Lenient, Normal or Strict for leaving out frames that differ from the rest of the session).
+- **Detection**: how objects are found in each frame (Streak Detection) and which frames are used (Quality Control, with a **Strictness** choice of Lenient, Normal or Strict for leaving out frames that differ from the rest of the session).
 - **Moving objects**: how detections are linked into tracks (Track Linking) and the extra searches (Anomaly Detection, Slow Movers, Residual Analysis).
 - **Variable stars**: the photometry settings.
 - **Report**: how images in the report are stretched and animated.
