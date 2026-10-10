@@ -868,7 +868,7 @@ public class DetectionConfigurationPanel extends JPanel {
         chkEnableBrightStarEccentricityFilter = addCheckboxRow(panel, "Enable Bright-Star Eccentricity Filter", "Runs an extra rejection gate using only the brightest quality stars, which is useful for catching tracking error or wind that shows up most clearly on high-SNR stars.", jTransientConfig.enableBrightStarEccentricityFilter);
         spinBrightStarEccentricitySigma = addRow(panel, "Bright-Star Eccentricity Sigma", "Rejects frames whose bright-star median eccentricity rises too far above the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.brightStarEccentricitySigmaDeviation, 0.0, 10.0, 0.1));
         spinBackgroundSigma = addRow(panel, "Background Deviation Sigma", "Rejects frames whose background level deviates too much from the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.backgroundSigmaDeviation, 0.0, 10.0, 0.1));
-        spinMinBgDevAdu = addRow(panel, "Min Background Deviation (ADU)", "Minimum absolute background tolerance used even when the measured session variation is tiny.", doubleSpinnerModel(jTransientConfig.minBackgroundDeviationADU, 0.0, 10000.0, 5.0));
+        spinMinBgDevAdu = addRow(panel, "Min Background Deviation (ADU)", "Smallest allowed sky-level shift, in ADU, even when the measured session variation is tiny. The allowed shift is also never smaller than the typical sky noise of one frame.", doubleSpinnerModel(jTransientConfig.minBackgroundDeviationADU, 0.0, 10000.0, 5.0));
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Auto-Tune"));
