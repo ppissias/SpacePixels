@@ -105,18 +105,12 @@ public final class SkyCatalogueClient {
         String depth = String.format(Locale.US, "stars to magnitude %.1f (Gaia)", magnitudeLimit);
         progress.stage(3, 3, depth);
         try {
-            catalogue.stars = parseStars(query(VIZIER_TAP, vizierStarQuery(field, magnitudeLimit), MAX_STARS, STAR_TIMEOUT),
-                    "RA_ICRS", "DE_ICRS", "pmRA", "pmDE", "Gmag", "BP-RP");
-            catalogue.starSource = "Gaia DR3 via VizieR (CDS)";
-        } catch (IOException vizierProblem) {
-            progress.stage(3, 3, depth.replace("(Gaia)", "(Gaia, ESA archive)"));
-            try {
-                catalogue.stars = parseStars(query(ESA_GAIA_TAP, esaStarQuery(field, magnitudeLimit), MAX_STARS, STAR_TIMEOUT),
-                        "ra", "dec", "pmra", "pmdec", "phot_g_mean_mag", "bp_rp");
-                catalogue.starSource = "Gaia DR3 via the ESA Gaia archive";
-            } catch (IOException esaProblem) {
-                catalogue.problems.add("Stars (Gaia): VizieR " + vizierProblem.getMessage() + "; ESA archive " + esaProblem.getMessage());
-            }
+            String[] source = new String[1];
+            catalogue.stars = fetchStars(field, magnitudeLimit, source,
+                    () -> progress.stage(3, 3, depth.replace("(Gaia)", "(Gaia, ESA archive)")));
+            catalogue.starSource = source[0];
+        } catch (IOException problem) {
+            catalogue.problems.add("Stars (Gaia): " + problem.getMessage());
         }
         if (catalogue.stars.size() >= MAX_STARS) {
             catalogue.problems.add(String.format(Locale.US,
@@ -124,6 +118,31 @@ public final class SkyCatalogueClient {
                             + "Lower the star depth in the Astrometry Config tab.", MAX_STARS));
         }
         return catalogue;
+    }
+
+    /** The Gaia DR3 stars of the field to this G magnitude, from VizieR or else from the ESA archive. */
+    public List<SkyCatalogue.Star> fetchStars(SkyField field, double magnitudeLimit) throws IOException, InterruptedException {
+        return fetchStars(field, magnitudeLimit, new String[1], () -> { });
+    }
+
+    private List<SkyCatalogue.Star> fetchStars(SkyField field, double magnitudeLimit, String[] source, Runnable fallingBack)
+            throws IOException, InterruptedException {
+        try {
+            List<SkyCatalogue.Star> stars = parseStars(query(VIZIER_TAP, vizierStarQuery(field, magnitudeLimit), MAX_STARS, STAR_TIMEOUT),
+                    "RA_ICRS", "DE_ICRS", "pmRA", "pmDE", "Gmag", "BP-RP");
+            source[0] = "Gaia DR3 via VizieR (CDS)";
+            return stars;
+        } catch (IOException vizierProblem) {
+            fallingBack.run();
+            try {
+                List<SkyCatalogue.Star> stars = parseStars(query(ESA_GAIA_TAP, esaStarQuery(field, magnitudeLimit), MAX_STARS, STAR_TIMEOUT),
+                        "ra", "dec", "pmra", "pmdec", "phot_g_mean_mag", "bp_rp");
+                source[0] = "Gaia DR3 via the ESA Gaia archive";
+                return stars;
+            } catch (IOException esaProblem) {
+                throw new IOException("VizieR " + vizierProblem.getMessage() + "; ESA archive " + esaProblem.getMessage());
+            }
+        }
     }
 
     // ==========================================

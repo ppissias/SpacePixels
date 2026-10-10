@@ -1,8 +1,12 @@
 package eu.startales.spacepixels.util;
 
+import java.io.File;
+
 /**
  * Resolves a usable WCS solution for an aligned image set.
- * Tries the current file first, then falls back to any other aligned file with a valid solution.
+ * Tries the current file first, then falls back to any other aligned file with a valid solution. When the session
+ * has a plate-solution correction that is switched on ({@link PlateSolutionCorrection}), it is applied: for the file
+ * asked for with its own part, or for the session as a whole when no file is given.
  */
 public final class WcsSolutionResolver {
 
@@ -10,32 +14,67 @@ public final class WcsSolutionResolver {
     }
 
     public static ResolvedWcsSolution resolve(FitsFileInformation preferredFile, FitsFileInformation[] alignedFiles) {
+        return resolve(preferredFile, alignedFiles, true);
+    }
+
+    /** The solution as the FITS headers give it, without a correction. */
+    public static ResolvedWcsSolution resolveUncorrected(FitsFileInformation preferredFile, FitsFileInformation[] alignedFiles) {
+        return resolve(preferredFile, alignedFiles, false);
+    }
+
+    private static ResolvedWcsSolution resolve(FitsFileInformation preferredFile, FitsFileInformation[] alignedFiles, boolean corrected) {
+        ResolvedWcsSolution solution = null;
         if (preferredFile != null) {
-            ResolvedWcsSolution direct = resolveForFile(preferredFile, false);
-            if (direct != null) {
-                return direct;
+            solution = resolveForFile(preferredFile, false);
+        }
+
+        if (solution == null && alignedFiles != null) {
+            for (FitsFileInformation candidate : alignedFiles) {
+                if (candidate == null || candidate == preferredFile) {
+                    continue;
+                }
+                if (!hasCompatibleDimensions(preferredFile, candidate)) {
+                    continue;
+                }
+
+                solution = resolveForFile(candidate, true);
+                if (solution != null) {
+                    break;
+                }
             }
         }
 
-        if (alignedFiles == null) {
-            return null;
+        if (solution == null || !corrected) {
+            return solution;
         }
+        FitsFileInformation reference = preferredFile != null ? preferredFile : firstFile(alignedFiles);
+        PlateSolutionCorrection correction = reference == null ? null : PlateSolutionCorrection.activeIn(folderOf(reference));
+        if (correction == null) {
+            return solution;
+        }
+        WcsCoordinateTransformer transformer = correction.apply(solution.getTransformer(),
+                preferredFile != null ? preferredFile.getFileName() : null, reference.getSizeWidth(), reference.getSizeHeight());
+        if (transformer == solution.getTransformer()) {
+            return solution;
+        }
+        return new ResolvedWcsSolution(transformer, solution.isSharedAcrossAlignedSet(), solution.getSourceFileName(),
+                solution.getSourceType() + ", corrected to the stars");
+    }
 
-        for (FitsFileInformation candidate : alignedFiles) {
-            if (candidate == null || candidate == preferredFile) {
-                continue;
-            }
-            if (!hasCompatibleDimensions(preferredFile, candidate)) {
-                continue;
-            }
-
-            ResolvedWcsSolution shared = resolveForFile(candidate, true);
-            if (shared != null) {
-                return shared;
+    private static FitsFileInformation firstFile(FitsFileInformation[] files) {
+        if (files != null) {
+            for (FitsFileInformation file : files) {
+                if (file != null) {
+                    return file;
+                }
             }
         }
-
         return null;
+    }
+
+    private static File folderOf(FitsFileInformation file) {
+        String path = file.getFilePath();
+        return path == null ? null : new File(path).getAbsoluteFile().getParentFile();
     }
 
     private static ResolvedWcsSolution resolveForFile(FitsFileInformation fileInfo, boolean sharedAcrossAlignedSet) {

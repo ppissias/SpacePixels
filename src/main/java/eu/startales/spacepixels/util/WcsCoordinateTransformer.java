@@ -25,6 +25,13 @@ public final class WcsCoordinateTransformer {
     private double[][] sipB;
     private double[][] sipAp;
     private double[][] sipBp;
+    /** A correction of the solution in pixels (see {@link PlateSolutionCorrection}), or null. */
+    private Displacement displacement;
+
+    /** A displacement (dx, dy) in pixels at a pixel position, from where the solution puts a point to where it is. */
+    public interface Displacement {
+        double[] at(double x, double y);
+    }
 
     private WcsCoordinateTransformer(double crpix1, double crpix2,
                                      double crval1Degrees, double crval2Degrees,
@@ -94,7 +101,48 @@ public final class WcsCoordinateTransformer {
         return sipA != null;
     }
 
+    /** Whether a correction fitted to the stars is applied. */
+    public boolean isCorrected() {
+        return displacement != null;
+    }
+
+    /** This solution with a correction: positions from {@link #skyToPixel} are moved by it, and the reverse. */
+    public WcsCoordinateTransformer withDisplacement(Displacement correction) {
+        WcsCoordinateTransformer corrected = new WcsCoordinateTransformer(crpix1, crpix2, Math.toDegrees(crval1Rad),
+                Math.toDegrees(crval2Rad), cd11, cd12, cd21, cd22);
+        corrected.sipA = sipA;
+        corrected.sipB = sipB;
+        corrected.sipAp = sipAp;
+        corrected.sipBp = sipBp;
+        corrected.displacement = correction;
+        return corrected;
+    }
+
+    /** Identifies the header solution, so a correction is applied only to the solution it was fitted to. */
+    public String solutionKey() {
+        return String.format(Locale.US, "%.4f,%.4f,%.9f,%.9f,%.10e,%.10e,%.10e,%.10e,%s", crpix1, crpix2,
+                Math.toDegrees(crval1Rad), Math.toDegrees(crval2Rad), cd11, cd12, cd21, cd22, sipA != null ? "sip" : "tan");
+    }
+
     public SkyCoordinate pixelToSky(double pixelX, double pixelY) {
+        if (displacement != null) {
+            // The header position whose corrected position is this pixel; the correction is small and smooth.
+            double x = pixelX;
+            double y = pixelY;
+            for (int iteration = 0; iteration < 20; iteration++) {
+                double[] d = displacement.at(x, y);
+                double nextX = pixelX - d[0];
+                double nextY = pixelY - d[1];
+                boolean converged = Math.abs(nextX - x) < 1e-7 && Math.abs(nextY - y) < 1e-7;
+                x = nextX;
+                y = nextY;
+                if (converged) {
+                    break;
+                }
+            }
+            pixelX = x;
+            pixelY = y;
+        }
         double fitsX = pixelX + 1.0;
         double fitsY = pixelY + 1.0;
 
@@ -163,7 +211,14 @@ public final class WcsCoordinateTransformer {
             dx = u;
             dy = v;
         }
-        return new double[]{crpix1 + dx - 1.0, crpix2 + dy - 1.0};
+        double x = crpix1 + dx - 1.0;
+        double y = crpix2 + dy - 1.0;
+        if (displacement != null) {
+            double[] d = displacement.at(x, y);
+            x += d[0];
+            y += d[1];
+        }
+        return new double[]{x, y};
     }
 
     /** SIP coefficients {@code prefix_p_q} up to {@code prefix_ORDER}, or null when the order is missing. */

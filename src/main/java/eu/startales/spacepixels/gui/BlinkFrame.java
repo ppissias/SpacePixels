@@ -412,7 +412,7 @@ public class BlinkFrame extends JFrame {
 
     private JComponent buildStatusBar() {
         return ViewerSupport.statusBar(frameLabel, cursorLabel, "Space play/pause · ← → step · ↑ ↓ speed · "
-                + "S skip frame (paused) · T tracks · A annotate · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
+                + "S skip frame (paused) · T tracks · A annotate · C correct plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
     }
 
     /** The stretch row shares its models with the Image Stretch tab (see {@link StretchControls}). */
@@ -448,6 +448,11 @@ public class BlinkFrame extends JFrame {
         });
         bind("A", "annotate", () -> {
             sky.toggle();
+            updateCursorLabel();
+        });
+        bind("C", "correct", sky::toggleCorrection);
+        sky.setOnSolutionChanged(() -> {
+            cursorReadout.forgetSolutions();
             updateCursorLabel();
         });
         ViewerSupport.bindZoomKeys(getRootPane(), view);

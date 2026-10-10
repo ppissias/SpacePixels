@@ -103,7 +103,7 @@ abstract class SequenceViewerFrame extends JFrame {
         setContentPane(contentPane);
         JComponent controls = buildControls();
         JComponent statusBar = ViewerSupport.statusBar(frameLabel, cursorLabel, "← → previous / next frame · "
-                + (showsDetections ? "D detections · " : "") + "A annotate · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
+                + (showsDetections ? "D detections · " : "") + "A annotate · C correct plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
         contentPane.add(controls, BorderLayout.NORTH);
         contentPane.add(view, BorderLayout.CENTER);
         contentPane.add(statusBar, BorderLayout.SOUTH);
@@ -133,6 +133,11 @@ abstract class SequenceViewerFrame extends JFrame {
         }
         ViewerSupport.bind(getRootPane(), "A", "annotate", () -> {
             sky.toggle();
+            updateCursorLabel();
+        });
+        ViewerSupport.bind(getRootPane(), "C", "correct", sky::toggleCorrection);
+        sky.setOnSolutionChanged(() -> {
+            cursorReadout.forgetSolutions();
             updateCursorLabel();
         });
         ViewerSupport.bindZoomKeys(getRootPane(), view);

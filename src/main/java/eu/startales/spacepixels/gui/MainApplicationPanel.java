@@ -12,7 +12,9 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.StretchAlgorithm;
+import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
+import eu.startales.spacepixels.util.skycatalog.PlateCorrectionFitter;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogueClient;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogueStore;
@@ -107,6 +109,8 @@ public class MainApplicationPanel extends JPanel {
     private long skyFetchStageStart;
     /** Why the last fetch failed or is incomplete, or null. */
     private String skyFetchProblem;
+    /** Why the plate solution could not be checked, or null. */
+    private String correctionProblem;
 
     private DetectionSequenceFrame detectionSequenceFrame;
 
@@ -359,6 +363,8 @@ public class MainApplicationPanel extends JPanel {
         });
 
         skyCatalogueButton.addActionListener(e -> onSkyCatalogueButton());
+        // A viewer switches the correction on or off; the Astrometry status follows.
+        SkyCatalogueModel.shared().addCorrectionListener(this::refreshWorkflowStatus);
 
         solveButton.addActionListener(e -> {
             ApplicationWindow.logger.info("Will try to solve image");
@@ -772,17 +778,19 @@ public class MainApplicationPanel extends JPanel {
     // ==========================================
 
     /**
-     * Starts fetching the sky catalogue of the session in the background, or cancels the fetch running. The rest
-     * of the application stays usable meanwhile; the result is saved next to the frames and handed to the viewers.
+     * Starts fetching the sky catalogue of the session in the background, or cancels the work running. The rest of
+     * the application stays usable meanwhile. The catalogue is saved next to the frames and handed to the viewers at
+     * once; then, in the same background job, the plate solution is checked against its stars (see
+     * {@link #startSkyJob}).
      */
     private void onSkyCatalogueButton() {
         if (skyFetchThread != null) {
             skyFetchThread.interrupt();
-            skyFetchLabel.setText("Cancelling the sky catalogue…");
+            skyFetchLabel.setText("Cancelling…");
             return;
         }
         FitsFileInformation[] files = getImportedFiles();
-        WcsSolutionResolver.ResolvedWcsSolution solution = files == null ? null : WcsSolutionResolver.resolve(null, files);
+        WcsSolutionResolver.ResolvedWcsSolution solution = files == null ? null : WcsSolutionResolver.resolveUncorrected(null, files);
         if (solution == null) {
             skyFetchProblem = "No frame has a plate solution in its FITS header.";
             refreshWorkflowStatus();
@@ -790,43 +798,78 @@ public class MainApplicationPanel extends JPanel {
         }
         SkyField field = SkyField.of(solution.getTransformer(), files[0].getSizeWidth(), files[0].getSizeHeight());
         double depth = mainAppWindow.getImageProcessing().getAppConfig().skyCatalogueStarMagnitude();
-        File folder = sessionFolder(files);
+        skyFetchProblem = null;
+        correctionProblem = null;
+        statusLabel.setText("Fetching the sky catalogue (" + field.sizeText() + " field)…");
+        startSkyJob(files, sessionFolder(files), field, depth, null);
+    }
+
+    /**
+     * The background job: fetches the catalogue (unless {@code existing} is given), hands it over, then fits the
+     * plate-solution correction to its stars and hands that over too. Interrupting the thread cancels what is left.
+     */
+    private void startSkyJob(FitsFileInformation[] files, File folder, SkyField field, double depth, SkyCatalogue existing) {
         Thread[] thread = new Thread[1];
         thread[0] = new Thread(() -> {
-            SkyCatalogue result = null;
+            SkyCatalogueClient client = new SkyCatalogueClient();
+            SkyCatalogue catalogue = existing;
+            if (catalogue == null) {
+                SkyCatalogue result = null;
+                String failure = null;
+                boolean cancelled = false;
+                try {
+                    result = client.fetch(field, depth, (number, total, text) ->
+                            EventQueue.invokeLater(() -> showSkyFetchStage(thread[0], "Sky catalogue " + number + "/" + total + ": " + text)));
+                } catch (InterruptedException e) {
+                    cancelled = true;
+                } catch (RuntimeException e) {
+                    ApplicationWindow.logger.log(java.util.logging.Level.WARNING, "Sky catalogue fetch failed", e);
+                    failure = e.getMessage();
+                }
+                SkyCatalogue fetched = result;
+                String problem = failure;
+                boolean wasCancelled = cancelled;
+                boolean fitFollows = !cancelled && failure == null && result != null && !result.stars.isEmpty();
+                EventQueue.invokeLater(() -> skyFetchFinished(thread[0], folder, fetched, problem, wasCancelled, fitFollows));
+                if (!fitFollows) {
+                    return;
+                }
+                catalogue = result;
+            }
+            PlateSolutionCorrection correction = null;
             String failure = null;
             boolean cancelled = false;
             try {
-                result = new SkyCatalogueClient().fetch(field, depth, (number, total, text) ->
-                        EventQueue.invokeLater(() -> showSkyFetchStage(thread[0], number, total, text)));
+                correction = PlateCorrectionFitter.fit(files, catalogue, client, text ->
+                        EventQueue.invokeLater(() -> showSkyFetchStage(thread[0], "Checking the plate solution: " + text)));
             } catch (InterruptedException e) {
                 cancelled = true;
-            } catch (RuntimeException e) {
-                ApplicationWindow.logger.log(java.util.logging.Level.WARNING, "Sky catalogue fetch failed", e);
+            } catch (IOException | RuntimeException e) {
+                ApplicationWindow.logger.log(java.util.logging.Level.WARNING, "Plate solution check failed", e);
                 failure = e.getMessage();
             }
-            SkyCatalogue fetched = result;
+            PlateSolutionCorrection fitted = correction;
             String problem = failure;
             boolean wasCancelled = cancelled;
-            EventQueue.invokeLater(() -> skyFetchFinished(thread[0], folder, fetched, problem, wasCancelled));
+            EventQueue.invokeLater(() -> correctionFinished(thread[0], folder, fitted, problem, wasCancelled));
         }, "sky-catalogue");
         thread[0].setDaemon(true);
         skyFetchThread = thread[0];
-        skyFetchProblem = null;
-        showSkyFetchStage(thread[0], 0, 3, "starting");
+        showSkyFetchStage(thread[0], existing == null ? "Sky catalogue: starting" : "Checking the plate solution: starting");
         skyFetchIndicator.setVisible(true);
         skyFetchTimer.start();
-        statusLabel.setText("Fetching the sky catalogue (" + field.sizeText() + " field)…");
         refreshWorkflowStatus();
         thread[0].start();
     }
 
-    private void showSkyFetchStage(Thread fetch, int number, int total, String text) {
-        if (fetch != skyFetchThread) {
+    private void showSkyFetchStage(Thread job, String stage) {
+        if (job != skyFetchThread) {
             return;
         }
-        skyFetchStage = number == 0 ? "Sky catalogue: " + text : "Sky catalogue " + number + "/" + total + ": " + text;
-        skyFetchStageStart = System.currentTimeMillis();
+        if (!stage.equals(skyFetchStage)) {
+            skyFetchStage = stage;
+            skyFetchStageStart = System.currentTimeMillis();
+        }
         updateSkyFetchText();
     }
 
@@ -838,11 +881,13 @@ public class MainApplicationPanel extends JPanel {
         skyFetchLabel.setText(skyFetchStage + "…" + (seconds >= 2 ? " " + seconds + " s" : ""));
     }
 
-    private void skyFetchFinished(Thread fetch, File folder, SkyCatalogue result, String failure, boolean cancelled) {
-        if (fetch != skyFetchThread) {
+    private void skyFetchFinished(Thread job, File folder, SkyCatalogue result, String failure, boolean cancelled, boolean fitFollows) {
+        if (job != skyFetchThread) {
             return; // cancelled by a new import: the result belongs to the previous session
         }
-        stopSkyFetchIndicator();
+        if (!fitFollows) {
+            stopSkyFetchIndicator();
+        }
         if (cancelled) {
             statusLabel.setText("Sky catalogue: cancelled");
         } else if (failure != null || result == null) {
@@ -866,30 +911,72 @@ public class MainApplicationPanel extends JPanel {
         refreshWorkflowStatus();
     }
 
+    /**
+     * The fitted correction arrives. It replaces the one there was and keeps its on/off setting; a new session's
+     * first correction starts switched off, so nothing changes until it is switched on in a viewer.
+     */
+    private void correctionFinished(Thread job, File folder, PlateSolutionCorrection correction, String failure, boolean cancelled) {
+        if (job != skyFetchThread) {
+            return;
+        }
+        stopSkyFetchIndicator();
+        if (cancelled) {
+            statusLabel.setText("Plate solution check: cancelled");
+        } else if (correction == null) {
+            correctionProblem = "The plate solution could not be checked: " + failure;
+            statusLabel.setText("Plate solution check failed");
+        } else {
+            correctionProblem = null;
+            PlateSolutionCorrection previous = SkyCatalogueModel.shared().getCorrection();
+            correction.enabled = previous != null && previous.enabled && correction.solutionKey.equals(previous.solutionKey);
+            try {
+                PlateSolutionCorrection.save(folder, correction);
+            } catch (IOException e) {
+                correctionProblem = "It could not be saved in the session folder (" + e.getMessage() + ").";
+            }
+            SkyCatalogueModel.shared().setCorrection(correction);
+            statusLabel.setText("Plate solution checked: " + correction.improvementText()
+                    + (correction.enabled ? ", correction in use" : "; switch the correction on in a viewer (C)"));
+        }
+        refreshWorkflowStatus();
+    }
+
     private void stopSkyFetchIndicator() {
         skyFetchThread = null;
         skyFetchTimer.stop();
         skyFetchIndicator.setVisible(false);
     }
 
-    /** On import: stops a fetch for the previous session and offers the catalogue saved with this one, if any. */
+    /**
+     * On import: stops the work for the previous session and offers the catalogue and correction saved with this
+     * one, if any. When there is a catalogue but no correction for the frames' solution, the check is started.
+     */
     private void restoreSkyCatalogue() {
         if (skyFetchThread != null) {
             skyFetchThread.interrupt();
             stopSkyFetchIndicator();
         }
         skyFetchProblem = null;
+        correctionProblem = null;
         FitsFileInformation[] files = getImportedFiles();
-        SkyCatalogue saved = files == null ? null : SkyCatalogueStore.load(sessionFolder(files));
-        if (saved != null) {
-            WcsSolutionResolver.ResolvedWcsSolution solution = WcsSolutionResolver.resolve(null, files);
-            SkyField current = solution == null ? null
-                    : SkyField.of(solution.getTransformer(), files[0].getSizeWidth(), files[0].getSizeHeight());
-            if (current != null && !current.isSameFieldAs(saved.field)) {
-                saved = null; // fetched for other frames
-            }
+        File folder = files == null ? null : sessionFolder(files);
+        SkyCatalogueModel.shared().setSessionFolder(folder);
+        SkyCatalogue saved = folder == null ? null : SkyCatalogueStore.load(folder);
+        WcsSolutionResolver.ResolvedWcsSolution solution = files == null ? null : WcsSolutionResolver.resolveUncorrected(null, files);
+        SkyField current = solution == null ? null
+                : SkyField.of(solution.getTransformer(), files[0].getSizeWidth(), files[0].getSizeHeight());
+        if (saved != null && current != null && !current.isSameFieldAs(saved.field)) {
+            saved = null; // fetched for other frames
+        }
+        PlateSolutionCorrection correction = folder == null ? null : PlateSolutionCorrection.load(folder);
+        if (correction != null && (solution == null || !solution.getTransformer().solutionKey().equals(correction.solutionKey))) {
+            correction = null; // fitted to another solution
         }
         SkyCatalogueModel.shared().set(saved);
+        SkyCatalogueModel.shared().setCorrection(correction);
+        if (saved != null && correction == null && !saved.stars.isEmpty() && current != null) {
+            startSkyJob(files, folder, current, saved.starMagnitudeLimit, saved);
+        }
     }
 
     private static File sessionFolder(FitsFileInformation[] files) {
@@ -897,10 +984,24 @@ public class MainApplicationPanel extends JPanel {
         return parent != null ? parent : new File(System.getProperty("user.dir"));
     }
 
-    /** The second line of the Astrometry status. */
+    /** The second line of the Astrometry status, and a third for the plate-solution correction. */
     private String skyCatalogueStatusText() {
+        String catalogueText = catalogueStatusText();
+        PlateSolutionCorrection correction = SkyCatalogueModel.shared().getCorrection();
+        if (correction != null) {
+            return catalogueText + "<br>" + (correction.enabled
+                    ? "✓ Plate solution corrected · " + String.format(Locale.US, "%.2f px", correction.afterMedianPx)
+                    : "Correction available · " + correction.improvementText());
+        }
+        if (correctionProblem != null) {
+            return catalogueText + "<br>⚠ Plate solution not checked";
+        }
+        return catalogueText;
+    }
+
+    private String catalogueStatusText() {
         if (skyFetchThread != null) {
-            return "Fetching sky catalogue…";
+            return skyFetchStage.startsWith("Checking") ? "Checking the plate solution…" : "Fetching sky catalogue…";
         }
         SkyCatalogue catalogue = SkyCatalogueModel.shared().get();
         if (catalogue == null) {
@@ -931,6 +1032,20 @@ public class MainApplicationPanel extends JPanel {
         if (skyFetchProblem != null) {
             text.append("<br><br><b>").append(catalogue == null ? "Not fetched:" : "Incomplete:").append("</b> ")
                     .append(escapeHtml(skyFetchProblem).replace("\n", "<br>"));
+        }
+        PlateSolutionCorrection correction = SkyCatalogueModel.shared().getCorrection();
+        if (correction != null) {
+            text.append(String.format(Locale.US, "<br><br>Plate solution checked against the Gaia stars: %,d stars per frame in %d frames.<br>"
+                            + "Distance from the catalogue stars to the stars found in the frames: %.2f px (90 %%: %.2f px)<br>"
+                            + "as in the FITS header, %.2f px (90 %%: %.2f px) corrected.",
+                    correction.starsPerFrame, correction.framesFitted, correction.beforeMedianPx, correction.beforeP90Px,
+                    correction.afterMedianPx, correction.afterP90Px));
+            text.append(correction.enabled
+                    ? "<br>The correction is <b>in use</b>: in the viewers, the cursor RA/Dec and the report of the next Detect Moving Targets."
+                    : "<br>The correction is <b>not in use</b>. Switch it on in a viewer (Correct plate solution, C).");
+            text.append("<br>The FITS files are not changed.");
+        } else if (correctionProblem != null) {
+            text.append("<br><br><b>Plate solution not checked:</b> ").append(escapeHtml(correctionProblem));
         }
         return text.append("</html>").toString();
     }

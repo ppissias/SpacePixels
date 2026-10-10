@@ -27,6 +27,8 @@ import java.util.Map;
  * (stars, deep-sky objects and variable stars) drawn on the frame, and the object under the cursor named in the
  * readout. The viewers only show the catalogue; it is fetched in the main window. When it arrives while the viewer
  * is open, the switch becomes available and a note says so, but nothing changes on the frame until it is turned on.
+ * Next to it, Correct plate solution (key C) switches the session's correction to the Gaia stars on or off, for all
+ * viewers at once and for what else uses the plate solution.
  */
 final class SkyAnnotations {
 
@@ -41,8 +43,12 @@ final class SkyAnnotations {
     private final JCheckBoxMenuItem starsItem = new JCheckBoxMenuItem("Stars (Gaia)", true);
     private final JCheckBoxMenuItem deepSkyItem = new JCheckBoxMenuItem("Galaxies, nebulae and clusters (SIMBAD)", true);
     private final JCheckBoxMenuItem variablesItem = new JCheckBoxMenuItem("Variable stars (AAVSO VSX)", true);
+    private final JCheckBox correctBox = new JCheckBox("Correct plate solution");
     private final JLabel notice = new JLabel(" ");
     private final Runnable catalogueListener = this::catalogueChanged;
+    private final Runnable correctionListener = this::correctionChanged;
+    /** Told when the plate solution in use changes, so the viewer can update its cursor readout. */
+    private Runnable onSolutionChanged = () -> { };
     /** Marks per plate solution, by the file that holds it; the least recently used is dropped. */
     private final Map<String, List<SkyMark>> marksBySolution = new LinkedHashMap<String, List<SkyMark>>(4, 0.75f, true) {
         @Override
@@ -66,8 +72,14 @@ final class SkyAnnotations {
         }
         layersButton.setToolTipText("Choose what Annotate shows.");
         layersButton.addActionListener(e -> layers.show(layersButton, 0, layersButton.getHeight()));
+        correctBox.addActionListener(e -> setCorrection(correctBox.isSelected()));
         notice.setForeground(NOTICE_COLOR);
         updateEnabled();
+    }
+
+    /** Runs when the plate solution in use changes (the correction is switched on or off, or a new one arrives). */
+    void setOnSolutionChanged(Runnable onSolutionChanged) {
+        this.onSolutionChanged = onSolutionChanged;
     }
 
     /** The switch, the Layers button and the note, for the viewer's row of controls. */
@@ -75,6 +87,7 @@ final class SkyAnnotations {
         List<JComponent> controls = new ArrayList<>();
         controls.add(annotateBox);
         controls.add(layersButton);
+        controls.add(correctBox);
         controls.add(notice);
         return controls;
     }
@@ -84,6 +97,7 @@ final class SkyAnnotations {
         this.files = files;
         if (!attached) {
             SkyCatalogueModel.shared().addListener(catalogueListener);
+            SkyCatalogueModel.shared().addCorrectionListener(correctionListener);
             attached = true;
         }
         catalogue = SkyCatalogueModel.shared().get();
@@ -96,6 +110,7 @@ final class SkyAnnotations {
     /** Stops following the catalogue and lets go of the marks, when the viewer closes. */
     void detach() {
         SkyCatalogueModel.shared().removeListener(catalogueListener);
+        SkyCatalogueModel.shared().removeCorrectionListener(correctionListener);
         attached = false;
         files = null;
         shownInfo = null;
@@ -118,6 +133,22 @@ final class SkyAnnotations {
             annotateBox.setSelected(!annotateBox.isSelected());
             apply();
         }
+    }
+
+    /** Key C. */
+    void toggleCorrection() {
+        if (correctBox.isEnabled()) {
+            setCorrection(!SkyCatalogueModel.shared().isCorrectionEnabled());
+        }
+    }
+
+    private void setCorrection(boolean enabled) {
+        try {
+            SkyCatalogueModel.shared().setCorrectionEnabled(enabled);
+        } catch (java.io.IOException e) {
+            notice.setText("Cannot save the setting: " + e.getMessage());
+        }
+        correctBox.setSelected(SkyCatalogueModel.shared().isCorrectionEnabled());
     }
 
     /** "  · NGC 2264 · open cluster" for the object under the cursor while Annotate is on, else "". */
@@ -157,7 +188,30 @@ final class SkyAnnotations {
         }
     }
 
+    private void correctionChanged() {
+        marksBySolution.clear();
+        boolean wasAvailable = correctBox.isEnabled();
+        updateEnabled();
+        apply();
+        onSolutionChanged.run();
+        if (!wasAvailable && correctBox.isEnabled() && !correctBox.isSelected()) {
+            notice.setText("Plate solution check ready · C corrects it");
+        }
+    }
+
     private void updateEnabled() {
+        eu.startales.spacepixels.util.PlateSolutionCorrection correction = SkyCatalogueModel.shared().getCorrection();
+        correctBox.setEnabled(correction != null);
+        correctBox.setSelected(correction != null && correction.enabled);
+        if (correction == null) {
+            correctBox.setToolTipText("<html>Use the plate solution corrected to the Gaia stars (C).<br><i>Not available: "
+                    + "it is worked out after Fetch Sky Catalogue, in the background.</i></html>");
+        } else {
+            correctBox.setToolTipText("<html>Use the plate solution corrected to the Gaia stars (C). Distance from the "
+                    + "catalogue stars to the stars<br>in the frames: " + correction.improvementText() + " (median). "
+                    + "This applies to all viewers, the cursor RA/Dec<br>and the report of the next Detect Moving Targets; "
+                    + "the FITS files are not changed.</html>");
+        }
         boolean available = catalogue != null;
         annotateBox.setEnabled(available);
         layersButton.setEnabled(available);
@@ -183,7 +237,9 @@ final class SkyAnnotations {
         if (solution == null) {
             return null;
         }
-        String key = solution.getSourceFileName() + "@" + info.getSizeWidth() + "x" + info.getSizeHeight();
+        // A corrected solution differs a little per frame.
+        String key = solution.getSourceFileName() + (solution.getTransformer().isCorrected() ? "/" + info.getFileName() : "")
+                + "@" + info.getSizeWidth() + "x" + info.getSizeHeight();
         List<SkyMark> marks = marksBySolution.get(key);
         if (marks == null) {
             marks = project(catalogue, solution.getTransformer(), info.getSizeWidth(), info.getSizeHeight(),

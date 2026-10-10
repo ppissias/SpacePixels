@@ -137,6 +137,11 @@ final class ViewerSupport {
             skyCoordinates.clear();
         }
 
+        /** Resolves the plate solutions again, after the correction was switched on or off. */
+        void forgetSolutions() {
+            skyCoordinates.clear();
+        }
+
         /** "x 120  y 340  value 1204  RA …  Dec …", or a blank when the cursor is not over the frame. */
         String describe(BlinkSequence.Frame frame, Point pixel) {
             if (frame == null || pixel == null || pixel.x >= frame.getWidth() || pixel.y >= frame.getHeight()) {
