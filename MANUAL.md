@@ -113,6 +113,8 @@ The columns tell you what to expect: **Expected noise detections** is about how 
 
 The profile chosen in **Apply after run** (High by default) is applied as soon as the run finishes; SpacePixels remembers your choice. To switch, select another row and click **Use Selected Profile**. The changed settings are marked with a blue name and a dot, and **Save** keeps them for the next start.
 
+The **Legacy** tuner sets only the per-frame detection settings, the mask overlap and the star jitter; it keeps your star mask settings and does not measure noise rates. Its table shows just those columns, and only those settings get the dot.
+
 ### Step 4: detect
 
 Click **Detect Moving Targets**, on the Overview or on the Main tab (or press **Ctrl+D**). A progress window shows each stage.
