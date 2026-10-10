@@ -313,11 +313,13 @@ On Linux and macOS use `bin/batchDetect`. The profile can be `low`, `medium`, `h
 
 The **Detection Settings** tab has a list of pages on the left, a search box at the top (Ctrl+F) and **Save**, **Revert** and **Load Defaults** at the bottom.
 
-- **Overview**: Auto-Tune, the most important settings (detection and star mask) and the analyses of a run: slow movers, anomaly rescue, residual analysis and variable stars, each with a switch and a link to its settings.
-- **Detection**: how objects are found in each frame (Object Detection, Streak Detection) and which frames are used (Quality Control).
+- **Overview**: Auto-Tune, the most important settings (detection, star mask and star jitter) and the analyses of a run: slow movers, anomaly rescue, residual analysis and variable stars, each with a switch and a link to its settings.
+- **Detection**: how objects are found in each frame (Object Detection, Streak Detection) and which frames are used (Quality Control, with a **Strictness** choice of Lenient, Normal or Strict for leaving out frames that differ from the rest of the session).
 - **Moving objects**: how detections are linked into tracks (Track Linking) and the extra searches (Anomaly Detection, Slow Movers, Residual Analysis).
 - **Variable stars**: the photometry settings.
 - **Report**: how images in the report are stretched and animated.
+
+Each page shows its main settings. The fine-tuning settings are expert settings: tick **Show expert settings** under the page list to see them on every page (SpacePixels remembers the choice). A search or **Show only unsaved changes** finds expert settings either way, and a page tells you how many expert settings it hides. Settings that only matter while a feature is on, such as those of the geometric linker, appear when you switch the feature on.
 
 A setting you changed since the last save shows its name in blue; **Show only unsaved changes** lists only those, and the **Reset** button next to a changed setting puts it back to the saved value. **Save** keeps the settings for the next start; **Load Defaults** goes back to the starting settings of SpacePixels.
 
@@ -339,6 +341,6 @@ In most sessions you only need Auto-Tune and the profile. Change single settings
 
 **No identification buttons.** Plate-solve one frame (section [3, step 2](#step-2-optional-plate-solve-one-frame)). The buttons that show results **Here** need SpacePixels to be running.
 
-**Out of memory.** Close other programs, lower **Frames Used by Auto-Tune** (Detection Settings → Quality Control) to limit the tuner, or use **Detect Iteratively**.
+**Out of memory.** Close other programs, lower **Frames Used by Auto-Tune** (Detection Settings → Quality Control, an expert setting) to limit the tuner, or use **Detect Iteratively**.
 
 **Colour frames.** Detection works on monochrome data; click **Convert to Mono** after importing.
