@@ -61,13 +61,15 @@ public class AutoTuneOverviewPanel extends JPanel {
     /** Two-line headings, so the table stays narrow enough for small windows. */
     private static final String[] COLUMNS = {
             "Profile", "Detection<br>σ / grow / min px", "Star mask<br>σ / grow / min px", "Mask<br>overlap",
-            "Noise detections<br>/ MPix / frame", "Expected noise<br>detections", "Test stars<br>found",
+            "Star<br>jitter (px)", "Noise detections<br>/ MPix / frame", "Expected noise<br>detections", "Test stars<br>found",
             "Detection<br>limit (SNR)", "Sky<br>masked"};
     private static final String[] COLUMN_TOOLTIPS = {
             "Sensitivity profile and its budget of noise detections per megapixel per frame. ● marks the profile in use.",
             "Per-frame detection threshold, grow threshold and minimum object size chosen for this profile.",
             "Master star mask: detection threshold, grow threshold and minimum size of the stars it hides.",
             "Largest share of a detection that may overlap the star mask before it is vetoed as star residue.",
+            "Base star jitter radius measured on the session: detections that move less than this are treated as star jitter, "
+                    + "not as moving objects. The same for every profile.",
             "Measured detections that are not real objects (noise peaks and star leftovers the settings let through), "
                     + "per megapixel per frame. ⚠: no setting met the profile's budget, so the cleanest one was used.",
             "Noise detections to expect in a full run on this session: the measured rate × sensor megapixels × frames.",
@@ -76,6 +78,21 @@ public class AutoTuneOverviewPanel extends JPanel {
                     + "sensitive; halving it reaches objects about 0.75 mag fainter.",
             "Share of the sky hidden by the star mask; nothing can be detected there. Measured on the tuner's crops, where it can "
                     + "be higher than on the whole frame; Test Star Mask… shows the whole-frame mask."};
+    private static final int[] COLUMN_WIDTHS = {150, 130, 130, 70, 70, 120, 105, 80, 85, 70};
+    private static final int COL_PROFILE = 0;
+    private static final int COL_DETECTION = 1;
+    private static final int COL_STAR_MASK = 2;
+    private static final int COL_OVERLAP = 3;
+    private static final int COL_JITTER = 4;
+    private static final int COL_NOISE = 5;
+    private static final int COL_EXPECTED_NOISE = 6;
+    private static final int COL_TEST_STARS = 7;
+    private static final int COL_SNR_LIMIT = 8;
+    private static final int COL_SKY_MASKED = 9;
+    private static final int[] CALIBRATED_COLUMNS = {COL_PROFILE, COL_DETECTION, COL_STAR_MASK, COL_OVERLAP, COL_JITTER,
+            COL_NOISE, COL_EXPECTED_NOISE, COL_TEST_STARS, COL_SNR_LIMIT, COL_SKY_MASKED};
+    /** The legacy tuner keeps the star mask settings and measures no noise rates, so only what it sets is shown. */
+    private static final int[] LEGACY_COLUMNS = {COL_PROFILE, COL_DETECTION, COL_OVERLAP, COL_JITTER};
 
     private final Host host;
 
@@ -96,6 +113,8 @@ public class AutoTuneOverviewPanel extends JPanel {
     /** Core settings in display order, with their tuned-value markers. */
     private final Map<JSpinner, JLabel> coreMarkers = new LinkedHashMap<>();
     private final Map<JSpinner, JLabel> coreLabels = new LinkedHashMap<>();
+    /** Core settings the legacy tuner sets; it keeps the others (the star mask). */
+    private final java.util.Set<JSpinner> legacyTunedSettings = new java.util.HashSet<>();
     /** Saved value of each core setting, for marking changes since the last save. */
     private java.util.function.Function<JSpinner, Number> savedValues = spinner -> null;
     private final Map<JSpinner, Number> tunedValues = new LinkedHashMap<>();
@@ -216,7 +235,7 @@ public class AutoTuneOverviewPanel extends JPanel {
             @Override
             public String getToolTipText(MouseEvent e) {
                 int column = columnAtPoint(e.getPoint());
-                return column < 0 ? null : COLUMN_TOOLTIPS[profileTable.convertColumnIndexToModel(column)];
+                return column < 0 ? null : COLUMN_TOOLTIPS[tableModel.columnId(profileTable.convertColumnIndexToModel(column))];
             }
 
             @Override
@@ -232,10 +251,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         profileTable.setFillsViewportHeight(true);
         profileTable.getTableHeader().setReorderingAllowed(false);
         profileTable.setDefaultRenderer(Object.class, new ProfileCellRenderer());
-        int[] widths = {150, 130, 130, 70, 120, 105, 80, 85, 70};
-        for (int i = 0; i < widths.length; i++) {
-            profileTable.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
-        }
+        tableModel.applyColumnWidths();
         profileTable.getSelectionModel().addListSelectionListener(e -> refreshControls());
         profileTable.addMouseListener(new MouseAdapter() {
             @Override
@@ -311,7 +327,10 @@ public class AutoTuneOverviewPanel extends JPanel {
         refreshControls();
     }
 
-    void addCoreSetting(String group, String title, String description, JSpinner spinner) {
+    void addCoreSetting(String group, String title, String description, JSpinner spinner, boolean setByLegacyTuner) {
+        if (setByLegacyTuner) {
+            legacyTunedSettings.add(spinner);
+        }
         GridBagConstraints c = new GridBagConstraints();
         c.anchor = GridBagConstraints.WEST;
         if (group != null) {
@@ -500,20 +519,40 @@ public class AutoTuneOverviewPanel extends JPanel {
         if (lastResult == null) {
             return;
         }
-        DetectionConfig tuned = lastResult.calibration != null
-                ? CalibratedAutoTuner.configFor(lastResult.calibration, host.currentConfig(), profile)
-                : lastResult.optimizedConfig;
+        boolean legacy = lastResult.calibration == null;
+        DetectionConfig tuned = legacy
+                ? legacyConfig(lastResult.optimizedConfig, host.currentConfig())
+                : CalibratedAutoTuner.configFor(lastResult.calibration, host.currentConfig(), profile);
         Map<JSpinner, Number> before = snapshotCoreValues();
         host.applyTunedConfig(tuned);
+        Map<JSpinner, Number> after = snapshotCoreValues();
+        if (legacy) {
+            before.keySet().retainAll(legacyTunedSettings);
+            after.keySet().retainAll(legacyTunedSettings);
+        }
         valuesBeforeTune.clear();
         valuesBeforeTune.putAll(before);
         tunedValues.clear();
-        tunedValues.putAll(snapshotCoreValues());
+        tunedValues.putAll(after);
         appliedProfile = lastResult.calibration != null ? profile : (AutoTuneProfile) profileCombo.getSelectedItem();
         appliedAlgorithm = selectedAlgorithm();
         tableModel.fireTableDataChanged();
         selectTableRow(appliedProfile);
         refreshMarkers();
+    }
+
+    /**
+     * The current settings with the values the legacy tuner chose. Its result is a copy of the settings at the start
+     * of the run, so applying it whole would undo changes made since then.
+     */
+    private static DetectionConfig legacyConfig(DetectionConfig result, DetectionConfig current) {
+        DetectionConfig tuned = current.clone();
+        tuned.detectionSigmaMultiplier = result.detectionSigmaMultiplier;
+        tuned.growSigmaMultiplier = result.growSigmaMultiplier;
+        tuned.minDetectionPixels = result.minDetectionPixels;
+        tuned.maxMaskOverlapFraction = result.maxMaskOverlapFraction;
+        tuned.maxStarJitter = result.maxStarJitter;
+        return tuned;
     }
 
     private void selectTableRow(AutoTuneProfile profile) {
@@ -615,7 +654,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         profileLabel.setToolTipText(profileCombo.getToolTipText());
         tableNoteLabel.setText("<html><div style='width: 480px;'>" + (calibrated
                 ? "One run measures every setting. Each profile then picks the most sensitive one within its budget of noise detections per MPix per frame (the ≤ value)."
-                : "The legacy tuner tunes one profile per run.") + "</div></html>");
+                : "The legacy tuner tunes one profile per run and keeps the current star mask settings.") + "</div></html>");
     }
 
     private AutoTunerRunner.Algorithm selectedAlgorithm() {
@@ -692,9 +731,18 @@ public class AutoTuneOverviewPanel extends JPanel {
 
     private final class ProfileTableModel extends AbstractTableModel {
         private final List<AutoTuneProfile> rows = new ArrayList<>();
+        /** The columns shown for the selected tuner, as indexes into {@link #COLUMNS}. */
+        private int[] columns = CALIBRATED_COLUMNS;
 
         @Override
         public void fireTableDataChanged() {
+            int[] wanted = selectedAlgorithm() == AutoTunerRunner.Algorithm.LEGACY ? LEGACY_COLUMNS : CALIBRATED_COLUMNS;
+            if (wanted != columns) {
+                columns = wanted;
+                rows.clear();
+                fireTableStructureChanged();
+                applyColumnWidths();
+            }
             rows.clear();
             if (lastResult != null) {
                 if (lastResult.calibration != null) {
@@ -719,14 +767,25 @@ public class AutoTuneOverviewPanel extends JPanel {
             return rows.size();
         }
 
+        /** Which of {@link #COLUMNS} the model column shows. */
+        int columnId(int modelColumn) {
+            return columns[modelColumn];
+        }
+
+        void applyColumnWidths() {
+            for (int i = 0; i < columns.length; i++) {
+                profileTable.getColumnModel().getColumn(i).setPreferredWidth(COLUMN_WIDTHS[columns[i]]);
+            }
+        }
+
         @Override
         public int getColumnCount() {
-            return COLUMNS.length;
+            return columns.length;
         }
 
         @Override
         public String getColumnName(int column) {
-            return "<html><center>" + COLUMNS[column] + "</center></html>";
+            return "<html><center>" + COLUMNS[columns[column]] + "</center></html>";
         }
 
         @Override
@@ -736,30 +795,32 @@ public class AutoTuneOverviewPanel extends JPanel {
             CalibratedAutoTuner.Calibration calibration = lastResult.calibration;
             if (calibration == null) {
                 DetectionConfig c = lastResult.optimizedConfig;
-                switch (column) {
-                    case 0: return name;
-                    case 1: return String.format(Locale.US, "%.2f / %.2f / %d", c.detectionSigmaMultiplier, c.growSigmaMultiplier, c.minDetectionPixels);
-                    case 2: return String.format(Locale.US, "%.2f / %.2f / %d", c.masterSigmaMultiplier, c.masterGrowSigmaMultiplier, c.masterMinDetectionPixels);
-                    case 3: return String.format(Locale.US, "%.2f", c.maxMaskOverlapFraction);
+                switch (columns[column]) {
+                    case COL_PROFILE: return name;
+                    case COL_DETECTION: return String.format(Locale.US, "%.2f / %.2f / %d", c.detectionSigmaMultiplier, c.growSigmaMultiplier, c.minDetectionPixels);
+                    case COL_OVERLAP: return String.format(Locale.US, "%.2f", c.maxMaskOverlapFraction);
+                    case COL_JITTER: return String.format(Locale.US, "%.2f", c.maxStarJitter);
                     default: return "—";
                 }
             }
             CalibratedAutoTuner.Candidate cand = calibration.chosen[profile.ordinal()];
             double frameArea = sessionMegapixels() * sessionFrames;
-            switch (column) {
-                case 0:
+            switch (columns[column]) {
+                case COL_PROFILE:
                     return name + "  (≤ " + BigDecimal.valueOf(CalibratedAutoTuner.FALSE_POSITIVE_BUDGET_PER_MPIX_FRAME[profile.ordinal()])
                             .stripTrailingZeros().toPlainString() + ")";
-                case 1:
+                case COL_DETECTION:
                     return String.format(Locale.US, "%.2f / %.2f / %d", cand.sigma, cand.growSigma, cand.minPixels);
-                case 2:
+                case COL_STAR_MASK:
                     return String.format(Locale.US, "%.2f / %.2f / %d", cand.masterSigma, cand.masterGrowSigma, cand.masterMinPixels);
-                case 3:
+                case COL_OVERLAP:
                     return String.format(Locale.US, "%.2f", cand.maskOverlap);
-                case 4:
+                case COL_JITTER:
+                    return String.format(Locale.US, "%.2f", calibration.jitter);
+                case COL_NOISE:
                     return String.format(Locale.US, "%.2f", cand.falsePositivesPerMpixFrame)
                             + (calibration.withinBudget[profile.ordinal()] ? "" : "  ⚠");
-                case 5:
+                case COL_EXPECTED_NOISE:
                     if (frameArea <= 0) {
                         return "—";
                     }
@@ -767,11 +828,11 @@ public class AutoTuneOverviewPanel extends JPanel {
                         return "< " + formatCount(Math.ceil(cand.falsePositiveUpperPerMpixFrame * frameArea));
                     }
                     return "≈ " + formatCount(Math.round(cand.falsePositivesPerMpixFrame * frameArea));
-                case 6:
+                case COL_TEST_STARS:
                     return String.format(Locale.US, "%.0f %%", 100 * cand.recoveredFraction);
-                case 7:
+                case COL_SNR_LIMIT:
                     return Double.isNaN(cand.snr50) ? "—" : String.format(Locale.US, "%.1f", cand.snr50);
-                case 8:
+                case COL_SKY_MASKED:
                     return String.format(Locale.US, "%.1f %%", 100 * cand.maskCoverage);
                 default:
                     return "";
@@ -785,13 +846,14 @@ public class AutoTuneOverviewPanel extends JPanel {
             Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             AutoTuneProfile profile = tableModel.profileAt(row);
             c.setFont(c.getFont().deriveFont(isApplied(profile) ? Font.BOLD : Font.PLAIN));
-            setHorizontalAlignment(column == 0 ? LEFT : CENTER);
-            boolean overBudget = column == 4 && lastResult != null && lastResult.calibration != null
+            int columnId = tableModel.columnId(table.convertColumnIndexToModel(column));
+            setHorizontalAlignment(columnId == COL_PROFILE ? LEFT : CENTER);
+            boolean overBudget = columnId == COL_NOISE && lastResult != null && lastResult.calibration != null
                     && !lastResult.calibration.withinBudget[profile.ordinal()];
             if (!isSelected) {
                 c.setForeground(overBudget ? warningColor() : table.getForeground());
             }
-            if (column == 0 && isApplied(profile) && !isSelected) {
+            if (columnId == COL_PROFILE && isApplied(profile) && !isSelected) {
                 c.setForeground(DetectionConfigurationPanel.accentColor());
             }
             if (overBudget) {
