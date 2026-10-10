@@ -42,7 +42,7 @@ A typical source is the folder of registered frames that your stacking program w
 2. Download the latest release from [SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases) and unpack it.
 3. Start `StartSpacePixels.bat` (Windows) or `./StartSpacePixels` (Linux, macOS).
 
-SpacePixels may use up to 80 % of the computer's memory. 8 GB of RAM is enough for typical cameras; very large sensors (60 MPix and more) with 30 or more frames need about 16 GB. When a newer release exists, a **New version** notice appears at the right end of the status bar; click it to open the releases page.
+SpacePixels may use up to 80 % of the computer's memory. 8 GB of RAM is enough for typical cameras; very large sensors (60 MPix and more) with 30 or more frames need about 16 GB. When a newer release exists, a blue **New version** button appears at the top right of the window, next to **User Manual**; click it to open the releases page.
 
 ### Optional: plate solving
 
