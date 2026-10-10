@@ -60,7 +60,6 @@ public class MainApplicationPanel extends JPanel {
 
     private final JProgressBar progressBar = new JProgressBar();
     private final JButton importButton = new JButton("Import Aligned Frames…");
-    private final JPanel updateNoticeHolder = new JPanel(new BorderLayout());
     private final JButton convertMonoButton = new JButton("Convert to Mono");
     private final JButton stretchButton = new JButton("Batch Stretch");
     private final JButton blinkButton = new JButton("Blink Selected");
@@ -317,10 +316,9 @@ public class MainApplicationPanel extends JPanel {
                 BorderFactory.createEtchedBorder(), BorderFactory.createEmptyBorder(2, 4, 2, 6)));
         statusBar.add(statusLabel, BorderLayout.CENTER);
         progressBar.setPreferredSize(new Dimension(150, 16));
-        // Right end: the "new version" notice (when a newer release exists) and the progress bar.
+        // Right end: the sky catalogue fetch indicator and the progress bar.
         JPanel statusRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         statusRight.setOpaque(false);
-        statusRight.add(updateNoticeHolder);
         skyFetchBar.setIndeterminate(true);
         skyFetchBar.setPreferredSize(new Dimension(80, 12));
         skyFetchIndicator.setOpaque(false);
@@ -1133,15 +1131,6 @@ public class MainApplicationPanel extends JPanel {
 
     boolean isImportEnabled() {
         return importButton.isEnabled() && !uiLocked;
-    }
-
-    /** Shows the "new version" notice at the right end of the status bar. */
-    void setUpdateNotice(JComponent notice) {
-        updateNoticeHolder.removeAll();
-        updateNoticeHolder.setOpaque(false);
-        updateNoticeHolder.add(notice, BorderLayout.CENTER);
-        updateNoticeHolder.revalidate();
-        updateNoticeHolder.repaint();
     }
 
     /** Accepts a folder (or a file in it) dropped on the frame table or the empty area, and imports it. */

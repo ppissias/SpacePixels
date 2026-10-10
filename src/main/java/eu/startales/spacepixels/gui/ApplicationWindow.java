@@ -78,7 +78,18 @@ public class ApplicationWindow {
     private final JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
 
 
-    private final JLabel updateNoticeLabel = new JLabel();
+    /** The "new version" notice: a pill in the accent colour at the right end of the tab bar, hidden until a newer release is found. */
+    private final JLabel updateNoticeLabel = new JLabel() {
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(getBackground());
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    };
 
     public static volatile boolean OOM_FLAG = false;
 
@@ -185,12 +196,7 @@ public class ApplicationWindow {
         installManualLink();
 
         // No menu bar: importing is the first button of the Main tab's workflow strip (or a folder dropped on the
-        // window), and the "new version" notice sits at the right end of the status bar.
-        updateNoticeLabel.setFont(updateNoticeLabel.getFont().deriveFont(Font.PLAIN, 11f));
-        updateNoticeLabel.setForeground(new Color(155, 155, 155));
-        updateNoticeLabel.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 4));
-        updateNoticeLabel.setVisible(false);
-        mainApplicationPanel.setUpdateNotice(updateNoticeLabel);
+        // window), and the "new version" notice sits next to the User Manual link at the right end of the tab bar.
 
         TransferHandler folderDrop = new TransferHandler() {
             @Override
@@ -480,11 +486,10 @@ public class ApplicationWindow {
     private void showUpdateNotice(ReleaseInfo latestRelease) {
         logger.info("New SpacePixels release available: " + latestRelease.versionTag);
 
-        updateNoticeLabel.setText("New version: " + latestRelease.versionTag);
+        updateNoticeLabel.setText("New version " + latestRelease.versionTag + " ↗");
         updateNoticeLabel.setToolTipText("A newer SpacePixels release is available. Click to open the releases page.");
-        updateNoticeLabel.setForeground(new Color(202, 162, 72));
-        updateNoticeLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         updateNoticeLabel.setVisible(true);
+        updateNoticeLabel.getParent().revalidate();
         updateNoticeLabel.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -499,7 +504,7 @@ public class ApplicationWindow {
         manualLink.setForeground(DetectionConfigurationPanel.accentColor());
         manualLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         manualLink.setToolTipText("Open the SpacePixels user manual in your browser: workflows, the report and examples.");
-        manualLink.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 10));
+        manualLink.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
         manualLink.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -516,10 +521,24 @@ public class ApplicationWindow {
                 manualLink.setText("User Manual");
             }
         });
-        // FlatLaf gives the trailing component the remaining width of the tab bar; keep the link at its right end.
-        JPanel trailing = new JPanel(new BorderLayout());
+        updateNoticeLabel.setFont(updateNoticeLabel.getFont().deriveFont(Font.BOLD));
+        updateNoticeLabel.setForeground(Color.WHITE);
+        updateNoticeLabel.setBackground(DetectionConfigurationPanel.accentColor());
+        updateNoticeLabel.setBorder(BorderFactory.createEmptyBorder(3, 10, 3, 10));
+        updateNoticeLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        updateNoticeLabel.setVisible(false);
+
+        // FlatLaf gives the trailing component the remaining width of the tab bar; keep the links at its right end.
+        JPanel links = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        links.setOpaque(false);
+        links.add(updateNoticeLabel);
+        links.add(manualLink);
+        JPanel trailing = new JPanel(new GridBagLayout());
         trailing.setOpaque(false);
-        trailing.add(manualLink, BorderLayout.EAST);
+        GridBagConstraints right = new GridBagConstraints();
+        right.weightx = 1;
+        right.anchor = GridBagConstraints.EAST;
+        trailing.add(links, right);
         tabbedPane.putClientProperty("JTabbedPane.trailingComponent", trailing);
     }
 
