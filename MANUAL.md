@@ -286,11 +286,13 @@ Below the frame: the frame number, file name, capture time and time since the fi
 
 ### Preview Frame
 
-Runs the object detection on the selected frame with the current settings and opens a viewer where you can step through the frames with the arrow keys. Use it to see what the detector picks up in a single frame. With a plate-solved frame, the cursor shows RA and Dec.
+Runs the source detection on the selected frame with the current settings and shows what it picks up: green boxes around point sources, red lines along streaks. **◀ ▶** (← →) move to the other frames of the session; each frame is detected when you get to it, and the status bar shows how many point sources and streaks it has. Use it to see what the detector picks up in a single frame.
 
 ### Manual Transient Inspection
 
-Runs the detection on all frames and shows, frame by frame, every detection that is not a star. Useful to judge the noise, or to find a faint object by eye that did not form a track.
+Runs the detection on all frames of the session (not only the selected ones) and shows, frame by frame, every detection left after the star mask: the candidates for moving objects, before they are linked into tracks. Useful to judge the noise, or to find a faint object by eye that did not form a track. The frames stay in memory until you close the window.
+
+Both windows work like the blink window: the same stretch as the Image Stretch tab, the same zoom (Fit, 100 %, 200 %, 400 %, scroll to zoom, drag to pan, double-click), and the same status bar with the frame, its time since the first frame, and under the cursor the pixel position, value and, on a plate-solved frame, RA and Dec. **Show detections** (D) hides the markers to see the frame underneath. From 100 % zoom the detected pixels are tinted too. When there are too many detections on screen to tell apart, the markers are left out until you zoom in. Esc closes the window.
 
 ### Star Mask Explorer
 
