@@ -148,7 +148,19 @@ The report starts with an overview, then the results; the processing diagnostics
 
 ![Report summary](docs/images/manual/report-summary.png)
 
-Under the title, one line describes the session: field, date and time span, frames kept, exposure, camera and whether the frames are plate-solved. The **Jump to** bar below it stays at the top of the window and leads to every section, with its count. The **Overview** has a card for each kind of result that was found (click a card to jump to it) and lists what was not found. The results come first; the processing details (quality control with the rejected frames and their reasons, configuration, star mask, extraction, track linking) are collected in the **Diagnostics** group near the end, collapsed until you click it.
+Under the title, one line describes the session: field, date and time span, frames kept, exposure, camera and whether the frames are plate-solved. The **Jump to** bar below it stays at the top of the window and leads to every section, with its count. The **Overview** has a card for each kind of result that was found (click a card to jump to it) and lists what was not found. The results come first; the processing details (quality control with the rejected frames and their reasons, configuration, star mask, extraction, track linking) are collected in the **Diagnostics** group near the end, collapsed until you click it. A line under the cards links to it (with the frames kept and rejected), and the link opens the group.
+
+![The session picture with the catalogue switched on: the Horsehead and Flame nebulae near Alnitak](docs/images/manual/report-session-picture.jpg)
+
+Below the cards is **the session**: the median stack of the frames kept, with three switches over it.
+
+- **Detections** (on at first) draws every result with its label and colour, as on the detection map.
+- **Star mask** shows in red what the detection treated as stars: hover over the button to see it, click to keep it.
+- **Catalogue** names what is known in the field: Messier, NGC, IC and Sharpless objects with their outlines and common names, bright stars with a proper name, and the brightest variable stars with an old designation (at most 15). It needs the sky catalogue, fetched before **Detect Moving Targets** (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)). Survey numbers that nobody knows are left out.
+
+Click the picture for the full-size stack.
+
+With the sky catalogue, the Overview also gives the **Field depth**: how faint the detection reached in the median frame, as a Gaia G magnitude. In four small patches of the field, away from large galaxies and nebulae, the Gaia stars are matched with the stars found there, and the depth is the magnitude where the share found falls to half of the share among the brighter stars. It is measured with the settings of the run, so it tells you how faint an object the detection could have found. **Quality Control: Field Depth** in the Diagnostics shows it frame by frame: clouds, haze, a bright sky or poor focus show up as frames that go less deep. Gaia G is close to a clear or luminance filter; with other filters, compare frames rather than the number itself.
 
 ### A moving object
 
@@ -168,7 +180,7 @@ A real object looks the same in every crop and moves evenly. A noise track jumps
 
 ![Global trajectory map](docs/images/manual/report-map.jpg)
 
-The **Map of All Detections** draws every result over the whole field, with its label (T1, ST2, A3…) and one colour per kind, counted in the legend above it. Here the long lines are satellite trails, and the magenta circles single-frame anomalies. The **Time Maps** below it show every detection that was not a star, coloured by time, which is useful to see where the noise is.
+The **Map of All Detections** draws every result over the whole field, with its label (T1, ST2, A3…) and one colour per kind, counted in the legend above it. Here the long lines are satellite trails, and the magenta circles single-frame anomalies. With the sky catalogue, the map also names the well-known deep-sky objects, the bright named stars and the brightest named variable stars of the field, as in the session picture. The **Time Maps** below it show every detection that was not a star, coloured by time, which is useful to see where the noise is.
 
 ### Unclassified Transient Inspector
 
@@ -266,6 +278,8 @@ Each candidate then has a card with a one-line summary and its light curve, draw
 
 ![A variable-star candidate](docs/images/manual/variable-star-candidate.png)
 
+When the sky catalogue of the session was fetched before the detection (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)), the **Known As** column is filled when the report is written, for every candidate that is among the catalogue's VSX stars, with no button and no SpacePixels needed. The button then reads **Look up the N others in VSX** and looks up only the rest: the catalogue has the variables down to one magnitude fainter than its star depth, and the full VSX also has the fainter ones. Each candidate card then starts with what the catalogues say: its VSX name, the type in words (for example *EW, W UMa-type eclipsing binary*), the catalogued range and period, how much of the period the session covers (*This session covers 5.0 h, about 77 % of a cycle*), and the star's Gaia G magnitude and colour. These are catalogue values; SpacePixels does not turn its own measurements into magnitudes.
+
 **Check VSX Here** looks one star up: candidate V1 is the catalogued δ Scuti star ASASSN-V J063632.76+064632.3, 5″ away, with a period of 2.5 hours. The light curve shows it rising and falling by 0.43 magnitudes within the 75 minutes of the session. A candidate without a VSX match may be a new variable, or a false one: check its light curve, the comparison stars and the cutouts before reporting it.
 
 ---
@@ -309,8 +323,11 @@ Both windows, and **Show full size** on the Image Stretch tab, work like the bli
 Once one frame is plate-solved, **Fetch Sky Catalogue** in **2 Astrometry** downloads what is known in the field of your frames:
 
 - **stars** from Gaia DR3, down to the **Star Depth** set on the Astrometry Config tab (Gaia G magnitude 15 by default);
-- **galaxies, nebulae and clusters** from SIMBAD: the objects with a classic catalogue name (Messier, NGC, IC, Sharpless, Collinder, Barnard, LDN, LBN and others), and galaxies of 1′ or more;
+- **galaxies, nebulae and clusters** from SIMBAD: the objects with a classic catalogue name (Messier, NGC, IC, Sharpless, Collinder, Barnard, LDN, LBN and others), galaxies of 1′ or more, and the common names people know (*M 81, Bode's Galaxy*; *Barnard 33, Horsehead Nebula*);
+- **bright stars with a proper name** from SIMBAD, such as Alnitak or Betelgeuse, brighter than magnitude 5 (most telescope fields have none);
 - **variable stars** from the AAVSO Variable Star Index (VSX), down to one magnitude fainter than the star depth.
+
+The detection report uses the catalogue too, when it was fetched before **Detect Moving Targets**: names on the session picture and the detection map, VSX matches for the variable-star candidates, and the field depth. It also fetches faint Gaia stars, down to magnitude 20.5, in four small patches of the field, for the **Field depth** of the report (see [Reading the report](#4-reading-the-report)). A catalogue fetched before these were added has no common names, named stars or faint stars: click **Fetch Sky Catalogue** again to get them.
 
 The fetch runs in the background, so you can keep working. The status bar shows each step and how long it has taken. The stars take longest, about 20 to 30 seconds for a 4° × 3° field to magnitude 15; each magnitude deeper roughly doubles the stars and the wait. Meanwhile the button reads **Cancel Sky Catalogue**. The catalogue is saved next to the frames as `sky_catalogue.json` and comes back by itself when you import the folder again. Click the button again to fetch a fresh one, for example after changing the star depth. The **2 Astrometry** status line shows what is loaded; its tooltip gives the details, and says why if a service did not answer (what did arrive is kept).
 
