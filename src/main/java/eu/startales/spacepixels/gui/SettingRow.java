@@ -12,6 +12,7 @@ package eu.startales.spacepixels.gui;
 import javax.swing.*;
 import java.awt.*;
 import java.util.Locale;
+import java.util.function.BooleanSupplier;
 
 /**
  * One setting on a detailed settings page: its row, its input, and its saved value. A setting that differs from
@@ -34,6 +35,9 @@ final class SettingRow {
     /** Section header label the row belongs to, set by the navigator. */
     SettingsNavigator.Section section;
 
+    /** Whether the row applies at all, for settings that only matter while another switch is on. */
+    BooleanSupplier applies = () -> true;
+
     SettingRow(JPanel parent, JPanel row, JLabel titleLabel, String title, String description, JComponent input) {
         this.parent = parent;
         this.row = row;
@@ -52,6 +56,8 @@ final class SettingRow {
             ((JSpinner) input).addChangeListener(e -> refresh());
         } else if (input instanceof AbstractButton) {
             ((AbstractButton) input).addItemListener(e -> refresh());
+        } else if (input instanceof JComboBox) {
+            ((JComboBox<?>) input).addActionListener(e -> refresh());
         }
     }
 
@@ -66,6 +72,10 @@ final class SettingRow {
     Object value() {
         if (input instanceof JSpinner) {
             return ((JSpinner) input).getValue();
+        }
+        if (input instanceof JComboBox) {
+            // A preset chooser only sets other rows, and those rows carry the changes.
+            return null;
         }
         return ((AbstractButton) input).isSelected();
     }

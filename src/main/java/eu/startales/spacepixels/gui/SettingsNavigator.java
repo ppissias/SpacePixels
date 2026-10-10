@@ -21,28 +21,29 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.IntSupplier;
+import java.util.prefs.Preferences;
 
 /**
  * The Detection Settings navigation: a page list with group headings on the left, the pages on the right, a search
- * box and a "show only changed" filter that work across all pages, and expert sections that start collapsed.
+ * box and a "show only changed" filter that work across all pages, and expert sections that appear only while
+ * "Show expert settings" is on (a search or the changed filter finds expert settings either way).
  */
 final class SettingsNavigator extends JPanel {
 
-    /** A titled block of rows on a page; expert sections can be collapsed. */
+    private static final String SHOW_EXPERT_PREFERENCE = "showExpertSettings";
+
+    /** A titled block of rows on a page; expert sections are shown only with "Show expert settings". */
     static final class Section {
         final JLabel header;
         final String title;
         final boolean expert;
         final List<SettingRow> rows = new ArrayList<>();
-        boolean collapsed;
 
         Section(JLabel header, String title, boolean expert) {
             this.header = header;
             this.title = title;
             this.expert = expert;
-            this.collapsed = expert;
         }
     }
 
@@ -53,6 +54,7 @@ final class SettingsNavigator extends JPanel {
         final List<String> extraSearchTitles;
         final List<Section> sections = new ArrayList<>();
         final JLabel emptyLabel = new JLabel("No settings on this page match the filter.");
+        final JLabel expertHint = new JLabel();
         int matchCount;
         int changedCount;
 
@@ -84,6 +86,7 @@ final class SettingsNavigator extends JPanel {
     private final JPanel cardPanel = new JPanel(cards);
     private final JTextField searchField = new JTextField();
     private final JCheckBox onlyChangedCheck = new JCheckBox("Show only unsaved changes");
+    private final JCheckBox showExpertCheck = new JCheckBox("Show expert settings");
     private String lastGroup;
     private boolean ready;
 
@@ -111,6 +114,13 @@ final class SettingsNavigator extends JPanel {
         });
         onlyChangedCheck.setToolTipText("Show only the settings changed since the configuration was last saved.");
         onlyChangedCheck.addItemListener(e -> applyFilters());
+        showExpertCheck.setToolTipText("<html>Show the fine-tuning settings on every page. The defaults suit most sessions;<br>"
+                + "a search or \"Show only unsaved changes\" finds expert settings either way.</html>");
+        showExpertCheck.setSelected(loadShowExpert());
+        showExpertCheck.addItemListener(e -> {
+            saveShowExpert(showExpertCheck.isSelected());
+            applyFilters();
+        });
 
         navList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         navList.setCellRenderer(new NavRenderer());
@@ -148,6 +158,7 @@ final class SettingsNavigator extends JPanel {
         JScrollPane navScroll = new JScrollPane(navList);
         navScroll.setPreferredSize(new Dimension(220, 300));
         side.add(navScroll, BorderLayout.CENTER);
+        side.add(showExpertCheck, BorderLayout.SOUTH);
 
         add(side, BorderLayout.WEST);
         add(cardPanel, BorderLayout.CENTER);
@@ -186,6 +197,21 @@ final class SettingsNavigator extends JPanel {
         page.emptyLabel.setVisible(false);
         content.add(page.emptyLabel);
 
+        // Points to the expert settings of the page while they are hidden; a click shows them.
+        page.expertHint.setForeground(UIManager.getColor("Label.disabledForeground"));
+        page.expertHint.setBorder(new EmptyBorder(10, 0, 0, 0));
+        page.expertHint.setAlignmentX(Component.LEFT_ALIGNMENT);
+        page.expertHint.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        page.expertHint.setToolTipText("Click to show the expert settings on every page.");
+        page.expertHint.setVisible(false);
+        page.expertHint.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                showExpertCheck.setSelected(true);
+            }
+        });
+        content.add(page.expertHint);
+
         JPanel holder = new WidthTrackingPanel();
         holder.add(content, BorderLayout.NORTH);
         JScrollPane scrollPane = new JScrollPane(holder);
@@ -195,10 +221,10 @@ final class SettingsNavigator extends JPanel {
     }
 
     /**
-     * Groups the rows of each page under their section headers, makes the expert sections collapsible, and shows
-     * the first page. Called once all pages are added and the defaults are captured.
+     * Groups the rows of each page under their section headers (a header made with {@code expert} marks an expert
+     * section) and shows the first page. Called once all pages are added and the defaults are captured.
      */
-    void finishBuilding(Set<String> expertSections) {
+    void finishBuilding() {
         Map<JLabel, Section> sections = new LinkedHashMap<>();
         for (SettingRow row : rows) {
             Page page = pageOf(row);
@@ -208,13 +234,10 @@ final class SettingsNavigator extends JPanel {
             }
             Section section = sections.get(header);
             if (section == null) {
-                String title = header.getText();
-                section = new Section(header, title, expertSections.contains(title));
+                boolean expert = Boolean.TRUE.equals(header.getClientProperty(DetectionConfigurationPanel.EXPERT_SECTION));
+                section = new Section(header, header.getText(), expert);
                 sections.put(header, section);
                 page.sections.add(section);
-                if (section.expert) {
-                    makeCollapsible(section);
-                }
             }
             section.rows.add(row);
             row.section = section;
@@ -276,25 +299,26 @@ final class SettingsNavigator extends JPanel {
         return null;
     }
 
-    private void makeCollapsible(Section section) {
-        section.header.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        section.header.setToolTipText("Expert settings: click to show or hide.");
-        section.header.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                if (!isFiltering()) {
-                    section.collapsed = !section.collapsed;
-                    applyFilters();
-                }
-            }
-        });
+    private static boolean loadShowExpert() {
+        try {
+            return Preferences.userNodeForPackage(SettingsNavigator.class).getBoolean(SHOW_EXPERT_PREFERENCE, false);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private static void saveShowExpert(boolean show) {
+        try {
+            Preferences.userNodeForPackage(SettingsNavigator.class).putBoolean(SHOW_EXPERT_PREFERENCE, show);
+        } catch (RuntimeException ignored) {
+            // The choice then lasts for this session only.
+        }
     }
 
     private boolean isFiltering() {
         return !searchField.getText().trim().isEmpty() || onlyChangedCheck.isSelected();
     }
 
-    /** Shows the rows that match the search and the changed filter, and updates headers and page counts. */
     /** Counts settings changed since the last save that are not rows of the page (for example the Overview core settings). */
     void setExtraChangedCount(String pageTitle, IntSupplier count) {
         extraChangedCounts.put(pageTitle, count);
@@ -312,18 +336,33 @@ final class SettingsNavigator extends JPanel {
         String query = searchField.getText().trim().toLowerCase(Locale.ROOT);
         boolean onlyChanged = onlyChangedCheck.isSelected();
         boolean filtering = !query.isEmpty() || onlyChanged;
+        boolean showExpert = showExpertCheck.isSelected();
         int totalChanged = 0;
 
         for (Page page : pages.values()) {
             page.matchCount = 0;
             page.changedCount = 0;
+            int pageShown = 0;
+            int hiddenExpert = 0;
+            int hiddenExpertChanged = 0;
             for (Section section : page.sections) {
                 int sectionMatches = 0;
                 int sectionChanged = 0;
+                int sectionShown = 0;
                 for (SettingRow row : section.rows) {
                     boolean changed = row.isChanged();
                     boolean matches = (query.isEmpty() || row.matches(query)) && (!onlyChanged || changed);
-                    row.row.setVisible(filtering ? matches : !(section.expert && section.collapsed));
+                    boolean applies = row.applies.getAsBoolean();
+                    boolean shown = filtering ? matches : applies && (!section.expert || showExpert);
+                    row.row.setVisible(shown);
+                    if (shown) {
+                        sectionShown++;
+                    } else if (!filtering && applies && section.expert) {
+                        hiddenExpert++;
+                        if (changed) {
+                            hiddenExpertChanged++;
+                        }
+                    }
                     if (matches) {
                         sectionMatches++;
                     }
@@ -331,11 +370,14 @@ final class SettingsNavigator extends JPanel {
                         sectionChanged++;
                     }
                 }
-                section.header.setVisible(!filtering || sectionMatches > 0);
-                section.header.setText(headerText(section, filtering, sectionChanged));
+                section.header.setVisible(sectionShown > 0);
+                section.header.setText(headerText(section, sectionChanged));
                 page.matchCount += sectionMatches;
                 page.changedCount += sectionChanged;
+                pageShown += sectionShown;
             }
+            page.expertHint.setText(expertHintText(hiddenExpert, hiddenExpertChanged, pageShown == 0));
+            page.expertHint.setVisible(hiddenExpert > 0);
             IntSupplier extraCount = extraChangedCounts.get(page.title);
             if (extraCount != null) {
                 // Settings on the page that are not rows (the core settings on the Overview).
@@ -372,15 +414,25 @@ final class SettingsNavigator extends JPanel {
         }
     }
 
-    private static String headerText(Section section, boolean filtering, int changed) {
-        String details = (section.expert ? section.rows.size() + " settings" : "")
+    private static String headerText(Section section, int changed) {
+        String details = (section.expert ? "expert" : "")
                 + (changed > 0 ? (section.expert ? " · " : "") + changed + " changed" : "");
-        String arrow = !section.expert ? "" : (filtering || !section.collapsed ? "▾ " : "▸ ");
         if (details.isEmpty()) {
-            return arrow.isEmpty() ? section.title : arrow + section.title;
+            return section.title;
         }
-        return "<html>" + arrow + section.title + "&nbsp;&nbsp;<span style='font-size: 0.8em; font-weight: normal; color: #999999;'>"
+        return "<html>" + section.title + "&nbsp;&nbsp;<span style='font-size: 0.8em; font-weight: normal; color: #999999;'>"
                 + details + "</span></html>";
+    }
+
+    private static String expertHintText(int hidden, int changed, boolean nothingElseShown) {
+        String count = hidden == 1 ? "1 expert setting" : hidden + " expert settings";
+        String text = nothingElseShown
+                ? "This page has " + count + (hidden == 1 ? "." : " only.")
+                : count.substring(0, 1).toUpperCase(Locale.ROOT) + count.substring(1) + (hidden == 1 ? " is" : " are") + " hidden.";
+        if (changed > 0) {
+            text += " " + changed + " of them changed since the last save.";
+        }
+        return "<html>" + text + " <u>Show expert settings</u></html>";
     }
 
     /**

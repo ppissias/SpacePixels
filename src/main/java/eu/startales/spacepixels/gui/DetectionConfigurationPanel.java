@@ -40,7 +40,6 @@ import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 public class DetectionConfigurationPanel extends JPanel {
 
@@ -55,14 +54,13 @@ public class DetectionConfigurationPanel extends JPanel {
     private final File legacyDetectionProfileFile = new File(System.getProperty("user.home"), SpacePixelsDetectionProfileIO.LEGACY_FILENAME);
     private final File visualizationPreferencesFile = new File(System.getProperty("user.home"), SpacePixelsVisualizationPreferencesIO.DEFAULT_FILENAME);
 
-    private JSpinner spinDetectionSigma, spinMinPixels, spinEdgeMargin, spinGrowSigma, spinVoidFraction, spinVoidRadius;
-    private JCheckBox chkEnableSlowMovers, chkEnableBinaryStarLikeStreakShapeVeto;
+    private JSpinner spinDetectionSigma, spinMinPixels, spinEdgeMargin, spinGrowSigma;
+    private JCheckBox chkEnableSlowMovers;
     private JSpinner spinMasterSigma, spinMasterGrowSigma, spinMasterMinPix, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma;
     private JSpinner spinSlowMoverMinAxisRatio, spinSlowMoverMaxAxisRatio, spinSlowMoverMinFillFactor;
     private JSpinner spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction;
     private JSpinner spinSlowMoverMinFrameSupport, spinSlowMoverMaxStationaryLikelihood;
     private JSpinner spinStreakMinElong, spinStreakMinPix, spinSingleStreakMinPeakSigma, spinStreakTimeConsistencyTolerance;
-    private JSpinner spinBgClippingIters, spinBgClippingFactor;
 
     // --- TrackLinker Spinners ---
     private JCheckBox chkStrictExposureKinematics, chkEnableGeometricTrackLinking;
@@ -80,27 +78,25 @@ public class DetectionConfigurationPanel extends JPanel {
     private JSpinner spinLocalActivityClusterRadiusPixels, spinLocalActivityClusterMinFrames;
 
     // --- Quality Control Spinners ---
-    private JSpinner spinMinFramesAnalysis, spinStarCountSigma, spinFwhmSigma;
+    private JSpinner spinStarCountSigma, spinFwhmSigma;
     private JSpinner spinEccentricitySigma, spinBackgroundSigma;
-    // NEW: Absolute minimum tolerance spinners
-    private JSpinner spinMinBgDevAdu, spinMinEccEnvelope, spinMinBrightStarEccEnvelope, spinMinFwhmEnvelope;
+    private JSpinner spinMinBgDevAdu;
 
-    private JSpinner spinQualitySigma, spinQualityGrowSigma, spinQualityMinPix, spinQualityBrightStarPeakSigmaOffset, spinQualityBrightStarMinStars, spinMaxElongFwhm, spinBrightStarEccentricitySigma;
+    private JSpinner spinBrightStarEccentricitySigma;
     private JCheckBox chkEnableBrightStarEccentricityFilter;
+    private JComboBox<String> cmbFrameRejection;
+    private boolean syncingFrameRejection;
 
     // --- Variable-star photometry ---
-    private JCheckBox chkEnableVariableStarDetection, chkPhotometryFitPlane;
-    private JSpinner spinPhotometryMaxStars, spinPhotometryMinSnr, spinPhotometryMaxElongation, spinPhotometryApertureFwhmFactor;
-    private JSpinner spinPhotometryAnnulusInnerFwhmFactor, spinPhotometryAnnulusOuterFwhmFactor;
-    private JSpinner spinPhotometrySaturationFraction, spinPhotometryMaxRegistrationSpreadPixels;
-    private JSpinner spinLinearityMinDistinctLevels, spinLinearityMaxFloorClippedFraction;
-    private JSpinner spinLinearityMaxConcentrationDrift, spinLinearityMinRangeMag, spinLinearityMinStars;
-    private JSpinner spinLinearityMaxFrameSlope, spinLinearityMinZeroPointRangeMag;
-    private JSpinner spinLinearityMaxSlopeTrackingCorrelation, spinLinearityMaxFailingFrameFraction;
-    private JSpinner spinVariableMinFrames, spinVariableMinSpanMinutes, spinVariableNoiseModelNeighbors, spinVariableScoreSigma;
+    private JCheckBox chkEnableVariableStarDetection;
+    private JSpinner spinPhotometryMaxStars, spinPhotometryMinSnr;
+    private JSpinner spinLinearityMaxConcentrationDrift, spinLinearityMinRangeMag;
+    private JSpinner spinLinearityMaxFrameSlope;
+    private JSpinner spinLinearityMaxFailingFrameFraction;
+    private JSpinner spinVariableMinFrames, spinVariableMinSpanMinutes, spinVariableScoreSigma;
     private JSpinner spinVariableMinAmplitudeMag, spinVariableLimitedMinAmplitudeMag, spinVariableAmplitudeNoiseFactor;
     private JSpinner spinVariableMinPersistenceFrames, spinVariableMinSplitHalfCorrelation, spinVariableMaxApertureAmplitudeDifference;
-    private JSpinner spinVariableMaxSystematicsCorrelation, spinVariableSystematicsResponseFactor, spinVariableLocalRadiusPixels, spinVariableMaxLocalCorrelation;
+    private JSpinner spinVariableMaxSystematicsCorrelation, spinVariableLocalRadiusPixels, spinVariableMaxLocalCorrelation;
 
     private JSpinner spinAutoTuneMaxCandidateFrames;
 
@@ -110,13 +106,16 @@ public class DetectionConfigurationPanel extends JPanel {
 
     /** Client property marking a section header label on a settings page. */
     static final String SECTION_HEADER = "spacepixels.sectionHeader";
-    /** Sections with expert settings; they start collapsed. */
-    private static final Set<String> EXPERT_SECTIONS = Set.of(
-            "Advanced Settings", "Linearity Checks", "Candidate Gates", "Absolute Minimum Tolerances", "Single Frame Analytics");
+    /** Client property marking a section header whose settings are shown only with "Show expert settings". */
+    static final String EXPERT_SECTION = "spacepixels.expertSection";
     /** Names of the core settings on the Overview, so a search finds them there. */
     private static final List<String> CORE_SETTING_TITLES = List.of(
             "Detection Sigma", "Grow Sigma (Hysteresis)", "Min Detection Pixels", "Master Sigma", "Master Grow Sigma",
-            "Master Min Pixels", "Max Mask Overlap Fraction", "Auto-Tune");
+            "Master Min Pixels", "Max Mask Overlap Fraction", "Base Star Jitter Radius", "Auto-Tune");
+
+    /** Frame rejection presets; each sets the five session outlier limits together. */
+    private static final String[] FRAME_REJECTION_PRESETS = {"Lenient", "Normal", "Strict"};
+    private static final String FRAME_REJECTION_CUSTOM = "Custom";
 
     private AutoTuneOverviewPanel overviewPanel;
     private SettingsNavigator navigator;
@@ -169,8 +168,13 @@ public class DetectionConfigurationPanel extends JPanel {
         }
 
         setupConstraints();
+        setupFrameRejectionPreset();
+        // Settings that only matter while their feature is on appear with it.
+        showOnlyWhen(chkEnableGeometricTrackLinking, spinMaxJump, spinRhythmVar, spinRhythmMinRatio, spinRhythmStatThresh);
+        showOnlyWhen(chkEnableLocalActivityClusters, spinLocalActivityClusterRadiusPixels, spinLocalActivityClusterMinFrames);
+        showOnlyWhen(chkEnableBrightStarEccentricityFilter, spinBrightStarEccentricitySigma);
         navigator.setExtraChangedCount("Overview", () -> overviewPanel.unsavedCoreCount());
-        navigator.finishBuilding(EXPERT_SECTIONS);
+        navigator.finishBuilding();
         // Ctrl+D runs Detect Moving Targets here too, as in the main window.
         getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ctrl D"), "detectMovingTargets");
         getActionMap().put("detectMovingTargets", new AbstractAction() {
@@ -247,6 +251,8 @@ public class DetectionConfigurationPanel extends JPanel {
         overview.addCoreSetting(null, "Master Min Pixels", "Minimum size required for a source to be included in the master star map. Lower values include fainter stars.", spinMasterMinPix);
         spinMaxMaskOverlapFraction = createSpinner(doubleSpinnerModel(jTransientConfig.maxMaskOverlapFraction, 0.0, 1.0, 0.01));
         overview.addCoreSetting(null, "Max Mask Overlap Fraction", "Maximum fraction of a point footprint that may overlap the master veto mask before it is rejected as likely stellar residual contamination.", spinMaxMaskOverlapFraction);
+        spinStarJitter = createSpinner(doubleSpinnerModel(jTransientConfig.maxStarJitter, 0.0, 20.0, 0.1));
+        overview.addCoreSetting(null, "Base Star Jitter Radius", "Baseline radius under which detections are treated as stationary star jitter instead of true moving points. Higher values are more conservative around registration residuals.", spinStarJitter);
 
         JButton testStarMaskButton = new JButton("Test Star Mask…");
         testStarMaskButton.setToolTipText("<html>Build the master stack as a detection run would, then try star mask settings "
@@ -428,6 +434,7 @@ public class DetectionConfigurationPanel extends JPanel {
         if (spinner == spinMasterGrowSigma) return savedConfig.masterGrowSigmaMultiplier;
         if (spinner == spinMasterMinPix) return savedConfig.masterMinDetectionPixels;
         if (spinner == spinMaxMaskOverlapFraction) return savedConfig.maxMaskOverlapFraction;
+        if (spinner == spinStarJitter) return savedConfig.maxStarJitter;
         return null;
     }
 
@@ -688,14 +695,10 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        panel.add(createTabIntro("Low-level detection safeguards. The detection thresholds and the star-mask settings are on the Overview tab. If you get false detections near the edge of the frame increase Void Proximity Radius."));
+        panel.add(createTabIntro("Low-level detection safeguards. The detection thresholds and the star-mask settings are on the Overview. The black padding that registration leaves at the frame edges is found automatically, and the distance kept from it grows with the drift measured over the sequence."));
 
-        panel.add(createSectionHeader("Detection Safeguards"));
+        panel.add(createExpertSectionHeader("Detection Safeguards"));
         spinEdgeMargin = addRow(panel, "Edge Margin (Dead Zone)", "Rejects detections too close to the image edge, where alignment and stacking artifacts are common.", intSpinnerModel(jTransientConfig.edgeMarginPixels, 0, 2000, 1));
-        spinVoidFraction = addRow(panel, "Void Threshold Fraction", "Pixels darker than this fraction of the local background are treated as registration void or padding, not real data.", doubleSpinnerModel(jTransientConfig.voidThresholdFraction, 0.0, 1.0, 0.01));
-        spinVoidRadius = addRow(panel, "Void Proximity Radius", "How far to look for nearby void padding when rejecting edge or interpolation artifacts. Larger values are more aggressive.", intSpinnerModel(jTransientConfig.voidProximityRadius, 0, 200, 1));
-        spinBgClippingIters = addRow(panel, "Sigma Clipping Iterations", "Number of clipping passes used when estimating background statistics. More passes remove bright-star contamination more thoroughly.", intSpinnerModel(jTransientConfig.bgClippingIterations, 1, 10, 1));
-        spinBgClippingFactor = addRow(panel, "Sigma Clipping Factor", "Clipping threshold used during background estimation. Lower values clip bright stars more aggressively.", doubleSpinnerModel(jTransientConfig.bgClippingFactor, 1.0, 10.0, 0.1));
 
         return panel;
     }
@@ -708,23 +711,18 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createTabIntro("Settings for streak detection."));
 
         panel.add(createSectionHeader("Common Settings"));
-        spinStreakMinElong = addRow(panel, "Streak Min Elongation", "Minimum elongation required for a detected object to be treated as a streak candidate rather than a point source.", doubleSpinnerModel(jTransientConfig.streakMinElongation, 1.0, 20.0, 0.1));
-        spinStreakMinPix = addRow(panel, "Streak Min Pixels", "Minimum size required for an elongated detection to be accepted as a streak. Higher values reject thin artifacts.", intSpinnerModel(jTransientConfig.streakMinPixels, 1, 2000, 1));
         spinSingleStreakMinPeakSigma = addRow(panel, "Single Streak Min Peak Sigma", "Minimum peak signal-to-noise required for a streak seen in only one frame. Helps reject elongated noise and interpolation artifacts.", doubleSpinnerModel(jTransientConfig.singleStreakMinPeakSigma, 0.0, 50.0, 0.1));
 
         panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Advanced Settings"));
+        panel.add(createExpertSectionHeader("Streak Shape And Linking"));
+        spinStreakMinElong = addRow(panel, "Streak Min Elongation", "Minimum elongation required for a detected object to be treated as a streak candidate rather than a point source.", doubleSpinnerModel(jTransientConfig.streakMinElongation, 1.0, 20.0, 0.1));
+        spinStreakMinPix = addRow(panel, "Streak Min Pixels", "Minimum size required for an elongated detection to be accepted as a streak. Higher values reject thin artifacts.", intSpinnerModel(jTransientConfig.streakMinPixels, 1, 2000, 1));
         spinAngleTol = addRow(panel, "Trajectory Angle Tolerance", "For streak-based tracks, maximum allowed difference between the streak angle and the inferred track direction.", doubleSpinnerModel(jTransientConfig.angleToleranceDegrees, 0.5, 180.0, 0.5));
         spinStreakTimeConsistencyTolerance = addRow(
                 panel,
                 "Streak Time Consistency Tolerance",
                 "When timestamps are available, this controls how much projected-speed variation the multi-frame streak linker tolerates between sampled frames. Higher values are more permissive for fragmented or faint streak trails.",
                 doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "streakTimeConsistencyTolerance", 0.50), 0.0, 1.0, 0.01));
-        chkEnableBinaryStarLikeStreakShapeVeto = addCheckboxRow(
-                panel,
-                "Enable Binary-Star-Like Streak Shape Veto",
-                "Keeps the single-streak shape veto active for detections whose footprint looks more like a binary star than a real moving streak. Enable if you are getting false positives of stars close to each other as streaks.",
-                getOptionalBooleanField(jTransientConfig, "enableBinaryStarLikeStreakShapeVeto", true));
 
         return panel;
     }
@@ -734,25 +732,24 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        panel.add(createTabIntro("Configuration for moving-object track construction. Common settings cover the main linker behavior; advanced settings collect the stricter geometric-only limits and point-to-point similarity checks."));
+        panel.add(createTabIntro("Configuration for moving-object track construction. Base Star Jitter Radius is on the Overview with the other values the Auto-Tuner sets. The time-based linker is used when the frames have timestamps; the geometric linker is an optional extra."));
 
-        panel.add(createSectionHeader("Common Settings"));
+        panel.add(createExpertSectionHeader("Track Linking"));
         chkStrictExposureKinematics = addCheckboxRow(panel, "Strict Exposure Kinematics", "Rejects candidate links when the implied motion is inconsistent with exposure timing assumptions. Usually it is a good way to filter out false positives", jTransientConfig.strictExposureKinematics);
-        chkEnableGeometricTrackLinking = addCheckboxRow(panel, "Enable Geometric Track Linking", "Enable the geometric (time-agnostic) track linker. May produce false positives", getOptionalBooleanField(jTransientConfig, "enableGeometricTrackLinking", true));
-        spinStarJitter = addRow(panel, "Base Star Jitter Radius", "Baseline radius under which detections are treated as stationary star jitter instead of true moving points. Higher values are more conservative around registration residuals.", doubleSpinnerModel(jTransientConfig.maxStarJitter, 0.0, 20.0, 0.1));
         spinPredTol = addRow(panel, "Prediction Line Tolerance", "Maximum distance a candidate point may sit from the projected track line and still be accepted. Higher values allow noisier tracks but increase false links.", doubleSpinnerModel(jTransientConfig.predictionTolerance, 0.1, 50.0, 0.1));
         spinTrackMinFrameRatio = addRow(panel, "Track Length Min Frame Ratio", "Controls minimum track length as required points = total frames / this value. Lower values demand longer tracks; higher values allow shorter ones.", doubleSpinnerModel(jTransientConfig.trackMinFrameRatio, 1.0, 20.0, 0.25));
-
-        panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Advanced Settings"));
         spinAbsMaxPoints = addRow(panel, "Absolute Max Required Points", "Upper limit on the required number of points for a valid track in very long sequences.", intSpinnerModel(jTransientConfig.absoluteMaxPointsRequired, 2, 100, 1));
         spinMaxFwhmRatio = addRow(panel, "Max FWHM Ratio", "Maximum allowed FWHM difference between linked points. Helps ensure all points in a track have similar optical blur; 0 disables this check.", doubleSpinnerModel(jTransientConfig.maxFwhmRatio, 0.0, 10.0, 0.1));
         spinMaxSurfaceBrightnessRatio = addRow(panel, "Max Surface Brightness Ratio", "Maximum allowed surface-brightness difference between linked points. Helps prevent linking compact artifacts to diffuse blobs; 0 disables this check.", doubleSpinnerModel(jTransientConfig.maxSurfaceBrightnessRatio, 0.0, 10.0, 0.1));
+        spinTimeBasedVelocityTolerance = addRow(panel, "Time-Based Velocity Tolerance", "When timestamps are available, this controls how much speed variation the moving-object linker tolerates between points before rejecting the track.", doubleSpinnerModel(jTransientConfig.timeBasedVelocityTolerance, 0.0, 1.0, 0.01));
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createExpertSectionHeader("Geometric Linker"));
+        chkEnableGeometricTrackLinking = addCheckboxRow(panel, "Enable Geometric Track Linking", "Enable the geometric (time-agnostic) track linker. May produce false positives. Its settings appear below when it is on.", getOptionalBooleanField(jTransientConfig, "enableGeometricTrackLinking", true));
         spinMaxJump = addRow(panel, "Max Jump Velocity", "Maximum geometric jump allowed between linked detections. This is only relevant to the geometric moving-object linker.", doubleSpinnerModel(jTransientConfig.maxJumpPixels, 0.0, 10000.0, 0.1));
         spinRhythmVar = addRow(panel, "Allowed Rhythm Variance", "Maximum deviation from the median step size allowed when checking whether a track moves at a steady rate.", doubleSpinnerModel(jTransientConfig.rhythmAllowedVariance, 0.0, 20.0, 0.1));
         spinRhythmMinRatio = addRow(panel, "Min Rhythm Consistency Ratio", "Minimum fraction of jumps that must match the median speed within the allowed variance for the geometric linker to keep the track.", doubleSpinnerModel(jTransientConfig.rhythmMinConsistencyRatio, 0.0, 1.0, 0.01));
         spinRhythmStatThresh = addRow(panel, "Rhythm Stationary Threshold", "Tracks with median jump below this value are treated as stationary noise or residual stars rather than moving objects by the geometric linker.", doubleSpinnerModel(jTransientConfig.rhythmStationaryThreshold, 0.0, 20.0, 0.1));
-        spinTimeBasedVelocityTolerance = addRow(panel, "Time-Based Velocity Tolerance", "When timestamps are available, this controls how much speed variation the moving-object linker tolerates between points before rejecting the track.", doubleSpinnerModel(jTransientConfig.timeBasedVelocityTolerance, 0.0, 1.0, 0.01));
 
         return panel;
     }
@@ -767,12 +764,12 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Common Settings"));
         chkEnableAnomalyRescue = addCheckboxRow(panel, "Enable Anomaly Rescue", "Keeps single-frame anomaly rescue active for flashes and fragments that do not become full multi-frame tracks.", jTransientConfig.enableAnomalyRescue);
         spinAnomalyMinPeakSigma = addRow(panel, "Anomaly Min Peak Sigma", "Minimum peak signal-to-noise required for a single-frame point source to be rescued as an anomaly. Higher values are stricter.", doubleSpinnerModel(jTransientConfig.anomalyMinPeakSigma, 1.0, 50.0, 0.1));
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createExpertSectionHeader("Anomaly Thresholds And Grouping"));
         spinAnomalyMinPixels = addRow(panel, "Anomaly Min Pixels", "Minimum size required for a single-frame point source to be rescued. Higher values reject more hot pixels and cosmic rays.", intSpinnerModel(jTransientConfig.anomalyMinPixels, 1, 2000, 1));
         spinAnomalyMinIntegratedSigma = addRow(panel, "Anomaly Min Integrated Sigma", "Minimum integrated signal-to-noise required for the broader single-frame anomaly rescue path. Higher values demand stronger total support from faint but larger flashes.", doubleSpinnerModel(jTransientConfig.anomalyMinIntegratedSigma, 1.0, 200.0, 0.5));
         spinAnomalyMinIntegratedPixels = addRow(panel, "Anomaly Min Integrated Pixels", "Minimum footprint size required for the integrated-sigma anomaly path. Higher values reject small high-energy fragments from the broader rescue branch.", intSpinnerModel(jTransientConfig.anomalyMinIntegratedPixels, 1, 2000, 1));
-
-        panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Advanced Settings"));
         spinAnomalyMinPeakSigmaFloor = addRow(panel, "Anomaly Min Peak Sigma Floor", "Safety floor for diffuse anomaly rescue. Even broader anomalies must retain at least some local prominence to avoid low-contrast mush.", doubleSpinnerModel(jTransientConfig.anomalyMinPeakSigmaFloor, 0.0, 20.0, 0.1));
         spinSuspectedStreakLineTolerance = addRow(panel, "Suspected Streak Line Tolerance", "Maximum perpendicular centroid distance allowed when grouping rescued same-frame anomalies into a suspected streak line. Higher values group faint streak fragments more permissively; lower values keep the grouping tighter.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "suspectedStreakLineTolerance", 6.0), 0.0, 50.0, 0.1));
         spinAnomalySuspectedStreakMinElongation = addRow(panel, "Anomaly Suspected Streak Min Elongation", "Rescued anomalies above this elongation are checked for same-frame collinear grouping and may be exported as suspected streak tracks. Higher values restrict grouping to more elongated anomaly fragments.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "anomalySuspectedStreakMinElongation", 3.5), 1.0, 20.0, 0.1));
@@ -792,11 +789,11 @@ public class DetectionConfigurationPanel extends JPanel {
         spinMasterSlowMoverSigma = addRow(panel, "Slow-Mover Sigma", "A pixel must rise this far above the estimated stack background to start a source.<br>Used on both stacks. Lower values find fainter sources but may add noise.", doubleSpinnerModel(jTransientConfig.masterSlowMoverSigmaMultiplier, 0.5, 15.0, 0.1));
         spinMasterSlowMoverGrowSigma = addRow(panel, "Slow-Mover Grow Sigma", "Neighboring pixels above this lower brightness threshold join a source.<br>Used on both stacks. Lower values enlarge shapes and may merge sources.<br>Cannot exceed Slow-Mover Sigma.", doubleSpinnerModel(jTransientConfig.masterSlowMoverGrowSigmaMultiplier, 0.1, 15.0, 0.1));
         spinMasterSlowMoverMinPixels = addRow(panel, "Slow-Mover Min Pixels", "Fewest connected pixels required to keep a source in either stack.<br>Higher values reject small noise spots but may miss small sources.", intSpinnerModel(jTransientConfig.masterSlowMoverMinPixels, 1, 2000, 1));
-        spinSlowMoverMinAxisRatio = addRow(panel, "Min Axis Ratio", "Length divided by width of a candidate's detected shape; 1 is roughly round.<br>Raise this to reject rounder sources.", doubleSpinnerModel(jTransientConfig.slowMoverMinAxisRatio, 1.0, 20.0, 0.05));
-        spinSlowMoverMaxAxisRatio = addRow(panel, "Max Axis Ratio", "Largest allowed length-to-width ratio for a candidate.<br>Lower this to reject longer, thinner streaks. Cannot be below Min Axis Ratio.", doubleSpinnerModel(jTransientConfig.slowMoverMaxAxisRatio, 1.0, 20.0, 0.05));
 
         panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Advanced Settings"));
+        panel.add(createExpertSectionHeader("Shape And Evidence"));
+        spinSlowMoverMinAxisRatio = addRow(panel, "Min Axis Ratio", "Length divided by width of a candidate's detected shape; 1 is roughly round.<br>Raise this to reject rounder sources.", doubleSpinnerModel(jTransientConfig.slowMoverMinAxisRatio, 1.0, 20.0, 0.05));
+        spinSlowMoverMaxAxisRatio = addRow(panel, "Max Axis Ratio", "Largest allowed length-to-width ratio for a candidate.<br>Lower this to reject longer, thinner streaks. Cannot be below Min Axis Ratio.", doubleSpinnerModel(jTransientConfig.slowMoverMaxAxisRatio, 1.0, 20.0, 0.05));
         spinSlowMoverMinFillFactor = addRow(panel, "Min Fill Factor", "How solid the shape must be inside a rectangle aligned with it.<br>Fill factor is the fraction of that rectangle covered by detected pixels.<br>Higher values reject sparse, bent, or branched shapes. Zero disables it.", doubleSpinnerModel(jTransientConfig.slowMoverMinFillFactor, 0.0, 1.0, 0.01));
         spinSlowMoverMedianSupportOverlapFraction = addRow(panel, "Median Mask Min Overlap", "Minimum share of candidate pixels also in the median-stack source mask.<br>0.20 requires 20% overlap; 0 does not require overlap.<br>Higher values require more persistence.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportOverlapFraction, 0.0, 1.0, 0.01));
         spinSlowMoverMedianSupportMaxOverlapFraction = addRow(panel, "Median Mask Max Overlap", "Largest share of candidate pixels allowed in the median-stack source mask.<br>0.80 rejects over 80% overlap. Lower values reject more stationary sources.<br>1 disables this limit.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportMaxOverlapFraction, 0.0, 1.0, 0.01));
@@ -816,10 +813,10 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Common Settings"));
         chkEnableResidualTransientAnalysis = addCheckboxRow(panel, "Enable Residual Transient Analysis", "Master switch for the final-pass leftover-transient analysis stage. Disable this to skip both local rescue candidates and local activity clusters.", getOptionalBooleanField(jTransientConfig, "enableResidualTransientAnalysis", true));
         chkEnableLocalRescueCandidates = addCheckboxRow(panel, "Enable Local Rescue Candidates", "Runs the object-like rescue pass on leftover point detections to surface weak local motion or repeaters that did not become normal tracks.", getOptionalBooleanField(jTransientConfig, "enableLocalRescueCandidates", true));
-        chkEnableLocalActivityClusters = addCheckboxRow(panel, "Enable Local Activity Clusters", "After local rescue candidates are removed, groups the remaining leftover detections into broad same-area activity clusters for review. These are not confirmed objects.", getOptionalBooleanField(jTransientConfig, "enableLocalActivityClusters", true));
 
         panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Activity Cluster Settings"));
+        panel.add(createExpertSectionHeader("Activity Clusters"));
+        chkEnableLocalActivityClusters = addCheckboxRow(panel, "Enable Local Activity Clusters", "After local rescue candidates are removed, groups the remaining leftover detections into broad same-area activity clusters for review. These are not confirmed objects. Their settings appear below when this is on.", getOptionalBooleanField(jTransientConfig, "enableLocalActivityClusters", true));
         spinLocalActivityClusterRadiusPixels = addRow(panel, "Local Activity Cluster Radius (Pixels)", "Spatial linkage radius used when grouping leftover detections into broad local activity clusters after rescue candidates are consumed.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "localActivityClusterRadiusPixels", 10.0), 0.0, 100.0, 0.5));
         spinLocalActivityClusterMinFrames = addRow(panel, "Local Activity Cluster Min Frames", "Minimum number of unique frames required before a broad local activity cluster is exported for review.", intSpinnerModel(getOptionalIntField(jTransientConfig, "localActivityClusterMinFrames", 3), 1, 100, 1));
 
@@ -831,49 +828,35 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        panel.add(createTabIntro("Measure the brightness of stationary stars in every frame that passed quality control, check whether the frames respond linearly to light, and report stars whose brightness changes more than noise and shared systematics explain. The analysis is tuned to avoid false variables: a missed variable is preferred over a false one. Results and per-frame diagnostics appear in the pipeline telemetry."));
+        panel.add(createTabIntro("Measure the brightness of stationary stars in every frame that passed quality control, check whether the frames respond linearly to light, and report stars whose brightness changes more than noise and shared systematics explain. The analysis is tuned to avoid false variables: a missed variable is preferred over a false one. Apertures, sky rings and star selection adapt to each session automatically. Results and per-frame diagnostics appear in the pipeline telemetry."));
 
         panel.add(createSectionHeader("Common Settings"));
         chkEnableVariableStarDetection = addCheckboxRow(panel, "Enable Variable-Star Detection", "Run stationary-star photometry and variable-star detection after moving-object tracking.<br>Adds processing time proportional to stars x frames.", jTransientConfig.enableVariableStarDetection);
-        spinPhotometryMaxStars = addRow(panel, "Max Stars Measured", "Most stars measured; 0 measures every usable star (recommended).<br>A cap picks stars evenly across the field and the brightness range. Saturated stars are always skipped.", intSpinnerModel(jTransientConfig.photometryMaxStars, 0, 200000, 500));
-        spinPhotometryMinSnr = addRow(panel, "Min Star SNR", "Stars fainter than this median signal-to-noise ratio are measured and exported, but not used or scored.<br>0 disables the cut.", doubleSpinnerModel(jTransientConfig.photometryMinSnr, 0.0, 1000.0, 1.0));
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createExpertSectionHeader("Candidate Thresholds"));
         spinVariableScoreSigma = addRow(panel, "Variability Score Sigma", "How far above same-brightness stars both the scatter score and the Stetson J score must be for a star to become a candidate.<br>Higher values give fewer, safer candidates.", doubleSpinnerModel(jTransientConfig.variableScoreSigma, 1.0, 50.0, 0.5));
         spinVariableMinAmplitudeMag = addRow(panel, "Min Amplitude (mag)", "Smallest brightness change (95th minus 5th percentile) reported as high confidence.", doubleSpinnerModel(jTransientConfig.variableMinAmplitudeMag, 0.0, 5.0, 0.01));
         spinVariableMinFrames = addRow(panel, "Min Frames", "Fewest usable measurements a star needs to be scored, and fewest frames the session must keep after the photometry checks.", intSpinnerModel(jTransientConfig.variableMinFrames, 3, 10000, 1));
         spinVariableMinSpanMinutes = addRow(panel, "Min Time Span (minutes)", "Shortest time span of a candidate's measurements for a high-confidence result.<br>Ignored when the frames have no timestamps.", doubleSpinnerModel(jTransientConfig.variableMinSpanMinutes, 0.0, 1440.0, 5.0));
+        spinPhotometryMaxStars = addRow(panel, "Max Stars Measured", "Most stars measured; 0 measures every usable star (recommended).<br>A cap picks stars evenly across the field and the brightness range. Saturated stars are always skipped.", intSpinnerModel(jTransientConfig.photometryMaxStars, 0, 200000, 500));
+        spinPhotometryMinSnr = addRow(panel, "Min Star SNR", "Stars fainter than this median signal-to-noise ratio are measured and exported, but not used or scored.<br>0 disables the cut.", doubleSpinnerModel(jTransientConfig.photometryMinSnr, 0.0, 1000.0, 1.0));
 
         panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Apertures And Star Selection"));
-        spinPhotometryApertureFwhmFactor = addRow(panel, "Aperture Radius (x FWHM)", "Photometry aperture radius in units of each frame's measured FWHM.", doubleSpinnerModel(jTransientConfig.photometryApertureFwhmFactor, 0.5, 5.0, 0.1));
-        spinPhotometryAnnulusInnerFwhmFactor = addRow(panel, "Sky Annulus Inner Radius (x FWHM)", "Inner radius of the sky ring. Stars with a bright neighbour inside this radius are not measured.", doubleSpinnerModel(jTransientConfig.photometryAnnulusInnerFwhmFactor, 1.0, 20.0, 0.1));
-        spinPhotometryAnnulusOuterFwhmFactor = addRow(panel, "Sky Annulus Outer Radius (x FWHM)", "Outer radius of the sky ring. Must be larger than the inner radius.", doubleSpinnerModel(jTransientConfig.photometryAnnulusOuterFwhmFactor, 1.5, 30.0, 0.1));
-        spinPhotometryMaxElongation = addRow(panel, "Max Star Elongation", "Master stars more elongated than this (blends, galaxies, trails) are not measured.", doubleSpinnerModel(jTransientConfig.photometryMaxElongation, 1.0, 5.0, 0.05));
-        spinPhotometrySaturationFraction = addRow(panel, "Saturation Fraction", "A measurement is flagged saturated when its peak pixel exceeds this fraction of the session saturation level.", doubleSpinnerModel(jTransientConfig.photometrySaturationFraction, 0.1, 1.0, 0.01));
-        chkPhotometryFitPlane = addCheckboxRow(panel, "Fit Per-Frame Gradient", "Fit a linear brightness gradient across the field in every frame, absorbing sky gradients and differential extinction.", jTransientConfig.photometryFitPlane);
-        spinPhotometryMaxRegistrationSpreadPixels = addRow(panel, "Max Registration Spread (px)", "Frames whose star positions scatter more than this around the median offset are excluded (rotation or poor alignment).", doubleSpinnerModel(jTransientConfig.photometryMaxRegistrationSpreadPixels, 0.0, 10.0, 0.05));
-
-        panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Linearity Checks"));
-        spinLinearityMinDistinctLevels = addRow(panel, "A: Min Distinct Pixel Levels", "Fewer distinct pixel values suggest 8-bit or heavily quantised data; the session is refused.", intSpinnerModel(jTransientConfig.linearityMinDistinctLevels, 2, 65536, 64));
-        spinLinearityMaxFloorClippedFraction = addRow(panel, "A: Max Clipped Sky Fraction", "Largest share of sky pixels allowed at zero. More means negative sky noise was clipped and faint stars are biased; the session is limited.", doubleSpinnerModel(jTransientConfig.linearityMaxFloorClippedFraction, 0.0, 1.0, 0.005));
+        panel.add(createExpertSectionHeader("Linearity Checks"));
         spinLinearityMaxConcentrationDrift = addRow(panel, "B: Max Concentration Drift", "Largest change of star concentration (flux in 0.7 x FWHM / flux in 2.5 x FWHM) from faint to bright stars inside the linear range.<br>Stretched data makes bright stars flatter.", doubleSpinnerModel(jTransientConfig.linearityMaxConcentrationDrift, 0.0, 0.5, 0.005));
         spinLinearityMinRangeMag = addRow(panel, "B: Min Linear Range (mag)", "Frames whose linear magnitude range is narrower than this are excluded.", doubleSpinnerModel(jTransientConfig.linearityMinRangeMag, 0.0, 10.0, 0.1));
-        spinLinearityMinStars = addRow(panel, "B: Min Stars", "Fewest bright-enough stars a frame needs for the linearity check, and fewest measurable stars for photometry to run.", intSpinnerModel(jTransientConfig.linearityMinStars, 5, 5000, 5));
         spinLinearityMaxFrameSlope = addRow(panel, "D: Max Response Slope (mag/mag)", "Largest allowed difference in how bright and faint stars respond within one frame. Failing frames are excluded.", doubleSpinnerModel(jTransientConfig.linearityMaxFrameSlope, 0.0, 0.5, 0.001));
-        spinLinearityMinZeroPointRangeMag = addRow(panel, "D: Min Transparency Range (mag)", "Below this change in transparency over the session, check D cannot confirm linearity and the session is limited.", doubleSpinnerModel(jTransientConfig.linearityMinZeroPointRangeMag, 0.0, 2.0, 0.01));
-        spinLinearityMaxSlopeTrackingCorrelation = addRow(panel, "D: Max Slope Tracking Correlation", "The session is refused when the response slope follows transparency or sky level at least this strongly.", doubleSpinnerModel(jTransientConfig.linearityMaxSlopeTrackingCorrelation, 0.0, 1.0, 0.05));
         spinLinearityMaxFailingFrameFraction = addRow(panel, "B/D: Max Failing Frame Fraction", "Share of frames that may fail check B or D before the whole session is refused.", doubleSpinnerModel(jTransientConfig.linearityMaxFailingFrameFraction, 0.0, 1.0, 0.05));
 
         panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Candidate Gates"));
-        spinVariableNoiseModelNeighbors = addRow(panel, "Noise Model Neighbours", "Stars nearest in brightness used to estimate the expected scatter of each star.", intSpinnerModel(jTransientConfig.variableNoiseModelNeighbors, 5, 1000, 5));
+        panel.add(createExpertSectionHeader("Candidate Gates"));
         spinVariableLimitedMinAmplitudeMag = addRow(panel, "Min Amplitude When Limited (mag)", "Smallest amplitude reported as high confidence when the linearity verdict is Limited.", doubleSpinnerModel(jTransientConfig.variableLimitedMinAmplitudeMag, 0.0, 5.0, 0.01));
         spinVariableAmplitudeNoiseFactor = addRow(panel, "Amplitude Noise Factor", "The amplitude must also exceed this many times the expected scatter at the star's brightness.", doubleSpinnerModel(jTransientConfig.variableAmplitudeNoiseFactor, 0.0, 50.0, 0.5));
         spinVariableMinPersistenceFrames = addRow(panel, "Min Persistence (frames)", "Fewest consecutive frames that must deviate in the same direction. Rejects single-frame events.", intSpinnerModel(jTransientConfig.variableMinPersistenceFrames, 1, 1000, 1));
         spinVariableMinSplitHalfCorrelation = addRow(panel, "Min Split-Half Correlation", "Consecutive measurement pairs must agree at least this well. Rejects noise that only looks coherent.", doubleSpinnerModel(jTransientConfig.variableMinSplitHalfCorrelation, -1.0, 1.0, 0.05));
         spinVariableMaxApertureAmplitudeDifference = addRow(panel, "Max Aperture Amplitude Difference", "Amplitudes measured with small and large apertures may differ by at most this fraction. Rejects neighbour leakage and seeing effects.", doubleSpinnerModel(jTransientConfig.variableMaxApertureAmplitudeDifference, 0.0, 5.0, 0.05));
-        spinVariableMaxSystematicsCorrelation = addRow(panel, "Max Systematics Correlation", "Light curves correlating more than this with transparency, FWHM, local sky or registration offsets are checked against the response factor below.<br>Correlation alone does not reject a star: real variables that brighten or fade steadily correlate with any steady drift.", doubleSpinnerModel(jTransientConfig.variableMaxSystematicsCorrelation, 0.0, 1.0, 0.05));
-        spinVariableSystematicsResponseFactor = addRow(panel, "Systematics Response Factor", "A correlated systematic rejects a candidate only if its amplitude is at most this many times the largest response that constant stars of similar brightness show to the same systematic.<br>Lower values reject fewer candidates.", doubleSpinnerModel(jTransientConfig.variableSystematicsResponseFactor, 0.0, 100.0, 0.5));
+        spinVariableMaxSystematicsCorrelation = addRow(panel, "Max Systematics Correlation", "Light curves correlating more than this with transparency, FWHM, local sky or registration offsets are compared with how strongly constant stars of similar brightness respond to the same systematic.<br>Correlation alone does not reject a star: real variables that brighten or fade steadily correlate with any steady drift.", doubleSpinnerModel(jTransientConfig.variableMaxSystematicsCorrelation, 0.0, 1.0, 0.05));
         spinVariableLocalRadiusPixels = addRow(panel, "Local Comparison Radius (px)", "Radius within which nearby constant stars are checked for the same pattern.", doubleSpinnerModel(jTransientConfig.variableLocalRadiusPixels, 0.0, 5000.0, 10.0));
         spinVariableMaxLocalCorrelation = addRow(panel, "Max Local Correlation", "Largest allowed median correlation with nearby constant stars. Rejects dust, dew and local gradients.", doubleSpinnerModel(jTransientConfig.variableMaxLocalCorrelation, 0.0, 1.0, 0.05));
 
@@ -885,39 +868,30 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        panel.add(createSectionHeader("Auto-Tuner Candidate Pool"));
-        spinAutoTuneMaxCandidateFrames = addRow(
-                panel,
-                "Frames Used by Auto-Tune (both tuners)",
-                "Most frames given to Auto-Tune, for both the calibrated and the legacy tuner. When the session has more, SpacePixels picks the best-quality, median-quality and evenly spaced frames. More frames give the calibrated tuner more measurements on small sensors and a master stack closer to the real run; fewer frames use less memory on large sensors (about 120 MB per frame at 61 megapixels).",
-                intSpinnerModel(autoTuneMaxCandidateFrames, SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES, 5000, 1));
+        panel.add(createTabIntro("Frames that differ too much from the rest of the session are left out before detection: fewer stars (clouds), softer focus, elongated stars (wind or tracking) or a shifted background (clouds, light leaks)."));
+
+        panel.add(createSectionHeader("Frame Rejection"));
+        cmbFrameRejection = new JComboBox<>(new DefaultComboBoxModel<>(FRAME_REJECTION_PRESETS));
+        cmbFrameRejection.setPreferredSize(new Dimension(110, 26));
+        addSettingRow(panel, "Strictness", "How readily frames that differ from the rest of the session are left out. Normal uses the default limits; Lenient keeps more frames, Strict leaves out more.<br>The individual limits are expert settings; changing one shows Custom.", cmbFrameRejection);
 
         panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Session Outlier Rejection (MAD)"));
-        spinMinFramesAnalysis = addRow(panel, "Min Frames for Analysis", "Minimum number of frames required before session-level outlier rejection is applied.", intSpinnerModel(jTransientConfig.minFramesForAnalysis, 2, 500, 1));
+        panel.add(createExpertSectionHeader("Session Outlier Rejection (MAD)"));
         spinStarCountSigma = addRow(panel, "Star Count Drop Sigma", "Rejects frames whose star count falls too far below the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.starCountSigmaDeviation, 0.0, 10.0, 0.1));
         spinFwhmSigma = addRow(panel, "FWHM Spike Sigma", "Rejects frames whose median FWHM rises too far above the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.fwhmSigmaDeviation, 0.0, 10.0, 0.1));
         spinEccentricitySigma = addRow(panel, "Eccentricity Spike Sigma", "Rejects frames whose star shapes become too elongated compared with the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.eccentricitySigmaDeviation, 0.0, 10.0, 0.1));
         chkEnableBrightStarEccentricityFilter = addCheckboxRow(panel, "Enable Bright-Star Eccentricity Filter", "Runs an extra rejection gate using only the brightest quality stars, which is useful for catching tracking error or wind that shows up most clearly on high-SNR stars.", jTransientConfig.enableBrightStarEccentricityFilter);
         spinBrightStarEccentricitySigma = addRow(panel, "Bright-Star Eccentricity Sigma", "Rejects frames whose bright-star median eccentricity rises too far above the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.brightStarEccentricitySigmaDeviation, 0.0, 10.0, 0.1));
         spinBackgroundSigma = addRow(panel, "Background Deviation Sigma", "Rejects frames whose background level deviates too much from the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.backgroundSigmaDeviation, 0.0, 10.0, 0.1));
-
-        // --- NEW: ABSOLUTE MINIMUMS SECTION ---
-        panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Absolute Minimum Tolerances"));
         spinMinBgDevAdu = addRow(panel, "Min Background Deviation (ADU)", "Minimum absolute background tolerance used even when the measured session variation is tiny.", doubleSpinnerModel(jTransientConfig.minBackgroundDeviationADU, 0.0, 10000.0, 5.0));
-        spinMinEccEnvelope = addRow(panel, "Min Eccentricity Envelope", "Minimum absolute tolerance around the session eccentricity median, so tiny shape changes do not trigger rejection.", doubleSpinnerModel(jTransientConfig.minEccentricityEnvelope, 0.0, 1.0, 0.01));
-        spinMinBrightStarEccEnvelope = addRow(panel, "Min Bright-Star Eccentricity Envelope", "Minimum absolute tolerance around the bright-star eccentricity median, so tiny high-SNR shape changes do not trigger rejection.", doubleSpinnerModel(jTransientConfig.minBrightStarEccentricityEnvelope, 0.0, 1.0, 0.01));
-        spinMinFwhmEnvelope = addRow(panel, "Min FWHM Envelope (Pixels)", "Minimum absolute tolerance around the session FWHM median, so tiny focus changes do not trigger rejection.", doubleSpinnerModel(jTransientConfig.minFwhmEnvelope, 0.0, 5.0, 0.05));
 
         panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Single Frame Analytics"));
-        spinQualitySigma = addRow(panel, "Quality Eval Sigma Multiplier", "Detection threshold used only for extracting stars for frame quality analysis, not for transient detection.", doubleSpinnerModel(jTransientConfig.qualitySigmaMultiplier, 1.0, 15.0, 0.1));
-        spinQualityGrowSigma = addRow(panel, "Quality Grow Sigma", "Secondary hysteresis threshold used only while growing stars for frame quality analysis and auto-tune frame sampling.", doubleSpinnerModel(jTransientConfig.qualityGrowSigmaMultiplier, 0.1, 20.0, 0.1));
-        spinQualityMinPix = addRow(panel, "Quality Min Detection Pixels", "Minimum source size required for a star to be used in frame quality analysis.", intSpinnerModel(jTransientConfig.qualityMinDetectionPixels, 1, 500, 1));
-        spinQualityBrightStarPeakSigmaOffset = addRow(panel, "Bright-Star Peak Sigma Offset", "Additional peak-sigma above the quality seed threshold required before a quality star contributes to the bright-star eccentricity metric.", doubleSpinnerModel(jTransientConfig.qualityBrightStarPeakSigmaOffset, 0.0, 50.0, 0.1));
-        spinQualityBrightStarMinStars = addRow(panel, "Bright-Star Min Stars", "Minimum number of qualifying bright stars required before the bright-star eccentricity metric is considered valid for a frame.", intSpinnerModel(jTransientConfig.qualityBrightStarMinStars, 1, 500, 1));
-        spinMaxElongFwhm = addRow(panel, "Quality Max Elongation for FWHM", "Only stars with elongation below this value are used when measuring median FWHM for frame quality.", doubleSpinnerModel(jTransientConfig.qualityMaxElongationForFwhm, 1.0, 10.0, 0.05));
+        panel.add(createExpertSectionHeader("Auto-Tune"));
+        spinAutoTuneMaxCandidateFrames = addRow(
+                panel,
+                "Frames Used by Auto-Tune (both tuners)",
+                "Most frames given to Auto-Tune, for both the calibrated and the legacy tuner. When the session has more, SpacePixels picks the best-quality, median-quality and evenly spaced frames. More frames give the calibrated tuner more measurements on small sensors and a master stack closer to the real run; fewer frames use less memory on large sensors (about 120 MB per frame at 61 megapixels).",
+                intSpinnerModel(autoTuneMaxCandidateFrames, SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES, 5000, 1));
 
         return panel;
     }
@@ -935,23 +909,20 @@ public class DetectionConfigurationPanel extends JPanel {
         spinGifBlinkSpeed = addRow(panel, "GIF Blink Speed (ms)", "Frame delay used for exported animated GIFs. Lower values blink faster; higher values slow the inspection cadence.", intSpinnerModel(DetectionReportGenerator.gifBlinkSpeedMs, 50, 5000, 10));
 
         panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Raw Image Annotations"));
-        spinStreakScale = addRow(panel, "Streak Line Scale Factor", "Visualization-only setting that scales the length of the drawn streak annotation line.", doubleSpinnerModel(RawImageAnnotator.streakLineScaleFactor, 0.1, 20.0, 0.1));
-        spinStreakCentroidRad = addRow(panel, "Streak Centroid Box Radius", "Visualization-only setting that controls the size of the box drawn around a streak centroid.", intSpinnerModel(RawImageAnnotator.streakCentroidBoxRadius, 1, 100, 1));
-        spinPointBoxRad = addRow(panel, "Point Source Min Box Radius", "Visualization-only setting that sets the minimum radius of boxes drawn around point sources.", intSpinnerModel(RawImageAnnotator.pointSourceMinBoxRadius, 1, 50, 1));
-        spinBoxPad = addRow(panel, "Dynamic Box Padding", "Visualization-only setting that adds extra padding around automatically sized annotation boxes.", intSpinnerModel(RawImageAnnotator.dynamicBoxPadding, 0, 50, 1));
-
-        panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Image Cropping"));
-        spinCropPadding = addRow(panel, "Track Crop Border Padding", "Export-only setting that adds extra border around cropped track images.", intSpinnerModel(DetectionReportGenerator.trackCropPadding, 0, 2000, 10));
-
-        panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Optional Report Sections"));
         chkIncludeAiCreativeReportSections = addCheckboxRow(
                 panel,
                 "Include AI Creative Report Sections",
                 "These optional reporting sections gave AI agents freedom to visualize the detection data in their own way. You can see the results by enabling them.",
                 DetectionReportGenerator.includeAiCreativeReportSections);
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createExpertSectionHeader("Annotations And Cropping"));
+        spinStreakScale = addRow(panel, "Streak Line Scale Factor", "Visualization-only setting that scales the length of the drawn streak annotation line.", doubleSpinnerModel(RawImageAnnotator.streakLineScaleFactor, 0.1, 20.0, 0.1));
+        spinStreakCentroidRad = addRow(panel, "Streak Centroid Box Radius", "Visualization-only setting that controls the size of the box drawn around a streak centroid.", intSpinnerModel(RawImageAnnotator.streakCentroidBoxRadius, 1, 100, 1));
+        spinPointBoxRad = addRow(panel, "Point Source Min Box Radius", "Visualization-only setting that sets the minimum radius of boxes drawn around point sources.", intSpinnerModel(RawImageAnnotator.pointSourceMinBoxRadius, 1, 50, 1));
+        spinBoxPad = addRow(panel, "Dynamic Box Padding", "Visualization-only setting that adds extra padding around automatically sized annotation boxes.", intSpinnerModel(RawImageAnnotator.dynamicBoxPadding, 0, 50, 1));
+        spinCropPadding = addRow(panel, "Track Crop Border Padding", "Export-only setting that adds extra border around cropped track images.", intSpinnerModel(DetectionReportGenerator.trackCropPadding, 0, 2000, 10));
 
         return panel;
     }
@@ -1047,6 +1018,102 @@ public class DetectionConfigurationPanel extends JPanel {
         return headerLabel;
     }
 
+    /** A section header whose settings appear only while "Show expert settings" is on. */
+    private static JLabel createExpertSectionHeader(String title) {
+        JLabel headerLabel = createSectionHeader(title);
+        headerLabel.putClientProperty(EXPERT_SECTION, true);
+        return headerLabel;
+    }
+
+    /** Shows the rows of {@code inputs} only while {@code toggle} is on. */
+    private void showOnlyWhen(AbstractButton toggle, JComponent... inputs) {
+        for (SettingRow row : settingRows) {
+            for (JComponent input : inputs) {
+                if (row.input == input) {
+                    row.applies = toggle::isSelected;
+                }
+            }
+        }
+    }
+
+    /** The five session outlier limits a frame rejection preset sets, in a fixed order. */
+    private JSpinner[] frameRejectionSpinners() {
+        return new JSpinner[]{spinStarCountSigma, spinFwhmSigma, spinEccentricitySigma, spinBrightStarEccentricitySigma, spinBackgroundSigma};
+    }
+
+    private static double[] frameRejectionPresetValues(String preset) {
+        if ("Lenient".equals(preset)) {
+            return new double[]{3.0, 3.5, 4.5, 4.5, 4.5};
+        }
+        if ("Strict".equals(preset)) {
+            return new double[]{1.5, 2.0, 2.5, 2.5, 2.5};
+        }
+        DetectionConfig defaults = new DetectionConfig();
+        return new double[]{defaults.starCountSigmaDeviation, defaults.fwhmSigmaDeviation, defaults.eccentricitySigmaDeviation,
+                defaults.brightStarEccentricitySigmaDeviation, defaults.backgroundSigmaDeviation};
+    }
+
+    /** Choosing a preset sets the five limits; editing a limit shows the matching preset, or Custom. */
+    private void setupFrameRejectionPreset() {
+        cmbFrameRejection.setToolTipText("<html>Lenient: star count 3.0, FWHM 3.5, eccentricity and background 4.5 sigma.<br>"
+                + "Normal: the defaults (2.0, 2.5, 3.0).<br>Strict: star count 1.5, FWHM 2.0, eccentricity and background 2.5 sigma.</html>");
+        cmbFrameRejection.addActionListener(e -> {
+            Object selected = cmbFrameRejection.getSelectedItem();
+            if (syncingFrameRejection || selected == null || FRAME_REJECTION_CUSTOM.equals(selected)) {
+                return;
+            }
+            double[] values = frameRejectionPresetValues((String) selected);
+            JSpinner[] spinners = frameRejectionSpinners();
+            syncingFrameRejection = true;
+            try {
+                for (int i = 0; i < spinners.length; i++) {
+                    setSpinnerValueClamped(spinners[i], values[i]);
+                }
+            } finally {
+                syncingFrameRejection = false;
+            }
+            syncFrameRejectionPreset();
+        });
+        for (JSpinner spinner : frameRejectionSpinners()) {
+            spinner.addChangeListener(e -> {
+                if (!syncingFrameRejection) {
+                    syncFrameRejectionPreset();
+                }
+            });
+        }
+        syncFrameRejectionPreset();
+    }
+
+    private void syncFrameRejectionPreset() {
+        JSpinner[] spinners = frameRejectionSpinners();
+        String match = FRAME_REJECTION_CUSTOM;
+        for (String preset : FRAME_REJECTION_PRESETS) {
+            double[] values = frameRejectionPresetValues(preset);
+            boolean same = true;
+            for (int i = 0; i < spinners.length && same; i++) {
+                same = Math.abs(((Number) spinners[i].getValue()).doubleValue() - values[i]) < 1e-9;
+            }
+            if (same) {
+                match = preset;
+                break;
+            }
+        }
+        DefaultComboBoxModel<String> model = (DefaultComboBoxModel<String>) cmbFrameRejection.getModel();
+        syncingFrameRejection = true;
+        try {
+            boolean hasCustom = model.getIndexOf(FRAME_REJECTION_CUSTOM) >= 0;
+            if (FRAME_REJECTION_CUSTOM.equals(match) && !hasCustom) {
+                model.addElement(FRAME_REJECTION_CUSTOM);
+            }
+            model.setSelectedItem(match);
+            if (!FRAME_REJECTION_CUSTOM.equals(match) && hasCustom) {
+                model.removeElement(FRAME_REJECTION_CUSTOM);
+            }
+        } finally {
+            syncingFrameRejection = false;
+        }
+    }
+
     private JSpinner createSpinner(SpinnerModel model) {
         JSpinner spinner = new JSpinner(model);
         if (model instanceof SpinnerNumberModel) {
@@ -1129,8 +1196,6 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.growSigmaMultiplier = ((Number) spinGrowSigma.getValue()).doubleValue();
             jTransientConfig.minDetectionPixels = ((Number) spinMinPixels.getValue()).intValue();
             jTransientConfig.edgeMarginPixels = ((Number) spinEdgeMargin.getValue()).intValue();
-            jTransientConfig.voidThresholdFraction = ((Number) spinVoidFraction.getValue()).doubleValue();
-            jTransientConfig.voidProximityRadius = ((Number) spinVoidRadius.getValue()).intValue();
             jTransientConfig.enableSlowMoverDetection = chkEnableSlowMovers.isSelected();
             jTransientConfig.masterSigmaMultiplier = ((Number) spinMasterSigma.getValue()).doubleValue();
             jTransientConfig.masterGrowSigmaMultiplier = ((Number) spinMasterGrowSigma.getValue()).doubleValue();
@@ -1149,8 +1214,6 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.streakMinPixels = ((Number) spinStreakMinPix.getValue()).intValue();
             jTransientConfig.singleStreakMinPeakSigma = ((Number) spinSingleStreakMinPeakSigma.getValue()).doubleValue();
             setOptionalDoubleField(jTransientConfig, "streakTimeConsistencyTolerance", ((Number) spinStreakTimeConsistencyTolerance.getValue()).doubleValue());
-            jTransientConfig.bgClippingIterations = ((Number) spinBgClippingIters.getValue()).intValue();
-            jTransientConfig.bgClippingFactor = ((Number) spinBgClippingFactor.getValue()).doubleValue();
 
             // --- Apply Tracker Settings to the POJO ---
             jTransientConfig.maxStarJitter = ((Number) spinStarJitter.getValue()).doubleValue();
@@ -1177,7 +1240,6 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.anomalyMinPeakSigmaFloor = ((Number) spinAnomalyMinPeakSigmaFloor.getValue()).doubleValue();
             setOptionalDoubleField(jTransientConfig, "suspectedStreakLineTolerance", ((Number) spinSuspectedStreakLineTolerance.getValue()).doubleValue());
             setOptionalDoubleField(jTransientConfig, "anomalySuspectedStreakMinElongation", ((Number) spinAnomalySuspectedStreakMinElongation.getValue()).doubleValue());
-            setOptionalBooleanField(jTransientConfig, "enableBinaryStarLikeStreakShapeVeto", chkEnableBinaryStarLikeStreakShapeVeto.isSelected());
             setOptionalBooleanField(jTransientConfig, "enableResidualTransientAnalysis", chkEnableResidualTransientAnalysis.isSelected());
             setOptionalBooleanField(jTransientConfig, "enableLocalRescueCandidates", chkEnableLocalRescueCandidates.isSelected());
             setOptionalBooleanField(jTransientConfig, "enableLocalActivityClusters", chkEnableLocalActivityClusters.isSelected());
@@ -1187,7 +1249,6 @@ public class DetectionConfigurationPanel extends JPanel {
             autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
             SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
 
-            jTransientConfig.minFramesForAnalysis = ((Number) spinMinFramesAnalysis.getValue()).intValue();
             jTransientConfig.starCountSigmaDeviation = ((Number) spinStarCountSigma.getValue()).doubleValue();
             jTransientConfig.fwhmSigmaDeviation = ((Number) spinFwhmSigma.getValue()).doubleValue();
             jTransientConfig.eccentricitySigmaDeviation = ((Number) spinEccentricitySigma.getValue()).doubleValue();
@@ -1196,39 +1257,17 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.backgroundSigmaDeviation = ((Number) spinBackgroundSigma.getValue()).doubleValue();
 
             jTransientConfig.minBackgroundDeviationADU = ((Number) spinMinBgDevAdu.getValue()).doubleValue();
-            jTransientConfig.minEccentricityEnvelope = ((Number) spinMinEccEnvelope.getValue()).doubleValue();
-            jTransientConfig.minBrightStarEccentricityEnvelope = ((Number) spinMinBrightStarEccEnvelope.getValue()).doubleValue();
-            jTransientConfig.minFwhmEnvelope = ((Number) spinMinFwhmEnvelope.getValue()).doubleValue();
 
-            jTransientConfig.qualitySigmaMultiplier = ((Number) spinQualitySigma.getValue()).doubleValue();
-            jTransientConfig.qualityGrowSigmaMultiplier = ((Number) spinQualityGrowSigma.getValue()).doubleValue();
-            jTransientConfig.qualityMinDetectionPixels = ((Number) spinQualityMinPix.getValue()).intValue();
-            jTransientConfig.qualityBrightStarPeakSigmaOffset = ((Number) spinQualityBrightStarPeakSigmaOffset.getValue()).doubleValue();
-            jTransientConfig.qualityBrightStarMinStars = ((Number) spinQualityBrightStarMinStars.getValue()).intValue();
-            jTransientConfig.qualityMaxElongationForFwhm = ((Number) spinMaxElongFwhm.getValue()).doubleValue();
 
             jTransientConfig.enableVariableStarDetection = chkEnableVariableStarDetection.isSelected();
             jTransientConfig.photometryMaxStars = ((Number) spinPhotometryMaxStars.getValue()).intValue();
             jTransientConfig.photometryMinSnr = ((Number) spinPhotometryMinSnr.getValue()).doubleValue();
-            jTransientConfig.photometryMaxElongation = ((Number) spinPhotometryMaxElongation.getValue()).doubleValue();
-            jTransientConfig.photometryApertureFwhmFactor = ((Number) spinPhotometryApertureFwhmFactor.getValue()).doubleValue();
-            jTransientConfig.photometryAnnulusInnerFwhmFactor = ((Number) spinPhotometryAnnulusInnerFwhmFactor.getValue()).doubleValue();
-            jTransientConfig.photometryAnnulusOuterFwhmFactor = ((Number) spinPhotometryAnnulusOuterFwhmFactor.getValue()).doubleValue();
-            jTransientConfig.photometrySaturationFraction = ((Number) spinPhotometrySaturationFraction.getValue()).doubleValue();
-            jTransientConfig.photometryFitPlane = chkPhotometryFitPlane.isSelected();
-            jTransientConfig.photometryMaxRegistrationSpreadPixels = ((Number) spinPhotometryMaxRegistrationSpreadPixels.getValue()).doubleValue();
-            jTransientConfig.linearityMinDistinctLevels = ((Number) spinLinearityMinDistinctLevels.getValue()).intValue();
-            jTransientConfig.linearityMaxFloorClippedFraction = ((Number) spinLinearityMaxFloorClippedFraction.getValue()).doubleValue();
             jTransientConfig.linearityMaxConcentrationDrift = ((Number) spinLinearityMaxConcentrationDrift.getValue()).doubleValue();
             jTransientConfig.linearityMinRangeMag = ((Number) spinLinearityMinRangeMag.getValue()).doubleValue();
-            jTransientConfig.linearityMinStars = ((Number) spinLinearityMinStars.getValue()).intValue();
             jTransientConfig.linearityMaxFrameSlope = ((Number) spinLinearityMaxFrameSlope.getValue()).doubleValue();
-            jTransientConfig.linearityMinZeroPointRangeMag = ((Number) spinLinearityMinZeroPointRangeMag.getValue()).doubleValue();
-            jTransientConfig.linearityMaxSlopeTrackingCorrelation = ((Number) spinLinearityMaxSlopeTrackingCorrelation.getValue()).doubleValue();
             jTransientConfig.linearityMaxFailingFrameFraction = ((Number) spinLinearityMaxFailingFrameFraction.getValue()).doubleValue();
             jTransientConfig.variableMinFrames = ((Number) spinVariableMinFrames.getValue()).intValue();
             jTransientConfig.variableMinSpanMinutes = ((Number) spinVariableMinSpanMinutes.getValue()).doubleValue();
-            jTransientConfig.variableNoiseModelNeighbors = ((Number) spinVariableNoiseModelNeighbors.getValue()).intValue();
             jTransientConfig.variableScoreSigma = ((Number) spinVariableScoreSigma.getValue()).doubleValue();
             jTransientConfig.variableMinAmplitudeMag = ((Number) spinVariableMinAmplitudeMag.getValue()).doubleValue();
             jTransientConfig.variableLimitedMinAmplitudeMag = ((Number) spinVariableLimitedMinAmplitudeMag.getValue()).doubleValue();
@@ -1237,7 +1276,6 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.variableMinSplitHalfCorrelation = ((Number) spinVariableMinSplitHalfCorrelation.getValue()).doubleValue();
             jTransientConfig.variableMaxApertureAmplitudeDifference = ((Number) spinVariableMaxApertureAmplitudeDifference.getValue()).doubleValue();
             jTransientConfig.variableMaxSystematicsCorrelation = ((Number) spinVariableMaxSystematicsCorrelation.getValue()).doubleValue();
-            jTransientConfig.variableSystematicsResponseFactor = ((Number) spinVariableSystematicsResponseFactor.getValue()).doubleValue();
             jTransientConfig.variableLocalRadiusPixels = ((Number) spinVariableLocalRadiusPixels.getValue()).doubleValue();
             jTransientConfig.variableMaxLocalCorrelation = ((Number) spinVariableMaxLocalCorrelation.getValue()).doubleValue();
 
@@ -1291,12 +1329,6 @@ public class DetectionConfigurationPanel extends JPanel {
         double masterGrow = ((Number) spinMasterGrowSigma.getValue()).doubleValue();
         if (masterGrow > masterSigma) {
             spinMasterGrowSigma.setValue(masterSigma);
-        }
-
-        double annulusInner = ((Number) spinPhotometryAnnulusInnerFwhmFactor.getValue()).doubleValue();
-        double annulusOuter = ((Number) spinPhotometryAnnulusOuterFwhmFactor.getValue()).doubleValue();
-        if (annulusOuter <= annulusInner) {
-            setSpinnerValueClamped(spinPhotometryAnnulusOuterFwhmFactor, annulusInner + 0.5);
         }
     }
 
@@ -1388,8 +1420,6 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinMasterMinPix, config.masterMinDetectionPixels);
         setSpinnerValueClamped(spinMinPixels, config.minDetectionPixels);
         setSpinnerValueClamped(spinEdgeMargin, config.edgeMarginPixels);
-        setSpinnerValueClamped(spinVoidFraction, config.voidThresholdFraction);
-        setSpinnerValueClamped(spinVoidRadius, config.voidProximityRadius);
         chkEnableSlowMovers.setSelected(config.enableSlowMoverDetection);
 
         setSpinnerValueClamped(spinMasterSlowMoverSigma, config.masterSlowMoverSigmaMultiplier);
@@ -1423,9 +1453,6 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinStreakMinPix, config.streakMinPixels);
         setSpinnerValueClamped(spinSingleStreakMinPeakSigma, config.singleStreakMinPeakSigma);
         setSpinnerValueClamped(spinStreakTimeConsistencyTolerance, getOptionalDoubleField(config, "streakTimeConsistencyTolerance", 0.50));
-        chkEnableBinaryStarLikeStreakShapeVeto.setSelected(getOptionalBooleanField(config, "enableBinaryStarLikeStreakShapeVeto", true));
-        setSpinnerValueClamped(spinBgClippingIters, config.bgClippingIterations);
-        setSpinnerValueClamped(spinBgClippingFactor, config.bgClippingFactor);
 
         chkEnableAnomalyRescue.setSelected(config.enableAnomalyRescue);
         setSpinnerValueClamped(spinAnomalyMinPeakSigma, config.anomalyMinPeakSigma);
@@ -1441,7 +1468,6 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinLocalActivityClusterRadiusPixels, getOptionalDoubleField(config, "localActivityClusterRadiusPixels", 10.0));
         setSpinnerValueClamped(spinLocalActivityClusterMinFrames, getOptionalIntField(config, "localActivityClusterMinFrames", 3));
 
-        setSpinnerValueClamped(spinMinFramesAnalysis, config.minFramesForAnalysis);
         setSpinnerValueClamped(spinStarCountSigma, config.starCountSigmaDeviation);
         setSpinnerValueClamped(spinFwhmSigma, config.fwhmSigmaDeviation);
         setSpinnerValueClamped(spinEccentricitySigma, config.eccentricitySigmaDeviation);
@@ -1449,38 +1475,16 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinBrightStarEccentricitySigma, config.brightStarEccentricitySigmaDeviation);
         setSpinnerValueClamped(spinBackgroundSigma, config.backgroundSigmaDeviation);
         setSpinnerValueClamped(spinMinBgDevAdu, config.minBackgroundDeviationADU);
-        setSpinnerValueClamped(spinMinEccEnvelope, config.minEccentricityEnvelope);
-        setSpinnerValueClamped(spinMinBrightStarEccEnvelope, config.minBrightStarEccentricityEnvelope);
-        setSpinnerValueClamped(spinMinFwhmEnvelope, config.minFwhmEnvelope);
-        setSpinnerValueClamped(spinQualitySigma, config.qualitySigmaMultiplier);
-        setSpinnerValueClamped(spinQualityGrowSigma, config.qualityGrowSigmaMultiplier);
-        setSpinnerValueClamped(spinQualityMinPix, config.qualityMinDetectionPixels);
-        setSpinnerValueClamped(spinQualityBrightStarPeakSigmaOffset, config.qualityBrightStarPeakSigmaOffset);
-        setSpinnerValueClamped(spinQualityBrightStarMinStars, config.qualityBrightStarMinStars);
-        setSpinnerValueClamped(spinMaxElongFwhm, config.qualityMaxElongationForFwhm);
 
         chkEnableVariableStarDetection.setSelected(config.enableVariableStarDetection);
         setSpinnerValueClamped(spinPhotometryMaxStars, config.photometryMaxStars);
         setSpinnerValueClamped(spinPhotometryMinSnr, config.photometryMinSnr);
-        setSpinnerValueClamped(spinPhotometryMaxElongation, config.photometryMaxElongation);
-        setSpinnerValueClamped(spinPhotometryApertureFwhmFactor, config.photometryApertureFwhmFactor);
-        setSpinnerValueClamped(spinPhotometryAnnulusInnerFwhmFactor, config.photometryAnnulusInnerFwhmFactor);
-        setSpinnerValueClamped(spinPhotometryAnnulusOuterFwhmFactor, config.photometryAnnulusOuterFwhmFactor);
-        setSpinnerValueClamped(spinPhotometrySaturationFraction, config.photometrySaturationFraction);
-        chkPhotometryFitPlane.setSelected(config.photometryFitPlane);
-        setSpinnerValueClamped(spinPhotometryMaxRegistrationSpreadPixels, config.photometryMaxRegistrationSpreadPixels);
-        setSpinnerValueClamped(spinLinearityMinDistinctLevels, config.linearityMinDistinctLevels);
-        setSpinnerValueClamped(spinLinearityMaxFloorClippedFraction, config.linearityMaxFloorClippedFraction);
         setSpinnerValueClamped(spinLinearityMaxConcentrationDrift, config.linearityMaxConcentrationDrift);
         setSpinnerValueClamped(spinLinearityMinRangeMag, config.linearityMinRangeMag);
-        setSpinnerValueClamped(spinLinearityMinStars, config.linearityMinStars);
         setSpinnerValueClamped(spinLinearityMaxFrameSlope, config.linearityMaxFrameSlope);
-        setSpinnerValueClamped(spinLinearityMinZeroPointRangeMag, config.linearityMinZeroPointRangeMag);
-        setSpinnerValueClamped(spinLinearityMaxSlopeTrackingCorrelation, config.linearityMaxSlopeTrackingCorrelation);
         setSpinnerValueClamped(spinLinearityMaxFailingFrameFraction, config.linearityMaxFailingFrameFraction);
         setSpinnerValueClamped(spinVariableMinFrames, config.variableMinFrames);
         setSpinnerValueClamped(spinVariableMinSpanMinutes, config.variableMinSpanMinutes);
-        setSpinnerValueClamped(spinVariableNoiseModelNeighbors, config.variableNoiseModelNeighbors);
         setSpinnerValueClamped(spinVariableScoreSigma, config.variableScoreSigma);
         setSpinnerValueClamped(spinVariableMinAmplitudeMag, config.variableMinAmplitudeMag);
         setSpinnerValueClamped(spinVariableLimitedMinAmplitudeMag, config.variableLimitedMinAmplitudeMag);
@@ -1489,7 +1493,6 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinVariableMinSplitHalfCorrelation, config.variableMinSplitHalfCorrelation);
         setSpinnerValueClamped(spinVariableMaxApertureAmplitudeDifference, config.variableMaxApertureAmplitudeDifference);
         setSpinnerValueClamped(spinVariableMaxSystematicsCorrelation, config.variableMaxSystematicsCorrelation);
-        setSpinnerValueClamped(spinVariableSystematicsResponseFactor, config.variableSystematicsResponseFactor);
         setSpinnerValueClamped(spinVariableLocalRadiusPixels, config.variableLocalRadiusPixels);
         setSpinnerValueClamped(spinVariableMaxLocalCorrelation, config.variableMaxLocalCorrelation);
     }
