@@ -284,7 +284,7 @@ Select three or more frames in the table and click **Blink Selected** to play th
 - **Zoom**: Fit, 100 %, 200 % and 400 %, or scroll to zoom around the cursor and drag to pan. Double-click switches between fit and 100 %. The view stays on the same spot while the frames change.
 - **The frame list** on the left shows every frame with its time since the first one; the frame on screen is highlighted. Click a frame to pause and show it. While paused, untick a frame, or press S or tick **Skip this frame**, to leave a cloudy or trailed frame out of the loop; stepping by hand still shows it. While playing, the ticks are greyed out: pause first, so you change the frame you meant. At least two frames stay in the loop.
 - **Show tracks** (T) draws the tracks of the last **Detect Moving Targets** run on this session, named as in the report (T1, T2… for moving objects, ST1… for streak tracks), with a ring where the object is in the frame shown.
-- **Annotate** (A) labels the stars, deep-sky objects and variable stars of the field, once the sky catalogue is fetched (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
+- **Annotate** (A) labels the stars, deep-sky objects and variable stars of the field, once the sky catalogue is fetched, and **Correct plate solution** (C) aligns them, and all coordinates, with the stars (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
 
 Below the frame: the frame number, file name, capture time and time since the first frame, and under the cursor the pixel position, its value and, on a plate-solved frame, RA and Dec. Esc closes the window. The frames stay in memory while blinking (about 170 MB per 61-megapixel frame); if they would not fit, SpacePixels says so before reading them.
 
@@ -318,7 +318,17 @@ In every viewer (Blink, Preview Frame, Manual Transient Inspection and Show full
 
 If a viewer is open when the catalogue arrives, the frame does not change: the **Annotate** switch becomes available and a note next to it says *Sky catalogue ready · A shows it*.
 
-The marks are only as accurate as the plate solution in your FITS headers: they can sit a few pixels off, most towards the corners of wide fields. Stars are moved from the Gaia epoch (2016) to the date of each frame. Only the sky coordinates of the field are sent to the services (at CDS in Strasbourg, and the ESA Gaia archive if CDS does not answer), never your observing site.
+Stars are moved from the Gaia epoch (2016) to the date of each frame. Only the sky coordinates of the field are sent to the services (at CDS in Strasbourg, and the ESA Gaia archive if CDS does not answer), never your observing site.
+
+#### Correct plate solution
+
+![The same corner of a wide field, as in the FITS header and corrected to the stars](docs/images/manual/ui-correction.jpg)
+
+A plate solution in the FITS headers is rarely perfect: in the corners of wide fields the catalogue stars can land several pixels from the real stars, as on the left above. After the catalogue arrives, SpacePixels checks the solution in the background: in every frame it finds the stars, matches them with the Gaia stars, and works out a correction for the whole session (including the distortion of the optics) and a small one for each frame. On the reference sessions this brought the stars from 0.3–4.9 px down to 0.07–0.3 px (median); it takes from a few seconds to about half a minute for large sessions.
+
+The check changes nothing by itself. The **2 Astrometry** status line says *Correction available · 4.85 → 0.10 px*, and **Correct plate solution** (C) next to Annotate switches it on, as on the right above. It is one setting for the session: it applies in all viewers at once, to the cursor RA and Dec, and to the report of the next **Detect Moving Targets**, so the positions, the JPL, SkyBoT and SatChecker lookups and the VSX matches of variable stars use the corrected coordinates (in tests, VSX matches moved from about 3″ to under 1″). A report written before keeps its coordinates until you run the detection again. The correction is kept next to the frames as `plate_correction.json`, with the setting; your FITS files are never changed. Switch it off again with C.
+
+When a field has few bright stars, SpacePixels fetches fainter Gaia stars for the check. If too few stars can be matched (clouds, very few stars), the status line says so and the solution in the headers stays in use.
 
 <sub>Gaia data: ESA/Gaia/DPAC. SIMBAD and VizieR: CDS, Strasbourg. VSX: AAVSO.</sub>
 
