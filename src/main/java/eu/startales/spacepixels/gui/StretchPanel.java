@@ -26,9 +26,9 @@ import java.util.Locale;
 import java.util.prefs.Preferences;
 
 /**
- * The Image Stretch tab: the display stretch used by Blink (whose window shows the same controls), "Show full size"
- * and the optional stretched copies, with a linked, zoomable preview of the whole frame. The settings are remembered
- * between sessions.
+ * The Image Stretch tab: the display stretch used by the frame viewers (Blink, Preview Frame, Manual Transient
+ * Inspection and "Show full size", whose windows show the same controls) and the optional stretched copies, with a
+ * linked, zoomable preview of the whole frame. The settings are remembered between sessions.
  */
 public class StretchPanel extends JPanel {
     private final ApplicationWindow mainAppWindow;
@@ -76,7 +76,8 @@ public class StretchPanel extends JPanel {
         controls.setLayout(new BoxLayout(controls, BoxLayout.Y_AXIS));
         controls.add(createSectionHeader("Display Stretch"));
         JLabel explanation = new JLabel("<html><div style='color: #999999; width: 620px;'>"
-                + "Used by <b>Blink Selected</b>, <b>Show full size</b> and the optional stretched copies. "
+                + "Used by <b>Blink Selected</b>, <b>Preview Frame</b>, <b>Manual Transient Inspection</b>, "
+                + "<b>Show full size</b> and the optional stretched copies. "
                 + "Detection always works on the linear data, and report images use their own stretch "
                 + "(Detection Settings → Report Visualization).</div></html>");
         controls.add(left(explanation));

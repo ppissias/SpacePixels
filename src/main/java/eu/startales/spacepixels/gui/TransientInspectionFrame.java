@@ -25,7 +25,7 @@ import java.util.Map;
  * Manual Transient Inspection: after the engine has run on all frames of the session, shows each frame with the
  * transients left after the star mask and the other vetoes. The frames stay in memory until the window closes.
  */
-public class TransientInspectionFrame extends DetectionViewerFrame {
+public class TransientInspectionFrame extends SequenceViewerFrame {
 
     private final StretchPanel stretchPanel;
     private final FitsFileInformation[] filesInfo;
@@ -35,7 +35,7 @@ public class TransientInspectionFrame extends DetectionViewerFrame {
 
     public TransientInspectionFrame(List<ImageFrame> frames, List<FrameTransients> allTransients,
                                     FitsFileInformation[] filesInfo, StretchPanel stretchPanel) {
-        super("Manual Transient Inspection", "preparing…", true);
+        super("Manual Transient Inspection", "preparing…", true, true);
         this.allTransients = allTransients != null ? allTransients : Collections.emptyList();
         if (filesInfo != null) {
             for (FitsFileInformation info : filesInfo) {

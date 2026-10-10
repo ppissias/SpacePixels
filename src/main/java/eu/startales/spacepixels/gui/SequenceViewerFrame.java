@@ -26,12 +26,12 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 /**
- * A window that steps through frames and shows what was detected on each, laid out like the blink window: controls
- * and the shared stretch on top, the zoomable frame in the middle, the frame and cursor in the status bar. Each frame
- * is prepared in the background by the subclass; while it is, the window says so and keeps the previous frame.
- * ← and → step, D shows or hides the detections.
+ * A window that steps through frames, laid out like the blink window: controls and the shared stretch on top, the
+ * zoomable frame in the middle, the frame and cursor in the status bar. Each frame is prepared in the background by
+ * the subclass; while it is, the window says so and keeps the previous frame. ← and → step. A window that shows
+ * detections has a "Show detections" switch (D).
  */
-abstract class DetectionViewerFrame extends JFrame {
+abstract class SequenceViewerFrame extends JFrame {
 
     /** What the window shows for one frame. */
     static final class Result {
@@ -69,6 +69,7 @@ abstract class DetectionViewerFrame extends JFrame {
     private final String windowName;
     private final String busyText;
     private final boolean disposeOnClose;
+    private final boolean showsDetections;
 
     private StretchControls stretch;
     private boolean open;
@@ -83,11 +84,13 @@ abstract class DetectionViewerFrame extends JFrame {
      * @param windowName     the start of the title, for example "Preview Frame"
      * @param busyText       shown while a frame is prepared, for example "detecting…"
      * @param disposeOnClose whether closing disposes the window (else it hides and is opened again later)
+     * @param showsDetections whether the frames come with detections, which get a "Show detections" switch
      */
-    DetectionViewerFrame(String windowName, String busyText, boolean disposeOnClose) {
+    SequenceViewerFrame(String windowName, String busyText, boolean disposeOnClose, boolean showsDetections) {
         this.windowName = windowName;
         this.busyText = busyText;
         this.disposeOnClose = disposeOnClose;
+        this.showsDetections = showsDetections;
         setTitle(windowName);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
@@ -98,8 +101,8 @@ abstract class DetectionViewerFrame extends JFrame {
         contentPane.setBorder(new EmptyBorder(6, 6, 6, 6));
         setContentPane(contentPane);
         JComponent controls = buildControls();
-        JComponent statusBar = ViewerSupport.statusBar(frameLabel, cursorLabel,
-                "← → previous / next frame · D detections · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
+        JComponent statusBar = ViewerSupport.statusBar(frameLabel, cursorLabel, "← → previous / next frame · "
+                + (showsDetections ? "D detections · " : "") + "F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
         contentPane.add(controls, BorderLayout.NORTH);
         contentPane.add(view, BorderLayout.CENTER);
         contentPane.add(statusBar, BorderLayout.SOUTH);
@@ -121,10 +124,12 @@ abstract class DetectionViewerFrame extends JFrame {
 
         ViewerSupport.bind(getRootPane(), "LEFT", "previous", () -> step(-1));
         ViewerSupport.bind(getRootPane(), "RIGHT", "next", () -> step(1));
-        ViewerSupport.bind(getRootPane(), "D", "detections", () -> {
-            detectionsBox.setSelected(!detectionsBox.isSelected());
-            view.setDetectionsVisible(detectionsBox.isSelected());
-        });
+        if (showsDetections) {
+            ViewerSupport.bind(getRootPane(), "D", "detections", () -> {
+                detectionsBox.setSelected(!detectionsBox.isSelected());
+                view.setDetectionsVisible(detectionsBox.isSelected());
+            });
+        }
         ViewerSupport.bindZoomKeys(getRootPane(), view);
         ViewerSupport.bind(getRootPane(), "ESCAPE", "close", this::close);
         addWindowListener(new WindowAdapter() {
@@ -235,8 +240,10 @@ abstract class DetectionViewerFrame extends JFrame {
         row.add(previousButton);
         row.add(nextButton);
         row.add(Box.createHorizontalStrut(10));
-        row.add(detectionsBox);
-        row.add(Box.createHorizontalStrut(10));
+        if (showsDetections) {
+            row.add(detectionsBox);
+            row.add(Box.createHorizontalStrut(10));
+        }
         for (JComponent zoomControl : ViewerSupport.zoomControls(view)) {
             row.add(zoomControl);
         }

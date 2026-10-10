@@ -24,13 +24,13 @@ import java.util.Locale;
  * Preview Frame: runs the source extraction of the detection, with the current settings, on one frame at a time and
  * shows what it finds. Steps through all frames of the session, starting at the selected one.
  */
-public class DetectionSequenceFrame extends DetectionViewerFrame {
+public class DetectionSequenceFrame extends SequenceViewerFrame {
 
     private FitsFileInformation[] files;
     private DetectionConfig config;
 
     public DetectionSequenceFrame(ApplicationWindow mainAppWindow) {
-        super("Preview Frame", "detecting…", false);
+        super("Preview Frame", "detecting…", false, true);
         setLocationRelativeTo(mainAppWindow.getFrame());
     }
 
