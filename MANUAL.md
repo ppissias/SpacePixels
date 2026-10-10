@@ -273,7 +273,9 @@ Each candidate then has a card with a one-line summary and its light curve, draw
 
 ### Blink Selected
 
-Select three or more frames in the table and click **Blink Selected** to play them as an animation, the classic way of hunting by eye. The blink window opens at once and shows the progress while it reads the frames (**Cancel** or Esc stops it), then plays them:
+![Blink, paused on comet Africano with its track shown](docs/images/manual/ui-blink.jpg)
+
+Select three or more frames in the table and click **Blink Selected** to play them as an animation, the classic way of hunting by eye. The blink window opens at once and shows the progress while it reads the frames (**Cancel** or Esc stops it), then plays them. Above, it is paused at 100 % on comet Africano, with the track found by **Detect Moving Targets** (T1) and frame 11 left out of the loop:
 
 - **Play / Pause** (Space) and **◀ ▶** (arrow keys) to step one frame at a time. Stepping back and forth between two frames is the surest way to confirm a faint mover.
 - **Speed**: from 50 ms to 2 s per frame, also with the ↑ and ↓ keys. SpacePixels remembers it.
@@ -286,13 +288,17 @@ Below the frame: the frame number, file name, capture time and time since the fi
 
 ### Preview Frame
 
+![Preview Frame at 100 %](docs/images/manual/ui-preview.jpg)
+
 Runs the source detection on the selected frame with the current settings and shows what it picks up: green boxes around point sources, red lines along streaks. **◀ ▶** (← →) move to the other frames of the session; each frame is detected when you get to it, and the status bar shows how many point sources and streaks it has. Use it to see what the detector picks up in a single frame.
 
 ### Manual Transient Inspection
 
-Runs the detection on all frames of the session (not only the selected ones) and shows, frame by frame, every detection left after the star mask: the candidates for moving objects, before they are linked into tracks. Useful to judge the noise, or to find a faint object by eye that did not form a track. The frames stay in memory until you close the window.
+![Manual Transient Inspection: the comet is the only transient left in this frame](docs/images/manual/ui-inspection.jpg)
 
-Both windows work like the blink window: the same stretch as the Image Stretch tab, the same zoom (Fit, 100 %, 200 %, 400 %, scroll to zoom, drag to pan, double-click), and the same status bar with the frame, its time since the first frame, and under the cursor the pixel position, value and, on a plate-solved frame, RA and Dec. **Show detections** (D) hides the markers to see the frame underneath. From 100 % zoom the detected pixels are tinted too. When there are too many detections on screen to tell apart, the markers are left out until you zoom in. Esc closes the window.
+Runs the detection on all frames of the session (not only the selected ones) and shows, frame by frame, every detection left after the star mask: the candidates for moving objects, before they are linked into tracks. Useful to judge the noise, or to find a faint object by eye that did not form a track. Above, at 200 %, the comet is the only transient left in its frame. The frames stay in memory until you close the window.
+
+Both windows, and **Show full size** on the Image Stretch tab, work like the blink window: the same stretch as the Image Stretch tab, the same zoom (Fit, 100 %, 200 %, 400 %, scroll to zoom, drag to pan, double-click), and the same status bar with the frame, its time since the first frame, and under the cursor the pixel position, value and, on a plate-solved frame, RA and Dec. **Show detections** (D) hides the markers to see the frame underneath. From 100 % zoom the detected pixels are tinted too. When there are too many detections on screen to tell apart, the markers are left out until you zoom in. Esc closes the window.
 
 ### Star Mask Explorer
 
@@ -304,7 +310,11 @@ Both windows work like the blink window: the same stretch as the Image Stretch t
 
 ![Image Stretch](docs/images/manual/ui-stretch.png)
 
-Sets how frames look in Blink, the viewers and **Show full size**. The detection always uses the original linear data, so the stretch does not change what is found. The report images have their own stretch (Detection Settings → Report Visualization). Optional **Batch Stretch** and **Convert to Mono** write new copies of the frames.
+Sets how frames look in Blink, Preview Frame, Manual Transient Inspection and **Show full size**; their windows show the same stretch controls, and a change in any of them shows everywhere. The detection always uses the original linear data, so the stretch does not change what is found. The report images have their own stretch (Detection Settings → Report Visualization). Optional **Batch Stretch** and **Convert to Mono** write new copies of the frames.
+
+![Show full size](docs/images/manual/ui-fullsize.jpg)
+
+**Show full size** opens the frames of the session at full resolution, starting at the selected one, in a window that works like the other viewers: ← → to step, the same zoom and stretch, and the pixel value and RA/Dec under the cursor. Colour frames show in colour, and the status bar gives the frame size.
 
 ### Detect Iteratively (large datasets)
 
