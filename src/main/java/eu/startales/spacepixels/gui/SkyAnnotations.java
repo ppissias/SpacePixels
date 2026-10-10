@@ -13,6 +13,7 @@ import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.util.skycatalog.SkyProjection;
 
 import javax.swing.*;
 import java.awt.*;
@@ -255,7 +256,6 @@ final class SkyAnnotations {
 
     /** Room around the frame in which deep-sky marks are still kept (they can reach in), in frame pixels. */
     private static final double EDGE_ROOM = 40;
-    private static final double MILLIS_PER_YEAR = 365.25 * 86_400_000.0;
 
     /**
      * The catalogue objects that fall on a frame of this size. Stars are moved from the Gaia epoch to the frame's
@@ -265,32 +265,20 @@ final class SkyAnnotations {
                                  long timestampMillis) {
         List<SkyMark> marks = new ArrayList<>();
         for (SkyCatalogue.DeepSkyObject object : catalogue.deepSky) {
-            double[] centre = transformer.skyToPixel(object.ra, object.dec);
-            if (centre == null) {
+            double[] shape = SkyProjection.deepSkyShape(transformer, object);
+            if (shape == null || !onFrame(shape, width, height, shape[2])) {
                 continue;
             }
-            double semiMajor = 0;
-            double semiMinor = 0;
-            double angle = 0;
-            if (object.majorArcmin != null && object.majorArcmin > 0) {
-                double radiusDeg = object.majorArcmin / 120.0;
-                double positionAngle = Math.toRadians(object.angleDeg == null ? 0 : object.angleDeg);
-                double[] edge = transformer.skyToPixel(
-                        object.ra + radiusDeg * Math.sin(positionAngle) / Math.max(1e-6, Math.cos(Math.toRadians(object.dec))),
-                        object.dec + radiusDeg * Math.cos(positionAngle));
-                if (edge != null) {
-                    semiMajor = Math.hypot(edge[0] - centre[0], edge[1] - centre[1]);
-                    angle = Math.atan2(edge[1] - centre[1], edge[0] - centre[0]);
-                    double minor = object.minorArcmin != null && object.minorArcmin > 0 && object.angleDeg != null
-                            ? object.minorArcmin : object.majorArcmin;
-                    semiMinor = semiMajor * Math.min(1.0, minor / object.majorArcmin);
-                }
-            }
-            if (!onFrame(centre, width, height, semiMajor)) {
+            marks.add(new SkyMark(SkyMark.Kind.DEEP_SKY, shape[0], shape[1], Double.NaN, shape[2], shape[3], shape[4],
+                    SkyProjection.deepSkyLabel(object), deepSkyDescription(object)));
+        }
+        for (SkyCatalogue.NamedStar named : catalogue.namedStars) {
+            double[] position = transformer.skyToPixel(named.ra, named.dec);
+            if (position == null || !onFrame(position, width, height, -EDGE_ROOM)) {
                 continue;
             }
-            marks.add(new SkyMark(SkyMark.Kind.DEEP_SKY, centre[0], centre[1], Double.NaN, semiMajor, semiMinor, angle,
-                    object.name, deepSkyDescription(object)));
+            marks.add(new SkyMark(SkyMark.Kind.NAMED_STAR, position[0], position[1], named.vmag, 0, 0, 0, named.name,
+                    String.format(Locale.US, "%s · V %.2f", named.name, named.vmag)));
         }
         for (SkyCatalogue.VariableStar variable : catalogue.variables) {
             double[] position = transformer.skyToPixel(variable.ra, variable.dec);
@@ -300,15 +288,8 @@ final class SkyAnnotations {
             marks.add(new SkyMark(SkyMark.Kind.VARIABLE, position[0], position[1],
                     variable.max == null ? Double.NaN : variable.max, 0, 0, 0, variable.name, variableDescription(variable)));
         }
-        double years = timestampMillis > 0 ? (timestampMillis - SkyCatalogue.GAIA_EPOCH_MILLIS) / MILLIS_PER_YEAR : 0;
         for (SkyCatalogue.Star star : catalogue.stars) {
-            double ra = star.ra;
-            double dec = star.dec;
-            if (years != 0 && star.pmra != null && star.pmdec != null) {
-                dec += star.pmdec * years / 3.6e6;
-                ra += star.pmra * years / 3.6e6 / Math.max(1e-6, Math.cos(Math.toRadians(star.dec)));
-            }
-            double[] position = transformer.skyToPixel(ra, dec);
+            double[] position = SkyProjection.starPixel(transformer, star, timestampMillis);
             if (position == null || !onFrame(position, width, height, -EDGE_ROOM)) {
                 continue;
             }
@@ -318,7 +299,6 @@ final class SkyAnnotations {
         return marks;
     }
 
-    /** Whether a mark is within {@code reach} pixels beyond the frame, plus the room ({@code -EDGE_ROOM}: on the frame). */
     private static boolean onFrame(double[] position, int width, int height, double reach) {
         double room = EDGE_ROOM + reach;
         return position[0] >= -0.5 - room && position[1] >= -0.5 - room
@@ -352,7 +332,7 @@ final class SkyAnnotations {
     }
 
     static String deepSkyDescription(SkyCatalogue.DeepSkyObject object) {
-        StringBuilder text = new StringBuilder(object.name == null ? "?" : object.name);
+        StringBuilder text = new StringBuilder(SkyProjection.deepSkyLabel(object));
         text.append(" · ").append(typeName(object.type));
         if (object.majorArcmin != null && object.majorArcmin > 0) {
             text.append(" · ").append(trimNumber(object.majorArcmin));
@@ -364,42 +344,8 @@ final class SkyAnnotations {
         return text.toString();
     }
 
-    /** Plain names for the SIMBAD object types a deep-sky label is likely to have. */
     static String typeName(String type) {
-        if (type == null) {
-            return "object";
-        }
-        switch (type) {
-            case "G": return "galaxy";
-            case "OpC": return "open cluster";
-            case "GlC": return "globular cluster";
-            case "Cl*": return "star cluster";
-            case "As*": return "stellar association";
-            case "PN": return "planetary nebula";
-            case "HII": return "HII region";
-            case "RNe": return "reflection nebula";
-            case "DNe": return "dark nebula";
-            case "GNe": return "nebula";
-            case "SNR": return "supernova remnant";
-            case "MoC": return "molecular cloud";
-            case "ClG": return "galaxy cluster";
-            case "GrG": return "group of galaxies";
-            case "CGG": return "compact group of galaxies";
-            case "PaG": return "pair of galaxies";
-            case "IG": return "interacting galaxies";
-            case "Sy1": case "Sy2": case "SyG": return "Seyfert galaxy";
-            case "AGN": case "LIN": return "active galaxy";
-            case "SBG": return "starburst galaxy";
-            case "EmG": return "emission-line galaxy";
-            case "LSB": return "low surface brightness galaxy";
-            case "BiC": return "brightest galaxy of a cluster";
-            case "GiC": case "GiG": case "GiP": return "galaxy in a group";
-            case "rG": return "radio galaxy";
-            case "H2G": return "HII galaxy";
-            case "bCG": return "blue compact galaxy";
-            case "AG?": case "G?": return "possible galaxy";
-            default: return "SIMBAD type " + type;
-        }
+        return SkyProjection.deepSkyTypeName(type);
     }
 
     private static String trimNumber(double value) {

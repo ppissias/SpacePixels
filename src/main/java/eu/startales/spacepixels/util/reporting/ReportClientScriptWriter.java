@@ -204,7 +204,7 @@ final class ReportClientScriptWriter {
         report.println("    Promise.all([worker(), worker(), worker()]).then(function () {");
         report.println("      const known = document.querySelectorAll('[data-known-as-sidecar] strong').length;");
         report.println("      if (status) {");
-        report.println("        status.textContent = 'Done: ' + known + ' of ' + total + ' candidates are catalogued in VSX. Results are saved into this report.';");
+        report.println("        status.textContent = 'Done: ' + known + ' of the ' + total + ' looked up ' + (total === 1 ? 'is' : 'are') + ' catalogued in VSX. Results are saved into this report.';");
         report.println("      }");
         report.println("      trigger.disabled = false;");
         report.println("    });");

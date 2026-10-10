@@ -20,6 +20,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
+import io.github.ppissias.jtransient.core.TrackLinker;
 import java.util.List;
 import java.util.Locale;
 
@@ -142,7 +143,9 @@ final class PipelineDiagnosticsSectionWriter {
     static void writeOverview(PrintWriter report,
                               DetectionReportContext reportContext,
                               PipelineTelemetry pipelineTelemetry,
-                              DetectionReportSummary summary) {
+                              DetectionReportSummary summary,
+                              List<TrackLinker.Track> localRescueTracks,
+                              FieldDepth fieldDepth) {
         if (pipelineTelemetry == null) {
             return;
         }
@@ -190,13 +193,20 @@ final class PipelineDiagnosticsSectionWriter {
             report.println("<div class='astro-note' style='margin-top: -6px; margin-bottom: 14px;'>Nothing found: "
                     + DetectionReportGenerator.escapeHtml(String.join(", ", empty)) + ".</div>");
         }
+        SessionPictureSectionWriter.writeAssets(report);
+        SessionPictureSectionWriter.write(report, reportContext, localRescueTracks);
 
         report.println("<div class='flex-container' style='margin-bottom: 4px;'>");
         report.println(compactCard(pipelineTelemetry.totalFramesKept + " <span style='color:#888;'>of " + pipelineTelemetry.totalFramesLoaded + "</span>", "Frames kept"));
         report.println(compactCard(String.format(Locale.US, "%.1f s", pipelineTelemetry.processingTimeMs / 1000.0), "Detection time"));
         report.println(compactCard(String.valueOf(pipelineTelemetry.totalRawObjectsExtracted), "Objects extracted"));
         report.println(compactCard(String.valueOf(summary.masterStarCount), "Stars in the master map"));
+        if (fieldDepth != null && !fieldDepth.isEmpty()) {
+            report.println("<a class='metric-link open-details' href='#field-depth' title='Gaia G magnitude where the share of stars found falls to half, in the median frame. Per frame under Diagnostics.'>"
+                    + compactCard(String.format(Locale.US, "G %.1f", fieldDepth.median()), "Field depth") + "</a>");
+        }
         report.println("</div>");
+        SessionPictureSectionWriter.writeDiagnosticsLink(report, pipelineTelemetry.totalFramesKept, pipelineTelemetry.totalFramesLoaded);
 
         report.println("<div class='astro-note'>" + plural(summary.returnedTrackCount, "track-like detection") + " in total: "
                 + plural(summary.singleStreakCount, "single-frame streak") + ", "
@@ -234,12 +244,14 @@ final class PipelineDiagnosticsSectionWriter {
                                  PipelineTelemetry pipelineTelemetry,
                                  TrackerTelemetry linkerTelemetry,
                                  DetectionReportSummary summary,
-                                 List<SourceExtractor.Pixel> driftPoints) throws IOException {
+                                 List<SourceExtractor.Pixel> driftPoints,
+                                 FieldDepth fieldDepth) throws IOException {
         report.println("<details class='report-group' id='diagnostics'>");
         report.println("<summary>Diagnostics<span class='summary-note'>Astrometry, frame quality control, configuration, star mask, extraction and track linking. Click to expand.</span></summary>");
         if (pipelineTelemetry != null) {
             writeAstrometricContext(report, reportContext);
             writeFrameQualityStatistics(report, pipelineTelemetry);
+            writeFieldDepth(report, fieldDepth);
             writeRejectedFrames(report, pipelineTelemetry);
             writePipelineConfiguration(report, reportContext);
             writeMasterShieldDiagnostics(report, reportContext, summary);
@@ -346,6 +358,89 @@ final class PipelineDiagnosticsSectionWriter {
             report.println("<p>No reusable WCS solution was found in the aligned set. Sky-coordinate report links are disabled for this session.</p>");
         }
         report.println("</div>");
+    }
+
+    /** The depth of every kept frame, as a chart: a frame that goes clearly less deep had clouds, haze or a bright sky. */
+    private static void writeFieldDepth(PrintWriter report, FieldDepth fieldDepth) {
+        if (fieldDepth == null || fieldDepth.isEmpty()) {
+            return;
+        }
+        double median = fieldDepth.median();
+        List<FieldDepth.Frame> measured = new ArrayList<>();
+        for (FieldDepth.Frame frame : fieldDepth.frames) {
+            if (!Double.isNaN(frame.depth)) {
+                measured.add(frame);
+            }
+        }
+        double lowest = median;
+        double highest = median;
+        List<String> shallow = new ArrayList<>();
+        for (FieldDepth.Frame frame : measured) {
+            lowest = Math.min(lowest, frame.depth);
+            highest = Math.max(highest, frame.depth);
+            if (frame.depth < median - 0.5) {
+                shallow.add(String.valueOf(frame.index + 1));
+            }
+        }
+        report.println("<div class='panel compact-diagnostics-panel' id='field-depth'>");
+        report.println("<h2>Quality Control: Field Depth</h2>");
+        report.println("<p class='compact-note'>" + String.format(Locale.US,
+                "How faint the stars are that the detection finds, with the settings of this run: the Gaia G magnitude at which the share of "
+                        + "Gaia stars found falls to half of the share among the brighter stars, in small patches of the field (%.0f&prime; each) away from large galaxies and nebulae. Median frame: <strong>G %.1f</strong>%s. ",
+                fieldDepth.patchArcmin, median, measured.size() > 1 ? String.format(Locale.US, " (frames from %.1f to %.1f)", lowest, highest) : "")
+                + (shallow.isEmpty() ? "No frame goes clearly less deep than the others."
+                : "Frame" + (shallow.size() == 1 ? " " : "s ") + String.join(", ", shallow) + " go" + (shallow.size() == 1 ? "es" : "")
+                + " more than half a magnitude less deep: clouds, haze, a bright sky or poor focus.")
+                + " Gaia G is close to a clear or luminance filter; other filters see different stars.</p>");
+        report.println(depthChart(measured, median, fieldDepth.sampleLimit));
+        report.println("</div>");
+    }
+
+    /** A small SVG chart of the depth per frame, with the median as a dashed line. */
+    static String depthChart(List<FieldDepth.Frame> frames, double median, double sampleLimit) {
+        int width = 760;
+        int height = 180;
+        int left = 46;
+        int right = 12;
+        int top = 12;
+        int bottom = 28;
+        double min = median;
+        double max = median;
+        for (FieldDepth.Frame frame : frames) {
+            min = Math.min(min, frame.depth);
+            max = Math.max(max, frame.depth);
+        }
+        min = Math.floor((min - 0.3) * 2) / 2;
+        max = Math.ceil((max + 0.3) * 2) / 2;
+        int count = frames.size();
+        StringBuilder svg = new StringBuilder("<svg viewBox='0 0 " + width + " " + height + "' style='max-width:" + width
+                + "px; width:100%; background:#2b2b2b; border:1px solid #555; border-radius:4px;' font-family='Segoe UI, sans-serif' font-size='11'>");
+        for (double mag = min; mag <= max + 1e-9; mag += 0.5) {
+            // Fainter (deeper) at the top.
+            double y = top + (max - mag) / (max - min) * (height - top - bottom);
+            svg.append(String.format(Locale.US, "<line x1='%d' y1='%.1f' x2='%d' y2='%.1f' stroke='#444'/><text x='%d' y='%.1f' fill='#999' text-anchor='end'>%.1f</text>",
+                    left, y, width - right, y, left - 6, y + 4, mag));
+        }
+        double medianY = top + (max - median) / (max - min) * (height - top - bottom);
+        svg.append(String.format(Locale.US, "<line x1='%d' y1='%.1f' x2='%d' y2='%.1f' stroke='#8fc3ff' stroke-dasharray='5 4'/>", left, medianY, width - right, medianY));
+        StringBuilder points = new StringBuilder();
+        for (int i = 0; i < count; i++) {
+            FieldDepth.Frame frame = frames.get(i);
+            double x = left + (count == 1 ? 0.5 : i / (double) (count - 1)) * (width - left - right);
+            double y = top + (max - frame.depth) / (max - min) * (height - top - bottom);
+            points.append(String.format(Locale.US, "%.1f,%.1f ", x, y));
+            svg.append(String.format(Locale.US, "<circle cx='%.1f' cy='%.1f' r='3' fill='%s'><title>Frame %d (%s): G %.2f%s</title></circle>",
+                    x, y, frame.depth < median - 0.5 ? "#ff8a65" : "#4da6ff", frame.index + 1, escapeForSvg(frame.fileName), frame.depth,
+                    frame.deeperThanSample ? String.format(Locale.US, " or deeper (the stars fetched end at %.1f)", sampleLimit) : ""));
+        }
+        svg.append("<polyline points='").append(points.toString().trim()).append("' fill='none' stroke='#4da6ff' stroke-width='1.5'/>");
+        svg.append(String.format(Locale.US, "<text x='%d' y='%d' fill='#999'>Frame →</text><text x='%d' y='%d' fill='#999' text-anchor='end'>Gaia G (deeper is higher)</text>",
+                left, height - 8, width - right, height - 8));
+        return svg.append("</svg>").toString();
+    }
+
+    private static String escapeForSvg(String text) {
+        return DetectionReportGenerator.escapeHtml(text == null ? "" : text);
     }
 
     private static void writeFrameQualityStatistics(PrintWriter report, PipelineTelemetry pipelineTelemetry) {

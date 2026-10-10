@@ -12,7 +12,7 @@ package eu.startales.spacepixels.gui;
 /** A catalogue object placed on a frame, in frame pixels, for {@link FrameView} to draw. */
 final class SkyMark {
 
-    enum Kind { STAR, DEEP_SKY, VARIABLE }
+    enum Kind { STAR, NAMED_STAR, DEEP_SKY, VARIABLE }
 
     final Kind kind;
     /** Position in frame pixels (0-based, like the detections). */

@@ -64,6 +64,12 @@ public final class SkyCatalogueStore {
             if (catalogue.variables == null) {
                 catalogue.variables = new ArrayList<>();
             }
+            if (catalogue.depthSamples == null) {
+                catalogue.depthSamples = new ArrayList<>();
+            }
+            if (catalogue.namedStars == null) {
+                catalogue.namedStars = new ArrayList<>();
+            }
             if (catalogue.problems == null) {
                 catalogue.problems = new ArrayList<>();
             }

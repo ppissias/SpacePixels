@@ -35,6 +35,10 @@ public final class SkyCatalogue {
     public List<Star> stars = new ArrayList<>();
     public List<DeepSkyObject> deepSky = new ArrayList<>();
     public List<VariableStar> variables = new ArrayList<>();
+    /** Stars brighter than about magnitude 5 that have a proper name, such as Betelgeuse; usually none in a telescope field. */
+    public List<NamedStar> namedStars = new ArrayList<>();
+    /** Faint Gaia stars of four small patches, one in each quarter of the field, to measure how deep the frames go. */
+    public List<DepthSample> depthSamples = new ArrayList<>();
     /** One line per source that could not be fetched; empty when all answered. */
     public List<String> problems = new ArrayList<>();
 
@@ -62,6 +66,29 @@ public final class SkyCatalogue {
         public Double majorArcmin;
         public Double minorArcmin;
         public Double angleDeg;
+        /** The common name, such as "Bode's Galaxy", or null. */
+        public String commonName;
+        /** SIMBAD's main identifier, which links the common name to the object. */
+        public transient String mainId;
+    }
+
+    /** The Gaia stars of a square patch of the field, down to {@link #magnitudeLimit}. */
+    public static final class DepthSample {
+        public double centerRa;
+        public double centerDec;
+        /** Side of the patch in degrees (along Dec; along RA it is this on the sky). */
+        public double sideDeg;
+        public double magnitudeLimit;
+        public List<Star> stars = new ArrayList<>();
+    }
+
+    /** A bright star with a proper name, from SIMBAD. */
+    public static final class NamedStar {
+        public String name;
+        public double ra;
+        public double dec;
+        /** V magnitude. */
+        public double vmag;
     }
 
     /** A variable star from the AAVSO International Variable Star Index (VSX). */

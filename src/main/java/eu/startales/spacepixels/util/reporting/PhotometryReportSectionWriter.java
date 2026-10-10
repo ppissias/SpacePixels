@@ -11,6 +11,7 @@
 package eu.startales.spacepixels.util.reporting;
 
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
+import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import io.github.ppissias.jtransient.core.PixelEncoding;
 import io.github.ppissias.jtransient.photometry.PhotometryFlags;
 import io.github.ppissias.jtransient.photometry.StarLightCurve;
@@ -591,11 +592,12 @@ final class PhotometryReportSectionWriter {
             report.println("<p class='compact-note'>High-confidence candidates passed every check; possible candidates failed exactly one. "
                     + "Each light curve is drawn with three constant stars of similar brightness offset below it, on the same scale, so you can see what a constant star looks like in this session. "
                     + "Cutouts show the star in its brightest and faintest usable frame with the same display stretch.</p>");
-            writeCandidateTable(report, context, analysis, cards);
+            SessionCatalogue sessionCatalogue = SessionCatalogue.of(context);
+            writeCandidateTable(report, context, analysis, cards, sessionCatalogue);
             int shown = 0;
             for (StarLightCurve star : cards) {
                 if (shown++ >= MAX_CANDIDATE_CARDS) break;
-                writeCandidateCard(report, context, analysis, star, shown);
+                writeCandidateCard(report, context, analysis, star, shown, sessionCatalogue);
             }
             if (cards.size() > MAX_CANDIDATE_CARDS) {
                 report.println("<p class='compact-note'>" + (cards.size() - MAX_CANDIDATE_CARDS) + " more candidates are listed in photometry_stars.csv.</p>");
@@ -621,7 +623,7 @@ final class PhotometryReportSectionWriter {
     }
 
     private static void writeCandidateCard(PrintWriter report, DetectionReportContext context, VariableStarAnalysis analysis,
-                                           StarLightCurve star, int number) throws IOException {
+                                           StarLightCurve star, int number, SessionCatalogue sessionCatalogue) throws IOException {
         boolean high = star.tier == VariabilityTier.HIGH_CONFIDENCE;
         String tierColor = high ? PhotometrySvgChart.SERIES_BLUE : PhotometrySvgChart.SERIES_ORANGE;
         report.println("<div class='detection-card' id='variable-v" + number + "' style='border-left-color:" + tierColor + ";'>");
@@ -630,6 +632,7 @@ final class PhotometryReportSectionWriter {
                 + DetectionReportGenerator.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, star.x, star.y))
                 + "</div>");
         report.println("<p style='font-size:14px; color:#e6e6e6; margin: 0 0 10px 0; line-height:1.5;'>" + DetectionReportGenerator.escapeHtml(plainSummary(analysis, star)) + "</p>");
+        report.println(catalogueEntryHtml(context, star, sessionCatalogue));
         report.println(catalogueCrossCheckHtml(context, star, number));
 
         report.println("<details class='foldable-streak-details'><summary>Statistics</summary><div class='foldable-streak-body'>");
@@ -678,14 +681,35 @@ final class PhotometryReportSectionWriter {
     }
 
     /**
-     * Compact table of every high-confidence and possible candidate, with an "Identify all in VSX" button
-     * that fills the "Known as" column through the lookup proxy (results are saved into the report).
+     * Compact table of every high-confidence and possible candidate. The "Known as" column is filled at once for
+     * candidates matched with the VSX stars of the session's sky catalogue; the "Identify in VSX" button looks the
+     * others up in the full VSX through the lookup proxy (results are saved into the report).
      */
     private static void writeCandidateTable(PrintWriter report, DetectionReportContext context, VariableStarAnalysis analysis,
-                                            List<StarLightCurve> candidates) {
+                                            List<StarLightCurve> candidates, SessionCatalogue sessionCatalogue) {
         boolean sky = context.astrometryContext != null && context.astrometryContext.hasAstrometricSolution();
+        int shownRows = 0;
+        int matchedRows = 0;
+        for (StarLightCurve star : candidates) {
+            shownRows++;
+            SkyTarget target = sky ? skyTarget(context, star.x, star.y) : null;
+            if (target != null && !sessionCatalogue.variablesNear(target.raDegrees, target.decDegrees, target.radiusArcsec).isEmpty()) {
+                matchedRows++;
+            }
+        }
+        int unmatchedRows = shownRows - matchedRows;
         report.println("<div style='display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin: 8px 0 2px 0;'>");
-        if (sky) {
+        if (sky && sessionCatalogue.isAvailable()) {
+            if (unmatchedRows > 0) {
+                report.println("<button type='button' class='id-link vsx-identify-all'>Look up the " + unmatchedRows
+                        + (unmatchedRows == 1 ? " other" : " others") + " in VSX</button>");
+            }
+            report.println("<span class='astro-note vsx-identify-status' style='margin:0;'>" + matchedRows + " of " + shownRows
+                    + " candidates were matched with the AAVSO VSX stars of the session's sky catalogue when this report was written."
+                    + (unmatchedRows > 0 ? " The button looks the " + (unmatchedRows == 1 ? "other one" : "other " + unmatchedRows)
+                    + " up in the full VSX, which also has the fainter variables. Needs SpacePixels running; the results are saved into this report." : "")
+                    + "</span>");
+        } else if (sky) {
             report.println("<button type='button' class='id-link vsx-identify-all'>Identify all in VSX</button>");
             report.println("<span class='astro-note vsx-identify-status' style='margin:0;'>Looks every candidate up in the AAVSO VSX catalogue. Needs SpacePixels running; the results are saved into this report.</span>");
         } else {
@@ -711,7 +735,11 @@ final class PhotometryReportSectionWriter {
                     + "<td" + (star.failedGates.isEmpty() ? "" : " class='alert'") + ">" + (star.failedGates.isEmpty() ? "&ndash;"
                     : DetectionReportGenerator.escapeHtml(String.join(", ", star.failedGates))) + "</td>");
             SkyTarget target = sky ? skyTarget(context, star.x, star.y) : null;
-            if (target != null) {
+            List<SessionCatalogue.VariableMatch> matches = target == null ? List.of()
+                    : sessionCatalogue.variablesNear(target.raDegrees, target.decDegrees, target.radiusArcsec);
+            if (!matches.isEmpty()) {
+                report.print("<td title='Matched with the AAVSO VSX stars of the session&#39;s sky catalogue'>" + knownAsHtml(matches) + "</td>");
+            } else if (target != null) {
                 String sidecar = "photometry_v" + number + "_vsx.json";
                 String hidden = DetectionReportAstrometry.buildLiveRenderButtonHtml("vsx", vsxTapUrl(target), "photometry-v" + number + "-vsx-row",
                         "VSX", sidecar, String.format(Locale.US, "AAVSO VSX within %.0f arcsec of V%d", target.radiusArcsec, number))
@@ -723,6 +751,108 @@ final class PhotometryReportSectionWriter {
             report.println("</tr>");
         }
         report.println("</tbody></table></div>");
+    }
+
+    /** The "Known as" cell of a candidate matched in the session's catalogue, written like the live VSX result. */
+    static String knownAsHtml(List<SessionCatalogue.VariableMatch> matches) {
+        SkyCatalogue.VariableStar star = matches.get(0).star;
+        String name = DetectionReportGenerator.escapeHtml(star.name);
+        String link = star.oid > 0 ? "<a class='live-link-inline' href='https://www.aavso.org/vsx/index.php?view=detail.top&amp;oid="
+                + star.oid + "' target='_blank' rel='noopener noreferrer'>" + name + "</a>" : name;
+        return "<strong>" + link + "</strong> &middot; " + DetectionReportGenerator.escapeHtml(star.type != null ? star.type : "?")
+                + " &middot; " + (star.periodDays != null ? SessionCatalogue.formatPeriod(star.periodDays) : "no period")
+                + " &middot; " + String.format(Locale.US, "%.1f", matches.get(0).separationArcsec) + "&Prime;"
+                + (matches.size() > 1 ? " <span style='color:#888;'>(+" + (matches.size() - 1) + " more)</span>" : "");
+    }
+
+    /**
+     * What the session's sky catalogue says about a candidate: its VSX entry, explained, with how much of the
+     * period the session covers, and its Gaia magnitude and colour. Catalogue values, not measurements. Empty
+     * without a catalogue or a sky position.
+     */
+    static String catalogueEntryHtml(DetectionReportContext context, StarLightCurve star, SessionCatalogue sessionCatalogue) {
+        SkyTarget target = sessionCatalogue.isAvailable() ? skyTarget(context, star.x, star.y) : null;
+        if (target == null) {
+            return "";
+        }
+        StringBuilder html = new StringBuilder("<div class='astro-note' style='margin: 0 0 10px 0; line-height:1.6;'>");
+        List<SessionCatalogue.VariableMatch> matches = sessionCatalogue.variablesNear(target.raDegrees, target.decDegrees, target.radiusArcsec);
+        if (matches.isEmpty()) {
+            html.append("Not among the AAVSO VSX variables of the session's sky catalogue (down to magnitude ")
+                    .append(String.format(Locale.US, "%.1f", sessionCatalogue.catalogue.starMagnitudeLimit + 1))
+                    .append("). <strong>Check VSX Here</strong> searches the full VSX, which also has fainter variables.");
+        } else {
+            SessionCatalogue.VariableMatch match = matches.get(0);
+            SkyCatalogue.VariableStar variable = match.star;
+            String name = DetectionReportGenerator.escapeHtml(variable.name);
+            html.append("<strong>Catalogued as ")
+                    .append(variable.oid > 0 ? "<a class='live-link-inline' href='https://www.aavso.org/vsx/index.php?view=detail.top&amp;oid="
+                            + variable.oid + "' target='_blank' rel='noopener noreferrer'>" + name + "</a>" : name)
+                    .append("</strong> in AAVSO VSX, ").append(String.format(Locale.US, "%.1f", match.separationArcsec)).append("&Prime; away: ")
+                    .append(DetectionReportGenerator.escapeHtml(SessionCatalogue.describeVsxType(variable.type)));
+            String range = vsxRange(variable);
+            if (range != null) {
+                html.append(" &middot; ").append(DetectionReportGenerator.escapeHtml(range));
+            }
+            if (variable.periodDays != null && variable.periodDays > 0) {
+                html.append(" &middot; period ").append(SessionCatalogue.formatPeriod(variable.periodDays)).append('.');
+                String coverage = periodCoverage(variable.periodDays, star.timeSpanMinutes);
+                if (coverage != null) {
+                    html.append(' ').append(coverage);
+                }
+            } else {
+                html.append('.');
+            }
+            if (matches.size() > 1) {
+                html.append(" <span style='color:#888;'>").append(matches.size() - 1).append(" more VSX ")
+                        .append(matches.size() == 2 ? "star" : "stars").append(" within ")
+                        .append(String.format(Locale.US, "%.0f", target.radiusArcsec)).append("&Prime;.</span>");
+            }
+        }
+        SkyCatalogue.Star gaia = sessionCatalogue.gaiaStarNear(target.raDegrees, target.decDegrees, Math.min(target.radiusArcsec, 5.0));
+        if (gaia != null) {
+            html.append("<br>Gaia DR3: G ").append(String.format(Locale.US, "%.2f", gaia.g));
+            if (gaia.bpRp != null) {
+                html.append(", BP&minus;RP ").append(String.format(Locale.US, "%.2f", gaia.bpRp));
+            }
+            html.append(" <span style='color:#888;'>(catalogue values, not measured in this session)</span>");
+        }
+        return html.append("</div>").toString();
+    }
+
+    /** "range 12.10–12.80 V", "12.33 G, amplitude 0.03", or null when VSX gives no magnitudes. */
+    static String vsxRange(SkyCatalogue.VariableStar variable) {
+        if (variable.max == null) {
+            return null;
+        }
+        String band = variable.band == null ? "" : " " + variable.band;
+        if (variable.min == null) {
+            return String.format(Locale.US, "brightest %.2f%s", variable.max, band);
+        }
+        if (variable.minIsAmplitude) {
+            return String.format(Locale.US, "%.2f%s, amplitude %.2f", variable.max, band, variable.min);
+        }
+        return String.format(Locale.US, "range %.2f–%.2f%s", variable.max, variable.min, band);
+    }
+
+    /** How much of the period the candidate's measurements span, in words; null without a time span. */
+    static String periodCoverage(double periodDays, double spanMinutes) {
+        if (Double.isNaN(spanMinutes) || spanMinutes <= 0 || periodDays <= 0) {
+            return null;
+        }
+        double cycles = spanMinutes / (periodDays * 1440.0);
+        String span = spanMinutes >= 120 ? String.format(Locale.US, "%.1f h", spanMinutes / 60.0) : String.format(Locale.US, "%.0f min", spanMinutes);
+        String part;
+        if (cycles >= 1.5) {
+            part = String.format(Locale.US, "about %.0f cycles", cycles);
+        } else if (cycles >= 0.85) {
+            part = "about one full cycle";
+        } else if (cycles >= 0.1) {
+            part = String.format(Locale.US, "about %.0f %% of a cycle", cycles * 100);
+        } else {
+            part = "less than a tenth of a cycle, so only a small part of the variation can show";
+        }
+        return "This session covers " + span + ", " + part + ".";
     }
 
     /** One plain sentence: how the star changed, by how much, how clearly, and which checks it passed. */

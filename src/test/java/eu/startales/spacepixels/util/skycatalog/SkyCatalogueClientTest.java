@@ -88,6 +88,41 @@ public class SkyCatalogueClientTest {
     }
 
     @Test
+    public void keepsProperNamesAndAddsNamedObjects() {
+        assertEquals("Bode's Galaxy", SkyCatalogueClient.properName("NAME Bode's Galaxy"));
+        assertEquals("Betelgeuse", SkyCatalogueClient.properName("NAME Betelgeuse"));
+        for (String technical : new String[]{"NAME M 81*", "NAME UMa A", "NAME lambda Ori X-3", "NAME the Cap in M 82", "NAME MONOCEROS NEB", "M 81"}) {
+            assertNull(technical, SkyCatalogueClient.properName(technical));
+        }
+        CsvTable named = CsvTable.parse("main_id,ra,dec,otype,galdim_majaxis,galdim_minaxis,galdim_angle,id\n"
+                + "\"M  81\",148.888,69.065,\"Sy2\",21.38,10.23,157,\"NAME M 81*\"\n"
+                + "\"M  81\",148.888,69.065,\"Sy2\",21.38,10.23,157,\"NAME Bode's Galaxy\"\n"
+                + "\"NAME Horsehead Nebula\",85.2458,-2.4583,\"DNe\",6.0,,,\"NAME Horsehead Nebula\"\n"
+                + "\"NAME Ori B\",85.0,-2.0,\"MoC\",360.0,,,\"NAME Orion B\"\n");
+        List<SkyCatalogue.DeepSkyObject> objects = new java.util.ArrayList<>(SkyCatalogueClient.parseDeepSky(CsvTable.parse(
+                "main_id,ra,dec,otype,galdim_majaxis,galdim_minaxis,galdim_angle,id\n\"M  81\",148.888,69.065,\"Sy2\",21.38,10.23,157,\"M  81\"\n"),
+                CsvTable.parse("main_id\n")));
+        SkyCatalogueClient.addNamedObjects(objects, named);
+        assertEquals(2, objects.size());
+        assertEquals("Bode's Galaxy", objects.get(0).commonName);
+        assertEquals("Horsehead Nebula", objects.get(1).name);
+        assertEquals(6.0, objects.get(1).majorArcmin, 1e-9);
+    }
+
+    @Test
+    public void readsBrightNamedStars() {
+        List<SkyCatalogue.NamedStar> stars = SkyCatalogueClient.parseNamedStars(CsvTable.parse("main_id,ra,dec,id,flux\n"
+                + "\"* lam Ori\",83.784,9.934,\"NAME Heka\",3.66\n"
+                + "\"* lam Ori\",83.784,9.934,\"NAME Meissa\",3.66\n"
+                + "\"* lam Ori A\",83.784,9.934,\"NAME lambda Ori X-3\",3.47\n"
+                + "\"* alf Ori\",88.793,7.407,\"NAME Betelgeuse\",0.42\n"));
+        assertEquals(2, stars.size());
+        assertEquals("Meissa", stars.get(0).name);
+        assertEquals("Betelgeuse", stars.get(1).name);
+        assertEquals(0.42, stars.get(1).vmag, 1e-9);
+    }
+
+    @Test
     public void readsVariablesWithRangesAndAmplitudes() {
         List<SkyCatalogue.VariableStar> variables = SkyCatalogueClient.parseVariables(CsvTable.parse(
                 "OID,Name,V,RAJ2000,DEJ2000,Type,max,n_max,f_min,min,Period\n"

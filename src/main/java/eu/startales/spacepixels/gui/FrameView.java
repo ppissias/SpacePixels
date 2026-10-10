@@ -60,6 +60,7 @@ final class FrameView extends JComponent {
     private static final Color SKY_STAR_COLOR = new Color(170, 160, 255);
     private static final Color SKY_DEEP_SKY_COLOR = new Color(255, 215, 70);
     private static final Color SKY_VARIABLE_COLOR = new Color(255, 90, 210);
+    private static final Color SKY_NAMED_STAR_COLOR = new Color(235, 235, 255);
     /** Screen pixels per catalogue mark: when more would be on screen, only the brightest (or largest) are drawn. */
     private static final double SCREEN_AREA_PER_STAR = 2500;
     private static final double SCREEN_AREA_PER_VARIABLE = 2500;
@@ -227,7 +228,7 @@ final class FrameView extends JComponent {
         double reach = Math.max(3, 8 / scale);
         SkyMark best = null;
         double bestDistance = Double.MAX_VALUE;
-        for (SkyMark.Kind kind : new SkyMark.Kind[]{SkyMark.Kind.VARIABLE, SkyMark.Kind.STAR}) {
+        for (SkyMark.Kind kind : new SkyMark.Kind[]{SkyMark.Kind.VARIABLE, SkyMark.Kind.NAMED_STAR, SkyMark.Kind.STAR}) {
             for (SkyMark mark : drawnSkyMarks) {
                 double distance = Math.hypot(mark.x - pixel.x, mark.y - pixel.y);
                 if (mark.kind == kind && distance <= reach && distance < bestDistance) {
@@ -497,10 +498,15 @@ final class FrameView extends JComponent {
         List<SkyMark> stars = new java.util.ArrayList<>();
         List<SkyMark> variables = new java.util.ArrayList<>();
         List<SkyMark> deepSky = new java.util.ArrayList<>();
+        List<SkyMark> namedStars = new java.util.ArrayList<>();
         for (SkyMark mark : skyMarks) {
-            boolean shown = mark.kind == SkyMark.Kind.STAR ? skyStars
+            boolean shown = mark.kind == SkyMark.Kind.STAR || mark.kind == SkyMark.Kind.NAMED_STAR ? skyStars
                     : mark.kind == SkyMark.Kind.VARIABLE ? skyVariables : skyDeepSky;
             if (!shown) {
+                continue;
+            }
+            if (mark.kind == SkyMark.Kind.NAMED_STAR) {
+                namedStars.add(mark);
                 continue;
             }
             double x = left + (mark.x + 0.5) * scale;
@@ -589,6 +595,18 @@ final class FrameView extends JComponent {
             if (labelDeepSky) {
                 drawLabel(g2, mark.label, labelX, labelY, SKY_DEEP_SKY_COLOR);
             }
+            drawn.add(mark);
+        }
+        // The few bright stars with a proper name are always named.
+        for (SkyMark mark : namedStars) {
+            double x = left + (mark.x + 0.5) * scale;
+            double y = top + (mark.y + 0.5) * scale;
+            double radius = 16 * circleZoom;
+            g2.setColor(SKY_NAMED_STAR_COLOR);
+            g2.draw(new Ellipse2D.Double(x - radius, y - radius, 2 * radius, 2 * radius));
+            g2.setFont(g2.getFont().deriveFont(Font.BOLD, 13f));
+            drawLabel(g2, mark.label, x + radius + 4, y - radius / 2, SKY_NAMED_STAR_COLOR);
+            g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 11f));
             drawn.add(mark);
         }
         g2.setClip(screenClip);

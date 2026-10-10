@@ -1330,7 +1330,8 @@ public class DetectionReportGenerator {
                     reportContext, pipelineTelemetry, summary, settings.isIncludeAiCreativeReportSections()));
 
             // Results first: overview, moving objects, slow movers, residual review, maps, inspector, variable stars.
-            PipelineDiagnosticsSectionWriter.writeOverview(report, reportContext, pipelineTelemetry, summary);
+            FieldDepth fieldDepth = FieldDepth.measure(reportContext, pipelineTelemetry);
+            PipelineDiagnosticsSectionWriter.writeOverview(report, reportContext, pipelineTelemetry, summary, localRescueTracks, fieldDepth);
 
             report.println("<section id='moving-objects'>");
             TargetVisualizationSectionWriter.writeSection(report, reportContext);
@@ -1364,7 +1365,8 @@ public class DetectionReportGenerator {
                     pipelineTelemetry,
                     linkerTelemetry,
                     summary,
-                    result.driftPoints);
+                    result.driftPoints,
+                    fieldDepth);
 
             // =================================================================
             // AI PERSPECTIVES: Codex's Signal Weave, then Claude's The Night, Retold

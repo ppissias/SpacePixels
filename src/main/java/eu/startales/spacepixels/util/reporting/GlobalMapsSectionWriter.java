@@ -58,6 +58,9 @@ final class GlobalMapsSectionWriter {
                 localRescueTracks,
                 reportContext.localActivityClusters,
                 reportContext.slowMoverCandidates);
+        SessionCatalogue sessionCatalogue = SessionCatalogue.of(reportContext);
+        int catalogueObjects = CatalogueMapPainter.paint(globalMap, sessionCatalogue.catalogue,
+                reportContext.astrometryContext != null ? reportContext.astrometryContext.getTransformer() : null);
         TrackVisualizationRenderer.saveLosslessPng(globalMap, new File(reportContext.exportDir, "global_track_map.png"));
 
         report.println("<div class='panel'>");
@@ -65,7 +68,9 @@ final class GlobalMapsSectionWriter {
         report.println("<p class='section-lede'>");
         report.println("Every classified track and single-frame event over the median stack. " +
                 "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>SST#</strong> for suspected streak groupings, <strong>LR#</strong> for local rescue candidates). " +
-                "Local activity clusters are ringed as <strong>LC#</strong>, while maximum-stack slow-mover shape candidates, single-frame anomalies, and single streaks are marked as <strong>DS#</strong>, <strong>A#</strong>, and <strong>S#</strong>.</p>");
+                "Local activity clusters are ringed as <strong>LC#</strong>, while maximum-stack slow-mover shape candidates, single-frame anomalies, and single streaks are marked as <strong>DS#</strong>, <strong>A#</strong>, and <strong>S#</strong>."
+                + (catalogueObjects > 0 ? " From the sky catalogue of the session: Messier, NGC, IC and Sharpless objects in yellow, bright named stars in white and named variable stars in magenta." : "")
+                + "</p>");
         report.println(buildGlobalTrajectoryLegendHtml(
                 reportContext.movingTargets.size(),
                 reportContext.streakTracks.size(),

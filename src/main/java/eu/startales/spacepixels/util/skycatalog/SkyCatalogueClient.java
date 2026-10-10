@@ -64,6 +64,8 @@ public final class SkyCatalogueClient {
             {"LBN", "LBN"}, {"VDB", "vdB"}, {"PN A66", "Abell"}, {"ACO", "Abell"}, {"UGC", "UGC"}};
     /** Galaxies without one of those names are kept from this size, in arcminutes. */
     static final double MIN_GALAXY_ARCMIN = 1.0;
+    /** Stars with a proper name are kept to this V magnitude: the bright stars people know. */
+    static final double NAMED_STAR_MAGNITUDE = 5.0;
 
     private final HttpClient http;
 
@@ -91,6 +93,8 @@ public final class SkyCatalogueClient {
             CsvTable named = query(SIMBAD_TAP, namedDeepSkyQuery(field), 20_000, QUICK_TIMEOUT);
             CsvTable galaxies = query(SIMBAD_TAP, galaxyQuery(field), 20_000, QUICK_TIMEOUT);
             catalogue.deepSky = parseDeepSky(named, galaxies);
+            addNamedObjects(catalogue.deepSky, query(SIMBAD_TAP, namedObjectQuery(field), 20_000, QUICK_TIMEOUT));
+            catalogue.namedStars = parseNamedStars(query(SIMBAD_TAP, namedStarQuery(field), 5_000, QUICK_TIMEOUT));
         } catch (IOException e) {
             catalogue.problems.add("Deep-sky objects (SIMBAD): " + e.getMessage());
         }
@@ -112,12 +116,59 @@ public final class SkyCatalogueClient {
         } catch (IOException problem) {
             catalogue.problems.add("Stars (Gaia): " + problem.getMessage());
         }
+        if (!catalogue.stars.isEmpty()) {
+            progress.stage(3, 3, String.format(Locale.US, "faint stars of four small patches (Gaia, to %.1f, for the field depth)", DEPTH_MAGNITUDE));
+            try {
+                catalogue.depthSamples = fetchDepthSamples(field);
+            } catch (IOException e) {
+                catalogue.problems.add("Faint stars for the field depth (Gaia): " + e.getMessage());
+            }
+        }
         if (catalogue.stars.size() >= MAX_STARS) {
             catalogue.problems.add(String.format(Locale.US,
                     "Stars (Gaia): the field has more than %,d stars to this depth, so only part of them were fetched. "
                             + "Lower the star depth in the Astrometry Config tab.", MAX_STARS));
         }
         return catalogue;
+    }
+
+    /** The faintest stars fetched for the field depth: deeper than amateur frames usually go. */
+    static final double DEPTH_MAGNITUDE = 20.5;
+    /** Side of a patch for the field depth, in degrees, at most; a quarter of the field for small fields. */
+    static final double DEPTH_PATCH_DEG = 12.0 / 60.0;
+
+    /**
+     * Gaia stars to G {@value #DEPTH_MAGNITUDE} in four square patches, halfway from the centre of the field to each
+     * corner: the middle of the field often holds a large galaxy or nebula, where faint stars cannot be found.
+     */
+    List<SkyCatalogue.DepthSample> fetchDepthSamples(SkyField field) throws IOException, InterruptedException {
+        List<SkyCatalogue.DepthSample> samples = new ArrayList<>();
+        double side = Math.min(DEPTH_PATCH_DEG, Math.min(field.widthDeg, field.heightDeg) / 4.0);
+        for (int i = 0; i < field.cornerRa.length; i++) {
+            double deltaRa = ((field.cornerRa[i] - field.centerRa + 540) % 360) - 180;
+            double ra = (field.centerRa + deltaRa / 2 + 360) % 360;
+            double dec = (field.centerDec + field.cornerDec[i]) / 2;
+            samples.add(fetchDepthSample(ra, dec, side));
+        }
+        return samples;
+    }
+
+    private SkyCatalogue.DepthSample fetchDepthSample(double centerRa, double centerDec, double sideDeg) throws IOException, InterruptedException {
+        SkyCatalogue.DepthSample sample = new SkyCatalogue.DepthSample();
+        sample.centerRa = centerRa;
+        sample.centerDec = centerDec;
+        sample.sideDeg = sideDeg;
+        sample.magnitudeLimit = DEPTH_MAGNITUDE;
+        double halfDec = sample.sideDeg / 2;
+        double halfRa = halfDec / Math.max(0.05, Math.cos(Math.toRadians(centerDec)));
+        String box = String.format(Locale.US, "POLYGON('ICRS', %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f)",
+                centerRa - halfRa, centerDec - halfDec, centerRa + halfRa, centerDec - halfDec,
+                centerRa + halfRa, centerDec + halfDec, centerRa - halfRa, centerDec + halfDec);
+        String query = "SELECT RA_ICRS, DE_ICRS, pmRA, pmDE, Gmag, \"BP-RP\" FROM \"I/355/gaiadr3\" "
+                + "WHERE 1=CONTAINS(POINT('ICRS', RA_ICRS, DE_ICRS), " + box + ") "
+                + String.format(Locale.US, "AND Gmag <= %.2f", DEPTH_MAGNITUDE);
+        sample.stars = parseStars(query(VIZIER_TAP, query, MAX_STARS, STAR_TIMEOUT), "RA_ICRS", "DE_ICRS", "pmRA", "pmDE", "Gmag", "BP-RP");
+        return sample;
     }
 
     /** The Gaia DR3 stars of the field to this G magnitude, from VizieR or else from the ESA archive. */
@@ -157,6 +208,24 @@ public final class SkyCatalogueClient {
         return "SELECT b.main_id, b.ra, b.dec, b.otype, b.galdim_majaxis, b.galdim_minaxis, b.galdim_angle, i.id "
                 + "FROM basic AS b JOIN ident AS i ON i.oidref = b.oid "
                 + "WHERE 1=CONTAINS(POINT('ICRS', b.ra, b.dec), " + field.adqlPolygon() + ") AND (" + ids + ")";
+    }
+
+    /**
+     * The galaxies, nebulae and clusters with a "NAME" identifier, such as "Bode's Galaxy" (M 81) or the Horsehead
+     * Nebula, which SIMBAD keeps as an object of its own.
+     */
+    static String namedObjectQuery(SkyField field) {
+        return "SELECT b.main_id, b.ra, b.dec, b.otype, b.galdim_majaxis, b.galdim_minaxis, b.galdim_angle, n.id "
+                + "FROM basic AS b JOIN ident AS n ON n.oidref = b.oid "
+                + "WHERE 1=CONTAINS(POINT('ICRS', b.ra, b.dec), " + field.adqlPolygon() + ") AND n.id LIKE 'NAME %' "
+                + "AND (b.otype = 'G..' OR b.otype = 'ISM..' OR b.otype = 'Cl*..' OR b.otype = 'GrG..' OR b.otype = 'ClG..')";
+    }
+
+    /** Stars brighter than V 5 with a "NAME" identifier. */
+    static String namedStarQuery(SkyField field) {
+        return "SELECT b.main_id, b.ra, b.dec, i.id, f.flux FROM basic AS b JOIN ident AS i ON i.oidref = b.oid "
+                + "JOIN flux AS f ON f.oidref = b.oid WHERE 1=CONTAINS(POINT('ICRS', b.ra, b.dec), " + field.adqlPolygon() + ") "
+                + String.format(Locale.US, "AND i.id LIKE 'NAME %%' AND f.filter = 'V' AND f.flux < %.1f AND b.otype = '*..'", NAMED_STAR_MAGNITUDE);
     }
 
     static String galaxyQuery(SkyField field) {
@@ -314,6 +383,7 @@ public final class SkyCatalogueClient {
         object.majorArcmin = table.number(row, "galdim_majaxis");
         object.minorArcmin = table.number(row, "galdim_minaxis");
         object.angleDeg = table.number(row, "galdim_angle");
+        object.mainId = table.text(row, "main_id");
         return object;
     }
 
@@ -337,6 +407,96 @@ public final class SkyCatalogueClient {
             }
         }
         return null;
+    }
+
+    /** SIMBAD types whose names are left out: molecular clouds, cores and the like are not seen in a picture. */
+    private static final java.util.Set<String> UNSEEN_TYPES = java.util.Set.of("MoC", "Cld", "cor", "smm", "mm", "QSO", "Q?", "bub");
+
+    /**
+     * Gives the objects their common names: of an object's "NAME" identifiers, the longest that reads as a name.
+     * A named object that is not in the list yet (the Horsehead Nebula has no NGC number) is added under its name.
+     */
+    static void addNamedObjects(List<SkyCatalogue.DeepSkyObject> objects, CsvTable named) {
+        Map<String, String> names = commonNames(named);
+        Map<String, SkyCatalogue.DeepSkyObject> byMainId = new LinkedHashMap<>();
+        for (SkyCatalogue.DeepSkyObject object : objects) {
+            if (object.mainId != null) {
+                byMainId.put(object.mainId, object);
+            }
+        }
+        for (int row = 0; row < named.size(); row++) {
+            String mainId = named.text(row, "main_id");
+            String name = mainId == null ? null : names.get(mainId);
+            if (name == null || UNSEEN_TYPES.contains(named.text(row, "otype"))) {
+                continue;
+            }
+            SkyCatalogue.DeepSkyObject object = byMainId.get(mainId);
+            if (object != null) {
+                if (object.name == null || !object.name.equals(name)) {
+                    object.commonName = name;
+                }
+                continue;
+            }
+            object = deepSkyObject(named, row);
+            if (object != null) {
+                object.name = name;
+                objects.add(object);
+                byMainId.put(mainId, object);
+            }
+        }
+    }
+
+    static Map<String, String> commonNames(CsvTable names) {
+        Map<String, String> best = new LinkedHashMap<>();
+        for (int row = 0; row < names.size(); row++) {
+            String mainId = names.text(row, "main_id");
+            String name = properName(names.text(row, "id"));
+            if (mainId != null && name != null && (!best.containsKey(mainId) || name.length() > best.get(mainId).length())) {
+                best.put(mainId, name);
+            }
+        }
+        return best;
+    }
+
+    /**
+     * The name of a SIMBAD "NAME" identifier when it reads as a proper name ("Bode's Galaxy", "Betelgeuse"): no
+     * digits, and a real word. Null for technical names such as "M 81*", "UMa A" or "lambda Ori X-3".
+     */
+    static String properName(String identifier) {
+        if (identifier == null || !identifier.startsWith("NAME ")) {
+            return null;
+        }
+        String name = identifier.substring(5).replaceAll("\\s+", " ").trim();
+        if (name.isEmpty() || name.matches(".*\\d.*") || !name.matches(".*\\b[A-Z]?[a-z']{3,}.*") || name.contains(" in ")) {
+            return null;
+        }
+        return name;
+    }
+
+    static List<SkyCatalogue.NamedStar> parseNamedStars(CsvTable table) {
+        Map<String, SkyCatalogue.NamedStar> stars = new LinkedHashMap<>();
+        for (int row = 0; row < table.size(); row++) {
+            String mainId = table.text(row, "main_id");
+            String name = properName(table.text(row, "id"));
+            Double ra = table.number(row, "ra");
+            Double dec = table.number(row, "dec");
+            Double vmag = table.number(row, "flux");
+            if (mainId == null || name == null || ra == null || dec == null || vmag == null) {
+                continue;
+            }
+            SkyCatalogue.NamedStar star = stars.get(mainId);
+            if (star == null) {
+                star = new SkyCatalogue.NamedStar();
+                star.ra = ra;
+                star.dec = dec;
+                star.vmag = vmag;
+                stars.put(mainId, star);
+            }
+            if (star.name == null || name.length() > star.name.length()) {
+                star.name = name;
+            }
+        }
+        return new ArrayList<>(stars.values());
     }
 
     static List<SkyCatalogue.VariableStar> parseVariables(CsvTable table) {
