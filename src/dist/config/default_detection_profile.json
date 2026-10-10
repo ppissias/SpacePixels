@@ -65,7 +65,6 @@
   "anomalyMinIntegratedPixels": 25,
   "anomalyMinIntegratedSigma": 12.0,
   "anomalyMinPeakSigmaFloor": 3.0,
-  "anomalySuspectedStreakMinElongation": 3.5,
   "suspectedStreakLineTolerance": 6.0,
   "enableResidualTransientAnalysis": true,
   "enableLocalRescueCandidates": true,

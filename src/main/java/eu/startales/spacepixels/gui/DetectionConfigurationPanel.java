@@ -54,7 +54,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private final File legacyDetectionProfileFile = new File(System.getProperty("user.home"), SpacePixelsDetectionProfileIO.LEGACY_FILENAME);
     private final File visualizationPreferencesFile = new File(System.getProperty("user.home"), SpacePixelsVisualizationPreferencesIO.DEFAULT_FILENAME);
 
-    private JSpinner spinDetectionSigma, spinMinPixels, spinEdgeMargin, spinGrowSigma;
+    private JSpinner spinDetectionSigma, spinMinPixels, spinGrowSigma;
     private JCheckBox chkEnableSlowMovers;
     private JSpinner spinMasterSigma, spinMasterGrowSigma, spinMasterMinPix, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma;
     private JSpinner spinSlowMoverMinAxisRatio, spinSlowMoverMaxAxisRatio, spinSlowMoverMinFillFactor;
@@ -71,7 +71,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     // --- Anomaly Rescue ---
     private JCheckBox chkEnableAnomalyRescue;
-    private JSpinner spinAnomalyMinPeakSigma, spinAnomalyMinPixels, spinAnomalyMinIntegratedSigma, spinAnomalyMinIntegratedPixels, spinAnomalyMinPeakSigmaFloor, spinSuspectedStreakLineTolerance, spinAnomalySuspectedStreakMinElongation;
+    private JSpinner spinAnomalyMinPeakSigma, spinAnomalyMinPixels, spinAnomalyMinIntegratedSigma, spinAnomalyMinIntegratedPixels, spinAnomalyMinPeakSigmaFloor, spinSuspectedStreakLineTolerance;
 
     // --- Residual transient analysis ---
     private JCheckBox chkEnableResidualTransientAnalysis, chkEnableLocalRescueCandidates, chkEnableLocalActivityClusters;
@@ -149,7 +149,6 @@ public class DetectionConfigurationPanel extends JPanel {
         overviewPanel = new AutoTuneOverviewPanel(new OverviewHost());
         buildCoreSettings(overviewPanel);
         navigator.addPage(null, "Overview", overviewPanel, CORE_SETTING_TITLES);
-        navigator.addPage("DETECTION", "Object Detection", buildSourceExtractionPanel(), List.of());
         navigator.addPage("DETECTION", "Streak Detection", buildStreakDetectionPanel(), List.of());
         navigator.addPage("DETECTION", "Quality Control", buildQualityPanel(), List.of());
         navigator.addPage("MOVING OBJECTS", "Track Linking", buildMovingObjectsPanel(), List.of());
@@ -690,19 +689,6 @@ public class DetectionConfigurationPanel extends JPanel {
         return jTransientConfig;
     }
 
-    private JPanel buildSourceExtractionPanel() {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBorder(new EmptyBorder(10, 20, 20, 20));
-
-        panel.add(createTabIntro("Low-level detection safeguards. The detection thresholds and the star-mask settings are on the Overview. The black padding that registration leaves at the frame edges is found automatically, and the distance kept from it grows with the drift measured over the sequence."));
-
-        panel.add(createExpertSectionHeader("Detection Safeguards"));
-        spinEdgeMargin = addRow(panel, "Edge Margin (Dead Zone)", "Rejects detections too close to the image edge, where alignment and stacking artifacts are common.", intSpinnerModel(jTransientConfig.edgeMarginPixels, 0, 2000, 1));
-
-        return panel;
-    }
-
     private JPanel buildStreakDetectionPanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
@@ -772,7 +758,6 @@ public class DetectionConfigurationPanel extends JPanel {
         spinAnomalyMinIntegratedPixels = addRow(panel, "Anomaly Min Integrated Pixels", "Minimum footprint size required for the integrated-sigma anomaly path. Higher values reject small high-energy fragments from the broader rescue branch.", intSpinnerModel(jTransientConfig.anomalyMinIntegratedPixels, 1, 2000, 1));
         spinAnomalyMinPeakSigmaFloor = addRow(panel, "Anomaly Min Peak Sigma Floor", "Safety floor for diffuse anomaly rescue. Even broader anomalies must retain at least some local prominence to avoid low-contrast mush.", doubleSpinnerModel(jTransientConfig.anomalyMinPeakSigmaFloor, 0.0, 20.0, 0.1));
         spinSuspectedStreakLineTolerance = addRow(panel, "Suspected Streak Line Tolerance", "Maximum perpendicular centroid distance allowed when grouping rescued same-frame anomalies into a suspected streak line. Higher values group faint streak fragments more permissively; lower values keep the grouping tighter.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "suspectedStreakLineTolerance", 6.0), 0.0, 50.0, 0.1));
-        spinAnomalySuspectedStreakMinElongation = addRow(panel, "Anomaly Suspected Streak Min Elongation", "Rescued anomalies above this elongation are checked for same-frame collinear grouping and may be exported as suspected streak tracks. Higher values restrict grouping to more elongated anomaly fragments.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "anomalySuspectedStreakMinElongation", 3.5), 1.0, 20.0, 0.1));
 
         return panel;
     }
@@ -1195,7 +1180,6 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.detectionSigmaMultiplier = ((Number) spinDetectionSigma.getValue()).doubleValue();
             jTransientConfig.growSigmaMultiplier = ((Number) spinGrowSigma.getValue()).doubleValue();
             jTransientConfig.minDetectionPixels = ((Number) spinMinPixels.getValue()).intValue();
-            jTransientConfig.edgeMarginPixels = ((Number) spinEdgeMargin.getValue()).intValue();
             jTransientConfig.enableSlowMoverDetection = chkEnableSlowMovers.isSelected();
             jTransientConfig.masterSigmaMultiplier = ((Number) spinMasterSigma.getValue()).doubleValue();
             jTransientConfig.masterGrowSigmaMultiplier = ((Number) spinMasterGrowSigma.getValue()).doubleValue();
@@ -1239,7 +1223,6 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.anomalyMinIntegratedPixels = ((Number) spinAnomalyMinIntegratedPixels.getValue()).intValue();
             jTransientConfig.anomalyMinPeakSigmaFloor = ((Number) spinAnomalyMinPeakSigmaFloor.getValue()).doubleValue();
             setOptionalDoubleField(jTransientConfig, "suspectedStreakLineTolerance", ((Number) spinSuspectedStreakLineTolerance.getValue()).doubleValue());
-            setOptionalDoubleField(jTransientConfig, "anomalySuspectedStreakMinElongation", ((Number) spinAnomalySuspectedStreakMinElongation.getValue()).doubleValue());
             setOptionalBooleanField(jTransientConfig, "enableResidualTransientAnalysis", chkEnableResidualTransientAnalysis.isSelected());
             setOptionalBooleanField(jTransientConfig, "enableLocalRescueCandidates", chkEnableLocalRescueCandidates.isSelected());
             setOptionalBooleanField(jTransientConfig, "enableLocalActivityClusters", chkEnableLocalActivityClusters.isSelected());
@@ -1419,7 +1402,6 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinMasterGrowSigma, config.masterGrowSigmaMultiplier);
         setSpinnerValueClamped(spinMasterMinPix, config.masterMinDetectionPixels);
         setSpinnerValueClamped(spinMinPixels, config.minDetectionPixels);
-        setSpinnerValueClamped(spinEdgeMargin, config.edgeMarginPixels);
         chkEnableSlowMovers.setSelected(config.enableSlowMoverDetection);
 
         setSpinnerValueClamped(spinMasterSlowMoverSigma, config.masterSlowMoverSigmaMultiplier);
@@ -1461,7 +1443,6 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinAnomalyMinIntegratedPixels, config.anomalyMinIntegratedPixels);
         setSpinnerValueClamped(spinAnomalyMinPeakSigmaFloor, config.anomalyMinPeakSigmaFloor);
         setSpinnerValueClamped(spinSuspectedStreakLineTolerance, getOptionalDoubleField(config, "suspectedStreakLineTolerance", 6.0));
-        setSpinnerValueClamped(spinAnomalySuspectedStreakMinElongation, getOptionalDoubleField(config, "anomalySuspectedStreakMinElongation", 3.5));
         chkEnableResidualTransientAnalysis.setSelected(getOptionalBooleanField(config, "enableResidualTransientAnalysis", true));
         chkEnableLocalRescueCandidates.setSelected(getOptionalBooleanField(config, "enableLocalRescueCandidates", true));
         chkEnableLocalActivityClusters.setSelected(getOptionalBooleanField(config, "enableLocalActivityClusters", true));
