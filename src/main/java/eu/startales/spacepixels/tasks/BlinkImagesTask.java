@@ -2,89 +2,57 @@ package eu.startales.spacepixels.tasks;
 
 import com.google.common.eventbus.EventBus;
 import eu.startales.spacepixels.events.BlinkFinishedEvent;
-import eu.startales.spacepixels.events.BlinkFrameUpdateEvent;
+import eu.startales.spacepixels.events.BlinkLoadProgressEvent;
+import eu.startales.spacepixels.events.BlinkSequenceLoadedEvent;
 import eu.startales.spacepixels.events.BlinkStartedEvent;
+import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
-import eu.startales.spacepixels.util.StretchAlgorithm;
-import nom.tam.fits.Fits;
 
-import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Reads the frames of a blink. The blink window plays them; the stretch is applied while drawing, so it can change
+ * during the blink.
+ */
 public class BlinkImagesTask implements Runnable {
 
     private final EventBus eventBus;
-    private final ImageProcessing imageProcessing;
     private final FitsFileInformation[] files;
-    private final int stretchFactor;
-    private final int iterations;
-    private final StretchAlgorithm algorithm;
     private final AtomicBoolean isBlinking;
 
-    public BlinkImagesTask(EventBus eventBus, ImageProcessing imageProcessing, FitsFileInformation[] files,
-                           int stretchFactor, int iterations, StretchAlgorithm algorithm, AtomicBoolean isBlinking) {
+    public BlinkImagesTask(EventBus eventBus, FitsFileInformation[] files, AtomicBoolean isBlinking) {
         this.eventBus = eventBus;
-        this.imageProcessing = imageProcessing;
         this.files = files;
-        this.stretchFactor = stretchFactor;
-        this.iterations = iterations;
-        this.algorithm = algorithm;
         this.isBlinking = isBlinking;
     }
 
     @Override
     public void run() {
         eventBus.post(new BlinkStartedEvent());
-
         try {
             if (files == null || files.length == 0) {
                 eventBus.post(new BlinkFinishedEvent(false, "No files selected for blinking."));
                 return;
             }
-
-            // 1. Pre-load and stretch all images into memory
-            BufferedImage[] loadedImages = new BufferedImage[files.length];
+            List<BlinkSequence.Frame> frames = new ArrayList<>();
             for (int i = 0; i < files.length; i++) {
-                // If the user cancelled while we were loading, abort early
                 if (!isBlinking.get()) {
                     eventBus.post(new BlinkFinishedEvent(true, null));
                     return;
                 }
-
-                Fits fitsImage = new Fits(files[i].getFilePath());
-                Object kernelData = fitsImage.getHDU(0).getKernel();
-                fitsImage.close();
-
-                loadedImages[i] = imageProcessing.getStretchedImageFullSize(
-                        kernelData,
-                        files[i].getSizeWidth(),
-                        files[i].getSizeHeight(),
-                        stretchFactor,
-                        iterations,
-                        algorithm
-                );
+                eventBus.post(new BlinkLoadProgressEvent(i, files.length));
+                frames.add(BlinkSequence.load(files[i]));
             }
-
-            // 2. The Animation Loop
-            int currentIndex = 0;
-            while (isBlinking.get()) {
-                // Emit the current frame to the UI
-                eventBus.post(new BlinkFrameUpdateEvent(loadedImages[currentIndex]));
-
-                // Wait 500ms
-                Thread.sleep(500);
-
-                // Advance index
-                currentIndex++;
-                if (currentIndex >= loadedImages.length) {
-                    currentIndex = 0;
-                }
+            if (!isBlinking.get()) {
+                eventBus.post(new BlinkFinishedEvent(true, null));
+                return;
             }
-
-            // Clean exit
-            eventBus.post(new BlinkFinishedEvent(true, null));
-
+            eventBus.post(new BlinkSequenceLoadedEvent(new BlinkSequence(frames), files));
+        } catch (OutOfMemoryError e) {
+            eventBus.post(new BlinkFinishedEvent(false, "Not enough memory to hold " + files.length
+                    + " frames. Blink fewer frames, or start SpacePixels with more memory."));
         } catch (Exception ex) {
             eventBus.post(new BlinkFinishedEvent(false, ex.getMessage()));
         }

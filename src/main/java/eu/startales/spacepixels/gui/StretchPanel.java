@@ -26,8 +26,9 @@ import java.util.Locale;
 import java.util.prefs.Preferences;
 
 /**
- * The Image Stretch tab: the display stretch used by Blink, "Show full size" and the optional stretched copies,
- * with a linked, zoomable preview of the whole frame. The settings are remembered between sessions.
+ * The Image Stretch tab: the display stretch used by Blink (whose window shows the same controls), "Show full size"
+ * and the optional stretched copies, with a linked, zoomable preview of the whole frame. The settings are remembered
+ * between sessions.
  */
 public class StretchPanel extends JPanel {
     private final ApplicationWindow mainAppWindow;
@@ -90,11 +91,7 @@ public class StretchPanel extends JPanel {
         });
         JButton resetButton = new JButton("Reset to Defaults");
         resetButton.setToolTipText("Return the sliders to the defaults of the selected algorithm.");
-        resetButton.addActionListener(e -> {
-            applySelectedAlgorithmConfiguration(true);
-            saveSettings();
-            triggerPreviewUpdate();
-        });
+        resetButton.addActionListener(e -> resetStretchToDefaults());
         JPanel algorithmRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         algorithmRow.setBorder(new EmptyBorder(12, 0, 6, 0));
         algorithmRow.add(new JLabel("Algorithm:"));
@@ -308,6 +305,10 @@ public class StretchPanel extends JPanel {
     }
 
     public void triggerPreviewUpdate() {
+        // Only a visible tab renders; the tab renders again when it is shown (for example after blinking).
+        if (!isShowing()) {
+            return;
+        }
         if (previewDebounceTimer.isRunning()) {
             previewDebounceTimer.restart();
         } else {
@@ -395,6 +396,18 @@ public class StretchPanel extends JPanel {
 
     public JSlider getStretchIterationsSlider() {
         return stretchIterationsSlider;
+    }
+
+    /** The algorithm choice, shared with the blink window so both show and change the same stretch. */
+    ComboBoxModel<StretchAlgorithm> getStretchAlgorithmModel() {
+        return stretchAlgoCombo.getModel();
+    }
+
+    /** Returns the sliders to the defaults of the selected algorithm (the Reset to Defaults button). */
+    void resetStretchToDefaults() {
+        applySelectedAlgorithmConfiguration(true);
+        saveSettings();
+        triggerPreviewUpdate();
     }
 
     // ==========================================

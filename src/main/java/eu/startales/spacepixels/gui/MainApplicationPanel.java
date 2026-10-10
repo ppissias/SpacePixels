@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.gui;
 
+import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
@@ -203,33 +204,19 @@ public class MainApplicationPanel extends JPanel {
             }).start();
         });
 
-        // --- REFACTORED BLINK ACTION LISTENER ---
         blinkButton.addActionListener(e -> {
-            if (!isBlinking.get()) {
-                // START BLINKING
-                FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
-                if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0) return;
-
-                isBlinking.set(true); // Lock the atomic boolean
-
-                int stretchFactor = mainAppWindow.getStretchPanel().getStretchSlider().getValue();
-                int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
-                StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
-
-                new Thread(new BlinkImagesTask(
-                        mainAppWindow.getEventBus(),
-                        mainAppWindow.getImageProcessing(),
-                        selectedFitsFilesInfo,
-                        stretchFactor,
-                        iterations,
-                        algo,
-                        isBlinking
-                )).start();
-
-            } else {
-                // STOP BLINKING
-                isBlinking.set(false); // Task will see this and exit its loop
+            if (isBlinking.get()) {
+                // Stop: while loading the task sees the flag; once playing, closing the window ends the blink.
+                isBlinking.set(false);
+                mainAppWindow.getBlinkFrame().close();
+                return;
             }
+            FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
+            if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0 || !confirmBlinkMemory(selectedFitsFilesInfo)) {
+                return;
+            }
+            isBlinking.set(true);
+            new Thread(new BlinkImagesTask(mainAppWindow.getEventBus(), selectedFitsFilesInfo, isBlinking)).start();
         });
 
         detectSingleButton.addActionListener(e -> {
@@ -1018,36 +1005,63 @@ public class MainApplicationPanel extends JPanel {
         });
     }
 
-    // ... (The rest of your existing event subscribers like onBlinkStarted, onBatchConvertStarted, etc. remain unchanged)
+    /**
+     * The blink keeps its frames in memory; when they would not fit, says so and lets the user choose. Returns whether
+     * to go ahead.
+     */
+    private boolean confirmBlinkMemory(FitsFileInformation[] files) {
+        long needed = BlinkSequence.estimateBytes(files);
+        Runtime runtime = Runtime.getRuntime();
+        long available = runtime.maxMemory() - (runtime.totalMemory() - runtime.freeMemory());
+        if (needed <= available * 0.9) {
+            return true;
+        }
+        int choice = JOptionPane.showConfirmDialog(this,
+                String.format(java.util.Locale.US, "<html>Blinking %d frames needs about %.1f GB of memory, but only about %.1f GB is free.<br>"
+                                + "Select fewer frames, or start SpacePixels with more memory.<br><br>Try anyway?</html>",
+                        files.length, needed / 1e9, available / 1e9),
+                "Not Enough Memory to Blink", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        return choice == JOptionPane.YES_OPTION;
+    }
 
     @Subscribe
     public void onBlinkStarted(BlinkStartedEvent event) {
         EventQueue.invokeLater(() -> {
             disableControlsBlinking();
-            blinkButton.setText("stop blinking");
-            statusLabel.setText("Preparing blink sequence...");
+            // The button stays available to stop the blink.
+            blinkButton.setEnabled(true);
+            blinkButton.setText("Stop Blinking");
+            statusLabel.setText("Loading frames for blinking...");
         });
     }
 
     @Subscribe
-    public void onBlinkFrameUpdate(BlinkFrameUpdateEvent event) {
+    public void onBlinkLoadProgress(BlinkLoadProgressEvent event) {
+        EventQueue.invokeLater(() -> statusLabel.setText(String.format("Loading frame %d of %d for blinking...",
+                event.getLoaded() + 1, event.getTotal())));
+    }
+
+    @Subscribe
+    public void onBlinkSequenceLoaded(BlinkSequenceLoadedEvent event) {
         EventQueue.invokeLater(() -> {
-            statusLabel.setText("Blinking...");
-            if (!mainAppWindow.getBlinkFrame().isVisible()) {
-                mainAppWindow.getBlinkFrame().setVisible(true);
+            if (!isBlinking.get()) {
+                // Stopped just as the last frame was read.
+                endBlink("Blinking stopped.");
+                return;
             }
-            mainAppWindow.getBlinkFrame().setImage(event.getImage());
+            statusLabel.setText("Blinking " + event.getSequence().getFrames().size()
+                    + " frames. Close the blink window or click Stop Blinking to end.");
+            mainAppWindow.getBlinkFrame().open(event.getSequence(), event.getFiles(), mainAppWindow.getStretchPanel(),
+                    mainAppWindow.getImageProcessing() == null ? null : mainAppWindow.getImageProcessing().getLastTrackOverlay());
         });
     }
 
+    /** Loading ended without showing the frames: stopped while loading, or failed. */
     @Subscribe
     public void onBlinkFinished(BlinkFinishedEvent event) {
         EventQueue.invokeLater(() -> {
-            blinkButton.setText("blink");
-            enableControlsProcessingBlinkingFinished();
-            statusLabel.setText("Blinking stopped.");
-            mainAppWindow.getBlinkFrame().dispose();
-
+            isBlinking.set(false);
+            endBlink("Blinking stopped.");
             if (!event.isSuccess()) {
                 JOptionPane.showMessageDialog(this,
                         "Blink process failed: " + event.getErrorMessage(),
@@ -1058,10 +1072,19 @@ public class MainApplicationPanel extends JPanel {
 
     @Subscribe
     public void onBlinkFrameClosed(BlinkFrameClosedEvent event) {
-        if (isBlinking.get()) {
-            ApplicationWindow.logger.info("Blink frame closed by user, signalling blink thread to stop.");
+        EventQueue.invokeLater(() -> {
             isBlinking.set(false);
+            endBlink("Blinking stopped.");
+        });
+    }
+
+    private void endBlink(String status) {
+        if (!uiLocked) {
+            return;
         }
+        blinkButton.setText("Blink Selected");
+        enableControlsProcessingBlinkingFinished();
+        statusLabel.setText(status);
     }
 
     @Subscribe

@@ -496,6 +496,11 @@ public class ImageProcessing implements AutoCloseable {
         return standardDetectionPipelineService.detectObjects(config, this.cachedFileInfo, safetyPrompt, progressListener);
     }
 
+    /** Tracks of the last detection run on these frames, or null when none has run. */
+    public TrackOverlay getLastTrackOverlay() {
+        return standardDetectionPipelineService.getLastTrackOverlay();
+    }
+
     /**
      * Runs the standard detection pipeline and returns the in-memory engine output without writing
      * any report artifacts to disk.

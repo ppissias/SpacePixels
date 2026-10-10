@@ -31,6 +31,8 @@ import java.util.List;
 final class StandardDetectionPipelineService {
 
     private final AppConfig appConfig;
+    /** Tracks of the last run, for the blink viewer. */
+    private volatile TrackOverlay lastTrackOverlay;
 
     StandardDetectionPipelineService(AppConfig appConfig) {
         this.appConfig = appConfig;
@@ -43,6 +45,7 @@ final class StandardDetectionPipelineService {
         // Detection takes 0-90% of the bar; exporting the report the rest.
         ImageProcessing.PipelineExecutionData executionData = runDetectionPipeline(config, cachedFileInfo,
                 progressListener == null ? null : (percent, message) -> progressListener.onProgressUpdate((int) (percent * 0.9), message));
+        lastTrackOverlay = TrackOverlay.from(executionData.getPipelineResult());
 
         if (safetyPrompt != null) {
             ImageProcessing.DetectionSummary detectionSummary = DetectionPipelineSupport.summarizeDetections(executionData.getPipelineResult());
@@ -67,6 +70,10 @@ final class StandardDetectionPipelineService {
             System.err.println("Failed to export visualizations: " + e.getMessage());
         }
         return null;
+    }
+
+    TrackOverlay getLastTrackOverlay() {
+        return lastTrackOverlay;
     }
 
     ImageProcessing.PipelineExecutionData runDetectionPipeline(DetectionConfig config,
