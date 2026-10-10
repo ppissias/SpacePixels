@@ -61,6 +61,10 @@ public class ConfigurationPanel extends JPanel {
     private final JLabel longStatus = statusLabel();
     private final JLabel footerStateLabel = new JLabel(" ");
     private final JLabel footerMessageLabel = new JLabel(" ");
+    private final JSpinner starDepthSpinner = new JSpinner(new SpinnerNumberModel(
+            AppConfig.DEFAULT_SKY_CATALOGUE_STAR_MAGNITUDE, AppConfig.MIN_SKY_CATALOGUE_STAR_MAGNITUDE,
+            AppConfig.MAX_SKY_CATALOGUE_STAR_MAGNITUDE, 0.5));
+    private final JLabel starDepthStatus = statusLabel();
 
     /** Site values as last saved, for the unsaved-changes indicator and Revert. */
     private String savedObservatoryCode = "";
@@ -111,6 +115,20 @@ public class ConfigurationPanel extends JPanel {
                         + "database (D50 is a good choice for most setups), installed next to the program. "
                         + "The <b>Astrometry.net (online)</b> option needs no installation; images are submitted as private.",
                 astapControl));
+
+        // --- SKY CATALOGUE ---
+        mainContent.add(createSectionHeader("Sky Catalogue (Annotate)"));
+        starDepthSpinner.setEditor(new JSpinner.NumberEditor(starDepthSpinner, "0.0"));
+        starDepthSpinner.setPreferredSize(new Dimension(80, CONFIG_TEXT_FIELD_HEIGHT));
+        starDepthSpinner.setMaximumSize(new Dimension(80, CONFIG_TEXT_FIELD_HEIGHT));
+        starDepthSpinner.addChangeListener(e -> starDepthChanged());
+        mainContent.add(createConfigRow(
+                "Star Depth (Gaia G)",
+                "The faintest stars that <b>Fetch Sky Catalogue</b> downloads from Gaia, as a G magnitude. "
+                        + "Magnitude 15 takes about half a minute for a field of 4° × 3°; each magnitude deeper roughly "
+                        + "doubles the stars and the wait. Variable stars are fetched to one magnitude fainter. "
+                        + "A change applies to the next fetch.",
+                verticalStack(starDepthSpinner, starDepthStatus)));
 
         // --- OBSERVING SITE ---
         mainContent.add(createSectionHeader("Observing Site (for object identification)"));
@@ -179,6 +197,8 @@ public class ConfigurationPanel extends JPanel {
         astapPathLabel.setText(astap == null || astap.isEmpty() ? "Not set" : astap);
         loading = true;
         try {
+            starDepthSpinner.setValue(config.skyCatalogueStarMagnitude());
+            starDepthStatus.setText(" ");
             observatoryCodeTextField.setText(nullToEmpty(config.observatoryCode));
             latTextField.setText(nullToEmpty(config.siteLat));
             longTextField.setText(nullToEmpty(config.siteLong));
@@ -400,6 +420,22 @@ public class ConfigurationPanel extends JPanel {
         } else {
             footerStateLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
             footerStateLabel.setText("✓ Saved settings in use");
+        }
+    }
+
+    /** Keeps the new star depth at once, like the ASTAP path. */
+    private void starDepthChanged() {
+        if (loading || mainAppWindow.getImageProcessing() == null) {
+            return;
+        }
+        config().skyCatalogueStarMagnitude = ((Number) starDepthSpinner.getValue()).doubleValue();
+        try {
+            mainAppWindow.getImageProcessing().saveAppConfig();
+            starDepthStatus.setForeground(UIManager.getColor("Label.disabledForeground"));
+            starDepthStatus.setText("✓ Saved · used by the next Fetch Sky Catalogue");
+        } catch (IOException ex) {
+            starDepthStatus.setForeground(warningColor());
+            starDepthStatus.setText("Cannot save: " + ex.getMessage());
         }
     }
 

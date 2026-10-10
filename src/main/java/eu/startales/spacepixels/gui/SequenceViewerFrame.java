@@ -29,7 +29,7 @@ import java.util.concurrent.ExecutionException;
  * A window that steps through frames, laid out like the blink window: controls and the shared stretch on top, the
  * zoomable frame in the middle, the frame and cursor in the status bar. Each frame is prepared in the background by
  * the subclass; while it is, the window says so and keeps the previous frame. ← and → step. A window that shows
- * detections has a "Show detections" switch (D).
+ * detections has a "Show detections" switch (D). Every window has the Annotate switch (A) for the sky catalogue.
  */
 abstract class SequenceViewerFrame extends JFrame {
 
@@ -66,6 +66,7 @@ abstract class SequenceViewerFrame extends JFrame {
     private final JLabel frameLabel = new JLabel(" ");
     private final JLabel cursorLabel = new JLabel(" ");
     private final ViewerSupport.CursorReadout cursorReadout = new ViewerSupport.CursorReadout();
+    private final SkyAnnotations sky = new SkyAnnotations(view);
     private final String windowName;
     private final String busyText;
     private final boolean disposeOnClose;
@@ -102,7 +103,7 @@ abstract class SequenceViewerFrame extends JFrame {
         setContentPane(contentPane);
         JComponent controls = buildControls();
         JComponent statusBar = ViewerSupport.statusBar(frameLabel, cursorLabel, "← → previous / next frame · "
-                + (showsDetections ? "D detections · " : "") + "F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
+                + (showsDetections ? "D detections · " : "") + "A annotate · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
         contentPane.add(controls, BorderLayout.NORTH);
         contentPane.add(view, BorderLayout.CENTER);
         contentPane.add(statusBar, BorderLayout.SOUTH);
@@ -130,6 +131,10 @@ abstract class SequenceViewerFrame extends JFrame {
                 view.setDetectionsVisible(detectionsBox.isSelected());
             });
         }
+        ViewerSupport.bind(getRootPane(), "A", "annotate", () -> {
+            sky.toggle();
+            updateCursorLabel();
+        });
         ViewerSupport.bindZoomKeys(getRootPane(), view);
         ViewerSupport.bind(getRootPane(), "ESCAPE", "close", this::close);
         addWindowListener(new WindowAdapter() {
@@ -161,6 +166,7 @@ abstract class SequenceViewerFrame extends JFrame {
     protected void openAt(int index, StretchPanel stretchPanel, FitsFileInformation[] files) {
         bindStretch(stretchPanel);
         cursorReadout.reset(files);
+        sky.attach(files);
         open = true;
         shown = null;
         shownIndex = -1;
@@ -186,6 +192,7 @@ abstract class SequenceViewerFrame extends JFrame {
         shownIndex = -1;
         cursorPixel = null;
         cursorReadout.reset(null);
+        sky.detach();
         view.clear();
         if (stretch != null) {
             stretch.clearTables();
@@ -246,6 +253,10 @@ abstract class SequenceViewerFrame extends JFrame {
         }
         for (JComponent zoomControl : ViewerSupport.zoomControls(view)) {
             row.add(zoomControl);
+        }
+        row.add(Box.createHorizontalStrut(10));
+        for (JComponent skyControl : sky.controls()) {
+            row.add(skyControl);
         }
 
         JPanel controls = new JPanel();
@@ -332,11 +343,13 @@ abstract class SequenceViewerFrame extends JFrame {
         if (result.frame == null) {
             view.showFrame(null, null, false);
             view.setDetections(null);
+            sky.showFrame(null);
             view.setPlaceholder(result.problem);
             frameLabel.setText(frameText(index, null));
         } else {
             view.showFrame(result.frame, stretch.tablesFor(result.frame), stretch.extremeColour(result.frame));
             view.setDetections(result.detections);
+            sky.showFrame(result.frame.getInfo());
             if (first) {
                 view.fit();
             }
@@ -362,6 +375,7 @@ abstract class SequenceViewerFrame extends JFrame {
     }
 
     private void updateCursorLabel() {
-        cursorLabel.setText(open && shown != null ? cursorReadout.describe(shown.frame, cursorPixel) : " ");
+        cursorLabel.setText(open && shown != null
+                ? cursorReadout.describe(shown.frame, cursorPixel) + sky.describe(cursorPixel) : " ");
     }
 }

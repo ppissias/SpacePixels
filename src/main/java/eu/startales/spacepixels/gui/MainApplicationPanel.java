@@ -12,6 +12,11 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.StretchAlgorithm;
+import eu.startales.spacepixels.util.WcsSolutionResolver;
+import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.util.skycatalog.SkyCatalogueClient;
+import eu.startales.spacepixels.util.skycatalog.SkyCatalogueStore;
+import eu.startales.spacepixels.util.skycatalog.SkyField;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import eu.startales.spacepixels.events.*;
 import eu.startales.spacepixels.tasks.*;
@@ -29,6 +34,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -57,6 +63,7 @@ public class MainApplicationPanel extends JPanel {
     private final JButton stretchButton = new JButton("Batch Stretch");
     private final JButton blinkButton = new JButton("Blink Selected");
     private final JButton solveButton = new JButton("Plate Solve Selected");
+    private final JButton skyCatalogueButton = new JButton(FETCH_SKY_CATALOGUE);
     private final JButton detectSingleButton = new JButton("Preview Frame");
     private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
     private final JButton detectBatchButton = new JButton("Detect Moving Targets");
@@ -88,6 +95,19 @@ public class MainApplicationPanel extends JPanel {
     /** The thread reading the frames of the current or last blink. */
     private Thread blinkLoader;
 
+    // Sky catalogue: fetched in the background, shown at the right of the status bar while it loads.
+    private static final String FETCH_SKY_CATALOGUE = "Fetch Sky Catalogue";
+    private final JLabel skyFetchLabel = new JLabel();
+    private final JProgressBar skyFetchBar = new JProgressBar();
+    private final JPanel skyFetchIndicator = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+    private final javax.swing.Timer skyFetchTimer = new javax.swing.Timer(1000, e -> updateSkyFetchText());
+    /** The fetch running, or null. */
+    private Thread skyFetchThread;
+    private String skyFetchStage = "";
+    private long skyFetchStageStart;
+    /** Why the last fetch failed or is incomplete, or null. */
+    private String skyFetchProblem;
+
     private DetectionSequenceFrame detectionSequenceFrame;
 
     public MainApplicationPanel(ApplicationWindow mainAppWindow) {
@@ -110,6 +130,9 @@ public class MainApplicationPanel extends JPanel {
         setActionTooltip(convertMonoButton, "Extract luminance and convert all loaded FITS files to 16-bit monochrome. Applies stretch if enabled.");
         setActionTooltip(stretchButton, "Apply the current non-linear stretch settings to all imported FITS files and save as new files.");
         setActionTooltip(solveButton, "Calculate the celestial coordinates (WCS) for the selected frame.");
+        setActionTooltip(skyCatalogueButton, "<html>Download the stars (Gaia), galaxies, nebulae and clusters (SIMBAD) and variable stars "
+                + "(AAVSO VSX)<br>in the field of the plate-solved frames, for the Annotate switch (A) of the viewers. "
+                + "Runs in the background;<br>the star depth is set in the Astrometry Config tab.</html>");
         setActionTooltip(blinkButton, "Animate the selected frames in a new window for manual visual inspection (Ctrl+B).");
         setActionTooltip(detectSingleButton, "Run the extraction engine on the selected frame to preview detected sources and streaks with the current settings (Ctrl+P).");
         setActionTooltip(manualTransientInspectionButton, "Extract purified transients from all frames against the master background and navigate through them using arrow keys.");
@@ -137,6 +160,7 @@ public class MainApplicationPanel extends JPanel {
                 buttonRow(stretchButton));
         JPanel astrometryGroup = workflowGroup("2  Astrometry", astrometryStatus,
                 buttonRow(solveButton),
+                buttonRow(skyCatalogueButton),
                 buttonRow(new JLabel("Solver:"), astapSolveRadio, astrometryNetSolveRadio));
         JPanel inspectGroup = workflowGroup("3  Inspect", inspectStatus,
                 buttonRow(blinkButton, detectSingleButton),
@@ -293,6 +317,13 @@ public class MainApplicationPanel extends JPanel {
         JPanel statusRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         statusRight.setOpaque(false);
         statusRight.add(updateNoticeHolder);
+        skyFetchBar.setIndeterminate(true);
+        skyFetchBar.setPreferredSize(new Dimension(80, 12));
+        skyFetchIndicator.setOpaque(false);
+        skyFetchIndicator.add(skyFetchLabel);
+        skyFetchIndicator.add(skyFetchBar);
+        skyFetchIndicator.setVisible(false);
+        statusRight.add(skyFetchIndicator);
         statusRight.add(progressBar);
         statusBar.add(statusRight, BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
@@ -326,6 +357,8 @@ public class MainApplicationPanel extends JPanel {
             }
             refreshWorkflowStatus();
         });
+
+        skyCatalogueButton.addActionListener(e -> onSkyCatalogueButton());
 
         solveButton.addActionListener(e -> {
             ApplicationWindow.logger.info("Will try to solve image");
@@ -378,6 +411,7 @@ public class MainApplicationPanel extends JPanel {
         resizeTableColumns(table);
         containsColorImages = false;
         FitsFileTableModel model = (FitsFileTableModel) tableModel;
+        restoreSkyCatalogue();
 
         if (model.getRowCount() == 0) {
             clearLoadedControls();
@@ -471,8 +505,9 @@ public class MainApplicationPanel extends JPanel {
     private void updateActionTooltip(JButton button) {
         String tooltip = actionTooltips.get(button);
         String reason = button.isEnabled() ? null : disabledReason(button);
+        String body = tooltip.replaceFirst("^<html>", "").replaceFirst("</html>$", "");
         button.setToolTipText(reason == null ? tooltip
-                : "<html>" + tooltip + "<br><i>Not available: " + reason + "</i></html>");
+                : "<html>" + body + "<br><i>Not available: " + reason + "</i></html>");
     }
 
     private String disabledReason(JButton button) {
@@ -498,6 +533,9 @@ public class MainApplicationPanel extends JPanel {
         if (button == blinkButton) {
             return "select at least 3 frames in the table.";
         }
+        if (button == skyCatalogueButton) {
+            return "plate solve at least one frame first, and write the solution to its FITS header.";
+        }
         if (containsColorImages) {
             return "convert the frames to monochrome first (1 Prepare).";
         }
@@ -512,6 +550,7 @@ public class MainApplicationPanel extends JPanel {
         if (frames == 0) {
             prepareStatus.setText("No frames imported");
             astrometryStatus.setText(" ");
+            astrometryStatus.setToolTipText(null);
             hasSolvedFrame = false;
             inspectStatus.setText(" ");
             detectStatus.setText("Import aligned frames to start");
@@ -524,17 +563,23 @@ public class MainApplicationPanel extends JPanel {
                 }
             }
             // One solved frame is enough: the frames are aligned, so the report uses its solution for all of them.
-            astrometryStatus.setText(solved == 0 ? "Solve one frame to identify objects" : "✓ " + solved + " / " + frames + " solved");
-            astrometryStatus.setToolTipText(solved == 0
-                    ? "<html>No frame is plate-solved yet. One solved frame gives the report sky coordinates:<br>"
-                    + "moving objects are identified with JPL and SkyBoT, and variable-star candidates are matched against AAVSO VSX.</html>"
-                    : "<html>The report has sky coordinates: moving objects are identified with JPL and SkyBoT,<br>"
-                    + "and variable-star candidates are matched against AAVSO VSX.</html>");
             hasSolvedFrame = solved > 0;
+            if (hasSolvedFrame) {
+                astrometryStatus.setText("<html>✓ " + solved + " / " + frames + " solved<br>" + skyCatalogueStatusText() + "</html>");
+                astrometryStatus.setToolTipText(skyCatalogueTooltip());
+            } else {
+                astrometryStatus.setText("Solve one frame to identify objects");
+                astrometryStatus.setToolTipText("<html>No frame is plate-solved yet. One solved frame gives the report sky coordinates:<br>"
+                        + "moving objects are identified with JPL and SkyBoT, and variable-star candidates are matched against AAVSO VSX.<br>"
+                        + "It also lets " + FETCH_SKY_CATALOGUE + " download the stars and deep-sky objects of the field.</html>");
+            }
             int selected = table.getSelectedRowCount();
             inspectStatus.setText(selected == 0 ? "No frames selected" : selected + (selected == 1 ? " frame selected" : " frames selected"));
             detectStatus.setText(containsColorImages ? "Convert to monochrome first" : "Settings: " + detectionSettingsSummary());
         }
+        boolean fetching = skyFetchThread != null;
+        skyCatalogueButton.setText(fetching ? "Cancel Sky Catalogue" : FETCH_SKY_CATALOGUE);
+        skyCatalogueButton.setEnabled(!uiLocked && (fetching || hasSolvedFrame));
         updateVariableStarTooltip();
         for (JButton button : actionTooltips.keySet()) {
             updateActionTooltip(button);
@@ -720,6 +765,188 @@ public class MainApplicationPanel extends JPanel {
         } else {
             JOptionPane.showMessageDialog(this, label + " links are not supported on your system.", "Info", JOptionPane.INFORMATION_MESSAGE);
         }
+    }
+
+    // ==========================================
+    // SKY CATALOGUE
+    // ==========================================
+
+    /**
+     * Starts fetching the sky catalogue of the session in the background, or cancels the fetch running. The rest
+     * of the application stays usable meanwhile; the result is saved next to the frames and handed to the viewers.
+     */
+    private void onSkyCatalogueButton() {
+        if (skyFetchThread != null) {
+            skyFetchThread.interrupt();
+            skyFetchLabel.setText("Cancelling the sky catalogue…");
+            return;
+        }
+        FitsFileInformation[] files = getImportedFiles();
+        WcsSolutionResolver.ResolvedWcsSolution solution = files == null ? null : WcsSolutionResolver.resolve(null, files);
+        if (solution == null) {
+            skyFetchProblem = "No frame has a plate solution in its FITS header.";
+            refreshWorkflowStatus();
+            return;
+        }
+        SkyField field = SkyField.of(solution.getTransformer(), files[0].getSizeWidth(), files[0].getSizeHeight());
+        double depth = mainAppWindow.getImageProcessing().getAppConfig().skyCatalogueStarMagnitude();
+        File folder = sessionFolder(files);
+        Thread[] thread = new Thread[1];
+        thread[0] = new Thread(() -> {
+            SkyCatalogue result = null;
+            String failure = null;
+            boolean cancelled = false;
+            try {
+                result = new SkyCatalogueClient().fetch(field, depth, (number, total, text) ->
+                        EventQueue.invokeLater(() -> showSkyFetchStage(thread[0], number, total, text)));
+            } catch (InterruptedException e) {
+                cancelled = true;
+            } catch (RuntimeException e) {
+                ApplicationWindow.logger.log(java.util.logging.Level.WARNING, "Sky catalogue fetch failed", e);
+                failure = e.getMessage();
+            }
+            SkyCatalogue fetched = result;
+            String problem = failure;
+            boolean wasCancelled = cancelled;
+            EventQueue.invokeLater(() -> skyFetchFinished(thread[0], folder, fetched, problem, wasCancelled));
+        }, "sky-catalogue");
+        thread[0].setDaemon(true);
+        skyFetchThread = thread[0];
+        skyFetchProblem = null;
+        showSkyFetchStage(thread[0], 0, 3, "starting");
+        skyFetchIndicator.setVisible(true);
+        skyFetchTimer.start();
+        statusLabel.setText("Fetching the sky catalogue (" + field.sizeText() + " field)…");
+        refreshWorkflowStatus();
+        thread[0].start();
+    }
+
+    private void showSkyFetchStage(Thread fetch, int number, int total, String text) {
+        if (fetch != skyFetchThread) {
+            return;
+        }
+        skyFetchStage = number == 0 ? "Sky catalogue: " + text : "Sky catalogue " + number + "/" + total + ": " + text;
+        skyFetchStageStart = System.currentTimeMillis();
+        updateSkyFetchText();
+    }
+
+    private void updateSkyFetchText() {
+        if (skyFetchThread == null) {
+            return;
+        }
+        long seconds = (System.currentTimeMillis() - skyFetchStageStart) / 1000;
+        skyFetchLabel.setText(skyFetchStage + "…" + (seconds >= 2 ? " " + seconds + " s" : ""));
+    }
+
+    private void skyFetchFinished(Thread fetch, File folder, SkyCatalogue result, String failure, boolean cancelled) {
+        if (fetch != skyFetchThread) {
+            return; // cancelled by a new import: the result belongs to the previous session
+        }
+        stopSkyFetchIndicator();
+        if (cancelled) {
+            statusLabel.setText("Sky catalogue: cancelled");
+        } else if (failure != null || result == null) {
+            skyFetchProblem = "The fetch failed: " + failure;
+            statusLabel.setText("Sky catalogue: the fetch failed");
+        } else if (result.isEmpty()) {
+            skyFetchProblem = result.problems.isEmpty() ? "The services found nothing in this field." : String.join("\n", result.problems);
+            statusLabel.setText("Sky catalogue: nothing could be fetched");
+        } else {
+            skyFetchProblem = result.problems.isEmpty() ? null : String.join("\n", result.problems);
+            try {
+                SkyCatalogueStore.save(folder, result);
+            } catch (IOException e) {
+                ApplicationWindow.logger.log(java.util.logging.Level.WARNING, "Cannot save the sky catalogue in " + folder, e);
+                skyFetchProblem = (skyFetchProblem == null ? "" : skyFetchProblem + "\n")
+                        + "It could not be saved in the session folder (" + e.getMessage() + "), so it lasts until SpacePixels closes.";
+            }
+            SkyCatalogueModel.shared().set(result);
+            statusLabel.setText("Sky catalogue: " + result.summary() + (result.problems.isEmpty() ? "" : " (incomplete)"));
+        }
+        refreshWorkflowStatus();
+    }
+
+    private void stopSkyFetchIndicator() {
+        skyFetchThread = null;
+        skyFetchTimer.stop();
+        skyFetchIndicator.setVisible(false);
+    }
+
+    /** On import: stops a fetch for the previous session and offers the catalogue saved with this one, if any. */
+    private void restoreSkyCatalogue() {
+        if (skyFetchThread != null) {
+            skyFetchThread.interrupt();
+            stopSkyFetchIndicator();
+        }
+        skyFetchProblem = null;
+        FitsFileInformation[] files = getImportedFiles();
+        SkyCatalogue saved = files == null ? null : SkyCatalogueStore.load(sessionFolder(files));
+        if (saved != null) {
+            WcsSolutionResolver.ResolvedWcsSolution solution = WcsSolutionResolver.resolve(null, files);
+            SkyField current = solution == null ? null
+                    : SkyField.of(solution.getTransformer(), files[0].getSizeWidth(), files[0].getSizeHeight());
+            if (current != null && !current.isSameFieldAs(saved.field)) {
+                saved = null; // fetched for other frames
+            }
+        }
+        SkyCatalogueModel.shared().set(saved);
+    }
+
+    private static File sessionFolder(FitsFileInformation[] files) {
+        File parent = new File(files[0].getFilePath()).getAbsoluteFile().getParentFile();
+        return parent != null ? parent : new File(System.getProperty("user.dir"));
+    }
+
+    /** The second line of the Astrometry status. */
+    private String skyCatalogueStatusText() {
+        if (skyFetchThread != null) {
+            return "Fetching sky catalogue…";
+        }
+        SkyCatalogue catalogue = SkyCatalogueModel.shared().get();
+        if (catalogue == null) {
+            return skyFetchProblem != null ? "⚠ Sky catalogue not fetched" : "No sky catalogue yet";
+        }
+        return (catalogue.problems.isEmpty() && skyFetchProblem == null ? "✓ Sky catalogue · " : "⚠ Sky catalogue · ")
+                + String.format(Locale.US, "%,d stars", catalogue.stars.size());
+    }
+
+    private String skyCatalogueTooltip() {
+        StringBuilder text = new StringBuilder("<html>The report has sky coordinates: moving objects are identified with JPL and SkyBoT,<br>"
+                + "and variable-star candidates are matched against AAVSO VSX.");
+        SkyCatalogue catalogue = SkyCatalogueModel.shared().get();
+        if (catalogue != null) {
+            text.append("<br><br>Sky catalogue for the Annotate switch: ").append(catalogue.summary())
+                    .append(String.format(Locale.US, "<br>Stars to Gaia G %.1f", catalogue.starMagnitudeLimit))
+                    .append(catalogue.starSource == null ? "" : " from " + catalogue.starSource)
+                    .append(catalogue.fetchedAtUtc == null ? "" : ", fetched " + fetchedText(catalogue.fetchedAtUtc));
+            double depth = mainAppWindow.getImageProcessing() == null ? catalogue.starMagnitudeLimit
+                    : mainAppWindow.getImageProcessing().getAppConfig().skyCatalogueStarMagnitude();
+            if (Math.abs(depth - catalogue.starMagnitudeLimit) > 0.01) {
+                text.append(String.format(Locale.US, "<br><i>The star depth is now set to %.1f: fetch again to use it.</i>", depth));
+            }
+        } else {
+            text.append("<br><br>").append(FETCH_SKY_CATALOGUE).append(" downloads the stars, deep-sky objects and variables of the field<br>"
+                    + "for the Annotate switch (A) of the viewers.");
+        }
+        if (skyFetchProblem != null) {
+            text.append("<br><br><b>").append(catalogue == null ? "Not fetched:" : "Incomplete:").append("</b> ")
+                    .append(escapeHtml(skyFetchProblem).replace("\n", "<br>"));
+        }
+        return text.append("</html>").toString();
+    }
+
+    /** "2026-10-10 14:03 UTC" from an ISO instant. */
+    private static String fetchedText(String isoInstant) {
+        try {
+            return java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'")
+                    .withZone(java.time.ZoneOffset.UTC).format(java.time.Instant.parse(isoInstant));
+        } catch (RuntimeException e) {
+            return isoInstant;
+        }
+    }
+
+    private static String escapeHtml(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     // ==========================================

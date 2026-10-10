@@ -4,7 +4,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Minimal WCS pixel-to-sky transformer for cursor readouts and report links.
+ * Minimal WCS transformer between pixels and the sky, for cursor readouts, report links and catalogue labels.
  * Supports standard celestial TAN projections with CD, PC+CDELT, or CDELT+CROTA matrices.
  */
 public final class WcsCoordinateTransformer {
@@ -87,6 +87,31 @@ public final class WcsCoordinateTransformer {
         );
 
         return new SkyCoordinate(normalizeDegrees(Math.toDegrees(ra)), Math.toDegrees(dec));
+    }
+
+    /**
+     * The pixel (0-based, as {@link #pixelToSky}) at this sky position, as {x, y}; null when the position is 90° or
+     * more from the field centre, where the projection does not reach.
+     */
+    public double[] skyToPixel(double raDegrees, double decDegrees) {
+        double ra = Math.toRadians(raDegrees);
+        double dec = Math.toRadians(decDegrees);
+        double sinDec0 = Math.sin(crval2Rad);
+        double cosDec0 = Math.cos(crval2Rad);
+        double deltaRa = ra - crval1Rad;
+        double cosDistance = sinDec0 * Math.sin(dec) + cosDec0 * Math.cos(dec) * Math.cos(deltaRa);
+        if (cosDistance <= 0) {
+            return null;
+        }
+        double xi = Math.toDegrees(Math.cos(dec) * Math.sin(deltaRa) / cosDistance);
+        double eta = Math.toDegrees((cosDec0 * Math.sin(dec) - sinDec0 * Math.cos(dec) * Math.cos(deltaRa)) / cosDistance);
+        double determinant = cd11 * cd22 - cd12 * cd21;
+        if (determinant == 0) {
+            return null;
+        }
+        double dx = (cd22 * xi - cd12 * eta) / determinant;
+        double dy = (cd11 * eta - cd21 * xi) / determinant;
+        return new double[]{crpix1 + dx - 1.0, crpix2 + dy - 1.0};
     }
 
     public static String formatRa(double raDegrees) {

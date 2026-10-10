@@ -83,6 +83,7 @@ public class BlinkFrame extends JFrame {
 
     private StretchControls stretch;
     private final ViewerSupport.CursorReadout cursorReadout = new ViewerSupport.CursorReadout();
+    private final SkyAnnotations sky = new SkyAnnotations(view);
 
     private BlinkSequence sequence;
     private FitsFileInformation[] files;
@@ -159,6 +160,7 @@ public class BlinkFrame extends JFrame {
         this.sequence = sequence;
         this.files = files;
         cursorReadout.reset(files);
+        sky.attach(files);
         this.skipped = new boolean[sequence.getFrames().size()];
         this.current = 0;
         this.open = true;
@@ -249,6 +251,7 @@ public class BlinkFrame extends JFrame {
             stretch.clearTables();
         }
         cursorReadout.reset(null);
+        sky.detach();
         cursorPixel = null;
         view.clear();
         frameModel.fireTableDataChanged();
@@ -284,7 +287,8 @@ public class BlinkFrame extends JFrame {
         });
         tracksBox.addActionListener(e -> view.setOverlayVisible(tracksBox.isSelected()));
 
-        JPanel playbackRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        // Wraps onto a second line when the window is narrow, so no control is cut off.
+        JPanel playbackRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 0));
         playbackRow.add(playButton);
         playbackRow.add(previousButton);
         playbackRow.add(nextButton);
@@ -298,6 +302,10 @@ public class BlinkFrame extends JFrame {
         playbackRow.add(Box.createHorizontalStrut(10));
         for (JComponent zoomControl : ViewerSupport.zoomControls(view)) {
             playbackRow.add(zoomControl);
+        }
+        playbackRow.add(Box.createHorizontalStrut(10));
+        for (JComponent skyControl : sky.controls()) {
+            playbackRow.add(skyControl);
         }
 
         JPanel controls = new JPanel();
@@ -404,7 +412,7 @@ public class BlinkFrame extends JFrame {
 
     private JComponent buildStatusBar() {
         return ViewerSupport.statusBar(frameLabel, cursorLabel, "Space play/pause · ← → step · ↑ ↓ speed · "
-                + "S skip frame (paused) · T tracks · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
+                + "S skip frame (paused) · T tracks · A annotate · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
     }
 
     /** The stretch row shares its models with the Image Stretch tab (see {@link StretchControls}). */
@@ -437,6 +445,10 @@ public class BlinkFrame extends JFrame {
                 tracksBox.setSelected(!tracksBox.isSelected());
                 view.setOverlayVisible(tracksBox.isSelected());
             }
+        });
+        bind("A", "annotate", () -> {
+            sky.toggle();
+            updateCursorLabel();
         });
         ViewerSupport.bindZoomKeys(getRootPane(), view);
         bind("ESCAPE", "close", this::close);
@@ -588,6 +600,7 @@ public class BlinkFrame extends JFrame {
         }
         BlinkSequence.Frame frame = sequence.getFrames().get(current);
         view.showFrame(frame, stretch.tablesFor(frame), stretch.extremeColour(frame));
+        sky.showFrame(frame.getInfo());
         skipBox.setSelected(skipped[current]);
         frameLabel.setText(frameText());
         updateCursorLabel();
@@ -603,7 +616,7 @@ public class BlinkFrame extends JFrame {
     }
 
     private void updateCursorLabel() {
-        cursorLabel.setText(open ? cursorReadout.describe(sequence.getFrames().get(current), cursorPixel) : " ");
+        cursorLabel.setText(open ? cursorReadout.describe(sequence.getFrames().get(current), cursorPixel) + sky.describe(cursorPixel) : " ");
     }
 
     /** Time since the first frame, "+12:30" or "+1:02:03"; empty when a capture time is missing. */

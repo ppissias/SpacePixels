@@ -39,7 +39,7 @@ import java.util.Locale;
  * Shows one frame from its 16-bit data through the stretch tables, drawing only the part on screen (from a reduced
  * copy when zoomed out). The zoom and centre stay when the frame changes. Scroll zooms around the cursor, drag pans
  * and double-click switches between the fitted view and 100 %. Used by Blink, Preview Frame and Manual Transient
- * Inspection; tracks and detections are drawn on top, so they stay sharp at any zoom.
+ * Inspection; catalogue labels, tracks and detections are drawn on top, so they stay sharp at any zoom.
  */
 final class FrameView extends JComponent {
 
@@ -57,6 +57,20 @@ final class FrameView extends JComponent {
     private static final double MIN_MARKER_RADIUS = 5;
     /** Below this many screen pixels per detection on screen, the markers are not drawn. */
     private static final double MIN_SCREEN_AREA_PER_MARKER = 400;
+    private static final Color SKY_STAR_COLOR = new Color(170, 160, 255);
+    private static final Color SKY_DEEP_SKY_COLOR = new Color(255, 215, 70);
+    private static final Color SKY_VARIABLE_COLOR = new Color(255, 90, 210);
+    /** Screen pixels per catalogue mark: when more would be on screen, only the brightest (or largest) are drawn. */
+    private static final double SCREEN_AREA_PER_STAR = 2500;
+    private static final double SCREEN_AREA_PER_VARIABLE = 2500;
+    private static final double SCREEN_AREA_PER_DEEP_SKY = 5000;
+    /** Labels are written only while no more marks of the kind than this are drawn. */
+    private static final int MAX_LABELLED_STARS = 60;
+    private static final int MAX_LABELLED_VARIABLES = 60;
+    private static final int MAX_LABELLED_DEEP_SKY = 150;
+    /** Long survey names ("Gaia DR3 3131…", "ZTF J0639…") are written only while this few variables are drawn. */
+    private static final int MAX_LABELLED_SURVEY_VARIABLES = 15;
+    private static final int SHORT_NAME_LENGTH = 12;
     static final double MAX_ZOOM = 16.0;
     static final double MAX_PIXEL_SCALE = 8.0;
 
@@ -68,6 +82,13 @@ final class FrameView extends JComponent {
     private boolean overlayVisible;
     private List<SourceExtractor.DetectedObject> detections;
     private boolean detectionsVisible = true;
+    private List<SkyMark> skyMarks;
+    private double skyStarLimit;
+    private boolean skyStars = true;
+    private boolean skyDeepSky = true;
+    private boolean skyVariables = true;
+    /** The catalogue marks drawn last, for {@link #skyMarkAt}. */
+    private List<SkyMark> drawnSkyMarks = new java.util.ArrayList<>();
     private String placeholder = "Loading…";
     private CursorListener cursorListener;
 
@@ -167,8 +188,79 @@ final class FrameView extends JComponent {
         bufferPixels = null;
         overlay = null;
         detections = null;
+        skyMarks = null;
+        drawnSkyMarks = new java.util.ArrayList<>();
         placeholder = "Loading…";
         fit();
+    }
+
+    /**
+     * The catalogue objects on the frame shown, or null for none. {@code starMagnitudeLimit} is the depth of the
+     * catalogue, which sets the size of the star circles.
+     */
+    void setSkyMarks(List<SkyMark> marks, double starMagnitudeLimit) {
+        this.skyMarks = marks;
+        this.skyStarLimit = starMagnitudeLimit;
+        if (marks == null) {
+            drawnSkyMarks = new java.util.ArrayList<>();
+        }
+        repaint();
+    }
+
+    /** Which kinds of catalogue objects are drawn. */
+    void setSkyLayers(boolean stars, boolean deepSky, boolean variables) {
+        this.skyStars = stars;
+        this.skyDeepSky = deepSky;
+        this.skyVariables = variables;
+        repaint();
+    }
+
+    /**
+     * The catalogue object at this frame pixel among those drawn: a variable or star near it (the nearest), else
+     * the smallest deep-sky object around it. Null when there is none.
+     */
+    SkyMark skyMarkAt(Point pixel) {
+        double scale = scale();
+        if (pixel == null || scale <= 0 || drawnSkyMarks.isEmpty()) {
+            return null;
+        }
+        double reach = Math.max(3, 8 / scale);
+        SkyMark best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (SkyMark.Kind kind : new SkyMark.Kind[]{SkyMark.Kind.VARIABLE, SkyMark.Kind.STAR}) {
+            for (SkyMark mark : drawnSkyMarks) {
+                double distance = Math.hypot(mark.x - pixel.x, mark.y - pixel.y);
+                if (mark.kind == kind && distance <= reach && distance < bestDistance) {
+                    best = mark;
+                    bestDistance = distance;
+                }
+            }
+            if (best != null) {
+                return best;
+            }
+        }
+        double smallest = Double.MAX_VALUE;
+        for (SkyMark mark : drawnSkyMarks) {
+            if (mark.kind != SkyMark.Kind.DEEP_SKY) {
+                continue;
+            }
+            double dx = pixel.x - mark.x;
+            double dy = pixel.y - mark.y;
+            boolean inside;
+            if (mark.semiMajor * scale >= 4) {
+                double u = dx * Math.cos(mark.angle) + dy * Math.sin(mark.angle);
+                double v = -dx * Math.sin(mark.angle) + dy * Math.cos(mark.angle);
+                double minor = Math.max(mark.semiMinor, 1e-6);
+                inside = (u * u) / (mark.semiMajor * mark.semiMajor) + (v * v) / (minor * minor) <= 1;
+            } else {
+                inside = Math.hypot(dx, dy) <= reach;
+            }
+            if (inside && mark.semiMajor < smallest) {
+                best = mark;
+                smallest = mark.semiMajor;
+            }
+        }
+        return best;
     }
 
     /** The detections of the frame shown, or null. */
@@ -302,6 +394,9 @@ final class FrameView extends JComponent {
                 return;
             }
             drawFrame(g2);
+            if (skyMarks != null) {
+                drawSkyMarks(g2);
+            }
             if (detectionsVisible && detections != null) {
                 drawDetections(g2);
             }
@@ -386,6 +481,160 @@ final class FrameView extends JComponent {
             }
         }
         g2.drawImage(buffer, 0, 0, getWidth(), getHeight(), null);
+    }
+
+    /**
+     * The catalogue objects on screen: deep-sky objects as yellow ellipses (or crosses when they have no size),
+     * variable stars as magenta diamonds and stars as blue circles, larger for brighter stars. When more would be on
+     * screen than can be told apart, only the brightest (or largest) are drawn and a note says so. Labels are
+     * written while few enough marks are drawn.
+     */
+    private void drawSkyMarks(Graphics2D g2) {
+        double scale = scale();
+        double left = left(scale);
+        double top = top(scale);
+        double area = (double) getWidth() * getHeight();
+        List<SkyMark> stars = new java.util.ArrayList<>();
+        List<SkyMark> variables = new java.util.ArrayList<>();
+        List<SkyMark> deepSky = new java.util.ArrayList<>();
+        for (SkyMark mark : skyMarks) {
+            boolean shown = mark.kind == SkyMark.Kind.STAR ? skyStars
+                    : mark.kind == SkyMark.Kind.VARIABLE ? skyVariables : skyDeepSky;
+            if (!shown) {
+                continue;
+            }
+            double x = left + (mark.x + 0.5) * scale;
+            double y = top + (mark.y + 0.5) * scale;
+            double reach = Math.max(16, mark.semiMajor * scale);
+            if (x + reach < 0 || y + reach < 0 || x - reach > getWidth() || y - reach > getHeight()) {
+                continue;
+            }
+            (mark.kind == SkyMark.Kind.STAR ? stars : mark.kind == SkyMark.Kind.VARIABLE ? variables : deepSky).add(mark);
+        }
+        java.util.Comparator<SkyMark> brightestFirst = java.util.Comparator.comparingDouble(
+                mark -> Double.isNaN(mark.magnitude) ? Double.MAX_VALUE : mark.magnitude);
+        int starTotal = stars.size();
+        int variableTotal = variables.size();
+        int deepSkyTotal = deepSky.size();
+        stars = brightest(stars, (int) (area / SCREEN_AREA_PER_STAR), brightestFirst);
+        variables = brightest(variables, (int) (area / SCREEN_AREA_PER_VARIABLE), brightestFirst);
+        deepSky = brightest(deepSky, (int) (area / SCREEN_AREA_PER_DEEP_SKY),
+                java.util.Comparator.comparingDouble((SkyMark mark) -> -mark.semiMajor));
+
+        List<SkyMark> drawn = new java.util.ArrayList<>(stars.size() + variables.size() + deepSky.size());
+        // Marks and labels stay on the frame.
+        java.awt.Shape screenClip = g2.getClip();
+        g2.clip(new java.awt.geom.Rectangle2D.Double(left, top, frame.getWidth() * scale, frame.getHeight() * scale));
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        // Circles grow with the zoom, more slowly than the stars, so they stay around them.
+        double circleZoom = Math.max(1, Math.pow(scale, 0.75));
+        g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 11f));
+        g2.setStroke(new BasicStroke(1.2f));
+        boolean labelStars = stars.size() <= MAX_LABELLED_STARS;
+        for (SkyMark mark : stars) {
+            double x = left + (mark.x + 0.5) * scale;
+            double y = top + (mark.y + 0.5) * scale;
+            double radius = Math.max(3, Math.min(14, 3 + (skyStarLimit - mark.magnitude) * 1.1)) * circleZoom;
+            g2.setColor(withAlpha(SKY_STAR_COLOR, 190));
+            g2.draw(new Ellipse2D.Double(x - radius, y - radius, 2 * radius, 2 * radius));
+            if (labelStars) {
+                drawLabel(g2, mark.label, x + radius + 2, y + radius + 9, SKY_STAR_COLOR);
+            }
+            drawn.add(mark);
+        }
+        boolean labelVariables = variables.size() <= MAX_LABELLED_VARIABLES;
+        boolean labelSurveyNames = variables.size() <= MAX_LABELLED_SURVEY_VARIABLES;
+        for (SkyMark mark : variables) {
+            double x = left + (mark.x + 0.5) * scale;
+            double y = top + (mark.y + 0.5) * scale;
+            double size = 7;
+            Path2D.Double diamond = new Path2D.Double();
+            diamond.moveTo(x, y - size);
+            diamond.lineTo(x + size, y);
+            diamond.lineTo(x, y + size);
+            diamond.lineTo(x - size, y);
+            diamond.closePath();
+            g2.setColor(SKY_VARIABLE_COLOR);
+            g2.draw(diamond);
+            if (labelVariables && (labelSurveyNames || mark.label.length() <= SHORT_NAME_LENGTH)) {
+                drawLabel(g2, mark.label, x + size + 3, y - 3, SKY_VARIABLE_COLOR);
+            }
+            drawn.add(mark);
+        }
+        boolean labelDeepSky = deepSky.size() <= MAX_LABELLED_DEEP_SKY;
+        for (SkyMark mark : deepSky) {
+            double x = left + (mark.x + 0.5) * scale;
+            double y = top + (mark.y + 0.5) * scale;
+            g2.setColor(SKY_DEEP_SKY_COLOR);
+            double labelX;
+            double labelY;
+            if (mark.semiMajor * scale >= 4) {
+                java.awt.geom.AffineTransform saved = g2.getTransform();
+                g2.rotate(mark.angle, x, y);
+                double a = mark.semiMajor * scale;
+                double b = Math.max(2, mark.semiMinor * scale);
+                g2.draw(new Ellipse2D.Double(x - a, y - b, 2 * a, 2 * b));
+                g2.setTransform(saved);
+                labelX = x + Math.min(a, 200) * 0.7 + 4;
+                labelY = y - Math.min(a, 200) * 0.7 - 2;
+            } else {
+                double arm = 6;
+                g2.draw(new java.awt.geom.Line2D.Double(x - arm, y, x - 2, y));
+                g2.draw(new java.awt.geom.Line2D.Double(x + 2, y, x + arm, y));
+                g2.draw(new java.awt.geom.Line2D.Double(x, y - arm, x, y - 2));
+                g2.draw(new java.awt.geom.Line2D.Double(x, y + 2, x, y + arm));
+                labelX = x + arm + 3;
+                labelY = y - arm;
+            }
+            if (labelDeepSky) {
+                drawLabel(g2, mark.label, labelX, labelY, SKY_DEEP_SKY_COLOR);
+            }
+            drawn.add(mark);
+        }
+        g2.setClip(screenClip);
+        drawnSkyMarks = drawn;
+
+        List<String> clipped = new java.util.ArrayList<>();
+        if (stars.size() < starTotal) {
+            clipped.add(String.format(Locale.US, "the brightest %,d of %,d stars", stars.size(), starTotal));
+        }
+        if (variables.size() < variableTotal) {
+            clipped.add(String.format(Locale.US, "the brightest %,d of %,d variables", variables.size(), variableTotal));
+        }
+        if (deepSky.size() < deepSkyTotal) {
+            clipped.add(String.format(Locale.US, "the largest %,d of %,d deep-sky objects", deepSky.size(), deepSkyTotal));
+        }
+        if (!clipped.isEmpty()) {
+            String note = "Showing " + String.join(", ", clipped) + " on screen · zoom in for more";
+            g2.setFont(g2.getFont().deriveFont(Font.BOLD, 12f));
+            int noteY = getHeight() - 26;
+            g2.setColor(new Color(10, 12, 20, 190));
+            g2.fillRect(6, noteY, g2.getFontMetrics().stringWidth(note) + 10, 18);
+            g2.setColor(SKY_STAR_COLOR);
+            g2.drawString(note, 11, noteY + 13);
+        }
+    }
+
+    private static List<SkyMark> brightest(List<SkyMark> marks, int limit, java.util.Comparator<SkyMark> order) {
+        if (marks.size() <= limit) {
+            return marks;
+        }
+        marks.sort(order);
+        return new java.util.ArrayList<>(marks.subList(0, Math.max(0, limit)));
+    }
+
+    /** Text with a dark edge, readable on bright and dark sky. */
+    private static void drawLabel(Graphics2D g2, String text, double x, double y, Color color) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        float textX = (float) x;
+        float textY = (float) y;
+        g2.setColor(new Color(0, 0, 0, 170));
+        g2.drawString(text, textX + 1, textY + 1);
+        g2.drawString(text, textX - 1, textY + 1);
+        g2.setColor(color);
+        g2.drawString(text, textX, textY);
     }
 
     /**
