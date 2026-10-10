@@ -87,8 +87,9 @@ If **Solved** says `No`, select one frame and click **Plate Solve Selected** in 
 
 - **ASTAP Executable Path**: choose `astap.exe` (or the ASTAP program on Linux and macOS) and click **Check**. Or pick **Astrometry.net (online)** under the Plate Solve button, which needs nothing installed.
 - **Observing Site**: your latitude and longitude, or your IAU observatory code, make the object identification exact for your location. When the FITS headers contain the site (as here), SpacePixels uses them; **Fill Site from FITS Header** copies them into the fields.
+- **Sky Catalogue (Annotate)**: how faint the stars are that **Fetch Sky Catalogue** downloads (**Star Depth**, see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
 
-Without a plate solution everything still works except sky coordinates and the identification buttons.
+Without a plate solution everything still works except sky coordinates and the identification buttons. With one, **Fetch Sky Catalogue** in **2 Astrometry** downloads the stars, deep-sky objects and variable stars of the field, which the viewers can then draw on your frames (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
 
 ### Step 3: Auto-Tune
 
@@ -283,6 +284,7 @@ Select three or more frames in the table and click **Blink Selected** to play th
 - **Zoom**: Fit, 100 %, 200 % and 400 %, or scroll to zoom around the cursor and drag to pan. Double-click switches between fit and 100 %. The view stays on the same spot while the frames change.
 - **The frame list** on the left shows every frame with its time since the first one; the frame on screen is highlighted. Click a frame to pause and show it. While paused, untick a frame, or press S or tick **Skip this frame**, to leave a cloudy or trailed frame out of the loop; stepping by hand still shows it. While playing, the ticks are greyed out: pause first, so you change the frame you meant. At least two frames stay in the loop.
 - **Show tracks** (T) draws the tracks of the last **Detect Moving Targets** run on this session, named as in the report (T1, T2… for moving objects, ST1… for streak tracks), with a ring where the object is in the frame shown.
+- **Annotate** (A) labels the stars, deep-sky objects and variable stars of the field, once the sky catalogue is fetched (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
 
 Below the frame: the frame number, file name, capture time and time since the first frame, and under the cursor the pixel position, its value and, on a plate-solved frame, RA and Dec. Esc closes the window. The frames stay in memory while blinking (about 170 MB per 61-megapixel frame); if they would not fit, SpacePixels says so before reading them.
 
@@ -299,6 +301,26 @@ Runs the source detection on the selected frame with the current settings and sh
 Runs the detection on all frames of the session (not only the selected ones) and shows, frame by frame, every detection left after the star mask: the candidates for moving objects, before they are linked into tracks. Useful to judge the noise, or to find a faint object by eye that did not form a track. Above, at 200 %, the comet is the only transient left in its frame. The frames stay in memory until you close the window.
 
 Both windows, and **Show full size** on the Image Stretch tab, work like the blink window: the same stretch as the Image Stretch tab, the same zoom (Fit, 100 %, 200 %, 400 %, scroll to zoom, drag to pan, double-click), and the same status bar with the frame, its time since the first frame, and under the cursor the pixel position, value and, on a plate-solved frame, RA and Dec. **Show detections** (D) hides the markers to see the frame underneath. From 100 % zoom the detected pixels are tinted too. When there are too many detections on screen to tell apart, the markers are left out until you zoom in. Esc closes the window.
+
+### Annotate: stars, deep-sky objects and variable stars
+
+![Annotate at 100 %: the open cluster NGC 2236, Gaia stars and catalogued variables](docs/images/manual/ui-annotate.jpg)
+
+Once one frame is plate-solved, **Fetch Sky Catalogue** in **2 Astrometry** downloads what is known in the field of your frames:
+
+- **stars** from Gaia DR3, down to the **Star Depth** set on the Astrometry Config tab (Gaia G magnitude 15 by default);
+- **galaxies, nebulae and clusters** from SIMBAD: the objects with a classic catalogue name (Messier, NGC, IC, Sharpless, Collinder, Barnard, LDN, LBN and others), and galaxies of 1′ or more;
+- **variable stars** from the AAVSO Variable Star Index (VSX), down to one magnitude fainter than the star depth.
+
+The fetch runs in the background, so you can keep working. The status bar shows each step and how long it has taken. The stars take longest, about 20 to 30 seconds for a 4° × 3° field to magnitude 15; each magnitude deeper roughly doubles the stars and the wait. Meanwhile the button reads **Cancel Sky Catalogue**. The catalogue is saved next to the frames as `sky_catalogue.json` and comes back by itself when you import the folder again. Click the button again to fetch a fresh one, for example after changing the star depth. The **2 Astrometry** status line shows what is loaded; its tooltip gives the details, and says why if a service did not answer (what did arrive is kept).
+
+In every viewer (Blink, Preview Frame, Manual Transient Inspection and Show full size), **Annotate** (A) draws the catalogue on the frame: blue circles for stars (larger for brighter stars), magenta diamonds for variable stars and yellow outlines for deep-sky objects, with their size and orientation. **Layers** chooses which of the three are shown. The status bar names the object under the cursor, above *NGC 2236 · open cluster · 8.4 × 8.4′*, or for a variable star for example *V0623 Mon · LB · 13.30–14.60 V*. When there are too many marks on screen to tell apart, only the brightest stars and variables and the largest deep-sky objects are drawn, and a note says so: zoom in to see more. Names and magnitudes are written next to the marks once few enough are on screen; the long survey names of many variables (such as *Gaia DR3 3131…*) only when you zoom further in.
+
+If a viewer is open when the catalogue arrives, the frame does not change: the **Annotate** switch becomes available and a note next to it says *Sky catalogue ready · A shows it*.
+
+The marks are only as accurate as the plate solution in your FITS headers: they can sit a few pixels off, most towards the corners of wide fields. Stars are moved from the Gaia epoch (2016) to the date of each frame. Only the sky coordinates of the field are sent to the services (at CDS in Strasbourg, and the ESA Gaia archive if CDS does not answer), never your observing site.
+
+<sub>Gaia data: ESA/Gaia/DPAC. SIMBAD and VizieR: CDS, Strasbourg. VSX: AAVSO.</sub>
 
 ### Star Mask Explorer
 
