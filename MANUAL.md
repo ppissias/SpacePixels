@@ -273,7 +273,16 @@ Each candidate then has a card with a one-line summary and its light curve, draw
 
 ### Blink Selected
 
-Select three or more frames in the table and click **Blink Selected** to play them as an animation, the classic way of hunting by eye.
+Select three or more frames in the table and click **Blink Selected** to play them as an animation, the classic way of hunting by eye. The frames are read first (the status bar counts them), then the blink window opens and plays them:
+
+- **Play / Pause** (Space) and **◀ ▶** (arrow keys) to step one frame at a time. Stepping back and forth between two frames is the surest way to confirm a faint mover.
+- **Speed**: from 50 ms to 2 s per frame, also with the ↑ and ↓ keys. SpacePixels remembers it.
+- **Stretch**: the same algorithm and sliders as the Image Stretch tab, and changes apply at once while blinking. The two places always show the same stretch.
+- **Zoom**: Fit, 100 %, 200 % and 400 %, or scroll to zoom around the cursor and drag to pan. Double-click switches between fit and 100 %. The view stays on the same spot while the frames change.
+- **Skip this frame** (S) leaves a cloudy or trailed frame out of the loop; stepping by hand still shows it.
+- **Show tracks** (T) draws the tracks of the last **Detect Moving Targets** run on this session, named as in the report (T1, T2… for moving objects, ST1… for streak tracks), with a ring where the object is in the frame shown.
+
+Below the frame: the frame number, file name, capture time and time since the first frame, and under the cursor the pixel position, its value and, on a plate-solved frame, RA and Dec. Esc closes the window. The frames stay in memory while blinking (about 170 MB per 61-megapixel frame); if they would not fit, SpacePixels says so before reading them.
 
 ### Preview Frame
 
