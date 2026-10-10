@@ -151,16 +151,19 @@ public class BlinkFrame extends JFrame {
     // ==========================================
 
     /**
-     * Shows the loaded frames and starts playing. {@code overlay} holds the tracks of the last detection run on this
-     * session, or is null.
+     * Shows the loaded frames and starts playing. {@code sessionFiles} are all frames of the session: one plate-solved
+     * frame among them gives sky coordinates and labels to the frames blinked, also when none of those is solved.
+     * {@code overlay} holds the tracks of the last detection run on this session, or is null.
      */
-    void open(BlinkSequence sequence, FitsFileInformation[] files, StretchPanel stretchPanel, TrackOverlay overlay) {
+    void open(BlinkSequence sequence, FitsFileInformation[] files, FitsFileInformation[] sessionFiles,
+              StretchPanel stretchPanel, TrackOverlay overlay) {
         bindStretch(stretchPanel);
         release();
         this.sequence = sequence;
         this.files = files;
-        cursorReadout.reset(files);
-        sky.attach(files);
+        FitsFileInformation[] alignedFiles = sessionFiles != null ? sessionFiles : files;
+        cursorReadout.reset(alignedFiles);
+        sky.attach(alignedFiles);
         this.skipped = new boolean[sequence.getFrames().size()];
         this.current = 0;
         this.open = true;
