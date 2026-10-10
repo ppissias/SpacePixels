@@ -5,7 +5,8 @@ import java.util.Map;
 
 /**
  * Minimal WCS transformer between pixels and the sky, for cursor readouts, report links and catalogue labels.
- * Supports standard celestial TAN projections with CD, PC+CDELT, or CDELT+CROTA matrices.
+ * Supports standard celestial TAN projections with CD, PC+CDELT, or CDELT+CROTA matrices, and the SIP distortion
+ * terms of TAN-SIP solutions (A/B; AP/BP are only used as a first guess when going from the sky to pixels).
  */
 public final class WcsCoordinateTransformer {
     private static final String STANDARD_CTYPE1 = "RA---TAN";
@@ -19,6 +20,11 @@ public final class WcsCoordinateTransformer {
     private final double cd12;
     private final double cd21;
     private final double cd22;
+    /** SIP distortion: coefficients [p][q] of u^p v^q, or null when the solution has none. */
+    private double[][] sipA;
+    private double[][] sipB;
+    private double[][] sipAp;
+    private double[][] sipBp;
 
     private WcsCoordinateTransformer(double crpix1, double crpix2,
                                      double crval1Degrees, double crval2Degrees,
@@ -63,7 +69,29 @@ public final class WcsCoordinateTransformer {
             return null;
         }
 
-        return new WcsCoordinateTransformer(crpix1, crpix2, crval1, crval2, matrix[0], matrix[1], matrix[2], matrix[3]);
+        WcsCoordinateTransformer transformer =
+                new WcsCoordinateTransformer(crpix1, crpix2, crval1, crval2, matrix[0], matrix[1], matrix[2], matrix[3]);
+        if (upperCtype1.endsWith("-SIP") && upperCtype2.endsWith("-SIP")) {
+            transformer.sipA = sipCoefficients(header, "A");
+            transformer.sipB = sipCoefficients(header, "B");
+            if (transformer.sipA == null || transformer.sipB == null) {
+                transformer.sipA = null;
+                transformer.sipB = null;
+            } else {
+                transformer.sipAp = sipCoefficients(header, "AP");
+                transformer.sipBp = sipCoefficients(header, "BP");
+                if (transformer.sipAp == null || transformer.sipBp == null) {
+                    transformer.sipAp = null;
+                    transformer.sipBp = null;
+                }
+            }
+        }
+        return transformer;
+    }
+
+    /** Whether the solution has SIP distortion terms, which are applied. */
+    public boolean hasDistortion() {
+        return sipA != null;
     }
 
     public SkyCoordinate pixelToSky(double pixelX, double pixelY) {
@@ -72,6 +100,12 @@ public final class WcsCoordinateTransformer {
 
         double dx = fitsX - crpix1;
         double dy = fitsY - crpix2;
+        if (sipA != null) {
+            double u = dx;
+            double v = dy;
+            dx = u + polynomial(sipA, u, v);
+            dy = v + polynomial(sipB, u, v);
+        }
 
         double xi = Math.toRadians((cd11 * dx) + (cd12 * dy));
         double eta = Math.toRadians((cd21 * dx) + (cd22 * dy));
@@ -111,7 +145,57 @@ public final class WcsCoordinateTransformer {
         }
         double dx = (cd22 * xi - cd12 * eta) / determinant;
         double dy = (cd11 * eta - cd21 * xi) / determinant;
+        if (sipA != null) {
+            // Solve u + A(u, v) = dx, v + B(u, v) = dy: start from the inverse terms if there are any, then refine
+            // so the result agrees with pixelToSky exactly (the inverse terms are only an approximation).
+            double u = sipAp != null ? dx + polynomial(sipAp, dx, dy) : dx;
+            double v = sipBp != null ? dy + polynomial(sipBp, dx, dy) : dy;
+            for (int iteration = 0; iteration < 50; iteration++) {
+                double nextU = dx - polynomial(sipA, u, v);
+                double nextV = dy - polynomial(sipB, u, v);
+                boolean converged = Math.abs(nextU - u) < 1e-9 && Math.abs(nextV - v) < 1e-9;
+                u = nextU;
+                v = nextV;
+                if (converged) {
+                    break;
+                }
+            }
+            dx = u;
+            dy = v;
+        }
         return new double[]{crpix1 + dx - 1.0, crpix2 + dy - 1.0};
+    }
+
+    /** SIP coefficients {@code prefix_p_q} up to {@code prefix_ORDER}, or null when the order is missing. */
+    private static double[][] sipCoefficients(Map<String, String> header, String prefix) {
+        Double order = parseDouble(header, prefix + "_ORDER");
+        if (order == null || order < 0 || order > 9) {
+            return null;
+        }
+        int n = order.intValue();
+        double[][] coefficients = new double[n + 1][n + 1];
+        for (int p = 0; p <= n; p++) {
+            for (int q = 0; p + q <= n; q++) {
+                Double value = parseDouble(header, prefix + "_" + p + "_" + q);
+                coefficients[p][q] = value == null ? 0 : value;
+            }
+        }
+        return coefficients;
+    }
+
+    /** Sum of coefficients[p][q] u^p v^q. */
+    private static double polynomial(double[][] coefficients, double u, double v) {
+        double sum = 0;
+        double uPower = 1;
+        for (double[] row : coefficients) {
+            double term = uPower;
+            for (double coefficient : row) {
+                sum += coefficient * term;
+                term *= v;
+            }
+            uPower *= u;
+        }
+        return sum;
     }
 
     public static String formatRa(double raDegrees) {
