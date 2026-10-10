@@ -127,6 +127,11 @@ public final class BlinkSequence {
         }
     }
 
+    /** A display copy of 16-bit mono data that stays in use elsewhere, such as the frames the engine ran on. */
+    public static Frame fromMono(FitsFileInformation info, short[][] data) {
+        return fromPlanes(info, new short[][][]{data});
+    }
+
     static Frame fromPlanes(FitsFileInformation info, short[][][] planes) {
         int height = planes[0].length;
         int width = planes[0][0].length;

@@ -10,7 +10,9 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.util.BlinkSequence;
+import eu.startales.spacepixels.util.RawImageAnnotator;
 import eu.startales.spacepixels.util.TrackOverlay;
+import io.github.ppissias.jtransient.core.SourceExtractor;
 
 import javax.swing.JComponent;
 import javax.swing.UIManager;
@@ -34,11 +36,12 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Shows one blink frame from its 16-bit data through the stretch tables, drawing only the part on screen (from a
- * reduced copy when zoomed out). The zoom and centre stay when the frame changes. Scroll zooms around the cursor,
- * drag pans and double-click switches between the fitted view and 100 %.
+ * Shows one frame from its 16-bit data through the stretch tables, drawing only the part on screen (from a reduced
+ * copy when zoomed out). The zoom and centre stay when the frame changes. Scroll zooms around the cursor, drag pans
+ * and double-click switches between the fitted view and 100 %. Used by Blink, Preview Frame and Manual Transient
+ * Inspection; tracks and detections are drawn on top, so they stay sharp at any zoom.
  */
-final class BlinkView extends JComponent {
+final class FrameView extends JComponent {
 
     /** Receives the frame pixel under the cursor, or null when the cursor leaves the frame. */
     interface CursorListener {
@@ -48,6 +51,12 @@ final class BlinkView extends JComponent {
     private static final Color BACKGROUND = new Color(0x14121f);
     private static final Color MOVING_COLOR = new Color(80, 220, 255);
     private static final Color STREAK_COLOR = new Color(255, 170, 60);
+    private static final Color DETECTION_POINT_COLOR = new Color(50, 255, 50);
+    private static final Color DETECTION_STREAK_COLOR = new Color(255, 50, 50);
+    /** The smallest marker on screen, so detections stay visible when zoomed out. */
+    private static final double MIN_MARKER_RADIUS = 5;
+    /** Below this many screen pixels per detection on screen, the markers are not drawn. */
+    private static final double MIN_SCREEN_AREA_PER_MARKER = 400;
     static final double MAX_ZOOM = 16.0;
     static final double MAX_PIXEL_SCALE = 8.0;
 
@@ -57,6 +66,8 @@ final class BlinkView extends JComponent {
     private boolean extremeColour;
     private TrackOverlay overlay;
     private boolean overlayVisible;
+    private List<SourceExtractor.DetectedObject> detections;
+    private boolean detectionsVisible = true;
     private String placeholder = "Loading…";
     private CursorListener cursorListener;
 
@@ -71,7 +82,7 @@ final class BlinkView extends JComponent {
     private double dragCenterX;
     private double dragCenterY;
 
-    BlinkView() {
+    FrameView() {
         setPreferredSize(new Dimension(800, 600));
         setOpaque(true);
         MouseAdapter mouse = new MouseAdapter() {
@@ -155,8 +166,20 @@ final class BlinkView extends JComponent {
         buffer = null;
         bufferPixels = null;
         overlay = null;
+        detections = null;
         placeholder = "Loading…";
         fit();
+    }
+
+    /** The detections of the frame shown, or null. */
+    void setDetections(List<SourceExtractor.DetectedObject> detections) {
+        this.detections = detections;
+        repaint();
+    }
+
+    void setDetectionsVisible(boolean visible) {
+        this.detectionsVisible = visible;
+        repaint();
     }
 
     void setOverlay(TrackOverlay overlay) {
@@ -279,6 +302,9 @@ final class BlinkView extends JComponent {
                 return;
             }
             drawFrame(g2);
+            if (detectionsVisible && detections != null) {
+                drawDetections(g2);
+            }
             if (overlayVisible && overlay != null) {
                 drawOverlay(g2);
             }
@@ -409,6 +435,83 @@ final class BlinkView extends JComponent {
             g2.drawString(track.label, (float) (left + (labelled.x + 0.5) * scale + ring + 3),
                     (float) (top + (labelled.y + 0.5) * scale - ring));
         }
+    }
+
+    /**
+     * Green boxes around point sources and red lines along streaks, sized in frame pixels by the marker settings of
+     * {@link RawImageAnnotator} (the visualization preferences). From 100 % zoom the exact pixels of each detection
+     * are tinted too. Only detections on screen are drawn.
+     */
+    private void drawDetections(Graphics2D g2) {
+        double streakLineScale = RawImageAnnotator.streakLineScaleFactor;
+        double streakBoxRadius = RawImageAnnotator.streakCentroidBoxRadius;
+        double scale = scale();
+        double left = left(scale);
+        double top = top(scale);
+        boolean footprints = scale >= 1.0;
+        List<SourceExtractor.DetectedObject> visible = new java.util.ArrayList<>();
+        for (SourceExtractor.DetectedObject object : detections) {
+            if (object.isNoise) {
+                continue;
+            }
+            double reach = object.isStreak
+                    ? Math.max(streakBoxRadius, object.elongation * streakLineScale)
+                    : pointBoxRadius(object);
+            double x = left + (object.x + 0.5) * scale;
+            double y = top + (object.y + 0.5) * scale;
+            double screenReach = Math.max(MIN_MARKER_RADIUS, reach * scale) + 2;
+            if (x + screenReach >= 0 && y + screenReach >= 0 && x - screenReach <= getWidth() && y - screenReach <= getHeight()) {
+                visible.add(object);
+            }
+        }
+        // Too many markers to tell apart would only cover the frame: say so instead, until zoomed in.
+        if (visible.size() > (double) getWidth() * getHeight() / MIN_SCREEN_AREA_PER_MARKER) {
+            String note = String.format(Locale.US, "%,d detections on screen · zoom in to see them", visible.size());
+            g2.setFont(g2.getFont().deriveFont(Font.BOLD, 12f));
+            g2.setColor(new Color(10, 12, 20, 190));
+            g2.fillRect(6, 30, g2.getFontMetrics().stringWidth(note) + 10, 18);
+            g2.setColor(DETECTION_POINT_COLOR);
+            g2.drawString(note, 11, 43);
+            return;
+        }
+        for (SourceExtractor.DetectedObject object : visible) {
+            double x = left + (object.x + 0.5) * scale;
+            double y = top + (object.y + 0.5) * scale;
+            Color color = object.isStreak ? DETECTION_STREAK_COLOR : DETECTION_POINT_COLOR;
+            if (footprints && object.rawPixels != null) {
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+                g2.setColor(withAlpha(color, 110));
+                for (SourceExtractor.Pixel pixel : object.rawPixels) {
+                    int x0 = (int) Math.floor(left + pixel.x * scale);
+                    int y0 = (int) Math.floor(top + pixel.y * scale);
+                    g2.fillRect(x0, y0, (int) Math.floor(left + (pixel.x + 1) * scale) - x0,
+                            (int) Math.floor(top + (pixel.y + 1) * scale) - y0);
+                }
+            }
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.setColor(color);
+            if (object.isStreak) {
+                double length = object.elongation * streakLineScale * scale;
+                double dx = Math.cos(object.angle) * length;
+                double dy = Math.sin(object.angle) * length;
+                g2.draw(new java.awt.geom.Line2D.Double(x - dx, y - dy, x + dx, y + dy));
+                double box = Math.max(3, streakBoxRadius * scale);
+                g2.draw(new java.awt.geom.Rectangle2D.Double(x - box, y - box, 2 * box, 2 * box));
+            } else {
+                double box = Math.max(MIN_MARKER_RADIUS, pointBoxRadius(object) * scale);
+                g2.draw(new java.awt.geom.Rectangle2D.Double(x - box, y - box, 2 * box, 2 * box));
+            }
+        }
+    }
+
+    /** The box clears the object: its rough radius plus a margin, and is at least the minimum box size. */
+    private static double pointBoxRadius(SourceExtractor.DetectedObject object) {
+        int minimum = RawImageAnnotator.pointSourceMinBoxRadius;
+        if (object.pixelArea <= 0) {
+            return minimum;
+        }
+        return Math.max(minimum, Math.round(Math.sqrt(object.pixelArea / Math.PI)) + RawImageAnnotator.dynamicBoxPadding);
     }
 
     private static Color withAlpha(Color color, int alpha) {

@@ -247,7 +247,8 @@ public class MainApplicationPanel extends JPanel {
             detectionSequenceFrame.openSequence(
                     allFiles,
                     startIndex,
-                    mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
+                    mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig(),
+                    mainAppWindow.getStretchPanel()
             );
         });
 
@@ -255,7 +256,8 @@ public class MainApplicationPanel extends JPanel {
             new Thread(new ManualTransientInspectionTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImageProcessing(),
-                    mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
+                    mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig(),
+                    mainAppWindow.getStretchPanel()
             )).start();
         });
 
@@ -263,7 +265,6 @@ public class MainApplicationPanel extends JPanel {
             new Thread(new DetectionTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImageProcessing(),
-                    null,
                     mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
             )).start();
         });

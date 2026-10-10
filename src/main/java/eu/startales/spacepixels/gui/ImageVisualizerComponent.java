@@ -24,13 +24,11 @@ public class ImageVisualizerComponent extends Component {
      *
      */
     public ImageVisualizerComponent() {
-        ApplicationWindow.logger.info("init");
 
     }
 
     public void setImage(BufferedImage image) {
         this.image = image;
-        ApplicationWindow.logger.info("setImage");
 
         repaint();
 
@@ -50,11 +48,9 @@ public class ImageVisualizerComponent extends Component {
         //super.paint(g);
 
         if (image != null) {
-            ApplicationWindow.logger.info("drawing image");
             g.drawImage(image, 0, 0, null);
         } else {
             //just draw something
-            ApplicationWindow.logger.info("drawing something");
 
             for (int i = 0; i < 100; i++) {
                 for (int j = 0; j < 100; j++) {
