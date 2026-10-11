@@ -426,7 +426,6 @@ public class DetectionConfigurationPanel extends JPanel {
         }
         footerMessageLabel.setText(" ");
         updateSavedState();
-        navigator.refreshFilters();
     }
 
     /** The saved value of a core setting on the Overview, or null before anything is saved. */
@@ -476,6 +475,9 @@ public class DetectionConfigurationPanel extends JPanel {
             footerStateLabel.setText("✓ Saved settings in use");
             footerStateLabel.setToolTipText(null);
         }
+        // The page dots and the unsaved count: Auto-Tune, Revert and the profile buttons change the Overview's core
+        // settings, which are not rows and so do not refresh them on their own.
+        navigator.refreshFilters();
     }
 
     private void revertToSaved() {
