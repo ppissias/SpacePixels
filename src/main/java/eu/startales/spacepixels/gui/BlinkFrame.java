@@ -98,6 +98,7 @@ public class BlinkFrame extends JFrame {
     public BlinkFrame(EventBus eventBus) {
         this.eventBus = eventBus;
         setTitle("Blink");
+        AppIcon.apply(this);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
         setSize((int) (screenSize.width * 0.8), (int) (screenSize.height * 0.8));

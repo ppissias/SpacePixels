@@ -93,6 +93,7 @@ abstract class SequenceViewerFrame extends JFrame {
         this.disposeOnClose = disposeOnClose;
         this.showsDetections = showsDetections;
         setTitle(windowName);
+        AppIcon.apply(this);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
         setSize((int) (screenSize.width * 0.8), (int) (screenSize.height * 0.8));

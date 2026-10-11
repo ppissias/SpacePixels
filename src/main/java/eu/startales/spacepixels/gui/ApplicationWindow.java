@@ -137,6 +137,7 @@ public class ApplicationWindow {
                 UIManager.put("Button.arc", 10);
                 UIManager.put("AccentColor", "#4285f4");
                 FlatDarkLaf.setup();
+                AppIcon.installForApplication();
 
                 ApplicationWindow window = new ApplicationWindow();
                 window.frmIpodImage.setVisible(true);
@@ -158,6 +159,7 @@ public class ApplicationWindow {
 
         frmIpodImage = new JFrame();
         frmIpodImage.setTitle("SpacePixels" + " " + version);
+        AppIcon.apply(frmIpodImage);
         // Resizable, sized to the screen or restored from the last session.
         WindowPlacement.install(frmIpodImage);
         frmIpodImage.setResizable(true);

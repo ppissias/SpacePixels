@@ -87,6 +87,7 @@ final class StarMaskExplorerFrame extends JFrame {
     StarMaskExplorerFrame(Window owner, String sessionName, JTransientEngine.MasterStackResult stackResult,
                           DetectionConfig baseConfig, Settings initial, Consumer<Settings> apply) {
         super("Star Mask Explorer · " + sessionName);
+        AppIcon.apply(this);
         this.stack = stackResult.masterStack;
         this.baseConfig = baseConfig.clone();
         this.initial = initial;
