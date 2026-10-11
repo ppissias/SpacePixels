@@ -28,6 +28,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.List;
 import java.util.Locale;
 
@@ -51,7 +52,24 @@ final class SessionPictureSectionWriter {
     private SessionPictureSectionWriter() {
     }
 
+    /**
+     * Writes the picture with its layers. It is written to the report only once complete; when it fails, a note
+     * takes its place and the rest of the report is still written.
+     */
     static void write(PrintWriter report, DetectionReportContext context, List<TrackLinker.Track> localRescueTracks) {
+        StringWriter section = new StringWriter();
+        try (PrintWriter writer = new PrintWriter(section)) {
+            writePicture(writer, context, localRescueTracks);
+        } catch (RuntimeException e) {
+            System.err.println("Failed to write the session picture: " + e);
+            report.println("<div class='astro-note'>The session picture could not be written: "
+                    + DetectionReportGenerator.escapeHtml(String.valueOf(e)) + "</div>");
+            return;
+        }
+        report.print(section);
+    }
+
+    private static void writePicture(PrintWriter report, DetectionReportContext context, List<TrackLinker.Track> localRescueTracks) {
         short[][] stack = context.masterStackData;
         if (stack == null || stack.length == 0 || stack[0].length == 0) {
             return;

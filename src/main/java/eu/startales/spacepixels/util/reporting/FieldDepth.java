@@ -92,8 +92,20 @@ final class FieldDepth {
         int y1;
     }
 
-    /** Measures the kept frames; empty without a catalogue with depth samples, a plate solution or frame data. */
+    /**
+     * Measures the kept frames; empty without a catalogue with depth samples, a plate solution or frame data, and
+     * empty when the measurement fails, so the report is still written.
+     */
     static FieldDepth measure(DetectionReportContext context, PipelineTelemetry telemetry) {
+        try {
+            return measureFrames(context, telemetry);
+        } catch (RuntimeException e) {
+            System.err.println("Failed to measure the field depth: " + e);
+            return new FieldDepth();
+        }
+    }
+
+    private static FieldDepth measureFrames(DetectionReportContext context, PipelineTelemetry telemetry) {
         FieldDepth result = new FieldDepth();
         SkyCatalogue catalogue = SessionCatalogue.of(context).catalogue;
         WcsCoordinateTransformer transformer = context.astrometryContext != null ? context.astrometryContext.getTransformer() : null;

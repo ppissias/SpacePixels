@@ -39,8 +39,20 @@ final class CatalogueMapPainter {
     private CatalogueMapPainter() {
     }
 
-    /** Paints the catalogue onto the map; returns how many objects were drawn. */
+    /**
+     * Paints the catalogue onto the map; returns how many objects were drawn, or 0 when painting fails, so the map
+     * and the report are still written.
+     */
     static int paint(BufferedImage map, SkyCatalogue catalogue, WcsCoordinateTransformer transformer) {
+        try {
+            return paintObjects(map, catalogue, transformer);
+        } catch (RuntimeException e) {
+            System.err.println("Failed to paint the sky catalogue on the map: " + e);
+            return 0;
+        }
+    }
+
+    private static int paintObjects(BufferedImage map, SkyCatalogue catalogue, WcsCoordinateTransformer transformer) {
         if (catalogue == null || transformer == null) {
             return 0;
         }
