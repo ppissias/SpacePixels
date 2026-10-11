@@ -134,6 +134,10 @@ distributions {
             into('bin') {
                 from(injectStarsStartScripts)
                 from(batchDetectStartScripts)
+                // The tool scripts must be executable on Linux and macOS, like the main launcher.
+                filePermissions {
+                    unix('rwxr-xr-x')
+                }
             }
         }
     }
