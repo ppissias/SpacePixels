@@ -164,6 +164,7 @@ public class DetectionConfigurationPanel extends JPanel {
         if (mainPanel != null) {
             mainPanel.bindVariableStarToggle(chkEnableVariableStarDetection.getModel());
             overviewPanel.bindDetectButton(mainPanel.getDetectButton(), mainPanel::runDetection);
+            mainPanel.bindAutoTuneButton(overviewPanel.getRunButton(), this::openOverviewAndRunAutoTune);
         }
 
         setupConstraints();
@@ -382,6 +383,13 @@ public class DetectionConfigurationPanel extends JPanel {
                 mainPanel.refreshWorkflowStatus();
             }
         }
+    }
+
+    /** Shows the Overview page of this tab and runs Auto-Tune as its Run Auto-Tune button does. */
+    private void openOverviewAndRunAutoTune() {
+        mainAppWindow.getTabbedPane().setSelectedComponent(this);
+        navigator.showPage("Overview");
+        overviewPanel.runAutoTune();
     }
 
     /** One-line description of the detection settings in use, for the main window. */

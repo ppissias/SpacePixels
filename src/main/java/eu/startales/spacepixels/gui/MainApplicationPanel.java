@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.gui;
 
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.StretchAlgorithm;
@@ -69,6 +70,9 @@ public class MainApplicationPanel extends JPanel {
     private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
     private final JButton detectBatchButton = new JButton("Detect Moving Targets");
     private final JButton detectIterativelyButton = new JButton("Detect Iteratively (large datasets)");
+    private final JButton autoTuneButton = new JButton("Auto-Tune Settings", new AutoTuneIcon(20));
+    /** The Run Auto-Tune button of the Detection Settings Overview, whose enabling the Auto-Tune button follows. */
+    private JButton overviewRunAutoTuneButton;
     private final JRadioButton astapSolveRadio = new JRadioButton("ASTAP");
     private final JRadioButton astrometryNetSolveRadio = new JRadioButton("Astrometry.net (online)");
 
@@ -141,6 +145,8 @@ public class MainApplicationPanel extends JPanel {
         setActionTooltip(manualTransientInspectionButton, "Extract purified transients from all frames against the master background and navigate through them using arrow keys.");
         setActionTooltip(detectBatchButton, "Run the full pipeline: detect, link and report moving objects across the whole sequence (Ctrl+D).");
         setActionTooltip(detectIterativelyButton, "For datasets too large for the standard run: multiple temporally spaced passes across the sequence.");
+        setActionTooltip(autoTuneButton, "<html>Open the Detection Settings and run Auto-Tune on your frames, with the tuner and profile chosen there "
+                + "(Ctrl+T).<br>It measures the noise and the faintest stars it can find, and sets the detection settings to match.</html>");
         for (JButton button : actionTooltips.keySet()) {
             button.setEnabled(false);
         }
@@ -156,6 +162,8 @@ public class MainApplicationPanel extends JPanel {
 
         // The primary action: accent colours of the look and feel, larger and bold.
         detectBatchButton.putClientProperty("FlatLaf.style", PRIMARY_BUTTON_STYLE);
+        // As tall as the primary button next to it, without its accent colours.
+        autoTuneButton.putClientProperty("FlatLaf.style", "font: +2; margin: 5,10,5,14; iconTextGap: 6");
 
         JPanel prepareGroup = workflowGroup("1  Prepare", prepareStatus,
                 buttonRow(importButton),
@@ -181,7 +189,7 @@ public class MainApplicationPanel extends JPanel {
             }
         });
         JPanel detectGroup = workflowGroup("4  Detect", detectStatus,
-                buttonRow(detectBatchButton),
+                buttonRow(detectBatchButton, autoTuneButton),
                 buttonRow(detectIterativelyButton),
                 buttonRow(variableStarCheck, editSettingsLink));
 
@@ -543,6 +551,11 @@ public class MainApplicationPanel extends JPanel {
         if (containsColorImages) {
             return "convert the frames to monochrome first (1 Prepare).";
         }
+        if (button == autoTuneButton) {
+            return frames < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES
+                    ? "Auto-Tune needs at least " + SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES + " frames."
+                    : "Auto-Tune is already running.";
+        }
         return null;
     }
 
@@ -584,6 +597,7 @@ public class MainApplicationPanel extends JPanel {
         boolean fetching = skyFetchThread != null;
         skyCatalogueButton.setText(fetching ? "Cancel Sky Catalogue" : FETCH_SKY_CATALOGUE);
         skyCatalogueButton.setEnabled(!uiLocked && (fetching || hasSolvedFrame));
+        updateAutoTuneButton();
         updateVariableStarTooltip();
         for (JButton button : actionTooltips.keySet()) {
             updateActionTooltip(button);
@@ -652,11 +666,12 @@ public class MainApplicationPanel extends JPanel {
         });
     }
 
-    /** Ctrl+D detect, Ctrl+B blink, Ctrl+P preview. */
+    /** Ctrl+D detect, Ctrl+B blink, Ctrl+P preview, Ctrl+T Auto-Tune. */
     private void installShortcuts() {
         bindShortcut("detect", KeyStroke.getKeyStroke("ctrl D"), detectBatchButton);
         bindShortcut("blink", KeyStroke.getKeyStroke("ctrl B"), blinkButton);
         bindShortcut("preview", KeyStroke.getKeyStroke("ctrl P"), detectSingleButton);
+        bindShortcut("autoTune", KeyStroke.getKeyStroke("ctrl T"), autoTuneButton);
     }
 
     private void bindShortcut(String name, KeyStroke key, JButton button) {
@@ -1149,6 +1164,21 @@ public class MainApplicationPanel extends JPanel {
     /** The Detect Moving Targets button, so other views can offer the same action with the same enabling. */
     JButton getDetectButton() {
         return detectBatchButton;
+    }
+
+    /**
+     * Connects the Auto-Tune button to the Overview's Run Auto-Tune button: it is enabled with it (frames ready, no tune
+     * running), and a click runs {@code openAndRun}, which shows the Overview and starts Auto-Tune there.
+     */
+    void bindAutoTuneButton(JButton runButton, Runnable openAndRun) {
+        overviewRunAutoTuneButton = runButton;
+        autoTuneButton.addActionListener(e -> openAndRun.run());
+        runButton.addPropertyChangeListener("enabled", e -> updateAutoTuneButton());
+        updateAutoTuneButton();
+    }
+
+    private void updateAutoTuneButton() {
+        autoTuneButton.setEnabled(!uiLocked && overviewRunAutoTuneButton != null && overviewRunAutoTuneButton.isEnabled());
     }
 
     /** Runs Detect Moving Targets exactly as its button does (ignored while disabled or busy). */

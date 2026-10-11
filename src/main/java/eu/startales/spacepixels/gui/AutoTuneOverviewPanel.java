@@ -314,6 +314,18 @@ public class AutoTuneOverviewPanel extends JPanel {
         mirror.run();
     }
 
+    /** The Run Auto-Tune button, enabled while frames are ready and no tune is running. */
+    JButton getRunButton() {
+        return runButton;
+    }
+
+    /** Runs Auto-Tune as the Run Auto-Tune button does (ignored while it is disabled). */
+    void runAutoTune() {
+        if (runButton.isEnabled()) {
+            runButton.doClick();
+        }
+    }
+
     /** Adds a button under the core settings, enabled while frames are ready and no tune is running. */
     void addCoreAction(JButton button) {
         GridBagConstraints c = new GridBagConstraints();
