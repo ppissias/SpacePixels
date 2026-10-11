@@ -189,7 +189,7 @@ public class MainApplicationPanel extends JPanel {
             }
         });
         JPanel detectGroup = workflowGroup("4  Detect", detectStatus,
-                buttonRow(detectBatchButton, autoTuneButton),
+                buttonRow(autoTuneButton, detectBatchButton),
                 buttonRow(detectIterativelyButton),
                 buttonRow(variableStarCheck, editSettingsLink));
 
