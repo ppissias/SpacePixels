@@ -50,6 +50,8 @@ This release adds variable-star photometry, a new auto-tuner that measures your 
 - The frame numbers in the Unclassified Transient Inspector are right when frames were rejected.
 - Blink uses the session's plate solution when the blinked frames are not solved themselves.
 - The command-line tool always exits when it finishes.
+- On Linux and macOS, the `batchDetect` and `injectStars` launchers can be run directly (they were not marked executable).
+- Preview Frame, Manual Transient Inspection, the Star Mask Explorer and Correct plate solution read frames whose image is not in the first part of the FITS file, as import and detection already did.
 - If an optional part of the report (session picture, field depth, catalogue names on the map) cannot be made, the rest of the report is still written.
 
 ### Upgrading
@@ -62,6 +64,7 @@ This release adds variable-star photometry, a new auto-tuner that measures your 
 ### Under the hood
 
 - Detection engine: JTransient 1.0.2.
-- Java API: `SpacePixelsPipelineRequest` takes the auto-tune algorithm (`autoTuneAlgorithm`). See [API.md](API.md).
+- Java API: `SpacePixelsPipelineRequest` takes the auto-tune algorithm (`autoTuneAlgorithm`). The Maven artifact now brings JTransient to API users at compile time, so the examples in [API.md](API.md) build with the SpacePixels dependency alone.
+- The release archives include the license.
 
 <sub>Gaia data: ESA/Gaia/DPAC. SIMBAD and VizieR: CDS, Strasbourg. VSX: AAVSO.</sub>
