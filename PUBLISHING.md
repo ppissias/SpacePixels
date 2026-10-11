@@ -37,11 +37,11 @@ pomDeveloperName=Petros Pissias
 pomDeveloperEmail=petrospis@gmail.com
 pomDeveloperOrganization=GitHub
 pomDeveloperOrganizationUrl=https://github.com/ppissias
-signingKey=-----BEGIN PGP PRIVATE KEY BLOCK-----
-...
------END PGP PRIVATE KEY BLOCK-----
+signingKey=-----BEGIN PGP PRIVATE KEY BLOCK-----\n\nlQdGBF...\n...\n-----END PGP PRIVATE KEY BLOCK-----\n
 signingPassword=YOUR_SIGNING_PASSWORD
 ```
+
+A value in a `.properties` file ends at the end of its line, so write the armored key on one line and put `\n` where the key's line breaks are, including the empty line after the `BEGIN` line. The build also turns a literal `\n` into a line break, so the same one-line form works in the environment variable below.
 
 You can also provide the in-memory signing values through environment variables:
 

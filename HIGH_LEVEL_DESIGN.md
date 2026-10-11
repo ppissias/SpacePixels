@@ -306,9 +306,9 @@ The Star Mask Explorer, opened from the Overview.
 
 - a grouped page list and the pages themselves (a `CardLayout`);
 - a search box and a "show only unsaved changes" filter that work across all pages;
-- collapsible expert sections.
+- a "Show expert settings" switch. Expert sections are hidden while it is off, but search and the unsaved-changes filter still find them, and each page says how many expert settings it hides.
 
-Sections are found from the header labels that `DetectionConfigurationPanel` marks with a client property.
+Expert sections are found from the header labels that `DetectionConfigurationPanel` marks with a client property.
 
 `SettingRow` is one setting on a page: its input, its saved value and a `Reset` button. It marks itself when its value differs from the saved configuration and tells the navigator to refresh the filters and counts.
 
@@ -535,10 +535,9 @@ Detection sequence viewer:
 
 ```text
 MainApplicationPanel
--> DetectionSequenceFrame
--> DetectionTask in quick-detection mode
+-> DetectionSequenceFrame (a SequenceViewerFrame; prepares one frame at a time on a SwingWorker)
 -> JTransient SourceExtractor.extractSources(...)
--> annotated image displayed in DetectionSequenceFrame
+-> detection markers drawn by FrameView
 ```
 
 Detection settings preview:
@@ -556,7 +555,7 @@ Manual transient inspection:
 ```text
 MainApplicationPanel
 -> ManualTransientInspectionTask
--> ImageProcessing
+-> SessionFrameLoader (shared with the Star Mask Explorer)
 -> JTransient transient filtering path
 -> TransientInspectionFrame
 ```
