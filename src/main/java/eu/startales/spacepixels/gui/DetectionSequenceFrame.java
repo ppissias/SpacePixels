@@ -12,6 +12,7 @@ package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.ImageProcessing;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import nom.tam.fits.Fits;
@@ -51,13 +52,13 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
         return files[index];
     }
 
-    /** Reads the frame as the detection does (16-bit mono, first HDU) and extracts its sources. */
+    /** Reads the frame as the detection does (16-bit mono, the image HDU) and extracts its sources. */
     @Override
     protected Result prepare(int index) throws Exception {
         FitsFileInformation info = files[index];
         short[][] data;
         try (Fits fits = new Fits(new File(info.getFilePath()))) {
-            Object kernel = fits.getHDU(0).getKernel();
+            Object kernel = ImageProcessing.getImageHDU(fits).getKernel();
             if (!(kernel instanceof short[][])) {
                 return Result.problem("The detection needs 16-bit monochrome frames. Convert 32-bit, compressed or XISF "
                         + "frames when you import them, and colour frames with Convert to Mono.");

@@ -8,6 +8,7 @@
 
 package eu.startales.spacepixels.tools;
 
+import eu.startales.spacepixels.util.ImageProcessing;
 import nom.tam.fits.*;
 import nom.tam.util.Cursor;
 
@@ -105,7 +106,7 @@ public class ArtificialStarInjector {
         // 2. Read the first frame to get dimensions
         int width, height;
         try (Fits firstFits = new Fits(fitsFiles[0])) {
-            BasicHDU<?> hdu = firstFits.getHDU(0);
+            BasicHDU<?> hdu = ImageProcessing.getImageHDU(firstFits);
             int[] axes = hdu.getAxes();
             if (axes.length != 2) {
                 throw new IllegalArgumentException("Expected 2D monochrome 16-bit FITS files. Found " + axes.length + " axes.");
@@ -164,7 +165,7 @@ public class ArtificialStarInjector {
             System.out.printf("Processing frame [%d/%d]: %s\n", (i + 1), numFrames, inFile.getName());
 
             try (Fits fits = new Fits(inFile)) {
-                BasicHDU<?> hdu = fits.getHDU(0);
+                BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
                 Object kernel = hdu.getKernel();
 
                 if (!(kernel instanceof short[][])) {
@@ -199,6 +200,10 @@ public class ArtificialStarInjector {
                 Header newHeader = newHdu.getHeader();
                 while (originalCursor.hasNext()) {
                     HeaderCard card = originalCursor.next();
+                    // The image may come from an extension; its extension keywords don't belong in a primary header.
+                    if (isExtensionOnlyKey(card.getKey())) {
+                        continue;
+                    }
                     if (!newHeader.containsKey(card.getKey())) {
                         newHeader.addLine(card);
                     }
@@ -209,6 +214,10 @@ public class ArtificialStarInjector {
             }
         }
         System.out.println("\nSuccessfully injected artificial stars! Output saved to: " + outDir.getAbsolutePath());
+    }
+
+    private static boolean isExtensionOnlyKey(String key) {
+        return "XTENSION".equals(key) || "PCOUNT".equals(key) || "GCOUNT".equals(key);
     }
 
     private static int drawGaussianStar(short[][] data, double cx, double cy, double peakAdu, double sigma) {

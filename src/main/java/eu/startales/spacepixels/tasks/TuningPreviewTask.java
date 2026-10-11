@@ -5,6 +5,7 @@ import eu.startales.spacepixels.events.TuningPreviewFinishedEvent;
 import eu.startales.spacepixels.events.TuningPreviewStartedEvent;
 import eu.startales.spacepixels.util.DisplayImageRenderer;
 import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.RawImageAnnotator;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.SourceExtractor;
@@ -36,7 +37,7 @@ public class TuningPreviewTask implements Runnable {
 
         try {
             Fits fitsImage = new Fits(targetFile.getFilePath());
-            Object kernelData = fitsImage.getHDU(0).getKernel();
+            Object kernelData = ImageProcessing.getImageHDU(fitsImage).getKernel();
             fitsImage.close();
 
             if (!(kernelData instanceof short[][])) {

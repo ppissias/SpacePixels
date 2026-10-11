@@ -10,6 +10,7 @@
 package eu.startales.spacepixels.util.skycatalog;
 
 import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
@@ -233,7 +234,7 @@ public final class PlateCorrectionFitter {
     /** The frame's 16-bit data; for a colour frame its middle plane. Null for other data. */
     static short[][] readMono(File file) throws IOException {
         try (Fits fits = new Fits(file)) {
-            Object kernel = fits.getHDU(0).getKernel();
+            Object kernel = ImageProcessing.getImageHDU(fits).getKernel();
             if (kernel instanceof short[][]) {
                 return (short[][]) kernel;
             }
