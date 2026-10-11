@@ -97,7 +97,7 @@ Open **Detection Settings** (or click **Edit settings…** in **4 Detect**). The
 
 ![Auto-Tune running](docs/images/manual/ui-autotune-running.png)
 
-Click **Run Auto-Tune**. It measures your own frames: how sharp the stars are, how much the stars jitter, how many noise detections each setting produces and how faint a test star each setting still finds. This takes from a few seconds to a few minutes (here 1 min 47 s for 33 × 61 MPix).
+Click **Run Auto-Tune**, or **Auto-Tune Settings** next to **Detect Moving Targets** on the Main tab (or press **Ctrl+T**), which opens this page and starts the run with the tuner and profile chosen here. It measures your own frames: how sharp the stars are, how much the stars jitter, how many noise detections each setting produces and how faint a test star each setting still finds. This takes from a few seconds to a few minutes (here 1 min 47 s for 33 × 61 MPix).
 
 ![Auto-Tune results](docs/images/manual/ui-autotune-done.png)
 
