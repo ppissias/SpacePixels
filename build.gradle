@@ -131,6 +131,7 @@ distributions {
                     }
                 }
             }
+            from('LICENSE')
             into('bin') {
                 from(injectStarsStartScripts)
                 from(batchDetectStartScripts)
