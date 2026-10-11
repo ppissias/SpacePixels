@@ -34,6 +34,7 @@ This release adds variable-star photometry, a new auto-tuner that measures your 
 - **Astrometry Config:** the ASTAP check also looks for the star database, the observing site is checked as you type, and **Fill Site from FITS Header** fills the fields. Astrometry.net submissions are private.
 - **Image Stretch:** the preview shows the whole frame with zoom and histograms, and the stretch is shared with every viewer.
 - A **User Manual** link and, when a newer release exists, a **New version** button at the right end of the tab bar.
+- A new application icon for the windows, the taskbar and the macOS Dock.
 
 ### Detection changes
 
