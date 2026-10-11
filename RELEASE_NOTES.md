@@ -26,7 +26,7 @@ This release adds variable-star photometry, a new auto-tuner that measures your 
 
 ### The application
 
-- The **Main** tab follows the workflow in four groups (**1 Prepare**, **2 Astrometry**, **3 Inspect**, **4 Detect**), each with a status line. A greyed-out button's tooltip says why it is disabled. **Auto-Tune Settings**, next to **Detect Moving Targets**, opens the Detection Settings and runs Auto-Tune. Shortcuts: Ctrl+D (detect), Ctrl+T (Auto-Tune), Ctrl+B (blink), Ctrl+P (preview).
+- The **Main** tab follows the workflow in four groups (**1 Prepare**, **2 Astrometry**, **3 Inspect**, **4 Detect**), each with a status line. A greyed-out button's tooltip says why it is disabled. **Auto-Tune Settings**, to the left of **Detect Moving Targets**, opens the Detection Settings and runs Auto-Tune. Shortcuts: Ctrl+D (detect), Ctrl+T (Auto-Tune), Ctrl+B (blink), Ctrl+P (preview).
 - **Import Aligned Frames…** replaces the File menu, and you can drag a folder onto the window. Import checks that all frames of the folder belong together (same type, bit depth, size and layout).
 - The window can be resized and remembers its size and position.
 - **Detection Settings** has pages with search (Ctrl+F) and **Show only unsaved changes**. Settings are basic or expert: the fine-tuning settings are shown with **Show expert settings**. Changed settings are marked, with a reset button for each. Settings that only matter while a feature is on appear when you switch it on.
