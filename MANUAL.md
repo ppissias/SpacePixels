@@ -188,6 +188,26 @@ The **Map of All Detections** draws every result over the whole field, with its 
 
 Everything that was detected but did not become a result is shown here, coloured from blue (early frames) to red (late frames). Click a circle to see a short animation of that spot (two frames before and after the detection) and its measurements. This is where you look when you expect an object that the report did not find.
 
+### Night & Equipment
+
+![Night & Equipment](docs/images/manual/report-night-equipment.png)
+
+What the frames say about the night and your equipment. SpacePixels measures up to 2,000 isolated stars of the master star map in every kept frame: their size, shape, brightness and how lopsided they are. Each part ends with a reading in plain words. The **Seeing** card in the Overview links here.
+
+- **The night**: three charts through the session.
+  - **Star size near the centre** (the seeing), with the focuser or air temperature when the FITS headers have it. Stars that grow steadily usually mean the focus drifted as the temperature fell.
+  - **Star brightness against the clearest frame**: haze and thin cloud show as dips. A target that sinks lower also dims a little.
+  - **Sky brightness** in magnitudes per square arcsecond, like a sky quality meter, calibrated with the Gaia stars of each frame. It needs the sky catalogue and linear frames, and it assumes calibrated frames: a camera offset (bias or pedestal) left in the frames, or a background removed during processing, gives a wrong value.
+- **The setup**: the pixel scale, the field of view and the camera angle from the plate solution; the focal length (from the pixel size in the FITS header), compared with the header's focal length; the sampling (how many pixels a star covers); and the brightness range from the saturation limit down to the field depth. With a reducer or flattener the focal length depends on its distance to the camera, so a different value between sessions with the same equipment means the spacing changed.
+- **The optics**: three maps of the field, in the orientation of the report's pictures.
+  - **Star size against the centre**: larger stars in all corners mean field curvature (or a flattener at the wrong distance); larger stars on one side mean a tilted camera or a sagging focuser.
+  - **Star shapes**: the stretch of the stars after the stretch they all share (tracking, guiding, wind) is taken out. Stars stretched along or across the line to the centre in the outer field point to the flattener or reducer spacing.
+  - **Coma**: arrows from the core of the stars towards their light. Tails that grow towards the edges are coma; with a camera lens they can also be lateral colour. A point without coma away from the centre (a white cross) means, on a reflector, that the collimation is off.
+  - Frames taken on the other side of the pier are turned back by 180°, since tilt and coma belong to the camera.
+- **Flat-field check**: the star brightness against Gaia across the field, and the sky background. Stars dimmer in the corners mean vignetting that the flats did not remove; brighter corners mean flats that over-correct. A sky that is brighter towards one side is a gradient from light pollution, the Moon or twilight.
+
+The measurement takes a few seconds. Without a plate solution the sizes are in pixels (or in arcseconds from the focal length and pixel size in the FITS header), and without the sky catalogue the sky brightness and the star brightness map are left out.
+
 ### Optional AI sections
 
 With **Include AI Creative Report Sections** ticked (Detection Settings, Report Visualization), the report ends with two sections where AI assistants present the session in their own way. Codex's **Signal Weave** draws every detection as one picture. Claude's **The Night, Retold** puts the session back in time order: one timeline with every frame (rejected ones in red), the sky background and seeing through the night, every track, streak and flash at its time and a small light curve per variable star, followed by a short account of the night written from the measured numbers.
