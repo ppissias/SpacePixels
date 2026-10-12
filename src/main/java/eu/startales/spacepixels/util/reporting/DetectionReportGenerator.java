@@ -1086,6 +1086,7 @@ public class DetectionReportGenerator {
         } else {
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("variables", "Variable stars", "off", true));
         }
+        items.add(new PipelineDiagnosticsSectionWriter.NavItem("night-equipment", "Night & equipment", null, false));
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("diagnostics", "Diagnostics", null, true));
         if (aiSections) {
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("ai-perspective", "AI perspectives", null, true));
@@ -1331,7 +1332,9 @@ public class DetectionReportGenerator {
 
             // Results first: overview, moving objects, slow movers, residual review, maps, inspector, variable stars.
             FieldDepth fieldDepth = FieldDepth.measure(reportContext, pipelineTelemetry);
-            PipelineDiagnosticsSectionWriter.writeOverview(report, reportContext, pipelineTelemetry, summary, localRescueTracks, fieldDepth);
+            NightEquipment nightEquipment = NightEquipment.measure(reportContext, pipelineTelemetry, masterStars);
+            System.out.printf(Locale.US, "Night & Equipment measured in %.1f s%n", nightEquipment.millis / 1000.0);
+            PipelineDiagnosticsSectionWriter.writeOverview(report, reportContext, pipelineTelemetry, summary, localRescueTracks, fieldDepth, nightEquipment);
 
             report.println("<section id='moving-objects'>");
             TargetVisualizationSectionWriter.writeSection(report, reportContext);
@@ -1356,6 +1359,10 @@ public class DetectionReportGenerator {
 
             report.println("<section id='variables'>");
             PhotometryReportSectionWriter.writeSection(report, reportContext, result.variableStarAnalysis);
+            report.println("</section>");
+
+            report.println("<section id='night-equipment'>");
+            NightEquipmentSectionWriter.writeSection(report, nightEquipment, fieldDepth);
             report.println("</section>");
 
             // Processing diagnostics, collapsed.

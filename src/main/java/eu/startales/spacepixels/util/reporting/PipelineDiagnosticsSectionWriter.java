@@ -145,7 +145,8 @@ final class PipelineDiagnosticsSectionWriter {
                               PipelineTelemetry pipelineTelemetry,
                               DetectionReportSummary summary,
                               List<TrackLinker.Track> localRescueTracks,
-                              FieldDepth fieldDepth) {
+                              FieldDepth fieldDepth,
+                              NightEquipment nightEquipment) {
         if (pipelineTelemetry == null) {
             return;
         }
@@ -204,6 +205,13 @@ final class PipelineDiagnosticsSectionWriter {
         if (fieldDepth != null && !fieldDepth.isEmpty()) {
             report.println("<a class='metric-link open-details' href='#field-depth' title='Gaia G magnitude where the share of stars found falls to half, in the median frame. Per frame under Diagnostics.'>"
                     + compactCard(String.format(Locale.US, "G %.1f", fieldDepth.median()), "Field depth") + "</a>");
+        }
+        if (nightEquipment != null && !nightEquipment.isEmpty()) {
+            double seeing = nightEquipment.centreSizePx;
+            String value = nightEquipment.hasPixelScale() ? String.format(Locale.US, "%.1f&Prime;", seeing * nightEquipment.pixelScale)
+                    : String.format(Locale.US, "%.1f px", seeing);
+            report.println("<a class='metric-link' href='#night-equipment' title='Median star size near the centre. The night, the setup, the optics and the flats under Night &amp; Equipment.'>"
+                    + compactCard(value, "Seeing") + "</a>");
         }
         report.println("</div>");
         SessionPictureSectionWriter.writeDiagnosticsLink(report, pipelineTelemetry.totalFramesKept, pipelineTelemetry.totalFramesLoaded);
