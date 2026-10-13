@@ -42,7 +42,7 @@ public class TuningPreviewManager {
         this.currentConfig = config;
 
         try {
-            previewFiles = mainAppWindow.getImageProcessing().getFitsfileInformation();
+            previewFiles = mainAppWindow.getImageProcessing().getImportedFiles();
         } catch (Exception ex) {
             System.err.println("Could not load FITS files for preview: " + ex.getMessage());
         }

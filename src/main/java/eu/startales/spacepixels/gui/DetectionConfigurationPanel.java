@@ -286,7 +286,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private void openStarMaskExplorer() {
         FitsFileInformation[] files;
         try {
-            files = mainAppWindow.getImageProcessing().getFitsfileInformation();
+            files = mainAppWindow.getImageProcessing().getImportedFiles();
         } catch (Exception e) {
             return;
         }

@@ -40,7 +40,7 @@ public class ManualTransientInspectionTask implements Runnable {
         eventBus.post(new DetectionStartedEvent());
 
         try {
-            FitsFileInformation[] filesInfo = preProcessing.getFitsfileInformation();
+            FitsFileInformation[] filesInfo = preProcessing.getImportedFiles();
             List<ImageFrame> framesForLibrary = SessionFrameLoader.loadAll(filesInfo,
                     (percent, message) -> eventBus.post(new EngineProgressUpdateEvent(percent, message)), 20);
 

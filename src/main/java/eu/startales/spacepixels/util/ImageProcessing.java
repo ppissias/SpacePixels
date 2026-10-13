@@ -539,15 +539,10 @@ public class ImageProcessing implements AutoCloseable {
     // UPDATED FITS FILE INFORMATION (The Import Gatekeeper)
     // =========================================================================
 
-    /**
-     * Loads FITS metadata for interactive use after validating compression state, format
-     * consistency, dimensions, and optional auto-conversion paths.
-     */
     /** Whether any imported frame is plate-solved, which gives the report sky coordinates. */
     public boolean hasPlateSolvedFrame() {
         try {
-            FitsFileInformation[] files = cachedFileInfo != null ? cachedFileInfo : getFitsfileInformation();
-            for (FitsFileInformation file : files) {
+            for (FitsFileInformation file : getImportedFiles()) {
                 if (file.isWcsSolved()) {
                     return true;
                 }
@@ -558,6 +553,19 @@ public class ImageProcessing implements AutoCloseable {
         return false;
     }
 
+    /**
+     * The imported frames: the same objects the frame table shows and the detection run uses, so a header updated in
+     * place (Plate Solve writes the WCS) reaches all of them. Reads the folder only when nothing is loaded yet; use
+     * {@link #getFitsfileInformation()} only to import.
+     */
+    public FitsFileInformation[] getImportedFiles() throws Exception {
+        return cachedFileInfo != null ? cachedFileInfo : getFitsfileInformation();
+    }
+
+    /**
+     * Loads FITS metadata for interactive use after validating compression state, format
+     * consistency, dimensions, and optional auto-conversion paths. Replaces the imported frames with new objects.
+     */
     public FitsFileInformation[] getFitsfileInformation() throws Exception {
         File[] fitsFileInformation = getFitsFilesDetails();
         int numFiles = fitsFileInformation.length;

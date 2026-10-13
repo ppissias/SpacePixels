@@ -354,7 +354,7 @@ public class StretchPanel extends JPanel {
     private void openFullSize() {
         FitsFileInformation[] files;
         try {
-            files = mainAppWindow.getImageProcessing().getFitsfileInformation();
+            files = mainAppWindow.getImageProcessing().getImportedFiles();
         } catch (Exception ex) {
             System.err.println("Could not load FITS files: " + ex.getMessage());
             return;

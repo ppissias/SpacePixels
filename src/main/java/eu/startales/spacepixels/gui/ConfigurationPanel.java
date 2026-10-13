@@ -527,7 +527,7 @@ public class ConfigurationPanel extends JPanel {
 
     private FitsFileInformation[] importedFiles() {
         try {
-            return mainAppWindow.getImageProcessing() == null ? null : mainAppWindow.getImageProcessing().getFitsfileInformation();
+            return mainAppWindow.getImageProcessing() == null ? null : mainAppWindow.getImageProcessing().getImportedFiles();
         } catch (Exception e) {
             return null;
         }
