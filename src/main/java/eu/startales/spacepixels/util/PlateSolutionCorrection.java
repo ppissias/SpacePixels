@@ -50,7 +50,7 @@ public final class PlateSolutionCorrection {
     public String solutionKey;
     public int width;
     public int height;
-    /** The correction of the whole session. */
+    /** The correction of the whole session; null when the check found the header solution needs none. */
     public Polynomial global;
     /** The extra correction of each frame, by file name; a frame without one uses the global correction only. */
     public Map<String, Polynomial> frames = new LinkedHashMap<>();
@@ -126,6 +126,11 @@ public final class PlateSolutionCorrection {
         });
     }
 
+    /** Whether the check found a correction that matches the stars better than the header solution. */
+    public boolean isNeeded() {
+        return global != null;
+    }
+
     /** "4.86 → 0.11 px". */
     public String improvementText() {
         return String.format(Locale.US, "%.2f → %.2f px", beforeMedianPx, afterMedianPx);
@@ -155,8 +160,8 @@ public final class PlateSolutionCorrection {
         }
         try (Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
             PlateSolutionCorrection correction = GSON.fromJson(reader, PlateSolutionCorrection.class);
-            if (correction == null || correction.version > CURRENT_VERSION || correction.global == null
-                    || !correction.global.isValid() || correction.solutionKey == null) {
+            if (correction == null || correction.version > CURRENT_VERSION
+                    || (correction.global != null && !correction.global.isValid()) || correction.solutionKey == null) {
                 return null;
             }
             if (correction.frames == null) {
@@ -165,6 +170,7 @@ public final class PlateSolutionCorrection {
             if (correction.notes == null) {
                 correction.notes = new ArrayList<>();
             }
+            correction.enabled &= correction.isNeeded();
             return correction;
         } catch (IOException | JsonParseException e) {
             return null;

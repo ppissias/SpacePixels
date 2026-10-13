@@ -74,7 +74,7 @@ final class SkyCatalogueModel {
      * plate solution, including a detection run, uses the new setting.
      */
     void setCorrectionEnabled(boolean enabled) throws IOException {
-        if (correction == null || correction.enabled == enabled) {
+        if (correction == null || !correction.isNeeded() || correction.enabled == enabled) {
             return;
         }
         correction.enabled = enabled;

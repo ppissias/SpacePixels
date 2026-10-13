@@ -941,14 +941,17 @@ public class MainApplicationPanel extends JPanel {
         } else {
             correctionProblem = null;
             PlateSolutionCorrection previous = SkyCatalogueModel.shared().getCorrection();
-            correction.enabled = previous != null && previous.enabled && correction.solutionKey.equals(previous.solutionKey);
+            correction.enabled = correction.isNeeded() && previous != null && previous.enabled
+                    && correction.solutionKey.equals(previous.solutionKey);
             try {
                 PlateSolutionCorrection.save(folder, correction);
             } catch (IOException e) {
                 correctionProblem = "It could not be saved in the session folder (" + e.getMessage() + ").";
             }
             SkyCatalogueModel.shared().setCorrection(correction);
-            statusLabel.setText("Plate solution checked: " + correction.improvementText()
+            statusLabel.setText(!correction.isNeeded()
+                    ? String.format(Locale.US, "Plate solution checked: the FITS header already matches the stars (%.2f px)", correction.beforeMedianPx)
+                    : "Plate solution checked: " + correction.improvementText()
                     + (correction.enabled ? ", correction in use" : "; switch the correction on in a viewer (C)"));
         }
         refreshWorkflowStatus();
@@ -1002,7 +1005,9 @@ public class MainApplicationPanel extends JPanel {
         String catalogueText = catalogueStatusText();
         PlateSolutionCorrection correction = SkyCatalogueModel.shared().getCorrection();
         if (correction != null) {
-            return catalogueText + "<br>" + (correction.enabled
+            return catalogueText + "<br>" + (!correction.isNeeded()
+                    ? "✓ Plate solution checked · " + String.format(Locale.US, "%.2f px", correction.beforeMedianPx)
+                    : correction.enabled
                     ? "✓ Plate solution corrected · " + String.format(Locale.US, "%.2f px", correction.afterMedianPx)
                     : "Correction available · " + correction.improvementText());
         }
@@ -1047,7 +1052,12 @@ public class MainApplicationPanel extends JPanel {
                     .append(escapeHtml(skyFetchProblem).replace("\n", "<br>"));
         }
         PlateSolutionCorrection correction = SkyCatalogueModel.shared().getCorrection();
-        if (correction != null) {
+        if (correction != null && !correction.isNeeded()) {
+            text.append(String.format(Locale.US, "<br><br>Plate solution checked against the Gaia stars: %,d stars per frame in %d frames.<br>"
+                            + "Distance from the catalogue stars to the stars found in the frames: %.2f px (90 %%: %.2f px).<br>"
+                            + "The FITS header solution already matches the stars: a correction would not bring them closer, so none is offered.",
+                    correction.starsPerFrame, correction.framesFitted, correction.beforeMedianPx, correction.beforeP90Px));
+        } else if (correction != null) {
             text.append(String.format(Locale.US, "<br><br>Plate solution checked against the Gaia stars: %,d stars per frame in %d frames.<br>"
                             + "Distance from the catalogue stars to the stars found in the frames: %.2f px (90 %%: %.2f px)<br>"
                             + "as in the FITS header, %.2f px (90 %%: %.2f px) corrected.",

@@ -34,7 +34,9 @@ import java.util.Map;
  * Fits a {@link PlateSolutionCorrection} for a session: in every frame, the Gaia stars (moved to the frame's date) are
  * matched to the detected stars, a polynomial correction of order 1 to 3 is fitted to all frames together (the order
  * is the lowest that does as well as the best on frames left out of the fit), and then a shift (or, with many stars,
- * a linear correction) per frame on top. The frames are read one at a time.
+ * a linear correction) per frame on top. When the header solution does as well as the best correction on those
+ * frames, none is made: the result then has no {@link PlateSolutionCorrection#global}.
+ * The frames are read one at a time.
  */
 public final class PlateCorrectionFitter {
 
@@ -50,6 +52,12 @@ public final class PlateCorrectionFitter {
     /** Above this many matched stars, a frame gets a linear correction instead of a shift. */
     static final int LINEAR_FRAME_PAIRS = 300;
     static final int MAX_FRAMES = 300;
+    /**
+     * A lower order, or the header solution without a correction, counts as doing as well as the best order when its
+     * median distance on the frames left out of the fit is at most this much larger (3 %). Relative, because a header
+     * solution can already be good to 0.1 px.
+     */
+    static final double ORDER_TOLERANCE = 0.03;
     private static final double SEARCH_RANGE = 80;
     private static final double MATCH_RADIUS = 4;
     private static final double[] DEEPER_STARS = {17, 18.5};
@@ -149,8 +157,24 @@ public final class PlateCorrectionFitter {
             throw new IOException("too few stars matched for a fit.");
         }
         int order = 1;
-        while (testMedian[order] > best + 0.02) {
+        while (testMedian[order] > best * (1 + ORDER_TOLERANCE)) {
             order++;
+        }
+        double headerTestMedian = median(residuals(testFrom, testBy, null));
+
+        PlateSolutionCorrection correction = new PlateSolutionCorrection();
+        correction.fittedAtUtc = Instant.now().toString();
+        correction.solutionKey = solutionKey;
+        correction.width = width;
+        correction.height = height;
+        correction.notes = notes;
+        if (headerTestMedian <= best * (1 + ORDER_TOLERANCE)) {
+            // On the stars left out of the fit, the header solution does as well as the best correction: none is made.
+            notCorrected(correction, frames);
+            notes.add(0, String.format(Locale.US, "The plate solution in the FITS header already matches the Gaia stars: "
+                    + "%.3f px on the stars left out of the fit, %.3f px with the best correction.",
+                    headerTestMedian, best));
+            return correction;
         }
 
         List<double[]> allFrom = new ArrayList<>(trainFrom);
@@ -161,14 +185,7 @@ public final class PlateCorrectionFitter {
         if (global == null) {
             throw new IOException("the fit failed.");
         }
-
-        PlateSolutionCorrection correction = new PlateSolutionCorrection();
-        correction.fittedAtUtc = Instant.now().toString();
-        correction.solutionKey = solutionKey;
-        correction.width = width;
-        correction.height = height;
         correction.global = global;
-        correction.notes = notes;
         List<Double> before = new ArrayList<>();
         List<Double> after = new ArrayList<>();
         List<Integer> counts = new ArrayList<>();
@@ -203,6 +220,27 @@ public final class PlateCorrectionFitter {
         notes.add(0, String.format(Locale.US, "Correction of order %d for the session%s.", order,
                 correction.frames.isEmpty() ? "" : ", plus a small one per frame"));
         return correction;
+    }
+
+    /** The figures of a check that found no correction needed: the header solution's distances, before and after. */
+    private static void notCorrected(PlateSolutionCorrection correction, List<FramePairs> frames) {
+        List<Double> distances = new ArrayList<>();
+        List<Integer> counts = new ArrayList<>();
+        for (FramePairs frame : frames) {
+            counts.add(frame.size());
+            for (int k = 0; k < frame.size(); k++) {
+                double[] d = frame.displacement(k);
+                distances.add(Math.hypot(d[0], d[1]));
+            }
+        }
+        Collections.sort(distances);
+        Collections.sort(counts);
+        correction.beforeMedianPx = distances.get(distances.size() / 2);
+        correction.beforeP90Px = distances.get((int) (distances.size() * 0.9));
+        correction.afterMedianPx = correction.beforeMedianPx;
+        correction.afterP90Px = correction.beforeP90Px;
+        correction.starsPerFrame = counts.get(counts.size() / 2);
+        correction.framesFitted = frames.size();
     }
 
     private static List<Double> residuals(List<double[]> from, List<double[]> by, PlateSolutionCorrection.Polynomial fit) {

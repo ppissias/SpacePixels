@@ -13,6 +13,8 @@ import java.util.Map;
 import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -81,6 +83,59 @@ public class PlateCorrectionFitterTest {
         PlateSolutionCorrection correction = PlateCorrectionFitter.fitPairs(frames, header.solutionKey(), WIDTH, HEIGHT, new ArrayList<>());
         assertEquals(1, correction.global.order);
         assertTrue(correction.afterMedianPx < 0.2);
+    }
+
+    @Test
+    public void aHeaderSolutionThatAlreadyMatchesGetsNoCorrection() throws IOException {
+        WcsCoordinateTransformer header = WcsCoordinateTransformer.fromHeader(header());
+        Random random = new Random(5);
+        List<SkyCatalogue.Star> stars = stars(header, random, 2000);
+        List<PlateCorrectionFitter.FramePairs> frames = new ArrayList<>();
+        for (int f = 0; f < 4; f++) {
+            frames.add(PlateCorrectionFitter.FramePairs.match("f" + f, stars, header,
+                    detectWithRadialDistortion(header, stars, 0, 0.07, random), WIDTH, HEIGHT, 0));
+        }
+        PlateSolutionCorrection correction = PlateCorrectionFitter.fitPairs(frames, header.solutionKey(), WIDTH, HEIGHT, new ArrayList<>());
+        assertFalse("no correction offered: " + correction.notes.get(0), correction.isNeeded());
+        assertEquals(correction.beforeMedianPx, correction.afterMedianPx, 0);
+        assertEquals(4, correction.framesFitted);
+        // It changes nothing, even when switched on.
+        correction.enabled = true;
+        assertSame(header, correction.apply(header, "f0", WIDTH, HEIGHT));
+    }
+
+    @Test
+    public void aSmallRadialDistortionGetsTheThirdOrder() throws IOException {
+        // 0.15 px at the left and right edges with 0.07 px of centroid noise per axis, as in a real session: the
+        // third order gains less than 0.02 px over the first, a scale change that spoils the centre, but it is better.
+        WcsCoordinateTransformer header = WcsCoordinateTransformer.fromHeader(header());
+        Random random = new Random(9);
+        List<SkyCatalogue.Star> stars = stars(header, random, 2000);
+        List<PlateCorrectionFitter.FramePairs> frames = new ArrayList<>();
+        for (int f = 0; f < 6; f++) {
+            frames.add(PlateCorrectionFitter.FramePairs.match("f" + f, stars, header,
+                    detectWithRadialDistortion(header, stars, 0.15, 0.07, random), WIDTH, HEIGHT, 0));
+        }
+        PlateSolutionCorrection correction = PlateCorrectionFitter.fitPairs(frames, header.solutionKey(), WIDTH, HEIGHT, new ArrayList<>());
+        assertTrue(correction.notes.get(0), correction.isNeeded());
+        assertEquals(3, correction.global.order);
+        assertTrue(correction.beforeMedianPx + " -> " + correction.afterMedianPx, correction.afterMedianPx < correction.beforeMedianPx);
+    }
+
+    /** Detections displaced by k r^2 outwards (r = 1 at the left and right edges), with centroid noise per axis. */
+    private static List<SourceExtractor.DetectedObject> detectWithRadialDistortion(WcsCoordinateTransformer header,
+                                                                                   List<SkyCatalogue.Star> stars, double k,
+                                                                                   double noise, Random random) {
+        List<SourceExtractor.DetectedObject> detected = new ArrayList<>();
+        for (SkyCatalogue.Star star : stars) {
+            double[] p = header.skyToPixel(star.ra, star.dec);
+            double u = (p[0] - WIDTH / 2.0) / (WIDTH / 2.0);
+            double v = (p[1] - HEIGHT / 2.0) / (WIDTH / 2.0);
+            double r2 = u * u + v * v;
+            detected.add(new SourceExtractor.DetectedObject(p[0] + k * u * r2 + random.nextGaussian() * noise,
+                    p[1] + k * v * r2 + random.nextGaussian() * noise, Math.pow(10, -0.4 * star.g) * 1e8, 20));
+        }
+        return detected;
     }
 
     private static List<SkyCatalogue.Star> stars(WcsCoordinateTransformer header, Random random, int count) {

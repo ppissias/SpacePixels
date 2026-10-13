@@ -202,11 +202,15 @@ final class SkyAnnotations {
 
     private void updateEnabled() {
         eu.startales.spacepixels.util.PlateSolutionCorrection correction = SkyCatalogueModel.shared().getCorrection();
-        correctBox.setEnabled(correction != null);
+        correctBox.setEnabled(correction != null && correction.isNeeded());
         correctBox.setSelected(correction != null && correction.enabled);
         if (correction == null) {
             correctBox.setToolTipText("<html>Use the plate solution corrected to the Gaia stars (C).<br><i>Not available: "
                     + "it is worked out after Fetch Sky Catalogue, in the background.</i></html>");
+        } else if (!correction.isNeeded()) {
+            correctBox.setToolTipText(String.format(java.util.Locale.US, "<html>Use the plate solution corrected to the Gaia stars (C)."
+                    + "<br><i>Not needed: the FITS header solution already matches the stars (%.2f px median).</i></html>",
+                    correction.beforeMedianPx));
         } else {
             correctBox.setToolTipText("<html>Use the plate solution corrected to the Gaia stars (C). Distance from the "
                     + "catalogue stars to the stars<br>in the frames: " + correction.improvementText() + " (median). "
