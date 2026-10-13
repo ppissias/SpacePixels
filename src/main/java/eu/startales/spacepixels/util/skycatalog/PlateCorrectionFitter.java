@@ -34,8 +34,9 @@ import java.util.Map;
  * Fits a {@link PlateSolutionCorrection} for a session: in every frame, the Gaia stars (moved to the frame's date) are
  * matched to the detected stars, a polynomial correction of order 1 to 3 is fitted to all frames together (the order
  * is the lowest that does as well as the best on frames left out of the fit), and then a shift (or, with many stars,
- * a linear correction) per frame on top. When the header solution does as well as the best correction on those
- * frames, none is made: the result then has no {@link PlateSolutionCorrection#global}.
+ * a linear correction) per frame on top. No correction is made when the header solution is already good (90 % of the
+ * stars within {@value #GOOD_ENOUGH_P90_PX} px) or does as well as the best correction on the frames left out: the
+ * result then has no {@link PlateSolutionCorrection#global}.
  * The frames are read one at a time.
  */
 public final class PlateCorrectionFitter {
@@ -58,6 +59,11 @@ public final class PlateCorrectionFitter {
      * solution can already be good to 0.1 px.
      */
     static final double ORDER_TOLERANCE = 0.03;
+    /**
+     * When 90 % of the stars are already this close to their Gaia positions with the header solution, no correction is
+     * made: what it could gain is far below what the labels, the cursor and the sky lookups can show.
+     */
+    static final double GOOD_ENOUGH_P90_PX = 0.5;
     private static final double SEARCH_RANGE = 80;
     private static final double MATCH_RADIUS = 4;
     private static final double[] DEEPER_STARS = {17, 18.5};
@@ -136,6 +142,19 @@ public final class PlateCorrectionFitter {
         double cy = height / 2.0;
         double scale = Math.max(width, height) / 2.0;
 
+        PlateSolutionCorrection correction = new PlateSolutionCorrection();
+        correction.fittedAtUtc = Instant.now().toString();
+        correction.solutionKey = solutionKey;
+        correction.width = width;
+        correction.height = height;
+        correction.notes = notes;
+        measureHeader(correction, frames);
+        if (correction.beforeP90Px <= GOOD_ENOUGH_P90_PX) {
+            notes.add(0, String.format(Locale.US, "The plate solution in the FITS header is already good: 90 %% of the stars "
+                    + "are within %.2f px of their Gaia positions.", correction.beforeP90Px));
+            return correction;
+        }
+
         // The order: fitted on half of the frames (or of the stars, with one frame), measured on the rest.
         List<double[]> trainFrom = new ArrayList<>(), trainBy = new ArrayList<>(), testFrom = new ArrayList<>(), testBy = new ArrayList<>();
         for (int f = 0; f < frames.size(); f++) {
@@ -161,16 +180,8 @@ public final class PlateCorrectionFitter {
             order++;
         }
         double headerTestMedian = median(residuals(testFrom, testBy, null));
-
-        PlateSolutionCorrection correction = new PlateSolutionCorrection();
-        correction.fittedAtUtc = Instant.now().toString();
-        correction.solutionKey = solutionKey;
-        correction.width = width;
-        correction.height = height;
-        correction.notes = notes;
         if (headerTestMedian <= best * (1 + ORDER_TOLERANCE)) {
             // On the stars left out of the fit, the header solution does as well as the best correction: none is made.
-            notCorrected(correction, frames);
             notes.add(0, String.format(Locale.US, "The plate solution in the FITS header already matches the Gaia stars: "
                     + "%.3f px on the stars left out of the fit, %.3f px with the best correction.",
                     headerTestMedian, best));
@@ -222,8 +233,11 @@ public final class PlateCorrectionFitter {
         return correction;
     }
 
-    /** The figures of a check that found no correction needed: the header solution's distances, before and after. */
-    private static void notCorrected(PlateSolutionCorrection correction, List<FramePairs> frames) {
+    /**
+     * The header solution's distances to the stars, as both the before and the after figures: those of a check that
+     * makes no correction. A correction replaces the after figures.
+     */
+    private static void measureHeader(PlateSolutionCorrection correction, List<FramePairs> frames) {
         List<Double> distances = new ArrayList<>();
         List<Integer> counts = new ArrayList<>();
         for (FramePairs frame : frames) {

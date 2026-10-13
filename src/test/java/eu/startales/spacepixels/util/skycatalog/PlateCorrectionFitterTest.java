@@ -86,17 +86,37 @@ public class PlateCorrectionFitterTest {
     }
 
     @Test
-    public void aHeaderSolutionThatAlreadyMatchesGetsNoCorrection() throws IOException {
+    public void aGoodHeaderSolutionGetsNoCorrection() throws IOException {
+        // A slight radial distortion (0.15 px at the edges) and 0.07 px of centroid noise: 90 % of the stars are
+        // within half a pixel already.
+        WcsCoordinateTransformer header = WcsCoordinateTransformer.fromHeader(header());
+        Random random = new Random(3);
+        List<SkyCatalogue.Star> stars = stars(header, random, 2000);
+        List<PlateCorrectionFitter.FramePairs> frames = new ArrayList<>();
+        for (int f = 0; f < 4; f++) {
+            frames.add(PlateCorrectionFitter.FramePairs.match("f" + f, stars, header,
+                    detectWithRadialDistortion(header, stars, 0.15, 0.07, random), WIDTH, HEIGHT, 0));
+        }
+        PlateSolutionCorrection correction = PlateCorrectionFitter.fitPairs(frames, header.solutionKey(), WIDTH, HEIGHT, new ArrayList<>());
+        assertFalse("no correction offered: " + correction.notes.get(0), correction.isNeeded());
+        assertTrue(correction.notes.get(0), correction.notes.get(0).contains("already good"));
+        assertTrue("90 %: " + correction.beforeP90Px, correction.beforeP90Px < PlateCorrectionFitter.GOOD_ENOUGH_P90_PX);
+    }
+
+    @Test
+    public void aHeaderSolutionThatNoCorrectionBeatsGetsNone() throws IOException {
+        // No distortion, but 0.3 px of centroid noise: too far for "already good", yet no correction does better.
         WcsCoordinateTransformer header = WcsCoordinateTransformer.fromHeader(header());
         Random random = new Random(5);
         List<SkyCatalogue.Star> stars = stars(header, random, 2000);
         List<PlateCorrectionFitter.FramePairs> frames = new ArrayList<>();
         for (int f = 0; f < 4; f++) {
             frames.add(PlateCorrectionFitter.FramePairs.match("f" + f, stars, header,
-                    detectWithRadialDistortion(header, stars, 0, 0.07, random), WIDTH, HEIGHT, 0));
+                    detectWithRadialDistortion(header, stars, 0, 0.3, random), WIDTH, HEIGHT, 0));
         }
         PlateSolutionCorrection correction = PlateCorrectionFitter.fitPairs(frames, header.solutionKey(), WIDTH, HEIGHT, new ArrayList<>());
         assertFalse("no correction offered: " + correction.notes.get(0), correction.isNeeded());
+        assertTrue(correction.notes.get(0), correction.notes.get(0).contains("already matches"));
         assertEquals(correction.beforeMedianPx, correction.afterMedianPx, 0);
         assertEquals(4, correction.framesFitted);
         // It changes nothing, even when switched on.
@@ -106,15 +126,15 @@ public class PlateCorrectionFitterTest {
 
     @Test
     public void aSmallRadialDistortionGetsTheThirdOrder() throws IOException {
-        // 0.15 px at the left and right edges with 0.07 px of centroid noise per axis, as in a real session: the
-        // third order gains less than 0.02 px over the first, a scale change that spoils the centre, but it is better.
+        // 0.5 px at the left and right edges with 0.25 px of centroid noise per axis: the third order gains less than
+        // 0.02 px over the first (a scale change that spoils the centre), but 5 %, so it is the one chosen.
         WcsCoordinateTransformer header = WcsCoordinateTransformer.fromHeader(header());
         Random random = new Random(9);
         List<SkyCatalogue.Star> stars = stars(header, random, 2000);
         List<PlateCorrectionFitter.FramePairs> frames = new ArrayList<>();
         for (int f = 0; f < 6; f++) {
             frames.add(PlateCorrectionFitter.FramePairs.match("f" + f, stars, header,
-                    detectWithRadialDistortion(header, stars, 0.15, 0.07, random), WIDTH, HEIGHT, 0));
+                    detectWithRadialDistortion(header, stars, 0.5, 0.25, random), WIDTH, HEIGHT, 0));
         }
         PlateSolutionCorrection correction = PlateCorrectionFitter.fitPairs(frames, header.solutionKey(), WIDTH, HEIGHT, new ArrayList<>());
         assertTrue(correction.notes.get(0), correction.isNeeded());
