@@ -80,11 +80,13 @@ final class PhotometryReportSectionWriter {
         PipelineTelemetry.PhotometryTelemetry telemetry = analysis.telemetry;
         writeOverview(report, context, analysis, telemetry);
         writeReadinessChecks(report, context, telemetry);
-        if (!analysis.frames.isEmpty()) {
-            writeSessionCharts(report, context, analysis);
+        if (!"NOT_READY".equals(telemetry.verdict)) {
+            if (!analysis.frames.isEmpty()) {
+                writeSessionCharts(report, context, analysis);
+            }
+            writeCandidates(report, context, analysis);
+            writeFrameTable(report, telemetry);
         }
-        writeCandidates(report, context, analysis);
-        writeFrameTable(report, telemetry);
         writeCsvExports(context.exportDir, analysis);
     }
 

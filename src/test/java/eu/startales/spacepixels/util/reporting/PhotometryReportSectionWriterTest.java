@@ -5,7 +5,10 @@ import io.github.ppissias.jtransient.core.PixelEncoding;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.PipelineResult;
+import io.github.ppissias.jtransient.photometry.PhotometricReadiness;
 import io.github.ppissias.jtransient.photometry.VariabilityTier;
+import io.github.ppissias.jtransient.photometry.VariableStarAnalysis;
+import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -20,6 +23,7 @@ import java.util.List;
 import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class PhotometryReportSectionWriterTest {
@@ -78,6 +82,52 @@ public class PhotometryReportSectionWriterTest {
             out.mkdirs();
             render(result, rawFrames, config, out);
         }
+    }
+
+    @Test
+    public void notReadyPhotometryOmitsDetailedSectionsButKeepsChecksAndCsvExports() throws Exception {
+        DetectionConfig config = new DetectionConfig();
+        config.enableVariableStarDetection = true;
+        PipelineTelemetry.PhotometryTelemetry telemetry = new PipelineTelemetry.PhotometryTelemetry();
+        telemetry.verdict = "NOT_READY";
+        telemetry.shapeLinearityCheck = "FAIL";
+        telemetry.readinessMessages.add("No useful stars for photometry.");
+        telemetry.frames.add(new PipelineTelemetry.PhotometryFrameStat());
+        VariableStarAnalysis analysis = new VariableStarAnalysis(new PhotometricReadiness(), Collections.emptyList(), telemetry);
+        File exportDir = temporaryFolder.newFolder();
+        StringWriter output = new StringWriter();
+
+        PhotometryReportSectionWriter.writeSection(new PrintWriter(output), context(config, Collections.emptyList(), exportDir), analysis);
+
+        String html = output.toString();
+        assertTrue(html.contains("<h2>Variable Stars</h2>"));
+        assertTrue(html.contains("Not ready"));
+        assertTrue(html.contains("No useful stars for photometry."));
+        assertTrue(html.contains("Variable Stars: Readiness Checks"));
+        assertFalse(html.contains("Variable Stars: Session Diagnostics"));
+        assertFalse(html.contains("Variable Stars: Candidates"));
+        assertFalse(html.contains("Variable Stars: Per-Frame Measurements"));
+        assertTrue(new File(exportDir, "photometry_stars.csv").isFile());
+        assertTrue(new File(exportDir, "photometry_lightcurves.csv").isFile());
+        assertEquals(2, Files.readAllLines(new File(exportDir, "photometry_frames.csv").toPath()).size());
+    }
+
+    @Test
+    public void limitedPhotometryStillWritesDetailedSections() throws Exception {
+        DetectionConfig config = new DetectionConfig();
+        config.enableVariableStarDetection = true;
+        PipelineTelemetry.PhotometryTelemetry telemetry = new PipelineTelemetry.PhotometryTelemetry();
+        telemetry.verdict = "LIMITED";
+        telemetry.frames.add(new PipelineTelemetry.PhotometryFrameStat());
+        VariableStarAnalysis analysis = new VariableStarAnalysis(new PhotometricReadiness(), Collections.emptyList(), telemetry);
+        StringWriter output = new StringWriter();
+
+        PhotometryReportSectionWriter.writeSection(new PrintWriter(output), context(config, Collections.emptyList(), temporaryFolder.newFolder()), analysis);
+
+        String html = output.toString();
+        assertTrue(html.contains("Variable Stars: Session Diagnostics"));
+        assertTrue(html.contains("Variable Stars: Candidates"));
+        assertTrue(html.contains("Variable Stars: Per-Frame Measurements"));
     }
 
     @Test
