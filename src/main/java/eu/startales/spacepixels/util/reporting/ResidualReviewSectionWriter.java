@@ -33,11 +33,29 @@ final class ResidualReviewSectionWriter {
 
     private static final Color LOCAL_RESCUE_COLOR = new Color(64, 224, 208);
     private static final Color LOCAL_ACTIVITY_COLOR = new Color(255, 170, 80);
+    private static final int COMMON_MOTION_SHOWN_SOURCES = 4;
+    private static final int COMMON_MOTION_PANEL = 160;
+    private static final int COMMON_MOTION_GIF_FRAMES = 12;
+    private static final int COMMON_MOTION_FIELD_MAX = 1200;
+    private static final double COMMON_MOTION_ARROW_PX = 18.0;
+    private static final Color[] COMMON_MOTION_COLORS = {
+            new Color(64, 224, 208),
+            new Color(255, 176, 64),
+            new Color(120, 170, 255),
+            new Color(255, 96, 144),
+            new Color(180, 230, 80),
+            new Color(200, 140, 255),
+            new Color(255, 220, 80),
+            new Color(80, 210, 170)
+    };
 
     private ResidualReviewSectionWriter() {
     }
 
-    static void writeSection(PrintWriter report, DetectionReportContext context) throws IOException {
+    static void writeSection(PrintWriter report,
+                             DetectionReportContext context,
+                             List<ResidualTransientAnalysis.CommonMotionGroup> commonMotionGroups) throws IOException {
+        writeCommonMotion(report, context, commonMotionGroups);
         if (!context.localRescueCandidates.isEmpty()) {
             short[][] background = context.masterStackData != null
                     ? context.masterStackData
@@ -65,6 +83,343 @@ final class ResidualReviewSectionWriter {
                 counter++;
             }
         }
+    }
+
+    private static void writeCommonMotion(PrintWriter report,
+                                          DetectionReportContext context,
+                                          List<ResidualTransientAnalysis.CommonMotionGroup> groups) throws IOException {
+        if (groups == null || groups.isEmpty()) {
+            return;
+        }
+        report.println("<h2 id='common-motion'>Common Motion</h2>");
+        report.println("<p class='section-lede'>Compact sources that share one displacement across at least three frames, "
+                + "and that sit well apart. They were taken out of the local-rescue list and the unclassified list, "
+                + "because the same motion at separated places is the pattern of hot pixels or a registration residual. "
+                + "A real pair with this motion is still listed here.</p>");
+
+        short[][] background = context.masterStackData != null
+                ? context.masterStackData
+                : (!context.rawFrames.isEmpty() ? context.rawFrames.get(0) : null);
+        writeCommonMotionField(report, context, background, groups);
+
+        int groupNumber = 1;
+        for (ResidualTransientAnalysis.CommonMotionGroup group : groups) {
+            writeCommonMotionCard(report, context, background, group, groupNumber);
+            groupNumber++;
+        }
+    }
+
+    /** Field map of every source. Returns how much the arrows were lengthened, or 1 when they are true. */
+    private static double writeCommonMotionField(PrintWriter report,
+                                                DetectionReportContext context,
+                                                short[][] background,
+                                                List<ResidualTransientAnalysis.CommonMotionGroup> groups) throws IOException {
+        if (background == null || background.length == 0 || background[0].length == 0) {
+            return 1.0;
+        }
+        int width = background[0].length;
+        int height = background.length;
+        double scale = Math.min(1.0, COMMON_MOTION_FIELD_MAX / (double) Math.max(width, height));
+        int scaledW = Math.max(1, (int) Math.round(width * scale));
+        int scaledH = Math.max(1, (int) Math.round(height * scale));
+
+        BufferedImage full = TrackVisualizationRenderer.createDisplayImage(background, context.settings);
+        BufferedImage map = new BufferedImage(scaledW, scaledH, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = map.createGraphics();
+        g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.drawImage(full, 0, 0, scaledW, scaledH, null);
+        full.flush();
+
+        double arrowFactor = commonMotionArrowFactor(groups, scale);
+        int groupNumber = 0;
+        for (ResidualTransientAnalysis.CommonMotionGroup group : groups) {
+            Color color = COMMON_MOTION_COLORS[groupNumber % COMMON_MOTION_COLORS.length];
+            for (List<SourceExtractor.DetectedObject> source : group.sources) {
+                drawCommonMotionArrow(g2d, source, scale, arrowFactor, color, scaledW, scaledH);
+            }
+            groupNumber++;
+        }
+        g2d.dispose();
+
+        String fileName = "common_motion_field.png";
+        TrackVisualizationRenderer.saveLosslessPng(map, new File(context.exportDir, fileName));
+        report.println("<div class='image-container'>");
+        report.println("<div><a href='" + fileName + "' target='_blank'><img src='" + fileName
+                + "' alt='Common motion field' /></a><br/><center><small>Shared motion across the field</small></center></div>");
+        report.println("</div>");
+        if (arrowFactor > 1.05) {
+            report.println("<p class='astro-note'>Each arrow starts at a source's first detection and points the way it moved. "
+                    + "One colour is one group. The arrows are " + String.format(Locale.US, "%.0f", arrowFactor)
+                    + " times the true shift, all by the same factor, so a shift of a few pixels can be seen.</p>");
+        } else {
+            report.println("<p class='astro-note'>Each arrow starts at a source's first detection and points the way it moved, at the true shift. "
+                    + "One colour is one group. A ring is a source seen in only one frame.</p>");
+        }
+        return arrowFactor;
+    }
+
+    private static void writeCommonMotionCard(PrintWriter report,
+                                              DetectionReportContext context,
+                                              short[][] background,
+                                              ResidualTransientAnalysis.CommonMotionGroup group,
+                                              int groupNumber) throws IOException {
+        Color color = COMMON_MOTION_COLORS[(groupNumber - 1) % COMMON_MOTION_COLORS.length];
+        int shown = Math.min(COMMON_MOTION_SHOWN_SOURCES, group.sources.size());
+        List<List<SourceExtractor.DetectedObject>> pictured = group.sources.subList(0, shown);
+        String trailName = "common_motion_" + groupNumber + "_trail.png";
+        String gifName = "common_motion_" + groupNumber + ".gif";
+        boolean trail = background != null && writeCommonMotionTrail(context, background, pictured, color, trailName);
+        boolean gif = !context.rawFrames.isEmpty() && writeCommonMotionGif(context, pictured, color, gifName);
+
+        String css = String.format(Locale.US, "#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
+        report.println("<div class='detection-card' style='border-left-color: " + css + ";'>");
+        report.println("<div class='detection-title' style='color: " + css + ";'>Common Motion Group " + groupNumber + "</div>");
+        report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>"
+                + group.sources.size() + " sources, " + group.sharedFrameCount + " shared frames."
+                + (shown < group.sources.size()
+                ? " The pictures show the first " + shown + "."
+                : " The pictures show every source.")
+                + " Each panel is one source, and the frames play together.</div>");
+        report.println("<div class='image-container'>");
+        if (trail) {
+            report.println("<div><a href='" + trailName + "' target='_blank'><img src='" + trailName
+                    + "' alt='Common motion trail' /></a><br/><center><small>Trails, blue to red</small></center></div>");
+        }
+        if (gif) {
+            report.println("<div><a href='" + gifName + "' target='_blank'><img src='" + gifName
+                    + "' alt='Common motion animation' /></a><br/><center><small>Same frames, side by side</small></center></div>");
+        }
+        report.println("</div>");
+        report.println("<details class='foldable-streak-details'><summary>Coordinates</summary><div class='foldable-streak-body'>");
+        report.println("<ul class='source-list'>");
+        int sourceNumber = 1;
+        for (List<SourceExtractor.DetectedObject> source : group.sources) {
+            report.print("<li>Source " + sourceNumber + ":");
+            for (SourceExtractor.DetectedObject point : source) {
+                report.printf(Locale.US, " frame %d (%.1f, %.1f)", point.sourceFrameIndex + 1, point.x, point.y);
+            }
+            report.println("</li>");
+            sourceNumber++;
+        }
+        report.println("</ul></div></details>");
+        report.println("</div>");
+    }
+
+    private static boolean writeCommonMotionTrail(DetectionReportContext context,
+                                                  short[][] background,
+                                                  List<List<SourceExtractor.DetectedObject>> sources,
+                                                  Color color,
+                                                  String fileName) throws IOException {
+        List<BufferedImage> panels = new ArrayList<>();
+        int index = 1;
+        for (List<SourceExtractor.DetectedObject> source : sources) {
+            if (source.isEmpty()) {
+                continue;
+            }
+            int cx = (int) Math.round(mean(source, true));
+            int cy = (int) Math.round(mean(source, false));
+            BufferedImage panel = croppedDisplay(background, cx, cy, context.settings);
+            Graphics2D g2d = panel.createGraphics();
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int count = source.size();
+            for (int i = 0; i < count; i++) {
+                SourceExtractor.DetectedObject point = source.get(i);
+                float ratio = count > 1 ? (float) i / (count - 1) : 0f;
+                Color timeColor = Color.getHSBColor(0.66f - (0.66f * ratio), 1.0f, 1.0f);
+                int localX = local(point.x, cx);
+                int localY = local(point.y, cy);
+                g2d.setColor(new Color(timeColor.getRed(), timeColor.getGreen(), timeColor.getBlue(), 140));
+                g2d.fillOval(localX - 6, localY - 6, 12, 12);
+                g2d.setColor(timeColor);
+                g2d.fillOval(localX - 3, localY - 3, 6, 6);
+            }
+            labelPanel(g2d, Integer.toString(index), color);
+            g2d.dispose();
+            panels.add(panel);
+            index++;
+        }
+        if (panels.isEmpty()) {
+            return false;
+        }
+        TrackVisualizationRenderer.saveLosslessPng(stitch(panels), new File(context.exportDir, fileName));
+        return true;
+    }
+
+    private static boolean writeCommonMotionGif(DetectionReportContext context,
+                                                List<List<SourceExtractor.DetectedObject>> sources,
+                                                Color color,
+                                                String fileName) throws IOException {
+        Set<Integer> mandatory = new HashSet<>();
+        for (List<SourceExtractor.DetectedObject> source : sources) {
+            for (SourceExtractor.DetectedObject point : source) {
+                if (point.sourceFrameIndex >= 0 && point.sourceFrameIndex < context.rawFrames.size()) {
+                    mandatory.add(point.sourceFrameIndex);
+                }
+            }
+        }
+        if (mandatory.isEmpty()) {
+            return false;
+        }
+        List<Integer> frames = DetectionReportGenerator.getRepresentativeSequence(
+                context.rawFrames.size(), mandatory, COMMON_MOTION_GIF_FRAMES);
+        List<BufferedImage> gifFrames = new ArrayList<>();
+        for (int frameIndex : frames) {
+            List<BufferedImage> panels = new ArrayList<>();
+            int index = 1;
+            boolean first = true;
+            for (List<SourceExtractor.DetectedObject> source : sources) {
+                if (source.isEmpty()) {
+                    continue;
+                }
+                int cx = (int) Math.round(mean(source, true));
+                int cy = (int) Math.round(mean(source, false));
+                BufferedImage panel = croppedDisplay(context.rawFrames.get(frameIndex), cx, cy, context.settings);
+                Graphics2D g2d = panel.createGraphics();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                SourceExtractor.DetectedObject hit = pointOnFrame(source, frameIndex);
+                if (hit != null) {
+                    int localX = local(hit.x, cx);
+                    int localY = local(hit.y, cy);
+                    g2d.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 90));
+                    g2d.fillOval(localX - 8, localY - 8, 16, 16);
+                    g2d.setColor(color);
+                    g2d.setStroke(new BasicStroke(2f));
+                    g2d.drawOval(localX - 5, localY - 5, 10, 10);
+                }
+                labelPanel(g2d, Integer.toString(index), color);
+                if (first) {
+                    g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
+                    g2d.setColor(new Color(255, 255, 255, 230));
+                    g2d.drawString("Frame " + (frameIndex + 1), 8, COMMON_MOTION_PANEL - 8);
+                    first = false;
+                }
+                g2d.dispose();
+                panels.add(panel);
+                index++;
+            }
+            if (!panels.isEmpty()) {
+                gifFrames.add(stitch(panels));
+            }
+        }
+        if (gifFrames.isEmpty()) {
+            return false;
+        }
+        TrackVisualizationRenderer.saveAnimatedGif(gifFrames, new File(context.exportDir, fileName), context.settings);
+        return true;
+    }
+
+    private static double commonMotionArrowFactor(List<ResidualTransientAnalysis.CommonMotionGroup> groups, double scale) {
+        List<Double> lengths = new ArrayList<>();
+        for (ResidualTransientAnalysis.CommonMotionGroup group : groups) {
+            for (List<SourceExtractor.DetectedObject> source : group.sources) {
+                if (source.size() < 2) {
+                    continue;
+                }
+                SourceExtractor.DetectedObject first = source.get(0);
+                SourceExtractor.DetectedObject last = source.get(source.size() - 1);
+                lengths.add(Math.hypot((last.x - first.x) * scale, (last.y - first.y) * scale));
+            }
+        }
+        if (lengths.isEmpty()) {
+            return 1.0;
+        }
+        lengths.sort(Comparator.naturalOrder());
+        double median = lengths.get(lengths.size() / 2);
+        if (median < 1.0) {
+            median = 1.0;
+        }
+        return median >= COMMON_MOTION_ARROW_PX ? 1.0 : COMMON_MOTION_ARROW_PX / median;
+    }
+
+    private static void drawCommonMotionArrow(Graphics2D g2d,
+                                              List<SourceExtractor.DetectedObject> source,
+                                              double scale,
+                                              double arrowFactor,
+                                              Color color,
+                                              int width,
+                                              int height) {
+        if (source.isEmpty()) {
+            return;
+        }
+        SourceExtractor.DetectedObject first = source.get(0);
+        int x1 = clamp((int) Math.round(first.x * scale), 0, width - 1);
+        int y1 = clamp((int) Math.round(first.y * scale), 0, height - 1);
+        g2d.setColor(color);
+        g2d.setStroke(new BasicStroke(2f));
+        if (source.size() < 2) {
+            g2d.drawOval(x1 - 4, y1 - 4, 8, 8);
+            return;
+        }
+        SourceExtractor.DetectedObject last = source.get(source.size() - 1);
+        double dx = (last.x - first.x) * scale * arrowFactor;
+        double dy = (last.y - first.y) * scale * arrowFactor;
+        if (Math.hypot(dx, dy) < 1.5) {
+            g2d.drawOval(x1 - 4, y1 - 4, 8, 8);
+            return;
+        }
+        int x2 = clamp((int) Math.round(x1 + dx), 0, width - 1);
+        int y2 = clamp((int) Math.round(y1 + dy), 0, height - 1);
+        g2d.drawLine(x1, y1, x2, y2);
+        double angle = Math.atan2(y2 - y1, x2 - x1);
+        int head = 7;
+        g2d.drawLine(x2, y2, x2 - (int) Math.round(head * Math.cos(angle - 0.45)), y2 - (int) Math.round(head * Math.sin(angle - 0.45)));
+        g2d.drawLine(x2, y2, x2 - (int) Math.round(head * Math.cos(angle + 0.45)), y2 - (int) Math.round(head * Math.sin(angle + 0.45)));
+        g2d.fillOval(x1 - 2, y1 - 2, 4, 4);
+    }
+
+    private static BufferedImage croppedDisplay(short[][] image, int cx, int cy, ExportVisualizationSettings settings) {
+        short[][] crop = TrackVisualizationRenderer.robustEdgeAwareCrop(image, cx, cy, COMMON_MOTION_PANEL, COMMON_MOTION_PANEL);
+        return TrackVisualizationRenderer.createDisplayImage(crop, settings);
+    }
+
+    private static BufferedImage stitch(List<BufferedImage> panels) {
+        int gap = 6;
+        int width = panels.size() * COMMON_MOTION_PANEL + Math.max(0, panels.size() - 1) * gap;
+        BufferedImage strip = new BufferedImage(Math.max(1, width), COMMON_MOTION_PANEL, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = strip.createGraphics();
+        g2d.setColor(Color.BLACK);
+        g2d.fillRect(0, 0, strip.getWidth(), strip.getHeight());
+        int x = 0;
+        for (BufferedImage panel : panels) {
+            g2d.drawImage(panel, x, 0, null);
+            x += COMMON_MOTION_PANEL + gap;
+        }
+        g2d.dispose();
+        return strip;
+    }
+
+    private static void labelPanel(Graphics2D g2d, String label, Color color) {
+        g2d.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        g2d.setColor(new Color(0, 0, 0, 160));
+        g2d.fillRoundRect(6, 6, 22, 18, 4, 4);
+        g2d.setColor(color);
+        g2d.drawString(label, 10, 20);
+    }
+
+    private static SourceExtractor.DetectedObject pointOnFrame(List<SourceExtractor.DetectedObject> source, int frameIndex) {
+        for (SourceExtractor.DetectedObject point : source) {
+            if (point.sourceFrameIndex == frameIndex) {
+                return point;
+            }
+        }
+        return null;
+    }
+
+    private static double mean(List<SourceExtractor.DetectedObject> source, boolean horizontal) {
+        double sum = 0.0;
+        for (SourceExtractor.DetectedObject point : source) {
+            sum += horizontal ? point.x : point.y;
+        }
+        return sum / source.size();
+    }
+
+    private static int local(double coordinate, int center) {
+        return (int) Math.round(coordinate - (center - COMMON_MOTION_PANEL / 2));
+    }
+
+    private static int clamp(int value, int low, int high) {
+        return Math.max(low, Math.min(high, value));
     }
 
     static TrackLinker.Track buildResidualTrack(List<SourceExtractor.DetectedObject> points) {

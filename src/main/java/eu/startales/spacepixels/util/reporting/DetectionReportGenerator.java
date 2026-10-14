@@ -1060,7 +1060,8 @@ public class DetectionReportGenerator {
     private static List<PipelineDiagnosticsSectionWriter.NavItem> buildNavigation(DetectionReportContext context,
                                                                                  PipelineTelemetry pipelineTelemetry,
                                                                                  DetectionReportSummary summary,
-                                                                                 boolean aiSections) {
+                                                                                 boolean aiSections,
+                                                                                 int commonMotionGroupCount) {
         List<PipelineDiagnosticsSectionWriter.NavItem> items = new ArrayList<>();
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("overview", "Overview", null, false));
         int movingObjects = summary.movingTargetCount + summary.streakTrackCount + summary.singleStreakCount
@@ -1074,6 +1075,10 @@ public class DetectionReportGenerator {
         int residual = summary.localRescueCandidateCount + summary.localActivityClusterCount;
         if (residual > 0) {
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("residual-review", "Local rescue", String.valueOf(residual), false));
+        }
+        if (commonMotionGroupCount > 0) {
+            items.add(new PipelineDiagnosticsSectionWriter.NavItem("common-motion", "Common motion",
+                    String.valueOf(commonMotionGroupCount), false));
         }
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("maps", "Maps", null, false));
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("inspector", "Unclassified", null, false));
@@ -1328,7 +1333,8 @@ public class DetectionReportGenerator {
             DetectionReportDocumentWriter.appendDetectionReportStart(report);
             PipelineDiagnosticsSectionWriter.writeSessionHeader(report, reportContext, pipelineTelemetry);
             PipelineDiagnosticsSectionWriter.writeNavigation(report, buildNavigation(
-                    reportContext, pipelineTelemetry, summary, settings.isIncludeAiCreativeReportSections()));
+                    reportContext, pipelineTelemetry, summary, settings.isIncludeAiCreativeReportSections(),
+                    residualTransientAnalysis.commonMotionGroups.size()));
 
             // Results first: overview, moving objects, slow movers, residual review, maps, inspector, variable stars.
             FieldDepth fieldDepth = FieldDepth.measure(reportContext, pipelineTelemetry);
@@ -1345,7 +1351,7 @@ public class DetectionReportGenerator {
             report.println("</section>");
 
             report.println("<section id='residual-review'>");
-            ResidualReviewSectionWriter.writeSection(report, reportContext);
+            ResidualReviewSectionWriter.writeSection(report, reportContext, residualTransientAnalysis.commonMotionGroups);
             report.println("</section>");
 
             report.println("<section id='maps'>");

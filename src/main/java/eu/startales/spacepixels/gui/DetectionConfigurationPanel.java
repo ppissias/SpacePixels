@@ -61,6 +61,8 @@ public class DetectionConfigurationPanel extends JPanel {
     private JSpinner spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction;
     private JSpinner spinSlowMoverMinFrameSupport, spinSlowMoverMaxStationaryLikelihood;
     private JSpinner spinStreakMinElong, spinStreakMinPix, spinSingleStreakMinPeakSigma, spinStreakTimeConsistencyTolerance;
+    private JCheckBox chkEnableFaintStreakFragments;
+    private JSpinner spinFaintStreakLineTolerance;
 
     // --- TrackLinker Spinners ---
     private JCheckBox chkStrictExposureKinematics, chkEnableGeometricTrackLinking;
@@ -75,7 +77,8 @@ public class DetectionConfigurationPanel extends JPanel {
 
     // --- Residual transient analysis ---
     private JCheckBox chkEnableResidualTransientAnalysis, chkEnableLocalRescueCandidates, chkEnableLocalActivityClusters;
-    private JSpinner spinLocalActivityClusterRadiusPixels, spinLocalActivityClusterMinFrames;
+    private JCheckBox chkEnableCommonMotionRejection;
+    private JSpinner spinLocalActivityClusterRadiusPixels, spinLocalActivityClusterMinFrames, spinCommonMotionShiftTolerance;
 
     // --- Quality Control Spinners ---
     private JSpinner spinStarCountSigma, spinFwhmSigma;
@@ -171,7 +174,9 @@ public class DetectionConfigurationPanel extends JPanel {
         setupFrameRejectionPreset();
         // Settings that only matter while their feature is on appear with it.
         showOnlyWhen(chkEnableGeometricTrackLinking, spinMaxJump, spinRhythmVar, spinRhythmMinRatio, spinRhythmStatThresh);
+        showOnlyWhen(chkEnableFaintStreakFragments, spinFaintStreakLineTolerance);
         showOnlyWhen(chkEnableLocalActivityClusters, spinLocalActivityClusterRadiusPixels, spinLocalActivityClusterMinFrames);
+        showOnlyWhen(chkEnableCommonMotionRejection, spinCommonMotionShiftTolerance);
         showOnlyWhen(chkEnableBrightStarEccentricityFilter, spinBrightStarEccentricitySigma);
         navigator.setExtraChangedCount("Overview", () -> overviewPanel.unsavedCoreCount());
         navigator.finishBuilding();
@@ -720,6 +725,11 @@ public class DetectionConfigurationPanel extends JPanel {
                 "When timestamps are available, this controls how much projected-speed variation the multi-frame streak linker tolerates between sampled frames. Higher values are more permissive for fragmented or faint streak trails.",
                 doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "streakTimeConsistencyTolerance", 0.50), 0.0, 1.0, 0.01));
 
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createExpertSectionHeader("Faint Streak Fragments"));
+        chkEnableFaintStreakFragments = addCheckboxRow(panel, "Assemble Faint Streak Fragments", "Joins faint pieces that line up in one frame onto an existing streak, and builds a new single-frame streak when elongated pieces line up over a long span. Rounder pieces can fill the gaps between those anchors. Pieces below the normal streak gates are included. The tolerance appears below when this is on.", jTransientConfig.enableFaintStreakFragments);
+        spinFaintStreakLineTolerance = addRow(panel, "Faint Streak Line Tolerance", "How far, in pixels, a piece may sit from the streak line and still be joined. Lower values keep only pieces that sit tightly on the line.", doubleSpinnerModel(jTransientConfig.faintStreakLineTolerance, 0.0, 20.0, 0.1));
+
         return panel;
     }
 
@@ -814,6 +824,11 @@ public class DetectionConfigurationPanel extends JPanel {
         chkEnableLocalActivityClusters = addCheckboxRow(panel, "Enable Local Activity Clusters", "After local rescue candidates are removed, groups the remaining leftover detections into broad same-area activity clusters for review. These are not confirmed objects. Their settings appear below when this is on.", getOptionalBooleanField(jTransientConfig, "enableLocalActivityClusters", true));
         spinLocalActivityClusterRadiusPixels = addRow(panel, "Local Activity Cluster Radius (Pixels)", "Spatial linkage radius used when grouping leftover detections into broad local activity clusters after rescue candidates are consumed.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "localActivityClusterRadiusPixels", 10.0), 0.0, 100.0, 0.5));
         spinLocalActivityClusterMinFrames = addRow(panel, "Local Activity Cluster Min Frames", "Minimum number of unique frames required before a broad local activity cluster is exported for review.", intSpinnerModel(getOptionalIntField(jTransientConfig, "localActivityClusterMinFrames", 3), 1, 100, 1));
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createExpertSectionHeader("Common Motion"));
+        chkEnableCommonMotionRejection = addCheckboxRow(panel, "Reject Common Motion", "Removes compact sources that share one displacement on at least three frames and are well separated. This is the pattern of hot pixels or a registration residual. The group is listed in the report. A pair seen in only two frames is kept. The tolerance appears below when this is on.", jTransientConfig.enableCommonMotionRejection);
+        spinCommonMotionShiftTolerance = addRow(panel, "Common Motion Shift Tolerance", "How closely, in pixels, those sources must share the same frame-to-frame displacement. Lower values keep only a tighter match.", doubleSpinnerModel(jTransientConfig.commonMotionShiftTolerance, 0.0, 20.0, 0.1));
 
         return panel;
     }
@@ -1208,6 +1223,8 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.streakMinPixels = ((Number) spinStreakMinPix.getValue()).intValue();
             jTransientConfig.singleStreakMinPeakSigma = ((Number) spinSingleStreakMinPeakSigma.getValue()).doubleValue();
             setOptionalDoubleField(jTransientConfig, "streakTimeConsistencyTolerance", ((Number) spinStreakTimeConsistencyTolerance.getValue()).doubleValue());
+            jTransientConfig.enableFaintStreakFragments = chkEnableFaintStreakFragments.isSelected();
+            jTransientConfig.faintStreakLineTolerance = ((Number) spinFaintStreakLineTolerance.getValue()).doubleValue();
 
             // --- Apply Tracker Settings to the POJO ---
             jTransientConfig.maxStarJitter = ((Number) spinStarJitter.getValue()).doubleValue();
@@ -1238,6 +1255,8 @@ public class DetectionConfigurationPanel extends JPanel {
             setOptionalBooleanField(jTransientConfig, "enableLocalActivityClusters", chkEnableLocalActivityClusters.isSelected());
             setOptionalDoubleField(jTransientConfig, "localActivityClusterRadiusPixels", ((Number) spinLocalActivityClusterRadiusPixels.getValue()).doubleValue());
             setOptionalIntField(jTransientConfig, "localActivityClusterMinFrames", ((Number) spinLocalActivityClusterMinFrames.getValue()).intValue());
+            jTransientConfig.enableCommonMotionRejection = chkEnableCommonMotionRejection.isSelected();
+            jTransientConfig.commonMotionShiftTolerance = ((Number) spinCommonMotionShiftTolerance.getValue()).doubleValue();
 
             autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
             SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
@@ -1445,6 +1464,8 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinStreakMinPix, config.streakMinPixels);
         setSpinnerValueClamped(spinSingleStreakMinPeakSigma, config.singleStreakMinPeakSigma);
         setSpinnerValueClamped(spinStreakTimeConsistencyTolerance, getOptionalDoubleField(config, "streakTimeConsistencyTolerance", 0.50));
+        chkEnableFaintStreakFragments.setSelected(config.enableFaintStreakFragments);
+        setSpinnerValueClamped(spinFaintStreakLineTolerance, config.faintStreakLineTolerance);
 
         chkEnableAnomalyRescue.setSelected(config.enableAnomalyRescue);
         setSpinnerValueClamped(spinAnomalyMinPeakSigma, config.anomalyMinPeakSigma);
@@ -1458,6 +1479,8 @@ public class DetectionConfigurationPanel extends JPanel {
         chkEnableLocalActivityClusters.setSelected(getOptionalBooleanField(config, "enableLocalActivityClusters", true));
         setSpinnerValueClamped(spinLocalActivityClusterRadiusPixels, getOptionalDoubleField(config, "localActivityClusterRadiusPixels", 10.0));
         setSpinnerValueClamped(spinLocalActivityClusterMinFrames, getOptionalIntField(config, "localActivityClusterMinFrames", 3));
+        chkEnableCommonMotionRejection.setSelected(config.enableCommonMotionRejection);
+        setSpinnerValueClamped(spinCommonMotionShiftTolerance, config.commonMotionShiftTolerance);
 
         setSpinnerValueClamped(spinStarCountSigma, config.starCountSigmaDeviation);
         setSpinnerValueClamped(spinFwhmSigma, config.fwhmSigmaDeviation);
