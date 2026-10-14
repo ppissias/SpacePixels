@@ -25,6 +25,12 @@ import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 
 import javax.swing.*;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.file.Files;
@@ -70,6 +76,12 @@ public class ImageProcessing implements AutoCloseable {
         public final int slowMoverCandidates;
         public final int localRescueCandidates;
         public final int localActivityClusters;
+        /** Compact sources that share one displacement. Included in {@link #totalDetections}. */
+        public final int commonMotionGroups;
+        /** Leftover detections. Shown in the summary, and not added to {@link #totalDetections}. */
+        public final int unclassifiedDetections;
+        /** Anomalies that lie on a confirmed streak in the same frame. Already included in {@link #anomalies}. */
+        public final int lowConfidenceAnomalies;
         /** Photometry verdict ("READY", "LIMITED", "NOT_READY") or null when variable-star detection did not run. */
         public final String photometryVerdict;
         public final int variableStarCandidates;
@@ -86,7 +98,10 @@ public class ImageProcessing implements AutoCloseable {
                          int localActivityClusters,
                          String photometryVerdict,
                          int variableStarCandidates,
-                         int possibleVariableStars) {
+                         int possibleVariableStars,
+                         int commonMotionGroups,
+                         int unclassifiedDetections,
+                         int lowConfidenceAnomalies) {
             this.totalDetections = totalDetections;
             this.singleStreaks = singleStreaks;
             this.streakTracks = streakTracks;
@@ -99,6 +114,37 @@ public class ImageProcessing implements AutoCloseable {
             this.photometryVerdict = photometryVerdict;
             this.variableStarCandidates = variableStarCandidates;
             this.possibleVariableStars = possibleVariableStars;
+            this.commonMotionGroups = commonMotionGroups;
+            this.unclassifiedDetections = unclassifiedDetections;
+            this.lowConfidenceAnomalies = lowConfidenceAnomalies;
+        }
+
+        /**
+         * Asks whether to build the report when the classified count is above {@code limit}.
+         * A count at or under the limit proceeds without a dialog.
+         *
+         * @param heading optional line above the summary, for an iterative pass
+         * @return true when the report should be generated
+         */
+        public boolean confirmReport(boolean plateSolved, int limit, String heading) {
+            if (totalDetections <= limit) {
+                return true;
+            }
+            final boolean[] proceed = {false};
+            try {
+                SwingUtilities.invokeAndWait(() -> {
+                    int choice = JOptionPane.showConfirmDialog(
+                            null,
+                            warningPanel(plateSolved, limit, heading),
+                            "Detection summary",
+                            JOptionPane.YES_NO_OPTION,
+                            JOptionPane.WARNING_MESSAGE);
+                    proceed[0] = choice == JOptionPane.YES_OPTION;
+                });
+            } catch (Exception e) {
+                return false;
+            }
+            return proceed[0];
         }
 
         /**
@@ -118,17 +164,20 @@ public class ImageProcessing implements AutoCloseable {
             } else {
                 photometry = variableStarCandidates + " candidates, " + possibleVariableStars + " possible";
             }
+            String anomalyCount = lowConfidenceAnomalies > 0
+                    ? anomalies + " (" + lowConfidenceAnomalies + " low confidence)"
+                    : Integer.toString(anomalies);
             return "The engine found " + totalDetections + " detections, more than the usual " + limit + ".\n\n"
-                    + "Moving objects:\n"
-                    + "   Moving-object tracks: " + movingTargets + "\n"
-                    + "   Streak tracks (multi-frame): " + streakTracks + "\n"
-                    + "   Single streaks: " + singleStreaks + "\n"
-                    + "   Suspected streak groupings: " + suspectedStreakTracks + "\n"
-                    + "Single-frame anomalies: " + anomalies + "\n"
+                    + "Moving-object tracks: " + movingTargets + "\n"
+                    + "Streak tracks (multi-frame): " + streakTracks + "\n"
+                    + "Single streaks: " + singleStreaks + "\n"
+                    + "Suspected streak groupings: " + suspectedStreakTracks + "\n"
+                    + "Single-frame anomalies: " + anomalyCount + "\n"
                     + "Slow-mover candidates (maximum stack): " + slowMoverCandidates + "\n"
-                    + "Residual analysis of leftover transients:\n"
-                    + "   Local rescue candidates: " + localRescueCandidates + "\n"
-                    + "   Local activity clusters: " + localActivityClusters + "\n"
+                    + "Local rescue candidates: " + localRescueCandidates + "\n"
+                    + "Local activity clusters: " + localActivityClusters + "\n"
+                    + "Common-motion groups: " + commonMotionGroups + "\n"
+                    + "Still unclassified, not counted above: " + unclassifiedDetections + "\n"
                     + "Variable stars: " + photometry + "\n"
                     + "Astrometry: " + (plateSolved
                     ? "a plate-solved frame is available, so the report has sky coordinates and online identification."
@@ -139,10 +188,106 @@ public class ImageProcessing implements AutoCloseable {
                     + "Do you want to generate the report anyway?";
         }
 
+        private JComponent warningPanel(boolean plateSolved, int limit, String heading) {
+            JPanel panel = new JPanel();
+            panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+            panel.setOpaque(false);
+            panel.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 4));
+
+            String title = (heading == null || heading.isBlank() ? "" : heading + " — ")
+                    + "This run found " + totalDetections + " detections, above the usual " + limit + ".";
+            panel.add(aligned(label(title, true)));
+            panel.add(Box.createVerticalStrut(10));
+
+            JPanel grid = new JPanel(new GridBagLayout());
+            grid.setOpaque(false);
+            grid.setAlignmentX(Component.LEFT_ALIGNMENT);
+            String anomalyValue = lowConfidenceAnomalies > 0
+                    ? anomalies + "  (" + lowConfidenceAnomalies + " low confidence)"
+                    : Integer.toString(anomalies);
+            String[][] rows = {
+                    {"Moving-object tracks", Integer.toString(movingTargets)},
+                    {"Streak tracks", Integer.toString(streakTracks)},
+                    {"Single streaks", Integer.toString(singleStreaks)},
+                    {"Suspected streak groupings", Integer.toString(suspectedStreakTracks)},
+                    {"Single-frame anomalies", anomalyValue},
+                    {"Slow-mover candidates", Integer.toString(slowMoverCandidates)},
+                    {"Local rescue candidates", Integer.toString(localRescueCandidates)},
+                    {"Local activity clusters", Integer.toString(localActivityClusters)},
+                    {"Common-motion groups", Integer.toString(commonMotionGroups)}
+            };
+            GridBagConstraints name = new GridBagConstraints();
+            name.gridx = 0;
+            name.anchor = GridBagConstraints.WEST;
+            name.insets = new Insets(2, 0, 2, 18);
+            GridBagConstraints value = new GridBagConstraints();
+            value.gridx = 1;
+            value.weightx = 1;
+            value.anchor = GridBagConstraints.EAST;
+            value.insets = new Insets(2, 0, 2, 0);
+            Color quiet = UIManager.getColor("Label.disabledForeground");
+            for (int i = 0; i < rows.length; i++) {
+                name.gridy = i;
+                value.gridy = i;
+                boolean zero = rows[i][1].startsWith("0");
+                JLabel nameLabel = new JLabel(rows[i][0]);
+                JLabel valueLabel = new JLabel(rows[i][1]);
+                valueLabel.setFont(valueLabel.getFont().deriveFont(Font.BOLD));
+                if (zero && quiet != null) {
+                    nameLabel.setForeground(quiet);
+                    valueLabel.setForeground(quiet);
+                }
+                grid.add(nameLabel, name);
+                grid.add(valueLabel, value);
+            }
+            panel.add(grid);
+            panel.add(Box.createVerticalStrut(8));
+            panel.add(aligned(wrapped("Still unclassified, not counted above: " + unclassifiedDetections
+                    + ". The inspector lists them.")));
+            panel.add(Box.createVerticalStrut(6));
+            String photometry;
+            if (photometryVerdict == null || "NOT_RUN".equals(photometryVerdict)) {
+                photometry = "off";
+            } else if ("NOT_READY".equals(photometryVerdict)) {
+                photometry = "session not ready for photometry (see the report)";
+            } else {
+                photometry = variableStarCandidates + " candidates, " + possibleVariableStars + " possible";
+            }
+            panel.add(aligned(wrapped("Variable stars: " + photometry)));
+            panel.add(aligned(wrapped("Astrometry: " + (plateSolved
+                    ? "a plate-solved frame is available, so the report has sky coordinates and online identification."
+                    : "no plate-solved frame, so the report has no sky coordinates or identification."))));
+            panel.add(Box.createVerticalStrut(8));
+            panel.add(aligned(wrapped("Largest group: " + largestGroup() + ". "
+                    + "Image crops, GIFs and the HTML report for this many objects take a long time and a lot of disk. "
+                    + "Many tracks or anomalies usually mean the Detection Sigma is too low and noise was linked.")));
+            panel.add(Box.createVerticalStrut(10));
+            panel.add(aligned(label("Generate the report anyway?", true)));
+            return panel;
+        }
+
+        private static JLabel label(String text, boolean bold) {
+            JLabel result = new JLabel(text);
+            if (bold) {
+                result.setFont(result.getFont().deriveFont(Font.BOLD));
+            }
+            return result;
+        }
+
+        private static JLabel wrapped(String text) {
+            return new JLabel("<html><body style='width:420px'>" + text + "</body></html>");
+        }
+
+        private static JComponent aligned(JComponent component) {
+            component.setAlignmentX(Component.LEFT_ALIGNMENT);
+            return component;
+        }
+
         private String largestGroup() {
-            String[] names = {"moving objects", "single-frame anomalies", "slow-mover candidates", "residual analysis"};
+            String[] names = {"moving objects", "single-frame anomalies", "slow-mover candidates",
+                    "residual analysis", "common-motion groups"};
             int[] counts = {movingTargets + streakTracks + singleStreaks + suspectedStreakTracks, anomalies,
-                    slowMoverCandidates, localRescueCandidates + localActivityClusters};
+                    slowMoverCandidates, localRescueCandidates + localActivityClusters, commonMotionGroups};
             int best = 0;
             for (int i = 1; i < counts.length; i++) {
                 if (counts[i] > counts[best]) {

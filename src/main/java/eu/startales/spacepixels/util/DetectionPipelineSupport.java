@@ -9,6 +9,7 @@ package eu.startales.spacepixels.util;
 
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
+import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
 import io.github.ppissias.jtransient.core.TrackLinker;
 import io.github.ppissias.jtransient.engine.ImageFrame;
@@ -128,11 +129,26 @@ final class DetectionPipelineSupport {
         int localRescueCandidates = residualAnalysis.localRescueCandidates.size();
         int localActivityClusters = residualAnalysis.localActivityClusters.size();
         int anomalyCount = anomalies.size();
+        int lowConfidenceAnomalies = 0;
+        for (TrackLinker.AnomalyDetection anomaly : anomalies) {
+            if (anomaly != null && anomaly.lowConfidence) {
+                lowConfidenceAnomalies++;
+            }
+        }
+        int unclassifiedDetections = 0;
+        if (result.unclassifiedTransients != null) {
+            for (List<SourceExtractor.DetectedObject> frame : result.unclassifiedTransients) {
+                if (frame != null) {
+                    unclassifiedDetections += frame.size();
+                }
+            }
+        }
         PipelineTelemetry.PhotometryTelemetry photometry = result.telemetry != null ? result.telemetry.photometryTelemetry : null;
 
         return new ImageProcessing.DetectionSummary(
                 singleStreaks + streakTracks + movingTargets + anomalyCount + suspectedStreakTracks
-                        + slowMoverCandidates + localRescueCandidates + localActivityClusters,
+                        + slowMoverCandidates + localRescueCandidates + localActivityClusters
+                        + residualAnalysis.commonMotionGroups.size(),
                 singleStreaks,
                 streakTracks,
                 movingTargets,
@@ -143,7 +159,10 @@ final class DetectionPipelineSupport {
                 localActivityClusters,
                 photometry != null ? photometry.verdict : null,
                 photometry != null ? photometry.highConfidence : 0,
-                photometry != null ? photometry.possible : 0);
+                photometry != null ? photometry.possible : 0,
+                residualAnalysis.commonMotionGroups.size(),
+                unclassifiedDetections,
+                lowConfidenceAnomalies);
     }
 
     static PipelineResult suppressLatePhaseOutputsWhenTooFewFramesRemain(PipelineResult result) {

@@ -84,7 +84,7 @@ final class UnclassifiedTransientSectionWriter {
                              DetectionReportContext context,
                              List<List<SourceExtractor.DetectedObject>> allTransients,
                              List<List<SourceExtractor.DetectedObject>> unclassifiedTransients) throws IOException {
-        writeSection(report, context, allTransients, unclassifiedTransients, Collections.emptySet());
+        writeSection(report, context, allTransients, unclassifiedTransients, Collections.emptySet(), null);
     }
 
     /**
@@ -95,7 +95,8 @@ final class UnclassifiedTransientSectionWriter {
                              DetectionReportContext context,
                              List<List<SourceExtractor.DetectedObject>> allTransients,
                              List<List<SourceExtractor.DetectedObject>> unclassifiedTransients,
-                             Set<Integer> rejectedFrames) throws IOException {
+                             Set<Integer> rejectedFrames,
+                             List<ResidualTransientAnalysis.CommonMotionGroup> commonMotionGroups) throws IOException {
         List<List<SourceExtractor.DetectedObject>> remaining = selectRemaining(
                 unclassifiedTransients, context.localRescueCandidates);
         int totalCount = countDistinct(allTransients);
@@ -106,10 +107,15 @@ final class UnclassifiedTransientSectionWriter {
 
         report.println("<div class='panel' id='unclassified-transient-inspector'>");
         report.println("<h2>Unclassified Transient Inspector</h2>");
-        report.println("<p class='astro-note'>Detections left after accepted tracks, standalone anomalies, and local rescue candidates. Local activity clusters remain here because they group detections for review without classifying them. The background uses the median stack when available; colors run from blue for early frames to red for late frames.</p>");
+        int commonMotionCount = countRemovedCommonMotion(unclassifiedTransients, commonMotionGroups);
+        int tracksAndAnomalies = Math.max(0, classifiedCount - commonMotionCount);
+        report.println("<p class='astro-note'>Detections left after accepted tracks, streak parts, standalone anomalies, common-motion groups and local rescue candidates. Local activity clusters remain here because they group detections for review without classifying them. The background uses the median stack when available; colors run from blue for early frames to red for late frames.</p>");
         report.println("<div class='map-legend'>");
         report.println(metric("Post-veto detections", totalCount));
-        report.println(metric("Tracks and anomalies", classifiedCount));
+        report.println(metric("Tracks, streaks and anomalies", tracksAndAnomalies));
+        if (commonMotionCount > 0) {
+            report.println(metric("Common motion", commonMotionCount));
+        }
         report.println(metric("Local rescue points", rescueCount));
         report.println(metric("Still unclassified", remainingCount));
         report.println("</div>");
@@ -196,6 +202,44 @@ final class UnclassifiedTransientSectionWriter {
 
     private static boolean hasPixels(short[][] imageData) {
         return imageData != null && imageData.length > 0 && imageData[0] != null && imageData[0].length > 0;
+    }
+
+    /** Common-motion points that are no longer in the unclassified list, so they are not on this map. */
+    private static int countRemovedCommonMotion(List<List<SourceExtractor.DetectedObject>> unclassifiedTransients,
+                                                List<ResidualTransientAnalysis.CommonMotionGroup> groups) {
+        if (groups == null || groups.isEmpty()) {
+            return 0;
+        }
+        Set<SourceExtractor.DetectedObject> stillThere = Collections.newSetFromMap(new IdentityHashMap<>());
+        if (unclassifiedTransients != null) {
+            for (List<SourceExtractor.DetectedObject> frame : unclassifiedTransients) {
+                if (frame != null) {
+                    for (SourceExtractor.DetectedObject detection : frame) {
+                        if (detection != null) {
+                            stillThere.add(detection);
+                        }
+                    }
+                }
+            }
+        }
+        Set<SourceExtractor.DetectedObject> counted = Collections.newSetFromMap(new IdentityHashMap<>());
+        int removed = 0;
+        for (ResidualTransientAnalysis.CommonMotionGroup group : groups) {
+            if (group == null || group.sources == null) {
+                continue;
+            }
+            for (List<SourceExtractor.DetectedObject> source : group.sources) {
+                if (source == null) {
+                    continue;
+                }
+                for (SourceExtractor.DetectedObject detection : source) {
+                    if (detection != null && !stillThere.contains(detection) && counted.add(detection)) {
+                        removed++;
+                    }
+                }
+            }
+        }
+        return removed;
     }
 
     private static String metric(String label, int count) {

@@ -1340,7 +1340,8 @@ public class DetectionReportGenerator {
             FieldDepth fieldDepth = FieldDepth.measure(reportContext, pipelineTelemetry);
             NightEquipment nightEquipment = NightEquipment.measure(reportContext, pipelineTelemetry, masterStars);
             System.out.printf(Locale.US, "Night & Equipment measured in %.1f s%n", nightEquipment.millis / 1000.0);
-            PipelineDiagnosticsSectionWriter.writeOverview(report, reportContext, pipelineTelemetry, summary, localRescueTracks, fieldDepth, nightEquipment);
+            PipelineDiagnosticsSectionWriter.writeOverview(report, reportContext, pipelineTelemetry, summary, localRescueTracks, fieldDepth, nightEquipment,
+                    residualTransientAnalysis.commonMotionGroups.size());
 
             report.println("<section id='moving-objects'>");
             TargetVisualizationSectionWriter.writeSection(report, reportContext);
@@ -1360,7 +1361,8 @@ public class DetectionReportGenerator {
 
             report.println("<section id='inspector'>");
             UnclassifiedTransientSectionWriter.writeSection(report, reportContext, allTransients, unclassifiedTransients,
-                    UnclassifiedTransientSectionWriter.rejectedFrameIndices(pipelineTelemetry));
+                    UnclassifiedTransientSectionWriter.rejectedFrameIndices(pipelineTelemetry),
+                    residualTransientAnalysis.commonMotionGroups);
             report.println("</section>");
 
             report.println("<section id='variables'>");

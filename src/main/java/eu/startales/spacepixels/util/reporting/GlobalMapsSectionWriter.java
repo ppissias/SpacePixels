@@ -68,7 +68,8 @@ final class GlobalMapsSectionWriter {
         report.println("<p class='section-lede'>");
         report.println("Every classified track and single-frame event over the median stack. " +
                 "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>SST#</strong> for suspected streak groupings, <strong>LR#</strong> for local rescue candidates). " +
-                "Local activity clusters are ringed as <strong>LC#</strong>, while maximum-stack slow-mover shape candidates, single-frame anomalies, and single streaks are marked as <strong>DS#</strong>, <strong>A#</strong>, and <strong>S#</strong>."
+                "Local activity clusters are ringed as <strong>LC#</strong>, while maximum-stack slow-mover shape candidates, single-frame anomalies, and single streaks are marked as <strong>DS#</strong>, <strong>A#</strong>, and <strong>S#</strong>. " +
+                "Common-motion groups and unclassified detections are in their own sections."
                 + (catalogueObjects > 0 ? " From the sky catalogue of the session: Messier, NGC, IC and Sharpless objects in yellow, bright named stars in white and named variable stars in magenta." : "")
                 + "</p>");
         report.println(buildGlobalTrajectoryLegendHtml(
@@ -110,7 +111,7 @@ final class GlobalMapsSectionWriter {
         report.println("<div style='display:flex; align-items:center; gap:10px; margin-top:8px; font-size:12px; color:#aaa;'><span>Start</span><span style='flex:0 0 220px; height:12px; border-radius:3px; background:linear-gradient(90deg, hsl(240,100%,50%), hsl(180,100%,50%), hsl(120,100%,50%), hsl(60,100%,50%), hsl(0,100%,50%));'></span><span>End</span></div></div>");
         report.println("<div style='flex: 1; min-width: 400px;'>");
         report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Transient Cluster Map</h4>");
-        report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Point detections only (no streaks), cropped, downscaled and dilated so close neighbours merge. A rainbow-like chain of dots is an object moving slowly across the frames.</p>");
+        report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Every non-star detection, including streak pieces, as a dot at its centre. Dots of one colour are the same frame, so a line of one colour is often a streak. A rainbow chain changed frame as it moved. Cropped around the activity, downscaled and dilated so close neighbours merge. Linking a piece onto a streak does not remove it from this map.</p>");
         report.println("<div style='overflow-x: auto;'><a href='rainbow_cluster_map.png' target='_blank'><img src='rainbow_cluster_map.png' style='display: block; width: auto; max-width: none; height: auto; border: 1px solid #555; border-radius: 4px;' alt='Rainbow Cluster Map' /></a></div></div>");
         report.println("</div>");
         report.println("</div>");

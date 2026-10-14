@@ -83,29 +83,9 @@ public class IterativeDetectionTask implements Runnable {
 
         try {
             // Define the Safety Valve Callback
-            ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) -> {
-                int safeDetectionLimit = 100; // Increased limit slightly since iterative runs aggregate detections
-                if (summary.totalDetections <= safeDetectionLimit) {
-                    return true;
-                }
-
-                final boolean[] proceed = {false};
-                try {
-                    SwingUtilities.invokeAndWait(() -> {
-                        int choice = JOptionPane.showConfirmDialog(
-                                null,
-                                "Iterative pass: " + summary.warningMessage(preProcessing.hasPlateSolvedFrame(), safeDetectionLimit),
-                                "High Detection Count Warning",
-                                JOptionPane.YES_NO_OPTION,
-                                JOptionPane.WARNING_MESSAGE
-                        );
-                        proceed[0] = (choice == JOptionPane.YES_OPTION);
-                    });
-                } catch (Exception e) {
-                    return false;
-                }
-                return proceed[0];
-            };
+            // The limit is higher than a single pass because an iterative run aggregates detections.
+            ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) ->
+                    summary.confirmReport(preProcessing.hasPlateSolvedFrame(), 100, "Iterative pass");
 
             // --- NEW: Define the Progress Callback Bridge ---
             TransientEngineProgressListener progressListener = (percentage, message) -> {

@@ -146,7 +146,8 @@ final class PipelineDiagnosticsSectionWriter {
                               DetectionReportSummary summary,
                               List<TrackLinker.Track> localRescueTracks,
                               FieldDepth fieldDepth,
-                              NightEquipment nightEquipment) {
+                              NightEquipment nightEquipment,
+                              int commonMotionGroups) {
         if (pipelineTelemetry == null) {
             return;
         }
@@ -168,6 +169,11 @@ final class PipelineDiagnosticsSectionWriter {
         }
         addResult(cards, empty, summary.localRescueCandidateCount, "Local rescue candidates", "local-rescue");
         addResult(cards, empty, summary.localActivityClusterCount, "Local activity clusters", "activity-clusters");
+        if (reportContext.config != null && reportContext.config.enableCommonMotionRejection) {
+            addResult(cards, empty, commonMotionGroups, "Common-motion groups", "common-motion");
+        } else {
+            empty.add("common motion (switched off)");
+        }
         PipelineTelemetry.PhotometryTelemetry photometry = pipelineTelemetry.photometryTelemetry;
         if (!reportContext.config.enableVariableStarDetection) {
             empty.add("variable stars (switched off)");
@@ -218,17 +224,27 @@ final class PipelineDiagnosticsSectionWriter {
 
         report.println("<div class='astro-note'>" + plural(summary.returnedTrackCount, "track-like detection") + " in total: "
                 + plural(summary.singleStreakCount, "single-frame streak") + ", "
-                + plural(summary.confirmedLinkedTrackCount, "linked track") + " and "
+                + plural(summary.confirmedLinkedTrackCount, "multi-frame track") + " and "
                 + plural(summary.suspectedStreakTrackCount, "suspected streak grouping") + ".</div>");
         if (!reportContext.anomalies.isEmpty()) {
+            int lowConfidence = 0;
+            for (TrackLinker.AnomalyDetection anomaly : reportContext.anomalies) {
+                if (anomaly != null && anomaly.lowConfidence) {
+                    lowConfidence++;
+                }
+            }
             String split = summary.peakSigmaAnomalyCount + " found by their peak brightness, "
                     + summary.integratedSigmaAnomalyCount + " by their integrated brightness"
                     + (summary.otherAnomalyCount > 0 ? ", " + summary.otherAnomalyCount + " other" : "");
-            report.println("<div class='astro-note'>Anomalies: " + split + " (the order used on the anomaly cards and the A# map labels).</div>");
+            String lowNote = lowConfidence > 0
+                    ? " " + lowConfidence + " sit on a streak in the same frame and are marked low confidence."
+                    : "";
+            report.println("<div class='astro-note'>Anomalies: " + split + " (the order used on the anomaly cards and the A# map labels)." + lowNote + "</div>");
         }
         if (reportContext.config.enableSlowMoverDetection) {
-            report.println("<div class='astro-note'>Local rescue candidates and activity clusters come from a second look at the "
-                    + plural(summary.unclassifiedTransientCount, "detection") + " the tracker left unexplained: rescue candidates are short, consistent motions; the rest are grouped into activity clusters for manual review.</div>");
+            report.println("<div class='astro-note'>Local rescue candidates are short motions found among the detections the tracker left over. "
+                    + "Activity clusters only mark places where leftovers repeat; they do not collect every leftover. "
+                    + "Common-motion groups are listed on their own. Anything still left is in the unclassified inspector.</div>");
         } else {
             report.println("<div class='astro-note'>Slow-mover analysis was switched off for this session.</div>");
         }

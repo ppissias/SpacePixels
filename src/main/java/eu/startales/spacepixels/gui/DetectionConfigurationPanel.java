@@ -727,7 +727,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Faint Streak Fragments"));
-        chkEnableFaintStreakFragments = addCheckboxRow(panel, "Assemble Faint Streak Fragments", "Joins faint pieces that line up in one frame onto an existing streak, and builds a new single-frame streak when elongated pieces line up over a long span. Rounder pieces can fill the gaps between those anchors. Pieces below the normal streak gates are included. The tolerance appears below when this is on.", jTransientConfig.enableFaintStreakFragments);
+        chkEnableFaintStreakFragments = addCheckboxRow(panel, "Assemble Faint Streak Fragments", "Joins faint pieces that line up in one frame onto an existing streak, including a connected chain a short way past its ends, and builds a new single-frame streak when elongated pieces line up over a long span. Rounder pieces can fill the gaps between those anchors. Pieces below the normal streak gates are included. The tolerance appears below when this is on.", jTransientConfig.enableFaintStreakFragments);
         spinFaintStreakLineTolerance = addRow(panel, "Faint Streak Line Tolerance", "How far, in pixels, a piece may sit from the streak line and still be joined. Lower values keep only pieces that sit tightly on the line.", doubleSpinnerModel(jTransientConfig.faintStreakLineTolerance, 0.0, 20.0, 0.1));
 
         return panel;
@@ -765,7 +765,7 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        panel.add(createTabIntro("Anomalies are either transient high energy events or transient larger but fainter events. Here are the controls for single-frame anomaly rescue and suspected same-frame anomaly streak identification. Sometimes faint streaks produce false positive anomalies."));
+        panel.add(createTabIntro("Anomalies are either transient high energy events or transient larger but fainter events. Here are the controls for single-frame anomaly rescue and suspected same-frame anomaly streak identification. A faint streak through a star can change the star's shape and produce an anomaly; when that anomaly sits on a known streak in the same frame, the report marks it low confidence."));
 
         panel.add(createSectionHeader("Common Settings"));
         chkEnableAnomalyRescue = addCheckboxRow(panel, "Enable Anomaly Rescue", "Keeps single-frame anomaly rescue active for flashes and fragments that do not become full multi-frame tracks.", jTransientConfig.enableAnomalyRescue);

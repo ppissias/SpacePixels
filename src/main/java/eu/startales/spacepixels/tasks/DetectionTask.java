@@ -50,29 +50,8 @@ public class DetectionTask implements Runnable {
             eventBus.post(new DetectionStartedEvent());
 
             // Define the Safety Valve Callback
-            ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) -> {
-                int safeDetectionLimit = 50;
-                if (summary.totalDetections <= safeDetectionLimit) {
-                    return true;
-                }
-
-                final boolean[] proceed = {false};
-                try {
-                    SwingUtilities.invokeAndWait(() -> {
-                        int choice = JOptionPane.showConfirmDialog(
-                                null,
-                                summary.warningMessage(preProcessing.hasPlateSolvedFrame(), safeDetectionLimit),
-                                "High Detection Count Warning",
-                                JOptionPane.YES_NO_OPTION,
-                                JOptionPane.WARNING_MESSAGE
-                        );
-                        proceed[0] = (choice == JOptionPane.YES_OPTION);
-                    });
-                } catch (Exception e) {
-                    return false;
-                }
-                return proceed[0];
-            };
+            ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) ->
+                    summary.confirmReport(preProcessing.hasPlateSolvedFrame(), 50, null);
 
             // 2. Define the Progress Callback Bridge
             TransientEngineProgressListener progressListener = (percentage, message) -> {
