@@ -70,9 +70,15 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(html.contains("<svg"));
         assertTrue(html.contains("Variable Stars: Per-Frame Measurements"));
         assertTrue(html.contains("Hover a column name"));
-        assertTrue(html.contains("the stars next to it do not follow the same pattern"));
-        assertTrue(html.contains("Whole-frame brightness"));
+        assertTrue(html.contains("No sufficiently similar variation was found among the usable nearby comparison stars"));
+        assertTrue(html.contains("Frame zero point, Z (mag)"));
+        assertTrue(html.contains("All readiness diagnostics"));
+        assertTrue(html.contains("Spatial gradient X"));
+        assertTrue(html.contains("pure power-law stretch from zero"));
+        assertTrue(html.contains("Scatter ratio"));
         assertFalse(html.contains("Nearby comparison stars do not share the pattern"));
+        assertFalse(html.contains("jumpiness"));
+        assertFalse(html.contains("Tilt X"));
         assertTrue(new File(exportDir, "photometry_stars.csv").isFile());
         assertTrue(new File(exportDir, "photometry_lightcurves.csv").isFile());
         assertTrue(new File(exportDir, "photometry_frames.csv").isFile());
@@ -136,10 +142,18 @@ public class PhotometryReportSectionWriterTest {
 
     @Test
     public void localFailureTextSaysWhetherNeighboursShareThePattern() {
-        assertTrue(PhotometryReportSectionWriter.gateOutcome("LOCAL", true, 8).contains("fade and brighten the same way"));
-        assertTrue(PhotometryReportSectionWriter.gateOutcome("LOCAL", true, 1).contains("not enough steady stars"));
-        assertTrue(PhotometryReportSectionWriter.gateOutcome("LOCAL", false, 8).contains("do not follow"));
-        assertTrue(PhotometryReportSectionWriter.gateQuestion("LOCAL").contains("part of the picture"));
+        String shared = PhotometryReportSectionWriter.gateOutcome("LOCAL", true, 8);
+        String insufficient = PhotometryReportSectionWriter.gateOutcome("LOCAL", true, 1);
+        String passed = PhotometryReportSectionWriter.gateOutcome("LOCAL", false, 8);
+        assertTrue(shared.contains("share a similar pattern and amplitude"));
+        assertFalse(shared.contains("do not"));
+        assertTrue(insufficient.contains("at least three are required"));
+        assertFalse(insufficient.contains("share a similar pattern"));
+        assertTrue(passed.contains("No sufficiently similar variation"));
+        assertTrue(PhotometryReportSectionWriter.gateQuestion("LOCAL").contains("nearby comparison stars"));
+        assertTrue(PhotometryReportSectionWriter.gateQuestion("SPLIT_HALF").contains("non-overlapping pairs"));
+        assertTrue(PhotometryReportSectionWriter.gateOutcome("LINEARITY", true, 0).contains("At least one measurement"));
+        assertFalse(PhotometryReportSectionWriter.gateOutcome("LINEARITY", false, 0).contains("usable measurement"));
     }
 
     @Test
