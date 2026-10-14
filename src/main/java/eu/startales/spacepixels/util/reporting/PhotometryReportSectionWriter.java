@@ -50,17 +50,69 @@ final class PhotometryReportSectionWriter {
     /** Most constant stars drawn in the noise chart; candidates are always drawn. */
     private static final int MAX_CONSTANT_CHART_POINTS = 3000;
 
-    private static final Map<String, String> GATE_DESCRIPTIONS = new LinkedHashMap<>();
+    /** What the check is asking, independent of this star. Shown in the mouse-over. */
+    static String gateQuestion(String gate) {
+        switch (gate) {
+            case "DATA":
+                return "Are there enough measurements, spread over enough time, to trust a change?";
+            case "AMPLITUDE":
+                return "Is the brightness change larger than the smallest change this session reports, and larger than the noise?";
+            case "PERSISTENCE":
+                return "Does the change last for several frames in a row, rather than one odd frame?";
+            case "SPLIT_HALF":
+                return "Do consecutive measurements tell the same story, or do they jump like noise?";
+            case "APERTURE":
+                return "Does a smaller measuring circle see the same size of change as a larger one? A difference usually means light from a neighbour.";
+            case "SYSTEMATICS":
+                return "Does this star fade and brighten together with the whole frame: its transparency, star width, sky background, or alignment shift?";
+            case "LOCAL":
+                return "Do the stars next to this one fade and brighten the same way? If they do, the change is in that part of the picture, not in this star.";
+            case "LINEARITY":
+                return "Did the star stay faint enough that the camera recorded it faithfully?";
+            default:
+                return gate;
+        }
+    }
 
-    static {
-        GATE_DESCRIPTIONS.put("DATA", "Enough measurements over a long enough time span");
-        GATE_DESCRIPTIONS.put("AMPLITUDE", "Amplitude above the floor and above the noise");
-        GATE_DESCRIPTIONS.put("PERSISTENCE", "Change spans several consecutive frames");
-        GATE_DESCRIPTIONS.put("SPLIT_HALF", "Consecutive measurement pairs agree");
-        GATE_DESCRIPTIONS.put("APERTURE", "Small and large apertures give the same amplitude");
-        GATE_DESCRIPTIONS.put("SYSTEMATICS", "Not correlated with transparency, FWHM, sky or offsets");
-        GATE_DESCRIPTIONS.put("LOCAL", "Nearby comparison stars do not share the pattern with a similar amplitude");
-        GATE_DESCRIPTIONS.put("LINEARITY", "Never saturated or brighter than the linear limit");
+    /**
+     * How this star did on the check, as a short clause. A local failure says which of the two causes it was:
+     * the neighbours share the pattern, or there were not enough neighbours to test.
+     */
+    static String gateOutcome(String gate, boolean failed, int localComparisonStars) {
+        if ("LOCAL".equals(gate)) {
+            if (!failed) {
+                return "the stars next to it do not follow the same pattern";
+            }
+            if (localComparisonStars < 3) {
+                return "there are not enough steady stars nearby to test whether the pattern is shared";
+            }
+            return "the stars next to it fade and brighten the same way, so the change is shared with that part of the picture";
+        }
+        switch (gate) {
+            case "DATA":
+                return failed ? "too few measurements, or they cover too little time" : "enough measurements over a long enough time";
+            case "AMPLITUDE":
+                return failed ? "the change is smaller than the minimum, or no larger than the noise" : "the change is above the minimum and above the noise";
+            case "PERSISTENCE":
+                return failed ? "the change does not last for several frames in a row" : "the change lasts for several frames in a row";
+            case "SPLIT_HALF":
+                return failed ? "consecutive measurements do not agree" : "consecutive measurements agree";
+            case "APERTURE":
+                return failed ? "a small and a large measuring circle see different changes" : "a small and a large measuring circle see the same change";
+            case "SYSTEMATICS":
+                return failed ? "the change follows the transparency, star width, sky or alignment of the frame"
+                        : "the change does not follow the transparency, star width, sky or alignment of the frame";
+            case "LINEARITY":
+                return failed ? "the star was saturated, or brighter than the camera records faithfully, in at least one frame"
+                        : "the star stayed below saturation and inside the range the camera records faithfully";
+            default:
+                return gate;
+        }
+    }
+
+    private static String gateTooltip(String gate, boolean failed, int localComparisonStars) {
+        return gateQuestion(gate) + " This star " + (failed ? "failed" : "passed") + ": "
+                + gateOutcome(gate, failed, localComparisonStars) + ".";
     }
 
     private PhotometryReportSectionWriter() {
@@ -99,30 +151,38 @@ final class PhotometryReportSectionWriter {
         boolean notReady = "NOT_READY".equals(t.verdict);
         report.println("<div class='panel'>");
         report.println("<h2>Variable Stars</h2>");
-        report.println("<p class='section-lede'>Differential photometry of isolated stars in every frame that passed quality control: each star is compared with an ensemble of all measured stars, so changes in transparency cancel out. "
-                + "A star is reported when both its scatter and its frame-to-frame coherence stand out from stars of the same brightness and it passes the checks on its card. "
+        report.println("<p class='section-lede'>Brightness of the isolated stars, compared with all the other measured stars, so a cloud that dims the whole frame cancels out. "
+                + "A star is reported when it jumps more than stars of the same brightness, the jumps line up from frame to frame, and it passes the checks on its card. "
                 + "<a href='photometry_stars.csv' target='_blank'>[All stars CSV]</a> "
                 + "<a href='photometry_lightcurves.csv' target='_blank'>[Candidate light curves CSV]</a> "
                 + "<a href='photometry_frames.csv' target='_blank'>[Per-frame CSV]</a></p>");
 
         report.println("<div class='flex-container'>");
-        report.println("<div class='metric-box' style='border-left-color:" + verdictColor(t.verdict) + ";'><span class='metric-value'>"
-                + verdictBadge(t.verdict) + "</span><span class='metric-label'>Readiness Verdict</span></div>");
-        report.println(metricBox(t.framesUsed + " <span style='color:#777; font-size:16px;'>/ " + t.framesAnalyzed + "</span>", "Frames Used / Analysed"));
-        report.println(metricBox(String.valueOf(t.starsSelected), "Stars Measured"));
+        report.println("<div class='metric-box'" + tipAttr("Whether the pictures look linear enough to trust a brightness change. Ready: the checks found no problem. Limited: only the larger changes are reported. Not ready: nothing was scored.")
+                + " style='border-left-color:" + verdictColor(t.verdict) + ";'><span class='metric-value'>"
+                + verdictBadge(t.verdict) + "</span><span class='metric-label'>Readiness</span></div>");
+        report.println(metricBox(t.framesUsed + " <span style='color:#777; font-size:16px;'>/ " + t.framesAnalyzed + "</span>", "Frames used / looked at",
+                "Frames that stayed in the variable-star measurement, out of the frames that passed the earlier quality filter."));
+        report.println(metricBox(String.valueOf(t.starsSelected), "Stars measured",
+                "Isolated stars whose brightness was measured in every frame."));
         if (!notReady) {
-            report.println(metricBox(String.valueOf(t.starsScored), "Stars Scored"));
-            report.println(metricBox(String.valueOf(t.highConfidence), "High-Confidence Variables"));
-            report.println(metricBox(String.valueOf(t.possible), "Possible Variables"));
+            report.println(metricBox(String.valueOf(t.starsScored), "Stars tested",
+                "Measured stars with enough good frames to be compared with stars of the same brightness."));
+            report.println(metricBox(String.valueOf(t.highConfidence), "High-confidence variables",
+                "Stars that stood out and passed every check."));
+            report.println(metricBox(String.valueOf(t.possible), "Possible variables",
+                "Stars that stood out but failed exactly one check. The card says which."));
         }
-        report.println(metricBox(formatMag(t.medianLinearRangeMag, 1), "Linear Range (mag)"));
-        report.println(metricBox(formatMag(t.zeroPointRangeMag, 3), "Transparency Range (mag)"));
+        report.println(metricBox(formatMag(t.medianLinearRangeMag, 1), "Trusted range (mag)",
+                "How many magnitudes of star brightness still look linear. A longer range means more of the stars can be trusted."));
+        report.println(metricBox(formatMag(t.zeroPointRangeMag, 3), "Transparency change (mag)",
+                "How much the whole field got brighter and fainter during the night, ignoring the most extreme frames."));
         report.println("</div>");
 
         report.println(verdictExplanationHtml(context, t));
-        report.println("<div class='astro-note'><strong>Ready</strong> means the checks found no sign of non-linear data, not that linearity is proven (a pure power-law stretch from zero passes every image-based check). "
-                + "<strong>Limited</strong> sessions only report amplitudes of at least " + formatMag(context.config.variableLimitedMinAmplitudeMag, 2) + " mag. "
-                + "<strong>Not ready</strong> sessions are not scored; their light curves are still exported for diagnosis.</div>");
+        report.println("<div class='astro-note'><strong>Ready</strong> means the checks found no sign that the pictures distort brightness. It does not prove they are perfect: a stretch applied the same way to every pixel can still pass. "
+                + "<strong>Limited</strong> sessions only report changes of at least " + formatMag(context.config.variableLimitedMinAmplitudeMag, 2) + " mag. "
+                + "<strong>Not ready</strong> sessions are not scored. The measurements are still saved so the cause can be checked.</div>");
         report.println("</div>");
     }
 
@@ -194,19 +254,20 @@ final class PhotometryReportSectionWriter {
                                              PipelineTelemetry.PhotometryTelemetry t) {
         report.println("<div class='panel compact-diagnostics-panel'>");
         report.println("<h2>Variable Stars: Readiness Checks</h2>");
-        report.println("<p class='compact-note'>Photometry needs linear data, where a star twice as bright gives twice the signal. These checks look for signs that it is not.</p>");
+        report.println("<p class='compact-note'>Photometry needs a picture in which a star that is really twice as bright records twice the signal. "
+                + "These three checks look for signs that it does not. Hover a row in the full list below for the same idea in a few more words.</p>");
         report.println("<div style='display:grid; grid-template-columns: max-content max-content 1fr; gap: 8px 14px; align-items: baseline; font-size: 13px; margin-bottom: 14px;'>");
         report.println(checkRow(t.quantisationCheck, "A &middot; Data depth",
-                "No 8-bit or heavily quantised data, no sky noise clipped at zero.",
-                t.distinctPixelLevels + " distinct pixel levels; " + formatPercent(t.medianFloorClippedFraction) + " of sky pixels at zero."));
+                "The pixels need many brightness steps, and the sky must not be crushed to zero. A crushed sky makes faint stars look too bright.",
+                t.distinctPixelLevels + " different brightness steps; " + formatPercent(t.medianFloorClippedFraction) + " of sky pixels sit at zero."));
         report.println(checkRow(t.shapeLinearityCheck, "B &middot; Star shapes",
-                "Bright stars keep the profile of faint ones; where they turn flatter, linearity ends.",
-                "Median verified linear range " + formatMag(t.medianLinearRangeMag, 2) + " mag; stars brighter than instrumental mag "
-                        + formatMag(t.medianLinearLimitMag, 2) + " are set aside; " + t.framesFailingShapeLinearity + " of " + t.framesAnalyzed + " frames failed."));
-        report.println(checkRow(t.responseCheck, "D &middot; Response",
-                "When transparency changes, bright and faint stars change by the same amount.",
-                "Transparency varied by " + formatMag(t.zeroPointRangeMag, 3) + " mag (at least " + formatMag(context.config.linearityMinZeroPointRangeMag, 2)
-                        + " mag is needed to judge); " + t.framesFailingResponse + " frames failed."));
+                "A star that is too bright for the camera stops growing in the middle and looks flatter. This finds that brightness and sets brighter stars aside.",
+                "About " + formatMag(t.medianLinearRangeMag, 2) + " magnitudes stay trustworthy. Stars brighter than instrumental mag "
+                        + formatMag(t.medianLinearLimitMag, 2) + " are set aside. " + t.framesFailingShapeLinearity + " of " + t.framesAnalyzed + " frames failed this check."));
+        report.println(checkRow(t.responseCheck, "D &middot; Same response",
+                "Cloud or haze should dim every star by the same amount. If faint stars change more than bright ones, the magnitudes cannot be trusted.",
+                "The night got brighter and fainter by " + formatMag(t.zeroPointRangeMag, 3) + " mag (at least " + formatMag(context.config.linearityMinZeroPointRangeMag, 2)
+                        + " mag is needed before this check can judge). " + t.framesFailingResponse + " frames failed."));
         report.println("</div>");
         // A Not ready verdict already lists these messages as its reasons.
         if (!t.readinessMessages.isEmpty() && !"NOT_READY".equals(t.verdict)) {
@@ -227,38 +288,70 @@ final class PhotometryReportSectionWriter {
                     + t.measurementsOutlier + " isolated outliers, " + t.measurementsContaminated + " with a distorted shape (hot pixel, cosmic ray).</div>");
         }
         report.println("<details class='foldable-streak-details'><summary>All readiness figures</summary><div class='foldable-streak-body'>");
+        report.println("<p class='compact-note'>The short name is what the number is. Hover a row for what it means for the measurements.</p>");
         report.println("<div class='compact-threshold-grid'>");
-        report.println(configItem("A: Quantisation", statusBadge(t.quantisationCheck)));
-        report.println(configItem("A: Distinct Pixel Levels", String.valueOf(t.distinctPixelLevels)));
-        report.println(configItem("A: Sky Pixels At Zero", formatPercent(t.medianFloorClippedFraction)));
-        report.println(configItem("B: Star Shape", statusBadge(t.shapeLinearityCheck)));
-        report.println(configItem("B: Median Linear Limit (inst. mag)", formatMag(t.medianLinearLimitMag, 2)));
-        report.println(configItem("B: Median Linear Range (mag)", formatMag(t.medianLinearRangeMag, 2)));
-        report.println(configItem("B: Failing Frames", String.valueOf(t.framesFailingShapeLinearity)));
-        report.println(configItem("D: Response", statusBadge(t.responseCheck)));
-        report.println(configItem("D: Zero-Point Range (mag)", formatMag(t.zeroPointRangeMag, 3)));
-        report.println(configItem("D: r(slope, zero point)", formatMag(t.slopeZeroPointCorrelation, 2)));
-        report.println(configItem("D: r(slope, sky)", formatMag(t.slopeSkyCorrelation, 2)));
-        report.println(configItem("D: Failing Frames", String.valueOf(t.framesFailingResponse)));
-        report.println(configItem("Session FWHM (extraction, px)", formatMag(t.sessionFwhm, 2)));
-        report.println(configItem("Saturation Level (ADU)", formatMag(t.saturationLevel, 0)));
-        report.println(configItem("Stars Rejected: Crowded", String.valueOf(t.starsRejectedCrowded)));
-        report.println(configItem("Stars Rejected: Saturated", String.valueOf(t.starsRejectedSaturated)));
-        report.println(configItem("Stars Rejected: Edge / Void", String.valueOf(t.starsRejectedEdgeOrVoid)));
-        report.println(configItem("Stars Rejected: Elongated / Streak", t.starsRejectedElongated + " / " + t.starsRejectedStreak));
-        report.println(configItem("Stars Not Selected (cap)", String.valueOf(t.starsRejectedByCap)));
-        report.println(configItem("Stars Mostly Non-Linear", String.valueOf(t.starsExcludedMostlyNonlinear)));
-        report.println(configItem("Stars Below Min SNR", String.valueOf(t.starsExcludedLowSnr)));
-        report.println(configItem("Frames Excluded: Registration", String.valueOf(t.framesExcludedRegistration)));
-        report.println(configItem("Frames Excluded: Star Shape (B)", String.valueOf(t.framesExcludedShapeLinearity)));
-        report.println(configItem("Frames Excluded: Response (D)", String.valueOf(t.framesExcludedResponse)));
-        report.println(configItem("Frames Excluded: Too Few Stars", String.valueOf(t.framesExcludedTooFewStars)));
-        report.println(configItem("Flagged: Saturated / Non-Linear", t.measurementsSaturated + " / " + t.measurementsNonlinear));
-        report.println(configItem("Flagged: Crossing Objects", String.valueOf(t.measurementsCrossing)));
-        report.println(configItem("Flagged: Edge / Void", String.valueOf(t.measurementsEdgeOrVoid)));
-        report.println(configItem("Flagged: Isolated Outliers", String.valueOf(t.measurementsOutlier)));
-        report.println(configItem("Flagged: Contaminated Shape", String.valueOf(t.measurementsContaminated)));
-        report.println(configItem("Photometry Time", String.format(Locale.US, "%.2f s", t.processingTimeMs / 1000.0)));
+        report.println(configItem("A · Brightness steps", statusBadge(t.quantisationCheck),
+                "Pass means the pixels have enough different brightness values, and the sky is not crushed to zero."));
+        report.println(configItem("A · Different brightness values", String.valueOf(t.distinctPixelLevels),
+                "How many different pixel values the middle frame uses. A real 16-bit frame has thousands. An 8-bit or heavily rounded frame has few."));
+        report.println(configItem("A · Sky pixels at zero", formatPercent(t.medianFloorClippedFraction),
+                "Share of the sky that sits on the lowest value the file can store. Those pixels hide the real sky, so faint stars look too bright."));
+        report.println(configItem("B · Star shapes", statusBadge(t.shapeLinearityCheck),
+                "Pass means bright stars still have the same shape as faint ones. Where bright stars go flat, the camera is no longer recording them faithfully."));
+        report.println(configItem("B · Brightest star still trusted", formatMag(t.medianLinearLimitMag, 2),
+                "Instrumental magnitude where stars start to flatten. Brighter than this (a smaller number) is set aside. Not a catalogue magnitude."));
+        report.println(configItem("B · Trusted range", formatMag(t.medianLinearRangeMag, 2) + " mag",
+                "How many magnitudes fainter than that limit still look linear. A longer range means more of the stars can be measured."));
+        report.println(configItem("B · Frames that failed the shape check", String.valueOf(t.framesFailingShapeLinearity),
+                "Frames where bright stars were already flat across the whole range, so the frame itself does not look linear."));
+        report.println(configItem("D · Same response", statusBadge(t.responseCheck),
+                "Pass means faint and bright stars dimmed by the same amount when the sky transparency changed."));
+        report.println(configItem("D · Transparency change", formatMag(t.zeroPointRangeMag, 3) + " mag",
+                "How much the whole field got brighter and fainter during the night, ignoring the most extreme frames. The check needs a real change before it can judge."));
+        report.println(configItem("D · Response versus transparency", formatMag(t.slopeZeroPointCorrelation, 2),
+                "From -1 to 1. Near 1 or -1 means the faint-versus-bright difference grows when the transparency changes, which a linear picture should not do."));
+        report.println(configItem("D · Response versus sky", formatMag(t.slopeSkyCorrelation, 2),
+                "From -1 to 1. Near 1 or -1 means the faint-versus-bright difference follows the sky background, a sign of stretching or a sky-subtraction problem."));
+        report.println(configItem("D · Frames that failed the response check", String.valueOf(t.framesFailingResponse),
+                "Frames where faint stars changed by a different amount than bright stars."));
+        report.println(configItem("Typical star width", formatMag(t.sessionFwhm, 2) + " px",
+                "How wide a typical star is, in pixels, from the star measurement used for detection. Wider means blurrier seeing or worse focus."));
+        report.println(configItem("Saturation level", formatMag(t.saturationLevel, 0) + " ADU",
+                "The pixel value where the camera stops getting brighter. Stars near it are left out."));
+        report.println(configItem("Stars left out: crowded", String.valueOf(t.starsRejectedCrowded),
+                "Stars with a neighbour close enough that the measuring circle would mix their light."));
+        report.println(configItem("Stars left out: saturated on the master", String.valueOf(t.starsRejectedSaturated),
+                "Stars already too bright on the combined master image."));
+        report.println(configItem("Stars left out: edge", String.valueOf(t.starsRejectedEdgeOrVoid),
+                "Stars too close to the edge, or inside an area the pipeline leaves empty."));
+        report.println(configItem("Stars left out: elongated / on a streak", t.starsRejectedElongated + " / " + t.starsRejectedStreak,
+                "Elongated stars, and stars that sit on a moving streak, are not used as steady comparison stars."));
+        report.println(configItem("Stars left out: over the cap", String.valueOf(t.starsRejectedByCap),
+                "Extra stars beyond the maximum number photometry measures. The brightest isolated ones are kept."));
+        report.println(configItem("Stars left out: non-linear in most frames", String.valueOf(t.starsExcludedMostlyNonlinear),
+                "Stars that were saturated or past the trusted brightness in more than half of their measurements."));
+        report.println(configItem("Stars left out: too faint", String.valueOf(t.starsExcludedLowSnr),
+                "Stars whose typical measurement is noisier than the minimum signal-to-noise."));
+        report.println(configItem("Frames left out: alignment", String.valueOf(t.framesExcludedRegistration),
+                "Frames whose stars did not agree on how far the frame had to be shifted to line up."));
+        report.println(configItem("Frames left out: star shape (B)", String.valueOf(t.framesExcludedShapeLinearity),
+                "Frames that failed the bright-star shape check."));
+        report.println(configItem("Frames left out: response (D)", String.valueOf(t.framesExcludedResponse),
+                "Frames where faint stars responded differently from bright stars."));
+        report.println(configItem("Frames left out: too few stars", String.valueOf(t.framesExcludedTooFewStars),
+                "Frames without enough usable stars to solve the comparison."));
+        report.println(configItem("Measurements left out: saturated / too bright", t.measurementsSaturated + " / " + t.measurementsNonlinear,
+                "Single measurements, not whole stars. Saturated means the pixel hit the camera limit. Too bright means past the shape-check limit."));
+        report.println(configItem("Measurements left out: a mover crossed the star", String.valueOf(t.measurementsCrossing),
+                "A moving object passed over the star in that frame, so the brightness is not the star alone."));
+        report.println(configItem("Measurements left out: edge", String.valueOf(t.measurementsEdgeOrVoid),
+                "The star fell at the edge or in an empty area of that frame."));
+        report.println(configItem("Measurements left out: one odd frame", String.valueOf(t.measurementsOutlier),
+                "A single frame far from the star's other measurements, with no neighbour frame to support it. A dip that lasts several frames is kept."));
+        report.println(configItem("Measurements left out: distorted shape", String.valueOf(t.measurementsContaminated),
+                "The star's shape in that frame does not match its usual shape. Often a hot pixel or a cosmic ray."));
+        report.println(configItem("Time spent measuring", String.format(Locale.US, "%.2f s", t.processingTimeMs / 1000.0),
+                "How long the variable-star measurement took."));
         report.println("</div>");
         report.println("</div></details>");
         if (!t.gateFailureCounts.isEmpty()) {
@@ -267,7 +360,8 @@ final class PhotometryReportSectionWriter {
                 if (gates.length() > 0) gates.append(", ");
                 gates.append(e.getKey()).append(": ").append(e.getValue());
             }
-            report.println("<div class='astro-note'>Candidate checks failed: " + DetectionReportGenerator.escapeHtml(gates.toString()) + "</div>");
+            report.println("<div class='astro-note'" + tipAttr("How many candidate stars failed each check. A star can fail more than one. Hover the checks on a candidate card for what each name asks.")
+                    + ">Checks failed by candidates: " + DetectionReportGenerator.escapeHtml(gates.toString()) + "</div>");
         }
         report.println("</div>");
     }
@@ -388,7 +482,8 @@ final class PhotometryReportSectionWriter {
                     ? " Every candidate is drawn; constant stars are thinned to an evenly spaced sample of about " + MAX_CONSTANT_CHART_POINTS
                     + " of the " + scored + " scored stars (all are in photometry_stars.csv)."
                     : "";
-            report.println("<p class='compact-note'>Each dot is one scored star. The dashed line is the scatter expected from stars of the same brightness; variable candidates sit well above it. Hover a dot for details." + sampleNote + "</p>");
+            report.println("<p class='compact-note'>Each dot is one measured star. Left is brighter, right is fainter. Height is how much that star's brightness jumps around, in magnitudes. "
+                    + "The dashed line is the jumpiness of an ordinary steady star of that brightness. A real variable sits well above the line. Hover a dot for the star and its numbers." + sampleNote + "</p>");
             report.println(legend(
                     legendDot(PhotometrySvgChart.CONTEXT_GRAY, "Constant"),
                     legendDot(PhotometrySvgChart.SERIES_BLUE, "High confidence"),
@@ -400,25 +495,39 @@ final class PhotometryReportSectionWriter {
 
         // --- Per-frame small multiples ---
         report.println("<h3 style='color:#e6e6e6; font-size:15px; margin:18px 0 6px 0;'>Per-frame diagnostics</h3>");
-        report.println("<p class='compact-note'>One chart per measurement, frame number on the x axis. Excluded frames are marked with a red cross; hover any mark for the frame name and the reason.</p>");
+        report.println("<p class='compact-note'>One chart per question about the frames. The horizontal axis is the frame number. A blue point is a frame that was used. A red cross is a frame left out; hover it for the file name and why. "
+                + "The sentence under each title says what the height of the point means.</p>");
         report.println(legend(
                 legendDot(PhotometrySvgChart.SERIES_BLUE, "Used frame"),
-                legendCross(PhotometrySvgChart.STATUS_CRITICAL, "Excluded frame"),
-                legendDash(PhotometrySvgChart.REFERENCE_INK, "Configured limit")));
+                legendCross(PhotometrySvgChart.STATUS_CRITICAL, "Frame left out"),
+                legendDash(PhotometrySvgChart.REFERENCE_INK, "Limit")));
         report.println("<div class='flex-container' style='gap:14px;'>");
-        report.println(frameChart(frames, "Zero point Z (mag, brighter up)", f -> f.zeroPoint, true, Double.NaN, Double.NaN, null));
+        report.println(frameChart(frames, "Whole-frame brightness",
+                "How much this whole frame is brighter or fainter than a typical frame of the night, in magnitudes. Positive means fainter. This is the zero point. Drawn brighter-up.",
+                "mag", f -> f.zeroPoint, true, Double.NaN, Double.NaN, null));
         double slopeLimit = context.config.linearityMaxFrameSlope;
-        report.println(frameChart(frames, "D: response slope (mag/mag)", f -> f.responseSlope, false, -slopeLimit, slopeLimit, "limit"));
-        report.println(frameChart(frames, "B: linear range (mag)", f -> f.linearRangeMag, false, context.config.linearityMinRangeMag, Double.NaN, "min"));
-        report.println(frameChart(frames, "Measured FWHM (px)", f -> f.fwhm, false, Double.NaN, Double.NaN, null));
-        report.println(frameChart(frames, "Registration spread (px)", f -> f.registrationSpread, false,
+        report.println(frameChart(frames, "Faint stars versus bright stars",
+                "Whether faint stars changed more than bright stars in this frame. Near zero is what a linear picture does. This is check D's slope, in magnitudes of error per magnitude of brightness. The dashed lines are the limit.",
+                "mag/mag", f -> f.responseSlope, false, -slopeLimit, slopeLimit, "limit"));
+        report.println(frameChart(frames, "Trusted brightness range",
+                "How many magnitudes of stars in this frame still have the right shape. Longer is better. This is check B. The dashed line is the minimum the session wants.",
+                "mag", f -> f.linearRangeMag, false, context.config.linearityMinRangeMag, Double.NaN, "min"));
+        report.println(frameChart(frames, "Star width",
+                "How wide the stars are in this frame, in pixels. A spike is a blurry frame. This is the FWHM.",
+                "px", f -> f.fwhm, false, Double.NaN, Double.NaN, null));
+        report.println(frameChart(frames, "Alignment disagreement",
+                "How far the stars disagreed about the shift needed to line this frame up, in pixels. A large value means a poor alignment. The dashed line is the maximum that is still used.",
+                "px", f -> f.registrationSpread, false,
                 context.config.photometryMaxRegistrationSpreadPixels, Double.NaN, "max"));
-        report.println(frameChart(frames, "Stars flagged as crossed", f -> (double) f.crossing, false, Double.NaN, Double.NaN, null, true));
+        report.println(frameChart(frames, "Stars a mover crossed",
+                "How many measured stars a moving object passed over in this frame. Those measurements are left out, because the brightness is not the star alone.",
+                "stars", f -> (double) f.crossing, false, Double.NaN, Double.NaN, null, true));
         report.println("</div>");
 
         // --- Check B profiles ---
-        report.println("<h3 style='color:#e6e6e6; font-size:15px; margin:18px 0 6px 0;'>Check B: star concentration against brightness</h3>");
-        report.println("<p class='compact-note'>Concentration index of each frame minus that frame's faint-star reference, in magnitude bins. Linear data stays inside the shaded tolerance band; stretched or saturated data bends away at the bright (left) end.</p>");
+        report.println("<h3 style='color:#e6e6e6; font-size:15px; margin:18px 0 6px 0;'>Check B: does a bright star still have the shape of a faint one?</h3>");
+        report.println("<p class='compact-note'>Each line is one frame. Left is brighter, right is fainter. Height is how concentrated the star's light is, compared with the faint stars in that same frame. "
+                + "A linear frame stays inside the shaded band. A frame that was stretched, or whose bright stars are saturating, bends away at the bright end. Hover a line for that frame's result.</p>");
         report.println(legend(
                 legendLine(PhotometrySvgChart.SERIES_BLUE, "Frame passed B"),
                 legendLine(PhotometrySvgChart.STATUS_CRITICAL, "Frame failed B")));
@@ -466,8 +575,8 @@ final class PhotometryReportSectionWriter {
                 if (entry.getKey() == VariabilityTier.CONSTANT && (seen++ % constantStride) != 0) continue;
                 xy.add(new double[]{p.mag, p.scatter});
                 StarLightCurve star = byKey.get(key(p.mag, p.scatter));
-                tips.add(String.format(Locale.US, "%s%s | mag %.2f | scatter %.4f (expected %.4f)",
-                        star != null ? "Star #" + star.id + String.format(Locale.US, " (%.0f, %.0f) | ", star.x, star.y) : "",
+                tips.add(String.format(Locale.US, "%s%s. Average brightness %.2f (larger is fainter). Jumpiness %.4f mag; a steady star of this brightness jumps about %.4f mag.",
+                        star != null ? "Star #" + star.id + String.format(Locale.US, " at (%.0f, %.0f). ", star.x, star.y) : "",
                         tierLabel(entry.getKey()), p.mag, p.scatter, p.expectedScatter));
             }
             double[] xs = new double[xy.size()];
@@ -498,13 +607,14 @@ final class PhotometryReportSectionWriter {
         double get(PipelineTelemetry.PhotometryFrameStat frame);
     }
 
-    private static String frameChart(List<PipelineTelemetry.PhotometryFrameStat> frames, String title, FrameValue value,
-                                     boolean invert, double limitA, double limitB, String limitLabel) {
-        return frameChart(frames, title, value, invert, limitA, limitB, limitLabel, false);
+    private static String frameChart(List<PipelineTelemetry.PhotometryFrameStat> frames, String title, String explanation,
+                                     String unit, FrameValue value, boolean invert, double limitA, double limitB, String limitLabel) {
+        return frameChart(frames, title, explanation, unit, value, invert, limitA, limitB, limitLabel, false);
     }
 
-    private static String frameChart(List<PipelineTelemetry.PhotometryFrameStat> frames, String title, FrameValue value,
-                                     boolean invert, double limitA, double limitB, String limitLabel, boolean counts) {
+    private static String frameChart(List<PipelineTelemetry.PhotometryFrameStat> frames, String title, String explanation,
+                                     String unit, FrameValue value, boolean invert, double limitA, double limitB,
+                                     String limitLabel, boolean counts) {
         int n = frames.size();
         double[] x = new double[n];
         double[] usedY = new double[n];
@@ -515,13 +625,15 @@ final class PhotometryReportSectionWriter {
             PipelineTelemetry.PhotometryFrameStat f = frames.get(j);
             x[j] = f.frameIndex + 1;
             double v = value.get(f);
-            String tip = String.format(Locale.US, "Frame %d (%s): %s", f.frameIndex + 1, f.filename, formatMag(v, 4));
+            String shown = counts ? String.format(Locale.US, "%.0f %s", v, unit) : formatMag(v, 4) + " " + unit;
+            String tip = String.format(Locale.US, "Frame %d (%s): %s. %s %s", f.frameIndex + 1, f.filename, shown, explanation,
+                    f.used ? "This frame is used." : "This frame is left out: " + f.exclusionReason);
             usedY[j] = f.used ? v : Double.NaN;
             excludedY[j] = f.used ? Double.NaN : v;
             usedTips[j] = tip;
-            excludedTips[j] = tip + " | excluded: " + f.exclusionReason;
+            excludedTips[j] = tip;
         }
-        PhotometrySvgChart chart = new PhotometrySvgChart(360, 190, title, "Frame", "");
+        PhotometrySvgChart chart = new PhotometrySvgChart(360, 190, title + ". " + explanation, "Frame", "");
         if (invert) {
             chart.invertY();
         }
@@ -537,13 +649,15 @@ final class PhotometryReportSectionWriter {
         chart.line(x, usedY, PhotometrySvgChart.SERIES_BLUE, 2, false, null);
         chart.points(x, usedY, PhotometrySvgChart.SERIES_BLUE, 4, PhotometrySvgChart.Marker.CIRCLE, usedTips);
         chart.points(x, excludedY, PhotometrySvgChart.STATUS_CRITICAL, 4.5, PhotometrySvgChart.Marker.CROSS, excludedTips);
-        return "<div><div style='font-size:12px; color:#cccccc; margin-bottom:4px;'>" + DetectionReportGenerator.escapeHtml(title)
-                + "</div>" + chart.render() + "</div>";
+        return "<div><div style='font-size:12px; color:#cccccc;'>" + DetectionReportGenerator.escapeHtml(title) + "</div>"
+                + "<div style='font-size:11px; color:#9aa3ab; max-width:360px; margin:0 0 4px 0; line-height:1.35;'>"
+                + DetectionReportGenerator.escapeHtml(explanation) + "</div>" + chart.render() + "</div>";
     }
 
     private static String concentrationChart(List<PipelineTelemetry.PhotometryFrameStat> frames, double drift) {
-        PhotometrySvgChart chart = new PhotometrySvgChart(760, 300, "Concentration index minus reference against magnitude, one line per frame",
-                "Instrumental magnitude (fainter to the right)", "Concentration - reference");
+        PhotometrySvgChart chart = new PhotometrySvgChart(760, 300,
+                "How concentrated each star is, compared with the faint stars of the same frame. Left is brighter. A line that stays in the band is linear.",
+                "Brightness (fainter to the right)", "Shape compared with faint stars");
         chart.band(-drift, drift, PhotometrySvgChart.REFERENCE_INK, 0.12);
         // Passing frames first so failing ones draw on top.
         for (boolean failingPass : new boolean[]{false, true}) {
@@ -557,8 +671,10 @@ final class PhotometryReportSectionWriter {
                     xs[i] = f.concentrationProfile.get(i).mag;
                     ys[i] = f.concentrationProfile.get(i).concentration - f.concentrationReference;
                 }
-                String tip = String.format(Locale.US, "Frame %d (%s): B %s, linear limit %s, range %s mag",
-                        f.frameIndex + 1, f.filename, f.shapeLinearityStatus, formatMag(f.linearLimitMag, 2), formatMag(f.linearRangeMag, 2));
+                String tip = String.format(Locale.US, "Frame %d (%s). Shape check %s. Stars brighter than instrumental mag %s are not trusted in this frame. The trusted range is %s mag. %s",
+                        f.frameIndex + 1, f.filename, "FAIL".equals(f.shapeLinearityStatus) ? "failed: bright stars go flat" : f.shapeLinearityStatus.toLowerCase(Locale.ROOT),
+                        formatMag(f.linearLimitMag, 2), formatMag(f.linearRangeMag, 2),
+                        failed ? "This frame is left out of the variable-star measurement." : "A flat line inside the band is what linear data looks like.");
                 chart.line(xs, ys, failed ? PhotometrySvgChart.STATUS_CRITICAL : PhotometrySvgChart.SERIES_BLUE,
                         failed ? 2 : 1.2, false, tip);
             }
@@ -610,7 +726,16 @@ final class PhotometryReportSectionWriter {
             report.println("<h3 style='color:#e6e6e6; font-size:15px; margin:18px 0 6px 0;'>Rejected candidates (" + rejected.size() + ")</h3>");
             report.println("<p class='compact-note'>Stars whose scores stood out but that failed two or more gates. Listed so you can see why a suspected variable was not reported.</p>");
             report.println("<div class='scroll-box compact-table-box'>");
-            report.println("<table><thead><tr><th>Star</th><th>Position</th><th>Mean Mag</th><th>Amplitude</th><th>Scatter z</th><th>Stetson J z</th><th>Failed Gates</th><th>Look Up</th></tr></thead><tbody>");
+            report.println("<table><thead><tr>"
+                + th("Star", "Star number in this session's measurement.")
+                + th("Position", "Where the star is, in pixels and on the sky when the field is solved.")
+                + th("Mean Mag", "Average brightness in this session. A larger number is fainter. Not a catalogue magnitude.")
+                + th("Amplitude", "Size of the brightness change, in magnitudes.")
+                + th("Scatter z", "How unusual the jumpiness is among stars of the same brightness. Larger is more unusual.")
+                + th("Stetson J z", "How unusual it is that neighbouring frames move together. One noisy frame does not raise this.")
+                + th("Failed Gates", "The checks this star failed. Two or more, and it is listed here instead of as a candidate.")
+                + th("Look Up", "Opens the same sky position in a variable-star catalogue.")
+                + "</tr></thead><tbody>");
             for (StarLightCurve star : rejected) {
                 report.println("<tr><td>#" + star.id + "</td><td>" + DetectionReportGenerator.escapeHtml(
                         DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, star.x, star.y)) + "</td>"
@@ -638,33 +763,49 @@ final class PhotometryReportSectionWriter {
         report.println(catalogueCrossCheckHtml(context, star, number));
 
         report.println("<details class='foldable-streak-details'><summary>Statistics</summary><div class='foldable-streak-body'>");
+        report.println("<p class='compact-note'>The numbers behind the checks. Hover a box for what it means.</p>");
         report.println("<div class='flex-container'>");
-        report.println(compactMetric(formatMag(star.amplitude, 3), "Amplitude (mag)"));
-        report.println(compactMetric(formatMag(star.meanMag, 2), "Mean Inst. Mag"));
-        report.println(compactMetric(formatMag(star.excessScatter, 1) + "x", "Scatter / Expected"));
-        report.println(compactMetric(formatMag(star.scatterZ, 1), "Scatter z"));
-        report.println(compactMetric(formatMag(star.stetsonJZ, 1), "Stetson J z"));
-        report.println(compactMetric(String.valueOf(star.usableFrames), "Usable Frames"));
-        report.println(compactMetric(Double.isNaN(star.timeSpanMinutes) ? "n/a" : formatMag(star.timeSpanMinutes, 0) + " min", "Time Span"));
-        report.println(compactMetric(formatMag(star.splitHalfCorrelation, 2), "Split-Half r"));
-        report.println(compactMetric(formatMag(star.apertureAmplitudeDifference, 2), "Aperture Diff"));
+        report.println(compactMetric(formatMag(star.amplitude, 3), "Size of the change (mag)",
+                "How much the brightness changed, from a faint point to a bright point, ignoring the most extreme 5 percent at each end. In magnitudes."));
+        report.println(compactMetric(formatMag(star.meanMag, 2), "Average brightness",
+                "This star's average brightness in this session. A larger number is fainter. It is an instrumental magnitude, not a catalogue magnitude."));
+        report.println(compactMetric(formatMag(star.excessScatter, 1) + "x", "Jumpiness versus a steady star",
+                "How much this star jumps around, divided by how much a steady star of the same brightness jumps. 1 is ordinary noise. Well above 1 is a real change or a problem."));
+        report.println(compactMetric(formatMag(star.scatterZ, 1), "How unusual the jumpiness is",
+                "How unusual that jumpiness is among stars of the same brightness. Larger means more unusual. Both this and the next number have to stand out before a star is a candidate."));
+        report.println(compactMetric(formatMag(star.stetsonJZ, 1), "How coherent the change is",
+                "How unusual it is that neighbouring frames move in the same direction. One noisy frame does not raise this. This is the Stetson J score."));
+        report.println(compactMetric(String.valueOf(star.usableFrames), "Frames kept",
+                "Measurements kept for this star. A bad measurement, or a frame left out of the session, is not counted."));
+        report.println(compactMetric(Double.isNaN(star.timeSpanMinutes) ? "n/a" : formatMag(star.timeSpanMinutes, 0) + " min", "Time covered",
+                "Minutes from the first kept measurement to the last."));
+        report.println(compactMetric(formatMag(star.splitHalfCorrelation, 2), "Consecutive frames agree",
+                "Agreement between each measurement and the next, from -1 to 1. Near 1 means they move together. Near 0 means they look like noise."));
+        report.println(compactMetric(formatMag(star.apertureAmplitudeDifference, 2), "Small versus large circle",
+                "How much the size of the change differs between a small measuring circle and a large one, as a fraction of the change. Near 0 means they agree. A large difference usually means light from a neighbour."));
         report.println(compactMetric(formatMag(star.maxSystematicsCorrelation, 2)
                 + (star.maxSystematicsSource != null ? " <span style='font-size:10px; color:#999;'>" + DetectionReportGenerator.escapeHtml(star.maxSystematicsSource) + "</span>" : ""),
-                "Max Systematics r"));
-        report.println(compactMetric(formatMag(star.systematicsLimitMag, 3), "Systematics Limit (mag)"));
-        report.println(compactMetric(formatMag(star.maxFrameToFrameSystematicsCorrelation, 2), "Frame-to-Frame Systematics r"));
-        report.println(compactMetric(formatMag(star.localCorrelation, 2) + " <span style='font-size:10px; color:#999;'>n=" + star.localComparisonStars + "</span>", "Local r"));
-        report.println(compactMetric(formatMag(star.localSharedFraction, 2), "Local shared"));
+                "Follows the whole frame",
+                "The strongest agreement, from 0 to 1, between this star and something that affects the whole frame: transparency, star width, sky background, or the alignment shift. Near 1 means it follows that."));
+        report.println(compactMetric(formatMag(star.systematicsLimitMag, 3), "Change the frame can explain",
+                "How large a change that frame property produces in ordinary stars of this brightness, in magnitudes. A real variable should change by more than this."));
+        report.println(compactMetric(formatMag(star.maxFrameToFrameSystematicsCorrelation, 2), "Jumps with the frame",
+                "Whether this star jumps in the same frames as the frame property above. A blend with a neighbour often jumps when the seeing jumps."));
+        report.println(compactMetric(formatMag(star.localCorrelation, 2) + " <span style='font-size:10px; color:#999;'>n=" + star.localComparisonStars + "</span>", "Neighbours follow the shape",
+                "How closely the nearby stars follow this star's ups and downs, from 0 to 1. The small number is how many neighbours were used. High means they share the pattern."));
+        report.println(compactMetric(formatMag(star.localSharedFraction, 2), "Neighbours share the size",
+                "How much of this star's change shows up in the nearby stars. 1 means the same size of change. About 0.3 or more, together with a high shape agreement, fails the local check."));
         report.println("</div>");
         report.println("</div></details>");
 
         // Gates
+        report.println("<p class='compact-note' style='margin-bottom:6px;'>Hover a check to read what it asks, and whether this star passed.</p>");
         report.println("<div style='display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;'>");
         for (String gate : VariableStarAnalysis.GATE_NAMES) {
             boolean failed = star.failedGates.contains(gate);
             String color = failed ? PhotometrySvgChart.STATUS_CRITICAL : PhotometrySvgChart.STATUS_GOOD;
             String icon = failed ? "&#10005;" : "&#10003;";
-            report.println("<span class='legend-pill' title='" + DetectionReportGenerator.escapeHtml(GATE_DESCRIPTIONS.getOrDefault(gate, gate)) + "'>"
+            report.println("<span class='legend-pill'" + tipAttr(gateTooltip(gate, failed, star.localComparisonStars)) + ">"
                     + "<span style='color:" + color + "; font-weight:bold;'>" + icon + "</span> " + gate + "</span>");
         }
         report.println("</div>");
@@ -719,8 +860,17 @@ final class PhotometryReportSectionWriter {
         }
         report.println("</div>");
         report.println("<div class='scroll-box compact-table-box' style='max-height: 420px;'>");
-        report.println("<table><thead><tr><th>#</th><th>Tier</th><th>Position</th><th>Mean Inst. Mag</th><th>Amplitude</th><th>Time Span</th><th>Change</th><th>Failed Check</th>"
-                + (sky ? "<th>Known As (VSX)</th>" : "") + "</tr></thead><tbody>");
+        report.println("<table><thead><tr>"
+                + th("#", "Candidate number. The first ones also have a card below.")
+                + th("Tier", "High confidence passed every check. Possible failed exactly one.")
+                + th("Position", "Where the star is, in pixels and on the sky when the field is solved.")
+                + th("Mean Inst. Mag", "Average brightness in this session. A larger number is fainter. Not a catalogue magnitude.")
+                + th("Amplitude", "Size of the brightness change, in magnitudes.")
+                + th("Time Span", "Minutes from the first kept measurement to the last.")
+                + th("Change", "The rough shape of the light curve: a steady fade, a steady rise, a dip, a peak, or up and down.")
+                + th("Failed Check", "The one check a possible candidate failed. High-confidence candidates have none.")
+                + (sky ? th("Known As (VSX)", "Name in the AAVSO VSX variable-star catalogue, when this session's sky catalogue has a match.") : "")
+                + "</tr></thead><tbody>");
         int number = 0;
         for (StarLightCurve star : candidates) {
             number++;
@@ -873,7 +1023,7 @@ final class PhotometryReportSectionWriter {
         } else {
             String gate = star.failedGates.get(0);
             text.append(" Fails ").append(star.failedGates.size() == 1 ? "one check" : star.failedGates.size() + " checks").append(": ")
-                    .append(gate).append(" (").append(GATE_DESCRIPTIONS.getOrDefault(gate, gate).toLowerCase(Locale.ROOT)).append(")")
+                    .append(gate).append(" (").append(gateOutcome(gate, true, star.localComparisonStars)).append(")")
                     .append(star.failedGates.size() > 1 ? " and others" : "").append('.');
         }
         return text.toString();
@@ -1071,7 +1221,8 @@ final class PhotometryReportSectionWriter {
                 }
             }
             chart.line(x, y, PhotometrySvgChart.CONTEXT_GRAY, 1.5, false,
-                    String.format(Locale.US, "Comparison C%d: star #%d, mag %.2f, offset +%.2f", k + 1, comparison.id, comparison.meanMag, offset));
+                    String.format(Locale.US, "Steady comparison star C%d, star #%d, average brightness %.2f. Drawn %.2f mag below the candidate so the shapes can be compared.",
+                            k + 1, comparison.id, comparison.meanMag, offset));
             chart.label(lastX, lastY, "C" + (k + 1));
         }
 
@@ -1085,10 +1236,11 @@ final class PhotometryReportSectionWriter {
             boolean ok = star.flags[j] == 0;
             used[j] = ok ? v : Double.NaN;
             flagged[j] = ok ? Double.NaN : v;
-            String tip = String.format(Locale.US, "Frame %d (%s)%s: Δmag %s ± %s", f.frameIndex + 1, f.filename,
+            String tip = String.format(Locale.US, "Frame %d (%s)%s. Brightness difference %s mag, uncertainty %s mag. Positive is fainter than this star's average.",
+                    f.frameIndex + 1, f.filename,
                     Double.isNaN(f.julianDate) ? "" : ", " + utcFromJulianDate(f.julianDate), formatMag(v, 4), formatMag(star.magError[j], 4));
-            usedTips[j] = tip;
-            flaggedTips[j] = tip + " | flags: " + String.join(", ", PhotometryFlags.describe(star.flags[j]));
+            usedTips[j] = tip + " Used.";
+            flaggedTips[j] = tip + " Not used: " + plainFlags(star.flags[j]) + ".";
         }
         chart.line(x, used, color, 2, false, null);
         chart.points(x, used, color, 4, PhotometrySvgChart.Marker.CIRCLE, usedTips);
@@ -1201,13 +1353,44 @@ final class PhotometryReportSectionWriter {
         }
         report.println("<div class='panel compact-diagnostics-panel'>");
         report.println("<h2>Variable Stars: Per-Frame Measurements</h2>");
-        report.println("<p class='compact-note'>FWHM is measured by the photometry stage from bright-star moments. Z is the frame zero point (positive = fainter than the session median frame). "
-                + "Slope is check D's residual-against-magnitude slope. Stars counts are those used in the ensemble / measured.</p>");
+        report.println("<p class='compact-note'>Each row is one frame. Hover a column name for what the number means.</p>");
+        report.println("<p class='compact-note'><strong>Brightness of the frame.</strong> Z is how much the whole frame is fainter (positive) or brighter (negative) than a typical frame. "
+                + "Tilt X and Tilt Y are a slope across the frame that was removed, in magnitudes from the centre to the edge.</p>");
+        report.println("<p class='compact-note'><strong>Star shapes.</strong> FWHM is how wide the stars are, in pixels. B says whether bright stars still have the same shape as faint ones. "
+                + "Linear limit is the brightness where stars start to flatten, and linear range is how many magnitudes fainter than that still look trustworthy.</p>");
+        report.println("<p class='compact-note'><strong>Can the magnitudes be trusted?</strong> D and Slope say whether faint stars changed more than bright stars. Slope err is how uncertain that slope is. "
+                + "Sky at zero is the share of sky pixels crushed to zero.</p>");
+        report.println("<p class='compact-note'><strong>Alignment.</strong> Offset X and Y are how far the frame was shifted to line up, in pixels. Spread is how much the stars disagreed about that shift.</p>");
+        report.println("<p class='compact-note'><strong>Counts.</strong> Stars is how many went into the comparison, then how many were measured. "
+                + "Saturated, non-linear, crossed, edge and outliers are single measurements left out of that frame.</p>");
         report.println("<div class='scroll-box compact-table-box'>");
-        report.println("<table><thead><tr><th>Frame</th><th>Filename</th><th>Status</th><th>FWHM</th><th>Aperture</th><th>Sky</th>"
-                + "<th>Offset X</th><th>Offset Y</th><th>Spread</th><th>Sky At Zero</th><th>B</th><th>Linear Limit</th><th>Linear Range</th>"
-                + "<th>Z</th><th>Plane X</th><th>Plane Y</th><th>D</th><th>Slope</th><th>Slope Err</th><th>Stars</th>"
-                + "<th>Saturated</th><th>Non-Linear</th><th>Crossed</th><th>Edge/Void</th><th>Outliers</th></tr></thead><tbody>");
+        report.println("<table><thead><tr>"
+                + th("Frame", "Frame number in the session, starting at 1.")
+                + th("Filename", "Name of the image file.")
+                + th("Status", "Used means this frame is in the variable-star measurement. Left out names the reason.")
+                + th("FWHM", "How wide the stars are in this frame, in pixels. Larger means blurrier.")
+                + th("Aperture", "Radius of the main measuring circle, in pixels.")
+                + th("Sky", "Typical sky background around the measured stars, in image counts.")
+                + th("Offset X", "How far this frame was shifted sideways to line up with the others, in pixels.")
+                + th("Offset Y", "How far this frame was shifted up or down to line up with the others, in pixels.")
+                + th("Spread", "How much the stars disagreed about that shift, in pixels. Large means a poor alignment.")
+                + th("Sky At Zero", "Share of the sky that sits on the lowest value the file can store. Those pixels hide the real sky.")
+                + th("B", "Shape check. Pass means bright stars still have the shape of faint ones.")
+                + th("Linear Limit", "Brightness, as an instrumental magnitude, where stars start to flatten. Brighter than this is not trusted.")
+                + th("Linear Range", "How many magnitudes fainter than that limit still look trustworthy.")
+                + th("Z", "Whole-frame brightness offset, in magnitudes. Positive means this frame is fainter than a typical frame.")
+                + th("Tilt X", "Left-to-right brightness slope that was removed, in magnitudes from the centre to the edge.")
+                + th("Tilt Y", "Bottom-to-top brightness slope that was removed, in magnitudes from the centre to the edge.")
+                + th("D", "Response check. Pass means faint and bright stars changed by the same amount.")
+                + th("Slope", "How much more the faint stars changed than the bright ones, in magnitudes per magnitude. Near zero is linear.")
+                + th("Slope Err", "Uncertainty on that slope. A slope smaller than its uncertainty is not a real difference.")
+                + th("Stars", "Stars used in the comparison, then stars measured in this frame.")
+                + th("Saturated", "Measurements that hit the camera's brightest value.")
+                + th("Non-Linear", "Measurements brighter than the shape check trusts.")
+                + th("Crossed", "Stars a moving object passed over. Those measurements are left out.")
+                + th("Edge/Void", "Measurements too close to the edge, or in an area left empty.")
+                + th("Outliers", "Single frames far from that star's other measurements, with no neighbouring frame to support them.")
+                + "</tr></thead><tbody>");
         for (PipelineTelemetry.PhotometryFrameStat f : t.frames) {
             String status = f.used ? "Used" : "Excluded: " + DetectionReportGenerator.escapeHtml(f.exclusionReason);
             report.println("<tr><td>" + (f.frameIndex + 1) + "</td><td>" + DetectionReportGenerator.escapeHtml(f.filename) + "</td>"
@@ -1279,15 +1462,53 @@ final class PhotometryReportSectionWriter {
     // =================================================================
 
     private static String metricBox(String value, String label) {
-        return "<div class='metric-box'><span class='metric-value'>" + value + "</span><span class='metric-label'>" + label + "</span></div>";
+        return metricBox(value, label, null);
+    }
+
+    private static String metricBox(String value, String label, String tip) {
+        return "<div class='metric-box'" + tipAttr(tip) + "><span class='metric-value'>" + value + "</span><span class='metric-label'>" + label + "</span></div>";
+    }
+
+    /** Plain words for the measurement flags, for a light-curve mouse-over. */
+    private static String plainFlags(int flags) {
+        List<String> plain = new ArrayList<>();
+        if ((flags & PhotometryFlags.SATURATED) != 0) plain.add("saturated");
+        if ((flags & PhotometryFlags.NONLINEAR) != 0) plain.add("brighter than the camera records faithfully");
+        if ((flags & PhotometryFlags.EDGE_OR_VOID) != 0) plain.add("at the edge");
+        if ((flags & PhotometryFlags.CROSSING) != 0) plain.add("a moving object crossed the star");
+        if ((flags & PhotometryFlags.OUTLIER) != 0) plain.add("one odd frame");
+        if ((flags & PhotometryFlags.FRAME_EXCLUDED) != 0) plain.add("the frame was left out");
+        if ((flags & PhotometryFlags.BAD_FLUX) != 0) plain.add("the brightness could not be measured");
+        if ((flags & PhotometryFlags.CONTAMINATED) != 0) plain.add("the star shape was distorted");
+        return plain.isEmpty() ? "left out" : String.join("; ", plain);
     }
 
     private static String compactMetric(String value, String label) {
-        return "<div class='metric-box compact'><span class='metric-value'>" + value + "</span><span class='metric-label'>" + label + "</span></div>";
+        return compactMetric(value, label, null);
+    }
+
+    private static String compactMetric(String value, String label, String tip) {
+        return "<div class='metric-box compact'" + tipAttr(tip) + "><span class='metric-value'>" + value + "</span><span class='metric-label'>" + label + "</span></div>";
     }
 
     private static String configItem(String label, String value) {
-        return "<div class='config-item'><span>" + label + "</span><span class='val'>" + value + "</span></div>";
+        return configItem(label, value, null);
+    }
+
+    private static String configItem(String label, String value, String tip) {
+        return "<div class='config-item'" + tipAttr(tip) + "><span>" + label + "</span><span class='val'>" + value + "</span></div>";
+    }
+
+    /** Mouse-over attribute. Apostrophes are escaped because the attribute uses single quotes. */
+    private static String tipAttr(String tip) {
+        if (tip == null || tip.isEmpty()) {
+            return "";
+        }
+        return " title='" + DetectionReportGenerator.escapeHtml(tip).replace("'", "&#39;") + "'";
+    }
+
+    private static String th(String label, String tip) {
+        return "<th" + tipAttr(tip) + ">" + label + "</th>";
     }
 
     private static String legend(String... pills) {

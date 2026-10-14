@@ -69,6 +69,10 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(html.contains("V1 &middot; High confidence"));
         assertTrue(html.contains("<svg"));
         assertTrue(html.contains("Variable Stars: Per-Frame Measurements"));
+        assertTrue(html.contains("Hover a column name"));
+        assertTrue(html.contains("the stars next to it do not follow the same pattern"));
+        assertTrue(html.contains("Whole-frame brightness"));
+        assertFalse(html.contains("Nearby comparison stars do not share the pattern"));
         assertTrue(new File(exportDir, "photometry_stars.csv").isFile());
         assertTrue(new File(exportDir, "photometry_lightcurves.csv").isFile());
         assertTrue(new File(exportDir, "photometry_frames.csv").isFile());
@@ -128,6 +132,14 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(html.contains("Variable Stars: Session Diagnostics"));
         assertTrue(html.contains("Variable Stars: Candidates"));
         assertTrue(html.contains("Variable Stars: Per-Frame Measurements"));
+    }
+
+    @Test
+    public void localFailureTextSaysWhetherNeighboursShareThePattern() {
+        assertTrue(PhotometryReportSectionWriter.gateOutcome("LOCAL", true, 8).contains("fade and brighten the same way"));
+        assertTrue(PhotometryReportSectionWriter.gateOutcome("LOCAL", true, 1).contains("not enough steady stars"));
+        assertTrue(PhotometryReportSectionWriter.gateOutcome("LOCAL", false, 8).contains("do not follow"));
+        assertTrue(PhotometryReportSectionWriter.gateQuestion("LOCAL").contains("part of the picture"));
     }
 
     @Test
