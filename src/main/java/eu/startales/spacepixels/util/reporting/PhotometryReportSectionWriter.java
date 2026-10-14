@@ -1355,7 +1355,9 @@ final class PhotometryReportSectionWriter {
         report.println("<h2>Variable Stars: Per-Frame Measurements</h2>");
         report.println("<p class='compact-note'>Each row is one frame. Hover a column name for what the number means.</p>");
         report.println("<p class='compact-note'><strong>Brightness of the frame.</strong> Z is how much the whole frame is fainter (positive) or brighter (negative) than a typical frame. "
-                + "Tilt X and Tilt Y are a slope across the frame that was removed, in magnitudes from the centre to the edge.</p>");
+                + "Tilt X and Tilt Y are a slope across the frame that was removed, in magnitudes from the centre to the edge. "
+                + "A frame is left out when one ninth of it stays at least 0.10 mag brighter or fainter than the centre after that tilt is removed. "
+                + "Its status then says Spatial residual and the size of that difference.</p>");
         report.println("<p class='compact-note'><strong>Star shapes.</strong> FWHM is how wide the stars are, in pixels. B says whether bright stars still have the same shape as faint ones. "
                 + "Linear limit is the brightness where stars start to flatten, and linear range is how many magnitudes fainter than that still look trustworthy.</p>");
         report.println("<p class='compact-note'><strong>Can the magnitudes be trusted?</strong> D and Slope say whether faint stars changed more than bright stars. Slope err is how uncertain that slope is. "
