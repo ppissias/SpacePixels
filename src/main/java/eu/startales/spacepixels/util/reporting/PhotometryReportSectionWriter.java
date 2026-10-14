@@ -59,7 +59,7 @@ final class PhotometryReportSectionWriter {
         GATE_DESCRIPTIONS.put("SPLIT_HALF", "Consecutive measurement pairs agree");
         GATE_DESCRIPTIONS.put("APERTURE", "Small and large apertures give the same amplitude");
         GATE_DESCRIPTIONS.put("SYSTEMATICS", "Not correlated with transparency, FWHM, sky or offsets");
-        GATE_DESCRIPTIONS.put("LOCAL", "Nearby constant stars do not share the pattern with a similar amplitude");
+        GATE_DESCRIPTIONS.put("LOCAL", "Nearby comparison stars do not share the pattern with a similar amplitude");
         GATE_DESCRIPTIONS.put("LINEARITY", "Never saturated or brighter than the linear limit");
     }
 
