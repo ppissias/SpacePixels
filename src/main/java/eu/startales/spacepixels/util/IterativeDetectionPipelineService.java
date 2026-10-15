@@ -159,7 +159,8 @@ final class IterativeDetectionPipelineService {
                         cachedFileInfo,
                         iterationDir,
                         effectiveConfig,
-                        appConfig);
+                        appConfig,
+                        detectionSummary.reportInclusion());
             } catch (IOException e) {
                 System.err.println("Failed to export visualization for iteration " + k + ": " + e.getMessage());
             }

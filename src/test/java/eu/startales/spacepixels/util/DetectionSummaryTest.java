@@ -35,4 +35,11 @@ public class DetectionSummaryTest {
                 60, 0, 0, 60, 0, 0, 0, 0, 0, "NOT_READY", 0, 0, 0, 0, 0);
         assertTrue(notReady.warningMessage(false, 50).contains("not ready for photometry"));
     }
+
+    @Test
+    public void reportChoiceIsOfferedOnlyWhenTheDetectionRanThatGroup() {
+        assertFalse(ImageProcessing.DetectionSummary.offerInReport(false, 40));
+        assertFalse(ImageProcessing.DetectionSummary.offerInReport(true, 0));
+        assertTrue(ImageProcessing.DetectionSummary.offerInReport(true, 40));
+    }
 }

@@ -86,6 +86,8 @@ public class ImageProcessing implements AutoCloseable {
         public final String photometryVerdict;
         public final int variableStarCandidates;
         public final int possibleVariableStars;
+        /** Groups to write. The warning dialog replaces this when the user leaves some out. */
+        private ReportInclusion reportInclusion = ReportInclusion.all();
 
         DetectionSummary(int totalDetections,
                          int singleStreaks,
@@ -119,32 +121,48 @@ public class ImageProcessing implements AutoCloseable {
             this.lowConfidenceAnomalies = lowConfidenceAnomalies;
         }
 
+        /** Which optional groups this report should contain. All of them, unless the warning dialog said otherwise. */
+        public ReportInclusion reportInclusion() {
+            return reportInclusion;
+        }
+
         /**
          * Asks whether to build the report when the classified count is above {@code limit}.
-         * A count at or under the limit proceeds without a dialog.
+         * A count at or under the limit proceeds without a dialog. Optional groups the detection had switched on
+         * can be left out of the report; groups that were switched off are not offered.
          *
          * @param heading optional line above the summary, for an iterative pass
+         * @param config the settings this detection used, or null when every measured group may be offered
          * @return true when the report should be generated
          */
-        public boolean confirmReport(boolean plateSolved, int limit, String heading) {
+        public boolean confirmReport(boolean plateSolved, int limit, String heading, DetectionConfig config) {
             if (totalDetections <= limit) {
                 return true;
             }
             final boolean[] proceed = {false};
             try {
                 SwingUtilities.invokeAndWait(() -> {
-                    int choice = JOptionPane.showConfirmDialog(
+                    ReportChoice choice = warningPanel(plateSolved, heading, config);
+                    int answer = JOptionPane.showConfirmDialog(
                             null,
-                            warningPanel(plateSolved, limit, heading),
+                            choice.panel,
                             "Detection summary",
                             JOptionPane.YES_NO_OPTION,
                             JOptionPane.WARNING_MESSAGE);
-                    proceed[0] = choice == JOptionPane.YES_OPTION;
+                    proceed[0] = answer == JOptionPane.YES_OPTION;
+                    if (proceed[0]) {
+                        reportInclusion = choice.inclusion();
+                    }
                 });
             } catch (Exception e) {
                 return false;
             }
             return proceed[0];
+        }
+
+        /** A checkbox is offered only for a group the detection ran and that found something. */
+        static boolean offerInReport(boolean featureEnabled, int count) {
+            return featureEnabled && count > 0;
         }
 
         /**
@@ -188,14 +206,14 @@ public class ImageProcessing implements AutoCloseable {
                     + "Do you want to generate the report anyway?";
         }
 
-        private JComponent warningPanel(boolean plateSolved, int limit, String heading) {
+        private ReportChoice warningPanel(boolean plateSolved, String heading, DetectionConfig config) {
             JPanel panel = new JPanel();
             panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
             panel.setOpaque(false);
             panel.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 4));
 
             String title = (heading == null || heading.isBlank() ? "" : heading + " — ")
-                    + "This run found " + totalDetections + " detections, above the usual " + limit + ".";
+                    + "This run found " + totalDetections + " detections.";
             panel.add(aligned(label(title, true)));
             panel.add(Box.createVerticalStrut(10));
 
@@ -205,33 +223,79 @@ public class ImageProcessing implements AutoCloseable {
             String anomalyValue = lowConfidenceAnomalies > 0
                     ? anomalies + "  (" + lowConfidenceAnomalies + " low confidence)"
                     : Integer.toString(anomalies);
-            String[][] rows = {
-                    {"Moving-object tracks", Integer.toString(movingTargets)},
-                    {"Streak tracks", Integer.toString(streakTracks)},
-                    {"Single streaks", Integer.toString(singleStreaks)},
-                    {"Suspected streak groupings", Integer.toString(suspectedStreakTracks)},
-                    {"Single-frame anomalies", anomalyValue},
-                    {"Slow-mover candidates", Integer.toString(slowMoverCandidates)},
-                    {"Local rescue candidates", Integer.toString(localRescueCandidates)},
-                    {"Local activity clusters", Integer.toString(localActivityClusters)},
-                    {"Common-motion groups", Integer.toString(commonMotionGroups)}
+            boolean anomaliesOn = config == null || config.enableAnomalyRescue;
+            boolean slowMoversOn = config == null || config.enableSlowMoverDetection;
+            boolean residualOn = config == null || config.enableResidualTransientAnalysis;
+            boolean localRescueOn = residualOn && (config == null || config.enableLocalRescueCandidates);
+            boolean localActivityOn = residualOn && (config == null || config.enableLocalActivityClusters);
+            boolean commonMotionOn = config == null || config.enableCommonMotionRejection;
+            boolean variableStarsOn = config != null && config.enableVariableStarDetection
+                    && photometryVerdict != null && !"NOT_RUN".equals(photometryVerdict);
+            OptionalRow[] rows = {
+                    OptionalRow.always("Moving-object tracks", Integer.toString(movingTargets), movingTargets),
+                    OptionalRow.always("Streak tracks", Integer.toString(streakTracks), streakTracks),
+                    OptionalRow.always("Single streaks", Integer.toString(singleStreaks), singleStreaks),
+                    OptionalRow.always("Suspected streak groupings", Integer.toString(suspectedStreakTracks), suspectedStreakTracks),
+                    OptionalRow.when(anomaliesOn, "Single-frame anomalies", anomalyValue, anomalies),
+                    OptionalRow.when(slowMoversOn, "Slow-mover candidates", Integer.toString(slowMoverCandidates), slowMoverCandidates),
+                    OptionalRow.when(localRescueOn, "Local rescue candidates", Integer.toString(localRescueCandidates), localRescueCandidates),
+                    OptionalRow.when(localActivityOn, "Local activity clusters", Integer.toString(localActivityClusters), localActivityClusters),
+                    OptionalRow.when(commonMotionOn, "Common-motion groups", Integer.toString(commonMotionGroups), commonMotionGroups)
             };
+            JCheckBox anomaliesBox = null;
+            JCheckBox slowMoversBox = null;
+            JCheckBox localRescueBox = null;
+            JCheckBox localActivityBox = null;
+            JCheckBox commonMotionBox = null;
+            JCheckBox[] boxes = {null, null, null, null, null, null, null, null, null};
+            if (offerInReport(anomaliesOn, anomalies)) {
+                anomaliesBox = includeBox();
+                boxes[4] = anomaliesBox;
+            }
+            if (offerInReport(slowMoversOn, slowMoverCandidates)) {
+                slowMoversBox = includeBox();
+                boxes[5] = slowMoversBox;
+            }
+            if (offerInReport(localRescueOn, localRescueCandidates)) {
+                localRescueBox = includeBox();
+                boxes[6] = localRescueBox;
+            }
+            if (offerInReport(localActivityOn, localActivityClusters)) {
+                localActivityBox = includeBox();
+                boxes[7] = localActivityBox;
+            }
+            if (offerInReport(commonMotionOn, commonMotionGroups)) {
+                commonMotionBox = includeBox();
+                boxes[8] = commonMotionBox;
+            }
+            JCheckBox variableStarsBox = offerInReport(variableStarsOn, 1) ? includeBox() : null;
+
             GridBagConstraints name = new GridBagConstraints();
             name.gridx = 0;
             name.anchor = GridBagConstraints.WEST;
             name.insets = new Insets(2, 0, 2, 18);
             GridBagConstraints value = new GridBagConstraints();
             value.gridx = 1;
-            value.weightx = 1;
             value.anchor = GridBagConstraints.EAST;
-            value.insets = new Insets(2, 0, 2, 0);
+            value.insets = new Insets(2, 0, 2, 8);
+            GridBagConstraints choice = new GridBagConstraints();
+            choice.gridx = 2;
+            choice.anchor = GridBagConstraints.WEST;
+            choice.insets = new Insets(2, 0, 2, 0);
             Color quiet = UIManager.getColor("Label.disabledForeground");
+            JLabel included = label("", false);
+            int row = 0;
+            boolean anyChoice = false;
             for (int i = 0; i < rows.length; i++) {
-                name.gridy = i;
-                value.gridy = i;
-                boolean zero = rows[i][1].startsWith("0");
-                JLabel nameLabel = new JLabel(rows[i][0]);
-                JLabel valueLabel = new JLabel(rows[i][1]);
+                if (rows[i] == null) {
+                    continue;
+                }
+                name.gridy = row;
+                value.gridy = row;
+                choice.gridy = row;
+                boolean zero = rows[i].count == 0;
+                JLabel nameLabel = new JLabel(rows[i].label);
+                JLabel valueLabel = new JLabel(rows[i].value);
                 valueLabel.setFont(valueLabel.getFont().deriveFont(Font.BOLD));
                 if (zero && quiet != null) {
                     nameLabel.setForeground(quiet);
@@ -239,21 +303,36 @@ public class ImageProcessing implements AutoCloseable {
                 }
                 grid.add(nameLabel, name);
                 grid.add(valueLabel, value);
+                if (boxes[i] != null) {
+                    grid.add(boxes[i], choice);
+                    anyChoice = true;
+                }
+                row++;
+            }
+            if (variableStarsOn) {
+                name.gridy = row;
+                value.gridy = row;
+                choice.gridy = row;
+                grid.add(new JLabel("Variable stars"), name);
+                grid.add(new JLabel(photometryLine()), value);
+                if (variableStarsBox != null) {
+                    grid.add(variableStarsBox, choice);
+                    anyChoice = true;
+                }
             }
             panel.add(grid);
+            JCheckBox[] watched = {anomaliesBox, slowMoversBox, localRescueBox, localActivityBox, commonMotionBox};
+            Runnable refreshIncluded = () -> included.setText(includedLine(watched));
+            for (JCheckBox box : watched) {
+                if (box != null) {
+                    box.addItemListener(e -> refreshIncluded.run());
+                }
+            }
+            refreshIncluded.run();
             panel.add(Box.createVerticalStrut(8));
             panel.add(aligned(wrapped("Still unclassified, not counted above: " + unclassifiedDetections
                     + ". The inspector lists them.")));
             panel.add(Box.createVerticalStrut(6));
-            String photometry;
-            if (photometryVerdict == null || "NOT_RUN".equals(photometryVerdict)) {
-                photometry = "off";
-            } else if ("NOT_READY".equals(photometryVerdict)) {
-                photometry = "session not ready for photometry (see the report)";
-            } else {
-                photometry = variableStarCandidates + " candidates, " + possibleVariableStars + " possible";
-            }
-            panel.add(aligned(wrapped("Variable stars: " + photometry)));
             panel.add(aligned(wrapped("Astrometry: " + (plateSolved
                     ? "a plate-solved frame is available, so the report has sky coordinates and online identification."
                     : "no plate-solved frame, so the report has no sky coordinates or identification."))));
@@ -261,9 +340,49 @@ public class ImageProcessing implements AutoCloseable {
             panel.add(aligned(wrapped("Largest group: " + largestGroup() + ". "
                     + "Image crops, GIFs and the HTML report for this many objects take a long time and a lot of disk. "
                     + "Many tracks or anomalies usually mean the Detection Sigma is too low and noise was linked.")));
+            if (anyChoice) {
+                panel.add(Box.createVerticalStrut(8));
+                panel.add(aligned(wrapped("Uncheck a group to leave it out of this report. The detection settings stay as they are.")));
+                panel.add(Box.createVerticalStrut(4));
+                panel.add(aligned(included));
+            }
             panel.add(Box.createVerticalStrut(10));
-            panel.add(aligned(label("Generate the report anyway?", true)));
-            return panel;
+            panel.add(aligned(label("Generate the report?", true)));
+            return new ReportChoice(panel, anomaliesBox, slowMoversBox, localRescueBox, localActivityBox, commonMotionBox, variableStarsBox);
+        }
+
+        private String includedLine(JCheckBox[] boxes) {
+            int included = movingTargets + streakTracks + singleStreaks + suspectedStreakTracks;
+            if (boxes[0] == null || boxes[0].isSelected()) {
+                included += anomalies;
+            }
+            if (boxes[1] == null || boxes[1].isSelected()) {
+                included += slowMoverCandidates;
+            }
+            if (boxes[2] == null || boxes[2].isSelected()) {
+                included += localRescueCandidates;
+            }
+            if (boxes[3] == null || boxes[3].isSelected()) {
+                included += localActivityClusters;
+            }
+            if (boxes[4] == null || boxes[4].isSelected()) {
+                included += commonMotionGroups;
+            }
+            return "The report will include " + included + " of these detections.";
+        }
+
+        private String photometryLine() {
+            if ("NOT_READY".equals(photometryVerdict)) {
+                return "session not ready for photometry";
+            }
+            return variableStarCandidates + " candidates, " + possibleVariableStars + " possible";
+        }
+
+        private static JCheckBox includeBox() {
+            JCheckBox box = new JCheckBox("In report");
+            box.setSelected(true);
+            box.setOpaque(false);
+            return box;
         }
 
         private static JLabel label(String text, boolean bold) {
@@ -295,6 +414,63 @@ public class ImageProcessing implements AutoCloseable {
                 }
             }
             return names[best] + " (" + counts[best] + ")";
+        }
+    }
+
+    /** One line of the warning. Null when that part of the detection was switched off. */
+    private static final class OptionalRow {
+        final String label;
+        final String value;
+        final int count;
+
+        private OptionalRow(String label, String value, int count) {
+            this.label = label;
+            this.value = value;
+            this.count = count;
+        }
+
+        static OptionalRow always(String label, String value, int count) {
+            return new OptionalRow(label, value, count);
+        }
+
+        static OptionalRow when(boolean featureEnabled, String label, String value, int count) {
+            return featureEnabled ? new OptionalRow(label, value, count) : null;
+        }
+    }
+
+    /** The warning panel and the include boxes, read after the dialog closes. */
+    private static final class ReportChoice {
+        final JComponent panel;
+        final JCheckBox anomalies;
+        final JCheckBox slowMovers;
+        final JCheckBox localRescue;
+        final JCheckBox localActivity;
+        final JCheckBox commonMotion;
+        final JCheckBox variableStars;
+
+        ReportChoice(JComponent panel, JCheckBox anomalies, JCheckBox slowMovers, JCheckBox localRescue,
+                     JCheckBox localActivity, JCheckBox commonMotion, JCheckBox variableStars) {
+            this.panel = panel;
+            this.anomalies = anomalies;
+            this.slowMovers = slowMovers;
+            this.localRescue = localRescue;
+            this.localActivity = localActivity;
+            this.commonMotion = commonMotion;
+            this.variableStars = variableStars;
+        }
+
+        ReportInclusion inclusion() {
+            return new ReportInclusion(
+                    selected(anomalies),
+                    selected(slowMovers),
+                    selected(localRescue),
+                    selected(localActivity),
+                    selected(commonMotion),
+                    selected(variableStars));
+        }
+
+        private static boolean selected(JCheckBox box) {
+            return box == null || box.isSelected();
         }
     }
 

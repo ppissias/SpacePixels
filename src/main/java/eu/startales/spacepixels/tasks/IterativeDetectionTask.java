@@ -85,7 +85,7 @@ public class IterativeDetectionTask implements Runnable {
             // Define the Safety Valve Callback
             // The limit is higher than a single pass because an iterative run aggregates detections.
             ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) ->
-                    summary.confirmReport(preProcessing.hasPlateSolvedFrame(), 100, "Iterative pass");
+                    summary.confirmReport(preProcessing.hasPlateSolvedFrame(), 100, "Iterative pass", config);
 
             // --- NEW: Define the Progress Callback Bridge ---
             TransientEngineProgressListener progressListener = (percentage, message) -> {

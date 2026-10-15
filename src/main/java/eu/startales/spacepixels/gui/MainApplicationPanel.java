@@ -70,6 +70,9 @@ public class MainApplicationPanel extends JPanel {
     private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
     private final JButton detectBatchButton = new JButton("Detect Moving Targets");
     private final JButton detectIterativelyButton = new JButton("Detect Iteratively (large datasets)");
+    private static final String AUTO_TUNE_TOOLTIP = "<html>Open the Detection Settings and run Auto-Tune on your frames, with the tuner and profile chosen there "
+            + "(Ctrl+T).<br>It measures the noise and the faintest stars it can find, and sets the detection settings to match.</html>";
+
     private final JButton autoTuneButton = new JButton("Auto-Tune Settings", new AutoTuneIcon(20));
     /** The Run Auto-Tune button of the Detection Settings Overview, whose enabling the Auto-Tune button follows. */
     private JButton overviewRunAutoTuneButton;
@@ -81,8 +84,11 @@ public class MainApplicationPanel extends JPanel {
     private final JLabel astrometryStatus = new JLabel();
     private final JLabel inspectStatus = new JLabel();
     private final JLabel detectStatus = new JLabel();
-    // Shares its state with the Variable-Star Detection setting once the settings panel binds it.
-    private final JCheckBox variableStarCheck = new JCheckBox("Variable-star photometry");
+    /** Readout of the settings the calibrated auto-tuner sets, shown beside Detect Moving Targets. */
+    private final JLabel activeDetectionValue = new JLabel("—");
+    private final JLabel activeMaskValue = new JLabel("—");
+    private final JLabel activeOverlapValue = new JLabel("—");
+    private final JLabel activeJitterValue = new JLabel("—");
     // Tooltip of each action button while it is enabled; a disabled button adds the reason
     private final Map<JButton, String> actionTooltips = new HashMap<>();
     private final List<JPanel> workflowGroups = new ArrayList<>();
@@ -145,8 +151,7 @@ public class MainApplicationPanel extends JPanel {
         setActionTooltip(manualTransientInspectionButton, "Extract purified transients from all frames against the master background and navigate through them using arrow keys.");
         setActionTooltip(detectBatchButton, "Run the full pipeline: detect, link and report moving objects across the whole sequence (Ctrl+D).");
         setActionTooltip(detectIterativelyButton, "For datasets too large for the standard run: multiple temporally spaced passes across the sequence.");
-        setActionTooltip(autoTuneButton, "<html>Open the Detection Settings and run Auto-Tune on your frames, with the tuner and profile chosen there "
-                + "(Ctrl+T).<br>It measures the noise and the faintest stars it can find, and sets the detection settings to match.</html>");
+        setActionTooltip(autoTuneButton, AUTO_TUNE_TOOLTIP);
         for (JButton button : actionTooltips.keySet()) {
             button.setEnabled(false);
         }
@@ -176,22 +181,51 @@ public class MainApplicationPanel extends JPanel {
         JPanel inspectGroup = workflowGroup("3  Inspect", inspectStatus,
                 buttonRow(blinkButton, detectSingleButton),
                 buttonRow(manualTransientInspectionButton));
-        JLabel editSettingsLink = new JLabel("<html><u>Edit settings…</u></html>");
-        editSettingsLink.setForeground(LINK_COLOR);
-        editSettingsLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        editSettingsLink.setToolTipText("Open the Detection Settings tab (Auto-Tune, thresholds, variable stars).");
-        editSettingsLink.addMouseListener(new MouseAdapter() {
+        detectStatus.setForeground(UIManager.getColor("Label.disabledForeground"));
+        detectStatus.setBorder(BorderFactory.createEmptyBorder(6, 2, 0, 0));
+        detectStatus.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // The note wraps under the button. Its own preferred width must not push the Detect button away.
+        JPanel tuneColumn = new JPanel() {
             @Override
-            public void mouseClicked(MouseEvent e) {
-                if (!uiLocked) {
-                    mainAppWindow.getTabbedPane().setSelectedIndex(3);
-                }
+            public Dimension getPreferredSize() {
+                int width = autoTuneButton.getPreferredSize().width;
+                int height = autoTuneButton.getPreferredSize().height + wrappedStatusHeight(width);
+                Insets insets = getInsets();
+                return new Dimension(width + insets.left + insets.right, height + insets.top + insets.bottom);
             }
-        });
-        JPanel detectGroup = workflowGroup("4  Detect", detectStatus,
-                buttonRow(autoTuneButton, detectBatchButton),
-                buttonRow(detectIterativelyButton),
-                buttonRow(variableStarCheck, editSettingsLink));
+
+            @Override
+            public Dimension getMaximumSize() {
+                return new Dimension(getPreferredSize().width, Integer.MAX_VALUE);
+            }
+        };
+        tuneColumn.setLayout(new BoxLayout(tuneColumn, BoxLayout.Y_AXIS));
+        tuneColumn.setOpaque(false);
+        autoTuneButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tuneColumn.add(autoTuneButton);
+        tuneColumn.add(detectStatus);
+        JComponent settingsCard = activeSettingsCard();
+        JPanel detectColumn = new JPanel();
+        detectColumn.setLayout(new BoxLayout(detectColumn, BoxLayout.Y_AXIS));
+        detectColumn.setOpaque(false);
+        detectBatchButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+        detectIterativelyButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+        settingsCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+        detectColumn.add(detectBatchButton);
+        detectColumn.add(Box.createVerticalStrut(4));
+        detectColumn.add(detectIterativelyButton);
+        detectColumn.add(Box.createVerticalStrut(6));
+        detectColumn.add(settingsCard);
+        JPanel detectBody = new JPanel();
+        detectBody.setLayout(new BoxLayout(detectBody, BoxLayout.X_AXIS));
+        detectBody.setOpaque(false);
+        detectBody.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tuneColumn.setAlignmentY(Component.TOP_ALIGNMENT);
+        detectColumn.setAlignmentY(Component.TOP_ALIGNMENT);
+        detectBody.add(tuneColumn);
+        detectBody.add(Box.createHorizontalStrut(8));
+        detectBody.add(detectColumn);
+        JPanel detectGroup = workflowGroup("4  Detect", null, detectBody);
 
         JPanel workflowStrip = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 6));
         workflowStrip.add(prepareGroup);
@@ -263,29 +297,7 @@ public class MainApplicationPanel extends JPanel {
             blinkLoader.start();
         });
 
-        detectSingleButton.addActionListener(e -> {
-            FitsFileTableModel model = (FitsFileTableModel) table.getModel();
-            if (model == null || model.getRowCount() == 0) return;
-
-            FitsFileInformation[] allFiles = new FitsFileInformation[model.getRowCount()];
-            for (int i = 0; i < model.getRowCount(); i++) {
-                allFiles[i] = model.getFitsFileAt(i);
-            }
-
-            int startIndex = table.getSelectedRow();
-            if (startIndex < 0) startIndex = 0;
-
-            if (detectionSequenceFrame == null) {
-                detectionSequenceFrame = new DetectionSequenceFrame(mainAppWindow);
-            }
-
-            detectionSequenceFrame.openSequence(
-                    allFiles,
-                    startIndex,
-                    mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig(),
-                    mainAppWindow.getStretchPanel()
-            );
-        });
+        detectSingleButton.addActionListener(e -> previewSelectedFrame());
 
         manualTransientInspectionButton.addActionListener(e -> {
             new Thread(new ManualTransientInspectionTask(
@@ -491,10 +503,12 @@ public class MainApplicationPanel extends JPanel {
             group.add(row);
         }
         group.add(Box.createVerticalGlue());
-        status.setAlignmentX(Component.LEFT_ALIGNMENT);
-        status.setForeground(UIManager.getColor("Label.disabledForeground"));
-        status.setBorder(BorderFactory.createEmptyBorder(4, 4, 0, 0));
-        group.add(status);
+        if (status != null) {
+            status.setAlignmentX(Component.LEFT_ALIGNMENT);
+            status.setForeground(UIManager.getColor("Label.disabledForeground"));
+            status.setBorder(BorderFactory.createEmptyBorder(4, 4, 0, 0));
+            group.add(status);
+        }
         return group;
     }
 
@@ -570,7 +584,7 @@ public class MainApplicationPanel extends JPanel {
             astrometryStatus.setToolTipText(null);
             hasSolvedFrame = false;
             inspectStatus.setText(" ");
-            detectStatus.setText("Import aligned frames to start");
+            setDetectStatus("Import aligned frames to start");
         } else {
             prepareStatus.setText(containsColorImages ? "Colour frames: convert first" : "✓ Monochrome, " + frames + " frames");
             int solved = 0;
@@ -592,39 +606,136 @@ public class MainApplicationPanel extends JPanel {
             }
             int selected = table.getSelectedRowCount();
             inspectStatus.setText(selected == 0 ? "No frames selected" : selected + (selected == 1 ? " frame selected" : " frames selected"));
-            detectStatus.setText(containsColorImages ? "Convert to monochrome first" : "Settings: " + detectionSettingsSummary());
+            if (containsColorImages) {
+                setDetectStatus("Convert to monochrome first");
+            } else {
+                String saved = savedAutoTuneLine();
+                setDetectStatus(saved == null ? "Settings: " + detectionSettingsSummary()
+                        : "Settings: " + detectionSettingsSummary() + "<br>" + saved);
+            }
         }
         boolean fetching = skyFetchThread != null;
         skyCatalogueButton.setText(fetching ? "Cancel Sky Catalogue" : FETCH_SKY_CATALOGUE);
         skyCatalogueButton.setEnabled(!uiLocked && (fetching || hasSolvedFrame));
         updateAutoTuneButton();
-        updateVariableStarTooltip();
+        updateAutoTuneTooltip();
         for (JButton button : actionTooltips.keySet()) {
             updateActionTooltip(button);
         }
     }
 
     /**
-     * Shares the photometry switch with the Variable-Star Detection setting, so either place turns it on or off.
+     * The eight values the calibrated auto-tuner sets: detection sigma, grow and minimum pixels; master sigma,
+     * grow and minimum pixels; mask overlap; base star jitter, in pixels.
      */
-    void bindVariableStarToggle(ButtonModel settingModel) {
-        variableStarCheck.setModel(settingModel);
-        variableStarCheck.addItemListener(e -> updateVariableStarTooltip());
-        updateVariableStarTooltip();
+    void showActiveDetectionSettings(double detectionSigma, double growSigma, int minPixels,
+                                     double masterSigma, double masterGrowSigma, int masterMinPixels,
+                                     double maskOverlap, double jitterPixels) {
+        activeDetectionValue.setText(String.format(Locale.US, "%.2f / %.2f / %d", detectionSigma, growSigma, minPixels));
+        activeMaskValue.setText(String.format(Locale.US, "%.2f / %.2f / %d", masterSigma, masterGrowSigma, masterMinPixels));
+        activeOverlapValue.setText(String.format(Locale.US, "%.2f", maskOverlap));
+        activeJitterValue.setText(String.format(Locale.US, "%.2f px", jitterPixels));
     }
 
-    private void updateVariableStarTooltip() {
-        String text = "<html>Also measure the brightness of the field stars in every frame and look for variable stars<br>"
-                + "(light curves and candidates in the report). Runs with Detect Moving Targets; the iterative mode skips it.";
-        if (variableStarCheck.isSelected() && !hasSolvedFrame) {
-            text += "<br><i>Plate-solve one frame so the candidates can be matched against AAVSO VSX.</i>";
+    /** Small rectangle of the active detection settings, with the link that opens Detection Settings. */
+    private JComponent activeSettingsCard() {
+        Font small = UIManager.getFont("Label.font");
+        small = small == null ? new Font(Font.SANS_SERIF, Font.PLAIN, 11) : small.deriveFont(Math.max(10f, small.getSize2D() - 2f));
+        Color nameColor = UIManager.getColor("Label.disabledForeground");
+        JPanel card = new JPanel(new GridBagLayout());
+        Color border = UIManager.getColor("Component.borderColor");
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(border != null ? border : new Color(0x666666)),
+                BorderFactory.createEmptyBorder(3, 6, 2, 6)));
+        card.setToolTipText("<html>The detection settings in use, the ones the calibrated Auto-Tuner sets.<br>"
+                + "Detection and star mask are sigma / grow sigma / minimum pixels.</html>");
+        GridBagConstraints c = new GridBagConstraints();
+        c.anchor = GridBagConstraints.WEST;
+        c.insets = new Insets(0, 0, 1, 0);
+        addReadoutRow(card, c, 0, small, nameColor, "Detection", activeDetectionValue,
+                "Detection sigma, grow sigma and minimum pixels.");
+        addReadoutRow(card, c, 1, small, nameColor, "Star mask", activeMaskValue,
+                "Master sigma, master grow sigma and master minimum pixels.");
+        addReadoutRow(card, c, 2, small, nameColor, "Overlap", activeOverlapValue,
+                "Maximum share of a detection that may overlap the star mask.");
+        addReadoutRow(card, c, 3, small, nameColor, "Jitter", activeJitterValue,
+                "Base star jitter radius, in pixels. Detections that move less than this are treated as star jitter.");
+        JLabel editSettingsLink = new JLabel("<html><u>Edit settings…</u></html>");
+        editSettingsLink.setFont(small);
+        editSettingsLink.setForeground(LINK_COLOR);
+        editSettingsLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        editSettingsLink.setToolTipText("Open Detection Settings to change these values.");
+        editSettingsLink.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (!uiLocked) {
+                    mainAppWindow.getTabbedPane().setSelectedIndex(3);
+                }
+            }
+        });
+        c.gridy = 4;
+        c.gridx = 0;
+        c.gridwidth = 2;
+        c.insets = new Insets(3, 0, 0, 0);
+        card.add(editSettingsLink, c);
+        return card;
+    }
+
+    private static void addReadoutRow(JPanel card, GridBagConstraints c, int row, Font font, Color nameColor,
+                                      String name, JLabel value, String tip) {
+        JLabel nameLabel = new JLabel(name);
+        nameLabel.setFont(font);
+        nameLabel.setForeground(nameColor);
+        nameLabel.setToolTipText(tip);
+        value.setFont(font);
+        value.setToolTipText(tip);
+        c.gridy = row;
+        c.gridx = 0;
+        c.gridwidth = 1;
+        c.insets = new Insets(0, 0, 1, 8);
+        card.add(nameLabel, c);
+        c.gridx = 1;
+        c.insets = new Insets(0, 0, 1, 0);
+        card.add(value, c);
+    }
+
+    /** The note under Auto-Tune: which settings are in use, and when a saved auto-tune was run. */
+    private void setDetectStatus(String body) {
+        int width = Math.max(120, autoTuneButton.getPreferredSize().width - 4);
+        detectStatus.setText("<html><div style='width:" + width + "px'>" + body + "</div></html>");
+    }
+
+    /** Height of the Auto-Tune note when wrapped to the button width. */
+    private int wrappedStatusHeight(int width) {
+        javax.swing.text.View view = (javax.swing.text.View) detectStatus.getClientProperty(
+                javax.swing.plaf.basic.BasicHTML.propertyKey);
+        if (view == null) {
+            return detectStatus.getPreferredSize().height;
         }
-        variableStarCheck.setToolTipText(text + "</html>");
+        view.setSize(width, 0);
+        Insets insets = detectStatus.getInsets();
+        return (int) Math.ceil(view.getPreferredSpan(javax.swing.text.View.Y_AXIS)) + insets.top + insets.bottom;
     }
 
     private String detectionSettingsSummary() {
         DetectionConfigurationPanel settings = mainAppWindow.getDetectionConfigurationPanel();
         return settings == null ? "Manual settings" : settings.getSettingsSummary();
+    }
+
+    /** The saved auto-tune line for the imported dataset, or null when there is none. */
+    private String savedAutoTuneLine() {
+        DetectionConfigurationPanel settings = mainAppWindow.getDetectionConfigurationPanel();
+        return settings == null ? null : settings.getSavedAutoTuneLine();
+    }
+
+    /** Adds the saved-run date to the Auto-Tune button, and says that a click measures again. */
+    private void updateAutoTuneTooltip() {
+        int frames = table == null ? 0 : table.getRowCount();
+        String saved = frames == 0 ? null : savedAutoTuneLine();
+        String tooltip = saved == null ? AUTO_TUNE_TOOLTIP
+                : AUTO_TUNE_TOOLTIP.replace("</html>", "<br>" + saved + ". A click measures the frames again.</html>");
+        actionTooltips.put(autoTuneButton, tooltip);
+        updateActionTooltip(autoTuneButton);
     }
 
     /** Right-click menu on the frame table for the actions on selected frames. */
@@ -1258,6 +1369,38 @@ public class MainApplicationPanel extends JPanel {
     private void enableControlsProcessingFinished() { unlockUI(); }
     private void disableControlsBlinking() { lockUI(); }
     private void enableControlsProcessingBlinkingFinished() { unlockUI(); }
+
+    /**
+     * Opens Preview Frame on the selected frame, with the current detection settings.
+     * The Detection Settings button uses this same window.
+     */
+    void previewSelectedFrame() {
+        FitsFileTableModel model = (FitsFileTableModel) table.getModel();
+        if (model == null || model.getRowCount() == 0) {
+            return;
+        }
+
+        FitsFileInformation[] allFiles = new FitsFileInformation[model.getRowCount()];
+        for (int i = 0; i < model.getRowCount(); i++) {
+            allFiles[i] = model.getFitsFileAt(i);
+        }
+
+        int startIndex = table.getSelectedRow();
+        if (startIndex < 0) {
+            startIndex = 0;
+        }
+
+        if (detectionSequenceFrame == null) {
+            detectionSequenceFrame = new DetectionSequenceFrame(mainAppWindow);
+        }
+
+        detectionSequenceFrame.openSequence(
+                allFiles,
+                startIndex,
+                mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig(),
+                mainAppWindow.getStretchPanel()
+        );
+    }
 
     public void setDetectionButtonsEnabled() {
         this.detectSingleButton.setEnabled(true);

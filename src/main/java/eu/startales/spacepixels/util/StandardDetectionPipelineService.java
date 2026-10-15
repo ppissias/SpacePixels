@@ -47,12 +47,14 @@ final class StandardDetectionPipelineService {
                 progressListener == null ? null : (percent, message) -> progressListener.onProgressUpdate((int) (percent * 0.9), message));
         lastTrackOverlay = TrackOverlay.from(executionData.getPipelineResult());
 
+        ReportInclusion reportInclusion = ReportInclusion.all();
         if (safetyPrompt != null) {
             ImageProcessing.DetectionSummary detectionSummary = DetectionPipelineSupport.summarizeDetections(executionData.getPipelineResult());
             if (!safetyPrompt.shouldProceed(detectionSummary)) {
                 System.out.println("Report generation aborted by UI callback. Detection count: " + detectionSummary.totalDetections);
                 return null;
             }
+            reportInclusion = detectionSummary.reportInclusion();
         }
 
         System.out.println("\n--- PHASE 5: Exporting Visualizations ---");
@@ -61,7 +63,7 @@ final class StandardDetectionPipelineService {
         }
 
         try {
-            File reportFile = exportDetectionReport(executionData);
+            File reportFile = exportDetectionReport(executionData, reportInclusion);
             if (progressListener != null) {
                 progressListener.onProgressUpdate(100, "Finished!");
             }
@@ -139,6 +141,10 @@ final class StandardDetectionPipelineService {
     }
 
     File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData) throws IOException {
+        return exportDetectionReport(executionData, ReportInclusion.all());
+    }
+
+    File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData, ReportInclusion inclusion) throws IOException {
         if (executionData == null) {
             throw new IllegalArgumentException("executionData must not be null");
         }
@@ -155,7 +161,8 @@ final class StandardDetectionPipelineService {
                 filesInformation,
                 exportDir,
                 executionData.getEffectiveConfig(),
-                appConfig);
+                appConfig,
+                inclusion);
         return new File(exportDir, DetectionReportGenerator.detectionReportName);
     }
 }

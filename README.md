@@ -120,7 +120,7 @@ For the underlying detection logic and the meaning of the engine configuration o
 - Reviews maximum-stack elongated morphology candidates using geometric shape and exact median-mask overlap filters; these are not confirmed moving tracks.
 - Provides an iterative detection mode for large datasets and very slow targets.
 - Auto-tunes the detection settings for each session. The default calibrated tuner measures false detections and sensitivity on the session's own frames and offers four profiles: low, medium, high (the default) and maximum (as sensitive as possible, for small sensors or targeted searches for a faint object). The original score-based tuner is still available.
-- Optionally measures the photometry of the stationary stars and reports variable-star candidates with light curves, readiness checks and a lookup in the AAVSO VSX catalogue. Switch it on with the `Variable-star photometry` checkbox next to the Detect button; plate-solve one frame so candidates can be matched against VSX.
+- Optionally measures the photometry of the stationary stars and reports variable-star candidates with light curves, readiness checks and a lookup in the AAVSO VSX catalogue. Switch it on under Analyses in This Run on the Detection Settings Overview; plate-solve one frame so candidates can be matched against VSX.
 - Generates an HTML report with diagnostics, GIFs, geometric overlays, global maps, object-identification links, and optional AI-themed summary sections.
 - Supports manual transient inspection and frame-by-frame single-image detection preview.
 - Blinks aligned frames for traditional visual inspection.
@@ -192,7 +192,7 @@ To generate a local distribution with launch scripts:
 5. Optionally adjust the display stretch in the `Image Stretch` tab (used by Blink, the full-size viewer and the optional stretched copies; detection always uses the linear data).
 6. Run Auto-Tune on the `Overview` page of the `Detection Settings` tab (one run measures all four profiles; pick one in the table), or adjust the settings by hand.
 7. Run either:
-   - `Detect Moving Targets` (the standard pipeline, Ctrl+D), optionally with `Variable-star photometry` ticked, or
+   - `Detect Moving Targets` (the standard pipeline, Ctrl+D), optionally with variable-star photometry switched on in Detection Settings, or
    - `Detect Iteratively (large datasets)` for large datasets where the standard full run may be too heavy.
 8. When the run finishes, SpacePixels prompts you to open the generated HTML report or, for iterative runs, the results folder containing the per-pass reports.
 

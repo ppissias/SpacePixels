@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.gui;
 
+import eu.startales.spacepixels.util.AutoTuneSessionStore;
 import eu.startales.spacepixels.util.AutoTunerRunner;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.CalibratedAutoTuner;
@@ -23,8 +24,12 @@ import javax.swing.table.JTableHeader;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -101,7 +106,8 @@ public class AutoTuneOverviewPanel extends JPanel {
     private final JButton runButton = new JButton("Run Auto-Tune");
     private final JButton useProfileButton = new JButton("Use Selected Profile");
     private final JButton reportButton = new JButton("Measurement Report…");
-    private final JButton previewButton = new JButton("Preview on Frame…");
+    private final JButton chartButton = new JButton("Show Auto-Tune Chart…");
+    private final JButton previewButton = new JButton("Preview Frame");
     private final JButton detectButton = new JButton("Detect Moving Targets");
     private final JLabel profileLabel = new JLabel();
     private final JLabel tableNoteLabel = new JLabel(" ");
@@ -127,15 +133,22 @@ public class AutoTuneOverviewPanel extends JPanel {
 
     /** The result shown in the table: the last run of the tuner selected in the Tuner box. */
     private JTransientAutoTuner.AutoTunerResult lastResult;
-    /** Last run of each tuner on this session, and its "Last run" line. */
+    /** Last run of each tuner on this session, in memory and, once saved, in the session folder. */
     private final Map<AutoTunerRunner.Algorithm, JTransientAutoTuner.AutoTunerResult> resultsByTuner = new EnumMap<>(AutoTunerRunner.Algorithm.class);
-    private final Map<AutoTunerRunner.Algorithm, String> runTextByTuner = new EnumMap<>(AutoTunerRunner.Algorithm.class);
+    private final Map<AutoTunerRunner.Algorithm, Instant> ranAtByTuner = new EnumMap<>(AutoTunerRunner.Algorithm.class);
+    private final Map<AutoTunerRunner.Algorithm, Long> elapsedByTuner = new EnumMap<>(AutoTunerRunner.Algorithm.class);
+    /** The profile a legacy run searched for. The calibrated run holds every profile. */
+    private final Map<AutoTunerRunner.Algorithm, AutoTuneProfile> profileByTuner = new EnumMap<>(AutoTunerRunner.Algorithm.class);
     private AutoTunerRunner.Algorithm runningAlgorithm;
     private AutoTuneProfile appliedProfile;
     private boolean adjustingProfiles;
     /** The tuner whose result is applied, so the ● marker only shows in that tuner's table. */
     private AutoTunerRunner.Algorithm appliedAlgorithm;
+    /** True when the applied settings came from the file, not from a run in this visit. */
+    private boolean restored;
     private String sessionName;
+    private File sessionFolder;
+    private List<String> sessionFileNames = Collections.emptyList();
     private int sessionFrames;
     private int sessionWidth;
     private int sessionHeight;
@@ -280,12 +293,16 @@ public class AutoTuneOverviewPanel extends JPanel {
                 host.showReport(lastResult.telemetryReport);
             }
         });
-        previewButton.setToolTipText("Run object detection on the frame selected in the Main tab with the current settings and show the detection mask.");
+        chartButton.setToolTipText("<html>Show why the calibrated tuner chose these settings: stars found against false detections,<br>"
+                + "and how faint the chosen setting still recovers a test star.</html>");
+        chartButton.addActionListener(e -> showAutoTuneChart());
+        previewButton.setToolTipText("Run the extraction engine on the frame selected in the Main tab and show what it finds, with the current settings.");
         previewButton.addActionListener(e -> host.showPreview());
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         actions.setBorder(new EmptyBorder(8, 0, 0, 0));
         actions.add(useProfileButton);
         actions.add(reportButton);
+        actions.add(chartButton);
         actions.add(previewButton);
         actions.add(Box.createHorizontalStrut(14));
         actions.add(detectButton);
@@ -431,20 +448,25 @@ public class AutoTuneOverviewPanel extends JPanel {
     // EVENTS FROM THE SETTINGS PANEL
     // ==========================================
 
-    /** Describes the imported session; a previous tune result belongs to another session and is cleared. */
-    void setSession(String name, int frames, int width, int height, boolean readyForTuning) {
-        boolean sameSession = name != null && name.equals(sessionName) && frames == sessionFrames
-                && width == sessionWidth && height == sessionHeight;
+    /**
+     * Describes the imported session. A result saved for these frames is shown again; a result from
+     * another folder is cleared. {@code fileNames} are the names only, not the paths.
+     */
+    void setSession(String name, int frames, int width, int height, boolean readyForTuning,
+                    File folder, List<String> fileNames) {
+        List<String> names = AutoTuneSessionStore.sortedNames(fileNames);
+        boolean sameSession = folder != null && folder.equals(sessionFolder) && frames == sessionFrames
+                && width == sessionWidth && height == sessionHeight && names.equals(sessionFileNames);
         sessionName = name;
         sessionFrames = frames;
         sessionWidth = width;
         sessionHeight = height;
         sessionReady = readyForTuning;
         if (!sameSession) {
-            lastResult = null;
-            resultsByTuner.clear();
-            runTextByTuner.clear();
-            tableModel.fireTableDataChanged();
+            clearRuns();
+            sessionFolder = folder;
+            sessionFileNames = names;
+            restoreSavedRuns();
         }
         refreshControls();
     }
@@ -472,15 +494,173 @@ public class AutoTuneOverviewPanel extends JPanel {
             long seconds = result.calibration != null
                     ? Math.round(result.calibration.elapsedSeconds)
                     : (System.currentTimeMillis() - tuneStartedMillis) / 1000;
-            resultsByTuner.put(tuner, result);
-            runTextByTuner.put(tuner, String.format(Locale.US, "Last run: %s, %d frames, %d×%d (%.1f MPix) · %s tuner · %s",
-                    sessionName == null ? "session" : sessionName, sessionFrames, sessionWidth, sessionHeight,
-                    sessionMegapixels(), tuner == AutoTunerRunner.Algorithm.LEGACY ? "legacy" : "calibrated",
-                    formatDuration(seconds)));
+            rememberRun(tuner, result, Instant.now(), seconds, (AutoTuneProfile) profileCombo.getSelectedItem());
+            restored = false;
             showResultsOf(tuner);
             applyProfile((AutoTuneProfile) profileCombo.getSelectedItem());
+            saveRuns();
         }
         refreshControls();
+    }
+
+    private void clearRuns() {
+        lastResult = null;
+        resultsByTuner.clear();
+        ranAtByTuner.clear();
+        elapsedByTuner.clear();
+        profileByTuner.clear();
+        restored = false;
+        appliedProfile = null;
+        appliedAlgorithm = null;
+        tunedValues.clear();
+        valuesBeforeTune.clear();
+        if (!tuning) {
+            statusLabel.setText(" ");
+        }
+        tableModel.fireTableDataChanged();
+        refreshMarkers();
+    }
+
+    /** Shows a result saved for these frames, and applies the default profile when that result has it. */
+    private void restoreSavedRuns() {
+        AutoTuneSessionStore.Document saved = AutoTuneSessionStore.loadMatching(
+                sessionFolder, sessionFrames, sessionWidth, sessionHeight, sessionFileNames);
+        if (saved == null) {
+            return;
+        }
+        boolean bulky = AutoTuneSessionStore.slim(saved);
+        install(AutoTunerRunner.Algorithm.CALIBRATED, saved.calibrated);
+        install(AutoTunerRunner.Algorithm.LEGACY, saved.legacy);
+        if (bulky && resultsByTuner.containsKey(AutoTunerRunner.Algorithm.CALIBRATED)) {
+            saveRuns();
+        }
+        if (resultsByTuner.isEmpty()) {
+            return;
+        }
+        restored = true;
+        showResultsOf(selectedAlgorithm());
+        if (!sessionReady) {
+            return;
+        }
+        AutoTuneProfile profile = (AutoTuneProfile) profileCombo.getSelectedItem();
+        if (canApply(profile)) {
+            applyProfile(profile);
+        } else {
+            noteSavedButNotApplied(profile);
+        }
+    }
+
+    private void install(AutoTunerRunner.Algorithm tuner, AutoTuneSessionStore.Run run) {
+        if (run == null || run.result == null || !run.result.success || run.ranAt == null) {
+            return;
+        }
+        Instant ranAt;
+        try {
+            ranAt = Instant.parse(run.ranAt);
+        } catch (RuntimeException e) {
+            return;
+        }
+        AutoTuneProfile profile = null;
+        if (run.profile != null) {
+            try {
+                profile = AutoTuneProfile.parse(run.profile);
+            } catch (IllegalArgumentException e) {
+                profile = null;
+            }
+        }
+        rememberRun(tuner, run.result, ranAt, run.elapsedSeconds, profile);
+    }
+
+    private void rememberRun(AutoTunerRunner.Algorithm tuner, JTransientAutoTuner.AutoTunerResult result,
+                             Instant ranAt, long elapsedSeconds, AutoTuneProfile profile) {
+        resultsByTuner.put(tuner, result);
+        ranAtByTuner.put(tuner, ranAt);
+        elapsedByTuner.put(tuner, elapsedSeconds);
+        if (profile != null) {
+            profileByTuner.put(tuner, profile);
+        }
+    }
+
+    /** The profile selected in the box can be taken from the tuner that is showing. */
+    private boolean canApply(AutoTuneProfile profile) {
+        JTransientAutoTuner.AutoTunerResult result = resultsByTuner.get(selectedAlgorithm());
+        if (result == null || !result.success || profile == null) {
+            return false;
+        }
+        if (result.calibration == null) {
+            return profile == profileByTuner.get(AutoTunerRunner.Algorithm.LEGACY);
+        }
+        CalibratedAutoTuner.Candidate[] chosen = result.calibration.chosen;
+        return chosen != null && profile.ordinal() < chosen.length && chosen[profile.ordinal()] != null;
+    }
+
+    /** A saved run is showing, but it is not the profile the box would apply on its own. */
+    private void noteSavedButNotApplied(AutoTuneProfile profile) {
+        AutoTunerRunner.Algorithm tuner = selectedAlgorithm();
+        if (resultsByTuner.get(tuner) == null) {
+            return;
+        }
+        String when = AutoTuneSessionStore.formatRanAt(instantText(ranAtByTuner.get(tuner)));
+        statusLabel.setForeground(UIManager.getColor("Label.foreground"));
+        if (resultsByTuner.get(tuner).calibration == null) {
+            AutoTuneProfile tuned = profileByTuner.get(AutoTunerRunner.Algorithm.LEGACY);
+            if (tuned == null) {
+                statusLabel.setText("A legacy result is saved" + (when == null ? "" : " (run at " + when + ")")
+                        + ", without a profile name. Run Auto-Tune again to replace it.");
+                return;
+            }
+            selectTableRow(tuned);
+            statusLabel.setText("The saved legacy run" + (when == null ? "" : " at " + when) + " is for " + profileName(tuned)
+                    + ". Use Selected Profile to apply it. The Profile box is still " + profileName(profile) + ".");
+        } else {
+            statusLabel.setText("The saved calibrated run" + (when == null ? "" : " at " + when) + " has no "
+                    + profileName(profile) + " profile. Pick a row and click Use Selected Profile.");
+        }
+    }
+
+    private void saveRuns() {
+        if (sessionFolder == null || sessionFileNames.isEmpty()) {
+            return;
+        }
+        try {
+            AutoTuneSessionStore.save(sessionFolder, currentDocument());
+        } catch (IOException e) {
+            statusLabel.setText(statusLabel.getText()
+                    + " It could not be saved in the session folder (" + e.getMessage() + "), so it lasts until SpacePixels closes.");
+        }
+    }
+
+    private AutoTuneSessionStore.Document currentDocument() {
+        if (resultsByTuner.isEmpty()) {
+            return null;
+        }
+        AutoTuneSessionStore.Document document = new AutoTuneSessionStore.Document();
+        document.frameCount = sessionFrames;
+        document.width = sessionWidth;
+        document.height = sessionHeight;
+        document.fileNames = new ArrayList<>(sessionFileNames);
+        document.calibrated = toRun(AutoTunerRunner.Algorithm.CALIBRATED);
+        document.legacy = toRun(AutoTunerRunner.Algorithm.LEGACY);
+        return document;
+    }
+
+    private AutoTuneSessionStore.Run toRun(AutoTunerRunner.Algorithm tuner) {
+        JTransientAutoTuner.AutoTunerResult result = resultsByTuner.get(tuner);
+        Instant ranAt = ranAtByTuner.get(tuner);
+        if (result == null || ranAt == null) {
+            return null;
+        }
+        AutoTuneSessionStore.Run run = new AutoTuneSessionStore.Run();
+        run.ranAt = ranAt.toString();
+        run.elapsedSeconds = elapsedByTuner.getOrDefault(tuner, 0L);
+        AutoTuneProfile profile = profileByTuner.get(tuner);
+        run.profile = profile == null ? null : profile.name();
+        run.result = result;
+        return run;
+    }
+
+    private static String instantText(Instant instant) {
+        return instant == null ? null : instant.toString();
     }
 
     /** Clears the tuned markers, for example after Load Defaults or Revert. */
@@ -511,7 +691,38 @@ public class AutoTuneOverviewPanel extends JPanel {
         if (appliedProfile == null) {
             return "Manual settings";
         }
-        return profileName(appliedProfile) + ", auto-tuned" + (editedSinceTune() ? ", edited" : "");
+        String when = appliedAlgorithm == null ? null : AutoTuneSessionStore.formatRanAt(instantText(ranAtByTuner.get(appliedAlgorithm)));
+        return profileName(appliedProfile) + ", auto-tuned" + (editedSinceTune() ? ", edited" : "")
+                + (when == null ? "" : " · run " + when);
+    }
+
+    /** The saved-runs line, or null when this dataset has no auto-tune file in memory. */
+    String savedAutoTuneLine() {
+        return AutoTuneSessionStore.describe(currentDocument());
+    }
+
+    private void showAutoTuneChart() {
+        if (!chartAvailable(lastResult)) {
+            return;
+        }
+        CalibratedAutoTuner.buildTradeoff(lastResult.calibration);
+        AutoTuneProfile profile = (AutoTuneProfile) profileCombo.getSelectedItem();
+        int row = profileTable.getSelectedRow();
+        if (row >= 0) {
+            profile = tableModel.profileAt(row);
+        }
+        AutoTuneChartDialog.show(this, lastResult.calibration, profile);
+    }
+
+    private static boolean chartAvailable(JTransientAutoTuner.AutoTunerResult result) {
+        if (result == null || result.calibration == null) {
+            return false;
+        }
+        CalibratedAutoTuner.Tradeoff tradeoff = result.calibration.tradeoff;
+        if (tradeoff != null && tradeoff.profiles != null) {
+            return true;
+        }
+        return result.calibration.candidates != null && !result.calibration.candidates.isEmpty();
     }
 
     // ==========================================
@@ -546,7 +757,9 @@ public class AutoTuneOverviewPanel extends JPanel {
         valuesBeforeTune.putAll(before);
         tunedValues.clear();
         tunedValues.putAll(after);
-        appliedProfile = lastResult.calibration != null ? profile : (AutoTuneProfile) profileCombo.getSelectedItem();
+        appliedProfile = lastResult.calibration != null
+                ? profile
+                : profileByTuner.getOrDefault(AutoTunerRunner.Algorithm.LEGACY, profile);
         appliedAlgorithm = selectedAlgorithm();
         tableModel.fireTableDataChanged();
         selectTableRow(appliedProfile);
@@ -637,9 +850,16 @@ public class AutoTuneOverviewPanel extends JPanel {
         }
         if (!tuning && appliedProfile != null) {
             statusLabel.setForeground(UIManager.getColor("Label.foreground"));
-            statusLabel.setText(profileName(appliedProfile) + " settings applied"
-                    + (editedSinceTune() ? " · manual changes since the tune" : "")
-                    + ". Click Detect Moving Targets to run; Save keeps them for the next start.");
+            String when = appliedAlgorithm == null ? null : AutoTuneSessionStore.formatRanAt(instantText(ranAtByTuner.get(appliedAlgorithm)));
+            if (restored && when != null) {
+                statusLabel.setText(profileName(appliedProfile) + " settings from the saved run at " + when + " applied"
+                        + (editedSinceTune() ? " · manual changes since then" : "")
+                        + ". Run Auto-Tune measures again; Save keeps these settings for the next start.");
+            } else {
+                statusLabel.setText(profileName(appliedProfile) + " settings applied"
+                        + (editedSinceTune() ? " · manual changes since the tune" : "")
+                        + ". Click Detect Moving Targets to run; Save keeps them for the next start.");
+            }
         }
         host.tuningStateChanged();
     }
@@ -713,15 +933,21 @@ public class AutoTuneOverviewPanel extends JPanel {
         runButton.setText(tuning ? "Tuning…" : "Run Auto-Tune");
         algorithmCombo.setEnabled(canTune);
         profileCombo.setEnabled(!tuning);
-        previewButton.setEnabled(sessionReady && !tuning);
+        previewButton.setEnabled(sessionFrames > 0 && !tuning);
         for (JButton action : coreActions) {
             action.setEnabled(sessionReady && !tuning);
         }
         reportButton.setEnabled(lastResult != null && !tuning);
-        useProfileButton.setEnabled(lastResult != null && lastResult.calibration != null && !tuning
-                && profileTable.getSelectedRow() >= 0);
-        if (lastResult != null) {
-            lastRunLabel.setText(runTextByTuner.getOrDefault(selectedAlgorithm(), " "));
+        chartButton.setEnabled(!tuning && chartAvailable(lastResult));
+        useProfileButton.setEnabled(lastResult != null && !tuning && profileTable.getSelectedRow() >= 0);
+        String saved = savedAutoTuneLine();
+        if (saved != null) {
+            String selectedNote = resultsByTuner.get(selectedAlgorithm()) == null
+                    ? " The " + (selectedAlgorithm() == AutoTunerRunner.Algorithm.LEGACY ? "legacy" : "calibrated")
+                    + " tuner has not been run yet for this dataset."
+                    : "";
+            lastRunLabel.setText("<html>" + saved + "." + selectedNote
+                    + "<br>Run Auto-Tune measures the selected tuner again.</html>");
         } else if (sessionName == null) {
             lastRunLabel.setText("Import monochrome frames to run Auto-Tune.");
         } else if (!sessionReady) {
@@ -764,7 +990,8 @@ public class AutoTuneOverviewPanel extends JPanel {
                         }
                     }
                 } else {
-                    rows.add((AutoTuneProfile) profileCombo.getSelectedItem());
+                    rows.add(profileByTuner.getOrDefault(AutoTunerRunner.Algorithm.LEGACY,
+                            (AutoTuneProfile) profileCombo.getSelectedItem()));
                 }
             }
             super.fireTableDataChanged();
@@ -924,10 +1151,6 @@ public class AutoTuneOverviewPanel extends JPanel {
 
     private static String formatCount(double value) {
         return String.format(Locale.US, "%,d", (long) value);
-    }
-
-    private static String formatDuration(long seconds) {
-        return seconds < 60 ? seconds + " s" : (seconds / 60) + " min " + (seconds % 60) + " s";
     }
 
     private static Color warningColor() {

@@ -114,6 +114,10 @@ The columns tell you what to expect: **Expected noise detections** is about how 
 
 The profile chosen in **Apply after run** (High by default) is applied as soon as the run finishes; SpacePixels remembers your choice. To switch, select another row and click **Use Selected Profile**. The changed settings are marked with a blue name and a dot, and **Save** keeps them for the next start.
 
+**Show Auto-Tune Chart…** draws, for the profile you pick, the false detections against the share of test stars found (the budget is the vertical line, and the marked point is the setting that was chosen) and the recovery of test stars by brightness for that setting.
+
+The result is also written next to the frames, as `auto_tune.json`, in the same way as the sky catalogue. The file keeps the chosen settings and this chart, not every combination the tuner tried. An older, much larger file is rewritten in this smaller form the next time that folder is imported. Importing that folder again shows when the calibrated tuner and the legacy tuner last ran (each is kept on its own). The profile in **Apply after run** is selected from the saved calibrated result when that result has it, so detection can use it without measuring again. **Run Auto-Tune**, **Auto-Tune Settings** and **Ctrl+T** always measure again and replace the saved result of the tuner you run. A legacy result is applied on import only when the **Tuner** box is set to Legacy and its profile matches the one that was tuned; otherwise the row is there and **Use Selected Profile** applies it.
+
 The **Legacy** tuner sets only the per-frame detection settings, the mask overlap and the star jitter; it keeps your star mask settings and does not measure noise rates. Its table shows just those columns, and only those settings get the dot.
 
 ### Step 4: detect
@@ -288,7 +292,7 @@ The JPL NEO Recovery search then identified it (see [Identifying objects](#5-ide
 
 ### Variable stars
 
-Variable-star photometry is an optional analysis: tick **Variable-star photometry** next to the Detect button (or **Variable-star photometry** under **Analyses in This Run** on the Overview) before you click **Detect Moving Targets**. It measures the brightness of the field stars in every frame and reports stars that change. It needs at least 20 frames after quality control, and the original, unstretched (linear) frames.
+Variable-star photometry is an optional analysis. Switch it on under **Analyses in This Run** on the Overview of Detection Settings, or on the Variable Stars page, before you click **Detect Moving Targets**. It measures the brightness of the field stars in every frame and reports stars that change. It needs at least 20 frames after quality control, and the original, unstretched (linear) frames.
 
 The same 61-megapixel session with photometry switched on:
 

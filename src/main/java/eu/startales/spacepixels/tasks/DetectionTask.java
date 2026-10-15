@@ -51,7 +51,7 @@ public class DetectionTask implements Runnable {
 
             // Define the Safety Valve Callback
             ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) ->
-                    summary.confirmReport(preProcessing.hasPlateSolvedFrame(), 50, null);
+                    summary.confirmReport(preProcessing.hasPlateSolvedFrame(), 50, null, config);
 
             // 2. Define the Progress Callback Bridge
             TransientEngineProgressListener progressListener = (percentage, message) -> {

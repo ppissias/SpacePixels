@@ -147,7 +147,8 @@ final class PipelineDiagnosticsSectionWriter {
                               List<TrackLinker.Track> localRescueTracks,
                               FieldDepth fieldDepth,
                               NightEquipment nightEquipment,
-                              int commonMotionGroups) {
+                              int commonMotionGroups,
+                              eu.startales.spacepixels.util.ReportInclusion inclusion) {
         if (pipelineTelemetry == null) {
             return;
         }
@@ -160,22 +161,40 @@ final class PipelineDiagnosticsSectionWriter {
         addResult(cards, empty, summary.movingTargetCount, "Moving-object tracks", "moving-targets");
         addResult(cards, empty, summary.streakTrackCount, "Streak tracks", "streak-tracks");
         addResult(cards, empty, summary.singleStreakCount, "Single-frame streaks", "single-streaks");
-        addResult(cards, empty, summary.anomalyCount, "Single-frame anomalies", "anomalies");
+        if (!inclusion.anomalies) {
+            empty.add("single-frame anomalies (left out of this report)");
+        } else {
+            addResult(cards, empty, summary.anomalyCount, "Single-frame anomalies", "anomalies");
+        }
         addResult(cards, empty, summary.suspectedStreakTrackCount, "Suspected streak tracks", "streak-tracks");
-        if (reportContext.config.enableSlowMoverDetection) {
+        if (!inclusion.slowMovers) {
+            empty.add("slow movers (left out of this report)");
+        } else if (reportContext.config.enableSlowMoverDetection) {
             addResult(cards, empty, summary.slowMoverCandidateCount, "Slow-mover candidates", "slow-movers");
         } else {
             empty.add("slow movers (switched off)");
         }
-        addResult(cards, empty, summary.localRescueCandidateCount, "Local rescue candidates", "local-rescue");
-        addResult(cards, empty, summary.localActivityClusterCount, "Local activity clusters", "activity-clusters");
-        if (reportContext.config != null && reportContext.config.enableCommonMotionRejection) {
+        if (!inclusion.localRescue) {
+            empty.add("local rescue candidates (left out of this report)");
+        } else {
+            addResult(cards, empty, summary.localRescueCandidateCount, "Local rescue candidates", "local-rescue");
+        }
+        if (!inclusion.localActivity) {
+            empty.add("local activity clusters (left out of this report)");
+        } else {
+            addResult(cards, empty, summary.localActivityClusterCount, "Local activity clusters", "activity-clusters");
+        }
+        if (!inclusion.commonMotion) {
+            empty.add("common-motion groups (left out of this report)");
+        } else if (reportContext.config != null && reportContext.config.enableCommonMotionRejection) {
             addResult(cards, empty, commonMotionGroups, "Common-motion groups", "common-motion");
         } else {
             empty.add("common motion (switched off)");
         }
         PipelineTelemetry.PhotometryTelemetry photometry = pipelineTelemetry.photometryTelemetry;
-        if (!reportContext.config.enableVariableStarDetection) {
+        if (!inclusion.variableStars) {
+            empty.add("variable stars (left out of this report)");
+        } else if (!reportContext.config.enableVariableStarDetection) {
             empty.add("variable stars (switched off)");
         } else if (photometry == null) {
             empty.add("variable stars (not run)");
@@ -261,7 +280,7 @@ final class PipelineDiagnosticsSectionWriter {
 
     /**
      * Writes the processing diagnostics (astrometry, quality control, configuration, masks, extraction and
-     * linking) as one collapsible group near the end of the report.
+     * linking) as one group near the end of the report. It starts expanded.
      */
     static void writeDiagnostics(PrintWriter report,
                                  DetectionReportContext reportContext,
@@ -270,8 +289,8 @@ final class PipelineDiagnosticsSectionWriter {
                                  DetectionReportSummary summary,
                                  List<SourceExtractor.Pixel> driftPoints,
                                  FieldDepth fieldDepth) throws IOException {
-        report.println("<details class='report-group' id='diagnostics'>");
-        report.println("<summary>Diagnostics<span class='summary-note'>Stage timings, astrometry, frame quality control, configuration, star mask, extraction and track linking. Click to expand.</span></summary>");
+        report.println("<details class='report-group' id='diagnostics' open>");
+        report.println("<summary>Diagnostics<span class='summary-note'>Stage timings, astrometry, frame quality control, configuration, star mask, extraction and track linking.</span></summary>");
         if (pipelineTelemetry != null) {
             writeStageTimings(report, pipelineTelemetry);
             writeAstrometricContext(report, reportContext);

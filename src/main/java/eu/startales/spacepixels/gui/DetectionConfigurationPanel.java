@@ -46,8 +46,6 @@ public class DetectionConfigurationPanel extends JPanel {
     //link to main window
     private final ApplicationWindow mainAppWindow;
 
-    private final TuningPreviewManager previewManager;
-
     private volatile DetectionConfig jTransientConfig;
     private volatile int autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
     private final File detectionProfileFile = new File(System.getProperty("user.home"), SpacePixelsDetectionProfileIO.DEFAULT_FILENAME);
@@ -142,8 +140,6 @@ public class DetectionConfigurationPanel extends JPanel {
         this.mainAppWindow = mainAppWindow;
         loadPersistedSettings();
 
-        this.previewManager = new TuningPreviewManager(mainAppWindow);
-
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(10, 10, 10, 10));
 
@@ -165,7 +161,6 @@ public class DetectionConfigurationPanel extends JPanel {
         buildAnalyses(overviewPanel);
         MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
         if (mainPanel != null) {
-            mainPanel.bindVariableStarToggle(chkEnableVariableStarDetection.getModel());
             overviewPanel.bindDetectButton(mainPanel.getDetectButton(), mainPanel::runDetection);
             mainPanel.bindAutoTuneButton(overviewPanel.getRunButton(), this::openOverviewAndRunAutoTune);
         }
@@ -368,7 +363,10 @@ public class DetectionConfigurationPanel extends JPanel {
 
         @Override
         public void showPreview() {
-            previewManager.showPreview(getJTransientConfig());
+            MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
+            if (mainPanel != null) {
+                mainPanel.previewSelectedFrame();
+            }
         }
 
         @Override
@@ -400,6 +398,11 @@ public class DetectionConfigurationPanel extends JPanel {
     /** One-line description of the detection settings in use, for the main window. */
     public String getSettingsSummary() {
         return overviewPanel == null ? "Manual settings" : overviewPanel.settingsSummary();
+    }
+
+    /** When this dataset has a saved auto-tune, the line that names each tuner and when it ran. */
+    public String getSavedAutoTuneLine() {
+        return overviewPanel == null ? null : overviewPanel.savedAutoTuneLine();
     }
 
     // ==========================================
@@ -1306,6 +1309,27 @@ public class DetectionConfigurationPanel extends JPanel {
         } finally {
             suppressAutoApply = wasSuppressed;
         }
+        publishActiveSettings();
+    }
+
+    /** Pushes the auto-tuned detection values to the readout on the main window. */
+    private void publishActiveSettings() {
+        if (spinDetectionSigma == null || spinMasterSigma == null || spinMaxMaskOverlapFraction == null || spinStarJitter == null) {
+            return;
+        }
+        MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
+        if (mainPanel == null) {
+            return;
+        }
+        mainPanel.showActiveDetectionSettings(
+                ((Number) spinDetectionSigma.getValue()).doubleValue(),
+                ((Number) spinGrowSigma.getValue()).doubleValue(),
+                ((Number) spinMinPixels.getValue()).intValue(),
+                ((Number) spinMasterSigma.getValue()).doubleValue(),
+                ((Number) spinMasterGrowSigma.getValue()).doubleValue(),
+                ((Number) spinMasterMinPix.getValue()).intValue(),
+                ((Number) spinMaxMaskOverlapFraction.getValue()).doubleValue(),
+                ((Number) spinStarJitter.getValue()).doubleValue());
     }
 
     private void normalizeDependentSpinners() {
@@ -1372,7 +1396,7 @@ public class DetectionConfigurationPanel extends JPanel {
             cachedMasterStack = null;
             cachedStackFiles = null;
             if (filesInfo == null || filesInfo.length == 0) {
-                overviewPanel.setSession(null, 0, 0, 0, false);
+                overviewPanel.setSession(null, 0, 0, 0, false, null, new ArrayList<>());
                 return;
             }
             boolean existsColor = false;
@@ -1384,8 +1408,13 @@ public class DetectionConfigurationPanel extends JPanel {
             }
             File firstFile = new File(filesInfo[0].getFilePath());
             String sessionName = firstFile.getParentFile() != null ? firstFile.getParentFile().getName() : firstFile.getName();
+            List<String> fileNames = new ArrayList<>();
+            for (FitsFileInformation file : filesInfo) {
+                fileNames.add(new File(file.getFilePath()).getName());
+            }
             boolean readyForTuning = !existsColor && filesInfo.length >= SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
-            overviewPanel.setSession(sessionName, filesInfo.length, filesInfo[0].getSizeWidth(), filesInfo[0].getSizeHeight(), readyForTuning);
+            overviewPanel.setSession(sessionName, filesInfo.length, filesInfo[0].getSizeWidth(), filesInfo[0].getSizeHeight(),
+                    readyForTuning, firstFile.getParentFile(), fileNames);
         });
     }
 
