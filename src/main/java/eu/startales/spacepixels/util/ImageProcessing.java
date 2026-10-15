@@ -27,6 +27,7 @@ import io.github.ppissias.jtransient.core.SourceExtractor;
 import javax.swing.*;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -393,8 +394,53 @@ public class ImageProcessing implements AutoCloseable {
             return result;
         }
 
-        private static JLabel wrapped(String text) {
-            return new JLabel("<html><body style='width:420px'>" + text + "</body></html>");
+        /** Wrapped plain text whose height is known before the dialog is shown. HTML labels report one line until they are on screen, and the option pane then clips the question and the buttons. */
+        private static JComponent wrapped(String text) {
+            JTextArea area = new JTextArea(text);
+            area.setLineWrap(true);
+            area.setWrapStyleWord(true);
+            area.setEditable(false);
+            area.setOpaque(false);
+            area.setFocusable(false);
+            area.setBorder(null);
+            Font font = UIManager.getFont("Label.font");
+            if (font != null) {
+                area.setFont(font);
+            }
+            Color foreground = UIManager.getColor("Label.foreground");
+            if (foreground != null) {
+                area.setForeground(foreground);
+            }
+            int width = 640;
+            int height = wrappedHeight(area.getFontMetrics(area.getFont()), text, width);
+            area.setPreferredSize(new Dimension(width, height));
+            area.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
+            return area;
+        }
+
+        /** Line count for a word-wrapped label before the component is on screen. */
+        private static int wrappedHeight(java.awt.FontMetrics fm, String text, int width) {
+            int height = 0;
+            int lineHeight = fm.getHeight();
+            for (String paragraph : text.split("\n", -1)) {
+                if (paragraph.isEmpty()) {
+                    height += lineHeight;
+                    continue;
+                }
+                int lineWidth = 0;
+                int lines = 1;
+                for (String word : paragraph.split(" ")) {
+                    int wordWidth = fm.stringWidth(word + " ");
+                    if (lineWidth > 0 && lineWidth + wordWidth > width) {
+                        lines++;
+                        lineWidth = wordWidth;
+                    } else {
+                        lineWidth += wordWidth;
+                    }
+                }
+                height += lines * lineHeight;
+            }
+            return height + fm.getDescent();
         }
 
         private static JComponent aligned(JComponent component) {
