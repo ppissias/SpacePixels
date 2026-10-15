@@ -24,13 +24,16 @@ This manual walks through the everyday workflows with screenshots from real sess
 
 ### Your data
 
-SpacePixels is the opposite of a stacker: it looks for what changes between your frames, so it needs the frames *before* they are stacked. It works best with:
+The input to SpacePixels is the same input files for your stacking software: the aligned  + calibrated dataset.
+But SpacePixels is the opposite of a stacker: it looks for what changes between your frames. It works best with:
 
 - **aligned (registered) sub-exposures**, so the stars stay in the same place in every frame;
 - **calibrated** frames (darks and flats), although uncalibrated data also works, with more noise detections;
 - frames from **one session and one camera setup**, all with the same size;
 - **timestamps** in the FITS headers (`DATE-OBS`), so speeds and object identification work.
 - **unprocessed** data (i.e. just raw images, calibrated and aligned)
+
+
 
 Supported files: FITS (`.fit`, `.fits`, `.fts`), compressed FITS (`.fz`) and XISF, 16 or 32 bit, monochrome or colour. SpacePixels offers to convert what the detection needs (decompression, 16 bit, monochrome) when you import. Keep one sequence per folder: all files in a folder must have the same type, bit depth, size and layout, and either all frames have timestamps or none.
 
@@ -63,7 +66,11 @@ The window has four tabs:
 | **Image Stretch** | how frames are displayed in the viewers |
 | **Detection Settings** | Auto-Tune and every detection setting |
 
-The other tabs open once frames are imported. Each group on the Main tab has a status line underneath that tells you what is ready and what is missing; when a button is greyed out, its tooltip says why. The **User Manual** link at the right end of the tab bar opens this manual in your browser.
+The other tabs open once frames are imported. **1 Prepare**, **2 Astrometry** and **3 Inspect** each have a status line underneath that tells you what is ready and what is missing; when a button is greyed out, its tooltip says why.
+
+**Detect** is split in two. On the left, **Auto-Tune Settings** has a short note under it: which settings are in use, and, after this folder has a saved auto-tune, when that auto-tune was run. On the right are **Detect Moving Targets**, **Detect Iteratively**, and a small box with the detection settings now in use: detection and star-mask sigma, grow and minimum pixels, the mask overlap, and the star jitter. **Edit settings…** at the bottom of that box opens Detection Settings.
+
+The **User Manual** link at the right end of the tab bar opens this manual in your browser.
 
 ---
 
@@ -77,7 +84,7 @@ Click **Import Aligned Frames…** (the highlighted button in **1 Prepare**) and
 
 ![The imported session](docs/images/manual/ui-imported.png)
 
-The table lists every frame with its size, time, exposure, location and whether it is plate-solved. The status lines confirm what SpacePixels found: here *Monochrome, 33 frames* and *33 / 33 solved*. If the frames are in colour, click **Convert to Mono** first; if they are compressed, XISF or 32 bit, SpacePixels offers the conversion during import.
+The table lists every frame with its size, time, exposure and whether it is plate-solved. The status lines confirm what SpacePixels found: here *Monochrome, 33 frames* and *33 / 33 solved*. If this folder already has a saved auto-tune, the note under **Auto-Tune Settings** names the profile and when it was run, and the box on the right shows those detection settings. If the frames are in colour, click **Convert to Mono** first; if they are compressed, XISF or 32 bit, SpacePixels offers the conversion during import.
 
 ### Step 2 (optional): plate-solve one frame
 
@@ -97,7 +104,7 @@ Open **Detection Settings** (or click **Edit settings…** in **4 Detect**). The
 
 ![Auto-Tune running](docs/images/manual/ui-autotune-running.png)
 
-Click **Run Auto-Tune**, or **Auto-Tune Settings** to the left of **Detect Moving Targets** on the Main tab (or press **Ctrl+T**), which opens this page and starts the run with the tuner and profile chosen here. It measures your own frames: how sharp the stars are, how much the stars jitter, how many noise detections each setting produces and how faint a test star each setting still finds. This takes from a few seconds to a few minutes (here 2 min 7 s for 33 × 61 MPix).
+Click **Run Auto-Tune**, or **Auto-Tune Settings** on the Main tab (or press **Ctrl+T**), which opens this page and starts the run with the tuner and profile chosen here. It measures your own frames: how sharp the stars are, how much the stars jitter, how many noise detections each setting produces and how faint a test star each setting still finds. This takes from a few seconds to a few minutes (here 1 min 45 s for 33 × 61 MPix). While it runs, the button reads **Tuning…** and a progress window shows the frame it is on. **Preview Frame** on this page opens the same preview as **Preview Frame** on the Main tab.
 
 ![Auto-Tune results](docs/images/manual/ui-autotune-done.png)
 
@@ -114,7 +121,9 @@ The columns tell you what to expect: **Expected noise detections** is about how 
 
 The profile chosen in **Apply after run** (High by default) is applied as soon as the run finishes; SpacePixels remembers your choice. To switch, select another row and click **Use Selected Profile**. The changed settings are marked with a blue name and a dot, and **Save** keeps them for the next start.
 
-**Show Auto-Tune Chart…** draws, for the profile you pick, the false detections against the share of test stars found (the budget is the vertical line, and the marked point is the setting that was chosen) and the recovery of test stars by brightness for that setting.
+**Show Auto-Tune Chart…** draws, for the profile you pick, the false detections against the share of test stars found (the budget is the vertical line, and the marked point is the setting that was chosen) and the recovery of test stars by brightness for that setting. In the picture the selected profile is Maximum, the one last chosen in **Apply after run**.
+
+![The Auto-Tune chart](docs/images/manual/ui-autotune-chart.png)
 
 The result is also written next to the frames, as `auto_tune.json`, in the same way as the sky catalogue. The file keeps the chosen settings and this chart, not every combination the tuner tried. An older, much larger file is rewritten in this smaller form the next time that folder is imported. Importing that folder again shows when the calibrated tuner and the legacy tuner last ran (each is kept on its own). The profile in **Apply after run** is selected from the saved calibrated result when that result has it, so detection can use it without measuring again. **Run Auto-Tune**, **Auto-Tune Settings** and **Ctrl+T** always measure again and replace the saved result of the tuner you run. A legacy result is applied on import only when the **Tuner** box is set to Legacy and its profile matches the one that was tuned; otherwise the row is there and **Use Selected Profile** applies it.
 
@@ -130,13 +139,13 @@ SpacePixels checks the quality of every frame (blank, blurred or failed frames a
 
 The report is a folder named `detections_<date>_<time>` next to your frames; open `detection_report.html` in it with any browser.
 
-If a run finds a very large number of objects, a **High Detection Count Warning** first lists them by kind. Many tracks or anomalies usually mean the settings are too sensitive for this session: try a lower profile.
+If a run finds a very large number of objects, a summary first lists them by kind and asks whether to generate the report. Moving-object tracks, streak tracks, single streaks and suspected streak groupings are always included. Each other group that this run measured, and that found something, has an **In report** box, ticked to start with. Untick a group to leave it out of this report: its section, crops and animations are not written, and the line under the list says how many of these detections the report will still include. A group you had switched off before the run is not listed. The detection settings are not changed, so the next run still measures those groups. Many tracks or anomalies usually mean the settings are too sensitive for this session: try a lower profile.
 
 ---
 
 ## 4. Reading the report
 
-The report starts with an overview, then the results; the processing diagnostics come last, collapsed. Its sections follow the kinds of results:
+The report starts with an overview, then the results. **Diagnostics** comes near the end and starts expanded; click its heading to collapse it. The sections follow the kinds of results:
 
 | Result | What it is | Typical objects |
 |---|---|---|
@@ -152,9 +161,9 @@ The report starts with an overview, then the results; the processing diagnostics
 
 ![Report summary](docs/images/manual/report-summary.png)
 
-Under the title, one line describes the session: field, date and time span, frames kept, exposure, camera and whether the frames are plate-solved. The **Jump to** bar below it stays at the top of the window and leads to every section, with its count. The **Overview** has a card for each kind of result that was found (click a card to jump to it) and lists what was not found. The results come first; the processing details (quality control with the rejected frames and their reasons, configuration, star mask, extraction, track linking) are collected in the **Diagnostics** group near the end, collapsed until you click it. A line under the cards links to it (with the frames kept and rejected), and the link opens the group.
+Under the title, one line describes the session: field, date and time span, frames kept, exposure, camera and whether the frames are plate-solved. The **Jump to** bar below it stays at the top of the window and leads to every section, with its count. The **Overview** has a card for each kind of result that was written (click a card to jump to it) and lists what was not found. A group left out of this report is named in that line. The results come first. The processing details (quality control with the rejected frames and their reasons, configuration, star mask, extraction, track linking, and the time taken by each detection step) are collected in the **Diagnostics** group near the end. It is open when the report loads; click the heading to collapse it. A line under the cards links to it, with the frames kept and rejected.
 
-![The session picture with the catalogue switched on: the Horsehead and Flame nebulae near Alnitak](docs/images/manual/report-session-picture.jpg)
+![The session, with the catalogue and the detections: NGC 2236, NGC 2251, IC 448 and the Monoceros Nebula](docs/images/manual/report-session-picture.png)
 
 Below the cards is **the session**: the median stack of the frames kept, with three switches over it.
 
@@ -165,6 +174,8 @@ Below the cards is **the session**: the median stack of the frames kept, with th
 Click the picture for the full-size stack.
 
 **Detection Stage Timings**, under Diagnostics, shows the elapsed time and share of engine time for each major detection step. Faint streak fragment assembly is indented under tracking: its time is already included in the tracking total. Parallel steps show elapsed time, not the sum of worker times. Steps that were switched off are omitted. Image loading, Auto-Tune and report generation are outside the engine total.
+
+![Detection stage timings](docs/images/manual/report-diagnostics.png)
 
 Common-motion filtering runs after the main tracks, streaks and anomalies, before local rescue and activity clustering. It sets aside separated compact sources with matching displacement and keeps their observations available in the Common Motion report section. Ambiguous associations are kept for further review. **Reject Common Motion** has its own switch; turning off **Enable Residual Transient Analysis** skips local rescue and activity clustering but does not turn off common-motion filtering.
 
@@ -256,7 +267,7 @@ For exact results, set your observing site on the **Astrometry Config** tab (or 
 
 ### Asteroids in a wide field
 
-The session of [section 3](#3-workflow-find-moving-objects-in-a-session): 33 frames of 2 minutes with a 61-megapixel camera, plate-solved in the FITS headers. With the default **High** profile, SpacePixels found three moving objects, and the JPL buttons identified all three:
+The session of [section 3](#3-workflow-find-moving-objects-in-a-session): 33 frames of 2 minutes with a 61-megapixel camera, plate-solved in the FITS headers. SpacePixels found three moving objects, and the JPL buttons identified all three:
 
 | Track | Object | Magnitude (V) |
 |---|---|---|
@@ -264,11 +275,11 @@ The session of [section 3](#3-workflow-find-moving-objects-in-a-session): 33 fra
 | T2 | 611 Valeria | 14.3 |
 | T3 | 194 Prokne | 13.3 |
 
-Sutoku moved only 15 pixels in 77 minutes, yet it was linked through 25 frames. The same report also has several satellite trails and many single-frame anomalies; with this many results, the High Detection Count Warning appeared before the report was written:
+Sutoku moved only 15 pixels in 77 minutes, yet it was linked through 25 frames. The same report has the satellite trails as streak tracks. When a run finds this many objects, the summary appears before the report is written, and a noisy group can be left out:
 
-![High Detection Count Warning](docs/images/manual/ui-warning.png)
+![Detection summary, with the optional groups ticked for the report](docs/images/manual/ui-warning.png)
 
-Most of the 74 anomalies are short events or noise in single frames: they are worth a quick look in the report, but the moving objects are the tracks.
+In the picture the 74 single-frame anomalies are the largest group: short events or noise in single frames. Untick **In report** and they are left out of the report; the moving-object tracks stay. The run shown in [Reading the report](#4-reading-the-report) did that for the anomalies and the common-motion groups.
 
 ### A comet, without plate solving
 
@@ -298,9 +309,9 @@ The same 61-megapixel session with photometry switched on:
 
 ![Variable-star summary](docs/images/manual/variable-stars-summary.png)
 
-The verdict **Ready** means the data passed the linearity checks. SpacePixels measured 61,175 stars, scored 29,799 of them and reported 29 high-confidence and 12 possible variable stars. A **Limited** or **Not ready** verdict says in plain words why, and for Not ready what could help (for example unstretched frames or a longer sequence).
+The verdict **Ready** means the data passed the linearity checks. SpacePixels measured 53,869 stars, scored 43,859 of them and reported 45 high-confidence and 22 possible variable stars. A **Limited** or **Not ready** verdict says in plain words why, and for Not ready what could help (for example unstretched frames or a longer sequence).
 
-The candidates are first listed in a table: tier, position, observed variation in this session, the shape of the change (faded, brightened, dipped and recovered…) and any failed check. **Identify all in VSX** looks every candidate up in the AAVSO Variable Star Index and fills the **Known As** column; this needs SpacePixels running, and the results are saved into the report. In this session, 24 of the 41 candidates are catalogued variables:
+The candidates are first listed in a table: tier, position, observed variation in this session, the shape of the change (faded, brightened, dipped and recovered…) and any failed check. When the sky catalogue was fetched before the detection, the **Known As** column is filled as the report is written, for every candidate the catalogue contains. **Look up the N others in VSX** looks up only the rest; this needs SpacePixels running, and the results are saved into the report. In this session, 52 of the 67 candidates were already in the catalogue, so the button reads **Look up the 15 others in VSX**:
 
 **Observed variation in this session** is the 95th minus the 5th percentile of the usable differential magnitudes over the measured time span. It is not a full-cycle amplitude. **Catalogue range** and **Catalogue amplitude** refer to the listed catalogue passbands; filter, phase and time coverage can make them differ from the session measurement. A small fraction of an orbital period can still contain a substantial eclipse.
 
@@ -310,15 +321,15 @@ An amber **review amplitude** note is a conservative screening prompt: the obser
 
 **Review source metadata** identifies a source-verified catalogue discrepancy. The original VSX values remain visible alongside the publication and any unit conversion. Older saved catalogues still load; their shared passband and missing uncertainty metadata are identified as provisional. Fetching the sky catalogue again supplies the additional metadata when the service is available.
 
-![The candidate table after Identify all in VSX](docs/images/manual/variable-stars-table.png)
+![The candidate table. Known As comes from the sky catalogue; V2 was not in it](docs/images/manual/variable-stars-table.png)
 
 Each candidate then has a card with a one-line summary and its light curve, drawn above three constant stars of similar brightness for comparison; **Statistics** opens the detailed measures:
 
-![A variable-star candidate](docs/images/manual/variable-star-candidate.png)
+![A variable-star candidate, with the catalogue entry written into the report](docs/images/manual/variable-star-candidate.png)
 
 When the sky catalogue of the session was fetched before the detection (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)), the **Known As** column is filled when the report is written, for every candidate that is among the catalogue's VSX stars, with no button and no SpacePixels needed. The button then reads **Look up the N others in VSX** and looks up only the rest: the catalogue has the variables down to one magnitude fainter than its star depth, and the full VSX also has the fainter ones. Each candidate card then starts with what the catalogues say: its VSX name, the type in words (for example *EW, W UMa-type eclipsing binary*), the catalogued range and period, how much of the period the session covers (*This session spans 5.0 h, 77.2% of the catalogued period*), and the star's Gaia G magnitude and colour. These are catalogue values. SpacePixels measures instrumental differential magnitudes, without calibrating them to a catalogue passband.
 
-**Check VSX Here** looks one star up: candidate V1 is the catalogued δ Scuti star ASASSN-V J063632.76+064632.3, 5″ away, with a period of 2.5 hours. The light curve shows it rising and falling by 0.43 magnitudes within the 75 minutes of the session. A candidate without a VSX match may be a new variable, or a false one: check its light curve, the comparison stars and the cutouts before reporting it.
+Candidate V1 is already named from the catalogue: the high-amplitude δ Scuti star ASASSN-V J063632.76+064632.3, 0.2″ away, with a period of 2.5 hours. The light curve shows it rising and falling by 0.43 magnitudes within the 75 minutes of the session. **Check VSX Here** searches the full VSX for that position, using saved lookup results when available. A candidate without a VSX match may be a new variable, or a false one: check its light curve, the comparison stars and the cutouts before reporting it.
 
 ---
 
@@ -405,7 +416,7 @@ Sets how frames look in Blink, Preview Frame, Manual Transient Inspection and **
 
 ### Detect Iteratively (large datasets)
 
-Runs the detection in several passes over subsets of the frames, for sessions too large for one run, and for very slow objects. It writes one report per pass and a summary.
+Runs the detection in several passes over subsets of the frames, for sessions too large for one run, and for very slow objects. It writes one report per pass and a summary. To reduce memory use, enter a smaller maximum frame count when prompted: leaving the limit blank or zero still loads all frames to build the initial master stack. Variable-star photometry is skipped in iterative mode; use **Detect Moving Targets** for that analysis.
 
 ### Command line
 
@@ -451,6 +462,6 @@ In most sessions you only need Auto-Tune and the profile. Change single settings
 
 **No identification buttons.** Plate-solve one frame (section [3, step 2](#step-2-optional-plate-solve-one-frame)). The buttons that show results **Here** need SpacePixels to be running.
 
-**Out of memory.** Close other programs, lower **Frames Used by Auto-Tune** (Detection Settings → Quality Control, an expert setting) to limit the tuner, or use **Detect Iteratively**.
+**Out of memory.** Close other programs. If Auto-Tune runs out of memory, lower **Frames Used by Auto-Tune** (Detection Settings → Quality Control, an expert setting). For moving-object detection, use **Detect Iteratively** and set a smaller maximum frame count; leaving the limit blank or zero still loads all frames for the master stack.
 
 **Colour frames.** Detection works on monochrome data; click **Convert to Mono** after importing.
