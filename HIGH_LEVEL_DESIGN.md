@@ -197,6 +197,7 @@ Supporting groups:
   - `ResidualReviewSectionWriter`
   - `GlobalMapsSectionWriter`
   - `PhotometryReportSectionWriter` (variable-star photometry: readiness, noise model, per-frame diagnostics, candidate light curves, CSV exports, VSX lookup buttons)
+  - `CatalogueComparisonWriter` and the embedded `catalogue-comparison.js` (read-only catalogue comparison notes for saved/live matches, separate from detection confidence; see [CATALOGUE_COMPARISON.md](CATALOGUE_COMPARISON.md))
 - rendering helpers:
   - `TrackVisualizationRenderer`
   - `PhotometrySvgChart`
