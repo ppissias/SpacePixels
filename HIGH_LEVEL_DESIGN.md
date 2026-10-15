@@ -578,9 +578,14 @@ Report categories are driven by JTransient result data:
 - suspected same-frame streak tracks
 - anomalies
 - slow-mover candidates
+- common-motion groups, filtered from unclassified observations before optional residual analysis
 - residual local rescue candidates
 - residual local activity clusters
 - diagnostic transients, masks, drift, and telemetry
+
+Common-motion filtering has its own switch and runs before local rescue and activity clustering. It assigns each observation once, preserves ambiguous associations for review, and removes accepted groups from the residual input while retaining them in the report. The residual-analysis switch controls only local rescue and clustering.
+
+`PipelineTelemetry.stageTimeMs` provides ordered, non-overlapping major-phase wall-clock durations, and `processingTimeMs` includes the full engine run through photometry. `TrackerTelemetry.faintStreakFragmentTimeMs` is a substep already included in tracking (-1 when not run). `PipelineDiagnosticsSectionWriter` displays these durations under Diagnostics. `PhotometryTelemetry.framesExcludedSpatial` supplies the spatial-exclusion summary and diagnostic count. Engine timing excludes application image loading, Auto-Tune and report export.
 
 ## 6. Main Data Contracts
 
@@ -670,7 +675,7 @@ Headless/API:
 
 Progress ranges:
 
-- JTransient `runPipeline(...)` reports 0-100%: extraction up to 40%, frame rejection 42%, master stack 45-49%, track linking 50-90%, residual analysis 92%, photometry 93-99%
+- JTransient `runPipeline(...)` reports 0-100%: extraction up to 40%, frame rejection 42%, master stack 45-49%, track linking 50-90%, common-motion filtering and optional residual analysis 92%, photometry 93-99%
 - the standard pipeline shows frame loading at 0-20% and the engine at 20-100% of the detection run; the GUI shows the detection run as 0-90% and report export as 90-100%
 - the API shows input preparation up to 15%, Auto-Tune 15-35%, the detection run up to 90% and report export 90-100%
 - the iterative pipeline gives each pass an equal share; within a pass the engine takes 0-90% and report generation 95%

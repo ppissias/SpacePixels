@@ -194,6 +194,12 @@ JTransient's raw `PipelineResult` exposes slow-mover candidates as maximum-stack
 
 Each slow-mover candidate's diagnostics include `frameSupportPercentage` (usable frames with localized signal inside its footprint) and `stationaryLikelihoodPercentage` (supported positions clustered near one location), plus supported/usable frame counts and availability flags. Check `frameSupportAvailable` and `stationaryLikelihoodAvailable` before displaying a percentage: a numeric frame-support value can exist even when too few frames make it unavailable. Stationary likelihood is a heuristic, not a calibrated probability or motion confirmation. `DetectionConfig.slowMoverMinFrameSupport` defaults to `40.0` and `slowMoverMaxStationaryLikelihood` to `60.0`: a candidate is rejected when its frame support is below 40 % or its stationary likelihood is above 60 %. Each gate applies only when its value is available, and `0.0` and `100.0` turn the gates off; `PipelineTelemetry.SlowMoverTelemetry` also exposes effective thresholds, rejection counts, and accepted-candidate score lists.
 
+## Detection diagnostics
+
+The raw pipeline result also exposes `telemetry.stageTimeMs`, an ordered map from `PipelineTelemetry.Stage` to elapsed wall-clock milliseconds for completed major phases. Disabled phases are absent. `telemetry.processingTimeMs` covers the complete engine run, including photometry, and excludes application image loading, Auto-Tune and report export. Parallel phases measure elapsed time rather than summed worker CPU time. `telemetry.trackerTelemetry.faintStreakFragmentTimeMs` is already included in tracking; -1 means the pass did not run. When photometry ran, `telemetry.photometryTelemetry.framesExcludedSpatial` counts its spatial-residual frame exclusions. The generated report shows these timings under Diagnostics and the spatial count in its photometry diagnostics.
+
+Common-motion filtering precedes optional local rescue and activity clustering and has its own switch. Its groups are retained in `residualTransientAnalysis.commonMotionGroups` even with residual analysis disabled. Their observations remain in `allTransients` but are removed from `unclassifiedTransients`; local rescue candidates still reference observations in that latter list.
+
 ## Error handling
 
 `SpacePixelsPipelineApi.run(...)` throws `SpacePixelsPipelineException` when input preparation, validation, Auto-Tune, pipeline execution, or report generation fails.
