@@ -53,14 +53,16 @@ public class SessionCatalogueTest {
         range.max = 14.6;
         range.min = 15.3;
         range.band = "R1";
-        assertEquals("range 14.60–15.30 R1", PhotometryReportSectionWriter.vsxRange(range));
+        assertEquals("Catalogue range: 14.60–15.30 R1", PhotometryReportSectionWriter.vsxRange(range));
         range.minIsAmplitude = true;
         range.min = 0.71;
-        assertEquals("14.60 R1, amplitude 0.71", PhotometryReportSectionWriter.vsxRange(range));
+        assertEquals("Catalogue amplitude: 0.71 mag (listed magnitude 14.60 R1)", PhotometryReportSectionWriter.vsxRange(range));
 
-        assertEquals("This session covers 5.0 h, about 77 % of a cycle.", PhotometryReportSectionWriter.periodCoverage(0.27, 300));
-        assertEquals("This session covers 5.0 h, about 3 cycles.", PhotometryReportSectionWriter.periodCoverage(0.07, 300));
-        assertTrue(PhotometryReportSectionWriter.periodCoverage(30, 300).startsWith("This session covers 5.0 h, less than a tenth"));
+        assertEquals("This session spans 5.0 h, 77.2% of the catalogued period.", PhotometryReportSectionWriter.periodCoverage(0.27, 300));
+        assertEquals("This session spans 5.0 h, 3.0 times the catalogued period.", PhotometryReportSectionWriter.periodCoverage(0.07, 300));
+        assertEquals("This session spans 5.0 h, 0.7% of the catalogued period.", PhotometryReportSectionWriter.periodCoverage(30, 300));
+        // A short window can still contain a large eclipse: coverage must not imply a small amplitude.
+        assertEquals("This session spans 75 min, 2.4% of the catalogued period.", PhotometryReportSectionWriter.periodCoverage(2.178775, 74.7216));
         assertNull(PhotometryReportSectionWriter.periodCoverage(0.27, Double.NaN));
     }
 

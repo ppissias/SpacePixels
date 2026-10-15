@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "records": [
+    {"oid": 686523, "record": "CoRoT 221699985", "vsxType": "ROT:", "vsxAmplitude": 0.378, "periodDays": 5.143685, "fluxDepthPercent": 37.825, "citation": "Deleuil et al. 2018, Table A.6", "referenceUrl": "https://cdsarc.cds.unistra.fr/ftp/J/A+A/619/A97/tablea6.dat", "classificationNote": "The 2018 CoRoT catalogue lists this object among contact binaries, while VSX lists uncertain rotation (ROT:). These classifications conflict; neither is substituted for the other."},
+    {"oid": 684845, "record": "CoRoT 221707281", "vsxAmplitude": 0.499, "periodDays": 2.178775, "fluxDepthPercent": 49.851, "citation": "Deleuil et al. 2018, Table A.5", "referenceUrl": "https://cdsarc.cds.unistra.fr/ftp/J/A+A/619/A97/tablea5.dat"},
+    {"oid": 686292, "record": "CoRoT 223956789", "vsxAmplitude": 0.222, "periodDays": 0.542034, "fluxDepthPercent": 22.191, "citation": "Deleuil et al. 2018, Table A.6", "referenceUrl": "https://cdsarc.cds.unistra.fr/ftp/J/A+A/619/A97/tablea6.dat"},
+    {"oid": 686065, "record": "CoRoT 221684530", "vsxAmplitude": 0.183, "periodDays": 0.24723, "fluxDepthPercent": 18.274, "citation": "Deleuil et al. 2018, Table A.6", "referenceUrl": "https://cdsarc.cds.unistra.fr/ftp/J/A+A/619/A97/tablea6.dat"},
+    {"oid": 684818, "record": "CoRoT 221677174", "vsxAmplitude": 0.219, "periodDays": 2.07001, "fluxDepthPercent": 21.925, "citation": "Deleuil et al. 2018, Table A.5", "referenceUrl": "https://cdsarc.cds.unistra.fr/ftp/J/A+A/619/A97/tablea5.dat"}
+  ]
+}

@@ -236,7 +236,7 @@ public final class SkyCatalogueClient {
 
     static String variableQuery(SkyField field, double magnitudeLimit) {
         // V: 0 variable, 1 suspected, 2 constant or not existing, 3 possible duplicate.
-        return "SELECT OID, Name, V, RAJ2000, DEJ2000, Type, max, n_max, f_min, min, Period FROM \"B/vsx/vsx\" "
+        return "SELECT OID, Name, V, RAJ2000, DEJ2000, Type, max, n_max, f_min, min, n_min, l_max, u_max, l_min, u_min, Period, l_Period, u_Period, n_OID FROM \"B/vsx/vsx\" "
                 + "WHERE 1=CONTAINS(POINT('ICRS', RAJ2000, DEJ2000), " + field.adqlPolygon() + ") AND V < 2 "
                 + String.format(Locale.US, "AND (max IS NULL OR max <= %.2f)", magnitudeLimit + VARIABLE_MAGNITUDE_MARGIN);
     }
@@ -517,9 +517,22 @@ public final class SkyCatalogueClient {
             variable.dec = dec;
             variable.max = table.number(row, "max");
             variable.min = table.number(row, "min");
-            variable.minIsAmplitude = table.text(row, "f_min") != null;
+            String amplitudeFlag = table.text(row, "f_min");
+            variable.minIsAmplitude = "Y".equalsIgnoreCase(amplitudeFlag) || "(".equals(amplitudeFlag);
             variable.band = table.text(row, "n_max");
             variable.periodDays = table.number(row, "Period");
+            variable.maxBand = table.text(row, "n_max");
+            variable.minBand = table.text(row, "n_min");
+            variable.maxLimit = table.text(row, "l_max");
+            variable.minLimit = table.text(row, "l_min");
+            variable.maxUncertainty = table.text(row, "u_max");
+            variable.minUncertainty = table.text(row, "u_min");
+            variable.periodLimit = table.text(row, "l_Period");
+            variable.periodUncertainty = table.text(row, "u_Period");
+            variable.comparisonMetadataComplete = table.hasColumn("n_min") && table.hasColumn("l_max")
+                    && table.hasColumn("u_max") && table.hasColumn("l_min") && table.hasColumn("u_min")
+                    && table.hasColumn("l_Period") && table.hasColumn("u_Period");
+            variable.bibliographyAvailable = table.text(row, "n_OID") != null;
             variables.add(variable);
         }
         return variables;

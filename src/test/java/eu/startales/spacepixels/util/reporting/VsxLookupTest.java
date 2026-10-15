@@ -34,6 +34,26 @@ public class VsxLookupTest {
     }
 
     @Test
+    public void preservesComparisonMetadataWithoutGuessingAnAmplitudeFromReversedValues() {
+        String[] columns = {"OID", "Name", "max", "min", "n_max", "n_min", "f_min", "l_max", "u_max", "l_min", "u_min", "Period", "l_Period", "u_Period", "n_OID"};
+        JsonObject payload = new JsonObject();
+        JsonArray metadata = new JsonArray();
+        for (String name : columns) {
+            JsonObject column = new JsonObject(); column.addProperty("name", name); metadata.add(column);
+        }
+        payload.add("metadata", metadata);
+        payload.add("data", JsonParser.parseString("[[1,\"example\",12,0.1,\"G\",\"g\",null,\">\",\":\",null,\"?\",2,null,\":\",\"B\"]]"));
+        JsonObject match = ReportLookupPayloadNormalizer.normalizeVsxPayload(payload).getAsJsonArray("matches").get(0).getAsJsonObject();
+        assertFalse(match.get("minIsAmplitude").getAsBoolean());
+        assertEquals("G", match.get("maxBand").getAsString());
+        assertEquals("g", match.get("minBand").getAsString());
+        assertEquals(">", match.get("maxLimit").getAsString());
+        assertEquals(":", match.get("periodUncertainty").getAsString());
+        assertTrue(match.get("comparisonMetadataComplete").getAsBoolean());
+        assertTrue(match.get("bibliographyAvailable").getAsBoolean());
+    }
+
+    @Test
     public void normalizesTapRowsIntoMatches() {
         String payload = "{\"metadata\":[{\"name\":\"OID\"},{\"name\":\"Name\"},{\"name\":\"Type\"},{\"name\":\"max\"},"
                 + "{\"name\":\"n_max\"},{\"name\":\"f_min\"},{\"name\":\"min\"},{\"name\":\"n_min\"},{\"name\":\"Period\"},{\"name\":\"dist_arcsec\"}],"

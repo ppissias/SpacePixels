@@ -105,6 +105,17 @@ public final class SkyCatalogue {
         /** Passband of the magnitudes, for example "V". */
         public String band;
         public Double periodDays;
+        /** Optional VSX detail fields; older saved catalogues contain only the shared {@link #band}. */
+        public String maxBand;
+        public String minBand;
+        public String maxLimit;
+        public String minLimit;
+        public String maxUncertainty;
+        public String minUncertainty;
+        public String periodLimit;
+        public String periodUncertainty;
+        public boolean comparisonMetadataComplete;
+        public boolean bibliographyAvailable;
     }
 
     /** "21,475 stars · 54 deep-sky · 3,713 variables". */

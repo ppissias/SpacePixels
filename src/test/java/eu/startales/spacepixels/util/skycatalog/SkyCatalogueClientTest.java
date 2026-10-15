@@ -140,6 +140,22 @@ public class SkyCatalogueClientTest {
     }
 
     @Test
+    public void preservesSeparatePassbandsLimitsAndUncertainties() {
+        List<SkyCatalogue.VariableStar> variables = SkyCatalogueClient.parseVariables(CsvTable.parse(
+                "OID,Name,RAJ2000,DEJ2000,Type,max,n_max,f_min,min,n_min,l_max,u_max,l_min,u_min,Period,l_Period,u_Period,n_OID\n"
+                        + "1,example,10,20,EA,12.0,G,N,12.1,g,>,:,<,?,2.0,>,:,B\n"));
+        SkyCatalogue.VariableStar star = variables.get(0);
+        assertFalse(star.minIsAmplitude);
+        assertEquals("G", star.maxBand);
+        assertEquals("g", star.minBand);
+        assertEquals(">", star.maxLimit);
+        assertEquals("?", star.minUncertainty);
+        assertEquals(":", star.periodUncertainty);
+        assertTrue(star.comparisonMetadataComplete);
+        assertTrue(star.bibliographyAvailable);
+    }
+
+    @Test
     public void takesTheServiceErrorMessageFromItsAnswer() {
         String body = "<?xml version=\"1.0\"?><VOTABLE><RESOURCE type=\"results\">"
                 + "<INFO name=\"QUERY_STATUS\" value=\"ERROR\">Incorrect ADQL query: 5 unresolved identifiers</INFO></RESOURCE></VOTABLE>";

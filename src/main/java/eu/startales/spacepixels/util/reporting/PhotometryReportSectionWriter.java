@@ -731,8 +731,12 @@ final class PhotometryReportSectionWriter {
             report.println("<p class='compact-note'>High-confidence candidates passed every check; possible candidates failed exactly one. "
                     + "Each light curve is drawn with three constant stars of similar brightness offset below it, on the same scale, so you can see what a constant star looks like in this session. "
                     + "Cutouts show the star in its brightest and faintest usable frame with the same display stretch.</p>");
+            report.println("<p class='compact-note'><strong>Observed variation in this session</strong> is the 95th minus the 5th percentile of the usable differential magnitudes. "
+                    + "It describes the observed time span, rather than a full-cycle amplitude. Catalogue ranges and amplitudes use the listed passbands; "
+                    + "differences in filter, time coverage and phase limit direct comparisons.</p>");
             SessionCatalogue sessionCatalogue = SessionCatalogue.of(context);
             writeCandidateTable(report, context, analysis, cards, sessionCatalogue);
+            CatalogueComparisonWriter.writeData(report, context, analysis, cards, sessionCatalogue);
             int shown = 0;
             for (StarLightCurve star : cards) {
                 if (shown++ >= MAX_CANDIDATE_CARDS) break;
@@ -751,7 +755,7 @@ final class PhotometryReportSectionWriter {
                 + th("Star", "Star number in this session's measurement.")
                 + th("Position", "Where the star is, in pixels and on the sky when the field is solved.")
                 + th("Mean Mag", "Mean instrumental magnitude. Larger values indicate fainter stars; this is not a calibrated catalogue magnitude.")
-                + th("Amplitude", "Estimated size of the brightness variation, in magnitudes, using the 95th minus the 5th percentile of the usable residuals.")
+                + th("Observed variation in this session (mag)", "95th minus the 5th percentile of the usable differential magnitudes within this session; not a full-cycle amplitude.")
                 + th("Scatter z", "Standardised score indicating how unusual the scatter is relative to stars of similar brightness.")
                 + th("Stetson J z", "Standardised Stetson J score indicating how unusual the coherence between successive measurements is relative to stars of similar brightness.")
                 + th("Failed Gates", "The checks this star failed. Two or more, and it is listed here instead of as a candidate.")
@@ -781,13 +785,17 @@ final class PhotometryReportSectionWriter {
                 + "</div>");
         report.println("<p style='font-size:14px; color:#e6e6e6; margin: 0 0 10px 0; line-height:1.5;'>" + DetectionReportGenerator.escapeHtml(plainSummary(analysis, star)) + "</p>");
         report.println(catalogueEntryHtml(context, star, sessionCatalogue));
+        SkyTarget comparisonTarget = skyTarget(context, star.x, star.y);
+        boolean comparisonMatched = comparisonTarget != null && !sessionCatalogue.variablesNear(
+                comparisonTarget.raDegrees, comparisonTarget.decDegrees, comparisonTarget.radiusArcsec).isEmpty();
+        report.println(CatalogueComparisonWriter.slot(number, false, comparisonMatched));
         report.println(catalogueCrossCheckHtml(context, star, number));
 
         report.println("<details class='foldable-streak-details'><summary>Statistics</summary><div class='foldable-streak-body'>");
         report.println("<p class='compact-note'>The numbers behind the checks. Hover a box for what it means.</p>");
         report.println("<div class='flex-container'>");
-        report.println(compactMetric(formatMag(star.amplitude, 3), "Amplitude (mag)",
-                "Estimated size of the brightness variation, using the 95th minus the 5th percentile of the usable residuals, in magnitudes."));
+        report.println(compactMetric(formatMag(star.amplitude, 3), "Observed variation in this session (mag)",
+                "95th minus the 5th percentile of the usable differential magnitudes within this session; not a full-cycle amplitude."));
         report.println(compactMetric(formatMag(star.meanMag, 2), "Mean instrumental magnitude",
                 "Mean brightness on the instrumental magnitude scale. Larger values indicate fainter stars; this is not a calibrated catalogue magnitude."));
         report.println(compactMetric(formatMag(star.excessScatter, 1) + "x", "Scatter ratio",
@@ -886,7 +894,7 @@ final class PhotometryReportSectionWriter {
                 + th("Tier", "High confidence passed every check. Possible failed exactly one.")
                 + th("Position", "Where the star is, in pixels and on the sky when the field is solved.")
                 + th("Mean Inst. Mag", "Mean instrumental magnitude. Larger values indicate fainter stars; this is not a calibrated catalogue magnitude.")
-                + th("Amplitude", "Estimated size of the brightness variation, in magnitudes.")
+                + th("Observed variation in this session", "95th minus the 5th percentile of the usable differential magnitudes within this session; not a full-cycle amplitude.")
                 + th("Time Span", "Time between the first and last usable measurements.")
                 + th("Change", "The rough shape of the light curve: a steady fade, a steady rise, a dip, a peak, or up and down.")
                 + th("Failed Check", "The one check a possible candidate failed. High-confidence candidates have none.")
@@ -911,13 +919,16 @@ final class PhotometryReportSectionWriter {
             List<SessionCatalogue.VariableMatch> matches = target == null ? List.of()
                     : sessionCatalogue.variablesNear(target.raDegrees, target.decDegrees, target.radiusArcsec);
             if (!matches.isEmpty()) {
-                report.print("<td title='Matched with the AAVSO VSX stars of the session&#39;s sky catalogue'>" + knownAsHtml(matches) + "</td>");
+                report.print("<td title='Matched with the AAVSO VSX stars of the session&#39;s sky catalogue'><span data-known-as-sidecar='"
+                        + CatalogueComparisonWriter.key(number) + "'>" + knownAsHtml(matches) + "</span>"
+                        + CatalogueComparisonWriter.slot(number, true, true) + "</td>");
             } else if (target != null) {
                 String sidecar = "photometry_v" + number + "_vsx.json";
                 String hidden = DetectionReportAstrometry.buildLiveRenderButtonHtml("vsx", vsxTapUrl(target), "photometry-v" + number + "-vsx-row",
                         "VSX", sidecar, String.format(Locale.US, "AAVSO VSX within %.0f arcsec of V%d", target.radiusArcsec, number))
                         .replace("<button ", "<button style='display:none' data-identify-all='1' ");
-                report.print("<td data-known-as-sidecar='" + sidecar + "'><span style='color:#777;'>not checked</span>" + hidden + "</td>");
+                report.print("<td><span data-known-as-sidecar='" + sidecar + "'><span style='color:#777;'>not checked</span>" + hidden
+                        + "</span>" + CatalogueComparisonWriter.slot(number, true, false) + "</td>");
             } else if (sky) {
                 report.print("<td>&ndash;</td>");
             }
@@ -993,39 +1004,37 @@ final class PhotometryReportSectionWriter {
         return html.append("</div>").toString();
     }
 
-    /** "range 12.10–12.80 V", "12.33 G, amplitude 0.03", or null when VSX gives no magnitudes. */
+    /** Labels catalogue magnitudes separately from this session's observed variation. */
     static String vsxRange(SkyCatalogue.VariableStar variable) {
         if (variable.max == null) {
             return null;
         }
         String band = variable.band == null ? "" : " " + variable.band;
         if (variable.min == null) {
-            return String.format(Locale.US, "brightest %.2f%s", variable.max, band);
+            return String.format(Locale.US, "Catalogue brightest magnitude: %.2f%s", variable.max, band);
         }
         if (variable.minIsAmplitude) {
-            return String.format(Locale.US, "%.2f%s, amplitude %.2f", variable.max, band, variable.min);
+            return String.format(Locale.US, "Catalogue amplitude: %.2f mag (listed magnitude %.2f%s)", variable.min, variable.max, band);
         }
-        return String.format(Locale.US, "range %.2f–%.2f%s", variable.max, variable.min, band);
+        return String.format(Locale.US, "Catalogue range: %.2f–%.2f%s", variable.max, variable.min, band);
     }
 
     /** How much of the period the candidate's measurements span, in words; null without a time span. */
     static String periodCoverage(double periodDays, double spanMinutes) {
-        if (Double.isNaN(spanMinutes) || spanMinutes <= 0 || periodDays <= 0) {
+        if (!Double.isFinite(spanMinutes) || !Double.isFinite(periodDays) || spanMinutes <= 0 || periodDays <= 0) {
             return null;
         }
         double cycles = spanMinutes / (periodDays * 1440.0);
         String span = spanMinutes >= 120 ? String.format(Locale.US, "%.1f h", spanMinutes / 60.0) : String.format(Locale.US, "%.0f min", spanMinutes);
         String part;
         if (cycles >= 1.5) {
-            part = String.format(Locale.US, "about %.0f cycles", cycles);
-        } else if (cycles >= 0.85) {
-            part = "about one full cycle";
-        } else if (cycles >= 0.1) {
-            part = String.format(Locale.US, "about %.0f %% of a cycle", cycles * 100);
+            part = String.format(Locale.US, "%.1f times the catalogued period", cycles);
+        } else if (cycles >= 0.001) {
+            part = String.format(Locale.US, "%.1f%% of the catalogued period", cycles * 100);
         } else {
-            part = "less than a tenth of a cycle, so only a small part of the variation can show";
+            part = "less than 0.1% of the catalogued period";
         }
-        return "This session covers " + span + ", " + part + ".";
+        return "This session spans " + span + ", " + part + ".";
     }
 
     /** One plain sentence: how the star changed, by how much, how clearly, and which checks it passed. */
@@ -1180,7 +1189,8 @@ final class PhotometryReportSectionWriter {
      */
     static String vsxTapUrl(SkyTarget target) {
         String point = String.format(Locale.US, "POINT('ICRS', %.6f, %.6f)", target.raDegrees, target.decDegrees);
-        String query = "SELECT TOP 10 \"OID\", \"Name\", \"Type\", \"max\", \"n_max\", \"f_min\", \"min\", \"n_min\", \"Period\", "
+        String query = "SELECT TOP 10 \"OID\", \"Name\", \"Type\", \"max\", \"n_max\", \"f_min\", \"min\", \"n_min\", "
+                + "\"l_max\", \"u_max\", \"l_min\", \"u_min\", \"Period\", \"l_Period\", \"u_Period\", \"n_OID\", "
                 + "DISTANCE(POINT('ICRS', \"RAJ2000\", \"DEJ2000\"), " + point + ") * 3600 AS dist_arcsec "
                 + "FROM \"" + ReportLookupUpstreamClient.VSX_TABLE + "\" "
                 + "WHERE 1 = CONTAINS(POINT('ICRS', \"RAJ2000\", \"DEJ2000\"), "

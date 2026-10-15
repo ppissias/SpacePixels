@@ -68,14 +68,19 @@ final class ReportLookupPayloadNormalizer {
             addFiniteProperty(match, "minMag", vsxDouble(row, columns, "min"));
             addStringProperty(match, "minBand", vsxString(row, columns, "n_min"));
             // VSX flags a minimum that is really an amplitude ('Y' in the VizieR copy, '(' on the VSX site).
-            // A real minimum magnitude is always numerically larger than the maximum, so a smaller value is
-            // an amplitude even without the flag.
             String minFlag = vsxString(row, columns, "f_min");
-            double maxMag = vsxDouble(row, columns, "max");
-            double minMag = vsxDouble(row, columns, "min");
-            boolean amplitude = (minFlag != null && (minFlag.contains("(") || minFlag.equalsIgnoreCase("Y")))
-                    || (Double.isFinite(maxMag) && Double.isFinite(minMag) && minMag < maxMag);
+            boolean amplitude = "(".equals(minFlag) || "Y".equalsIgnoreCase(minFlag);
             match.addProperty("minIsAmplitude", amplitude);
+            addStringProperty(match, "maxLimit", vsxString(row, columns, "l_max"));
+            addStringProperty(match, "minLimit", vsxString(row, columns, "l_min"));
+            addStringProperty(match, "maxUncertainty", vsxString(row, columns, "u_max"));
+            addStringProperty(match, "minUncertainty", vsxString(row, columns, "u_min"));
+            addStringProperty(match, "periodLimit", vsxString(row, columns, "l_Period"));
+            addStringProperty(match, "periodUncertainty", vsxString(row, columns, "u_Period"));
+            match.addProperty("comparisonMetadataComplete", columns.keySet().containsAll(java.util.List.of(
+                    "n_min", "l_max", "u_max", "l_min", "u_min", "l_Period", "u_Period")));
+            match.addProperty("bibliographyAvailable", vsxString(row, columns, "n_OID") != null);
+            match.addProperty("source", "AAVSO VSX via VizieR");
             addFiniteProperty(match, "periodDays", vsxDouble(row, columns, "Period"));
             addFiniteProperty(match, "separationArcsec", vsxDouble(row, columns, "dist_arcsec"));
             double oid = vsxDouble(row, columns, "OID");

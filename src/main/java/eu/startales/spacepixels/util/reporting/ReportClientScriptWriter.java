@@ -22,6 +22,7 @@ final class ReportClientScriptWriter {
     }
 
     static void appendLiveReportRenderingScript(PrintWriter report) {
+        CatalogueComparisonWriter.appendScript(report);
         report.println(ReportLookupProxyServer.PERSISTED_LOOKUP_CACHE_START_MARKER);
         report.println("<script type='application/json' id='"
                 + escapeHtml(ReportLookupProxyServer.PERSISTED_LOOKUP_CACHE_SCRIPT_ID)
@@ -60,6 +61,7 @@ final class ReportClientScriptWriter {
         report.println("    if (typeof value === 'number') return value;");
         report.println("    if (typeof value !== 'string') return Number.NaN;");
         report.println("    const cleaned = value.replace(/,/g, '').trim();");
+        report.println("    if (!cleaned) return Number.NaN;");
         report.println("    const parsed = Number(cleaned);");
         report.println("    return Number.isFinite(parsed) ? parsed : Number.NaN;");
         report.println("  }");
@@ -215,6 +217,11 @@ final class ReportClientScriptWriter {
         report.println("      return;");
         report.println("    }");
         report.println("    updateKnownAs(entry);");
+        report.println("    if (entry.provider === 'vsx' && entry.kind === 'response' && entry.response && entry.response.ok === true) {");
+        report.println("      SpacePixelsCatalogueComparison.update(entry.sidecarFile, safeArray((entry.response.normalized || {}).matches).map(function (match) {");
+        report.println("        return Object.assign({ fetchedAtUtc: entry.response.fetchedAtUtc }, match);");
+        report.println("      }));");
+        report.println("    }");
         report.println("    const slot = document.getElementById(entry.slotId);");
         report.println("    if (!slot) {");
         report.println("      return;");
@@ -384,16 +391,17 @@ final class ReportClientScriptWriter {
         report.println("  }");
         report.println("");
         report.println("  function formatVsxRange(match) {");
-        report.println("    const maxText = Number.isFinite(Number(match.maxMag)) ? formatNumber(match.maxMag, 2) : '?';");
+        report.println("    const maxText = Number.isFinite(parseLooseNumber(match.maxMag)) ? formatNumber(match.maxMag, 2) : '?';");
         report.println("    const band = match.maxBand ? ' ' + match.maxBand.trim() : '';");
-        report.println("    if (!Number.isFinite(Number(match.minMag))) return maxText + band;");
-        report.println("    if (match.minIsAmplitude) return maxText + band + ' (amplitude ' + formatNumber(match.minMag, 2) + ')';");
-        report.println("    return maxText + ' - ' + formatNumber(match.minMag, 2) + band;");
+        report.println("    const minBand = match.minBand ? ' ' + match.minBand.trim() : '';");
+        report.println("    if (!Number.isFinite(parseLooseNumber(match.minMag))) return maxText + band;");
+        report.println("    if (match.minIsAmplitude) return maxText + band + ' (amplitude ' + formatNumber(match.minMag, 2) + minBand + ')';");
+        report.println("    return maxText + band + ' - ' + formatNumber(match.minMag, 2) + minBand;");
         report.println("  }");
         report.println("");
         report.println("  function formatVsxPeriod(days) {");
-        report.println("    const value = Number(days);");
-        report.println("    if (!Number.isFinite(value)) return 'n/a';");
+        report.println("    const value = parseLooseNumber(days);");
+        report.println("    if (!Number.isFinite(value) || value <= 0) return 'n/a';");
         report.println("    return value < 2 ? formatNumber(value, 5) + ' d (' + formatNumber(value * 24, 2) + ' h)' : formatNumber(value, 3) + ' d';");
         report.println("  }");
         report.println("");
@@ -412,7 +420,7 @@ final class ReportClientScriptWriter {
         report.println("      html += \"<p class='live-empty-note'>No catalogued variable star in the AAVSO VSX catalogue within the search radius. The candidate may be unlisted: check the SIMBAD link above before reporting it.</p>\";");
         report.println("    } else {");
         report.println("      html += \"<p class='live-caption'>AAVSO International Variable Star Index (VSX), queried through CDS VizieR, closest first. A catalogued match is convincing when the separation is a few arcsec and its type and period fit the light curve above.</p>\";");
-        report.println("      html += \"<div class='live-table-box'><table><thead><tr><th>Name</th><th>Type</th><th>Range (mag)</th><th>Period</th><th>Separation</th><th>Links</th></tr></thead><tbody>\";");
+        report.println("      html += \"<div class='live-table-box'><table><thead><tr><th>Name</th><th>Type</th><th>Catalogue range / amplitude (mag)</th><th>Period</th><th>Separation</th><th>Links</th></tr></thead><tbody>\";");
         report.println("      matches.forEach(function (match) {");
         report.println("        const link = match.vsxUrl ? \"<a class='live-link-inline' href='\" + escapeHtml(match.vsxUrl) + \"' target='_blank' rel='noopener noreferrer'>VSX page</a>\" : '';");
         report.println("        html += \"<tr><td>\" + escapeHtml(match.name || '') + \"</td><td>\" + escapeHtml(match.type || '') + \"</td><td>\" + escapeHtml(formatVsxRange(match)) + \"</td><td>\" + escapeHtml(formatVsxPeriod(match.periodDays)) + \"</td><td>\" + escapeHtml(formatNumber(match.separationArcsec, 1)) + \" arcsec</td><td>\" + link + \"</td></tr>\";");
@@ -532,6 +540,7 @@ final class ReportClientScriptWriter {
         report.println("  });");
         report.println("");
         report.println("  seedButtonRenderOrder();");
+        report.println("  SpacePixelsCatalogueComparison.initialize(document);");
         report.println("  seedPersistedLookupResults();");
         report.println("})();");
         report.println("</script>");
