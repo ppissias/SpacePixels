@@ -93,8 +93,8 @@ final class ResidualReviewSectionWriter {
         }
         report.println("<h2 id='common-motion'>Common Motion</h2>");
         report.println("<p class='section-lede'>Compact sources that share one displacement across at least three frames, "
-                + "and that sit well apart. They were taken out of the local-rescue list and the unclassified list, "
-                + "because the same motion at separated places is the pattern of hot pixels or a registration residual. "
+                + "and that sit well apart. Their observations were set aside before local rescue and activity clustering, "
+                + "because matching motion at separated places suggests hot pixels or a registration residual. "
                 + "A real pair with this motion is still listed here.</p>");
 
         short[][] background = context.masterStackData != null

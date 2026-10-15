@@ -813,10 +813,10 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        panel.add(createTabIntro("Final-pass analysis of the leftover per-frame point transients after JTransient finishes normal classification. This stage runs only on detections that were not consumed by confirmed moving-object tracks, accepted streak tracks, suspected same-frame streak tracks, or standalone anomalies. It first looks for weak object-like local rescue candidates, then groups the still-leftover points into broader local activity clusters for manual review."));
+        panel.add(createTabIntro("Analysis of point transients left after tracks, streaks, suspected streaks and standalone anomalies. Common-motion filtering first sets aside compact sources that share a displacement, independently of the residual-analysis switch. Optional residual analysis then looks for weak local rescue candidates and builds activity clusters from the remaining points."));
 
         panel.add(createSectionHeader("Common Settings"));
-        chkEnableResidualTransientAnalysis = addCheckboxRow(panel, "Enable Residual Transient Analysis", "Master switch for the final-pass leftover-transient analysis stage. Disable this to skip both local rescue candidates and local activity clusters.", getOptionalBooleanField(jTransientConfig, "enableResidualTransientAnalysis", true));
+        chkEnableResidualTransientAnalysis = addCheckboxRow(panel, "Enable Residual Transient Analysis", "Enables local rescue and activity clustering after common-motion filtering. Common-motion filtering has its own switch and still runs when residual analysis is off.", getOptionalBooleanField(jTransientConfig, "enableResidualTransientAnalysis", true));
         chkEnableLocalRescueCandidates = addCheckboxRow(panel, "Enable Local Rescue Candidates", "Runs the object-like rescue pass on leftover point detections to surface weak local motion or repeaters that did not become normal tracks.", getOptionalBooleanField(jTransientConfig, "enableLocalRescueCandidates", true));
 
         panel.add(Box.createVerticalStrut(10));
@@ -827,7 +827,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Common Motion"));
-        chkEnableCommonMotionRejection = addCheckboxRow(panel, "Reject Common Motion", "Removes compact sources that share one displacement on at least three frames and are well separated. This is the pattern of hot pixels or a registration residual. The group is listed in the report. A pair seen in only two frames is kept. The tolerance appears below when this is on.", jTransientConfig.enableCommonMotionRejection);
+        chkEnableCommonMotionRejection = addCheckboxRow(panel, "Reject Common Motion", "Before local rescue and activity clustering, sets aside separated compact sources that share one displacement on at least three frames. Matching motion suggests hot pixels or registration residuals; the groups remain visible in the report. Runs independently of the residual-analysis switch. Ambiguous associations and pairs seen in only two frames are kept. The tolerance appears below when this is on.", jTransientConfig.enableCommonMotionRejection);
         spinCommonMotionShiftTolerance = addRow(panel, "Common Motion Shift Tolerance", "How closely, in pixels, those sources must share the same frame-to-frame displacement. Lower values keep only a tighter match.", doubleSpinnerModel(jTransientConfig.commonMotionShiftTolerance, 0.0, 20.0, 0.1));
 
         return panel;

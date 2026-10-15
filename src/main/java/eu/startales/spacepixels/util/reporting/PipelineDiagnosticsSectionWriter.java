@@ -271,8 +271,9 @@ final class PipelineDiagnosticsSectionWriter {
                                  List<SourceExtractor.Pixel> driftPoints,
                                  FieldDepth fieldDepth) throws IOException {
         report.println("<details class='report-group' id='diagnostics'>");
-        report.println("<summary>Diagnostics<span class='summary-note'>Astrometry, frame quality control, configuration, star mask, extraction and track linking. Click to expand.</span></summary>");
+        report.println("<summary>Diagnostics<span class='summary-note'>Stage timings, astrometry, frame quality control, configuration, star mask, extraction and track linking. Click to expand.</span></summary>");
         if (pipelineTelemetry != null) {
+            writeStageTimings(report, pipelineTelemetry);
             writeAstrometricContext(report, reportContext);
             writeFrameQualityStatistics(report, pipelineTelemetry);
             writeFieldDepth(report, fieldDepth);
@@ -287,6 +288,35 @@ final class PipelineDiagnosticsSectionWriter {
             writeTrackLinkingDiagnostics(report, linkerTelemetry, summary);
         }
         report.println("</details>");
+    }
+
+    /** Major engine phases are disjoint; the faint-fragment row is included in tracking. */
+    static void writeStageTimings(PrintWriter report, PipelineTelemetry telemetry) {
+        if (telemetry == null || telemetry.stageTimeMs.isEmpty()) {
+            return;
+        }
+        report.println("<h3 id='detection-timings'>Detection Stage Timings</h3>");
+        report.printf(Locale.US, "<p class='astro-note'>Engine elapsed time: <strong>%.3f s</strong>. "
+                + "Major steps do not overlap. Parallel processing is measured as elapsed time, not the sum of worker times. "
+                + "Disabled steps are omitted. Input image loading and report generation are outside this total.</p>%n",
+                telemetry.processingTimeMs / 1000.0);
+        report.println("<table><thead><tr><th>Detection step</th><th>Elapsed time</th><th>Share of engine time</th></tr></thead><tbody>");
+        for (java.util.Map.Entry<PipelineTelemetry.Stage, Long> stage : telemetry.stageTimeMs.entrySet()) {
+            writeTimingRow(report, stage.getKey().getLabel(), stage.getValue(), telemetry.processingTimeMs, false);
+            if (stage.getKey() == PipelineTelemetry.Stage.TRACKING && telemetry.trackerTelemetry != null
+                    && telemetry.trackerTelemetry.faintStreakFragmentTimeMs >= 0) {
+                writeTimingRow(report, "Faint streak fragment assembly (included in tracking)",
+                        telemetry.trackerTelemetry.faintStreakFragmentTimeMs, telemetry.processingTimeMs, true);
+            }
+        }
+        report.println("</tbody></table>");
+    }
+
+    private static void writeTimingRow(PrintWriter report, String label, long elapsedMs, long totalMs, boolean substep) {
+        String share = totalMs > 0 ? String.format(Locale.US, "%.1f%%", 100.0 * elapsedMs / totalMs) : "&ndash;";
+        report.printf(Locale.US, "<tr><td%s>%s</td><td>%.3f s</td><td>%s</td></tr>%n",
+                substep ? " style='padding-left:28px;'" : "", DetectionReportGenerator.escapeHtml(label),
+                elapsedMs / 1000.0, share);
     }
 
     private static void addResult(List<String> cards, List<String> empty, int count, String label, String anchor) {

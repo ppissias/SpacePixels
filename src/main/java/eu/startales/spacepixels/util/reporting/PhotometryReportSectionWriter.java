@@ -174,6 +174,10 @@ final class PhotometryReportSectionWriter {
                 + verdictBadge(t.verdict) + "</span><span class='metric-label'>Readiness</span></div>");
         report.println(metricBox(t.framesUsed + " <span style='color:#777; font-size:16px;'>/ " + t.framesAnalyzed + "</span>", "Frames used / analysed",
                 "Frames retained for photometry, out of the frames analysed after the initial quality filter."));
+        if (t.framesExcludedSpatial > 0) {
+            report.println(metricBox(String.valueOf(t.framesExcludedSpatial), "Frames excluded: spatial residuals",
+                    "Frames omitted from variable-star photometry because a region of the field retains a brightness offset relative to the centre after ensemble correction."));
+        }
         report.println(metricBox(String.valueOf(t.starsSelected), "Stars measured",
                 "Isolated stars included in the photometric measurements. Individual measurements may later be excluded."));
         if (!notReady) {
@@ -348,6 +352,8 @@ final class PhotometryReportSectionWriter {
                 "Frames whose registration offsets disagree by more than the configured spread."));
         report.println(configItem("Frames excluded: star-shape check (B)", String.valueOf(t.framesExcludedShapeLinearity),
                 "Frames excluded because the star-shape check failed."));
+        report.println(configItem("Frames excluded: spatial residuals", String.valueOf(t.framesExcludedSpatial),
+                "Frames omitted from variable-star photometry because a region of the field retains a brightness offset relative to the centre after ensemble correction."));
         report.println(configItem("Frames excluded: brightness-response check (D)", String.valueOf(t.framesExcludedResponse),
                 "Frames excluded because bright and faint stars did not change by the same amount in magnitudes."));
         report.println(configItem("Frames excluded: too few stars", String.valueOf(t.framesExcludedTooFewStars),
