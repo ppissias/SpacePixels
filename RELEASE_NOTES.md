@@ -1,6 +1,6 @@
 # SpacePixels Release Notes
 
-## 2026-10.02
+## 2026.10-02
 
 This release adds **Night & Equipment** diagnostics, remembers each session's Auto-Tune results, improves faint-streak and common-motion handling, and strengthens the variable-star checks. The report now explains where processing time went and how a candidate's measured variation compares with its catalogue entry.
 
@@ -49,7 +49,7 @@ This release adds **Night & Equipment** diagnostics, remembers each session's Au
 - Java 21 or newer is still required. Detection engine: **JTransient 1.0.3**.
 - API users can inspect ordered per-stage wall-clock timings in `PipelineTelemetry.stageTimeMs`, faint-fragment time within tracking, spatial photometry exclusion counts, anomaly low-confidence flags and common-motion groups. Common-motion groups remain available even when residual analysis is disabled. See [Detection diagnostics](API.md#detection-diagnostics).
 
-## 2026-10.01
+## 2026.10-01
 
 This release adds variable-star photometry, a new auto-tuner that measures your own frames, a sky catalogue for the viewers and the report, and a reworked window, report and settings panel. It comes with a new [User Manual](MANUAL.md).
 
