@@ -4,7 +4,11 @@
 
 SpacePixels finds what moves or changes in your astrophotography sessions: asteroids, comets, satellites, flashes and variable stars. You give it the aligned sub-exposures of a session, and it gives you an HTML report with every object it found, with crops, animations, maps and buttons that look the objects up in JPL, SkyBoT and other catalogues.
 
-This manual walks through the everyday workflows with screenshots from real sessions. For the detailed meaning of every setting, hover the setting in the program: each one has a description. There is also a [video tutorial](https://youtu.be/7XBdYh0Wn7A), and the detection engine is documented in the [JTransient repository](https://github.com/ppissias/JTransient).
+This manual walks through the everyday workflows with screenshots from real sessions. For the detailed meaning of every setting, hover the setting in the program: each one has a description. Watch the [latest video tutorial](https://youtu.be/LhA1izPFql0) or the [earlier tutorial](https://youtu.be/7XBdYh0Wn7A). The detection engine is documented in the [JTransient repository](https://github.com/ppissias/JTransient).
+
+<a href="https://youtu.be/LhA1izPFql0" target="_blank" rel="noopener noreferrer">
+  <img src="docs/images/video-tutorial-latest-thumbnail.jpg" alt="Watch the latest SpacePixels full tutorial on YouTube" width="320"/>
+</a>
 
 ## Contents
 

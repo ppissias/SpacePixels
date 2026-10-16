@@ -1,4 +1,4 @@
-# SpacePixels 🌌
+# <img src="src/main/resources/eu/startales/spacepixels/gui/icons/spacepixels-128.png" alt="" width="40" height="40" /> SpacePixels
 
 SpacePixels is a desktop and command-line FITS workflow for finding moving and transient objects in aligned astronomical image sequences. It is built around the JTransient detection engine and is aimed at asteroid, comet, satellite, and transient hunting from amateur data.
 
@@ -59,10 +59,10 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 <br/>*Sample Detection - asteroid Prokne (data credit Klangwolke @ Cloudynights)*
 
 ![Sample Detection](docs/images/Valeria-Screenshot.png)
-<br/>*Sample Detection - minor planet Valeria (data credit Klangwolke @ Cloudynights)*
+<br/>*Sample Detection - asteroid Valeria (data credit Klangwolke @ Cloudynights)*
 
 ![Sample Detection](docs/images/Valeria-moving_track_1_star_centric.gif)
-<br/>*Sample Detection - minor planet Valeria (data credit Klangwolke @ Cloudynights)*
+<br/>*Sample Detection - asteroid Valeria (data credit Klangwolke @ Cloudynights)*
 
 ![Sample Detection](docs/images/Sutoku-Screenshot.png)
 <br/>*Sample Detection - asteroid Sutoku (data credit Klangwolke @ Cloudynights)*
@@ -73,6 +73,9 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 ![Sample Detection](docs/images/variable-star-summary.png)
 ![Sample Detection](docs/images/variable-star-detection.png)
 <br/>*Sample Detection - Variable star DK Per*
+
+![Variable star TSVSC1 TN-N213111103-25-82-2 detection and light curve](docs/images/variable-star-tsvsc1-tn-n213111103-25-82-2.png)
+<br/>*Sample Detection - Variable star TSVSC1 TN-N213111103-25-82-2 (W UMa-type eclipsing binary), showing 0.61 mag variation over 299 minutes.*
 
 ![Sample Detection](docs/images/aptrack_1_star_centric.gif)
 <br/>*Sample Detection - Comet Africano 2019*
@@ -92,15 +95,23 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 ![Sample Detection](docs/images/anomaly_17_context.gif)
 <br/> *Sample Detection - high-energy anomaly, data credit cloudynights user TheStarsabove.*
 
-## Video Tutorial
+## Video Tutorials
+
+### Latest tutorial
+
+<a href="https://youtu.be/LhA1izPFql0" target="_blank" rel="noopener noreferrer">
+  <img src="docs/images/video-tutorial-latest-thumbnail.jpg" alt="Watch the latest SpacePixels full tutorial on YouTube" width="320"/>
+</a>
+
+[Watch the latest SpacePixels tutorial on YouTube](https://youtu.be/LhA1izPFql0)
+
+### Earlier tutorial
 
 <a href="https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ" target="_blank">
   <img src="docs/images/video-tutorial-thumbnail.jpg" alt="Watch the SpacePixels video tutorial on YouTube" width="320"/>
 </a>
 
-[Watch the video tutorial on YouTube](https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ)
-
-*A new tutorial using the latest version is on the way.*
+[Watch the earlier SpacePixels tutorial on YouTube](https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ)
 
 
 ## JTransient engine documentation
@@ -186,14 +197,14 @@ To generate a local distribution with launch scripts:
 
 ## Typical GUI workflow
 
-1. Import a directory of aligned FITS files, or a XISF-only directory, with `Import Aligned Frames…` (the first button of the `1 Prepare` group), or drop the folder onto the window.
+1. Import a directory of aligned FITS files, or a XISF-only directory, with `Import Aligned Frames…`, or drop the folder onto the window.
 2. If the sequence is compressed or 32-bit, let SpacePixels decompress or standardize it first.
-3. If the sequence is color, run `Convert to Mono` (group 1 Prepare).
-4. Optionally configure ASTAP and observatory metadata in the `Astrometry Config` tab, and plate-solve one frame (group 2 Astrometry) so the report can identify asteroids (JPL, SkyBoT) and variable stars (AAVSO VSX).
-5. Optionally adjust the display stretch in the `Image Stretch` tab (used by Blink, the full-size viewer and the optional stretched copies; detection always uses the linear data).
-6. Run Auto-Tune on the `Overview` page of the `Detection Settings` tab (one run measures all four profiles; pick one in the table), or adjust the settings by hand.
+3. If the sequence is color, run `Convert to Mono`.
+4. Optionally configure your plate solver and observatory metadata, then plate-solve one frame so the report can identify asteroids (JPL, SkyBoT) and variable stars (AAVSO VSX).
+5. Optionally adjust the display stretch for Blink, the full-size viewer and the optional stretched copies. Detection always uses the linear data.
+6. Run Auto-Tune, which measures all four sensitivity profiles, and choose one, or adjust the settings by hand.
 7. Run either:
-   - `Detect Moving Targets` (the standard pipeline, Ctrl+D), optionally with variable-star photometry switched on in Detection Settings, or
+   - `Detect Moving Targets` (the standard pipeline, Ctrl+D), optionally with variable-star photometry enabled, or
    - `Detect Iteratively (large datasets)` for large datasets where the standard full run may be too heavy.
 8. When the run finishes, SpacePixels prompts you to open the generated HTML report or, for iterative runs, the results folder containing the per-pass reports.
 
