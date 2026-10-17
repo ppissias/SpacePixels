@@ -39,7 +39,7 @@ But SpacePixels is the opposite of a stacker: it looks for what changes between 
 
 
 
-Supported files: FITS (`.fit`, `.fits`, `.fts`), compressed FITS (`.fz`) and XISF, 16 or 32 bit, monochrome or colour. SpacePixels offers to convert what the detection needs (decompression, 16 bit, monochrome) when you import. Keep one sequence per folder: all files in a folder must have the same type, bit depth, size and layout, and either all frames have timestamps or none.
+Supported files: FITS (`.fit`, `.fits`, `.fts`), compressed FITS (`.fz`) and XISF, 16 or 32 bit, monochrome or colour. SpacePixels offers to convert what the detection needs (decompression, standard unsigned 16 bit, monochrome) when you import. Keep one sequence per folder: all files in a folder must have the same type, bit depth, size and layout, and either all frames have timestamps or none.
 
 A typical source is the folder of registered frames that your stacking program writes before it stacks them (for example the `r_*.fit` files of Siril or the registered frames of PixInsight).
 
@@ -88,7 +88,7 @@ Click **Import Aligned Frames…** (the highlighted button in **1 Prepare**) and
 
 ![The imported session](docs/images/manual/ui-imported.png)
 
-The table lists every frame with its size, time, exposure and whether it is plate-solved. The status lines confirm what SpacePixels found: here *Monochrome, 33 frames* and *33 / 33 solved*. If this folder already has a saved auto-tune, the note under **Auto-Tune Settings** names the profile and when it was run, and the box on the right shows those detection settings. If the frames are in colour, click **Convert to Mono** first; if they are compressed, XISF or 32 bit, SpacePixels offers the conversion during import.
+The table lists every frame with its size, time, exposure and whether it is plate-solved. The status lines confirm what SpacePixels found: here *Monochrome, 33 frames* and *33 / 33 solved*. If this folder already has a saved auto-tune, the note under **Auto-Tune Settings** names the profile and when it was run, and the box on the right shows those detection settings. If the frames are in colour, click **Convert to Mono** first; if they are compressed, XISF, 32 bit or signed 16 bit, SpacePixels offers the conversion during import.
 
 ### Step 2 (optional): plate-solve one frame
 
@@ -495,3 +495,5 @@ In most sessions you only need Auto-Tune and the profile. Change single settings
 **Out of memory.** Close other programs. If Auto-Tune runs out of memory, lower **Frames Used by Auto-Tune** (Detection Settings → Quality Control, an expert setting). For moving-object detection, use **Detect Iteratively** and set a smaller maximum frame count; leaving the limit blank or zero still loads all frames for the master stack.
 
 **Colour frames.** Detection works on monochrome data; click **Convert to Mono** after importing.
+
+**Signed 16-bit frames, or pixel values below zero.** SpacePixels reads 16-bit frames as unsigned values (`BZERO` 32768). Frames stored as signed 16 bit (`BZERO` 0) or with other scaling would be read at the wrong brightness level, so import offers to convert them into a new folder. When the conversion finds pixels below zero (frames bias- or dark-subtracted without a pedestal, in signed 16 bit or 32 bit), it asks how to store them. **Add an Offset** (recommended) adds the same amount to every pixel of every frame, keeps all values and leaves the registration padding at 0; the report takes the offset off again for the sky brightness. **Set to 0** keeps the original levels but cuts off the low side of the noise; when the sky itself is near zero, most of each frame becomes 0, every frame then looks like a failed registration and detection fails.

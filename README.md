@@ -149,11 +149,11 @@ For setup, request/result behavior, and usage examples, see [API.md](API.md).
 ## Input requirements
 
 - Best results come from aligned, calibrated sub-exposures where the star field is already registered.
-- All frames in a sequence should share the same dimensions.
+- All frames in a sequence must share the same dimensions, file type, bit depth and colour layout, and either all frames have timestamps or none. Import refuses a mixed folder.
 - The GUI can import FITS directories (`.fit`, `.fits`, `.fts`). Directories containing XISF files and no native FITS files are converted to 16-bit monochrome FITS during import. Compressed `.fz` inputs are detected and can be decompressed into a new directory during import.
-- The GUI can also standardize 32-bit FITS data down to 16-bit during import when needed.
+- The GUI can also standardize 32-bit FITS data, and signed or scaled 16-bit data (`BZERO` other than 32768), to standard unsigned 16-bit during import. When the conversion finds pixel values below zero, it asks whether to add an offset to every frame (recommended) or set them to 0.
 - Automated detection requires 16-bit monochrome frames. If you import color images, use `Convert to Mono` before running the detection pipelines.
-- The headless batch detector is stricter than the GUI: it expects uncompressed 16-bit monochrome FITS files.
+- The headless batch detector is stricter than the GUI: it expects uncompressed unsigned 16-bit monochrome FITS files (`BZERO` 32768, `BSCALE` 1).
 
 ## Installation and launch
 
@@ -195,10 +195,14 @@ To generate a local distribution with launch scripts:
 - Windows: `gradlew.bat installDist`
 - Linux/macOS: `./gradlew installDist`
 
+### Console output
+
+SpacePixels prints only problems to the console; the batch detector also prints the path of the report it wrote. For diagnostics (progress, per-frame statistics, timings and the detection engine's debug output), start the JVM with `-Dspacepixels.debug=true`: for a release build set `JAVA_OPTS=-Dspacepixels.debug=true` before running the launcher, and from source add `-PspacepixelsDebug` to the Gradle command.
+
 ## Typical GUI workflow
 
 1. Import a directory of aligned FITS files, or a XISF-only directory, with `Import Aligned Frames…`, or drop the folder onto the window.
-2. If the sequence is compressed or 32-bit, let SpacePixels decompress or standardize it first.
+2. If the sequence is compressed, 32-bit or signed 16-bit, let SpacePixels decompress or standardize it first.
 3. If the sequence is color, run `Convert to Mono`.
 4. Optionally configure your plate solver and observatory metadata, then plate-solve one frame so the report can identify asteroids (JPL, SkyBoT) and variable stars (AAVSO VSX).
 5. Optionally adjust the display stretch for Blink, the full-size viewer and the optional stretched copies. Detection always uses the linear data.

@@ -58,22 +58,40 @@ The report directory also contains `report-data.json` (schema version 1): genera
 
 ## Input preparation modes
 
-All imported images must use the same extension (case-insensitive). FITS frames must also share
-their BITPIX storage type, mono/RGB layout, dimensions and compression state. These checks run
-before automatic FITS conversion, so conversion cannot hide a mixed sequence. Compressed suffixes
-such as `.fit.fz` and `.fits.fz` are treated as different extensions.
+All imported images must use the same extension (case-insensitive), so FITS and XISF files cannot
+be mixed. FITS frames must also share their BITPIX storage type, `BZERO`/`BSCALE` sample scaling,
+mono/RGB layout, dimensions and compression state. XISF frames must share their dimensions, channel
+count, colour space and sample format. These checks run before automatic FITS or XISF conversion,
+so conversion cannot hide a mixed sequence. Compressed suffixes such as `.fit.fz` and `.fits.fz`
+are treated as different extensions.
 
 Timing must be consistent: every frame must have a parseable observation timestamp, or none may
 have one. Timed sequences sort by timestamp, with filename as a tie breaker; untimed sequences
 sort by filename. Malformed timestamps count as unavailable.
 
-FITS normalization applies the original `BSCALE` and `BZERO` in double precision before clipping
-to unsigned 16-bit storage. The API closes its import executor on both success and failure.
+FITS normalization applies the original `BSCALE` and `BZERO` in double precision and stores the
+result as unsigned 16-bit (`BZERO` 32768, `BSCALE` 1). Signed 16-bit frames (`BZERO` 0) and frames
+with other scaling count as not detection-ready, because read as they are their pixels would be at
+the wrong brightness level. The API closes its import executor on both success and failure.
+
+Unsigned 16-bit storage cannot hold values below zero, which signed or floating-point frames that
+were bias- or dark-subtracted without a pedestal contain. `NegativeValueHandling` chooses what
+`AUTO_PREPARE_TO_16BIT_MONO` does with them:
+
+- `ADD_OFFSET` (default, recommended): the same whole number of ADU is added to every pixel of every
+  frame so the lowest value becomes 0. All values and the sky noise are kept. The zero fill that
+  registration leaves at the frame edges stays at 0, so the detection still recognises it, and the
+  converted files record the offset in the `SPOFFSET` keyword, which the report subtracts for the sky
+  brightness.
+- `CLIP_TO_ZERO`: values below zero become 0. Where the sky is close to zero this cuts off the low
+  side of the noise; when more than half of each frame is at 0, every frame counts as a failed
+  registration and the run fails.
 
 `InputPreparationMode` controls how strictly the API treats the input directory:
 
 - `FAIL_IF_NOT_READY`
-  Use this when the directory is already an uncompressed 16-bit monochrome FITS sequence.
+  Use this when the directory is already an uncompressed 16-bit monochrome FITS sequence stored as
+  unsigned values (`BZERO` 32768, `BSCALE` 1). Anything else is refused with a message.
 - `AUTO_PREPARE_TO_16BIT_MONO`
   Use this when the input may be an XISF-only directory, color FITS, or supported FITS data that is not already 16-bit monochrome, and you want SpacePixels to normalize it into a new detection-ready directory first.
 
@@ -225,5 +243,6 @@ try {
 - `FAIL_IF_NOT_READY` is stricter and is best for automated production workflows.
 - `AUTO_PREPARE_TO_16BIT_MONO` is more forgiving and is best when input format may vary.
 - The API returns a defensive copy for exposed configs and FITS metadata arrays.
+- The API prints nothing to the console; problems are thrown or logged as `java.util.logging` warnings. Each run sets JTransient's `JTransientEngine.DEBUG` and `JTransientAutoTuner.DEBUG` from the `spacepixels.debug` system property, so start the JVM with `-Dspacepixels.debug=true` for the per-frame diagnostics on standard output. The Auto-Tune telemetry is in the result (`getAutoTuneTelemetryReport()`), not printed.
 - The public artifact currently contains GUI code as well, but GUI classes are not part of the supported API contract.
 - Do not run multiple API calls with the legacy auto-tuner concurrently in the same JVM. It temporarily adjusts shared JTransient Auto-Tune state while a tuning run is active. The calibrated tuner (the default) does not use shared state.
