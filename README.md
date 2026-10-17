@@ -1,5 +1,7 @@
 # <img src="src/main/resources/eu/startales/spacepixels/gui/icons/spacepixels-128.png" alt="" width="40" height="40" /> SpacePixels
 
+Discover asteroids, comets, moving objects, variable stars, and astronomical transients hidden in your existing astrophotography FITS images.
+
 SpacePixels is a desktop and command-line FITS workflow for finding moving and transient objects in aligned astronomical image sequences. It is built around the JTransient detection engine and is aimed at asteroid, comet, satellite, and transient hunting from amateur data.
 
 Instead of stacking away motion, SpacePixels analyzes the frame-to-frame changes, links detections across time, and exports a full HTML session report with diagnostics, crops, and animations.
