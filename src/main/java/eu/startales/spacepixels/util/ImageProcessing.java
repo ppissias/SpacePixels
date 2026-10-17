@@ -1652,6 +1652,51 @@ public class ImageProcessing implements AutoCloseable {
                         + "too low. With the sky at zero, detection can fail.");
     }
 
+    /**
+     * Warns that the images have different exposure times and offers to import only the largest group, copied into a
+     * subfolder because SpacePixels works on whole folders. Returns that subfolder, or null when the user cancels.
+     */
+    public static File offerToImportLargestExposureGroup(MixedExposureException mixed) throws IOException {
+        ExposureGroup largest = mixed.getLargestGroup();
+        String[] options = {"Import the " + largest.describe(), "Cancel"};
+        int choice = JOptionPane.showOptionDialog(null, mixedExposureQuestion(mixed), "Different Exposure Times",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[0]);
+        ApplicationWindow.logger.info(mixed.getMessage() + " Choice: " + (choice == 0 ? "import the largest group" : "cancel"));
+        if (choice != 0) {
+            return null;
+        }
+
+        eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog =
+                new eu.startales.spacepixels.gui.ProcessingProgressDialog(null);
+        progressDialog.setTitle("Copying images...");
+        SwingUtilities.invokeLater(() -> progressDialog.setVisible(true));
+        try {
+            return largest.copyIntoSubfolder(percent -> SwingUtilities.invokeLater(
+                    () -> progressDialog.updateProgress(percent, "Copying the " + largest.describe() + "...")));
+        } finally {
+            SwingUtilities.invokeLater(progressDialog::dispose);
+        }
+    }
+
+    /** The warning {@link #offerToImportLargestExposureGroup} shows. */
+    static String mixedExposureQuestion(MixedExposureException mixed) {
+        ExposureGroup largest = mixed.getLargestGroup();
+        StringBuilder groups = new StringBuilder();
+        for (String group : MixedExposureException.describeGroups(mixed.getGroups())) {
+            groups.append("<br>&bull; ").append(htmlText(group));
+        }
+        return dialogParagraphs(
+                "These " + mixed.getImageCount() + " images do not all have the same exposure time:" + groups,
+                "SpacePixels needs one exposure time for the whole sequence: the brightness of the stars and the sky, and "
+                        + "the length of trails, change with the exposure, and the detection compares the frames with each other.",
+                "Would you like to import only the " + largest.describe() + "? They are copied into the subfolder <b>"
+                        + htmlText(largest.getFolderName()) + "</b>, and the original folder stays as it is.");
+    }
+
+    private static String htmlText(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
     /** A dialog message of wrapped paragraphs (Swing's own wrapping of plain text drops characters). */
     private static String dialogParagraphs(String... paragraphs) {
         StringBuilder html = new StringBuilder("<html><body style='width: 430px'>");

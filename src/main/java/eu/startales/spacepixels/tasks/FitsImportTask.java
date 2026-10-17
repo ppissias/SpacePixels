@@ -17,6 +17,7 @@ import eu.startales.spacepixels.events.FitsImportStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.MixedExposureException;
 import eu.startales.spacepixels.util.XisfImageConverter;
 
 import java.io.File;
@@ -59,14 +60,34 @@ public class FitsImportTask implements Runnable {
             // The user opted to automatically load the newly converted directory!
             ApplicationWindow.logger.info("Redirecting import to newly created directory: " + e.getNewDirectory().getAbsolutePath());
             new FitsImportTask(eventBus, e.getNewDirectory()).run();
+        } catch (MixedExposureException e) {
+            // Only the window can ask; the API and batch runs reject the folder with the exception's message.
+            if (!e.canImportLargestGroup()) {
+                postFailure(e);
+                return;
+            }
+            try {
+                File largestGroup = ImageProcessing.offerToImportLargestExposureGroup(e);
+                if (largestGroup == null) {
+                    eventBus.post(new FitsImportFinishedEvent(true, null, null, new FitsFileInformation[0]));
+                } else {
+                    ApplicationWindow.logger.info("Redirecting import to the images of one exposure time: " + largestGroup.getAbsolutePath());
+                    new FitsImportTask(eventBus, largestGroup).run();
+                }
+            } catch (Exception copyFailure) {
+                postFailure(copyFailure);
+            }
         } catch (Exception e) {
-            ApplicationWindow.logger.log(Level.SEVERE, "Error loading FITS files", e);
-            // 3. Post failure
-            eventBus.post(new FitsImportFinishedEvent(false, e.getMessage(), null, null));
+            postFailure(e);
         } finally {
             if (!ownershipTransferred && imgProcessing != null) {
                 imgProcessing.close();
             }
         }
+    }
+
+    private void postFailure(Exception e) {
+        ApplicationWindow.logger.log(Level.SEVERE, "Error loading FITS files", e);
+        eventBus.post(new FitsImportFinishedEvent(false, e.getMessage(), null, null));
     }
 }

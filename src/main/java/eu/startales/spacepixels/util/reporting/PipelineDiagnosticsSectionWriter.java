@@ -93,8 +93,9 @@ final class PipelineDiagnosticsSectionWriter {
                 if (filter == null) missingFilter = true; else filters.add(filter);
             }
             if (!exposures.isEmpty()) {
+                // Import accepts one exposure time only, so a range here is the camera recording the measured exposure.
                 String exposure = formatSeconds(exposures.first() / 1000.0) + (exposures.size() > 1
-                        ? "–" + formatSeconds(exposures.last() / 1000.0) + " (mixed exposures)" : "");
+                        ? "–" + formatSeconds(exposures.last() / 1000.0) : "");
                 items.add(headerItem("Exposure", exposure));
             }
             if (!filters.isEmpty()) items.add(headerItem("Filter", DetectionReportGenerator.escapeHtml(String.join(", ", filters))

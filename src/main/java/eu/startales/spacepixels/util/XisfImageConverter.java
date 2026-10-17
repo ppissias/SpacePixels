@@ -85,12 +85,15 @@ public final class XisfImageConverter {
 
     /**
      * Checks, from the XML headers alone, that every XISF file has the same size, channels, colour space and sample
-     * format, and that all or none of them have a usable observation time.
+     * format, that all or none of them have a usable observation time, and that they share one exposure time.
      */
     static void validateSequence(File[] xisfFiles) throws Exception {
         ImageType reference = null;
-        for (File xisfFile : xisfFiles) {
+        long[] exposures = new long[xisfFiles.length];
+        for (int i = 0; i < xisfFiles.length; i++) {
+            File xisfFile = xisfFiles[i];
             ImageType type = readImageType(xisfFile);
+            exposures[i] = type.exposureMillis;
             if (reference == null) {
                 reference = type;
             } else if (!type.sameFormatAs(reference)) {
@@ -102,6 +105,10 @@ public final class XisfImageConverter {
                         + "observation timestamp, or none may have one. " + xisfFiles[0].getName()
                         + " and " + xisfFile.getName() + " have different timing availability.");
             }
+        }
+        List<ExposureGroup> groups = ExposureGroup.of(xisfFiles, exposures);
+        if (groups.size() > 1) {
+            throw new MixedExposureException(groups);
         }
     }
 
@@ -121,7 +128,8 @@ public final class XisfImageConverter {
                     information.getFitsHeader().put(keyword.name.trim(), decodeFitsString(value));
                 }
             }
-            return new ImageType(geometry, sampleFormat, colorSpace, information.getObservationTimestamp() != -1L);
+            return new ImageType(geometry, sampleFormat, colorSpace, information.getObservationTimestamp() != -1L,
+                    information.getExposureDurationMillis());
         }
     }
 
@@ -829,12 +837,14 @@ public final class XisfImageConverter {
         private final SampleFormat sampleFormat;
         private final String colorSpace;
         private final boolean timed;
+        private final long exposureMillis;
 
-        private ImageType(Geometry geometry, SampleFormat sampleFormat, String colorSpace, boolean timed) {
+        private ImageType(Geometry geometry, SampleFormat sampleFormat, String colorSpace, boolean timed, long exposureMillis) {
             this.geometry = geometry;
             this.sampleFormat = sampleFormat;
             this.colorSpace = colorSpace;
             this.timed = timed;
+            this.exposureMillis = exposureMillis;
         }
 
         private boolean sameFormatAs(ImageType other) {

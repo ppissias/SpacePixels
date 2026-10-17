@@ -11,6 +11,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 
 final class FitsSequenceValidator {
@@ -101,6 +102,7 @@ final class FitsSequenceValidator {
             }
         }
         validateTiming(metadata);
+        validateExposures(metadata);
     }
 
     private static String describe(int[] axes, int bitpix, double bzero, double bscale, boolean compressed) {
@@ -115,6 +117,7 @@ final class FitsSequenceValidator {
 
     static void validateAndSort(FitsFileInformation[] metadata) throws IOException {
         boolean timed = validateTiming(metadata);
+        validateExposures(metadata);
         Comparator<FitsFileInformation> order = Comparator.comparing(FitsFileInformation::getFileName);
         if (timed) {
             order = Comparator.comparingLong(FitsFileInformation::getObservationTimestamp).thenComparing(order);
@@ -135,5 +138,19 @@ final class FitsSequenceValidator {
             }
         }
         return timed;
+    }
+
+    /** Rejects a sequence whose images do not all have the same exposure time (see {@link ExposureGroup}). */
+    static void validateExposures(FitsFileInformation[] metadata) throws MixedExposureException {
+        File[] files = new File[metadata.length];
+        long[] exposures = new long[metadata.length];
+        for (int i = 0; i < metadata.length; i++) {
+            files[i] = new File(metadata[i].getFilePath());
+            exposures[i] = metadata[i].getExposureDurationMillis();
+        }
+        List<ExposureGroup> groups = ExposureGroup.of(files, exposures);
+        if (groups.size() > 1) {
+            throw new MixedExposureException(groups);
+        }
     }
 }

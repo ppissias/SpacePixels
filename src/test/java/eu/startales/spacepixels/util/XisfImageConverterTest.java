@@ -143,6 +143,25 @@ public class XisfImageConverterTest {
     }
 
     @Test
+    public void mixedExposureTimesAreRejectedBeforeConversion() throws Exception {
+        Path sourceDirectory = Files.createTempDirectory("spacepixels-xisf-mixed-exposure");
+        writeTimedXisf(sourceDirectory.resolve("a.xisf"), "2026-04-06T01:02:03", 60.0);
+        writeTimedXisf(sourceDirectory.resolve("b.xisf"), "2026-04-06T01:03:03", 60.1);
+        writeTimedXisf(sourceDirectory.resolve("c.xisf"), "2026-04-06T01:04:03", 180.0);
+        assertRejectedBeforeConversion(sourceDirectory, "2 images of 60–60.1 s, 1 image of 180 s (c.xisf)");
+        MixedExposureException mixed = assertThrows(MixedExposureException.class,
+                () -> XisfImageConverter.prepareDirectoryForFitsImport(sourceDirectory.toFile()));
+        assertEquals(2, mixed.getLargestGroup().size());
+
+        // The window copies the largest group, and that folder converts.
+        File subfolder = mixed.getLargestGroup().copyIntoSubfolder(null);
+        File importDirectory = XisfImageConverter.prepareDirectoryForFitsImport(subfolder);
+        assertTrue(Files.exists(importDirectory.toPath().resolve("a.fit")));
+        assertTrue(Files.exists(importDirectory.toPath().resolve("b.fit")));
+        assertFalse(Files.exists(importDirectory.toPath().resolve("c.fit")));
+    }
+
+    @Test
     public void matchingTimedSequenceIsConverted() throws Exception {
         Path sourceDirectory = Files.createTempDirectory("spacepixels-xisf-matching");
         writeGrayXisf(sourceDirectory.resolve("a.xisf"), "2:2:1", "UInt16", "2026-04-06T01:02:03");
@@ -157,6 +176,12 @@ public class XisfImageConverterTest {
                 () -> XisfImageConverter.prepareDirectoryForFitsImport(sourceDirectory.toFile()));
         assertTrue(exception.getMessage(), exception.getMessage().contains(message));
         assertFalse(Files.exists(sourceDirectory.resolve("_spacepixels_xisf_mono16")));
+    }
+
+    private static void writeTimedXisf(Path targetPath, String dateObs, double exposureSeconds) throws IOException {
+        writeMonolithicXisf(targetPath, "2:2:1", "UInt16", "Gray", "Planar", null, "", new byte[2 * 2 * 2],
+                "<FITSKeyword name=\"DATE-OBS\" value=\"'" + dateObs + "'\" comment=\"\" />"
+                        + "<FITSKeyword name=\"EXPTIME\" value=\"" + exposureSeconds + "\" comment=\"\" />");
     }
 
     private static void writeGrayXisf(Path targetPath, String geometry, String sampleFormat, String dateObs) throws IOException {
