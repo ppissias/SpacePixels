@@ -51,6 +51,7 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
             DetectionInputPreparation.PreparedDirectory preparedDirectory = DetectionInputPreparation.prepareInputDirectory(
                     request.getInputDirectory(),
                     request.getInputPreparationMode() == InputPreparationMode.AUTO_PREPARE_TO_16BIT_MONO,
+                    request.getNegativeValueHandling() == NegativeValueHandling.ADD_OFFSET,
                     (percentage, message) -> emitScaledProgress(progressListener, 0, 15, percentage, message));
 
             emitProgress(progressListener, 15, "Validating FITS metadata for pipeline execution...");

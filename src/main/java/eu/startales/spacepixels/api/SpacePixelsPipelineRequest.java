@@ -29,6 +29,7 @@ public final class SpacePixelsPipelineRequest {
     private final AutoTunerRunner.Algorithm autoTuneAlgorithm;
     private final int autoTuneMaxCandidateFrames;
     private final InputPreparationMode inputPreparationMode;
+    private final NegativeValueHandling negativeValueHandling;
     private final boolean generateReport;
     private final SpacePixelsProgressListener progressListener;
 
@@ -39,6 +40,7 @@ public final class SpacePixelsPipelineRequest {
         this.autoTuneAlgorithm = builder.autoTuneAlgorithm;
         this.autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.normalizeAutoTuneMaxCandidateFrames(builder.autoTuneMaxCandidateFrames);
         this.inputPreparationMode = builder.inputPreparationMode;
+        this.negativeValueHandling = builder.negativeValueHandling;
         this.generateReport = builder.generateReport;
         this.progressListener = builder.progressListener;
     }
@@ -109,6 +111,15 @@ public final class SpacePixelsPipelineRequest {
     }
 
     /**
+     * Returns how input preparation stores converted pixel values below zero.
+     *
+     * @return negative-value handling
+     */
+    public NegativeValueHandling getNegativeValueHandling() {
+        return negativeValueHandling;
+    }
+
+    /**
      * Returns whether the standard HTML report and export assets should be generated.
      *
      * @return {@code true} to export the report, {@code false} to return only in-memory results
@@ -136,6 +147,7 @@ public final class SpacePixelsPipelineRequest {
         private AutoTunerRunner.Algorithm autoTuneAlgorithm = AutoTunerRunner.DEFAULT_ALGORITHM;
         private int autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
         private InputPreparationMode inputPreparationMode = InputPreparationMode.FAIL_IF_NOT_READY;
+        private NegativeValueHandling negativeValueHandling = NegativeValueHandling.ADD_OFFSET;
         private boolean generateReport = true;
         private SpacePixelsProgressListener progressListener;
 
@@ -196,6 +208,18 @@ public final class SpacePixelsPipelineRequest {
          */
         public Builder inputPreparationMode(InputPreparationMode inputPreparationMode) {
             this.inputPreparationMode = Objects.requireNonNull(inputPreparationMode, "inputPreparationMode");
+            return this;
+        }
+
+        /**
+         * Sets how {@link InputPreparationMode#AUTO_PREPARE_TO_16BIT_MONO} stores converted pixel values below zero
+         * ({@link NegativeValueHandling#ADD_OFFSET} by default).
+         *
+         * @param negativeValueHandling negative-value handling
+         * @return this builder
+         */
+        public Builder negativeValueHandling(NegativeValueHandling negativeValueHandling) {
+            this.negativeValueHandling = Objects.requireNonNull(negativeValueHandling, "negativeValueHandling");
             return this;
         }
 

@@ -363,7 +363,9 @@ final class NightEquipment {
         FrameWork result = new FrameWork();
         result.frame = frame;
         result.samples = frameSamples;
-        result.boxes = backgroundBoxes(data, backgroundRows, backgroundColumns, frame.flipped);
+        // The offset SpacePixels added when converting frames with values below zero: the sky is measured without it.
+        double addedOffset = file != null ? headerNumber(file, "SPOFFSET") : Double.NaN;
+        result.boxes = backgroundBoxes(data, backgroundRows, backgroundColumns, frame.flipped, addedOffset > 0 ? addedOffset : 0);
         frame.background = medianOf(result.boxes);
         return result;
     }
@@ -1048,10 +1050,10 @@ final class NightEquipment {
     }
 
     /**
-     * The sky level in boxes over the frame (sigma-clipped medians, pixel units), in camera orientation; NaN for boxes
-     * with empty (padded) pixels.
+     * The sky level in boxes over the frame (sigma-clipped medians, pixel units, above {@code zeroLevel}), in camera
+     * orientation; NaN for boxes with a pixel at or below {@code zeroLevel}: padding, or sky too close to zero to compare.
      */
-    private static double[][] backgroundBoxes(short[][] data, int boxRows, int boxColumns, boolean flipped) {
+    private static double[][] backgroundBoxes(short[][] data, int boxRows, int boxColumns, boolean flipped, double zeroLevel) {
         int height = data.length;
         int width = data[0].length;
         int box = Math.max(8, Math.min(48, Math.min(width / boxColumns, height / boxRows) / 2));
@@ -1066,11 +1068,11 @@ final class NightEquipment {
                 for (int y = cy - box / 2; y < cy - box / 2 + box && !empty; y++) {
                     for (int x = cx - box / 2; x < cx - box / 2 + box; x++) {
                         int value = data[y][x] + 32768;
-                        if (value <= 0) {
+                        if (value <= zeroLevel) {
                             empty = true;
                             break;
                         }
-                        values[n++] = value;
+                        values[n++] = value - zeroLevel;
                     }
                 }
                 double level = empty ? Double.NaN : clippedMedian(values, n);

@@ -15,8 +15,9 @@
  * {@link eu.startales.spacepixels.api.SpacePixelsPipelineRequest},
  * {@link eu.startales.spacepixels.api.SpacePixelsPipelineResult},
  * {@link eu.startales.spacepixels.api.SpacePixelsPipelineException},
- * {@link eu.startales.spacepixels.api.SpacePixelsProgressListener}, and
- * {@link eu.startales.spacepixels.api.InputPreparationMode}.
+ * {@link eu.startales.spacepixels.api.SpacePixelsProgressListener},
+ * {@link eu.startales.spacepixels.api.InputPreparationMode}, and
+ * {@link eu.startales.spacepixels.api.NegativeValueHandling}.
  *
  * <p>Consumers should treat other {@code eu.startales.spacepixels.*} packages as internal
  * implementation details unless a type is explicitly exposed through this package. The current

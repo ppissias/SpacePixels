@@ -70,6 +70,17 @@ public final class DetectionInputPreparation {
     public static PreparedDirectory prepareInputDirectory(File inputDirectory,
                                                           boolean autoPrepare,
                                                           ProgressListener progressListener) throws Exception {
+        return prepareInputDirectory(inputDirectory, autoPrepare, true, progressListener);
+    }
+
+    /**
+     * @param keepNegativeValues when converted pixels fall below zero, add the same offset to every frame so all
+     *                           values are kept (true), or set them to 0 (false)
+     */
+    public static PreparedDirectory prepareInputDirectory(File inputDirectory,
+                                                          boolean autoPrepare,
+                                                          boolean keepNegativeValues,
+                                                          ProgressListener progressListener) throws Exception {
         Objects.requireNonNull(inputDirectory, "inputDirectory");
         if (!inputDirectory.exists() || !inputDirectory.isDirectory()) {
             throw new IOException("Input path is not a directory: " + inputDirectory.getAbsolutePath());
@@ -106,13 +117,26 @@ public final class DetectionInputPreparation {
             return new PreparedDirectory(inputDirectory, workingDirectory, inputWasPrepared);
         }
 
+        int addedOffset = 0;
+        if (keepNegativeValues) {
+            emitProgress(progressListener, 73, "Checking for pixel values below zero...");
+            FitsPixelConverter.NegativeValueScan scan = FitsPixelConverter.scanNegativeValues(fitsFiles,
+                    percentage -> emitProgress(progressListener, scaleProgress(percentage, 73, 75), "Checking for pixel values below zero..."));
+            addedOffset = scan.offsetToKeepNegativeValues();
+            if (addedOffset > 0) {
+                emitProgress(progressListener, 75, String.format(Locale.ROOT,
+                        "%d pixels are below zero (lowest %.0f ADU): adding %d ADU to every pixel of every frame to keep them.",
+                        scan.negativePixels(), scan.lowest(), addedOffset));
+            }
+        }
+
         File preparedOutputDirectory = createPreparedOutputDirectory(workingDirectory);
         for (int i = 0; i < fitsFiles.length; i++) {
             File fitsFile = fitsFiles[i];
             emitProgress(progressListener,
                     scaleProgress(i + 1, fitsFiles.length, 75, 100),
                     "Preparing " + fitsFile.getName() + " for mono 16-bit detection...");
-            prepareFitsFile(fitsFile, preparedOutputDirectory);
+            prepareFitsFile(fitsFile, preparedOutputDirectory, addedOffset);
         }
 
         emitProgress(progressListener, 100, "Prepared a 16-bit monochrome FITS directory for detection.");
@@ -144,22 +168,19 @@ public final class DetectionInputPreparation {
                 return false;
             }
 
-            Header header = imageHdu.getHeader();
-            return header.getIntValue("BITPIX", 0) == 16
-                    && header.getDoubleValue("BZERO", 0.0) == 32768.0
-                    && header.getDoubleValue("BSCALE", 1.0) == 1.0;
+            return FitsPixelConverter.isUnsigned16Bit(imageHdu.getHeader());
         }
     }
 
-    private static void prepareFitsFile(File inputFile, File outputDirectory) throws Exception {
-        try (Fits preparedFits = createPreparedFits(inputFile)) {
+    private static void prepareFitsFile(File inputFile, File outputDirectory, int addedOffset) throws Exception {
+        try (Fits preparedFits = createPreparedFits(inputFile, addedOffset)) {
             File outputFile = new File(outputDirectory, buildPreparedFilename(inputFile));
             Files.deleteIfExists(outputFile.toPath());
             preparedFits.write(outputFile);
         }
     }
 
-    private static Fits createPreparedFits(File inputFile) throws Exception {
+    private static Fits createPreparedFits(File inputFile, int addedOffset) throws Exception {
         try (Fits originalFits = new Fits(inputFile)) {
             BasicHDU<?> imageHdu = ImageProcessing.getImageHDU(originalFits);
             if (imageHdu == null) {
@@ -170,13 +191,13 @@ public final class DetectionInputPreparation {
             Object kernel = imageHdu.getKernel();
 
             if (kernel instanceof short[][] || kernel instanceof float[][] || kernel instanceof int[][]) {
-                short[][] monoKernel = FitsPixelConverter.standardizeTo16BitMono(kernel, originalHeader);
-                return FitsPixelConverter.createFitsFromData(monoKernel, originalHeader);
+                short[][] monoKernel = FitsPixelConverter.standardizeTo16BitMono(kernel, originalHeader, addedOffset);
+                return FitsPixelConverter.createFitsFromData(monoKernel, originalHeader, addedOffset);
             }
             if (kernel instanceof short[][][] || kernel instanceof float[][][] || kernel instanceof int[][][]) {
-                short[][][] colorKernel = FitsPixelConverter.standardizeTo16BitColor(kernel, originalHeader);
+                short[][][] colorKernel = FitsPixelConverter.standardizeTo16BitColor(kernel, originalHeader, addedOffset);
                 short[][] monoKernel = FitsPixelConverter.extractLuminance(colorKernel);
-                return FitsPixelConverter.createFitsFromData(monoKernel, originalHeader);
+                return FitsPixelConverter.createFitsFromData(monoKernel, originalHeader, addedOffset);
             }
 
             throw new IOException("Unsupported FITS kernel type in " + inputFile.getName() + ": " + kernel.getClass().getName());

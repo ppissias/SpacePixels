@@ -16,7 +16,9 @@ import java.nio.file.Path;
 import java.util.zip.Deflater;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class XisfImageConverterTest {
@@ -105,6 +107,65 @@ public class XisfImageConverterTest {
             assertEquals(10922, data[0][0]);
             assertEquals(10922, data[1][0]);
         }
+    }
+
+    @Test
+    public void mixedSampleFormatsAreRejectedBeforeConversion() throws Exception {
+        Path sourceDirectory = Files.createTempDirectory("spacepixels-xisf-mixed-format");
+        writeGrayXisf(sourceDirectory.resolve("a.xisf"), "2:2:1", "UInt16", null);
+        writeGrayXisf(sourceDirectory.resolve("b.xisf"), "2:2:1", "Float32", null);
+        assertRejectedBeforeConversion(sourceDirectory, "same type");
+    }
+
+    @Test
+    public void mixedMonoAndColourAreRejectedBeforeConversion() throws Exception {
+        Path sourceDirectory = Files.createTempDirectory("spacepixels-xisf-mixed-colour");
+        writeGrayXisf(sourceDirectory.resolve("a.xisf"), "2:2:1", "UInt16", null);
+        writeMonolithicXisf(sourceDirectory.resolve("b.xisf"), "2:2:3", "UInt16", "RGB", "Planar", null, "",
+                new byte[2 * 2 * 3 * 2], "");
+        assertRejectedBeforeConversion(sourceDirectory, "same type");
+    }
+
+    @Test
+    public void mixedDimensionsAreRejectedBeforeConversion() throws Exception {
+        Path sourceDirectory = Files.createTempDirectory("spacepixels-xisf-mixed-size");
+        writeGrayXisf(sourceDirectory.resolve("a.xisf"), "2:2:1", "UInt16", null);
+        writeGrayXisf(sourceDirectory.resolve("b.xisf"), "3:2:1", "UInt16", null);
+        assertRejectedBeforeConversion(sourceDirectory, "same type");
+    }
+
+    @Test
+    public void mixedTimedAndUntimedAreRejectedBeforeConversion() throws Exception {
+        Path sourceDirectory = Files.createTempDirectory("spacepixels-xisf-mixed-time");
+        writeGrayXisf(sourceDirectory.resolve("a.xisf"), "2:2:1", "UInt16", "2026-04-06T01:02:03");
+        writeGrayXisf(sourceDirectory.resolve("b.xisf"), "2:2:1", "UInt16", null);
+        assertRejectedBeforeConversion(sourceDirectory, "timed and untimed");
+    }
+
+    @Test
+    public void matchingTimedSequenceIsConverted() throws Exception {
+        Path sourceDirectory = Files.createTempDirectory("spacepixels-xisf-matching");
+        writeGrayXisf(sourceDirectory.resolve("a.xisf"), "2:2:1", "UInt16", "2026-04-06T01:02:03");
+        writeGrayXisf(sourceDirectory.resolve("b.xisf"), "2:2:1", "UInt16", "2026-04-06T01:03:03");
+        File importDirectory = XisfImageConverter.prepareDirectoryForFitsImport(sourceDirectory.toFile());
+        assertTrue(Files.exists(importDirectory.toPath().resolve("a.fit")));
+        assertTrue(Files.exists(importDirectory.toPath().resolve("b.fit")));
+    }
+
+    private static void assertRejectedBeforeConversion(Path sourceDirectory, String message) {
+        IOException exception = assertThrows(IOException.class,
+                () -> XisfImageConverter.prepareDirectoryForFitsImport(sourceDirectory.toFile()));
+        assertTrue(exception.getMessage(), exception.getMessage().contains(message));
+        assertFalse(Files.exists(sourceDirectory.resolve("_spacepixels_xisf_mono16")));
+    }
+
+    private static void writeGrayXisf(Path targetPath, String geometry, String sampleFormat, String dateObs) throws IOException {
+        String[] size = geometry.split(":");
+        int bytesPerSample = "Float32".equals(sampleFormat) ? 4 : 2;
+        byte[] payload = new byte[Integer.parseInt(size[0]) * Integer.parseInt(size[1]) * bytesPerSample];
+        String keywords = dateObs == null ? "" : "<FITSKeyword name=\"DATE-OBS\" value=\"'" + dateObs + "'\" comment=\"\" />";
+        writeMonolithicXisf(targetPath, geometry, sampleFormat, "Gray", "Planar",
+                "Float32".equals(sampleFormat) ? "0:1" : null, "", payload, keywords);
     }
 
     private static void writeMonolithicXisf(Path targetPath,

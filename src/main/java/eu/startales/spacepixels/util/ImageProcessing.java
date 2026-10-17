@@ -986,10 +986,12 @@ public class ImageProcessing implements AutoCloseable {
         int tempRefWidth = -1;
         int tempRefHeight = -1;
         boolean tempRefMono = true;
+        Header refHeader;
 
         try {
             Fits firstFits = new Fits(fitsFileInformation[0]);
             BasicHDU<?> hdu = getImageHDU(firstFits);
+            refHeader = hdu.getHeader();
             int[] axes = hdu.getAxes();
             if (axes == null) throw new FitsException("No image axes found");
 
@@ -1075,7 +1077,29 @@ public class ImageProcessing implements AutoCloseable {
         // --- THE GATEKEEPER: Check the format of the first file ---
         FitsFormatChecker.FitsFormat format = refFormat;
 
-        if (format == FitsFormatChecker.FitsFormat.MONO_32BIT_FLOAT || format == FitsFormatChecker.FitsFormat.MONO_32BIT_INT) {
+        if ((format == FitsFormatChecker.FitsFormat.MONO_16BIT || format == FitsFormatChecker.FitsFormat.COLOR_16BIT)
+                && !FitsPixelConverter.isUnsigned16Bit(refHeader)) {
+            boolean color = format == FitsFormatChecker.FitsFormat.COLOR_16BIT;
+            int choice = JOptionPane.showConfirmDialog(null,
+                    dialogParagraphs("These 16-bit images store their pixels with BZERO " + headerNumber(refHeader.getDoubleValue("BZERO", 0.0))
+                                    + " and BSCALE " + headerNumber(refHeader.getDoubleValue("BSCALE", 1.0)) + ". "
+                                    + "SpacePixels reads 16-bit images as unsigned values (BZERO 32768, BSCALE 1), so it would read these "
+                                    + "at the wrong brightness level, which breaks the saturation, padding and void checks.",
+                            color ? "Would you like to extract the Luminance (16-bit Mono) and save a standard 16-bit Color version?"
+                                  : "Would you like to convert this sequence to standard 16-bit images in a new folder?"),
+                    "Format Conversion Required",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+
+            if (choice == JOptionPane.YES_OPTION) {
+                ApplicationWindow.logger.info("Starting signed/scaled 16-bit to standard 16-bit conversion...");
+                return standardizeAndOfferToLoad(fitsFileInformation, color);
+            }
+
+            ApplicationWindow.logger.info("User declined 16-bit standardization. Clearing the active import.");
+            return new FitsFileInformation[0];
+
+        } else if (format == FitsFormatChecker.FitsFormat.MONO_32BIT_FLOAT || format == FitsFormatChecker.FitsFormat.MONO_32BIT_INT) {
             int choice = JOptionPane.showConfirmDialog(null,
                     "These images appear to be 32-bit.\nSpacePixels' transient detection engine is highly optimized for 16-bit monochrome files.\n\n" +
                             "Would you like to automatically standardize this sequence to 16-bit Mono?",
@@ -1085,15 +1109,7 @@ public class ImageProcessing implements AutoCloseable {
 
             if (choice == JOptionPane.YES_OPTION) {
                 ApplicationWindow.logger.info("Starting 32-bit Mono to 16-bit Mono conversion...");
-                File newDir = batchConvert32BitTo16Bit(fitsFileInformation, false);
-                
-                int loadChoice = JOptionPane.showConfirmDialog(null, 
-                        "Conversion Complete!\n\nWould you like to automatically load the newly created 16-bit directory?", 
-                        "Success", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-                if (loadChoice == JOptionPane.YES_OPTION && newDir != null) {
-                    throw new RedirectImportException(newDir);
-                }
-                return new FitsFileInformation[0]; // Stop the current import
+                return standardizeAndOfferToLoad(fitsFileInformation, false);
             }
 
             ApplicationWindow.logger.info("User declined 32-bit mono standardization. Clearing the active import.");
@@ -1109,15 +1125,7 @@ public class ImageProcessing implements AutoCloseable {
 
             if (choice == JOptionPane.YES_OPTION) {
                 ApplicationWindow.logger.info("Starting 32-bit Color to 16-bit Mono/Color conversion...");
-                File newDir = batchConvert32BitTo16Bit(fitsFileInformation, true);
-                
-                int loadChoice = JOptionPane.showConfirmDialog(null, 
-                        "Conversion Complete!\n\nWould you like to automatically load the newly created 16-bit Mono directory to run detections?", 
-                        "Success", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-                if (loadChoice == JOptionPane.YES_OPTION && newDir != null) {
-                    throw new RedirectImportException(newDir);
-                }
-                return new FitsFileInformation[0]; // Stop the current import
+                return standardizeAndOfferToLoad(fitsFileInformation, true);
             }
 
             ApplicationWindow.logger.info("User declined 32-bit color standardization. Clearing the active import.");
@@ -1284,6 +1292,14 @@ public class ImageProcessing implements AutoCloseable {
             if (bitpix != 16) {
                 throw new FitsException("Expected uncompressed 16-bit monochrome FITS files. File " + currentFile.getName() + " has BITPIX=" + bitpix + ".");
             }
+            if (!FitsPixelConverter.isUnsigned16Bit(fitsHeader)) {
+                throw new IOException("Expected unsigned 16-bit FITS files (BZERO=32768, BSCALE=1). File " + currentFile.getName()
+                        + " has BZERO=" + headerNumber(fitsHeader.getDoubleValue("BZERO", 0.0))
+                        + " and BSCALE=" + headerNumber(fitsHeader.getDoubleValue("BSCALE", 1.0))
+                        + ", so read as they are its pixels would be at the wrong brightness level. Convert the folder first:"
+                        + " import it in the SpacePixels window, which offers the conversion, or use the API with"
+                        + " InputPreparationMode.AUTO_PREPARE_TO_16BIT_MONO.");
+            }
 
             int height = axes[0];
             int width = axes[1];
@@ -1305,6 +1321,11 @@ public class ImageProcessing implements AutoCloseable {
                 fitsFile.close();
             }
         }
+    }
+
+    /** A header number without a trailing ".0" when it is whole. */
+    private static String headerNumber(double value) {
+        return value == Math.rint(value) && Math.abs(value) < 1e15 ? Long.toString((long) value) : Double.toString(value);
     }
 
     /**
@@ -1561,13 +1582,91 @@ public class ImageProcessing implements AutoCloseable {
     }
 
     /**
-     * Standardizes 32-bit FITS inputs into 16-bit outputs, optionally preserving color frames and
-     * extracting luminance for detection workflows.
+     * Converts to standard 16-bit after asking how to store pixel values below zero, then offers to load the new
+     * folder (the mono one for colour input). Always ends the current import.
      */
-    private File batchConvert32BitTo16Bit(File[] files, boolean isColor) throws Exception {
+    private FitsFileInformation[] standardizeAndOfferToLoad(File[] files, boolean isColor) throws Exception {
+        int addedOffset = chooseNegativeValueOffset(files);
+        if (addedOffset < 0) {
+            ApplicationWindow.logger.info("Conversion cancelled at the negative-value choice. Clearing the active import.");
+            return new FitsFileInformation[0];
+        }
+        File newDir = batchStandardizeTo16Bit(files, isColor, addedOffset);
+
+        int loadChoice = JOptionPane.showConfirmDialog(null,
+                isColor ? "Conversion Complete!\n\nWould you like to automatically load the newly created 16-bit Mono directory to run detections?"
+                        : "Conversion Complete!\n\nWould you like to automatically load the newly created 16-bit directory?",
+                "Success", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (loadChoice == JOptionPane.YES_OPTION && newDir != null) {
+            throw new RedirectImportException(newDir);
+        }
+        return new FitsFileInformation[0]; // Stop the current import
+    }
+
+    /**
+     * Looks for pixels the conversion would put below zero and asks how to store them. Returns the ADU to add to every
+     * pixel (0 when there are none or they are to be set to 0), or -1 when the user cancels.
+     */
+    private int chooseNegativeValueOffset(File[] files) throws Exception {
         eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog =
                 new eu.startales.spacepixels.gui.ProcessingProgressDialog(null);
-        progressDialog.setTitle("Converting 32-bit to 16-bit...");
+        progressDialog.setTitle("Checking pixel values...");
+        SwingUtilities.invokeLater(() -> progressDialog.setVisible(true));
+        FitsPixelConverter.NegativeValueScan scan;
+        try {
+            scan = FitsPixelConverter.scanNegativeValues(files, percent -> SwingUtilities.invokeLater(
+                    () -> progressDialog.updateProgress(percent, "Checking for pixel values below zero...")));
+        } finally {
+            SwingUtilities.invokeLater(progressDialog::dispose);
+        }
+        if (!scan.hasNegativeValues()) {
+            return 0;
+        }
+
+        int offset = scan.offsetToKeepNegativeValues();
+        String[] options = {"Add an Offset (Recommended)", "Set to 0", "Cancel"};
+        int choice = JOptionPane.showOptionDialog(null, negativeValueQuestion(scan, offset), "Pixel Values Below Zero",
+                JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+        ApplicationWindow.logger.info(scan.negativePixels() + " of " + scan.totalPixels() + " pixels below zero, lowest "
+                + scan.lowest() + "; choice: " + (choice == 0 ? "add " + offset + " ADU" : choice == 1 ? "set to 0" : "cancel"));
+        return choice == 0 ? offset : choice == 1 ? 0 : -1;
+    }
+
+    /** The question {@link #chooseNegativeValueOffset} asks. */
+    static String negativeValueQuestion(FitsPixelConverter.NegativeValueScan scan, int offset) {
+        double percent = 100.0 * scan.negativePixels() / Math.max(1, scan.totalPixels());
+        String share = percent >= 10 ? String.format(Locale.ROOT, "%.0f %%", percent)
+                : percent >= 0.1 ? String.format(Locale.ROOT, "%.1f %%", percent) : "Less than 0.1 %";
+        return dialogParagraphs(
+                String.format(Locale.ROOT, "%s of the pixels are below zero (the lowest is %,.0f ADU). This usually means the "
+                        + "frames were bias- or dark-subtracted without a pedestal. Standard 16-bit images cannot store values "
+                        + "below zero.", share, scan.lowest()),
+                String.format(Locale.ROOT, "<b>Add an Offset (recommended):</b> adds %,d ADU to every pixel of every frame. All "
+                        + "values are kept, so the sky background and its noise stay intact. Padding left by registration stays "
+                        + "at 0, and the report takes the offset off again for the sky brightness.", offset),
+                "<b>Set to 0:</b> keeps the original levels, but every pixel below zero becomes 0. Where the sky is close to "
+                        + "zero this cuts off the low side of the noise, so the background is measured too high and the noise "
+                        + "too low. With the sky at zero, detection can fail.");
+    }
+
+    /** A dialog message of wrapped paragraphs (Swing's own wrapping of plain text drops characters). */
+    private static String dialogParagraphs(String... paragraphs) {
+        StringBuilder html = new StringBuilder("<html><body style='width: 430px'>");
+        for (int i = 0; i < paragraphs.length; i++) {
+            html.append(i == 0 ? "<p>" : "<p style='margin-top: 8px'>").append(paragraphs[i]).append("</p>");
+        }
+        return html.append("</body></html>").toString();
+    }
+
+    /**
+     * Standardizes 32-bit, signed or scaled 16-bit FITS inputs into unsigned 16-bit outputs, optionally preserving
+     * color frames and extracting luminance for detection workflows. {@code addedOffset} ADU are added to every pixel
+     * except registration padding, so values below zero are kept.
+     */
+    private File batchStandardizeTo16Bit(File[] files, boolean isColor, int addedOffset) throws Exception {
+        eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog =
+                new eu.startales.spacepixels.gui.ProcessingProgressDialog(null);
+        progressDialog.setTitle("Converting to standard 16-bit...");
 
         SwingUtilities.invokeLater(() -> progressDialog.setVisible(true));
 
@@ -1578,10 +1677,10 @@ public class ImageProcessing implements AutoCloseable {
                 final int percent = (int) (((float) i / files.length) * 100);
                 SwingUtilities.invokeLater(() -> progressDialog.updateProgress(percent, "Converting " + file.getName() + "..."));
 
-                ApplicationWindow.logger.info("Converting 32-bit file: " + file.getName());
+                ApplicationWindow.logger.info("Converting file to standard 16-bit: " + file.getName());
 
                 // --- DEBUG: Print Original File ---
-                printFitsDebugInfo("ORIGINAL 32-BIT", file);
+                printFitsDebugInfo("ORIGINAL", file);
 
                 Fits originalFits = new Fits(file);
                 BasicHDU<?> imageHDU = getImageHDU(originalFits);
@@ -1590,8 +1689,8 @@ public class ImageProcessing implements AutoCloseable {
 
                 if (isColor) {
                     // 1. Convert to 16-bit Color
-                    short[][][] color16 = FitsPixelConverter.standardizeTo16BitColor(kernel, origHeader);
-                    Fits colorFits = FitsPixelConverter.createFitsFromData(color16, origHeader);
+                    short[][][] color16 = FitsPixelConverter.standardizeTo16BitColor(kernel, origHeader, addedOffset);
+                    Fits colorFits = FitsPixelConverter.createFitsFromData(color16, origHeader, addedOffset);
                     String colorName = addDirectory(file, "_16bit_color");
                     writeFitsWithSuffix(colorFits, colorName, "_16bit_color");
 
@@ -1601,7 +1700,7 @@ public class ImageProcessing implements AutoCloseable {
 
                     // 2. Extract Luminance to 16-bit Mono
                     short[][] mono16 = FitsPixelConverter.extractLuminance(color16);
-                    Fits monoFits = FitsPixelConverter.createFitsFromData(mono16, origHeader);
+                    Fits monoFits = FitsPixelConverter.createFitsFromData(mono16, origHeader, addedOffset);
 
                     // Note: No manual header hacking needed here anymore!
                     // createFitsFromData safely handles NAXIS and NAXIS3 automatically.
@@ -1615,8 +1714,8 @@ public class ImageProcessing implements AutoCloseable {
 
                 } else {
                     // Convert to 16-bit Mono
-                    short[][] mono16 = FitsPixelConverter.standardizeTo16BitMono(kernel, origHeader);
-                    Fits monoFits = FitsPixelConverter.createFitsFromData(mono16, origHeader);
+                    short[][] mono16 = FitsPixelConverter.standardizeTo16BitMono(kernel, origHeader, addedOffset);
+                    Fits monoFits = FitsPixelConverter.createFitsFromData(mono16, origHeader, addedOffset);
                     String monoName = addDirectory(file, "_16bit_converted");
                     if (targetDir == null) targetDir = new File(monoName).getParentFile();
                     writeFitsWithSuffix(monoFits, monoName, "_16bit");

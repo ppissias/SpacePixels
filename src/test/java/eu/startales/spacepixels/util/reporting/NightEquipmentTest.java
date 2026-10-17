@@ -207,6 +207,47 @@ public class NightEquipmentTest {
     }
 
     @Test
+    public void skyLevelLeavesOutTheOffsetAddedWhenConverting() {
+        List<Integer> kept = Arrays.asList(0, 1, 2, 3);
+        NightEquipment plain = NightEquipment.measure(frames(vignettedSky(0), 4), kept, null, masterStars(), null, null);
+        eu.startales.spacepixels.util.FitsFileInformation[] files = new eu.startales.spacepixels.util.FitsFileInformation[4];
+        for (int f = 0; f < files.length; f++) {
+            files[f] = new eu.startales.spacepixels.util.FitsFileInformation("f" + f + ".fit", "f" + f + ".fit", true, WIDTH, HEIGHT);
+            files[f].getFitsHeader().put("SPOFFSET", "2000");
+        }
+        NightEquipment offset = NightEquipment.measure(frames(vignettedSky(2000), 4), kept, files, masterStars(), null, null);
+
+        assertEquals(plain.frames.get(0).background, offset.frames.get(0).background, 1.0);
+        assertEquals(plain.backgroundCorner, offset.backgroundCorner, 0.005);
+
+        // Without the offset this sky would be at zero: too close to compare corners with the centre.
+        NightEquipment zeroSky = NightEquipment.measure(frames(new Field() {
+            public double sigma(double x, double y) { return 1.4; }
+            public double[] tail(double x, double y) { return new double[]{0, 0}; }
+            public double sky(double x, double y) { return 2000; }
+        }, 4), kept, files, masterStars(), null, null);
+        assertTrue(zeroSky.frames.stream().allMatch(frame -> Double.isNaN(frame.background)));
+        assertTrue(Double.isNaN(zeroSky.backgroundCorner));
+    }
+
+    private static Field vignettedSky(double addedOffset) {
+        return new Field() {
+            public double sigma(double x, double y) {
+                return 1.4;
+            }
+
+            public double[] tail(double x, double y) {
+                return new double[]{0, 0};
+            }
+
+            public double sky(double x, double y) {
+                double r = radius(x, y);
+                return 1000 * (1 - 0.2 * r * r) + addedOffset;
+            }
+        };
+    }
+
+    @Test
     public void wordsForDirectionsFollowThePicture() {
         assertEquals("bottom side", NightEquipmentSectionWriter.direction(0, 1));
         assertEquals("top left", NightEquipmentSectionWriter.direction(-1, -1));

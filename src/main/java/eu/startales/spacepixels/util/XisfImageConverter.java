@@ -77,8 +77,52 @@ public final class XisfImageConverter {
             return directory;
         }
 
+        // The conversion turns every file into 16-bit mono, so the sequence is checked before it hides the differences.
+        validateSequence(xisfFiles);
         ApplicationWindow.logger.info("No FITS files found. Converting " + xisfFiles.length + " XISF files to 16-bit monochrome FITS.");
         return convertDirectory(directory, xisfFiles, progressListener);
+    }
+
+    /**
+     * Checks, from the XML headers alone, that every XISF file has the same size, channels, colour space and sample
+     * format, and that all or none of them have a usable observation time.
+     */
+    static void validateSequence(File[] xisfFiles) throws Exception {
+        ImageType reference = null;
+        for (File xisfFile : xisfFiles) {
+            ImageType type = readImageType(xisfFile);
+            if (reference == null) {
+                reference = type;
+            } else if (!type.sameFormatAs(reference)) {
+                throw new IOException("All imported XISF files must have the same type, dimensions and colour space. "
+                        + xisfFile.getName() + " (" + type + ") differs from " + xisfFiles[0].getName()
+                        + " (" + reference + ").");
+            } else if (type.timed != reference.timed) {
+                throw new IOException("Cannot import a mixture of timed and untimed images. All files must have a usable "
+                        + "observation timestamp, or none may have one. " + xisfFiles[0].getName()
+                        + " and " + xisfFile.getName() + " have different timing availability.");
+            }
+        }
+    }
+
+    private static ImageType readImageType(File xisfFile) throws Exception {
+        try (RandomAccessFile input = new RandomAccessFile(xisfFile, "r")) {
+            Element imageElement = readImageElement(input, xisfFile);
+            Geometry geometry = parseGeometry(imageElement.getAttribute("geometry"));
+            SampleFormat sampleFormat = SampleFormat.parse(imageElement.getAttribute("sampleFormat"));
+            String colorSpace = imageElement.hasAttribute("colorSpace") ? imageElement.getAttribute("colorSpace") : "Gray";
+
+            // Same keywords and parser as the converted FITS file, so this agrees with the FITS import check.
+            FitsFileInformation information = new FitsFileInformation(xisfFile.getAbsolutePath(), xisfFile.getName(),
+                    geometry.channels == 1, geometry.width, geometry.height);
+            for (FitsKeyword keyword : extractFitsKeywords(imageElement.getOwnerDocument().getDocumentElement(), imageElement)) {
+                if (keyword.name != null && !keyword.name.isBlank()) {
+                    String value = keyword.value == null ? "" : keyword.value.trim();
+                    information.getFitsHeader().put(keyword.name.trim(), decodeFitsString(value));
+                }
+            }
+            return new ImageType(geometry, sampleFormat, colorSpace, information.getObservationTimestamp() != -1L);
+        }
     }
 
     private static File convertDirectory(File sourceDirectory, File[] xisfFiles, ProgressListener progressListener) throws Exception {
@@ -199,22 +243,28 @@ public final class XisfImageConverter {
         return value != null && value.matches("[+-]?(?:\\d+\\.\\d*|\\d*\\.\\d+|\\d+)(?:[eE][+-]?\\d+)?");
     }
 
+    /** Reads the XML header that follows the signature and returns its primary Image element. */
+    private static Element readImageElement(RandomAccessFile input, File xisfFile) throws Exception {
+        validateMonolithicSignature(input, xisfFile);
+
+        int headerLength = readInt32LittleEndian(input);
+        readInt32LittleEndian(input);
+
+        byte[] headerBytes = new byte[headerLength];
+        input.readFully(headerBytes);
+
+        Document document = parseXmlHeader(headerBytes);
+        Element imageElement = findPrimaryImageElement(document.getDocumentElement());
+        if (imageElement == null) {
+            throw new IOException("No Image element found in XISF file " + xisfFile.getName());
+        }
+        return imageElement;
+    }
+
     private static XisfImageData readImage(File xisfFile) throws Exception {
         try (RandomAccessFile input = new RandomAccessFile(xisfFile, "r")) {
-            validateMonolithicSignature(input, xisfFile);
-
-            int headerLength = readInt32LittleEndian(input);
-            readInt32LittleEndian(input);
-
-            byte[] headerBytes = new byte[headerLength];
-            input.readFully(headerBytes);
-
-            Document document = parseXmlHeader(headerBytes);
-            Element rootElement = document.getDocumentElement();
-            Element imageElement = findPrimaryImageElement(rootElement);
-            if (imageElement == null) {
-                throw new IOException("No Image element found in XISF file " + xisfFile.getName());
-            }
+            Element imageElement = readImageElement(input, xisfFile);
+            Element rootElement = imageElement.getOwnerDocument().getDocumentElement();
 
             Geometry geometry = parseGeometry(imageElement.getAttribute("geometry"));
             SampleFormat sampleFormat = SampleFormat.parse(imageElement.getAttribute("sampleFormat"));
@@ -770,6 +820,35 @@ public final class XisfImageConverter {
             this.width = width;
             this.height = height;
             this.channels = channels;
+        }
+    }
+
+    /** What must match across an imported sequence, read from one file's header. */
+    private static final class ImageType {
+        private final Geometry geometry;
+        private final SampleFormat sampleFormat;
+        private final String colorSpace;
+        private final boolean timed;
+
+        private ImageType(Geometry geometry, SampleFormat sampleFormat, String colorSpace, boolean timed) {
+            this.geometry = geometry;
+            this.sampleFormat = sampleFormat;
+            this.colorSpace = colorSpace;
+            this.timed = timed;
+        }
+
+        private boolean sameFormatAs(ImageType other) {
+            return geometry.width == other.geometry.width
+                    && geometry.height == other.geometry.height
+                    && geometry.channels == other.geometry.channels
+                    && sampleFormat == other.sampleFormat
+                    && colorSpace.equalsIgnoreCase(other.colorSpace);
+        }
+
+        @Override
+        public String toString() {
+            return geometry.width + "x" + geometry.height + ", " + geometry.channels + " channel"
+                    + (geometry.channels == 1 ? "" : "s") + ", " + colorSpace + ", " + sampleFormat;
         }
     }
 

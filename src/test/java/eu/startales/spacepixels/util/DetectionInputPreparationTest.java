@@ -109,10 +109,31 @@ public class DetectionInputPreparationTest {
 
     @Test
     public void preparationNormalizesScaled16BitDataInsteadOfRelabelingRawPixels() throws Exception {
-        assertScaledPreparation(new short[][]{{-6000, 0, 2000}}, 10000.0, 2.0, new int[]{0, 10000, 14000});
+        assertScaledPreparation(new short[][]{{-6000, 0, 2000}}, 10000.0, 2.0, false, new int[]{0, 10000, 14000});
     }
 
-    private static void assertScaledPreparation(Object kernel, double offset, double scale, int[] expected) throws Exception {
+    @Test
+    public void preparationKeepsValuesBelowZeroByOffsettingEveryFrame() throws Exception {
+        File prepared = assertScaledPreparation(new short[][]{{-6000, 0, 2000}}, 10000.0, 2.0, true, new int[]{0, 12000, 16000});
+        try (Fits fits = new Fits(prepared)) {
+            assertEquals(2000, ImageProcessing.getImageHDU(fits).getHeader().getIntValue("SPOFFSET"));
+        }
+    }
+
+    @Test
+    public void signed16BitWithoutValuesBelowZeroIsConvertedWithoutAnOffset() throws Exception {
+        File prepared = assertScaledPreparation(new short[][]{{0, 1200, 30000}}, 0.0, 1.0, true, new int[]{0, 1200, 30000});
+        try (Fits fits = new Fits(prepared)) {
+            assertFalse(ImageProcessing.getImageHDU(fits).getHeader().containsKey("SPOFFSET"));
+        }
+    }
+
+    private static File assertScaledPreparation(Object kernel, double offset, double scale, int[] expected) throws Exception {
+        return assertScaledPreparation(kernel, offset, scale, true, expected);
+    }
+
+    private static File assertScaledPreparation(Object kernel, double offset, double scale, boolean keepNegativeValues,
+                                                int[] expected) throws Exception {
         Path inputDirectory = Files.createTempDirectory("spacepixels-scaled-fits");
         File originalFile = inputDirectory.resolve("scaled.fit").toFile();
         try (Fits fits = new Fits()) {
@@ -125,9 +146,10 @@ public class DetectionInputPreparationTest {
         }
         byte[] originalBytes = Files.readAllBytes(originalFile.toPath());
         DetectionInputPreparation.PreparedDirectory prepared =
-                DetectionInputPreparation.prepareInputDirectory(inputDirectory.toFile(), true, null);
+                DetectionInputPreparation.prepareInputDirectory(inputDirectory.toFile(), true, keepNegativeValues, null);
         assertTrue(prepared.isInputWasPrepared());
-        try (Fits fits = new Fits(new File(prepared.getPreparedInputDirectory(), "scaled.fit"))) {
+        File preparedFile = new File(prepared.getPreparedInputDirectory(), "scaled.fit");
+        try (Fits fits = new Fits(preparedFile)) {
             BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
             short[][] data = (short[][]) hdu.getKernel();
             assertEquals(32768.0, hdu.getHeader().getDoubleValue("BZERO"), 0.0);
@@ -138,5 +160,6 @@ public class DetectionInputPreparationTest {
             }
         }
         org.junit.Assert.assertArrayEquals(originalBytes, Files.readAllBytes(originalFile.toPath()));
+        return preparedFile;
     }
 }

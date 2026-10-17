@@ -54,6 +54,8 @@ final class FitsSequenceValidator {
         FitsFileInformation[] metadata = new FitsFileInformation[files.length];
         int[] referenceAxes = null;
         int referenceBitpix = 0;
+        double referenceBzero = 0.0;
+        double referenceBscale = 1.0;
         boolean referenceCompressed = false;
         for (int position = 0; position < files.length; position++) {
             File file = files[position];
@@ -66,6 +68,9 @@ final class FitsSequenceValidator {
                 }
                 Header header = hdu.getHeader();
                 int bitpix = header.getIntValue("BITPIX", 0);
+                // Part of the sample type: 16-bit data with BZERO 0 is signed, with BZERO 32768 unsigned.
+                double bzero = header.getDoubleValue("BZERO", 0.0);
+                double bscale = header.getDoubleValue("BSCALE", 1.0);
                 boolean compressed = false;
                 for (int hduIndex = 0; hduIndex < fits.getNumberOfHDUs(); hduIndex++) {
                     BasicHDU<?> originalHdu = fits.getHDU(hduIndex);
@@ -75,11 +80,15 @@ final class FitsSequenceValidator {
                 if (position == 0) {
                     referenceAxes = axes;
                     referenceBitpix = bitpix;
+                    referenceBzero = bzero;
+                    referenceBscale = bscale;
                     referenceCompressed = compressed;
-                } else if (bitpix != referenceBitpix || !Arrays.equals(axes, referenceAxes)
-                        || compressed != referenceCompressed) {
+                } else if (bitpix != referenceBitpix || bzero != referenceBzero || bscale != referenceBscale
+                        || !Arrays.equals(axes, referenceAxes) || compressed != referenceCompressed) {
                     throw new IOException("All imported FITS files must have the same type, dimensions and compression. "
-                            + file.getName() + " differs from " + files[0].getName() + ".");
+                            + file.getName() + " (" + describe(axes, bitpix, bzero, bscale, compressed) + ") differs from "
+                            + files[0].getName() + " (" + describe(referenceAxes, referenceBitpix, referenceBzero,
+                            referenceBscale, referenceCompressed) + ").");
                 }
                 FitsFileInformation information = new FitsFileInformation(file.getAbsolutePath(), file.getName(),
                         axes.length == 2, axes[axes.length - 1], axes[axes.length - 2]);
@@ -92,6 +101,16 @@ final class FitsSequenceValidator {
             }
         }
         validateTiming(metadata);
+    }
+
+    private static String describe(int[] axes, int bitpix, double bzero, double bscale, boolean compressed) {
+        String size = axes[axes.length - 1] + "x" + axes[axes.length - 2] + (axes.length == 2 ? " mono" : " colour");
+        return String.format(Locale.US, "%s, BITPIX %d, BZERO %s, BSCALE %s%s", size, bitpix,
+                stripZeros(bzero), stripZeros(bscale), compressed ? ", compressed" : "");
+    }
+
+    private static String stripZeros(double value) {
+        return value == Math.rint(value) ? Long.toString((long) value) : Double.toString(value);
     }
 
     static void validateAndSort(FitsFileInformation[] metadata) throws IOException {

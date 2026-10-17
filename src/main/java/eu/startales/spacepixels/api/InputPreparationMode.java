@@ -13,12 +13,14 @@ package eu.startales.spacepixels.api;
  */
 public enum InputPreparationMode {
     /**
-     * Rejects directories that are not already detection-ready uncompressed 16-bit monochrome FITS.
+     * Rejects directories that are not already detection-ready uncompressed 16-bit monochrome FITS
+     * stored as unsigned values (BZERO 32768, BSCALE 1).
      */
     FAIL_IF_NOT_READY,
     /**
      * Converts supported FITS or XISF inputs into a new detection-ready 16-bit monochrome FITS
-     * directory before running the pipeline.
+     * directory before running the pipeline. Pixel values below zero are handled as the request's
+     * {@link NegativeValueHandling} says.
      */
     AUTO_PREPARE_TO_16BIT_MONO
 }

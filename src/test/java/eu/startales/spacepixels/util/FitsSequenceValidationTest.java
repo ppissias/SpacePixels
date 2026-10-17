@@ -72,6 +72,37 @@ public class FitsSequenceValidationTest {
     }
 
     @Test
+    public void mixedSignedAndUnsigned16BitFailsEveryImportPath() throws Exception {
+        File directory = temporaryFolder.newFolder();
+        writeFits(directory, "A.fit", new short[2][3], null);
+        writeFits(directory, "B.fit", new short[2][3], null);
+        try (Fits signed = new Fits()) {
+            signed.addHDU(Fits.makeHDU(new short[2][3]));
+            signed.write(new File(directory, "C.fit"));
+        }
+        assertRejectedGuiAndPreparation(directory, "same type");
+        try (ImageProcessing processor = ImageProcessing.getInstance(directory)) {
+            IOException exception = assertThrows(IOException.class, processor::getFitsfileInformationHeadless);
+            assertTrue(exception.getMessage(), exception.getMessage().contains("C.fit has BZERO=0 and BSCALE=1"));
+        }
+    }
+
+    @Test
+    public void signed16BitIsRejectedWhenTheFolderMustAlreadyBeReady() throws Exception {
+        File directory = temporaryFolder.newFolder();
+        for (String name : new String[]{"A.fit", "B.fit"}) {
+            try (Fits signed = new Fits()) {
+                signed.addHDU(Fits.makeHDU(new short[2][3]));
+                signed.write(new File(directory, name));
+            }
+        }
+        try (ImageProcessing processor = ImageProcessing.getInstance(directory)) {
+            IOException exception = assertThrows(IOException.class, processor::getFitsfileInformationHeadless);
+            assertTrue(exception.getMessage(), exception.getMessage().contains("Expected unsigned 16-bit FITS files"));
+        }
+    }
+
+    @Test
     public void fullyTimedSequencesSortByTimeWithFilenameTieBreaker() throws Exception {
         File directory = temporaryFolder.newFolder();
         writeFits(directory, "A.fit", new short[2][3], "2026-04-08T01:00:02");
