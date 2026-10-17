@@ -33,13 +33,13 @@ But SpacePixels is the opposite of a stacker: it looks for what changes between 
 
 - **aligned (registered) sub-exposures**, so the stars stay in the same place in every frame;
 - **calibrated** frames (darks and flats), although uncalibrated data also works, with more noise detections;
-- frames from **one session and one camera setup**, all with the same size;
+- frames from **one session and one camera setup**, all with the same size and exposure time;
 - **timestamps** in the FITS headers (`DATE-OBS`), so speeds and object identification work.
 - **unprocessed** data (i.e. just raw images, calibrated and aligned)
 
 
 
-Supported files: FITS (`.fit`, `.fits`, `.fts`), compressed FITS (`.fz`) and XISF, 16 or 32 bit, monochrome or colour. SpacePixels offers to convert what the detection needs (decompression, standard unsigned 16 bit, monochrome) when you import. Keep one sequence per folder: all files in a folder must have the same type, bit depth, size and layout, and either all frames have timestamps or none.
+Supported files: FITS (`.fit`, `.fits`, `.fts`), compressed FITS (`.fz`) and XISF, 16 or 32 bit, monochrome or colour. SpacePixels offers to convert what the detection needs (decompression, standard unsigned 16 bit, monochrome) when you import. Keep one sequence per folder: all files in a folder must have the same type, bit depth, size, layout and exposure time, and either all frames have timestamps or none. When the exposure times differ, for example 20 frames of 60 s and 2 of 120 s, import names the odd frames and offers to import only the largest set: it copies those frames into a subfolder such as `_exposure_60s` and imports that, and your folder stays as it is. Exposures within 2 % of each other count as the same, because many cameras record the measured exposure (60.0, 60.1 and 60.2 s).
 
 A typical source is the folder of registered frames that your stacking program writes before it stacks them (for example the `r_*.fit` files of Siril or the registered frames of PixInsight).
 

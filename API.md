@@ -69,6 +69,14 @@ Timing must be consistent: every frame must have a parseable observation timesta
 have one. Timed sequences sort by timestamp, with filename as a tie breaker; untimed sequences
 sort by filename. Malformed timestamps count as unavailable.
 
+Exposure times (`EXPTIME`, or `EXPOSURE`) must match as well. Exposures within 2 % of each other (at
+least 0.1 s) count as the same, because many cameras record the measured exposure (60.0, 60.1 and
+60.2 s in one sequence). A sequence with several exposure times, or with only some frames carrying
+one, fails with a `SpacePixelsPipelineException` whose message lists the groups and names the odd
+frames; its cause, `MixedExposureException`, has the groups as `getGroups()`, largest first. The API
+does not pick a group. The SpacePixels window offers to copy the largest group into a subfolder
+such as `_exposure_60s` and import that.
+
 FITS normalization applies the original `BSCALE` and `BZERO` in double precision and stores the
 result as unsigned 16-bit (`BZERO` 32768, `BSCALE` 1). Signed 16-bit frames (`BZERO` 0) and frames
 with other scaling count as not detection-ready, because read as they are their pixels would be at

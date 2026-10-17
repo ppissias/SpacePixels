@@ -151,7 +151,7 @@ For setup, request/result behavior, and usage examples, see [API.md](API.md).
 ## Input requirements
 
 - Best results come from aligned, calibrated sub-exposures where the star field is already registered.
-- All frames in a sequence must share the same dimensions, file type, bit depth and colour layout, and either all frames have timestamps or none. Import refuses a mixed folder.
+- All frames in a sequence must share the same dimensions, file type, bit depth, colour layout and exposure time, and either all frames have timestamps or none. Import refuses a mixed folder. When the exposure times differ (exposures within 2 % count as the same), the GUI offers to copy the largest set of frames with one exposure time into a subfolder and import that.
 - The GUI can import FITS directories (`.fit`, `.fits`, `.fts`). Directories containing XISF files and no native FITS files are converted to 16-bit monochrome FITS during import. Compressed `.fz` inputs are detected and can be decompressed into a new directory during import.
 - The GUI can also standardize 32-bit FITS data, and signed or scaled 16-bit data (`BZERO` other than 32768), to standard unsigned 16-bit during import. When the conversion finds pixel values below zero, it asks whether to add an offset to every frame (recommended) or set them to 0.
 - Automated detection requires 16-bit monochrome frames. If you import color images, use `Convert to Mono` before running the detection pipelines.
