@@ -154,10 +154,10 @@ final class ReportLookupCacheStore {
         }
     }
 
-    static void persistResponseInReportCache(Path reportPath, String sidecarFileName, JsonObject response) {
+    static boolean persistResponseInReportCache(Path reportPath, String sidecarFileName, JsonObject response) {
         String trimmedSidecarFileName = trimToNull(sidecarFileName);
         if (reportPath == null || trimmedSidecarFileName == null || !isCacheableSidecarResponse(response)) {
-            return;
+            return false;
         }
 
         synchronized (fileLock(reportPath)) {
@@ -171,8 +171,10 @@ final class ReportLookupCacheStore {
                 }
                 entries.add(trimmedSidecarFileName, response.deepCopy());
                 writeAtomically(reportPath, upsertPersistedLookupCacheBlock(reportHtml, cache));
+                return true;
             } catch (IOException e) {
                 LOGGER.warning("Failed to persist report lookup cache in " + reportPath + ": " + e.getMessage());
+                return false;
             }
         }
     }

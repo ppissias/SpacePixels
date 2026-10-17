@@ -34,7 +34,7 @@ final class SolarSystemQueryTargetFactory {
             return null;
         }
 
-        long timestampMillis = astrometryContext.getFrameTimestampMillis(detection.sourceFrameIndex);
+        long timestampMillis = SatCheckerQueryTargetFactory.resolveTrackPointMidpointTimestamp(astrometryContext, detection);
         if (timestampMillis <= 0L) {
             timestampMillis = astrometryContext.getSessionMidpointTimestampMillis();
         }
@@ -72,7 +72,7 @@ final class SolarSystemQueryTargetFactory {
             sumElongation += Math.max(1.0, point.elongation);
             count++;
 
-            long timestampMillis = astrometryContext.getFrameTimestampMillis(point.sourceFrameIndex);
+            long timestampMillis = SatCheckerQueryTargetFactory.resolveTrackPointMidpointTimestamp(astrometryContext, point);
             if (timestampMillis > 0L) {
                 timestampAccumulator += timestampMillis;
                 timestampCount++;

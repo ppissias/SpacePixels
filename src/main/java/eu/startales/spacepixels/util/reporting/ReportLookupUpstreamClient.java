@@ -61,6 +61,7 @@ final class ReportLookupUpstreamClient {
             }
 
             if (upstreamStatus >= 200 && upstreamStatus < 300) {
+                validatePayload(provider, payload);
                 response.addProperty("ok", true);
                 response.add("payload", payload);
                 response.add("normalized", ReportLookupPayloadNormalizer.normalize(provider, payload));
@@ -114,6 +115,22 @@ final class ReportLookupUpstreamClient {
         }
 
         return uri;
+    }
+
+    static void validatePayload(String provider, JsonElement payload) {
+        if (payload == null || !payload.isJsonObject()) throw new IllegalArgumentException("The catalogue returned an invalid response, not a search result.");
+        JsonObject root = payload.getAsJsonObject();
+        if (root.has("error") && !root.get("error").isJsonNull()) throw new IllegalArgumentException("The catalogue reported an error: " + root.get("error"));
+        boolean valid = switch (provider) {
+            case "vsx" -> root.has("metadata") && root.get("metadata").isJsonArray()
+                    && !root.getAsJsonArray("metadata").isEmpty() && root.has("data") && root.get("data").isJsonArray();
+            case "satchecker" -> root.has("data") && root.get("data").isJsonObject()
+                    && root.getAsJsonObject("data").has("satellites") && root.getAsJsonObject("data").get("satellites").isJsonObject();
+            case "jpl" -> root.has("signature") && root.get("signature").isJsonObject()
+                    && (root.has("n_second_pass") || root.has("n_first_pass"));
+            default -> false;
+        };
+        if (!valid) throw new IllegalArgumentException("The catalogue response is incomplete; no identification conclusion can be drawn. Retry the lookup.");
     }
 
     private static int resolveReadTimeoutMillis(String provider) {

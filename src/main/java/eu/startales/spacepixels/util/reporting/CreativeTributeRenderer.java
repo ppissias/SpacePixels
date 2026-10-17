@@ -145,7 +145,7 @@ final class CreativeTributeRenderer {
                                                     List<TrackLinker.Track> suspectedStreakTracks,
                                                     List<TrackLinker.Track> movingTargets,
                                                     List<SourceExtractor.DetectedObject> slowMoverCandidates,
-                                                    PipelineTelemetry pipelineTelemetry) {
+                                                    PipelineTelemetry pipelineTelemetry, ExportVisualizationSettings settings) {
         allTransients = safeList(allTransients);
         unclassifiedTransients = safeList(unclassifiedTransients);
         anomalies = safeList(anomalies);
@@ -185,7 +185,7 @@ final class CreativeTributeRenderer {
                 layout.cropWidth,
                 layout.cropHeight
         );
-        BufferedImage grayBg = DisplayImageRenderer.createDisplayImage(croppedBackground);
+        BufferedImage grayBg = TrackVisualizationRenderer.createDisplayImage(croppedBackground, settings);
         BufferedImage tribute = new BufferedImage(layout.outputWidth, layout.canvasHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = tribute.createGraphics();
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);

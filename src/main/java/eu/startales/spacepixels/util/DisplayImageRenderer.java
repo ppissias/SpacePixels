@@ -31,12 +31,13 @@ public final class DisplayImageRenderer {
     public static BufferedImage createDisplayImage(short[][] imageData,
                                                    double blackSigma,
                                                    double whiteSigma) {
+        double[] levels = displayLevels(imageData, blackSigma, whiteSigma);
+        return createDisplayImageAtLevels(imageData, levels[0], levels[1]);
+    }
+
+    public static double[] displayLevels(short[][] imageData, double blackSigma, double whiteSigma) {
         int height = imageData.length;
         int width = imageData[0].length;
-
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
-        WritableRaster raster = image.getRaster();
-
         long sum = 0;
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
@@ -72,6 +73,14 @@ public final class DisplayImageRenderer {
             whitePoint = actualMax;
         }
 
+        return new double[]{blackPoint, whitePoint};
+    }
+
+    /** Fixed display levels for comparisons in which brightness changes must stay visible. */
+    public static BufferedImage createDisplayImageAtLevels(short[][] imageData, double blackPoint, double whitePoint) {
+        int height = imageData.length, width = imageData[0].length;
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
+        WritableRaster raster = image.getRaster();
         double range = whitePoint - blackPoint;
         if (range <= 0) {
             range = 1.0;

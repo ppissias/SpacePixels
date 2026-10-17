@@ -29,9 +29,11 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
 
     private FitsFileInformation[] files;
     private DetectionConfig config;
+    private final ApplicationWindow mainAppWindow;
 
     public DetectionSequenceFrame(ApplicationWindow mainAppWindow) {
         super("Preview Frame", "detecting…", false, true);
+        this.mainAppWindow = mainAppWindow;
         setLocationRelativeTo(mainAppWindow.getFrame());
     }
 
@@ -40,6 +42,8 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
         this.files = files;
         this.config = config;
         openAt(startIndex, stretchPanel, files);
+        setVariableStarOverlay(mainAppWindow.getImageProcessing() == null ? null
+                : mainAppWindow.getImageProcessing().getLastVariableStarOverlay(), files);
     }
 
     @Override

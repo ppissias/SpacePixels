@@ -254,21 +254,15 @@ public final class WcsCoordinateTransformer {
     }
 
     public static String formatRa(double raDegrees) {
-        double totalSeconds = normalizeDegrees(raDegrees) / 15.0 * 3600.0;
-        int hours = (int) (totalSeconds / 3600.0);
-        totalSeconds -= hours * 3600.0;
-        int minutes = (int) (totalSeconds / 60.0);
-        double seconds = totalSeconds - (minutes * 60.0);
-        return String.format(Locale.US, "%02d:%02d:%04.1f", hours, minutes, seconds);
+        if (!Double.isFinite(raDegrees)) return "n/a";
+        long ticks = Math.round(normalizeDegrees(raDegrees) / 15.0 * 36000.0) % 864000;
+        return String.format(Locale.US, "%02d:%02d:%04.1f", ticks / 36000, ticks / 600 % 60, ticks % 600 / 10.0);
     }
 
     public static String formatDec(double decDegrees) {
-        double absolute = Math.abs(decDegrees);
-        int degrees = (int) absolute;
-        double remainingMinutes = (absolute - degrees) * 60.0;
-        int minutes = (int) remainingMinutes;
-        double seconds = (remainingMinutes - minutes) * 60.0;
-        return String.format(Locale.US, "%s%02d:%02d:%04.1f", decDegrees >= 0.0 ? "+" : "-", degrees, minutes, seconds);
+        if (!Double.isFinite(decDegrees) || Math.abs(decDegrees) > 90) return "n/a";
+        long ticks = Math.round(Math.abs(decDegrees) * 36000);
+        return String.format(Locale.US, "%s%02d:%02d:%04.1f", decDegrees >= 0 ? "+" : "-", ticks / 36000, ticks / 600 % 60, ticks % 600 / 10.0);
     }
 
     private static double[] buildTransformationMatrix(Map<String, String> header) {

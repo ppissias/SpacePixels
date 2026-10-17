@@ -102,20 +102,11 @@ final class DetectionReportDocumentWriter {
             ".comparison-fact { display: block; }",
             ".comparison-qualifications { margin-top: 5px; color: #999; }",
             ".sky-orientation-figure { position: relative; display: inline-block; }",
-            ".sky-orientation-overlay { position: absolute; top: 8px; right: 8px; width: 156px; padding: 10px 11px; border-radius: 10px; background: rgba(10, 16, 23, 0.93); border: 1px solid rgba(120, 177, 229, 0.68); color: #edf5ff; box-shadow: 0 8px 22px rgba(0,0,0,0.45); opacity: 0; pointer-events: none; transform: translateY(-4px); transition: opacity 140ms ease, transform 140ms ease; }",
-            ".sky-orientation-figure:hover .sky-orientation-overlay { opacity: 1; transform: translateY(0); }",
-            ".sky-orientation-title { color: #9ecfff; font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.9px; margin-bottom: 8px; }",
-            ".sky-orientation-compass { position: relative; width: 74px; height: 74px; margin: 0 auto 9px auto; border-radius: 50%; border: 1px solid rgba(158, 207, 255, 0.34); background: radial-gradient(circle at 50% 50%, rgba(63, 107, 153, 0.36) 0%, rgba(18, 26, 36, 0.16) 68%, rgba(18, 26, 36, 0.04) 100%); }",
-            ".sky-orientation-compass::before { content: ''; position: absolute; left: 50%; top: 8px; bottom: 8px; width: 1px; background: rgba(255,255,255,0.08); transform: translateX(-50%); }",
-            ".sky-orientation-compass::after { content: ''; position: absolute; top: 50%; left: 8px; right: 8px; height: 1px; background: rgba(255,255,255,0.08); transform: translateY(-50%); }",
-            ".sky-orientation-arrow { position: absolute; left: 50%; top: 50%; width: 0; height: 28px; transform: translate(-50%, -100%) rotate(var(--rotation, 0deg)); transform-origin: 50% 100%; }",
-            ".sky-orientation-arrow::before { content: ''; position: absolute; left: -1px; top: 7px; width: 2px; height: 19px; background: currentColor; border-radius: 999px; }",
-            ".sky-orientation-arrow::after { content: ''; position: absolute; left: -5px; top: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid currentColor; }",
-            ".sky-orientation-arrow span { position: absolute; top: -15px; left: -7px; font-size: 10px; font-weight: bold; }",
-            ".sky-orientation-arrow.north { color: #a7ef73; }",
-            ".sky-orientation-arrow.east { color: #7fc2ff; }",
-            ".sky-orientation-center { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; border-radius: 50%; background: #ffffff; transform: translate(-50%, -50%); box-shadow: 0 0 8px rgba(255,255,255,0.35); }",
-            ".sky-orientation-meta { color: #dce8f5; font-size: 11px; line-height: 1.35; margin-top: 2px; white-space: nowrap; }",
+            ".sky-orientation-overlay { position: absolute; bottom: 6px; right: 6px; width: 64px; height: 64px; opacity: 0; pointer-events: none; transition: opacity 120ms ease; }",
+            ".sky-orientation-figure:hover .sky-orientation-overlay, .sky-orientation-figure:focus-within .sky-orientation-overlay { opacity: 1; }",
+            ".sky-orientation-overlay svg { display: block; width: 100%; height: 100%; overflow: visible; }",
+            ".sky-orientation-overlay line { stroke: #ff6666; stroke-width: 1.2; stroke-linecap: round; }",
+            ".sky-orientation-overlay text { fill: #ff7777; stroke: rgba(0,0,0,0.85); stroke-width: 2.5px; paint-order: stroke; font: bold 11px sans-serif; text-anchor: middle; dominant-baseline: central; }",
             ".native-size-image { max-width: 100%; width: auto; height: auto; display: block; margin: 0 auto; }",
             ".map-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }",
             ".legend-pill { display: inline-flex; align-items: center; gap: 8px; background: #262626; border: 1px solid #444; border-radius: 999px; padding: 6px 10px; font-size: 12px; color: #d0d0d0; }",
@@ -185,10 +176,11 @@ final class DetectionReportDocumentWriter {
     }
 
     static void appendDetectionReportStart(PrintWriter report) {
-        report.println("<!DOCTYPE html><html><head><meta charset='utf-8'><title>SpacePixels Session Report</title><style>");
+        report.println("<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>SpacePixels Session Report</title><style>");
         for (String line : DETECTION_REPORT_STYLE_LINES) {
             report.println(line);
         }
+        report.println(".report-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0}.report-controls select{max-width:320px;background:#222;color:#eee;padding:6px}.image-container{flex-wrap:wrap}.image-container>div{min-width:0;max-width:100%}.source-list li{min-width:0;box-sizing:border-box;flex-basis:min(360px,100%)}.detection-card{min-width:0;max-width:100%;box-sizing:border-box}.chart-controls{display:flex;gap:6px;margin:4px 0}.chart-controls button{font-size:11px;padding:3px 8px}.report-map-stage{position:relative;line-height:0}.report-map svg.sp-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.report-map svg.sp-layer a,.report-map svg.sp-layer text{pointer-events:all}.report-map img{display:block;width:100%}.report-filter{display:flex;flex-wrap:wrap;gap:12px;align-items:center;line-height:1.5;margin-bottom:12px}svg[data-report-chart]{touch-action:pan-y}.map-category-controls{line-height:1.5;margin:8px 0}.map-category-controls button[aria-pressed=false]{opacity:.5}@media(max-width:700px){body{padding:10px}.panel{padding:12px}.report-nav{margin-left:-10px;margin-right:-10px;padding-left:10px;padding-right:10px}.report-controls select{max-width:220px}.image-container{gap:10px}} ");
         report.println("</style></head><body>");
         report.println("<h1>SpacePixels Session Report</h1>");
     }

@@ -36,8 +36,8 @@ final class NightEquipmentSectionWriter {
             report.println("</div>");
             return;
         }
-        report.println("<p class='section-lede'>What the frames say about the night and the equipment, from "
-                + ne.starsSelected + " isolated stars measured in each of the " + ne.frames.size()
+        report.println("<p class='section-lede'>What the frames say about the night and the equipment, from up to "
+                + ne.starsSelected + " isolated stars per frame across " + ne.frames.size()
                 + " kept frames. Each part ends with a reading; the numbers behind it are in the charts and maps.</p>");
         writeCards(report, ne);
         writeNight(report, ne);
@@ -137,7 +137,7 @@ final class NightEquipmentSectionWriter {
         StringBuilder text = new StringBuilder(String.format(Locale.US, "The stars near the centre measure %s across (median), from %s to %s. ",
                 format(median, unit), format(lowest, unit), format(highest, unit)));
         if (trend > 0.5 && change > 0.12) {
-            text.append(String.format(Locale.US, "They grew steadily, by %.0f %% from the first to the last third of the session: the focus probably drifted. ", change * 100));
+            text.append(String.format(Locale.US, "They grew steadily, by %.0f %% from the first to the last third of the session. Focus drift is one possible cause; seeing, tracking and altitude can also contribute. ", change * 100));
             String temperature = temperatureChange(ne);
             if (temperature != null) {
                 text.append(temperature).append(' ');
@@ -146,7 +146,7 @@ final class NightEquipmentSectionWriter {
         } else if (trend < -0.5 && change < -0.12) {
             text.append(String.format(Locale.US, "They became %.0f %% smaller during the session: the seeing improved, or the target rose higher.", -change * 100));
         } else {
-            text.append("There is no steady trend: the changes come from the seeing.");
+            text.append("There is no steady trend. Seeing, focus and tracking can all contribute to these changes.");
             String temperature = temperatureChange(ne);
             if (temperature != null) {
                 text.append(' ').append(temperature);
@@ -202,13 +202,13 @@ final class NightEquipmentSectionWriter {
         }
         StringBuilder text = new StringBuilder();
         if (range < 0.1) {
-            text.append(String.format(Locale.US, "The stars kept their brightness within %.2f mag through the session: a clear sky.", range));
+            text.append(String.format(Locale.US, "The stars kept their brightness within %.2f mag through the session, consistent with stable transparency.", range));
         } else if (dim.isEmpty()) {
             text.append(String.format(Locale.US, "The stars changed in brightness by up to %.2f mag: some haze, or the target's change in altitude.", range));
         } else {
             text.append(String.format(Locale.US, "The stars changed in brightness by up to %.2f mag. ", range));
             text.append(dim.size() <= 12 ? "Frame" + (dim.size() == 1 ? " " : "s ") + String.join(", ", dim)
-                    : dim.size() + " frames").append(" lost more than 0.3 mag (30 %): haze or thin cloud.");
+                    : dim.size() + " frames").append(" lost more than 0.3 mag (about 24 % of their light): haze, thin cloud or increasing airmass may contribute.");
         }
         text.append(" Measured per second of exposure on the same stars in every frame; a lower target also dims the stars.");
         return text.toString();
@@ -217,7 +217,7 @@ final class NightEquipmentSectionWriter {
     private static String skyReading(NightEquipment ne) {
         List<Double> sky = values(ne, f -> f.skyBrightness);
         double median = NightEquipment.median(sky);
-        StringBuilder text = new StringBuilder(String.format(Locale.US, "The sky measures %.2f mag/arcsec&sup2; (median): %s.", median, skyWords(median)));
+        StringBuilder text = new StringBuilder(String.format(Locale.US, "The estimated sky brightness is %.2f mag/arcsec&sup2; (median).", median));
         if (sky.size() >= 6) {
             int third = Math.max(1, sky.size() / 3);
             double start = NightEquipment.median(sky.subList(0, third));
@@ -228,28 +228,9 @@ final class NightEquipmentSectionWriter {
                 text.append(String.format(Locale.US, " It got %.1f mag darker during the session (twilight ending, the Moon setting, or the target rising).", end - start));
             }
         }
-        text.append(" Calibrated with the Gaia stars of each frame. It assumes calibrated frames (bias or dark subtracted, no added pedestal): "
+        text.append(" This is an approximate Gaia G estimate, not a direct SQM reading or a site classification. Calibrated with the Gaia stars of each frame, it assumes calibrated frames (bias or dark subtracted, no added pedestal): "
                 + "frames that still contain the camera's offset show a brighter sky than the real one.");
         return text.toString();
-    }
-
-    private static String skyWords(double sqm) {
-        if (sqm >= 21.5) {
-            return "a truly dark site";
-        }
-        if (sqm >= 20.8) {
-            return "a dark rural sky";
-        }
-        if (sqm >= 20.0) {
-            return "a rural to suburban sky";
-        }
-        if (sqm >= 19.0) {
-            return "a suburban sky";
-        }
-        if (sqm >= 18.0) {
-            return "a bright suburban sky";
-        }
-        return "a city sky, or moonlight";
     }
 
     // ==========================================
@@ -327,11 +308,11 @@ final class NightEquipmentSectionWriter {
         }
         if (hasDepth) {
             text.append(Double.isNaN(ne.saturationMagnitude) && ne.calibrationStars == 0 ? "" : ", and ")
-                    .append(String.format(Locale.US, "the detection reaches G %.1f (field depth)", fieldDepth.median()));
+                    .append("the detection reaches ").append(fieldDepth.medianLabel()).append(" (field depth)");
         }
         text.append(".");
         if (!Double.isNaN(ne.saturationMagnitude) && hasDepth) {
-            text.append(" Photometry is reliable between the two.");
+            text.append(" This is an estimated detection range, not a photometric accuracy limit; the Variable Stars readiness checks assess suitability for differential photometry.");
         }
         return text.toString();
     }
@@ -393,10 +374,10 @@ final class NightEquipmentSectionWriter {
         double lowest = Math.min(Math.min(corners[0], corners[1]), Math.min(corners[2], corners[3]));
         double highest = Math.max(Math.max(corners[0], corners[1]), Math.max(corners[2], corners[3]));
         double tilt = Math.hypot(ne.sizeTiltX, ne.sizeTiltY);
-        String tiltCause = "the focal plane is tilted against the camera (sensor tilt, or a sagging focuser or adapter)";
+        String tiltCause = "a pattern consistent with sensor tilt, a sagging focuser or adapter, or uneven focus";
         StringBuilder text = new StringBuilder();
         if (highest < 0.05 && lowest > -0.05) {
-            text.append("The stars are as sharp in the corners as in the centre (within 5 %): the field is flat. ");
+            text.append("The stars are as sharp in the corners as in the centre (within 5 %): no corner growth is resolved by these measurements. ");
         } else if (lowest >= 0.05) {
             text.append(String.format(Locale.US, "The stars are larger in all four corners than in the centre, by %.0f to %.0f %%: %s. ",
                     lowest * 100, highest * 100, lowest >= 0.15 ? "field curvature; with a field flattener or reducer, check its distance to the camera (backfocus)"
@@ -421,13 +402,13 @@ final class NightEquipmentSectionWriter {
         double tracking = Math.hypot(ne.trackingE1, ne.trackingE2);
         double trackingRatio = axisRatio(tracking);
         if (trackingRatio >= 1.12) {
-            text.append(String.format(Locale.US, "All stars are stretched %.0f %% in the same direction (%s): tracking, guiding or wind, not the optics. "
+            text.append(String.format(Locale.US, "All stars are stretched %.0f %% in the same direction (%s): tracking, guiding, wind or a shared optical effect may contribute. "
                     + "This shared stretch is taken out of the map. ", (trackingRatio - 1) * 100, lineDirection(ne.trackingE1, ne.trackingE2)));
         } else if (trackingRatio >= 1.05) {
             text.append(String.format(Locale.US, "All stars share a slight stretch of %.0f %% (%s): tracking or guiding; it is taken out of the map. ",
                     (trackingRatio - 1) * 100, lineDirection(ne.trackingE1, ne.trackingE2)));
         } else {
-            text.append("Round on average: the stars share no stretch beyond 5 % (tracking was good). ");
+            text.append("Round on average: the stars share no measured stretch beyond 5 %. ");
         }
         double radial = ne.radialEllipticity;
         if (Double.isNaN(radial)) {
@@ -472,7 +453,7 @@ final class NightEquipmentSectionWriter {
                     ne.comaSlope > 0 ? "away from" : "towards", format(corner * (ne.hasPixelScale() ? ne.pixelScale : 1), ne.hasPixelScale() ? SECOND : " px"), share * 100));
         } else {
             text.append(String.format(Locale.US, "The corner stars are lopsided, with a faint tail pointing %s the centre: their light lies %s (%.0f %% of their size) from the core. "
-                            + "This is coma: on a fast reflector a coma corrector at the right distance removes it; with a corrector or flattener, check its distance to the camera. ",
+                            + "This pattern is consistent with coma. On a reflector, check the corrector and its spacing; asymmetric focus and colour effects can also contribute. ",
                     ne.comaSlope > 0 ? "away from" : "towards", format(corner * (ne.hasPixelScale() ? ne.pixelScale : 1), ne.hasPixelScale() ? SECOND : " px"), share * 100));
             if (!Double.isNaN(ne.comaZeroX)) {
                 double zx = ne.comaZeroX - (ne.width - 1) / 2.0;
@@ -483,7 +464,7 @@ final class NightEquipmentSectionWriter {
                     text.append(String.format(Locale.US, "The point without coma (the cross) lies %.0f %% of the way from the centre to the %s corner: on a reflector, the collimation is probably off.",
                             off * 100, direction(zx, zy)));
                 } else if (inside) {
-                    text.append("The point without coma is near the centre: the optics are centred.");
+                    text.append("The point without coma is near the centre: the fitted asymmetry is centred within these measurements.");
                 }
             }
         }
@@ -556,7 +537,7 @@ final class NightEquipmentSectionWriter {
         double skyCorner = ne.backgroundCorner;
         if (!Double.isNaN(starCorner)) {
             if (Math.abs(starCorner) < 0.03) {
-                text.append("The stars are equally bright across the field (within 3 %): the flats removed the vignetting. ");
+                text.append("The stars are equally bright across the field (within 3 %): no brightness gradient larger than this is resolved in the measured stars. ");
             } else if (starCorner > 0) {
                 text.append(String.format(Locale.US, "The stars are %.0f %% dimmer in the corners than in the centre", starCorner * 100));
                 if (!Double.isNaN(skyCorner) && skyCorner < -0.02) {
@@ -613,7 +594,7 @@ final class NightEquipmentSectionWriter {
         for (String note : ne.notes) {
             report.println("<p>" + esc(note) + "</p>");
         }
-        report.println(String.format(Locale.US, "<p>Measured in %.1f s.</p>", ne.millis / 1000.0));
+        report.println(String.format(Locale.US, "<p>These are diagnostic patterns, not a unique diagnosis of the optics. Blank map cells lack enough usable measurements. Measured in %.1f s.</p>", ne.millis / 1000.0));
         report.println("</div></details>");
     }
 

@@ -691,6 +691,7 @@ final class NightEquipment {
         // also gives each star's residual below, so a slight non-linearity does not show up as a pattern on the field.
         List<Double> slopes = new ArrayList<>();
         double[][] lines = new double[frames.size()][];
+        boolean[] linearFrames = new boolean[frames.size()];
         for (int f = 0; f < frames.size(); f++) {
             List<double[]> points = new ArrayList<>();
             double low = Double.POSITIVE_INFINITY;
@@ -706,16 +707,19 @@ final class NightEquipment {
             lines[f] = robustLine(points);
             if (lines[f] != null && high - low >= 2) {
                 slopes.add(lines[f][1]);
+                linearFrames[f] = Double.isFinite(lines[f][1]) && Math.abs(lines[f][1] - 1) <= 0.12;
             }
         }
         linearity = slopes.isEmpty() ? Double.NaN : median(slopes);
         calibrated = !Double.isNaN(linearity) && Math.abs(linearity - 1) <= 0.12;
-        if (!Double.isNaN(linearity) && !calibrated) {
-            notes.add(String.format(Locale.US, "The star brightness does not follow Gaia in proportion (slope %.2f instead of 1): "
-                    + "the frames are probably stretched or not linear, so the sky brightness and the flat-field check are left out.", linearity));
+        if (!calibrated) {
+            notes.add(Double.isFinite(linearity) ? String.format(Locale.US, "The star brightness does not follow Gaia in proportion (slope %.2f instead of 1): "
+                    + "the frames are probably stretched or not linear, so the sky brightness and the flat-field check are left out.", linearity)
+                    : "The Gaia matches do not span enough brightness to validate linearity; sky brightness and the flat-field check are unavailable.");
             return;
         }
         for (int f = 0; f < frames.size(); f++) {
+            if (!linearFrames[f]) continue;
             Frame frame = frames.get(f);
             frame.zeroPoint = zeroPoints[f];
             if (!Double.isNaN(zeroPoints[f]) && hasPixelScale() && frame.background > 0) {
@@ -724,6 +728,7 @@ final class NightEquipment {
         }
         // Each star against its Gaia magnitude: positive when it is dimmer than expected.
         for (Sample sample : usable) {
+            if (!linearFrames[sample.frame]) continue;
             GaiaMatch match = matches[sample.star];
             double[] line = lines[sample.frame];
             if (line != null) {

@@ -83,6 +83,16 @@ final class FieldDepth {
         return Double.isNaN(median());
     }
 
+    boolean medianIsLowerLimit() {
+        List<Frame> measured = frames.stream().filter(f -> Double.isFinite(f.depth))
+                .sorted(java.util.Comparator.comparingDouble(f -> f.depth)).toList();
+        return !measured.isEmpty() && measured.get(measured.size() / 2).deeperThanSample;
+    }
+
+    String medianLabel() {
+        return String.format(java.util.Locale.US, "G %s%.1f", medianIsLowerLimit() ? "≥ " : "", median());
+    }
+
     /** One patch on the frame: its Gaia stars in frame pixels, and the part of the frame it covers. */
     private static final class Patch {
         final List<double[]> stars = new ArrayList<>(); // x, y, G

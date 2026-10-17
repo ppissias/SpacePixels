@@ -107,8 +107,8 @@ public class DetectionReportGenerator {
     }
 
     /**
-     * Returns an evenly spaced sample of chronological frame indices while guaranteeing that
-     * mandatory frames (where actual detections occur) are included to never miss a transient.
+     * Returns an evenly spaced sample of chronological frame indices, prioritising detection frames
+     * within the requested frame limit.
      */
     static List<Integer> getRepresentativeSequence(int totalFrames, java.util.Set<Integer> mandatoryFrames, int maxFrames) {
         java.util.TreeSet<Integer> selected = new java.util.TreeSet<>();
@@ -440,8 +440,8 @@ public class DetectionReportGenerator {
                                               List<TrackLinker.Track> movingTargets,
                                               List<TrackLinker.Track> localRescueTracks,
                                               List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters,
-                                              List<SourceExtractor.DetectedObject> deepStackCandidates) {
-        BufferedImage grayBg = createDisplayImage(backgroundData);
+                                              List<SourceExtractor.DetectedObject> deepStackCandidates, ExportVisualizationSettings settings) {
+        BufferedImage grayBg = createDisplayImage(backgroundData, settings);
         BufferedImage rgbMap = new BufferedImage(grayBg.getWidth(), grayBg.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
         g2d.drawImage(grayBg, 0, 0, null);
@@ -686,11 +686,11 @@ public class DetectionReportGenerator {
     }
 
     // --- GLOBAL TRANSIENT MAP RENDERER ---
-    static BufferedImage createGlobalTransientMap(short[][] backgroundData, List<List<SourceExtractor.DetectedObject>> allTransients) {
+    static BufferedImage createGlobalTransientMap(short[][] backgroundData, List<List<SourceExtractor.DetectedObject>> allTransients, ExportVisualizationSettings settings) {
         int width = backgroundData[0].length;
         int height = backgroundData.length;
 
-        BufferedImage grayBg = createDisplayImage(backgroundData);
+        BufferedImage grayBg = createDisplayImage(backgroundData, settings);
         BufferedImage rgbMap = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
 
@@ -1018,6 +1018,10 @@ public class DetectionReportGenerator {
 
         long firstStartTimestamp = -1L;
         long lastEndTimestamp = -1L;
+        long firstMidpoint = Long.MAX_VALUE;
+        long lastMidpoint = Long.MIN_VALUE;
+        SourceExtractor.DetectedObject motionFirst = null;
+        SourceExtractor.DetectedObject motionLast = null;
         for (SourceExtractor.DetectedObject point : track.points) {
             long startTimestamp = DetectionReportAstrometry.resolveTrackPointStartTimestamp(astrometryContext, point);
             if (startTimestamp <= 0L) {
@@ -1028,18 +1032,28 @@ public class DetectionReportGenerator {
                 firstStartTimestamp = startTimestamp;
             }
             lastEndTimestamp = Math.max(lastEndTimestamp, endTimestamp);
+            long midpoint = SatCheckerQueryTargetFactory.resolveTrackPointMidpointTimestamp(astrometryContext, point);
+            if (midpoint < firstMidpoint) { firstMidpoint = midpoint; motionFirst = point; }
+            if (midpoint > lastMidpoint) { lastMidpoint = midpoint; motionLast = point; }
         }
 
         long durationMillis = (firstStartTimestamp > 0L && lastEndTimestamp >= firstStartTimestamp)
                 ? lastEndTimestamp - firstStartTimestamp
                 : -1L;
+        long motionMillis = motionFirst != null && motionLast != null && lastMidpoint > firstMidpoint
+                ? lastMidpoint - firstMidpoint : -1;
+        if (motionMillis > 0) {
+            dx = motionLast.x - motionFirst.x;
+            dy = motionLast.y - motionFirst.y;
+            displacementPixels = Math.hypot(dx, dy);
+        }
 
         StringBuilder html = new StringBuilder();
         html.append("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 15px;'>");
         html.append("First UTC: <span style='color:#fff;'>").append(escapeHtml(formatUtcTimestamp(firstStartTimestamp))).append("</span><br>");
         html.append("Last UTC: <span style='color:#fff;'>").append(escapeHtml(formatUtcTimestamp(lastEndTimestamp))).append("</span><br>");
         html.append("Track Duration: <span style='color:#fff;'>").append(escapeHtml(formatDuration(durationMillis))).append("</span><br>");
-        html.append("Mean Speed: <span style='color:#fff;'>").append(escapeHtml(formatTrackSpeed(displacementPixels, durationMillis))).append("</span><br>");
+        html.append("Mean Speed: <span style='color:#fff;'>").append(escapeHtml(formatTrackSpeed(displacementPixels, motionMillis))).append("</span> (exposure midpoints)<br>");
         html.append(DetectionReportAstrometry.buildTrackSkyRateSummaryHtml(astrometryContext, track));
         html.append("Start-End Motion: <span style='color:#fff;'>")
                 .append(escapeHtml(formatDecimal(displacementPixels, 1)))
@@ -1354,13 +1368,18 @@ public class DetectionReportGenerator {
                 suspectedStreakTracks,
                 movingTargets);
 
-        if (!exportDir.exists()) exportDir.mkdirs();
+        reportContext.data = ReportData.create(reportContext, pipelineTelemetry, result.variableStarAnalysis, commonMotionGroups, inclusion);
+        java.nio.file.Files.createDirectories(exportDir.toPath());
+        reportContext.data.writeJson(exportDir);
 
         File reportFile = new File(exportDir, detectionReportName);
 
-        try (java.io.PrintWriter report = new java.io.PrintWriter(new java.io.FileWriter(reportFile))) {
+        long reportStarted = System.nanoTime();
+        try (AtomicReportFile output = new AtomicReportFile(reportFile)) {
+            java.io.PrintWriter report = output.writer();
             DetectionReportDocumentWriter.appendDetectionReportStart(report);
             PipelineDiagnosticsSectionWriter.writeSessionHeader(report, reportContext, pipelineTelemetry);
+            ReportPresentation.controls(report, reportContext);
             PipelineDiagnosticsSectionWriter.writeNavigation(report, buildNavigation(
                     reportContext, pipelineTelemetry, summary, settings.isIncludeAiCreativeReportSections(),
                     commonMotionGroups.size(), inclusion));
@@ -1437,7 +1456,8 @@ public class DetectionReportGenerator {
                         suspectedStreakTracks,
                         movingTargets,
                         slowMoverCandidates,
-                        pipelineTelemetry
+                        pipelineTelemetry,
+                        settings
                 );
                 saveTrackImageLossless(creativeTributeImage, new File(exportDir, creativeFileName));
 
@@ -1464,7 +1484,7 @@ public class DetectionReportGenerator {
                 report.println("<div class='panel' style='background: linear-gradient(180deg, #24303a 0%, #2b2b2b 100%); border: 1px solid #53606a;'>");
                 report.println("<h2>The AI's Perspective: Signal Weave</h2>");
                 report.println("<p style='color: #c7d2dc; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>A creative analysis by Codex. I treated the report output as a signal field: every post-veto transient becomes time-colored dust, unclassified leftovers become amber residue, moving targets become blue paths, confirmed streaks become gold vectors, suspected streak groupings become red paths, and rescued anomalies become magenta pulses.</p>");
-                report.println("<a href='" + creativeFileName + "' target='_blank'><img src='" + creativeFileName + "' class='native-size-image' style='border: 1px solid #666; border-radius: 6px;' alt='Creative Signal Weave report image' /></a>");
+                report.println("<a href='" + creativeFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + creativeFileName + "' class='native-size-image' style='border: 1px solid #666; border-radius: 6px;' alt='Creative Signal Weave report image' /></a>");
                 report.println("<div class='flex-container' style='margin-top: 16px; margin-bottom: 4px;'>");
                 report.println("<div class='metric-box compact' style='border-left-color:#96dcff;'><span class='metric-value'>" + rawTransientCount + "</span><span class='metric-label'>All transients</span></div>");
                 report.println("<div class='metric-box compact' style='border-left-color:#88d8ff;'><span class='metric-value'>" + pointTransientCount + "</span><span class='metric-label'>Point-like dust</span></div>");
@@ -1481,12 +1501,18 @@ public class DetectionReportGenerator {
             }
 
             if (settings.isIncludeAiCreativeReportSections()) {
-                ClaudePerspectiveSectionWriter.writeSection(report, reportContext, pipelineTelemetry, summary, result.variableStarAnalysis);
+                ClaudePerspectiveSectionWriter.writeSection(report, reportContext, pipelineTelemetry, summary,
+                        inclusion.variableStars ? result.variableStarAnalysis : null);
                 report.println("</section>");
             }
 
             ReportClientScriptWriter.appendLiveReportRenderingScript(report);
+            ReportPresentation.appendScript(report);
+            report.printf(Locale.US, "<p class='astro-note'>SpacePixels %s · JTransient %s · Generated %s · Report preparation %.2f s</p>%n",
+                    ReportPresentation.version("spacepixels"), ReportPresentation.version("jtransient"), reportContext.data.generatedAtUtc,
+                    (System.nanoTime() - reportStarted) / 1e9);
             DetectionReportDocumentWriter.appendHtmlDocumentEnd(report);
+            output.commit();
         }
         System.out.println("\nFinished exporting visualizations and generated HTML report at: " + reportFile.getAbsolutePath());
     }
@@ -1499,10 +1525,12 @@ public class DetectionReportGenerator {
 
     static void exportIterativeIndexReportInternal(File masterDir, List<IterationSummary> summaries) throws IOException {
         File indexFile = new File(masterDir, "index.html");
-        try (java.io.PrintWriter report = new java.io.PrintWriter(new java.io.FileWriter(indexFile))) {
+        try (AtomicReportFile output = new AtomicReportFile(indexFile)) {
+            java.io.PrintWriter report = output.writer();
             DetectionReportDocumentWriter.appendIterativeIndexReportStart(report);
-            report.println("<div class='panel'");
+            report.println("<div class='panel'>");
             report.println("<h2>Iteration Results</h2>");
+            report.println("<p>Each iteration analyses an overlapping selection of frames. Counts must not be added: the same object can occur in several reports. Compare its position and timestamps in the detailed reports.</p>");
             report.println("<table><tr><th>Iteration (Frames Used)</th><th>Total Tracks Found</th><th>Anomalies Found</th><th>Action</th></tr>");
 
             for (IterationSummary summary : summaries) {
@@ -1518,6 +1546,7 @@ public class DetectionReportGenerator {
             }
             report.println("</table></div>");
             DetectionReportDocumentWriter.appendHtmlDocumentEnd(report);
+            output.commit();
         }
     }
 }

@@ -1578,7 +1578,8 @@ public class MainApplicationPanel extends JPanel {
             statusLabel.setText("Blinking " + event.getSequence().getFrames().size()
                     + " frames. Close the blink window or click Stop Blinking to end.");
             mainAppWindow.getBlinkFrame().open(event.getSequence(), event.getFiles(), getImportedFiles(), mainAppWindow.getStretchPanel(),
-                    mainAppWindow.getImageProcessing() == null ? null : mainAppWindow.getImageProcessing().getLastTrackOverlay());
+                    mainAppWindow.getImageProcessing() == null ? null : mainAppWindow.getImageProcessing().getLastTrackOverlay(),
+                    mainAppWindow.getImageProcessing() == null ? null : mainAppWindow.getImageProcessing().getLastVariableStarOverlay());
         });
     }
 

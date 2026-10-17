@@ -139,6 +139,12 @@ final class UnclassifiedTransientSectionWriter {
         TrackVisualizationRenderer.saveLosslessPng(createComposite(background, markers, markerRadius),
                 new File(context.exportDir, COMPOSITE_FILE));
         int animatedCount = writeFrameStrips(context, markers, width, height, rejectedFrames);
+        java.util.TreeSet<Integer> frameNumbers = new java.util.TreeSet<>();
+        for (Marker marker : markers) frameNumbers.add(marker.sourceFrame() + 1);
+        report.println("<div class='report-filter'><label>Minimum peak sigma <input id='unclassified-min-sigma' type='number' min='0' step='1' value='0' style='width:70px'></label>"
+                + "<label>Frame <select id='unclassified-frame-filter'><option value='0'>All frames</option>");
+        for (int frame : frameNumbers) report.println("<option value='" + frame + "'>" + frame + "</option>");
+        report.println("</select></label><span id='unclassified-visible-count'></span><span class='astro-note'>Focus a marker and use ← / → to review visible detections.</span></div>");
 
         report.println("<style>");
         report.println("#unclassified-transient-inspector .unclassified-layout{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}");
@@ -166,7 +172,7 @@ final class UnclassifiedTransientSectionWriter {
         report.println("<div class='unclassified-layout'>");
         report.println("<div class='unclassified-map-column'>");
         report.println("<div class='unclassified-map' id='unclassified-map'>");
-        report.println("<img id='unclassified-background' src='" + BACKGROUND_FILE + "' width='" + width
+        report.println("<img loading='lazy' decoding='async' id='unclassified-background' src='" + BACKGROUND_FILE + "' width='" + width
                 + "' height='" + height + "' alt='Subdued " + (medianAvailable ? "median stack" : "first frame") + "' />");
         report.println("<svg viewBox='0 0 " + width + " " + height
                 + "' preserveAspectRatio='none' role='img' aria-label='Time-colored unclassified transient markers'>");
@@ -563,7 +569,7 @@ final class UnclassifiedTransientSectionWriter {
         report.println("const controls=panel.querySelector('#unclassified-cutout-controls');const playButton=panel.querySelector('#unclassified-play');");
         report.println("const viewButton=panel.querySelector('#unclassified-view');const note=panel.querySelector('#unclassified-cutout-note');");
         report.println("const staticLabel=viewButton.textContent;const strips={};const delay=" + Math.max(100, frameDelayMs) + ";");
-        report.println("let timer=null;let frame=0;let playing=true;let showStatic=false;");
+        report.println("let timer=null;let frame=0;let playing=true;let showStatic=false;let globalPaused=false;");
         report.println("function stopTimer(){if(timer){clearInterval(timer);timer=null;}}");
         report.println("function drawStripFrame(marker){");
         report.println("const data=marker.dataset;const strip=strips[data.strip];if(!strip||!strip.complete||!strip.naturalWidth)return;");
@@ -581,7 +587,7 @@ final class UnclassifiedTransientSectionWriter {
         report.println("const data=marker.dataset;let strip=strips[data.strip];");
         report.println("if(!strip){strip=new Image();strip.onload=()=>{if(selected===marker&&!showStatic)drawStripFrame(marker);};strip.src=data.strip;strips[data.strip]=strip;}");
         report.println("drawStripFrame(marker);");
-        report.println("if(playing)timer=setInterval(()=>{frame=(frame+1)%Number(data.stripCount);drawStripFrame(marker);},delay);");
+        report.println("if(playing&&!globalPaused)timer=setInterval(()=>{frame=(frame+1)%Number(data.stripCount);drawStripFrame(marker);},delay);");
         report.println("}");
         report.println("function render(marker){");
         report.println("stopTimer();const data=marker.dataset;const animated=!!data.strip;controls.hidden=!animated;");
@@ -591,6 +597,7 @@ final class UnclassifiedTransientSectionWriter {
         report.println("playButton.textContent=playing?'Pause':'Play';playButton.disabled=showStatic;viewButton.textContent=showStatic?'Show frames':staticLabel;");
         report.println("}");
         report.println("playButton.addEventListener('click',()=>{playing=!playing;if(selected)render(selected);});");
+        report.println("document.addEventListener('spacepixels-animation-state',event=>{globalPaused=event.detail.paused;if(selected)render(selected);});");
         report.println("viewButton.addEventListener('click',()=>{showStatic=!showStatic;if(selected)render(selected);});");
         report.println("canvas.addEventListener('click',()=>{if(selected&&selected.dataset.strip&&!showStatic&&!playing){frame=(frame+1)%Number(selected.dataset.stripCount);drawStripFrame(selected);}});");
         report.println("function select(marker){if(selected){selected.classList.remove('selected');selected.parentElement.classList.remove('selected');}selected=marker;marker.classList.add('selected');marker.parentElement.classList.add('selected');setDetails(marker);frame=Number(marker.dataset.stripDetection||0);render(marker);}");

@@ -60,6 +60,7 @@ final class PhotometrySvgChart {
     private double yMax = Double.NaN;
     private boolean logY;
     private boolean invertY;
+    private boolean interactive;
     private final StringBuilder background = new StringBuilder();
     private final StringBuilder marks = new StringBuilder();
     private final List<double[]> extents = new ArrayList<>();
@@ -87,6 +88,27 @@ final class PhotometrySvgChart {
     PhotometrySvgChart invertY() {
         this.invertY = true;
         return this;
+    }
+
+    PhotometrySvgChart interactive() { interactive = true; return this; }
+
+    /** Sky-noise errors supplied by the engine; these are lower bounds, not empirical total errors. */
+    void errorBars(double[] xs, double[] ys, double[] errors, String color) {
+        double[] low = new double[ys.length], high = new double[ys.length];
+        for (int i = 0; i < ys.length; i++) {
+            boolean valid = finite(ys[i]) && i < errors.length && finite(errors[i]) && errors[i] >= 0;
+            low[i] = valid ? ys[i] - errors[i] : Double.NaN;
+            high[i] = valid ? ys[i] + errors[i] : Double.NaN;
+        }
+        includeRange(xs, low); includeRange(xs, high);
+        deferred.add(() -> {
+            for (int i = 0; i < xs.length; i++) {
+                if (!finite(xs[i]) || !finite(low[i]) || !finite(high[i])) continue;
+                double x = px(xs[i]), a = py(low[i]), b = py(high[i]);
+                marks.append(String.format(Locale.US, "<path class='photometry-error-bar' d='M%.2f %.2fV%.2fM%.2f %.2fh6M%.2f %.2fh6' fill='none' stroke='%s' stroke-opacity='.5' stroke-width='1'/>",
+                        x, a, b, x - 3, a, x - 3, b, color));
+            }
+        });
     }
 
     PhotometrySvgChart xRange(double min, double max) {
@@ -232,7 +254,7 @@ final class PhotometrySvgChart {
             r.run();
         }
         StringBuilder svg = new StringBuilder();
-        svg.append("<svg xmlns='http://www.w3.org/2000/svg' role='img' viewBox='0 0 ").append(width).append(' ').append(height)
+        svg.append("<svg xmlns='http://www.w3.org/2000/svg'").append(interactive ? " data-report-chart='true'" : "").append(" role='img' viewBox='0 0 ").append(width).append(' ').append(height)
                 .append("' width='").append(width).append("' height='").append(height)
                 .append("' style='max-width:100%; height:auto; background:").append(SURFACE).append("; border-radius:4px;'")
                 .append(" font-family=\"'Segoe UI', Tahoma, sans-serif\">");

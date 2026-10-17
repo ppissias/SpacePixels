@@ -147,7 +147,7 @@ final class PhotometryReportSectionWriter {
             writeCandidates(report, context, analysis);
             writeFrameTable(report, telemetry);
         }
-        writeCsvExports(context.exportDir, analysis);
+        writeCsvExports(context, analysis);
     }
 
     // =================================================================
@@ -475,8 +475,8 @@ final class PhotometryReportSectionWriter {
 
     private static String funnelBar(int value, int total, String color, String label, String note) {
         double percent = total > 0 ? Math.max(0.6, 100.0 * value / total) : 0;
-        return "<div style='display:flex; align-items:center; gap:10px; margin:3px 0;'>"
-                + "<div style='flex: 0 0 360px; background:#262626; border-radius:3px; height:14px;'><div style='width:"
+        return "<div style='display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:3px 0;'>"
+                + "<div style='flex: 0 1 360px; max-width:100%; background:#262626; border-radius:3px; height:14px;'><div style='width:"
                 + String.format(Locale.US, "%.1f", percent) + "%; height:100%; background:" + color + "; border-radius:3px;'></div></div>"
                 + "<div><span style='color:#ffffff;'>" + DetectionReportGenerator.escapeHtml(label) + "</span>"
                 + (note.isEmpty() ? "" : " <span style='color:#99a3ad;'>(" + DetectionReportGenerator.escapeHtml(note) + ")</span>") + "</div></div>";
@@ -1235,7 +1235,7 @@ final class PhotometryReportSectionWriter {
         }
 
         PhotometrySvgChart chart = new PhotometrySvgChart(560, 300, "Light curve of star #" + star.id + " with comparison stars",
-                timeAxis ? "Minutes since first frame" : "Frame", "Δmag (brighter up)").invertY().rightMargin(34);
+                timeAxis ? "Minutes since first frame" : "Frame", "Δmag (brighter up)").invertY().rightMargin(34).interactive();
 
         double step = Math.max(0.1, (Double.isNaN(star.amplitude) ? 0.1 : star.amplitude) * 1.4);
         for (int k = 0; k < comparisons.size(); k++) {
@@ -1274,9 +1274,10 @@ final class PhotometryReportSectionWriter {
             flaggedTips[j] = tip + " Excluded from analysis: " + plainFlags(star.flags[j]) + ".";
         }
         chart.line(x, used, color, 2, false, null);
+        chart.errorBars(x, used, star.magError, color);
         chart.points(x, used, color, 4, PhotometrySvgChart.Marker.CIRCLE, usedTips);
         chart.points(x, flagged, PhotometrySvgChart.CONTEXT_GRAY, 4, PhotometrySvgChart.Marker.HOLLOW_CIRCLE, flaggedTips);
-        return "<div>" + chart.render() + "</div>";
+        return "<div>" + chart.render() + "<p class='compact-note'>Error bars show estimated sky-noise uncertainty, a lower bound on total uncertainty. Zoom in to inspect points; drag to pan and Reset to see the full curve.</p></div>";
     }
 
     /**
@@ -1342,7 +1343,7 @@ final class PhotometryReportSectionWriter {
         return "<div style='display:flex; gap:12px;'>"
                 + cutoutHtml(brightName, String.format(Locale.US, "Brightest: frame %d (%s mag)", b.frameIndex + 1, formatMag(star.deltaMag[brightest], 3)))
                 + cutoutHtml(faintName, String.format(Locale.US, "Faintest: frame %d (%s mag)", f.frameIndex + 1, formatMag(star.deltaMag[faintest], 3)))
-                + "</div>";
+                + "</div><p class='compact-note'>These are raw frame cutouts with one shared stretch. Brightest and faintest refer to the transparency-corrected light curve; clouds, exposure and seeing can change the appearance of the raw images.</p>";
     }
 
     private static short[][] rawFrame(DetectionReportContext context, PipelineTelemetry.PhotometryFrameStat frame) {
@@ -1370,7 +1371,7 @@ final class PhotometryReportSectionWriter {
     }
 
     private static String cutoutHtml(String file, String caption) {
-        return "<div><a href='" + file + "' target='_blank'><img src='" + file + "' style='width:" + CUTOUT_DISPLAY_SIZE + "px; image-rendering:pixelated;' alt='"
+        return "<div><a href='" + file + "' target='_blank'><img loading='lazy' decoding='async' src='" + file + "' style='width:" + CUTOUT_DISPLAY_SIZE + "px; image-rendering:pixelated;' alt='"
                 + DetectionReportGenerator.escapeHtml(caption) + "' /></a><br/><center><small>" + DetectionReportGenerator.escapeHtml(caption) + "</small></center></div>";
     }
 
@@ -1443,33 +1444,37 @@ final class PhotometryReportSectionWriter {
     // CSV exports
     // =================================================================
 
-    private static void writeCsvExports(File exportDir, VariableStarAnalysis analysis) {
-        try (PrintWriter csv = new PrintWriter(new File(exportDir, "photometry_stars.csv"), StandardCharsets.UTF_8.name())) {
-            csv.println("star_id,x,y,mean_inst_mag,tier,usable_frames,scatter,expected_scatter,excess_scatter,scatter_z,stetson_j,stetson_j_z,amplitude,failed_gates,not_scored_reason");
+    private static void writeCsvExports(DetectionReportContext context, VariableStarAnalysis analysis) throws IOException {
+        File exportDir = context.exportDir;
+        Map<Integer, String> labels = new LinkedHashMap<>();
+        for (StarLightCurve star : analysis.candidates) if (star.tier == VariabilityTier.HIGH_CONFIDENCE || star.tier == VariabilityTier.POSSIBLE) labels.put(star.id, "V" + (labels.size() + 1));
+        try (AtomicReportFile output = new AtomicReportFile(new File(exportDir, "photometry_stars.csv"))) {
+            PrintWriter csv = output.writer();
+            csv.println("star_id,x,y,mean_inst_mag,tier,usable_frames,scatter,expected_scatter,excess_scatter,scatter_z,stetson_j,stetson_j_z,amplitude,failed_gates,not_scored_reason,candidate_label,ra_deg,dec_deg,vsx_matches,nearest_vsx_arcsec");
             for (StarLightCurve s : analysis.stars) {
                 csv.println(s.id + "," + csvNum(s.x) + "," + csvNum(s.y) + "," + csvNum(s.meanMag) + "," + s.tier + "," + s.usableFrames + ","
                         + csvNum(s.scatter) + "," + csvNum(s.expectedScatter) + "," + csvNum(s.excessScatter) + "," + csvNum(s.scatterZ) + ","
                         + csvNum(s.stetsonJ) + "," + csvNum(s.stetsonJZ) + "," + csvNum(s.amplitude) + ","
-                        + csvText(String.join(";", s.failedGates)) + "," + csvText(s.notScoredReason));
+                        + csvText(String.join(";", s.failedGates)) + "," + csvText(s.notScoredReason) + csvIdentification(context, s, labels.get(s.id)));
             }
-        } catch (IOException e) {
-            System.err.println("Failed to write photometry_stars.csv: " + e.getMessage());
+            output.commit();
         }
 
-        try (PrintWriter csv = new PrintWriter(new File(exportDir, "photometry_lightcurves.csv"), StandardCharsets.UTF_8.name())) {
-            csv.println("star_id,tier,frame_index,filename,julian_date,delta_mag,mag_error,flags");
+        try (AtomicReportFile output = new AtomicReportFile(new File(exportDir, "photometry_lightcurves.csv"))) {
+            PrintWriter csv = output.writer();
+            csv.println("star_id,tier,frame_index,filename,julian_date,delta_mag,mag_error,flags,candidate_label");
             for (StarLightCurve s : analysis.candidates) {
                 for (int j = 0; j < analysis.frames.size(); j++) {
                     PipelineTelemetry.PhotometryFrameStat f = analysis.frames.get(j);
                     csv.println(s.id + "," + s.tier + "," + (f.frameIndex + 1) + "," + csvText(f.filename) + "," + csvNum(f.julianDate) + ","
-                            + csvNum(s.deltaMag[j]) + "," + csvNum(s.magError[j]) + "," + csvText(String.join(";", PhotometryFlags.describe(s.flags[j]))));
+                            + csvNum(s.deltaMag[j]) + "," + csvNum(s.magError[j]) + "," + csvText(String.join(";", PhotometryFlags.describe(s.flags[j]))) + "," + csvText(labels.get(s.id)));
                 }
             }
-        } catch (IOException e) {
-            System.err.println("Failed to write photometry_lightcurves.csv: " + e.getMessage());
+            output.commit();
         }
 
-        try (PrintWriter csv = new PrintWriter(new File(exportDir, "photometry_frames.csv"), StandardCharsets.UTF_8.name())) {
+        try (AtomicReportFile output = new AtomicReportFile(new File(exportDir, "photometry_frames.csv"))) {
+            PrintWriter csv = output.writer();
             csv.println("frame_index,filename,julian_date,used,exclusion_reason,fwhm,aperture_radius,sky,offset_x,offset_y,registration_spread,"
                     + "sky_at_zero_fraction,shape_status,linear_limit_mag,linear_range_mag,concentration_reference,zero_point,plane_x,plane_y,"
                     + "response_status,response_slope,response_slope_error,stars_in_ensemble,stars_measured,saturated,nonlinear,crossing,edge_or_void,outliers,bad_flux");
@@ -1482,9 +1487,17 @@ final class PhotometryReportSectionWriter {
                         + csvNum(f.responseSlope) + "," + csvNum(f.responseSlopeError) + "," + f.starsInEnsemble + "," + f.starsMeasured + ","
                         + f.saturated + "," + f.nonlinear + "," + f.crossing + "," + f.edgeOrVoid + "," + f.outliers + "," + f.badFlux);
             }
-        } catch (IOException e) {
-            System.err.println("Failed to write photometry_frames.csv: " + e.getMessage());
+            output.commit();
         }
+    }
+
+    private static String csvIdentification(DetectionReportContext context, StarLightCurve star, String label) {
+        SkyTarget target = skyTarget(context, star.x, star.y);
+        List<SessionCatalogue.VariableMatch> matches = target == null || label == null ? List.of()
+                : SessionCatalogue.of(context).variablesNear(target.raDegrees, target.decDegrees, target.radiusArcsec);
+        String names = matches.stream().map(m -> m.star.name).collect(java.util.stream.Collectors.joining(";"));
+        return "," + csvText(label) + "," + (target == null ? "," : csvNum(target.raDegrees) + "," + csvNum(target.decDegrees))
+                + "," + csvText(names) + "," + (matches.isEmpty() ? "" : csvNum(matches.get(0).separationArcsec));
     }
 
     // =================================================================

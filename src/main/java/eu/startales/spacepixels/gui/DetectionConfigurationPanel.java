@@ -254,6 +254,7 @@ public class DetectionConfigurationPanel extends JPanel {
         spinStarJitter = createSpinner(doubleSpinnerModel(jTransientConfig.maxStarJitter, 0.0, 20.0, 0.1));
         overview.addCoreSetting(null, "Base Star Jitter Radius", "Baseline radius under which detections are treated as stationary star jitter instead of true moving points. Higher values are more conservative around registration residuals.", spinStarJitter, true);
 
+        overview.addPreviewAction();
         JButton testStarMaskButton = new JButton("Test Star Mask…");
         testStarMaskButton.setToolTipText("<html>Build the master stack as a detection run would, then try star mask settings "
                 + "and see the resulting veto mask on the stack, with statistics.</html>");

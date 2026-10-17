@@ -98,13 +98,16 @@ final class TrackVisualizationRenderer {
                                                            String pointLabel,
                                                            String frameLabel,
                                                            boolean antiAlias) {
-        BufferedImage frameImage = createCroppedDisplayImage(
-                rawImage,
-                cropBounds.fixedCenterX,
-                cropBounds.fixedCenterY,
-                cropBounds.trackBoxWidth,
-                cropBounds.trackBoxHeight,
-                settings);
+        return createStarCentricHighlightedFrame(rawImage, cropBounds, highlightedPoint, settings,
+                highlightColor, pointLabel, frameLabel, antiAlias, null);
+    }
+
+    static BufferedImage createStarCentricHighlightedFrame(short[][] rawImage, TrackCropGeometry.CropBounds cropBounds,
+            SourceExtractor.DetectedObject highlightedPoint, ExportVisualizationSettings settings, Color highlightColor,
+            String pointLabel, String frameLabel, boolean antiAlias, double[] levels) {
+        short[][] crop = robustEdgeAwareCrop(rawImage, cropBounds.fixedCenterX, cropBounds.fixedCenterY, cropBounds.trackBoxWidth, cropBounds.trackBoxHeight);
+        BufferedImage frameImage = levels == null ? createDisplayImage(crop, settings)
+                : DisplayImageRenderer.createDisplayImageAtLevels(crop, levels[0], levels[1]);
         Graphics2D g2d = frameImage.createGraphics();
         if (antiAlias) {
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -129,6 +132,12 @@ final class TrackVisualizationRenderer {
 
         g2d.dispose();
         return frameImage;
+    }
+
+    static String frameLabel(DetectionReportContext context, int index) {
+        long timestamp = context.fitsFiles != null && index >= 0 && index < context.fitsFiles.length && context.fitsFiles[index] != null
+                ? context.fitsFiles[index].getObservationTimestamp() : -1;
+        return "Frame " + (index + 1) + (timestamp > 0 ? " · " + DetectionReportGenerator.formatUtcTimestamp(timestamp) : "");
     }
 
     static BufferedImage createSingleStreakShapeImage(List<SourceExtractor.DetectedObject> points,

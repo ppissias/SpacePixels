@@ -109,6 +109,11 @@ final class DetectionReportAstrometry {
             return fitsFiles[frameIndex].getObservationTimestamp();
         }
 
+        long getFrameExposureMillis(int frameIndex) {
+            return fitsFiles != null && frameIndex >= 0 && frameIndex < fitsFiles.length && fitsFiles[frameIndex] != null
+                    ? Math.max(0, fitsFiles[frameIndex].getExposureDurationMillis()) : 0;
+        }
+
         boolean hasSkybotObserverCode() {
             return skybotObserverCode != null && !skybotObserverCode.isEmpty();
         }

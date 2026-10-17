@@ -23,7 +23,7 @@ import java.awt.image.BufferedImage;
 /**
  * Small ImageIO-based helper for writing animated GIF sequences used by report previews and blink visualizations.
  */
-public class GifSequenceWriter {
+public class GifSequenceWriter implements AutoCloseable {
     protected ImageWriter gifWriter;
     protected ImageWriteParam imageWriteParam;
     protected IIOMetadata imageMetaData;
@@ -85,7 +85,7 @@ public class GifSequenceWriter {
     }
 
     public void close() throws IOException {
-        gifWriter.endWriteSequence();
+        try { gifWriter.endWriteSequence(); } finally { gifWriter.dispose(); }
     }
 
     private static IIOMetadataNode getNode(IIOMetadataNode rootNode, String nodeName) {
@@ -105,23 +105,28 @@ public class GifSequenceWriter {
     // =========================================================================
     public static void saveAnimatedGif(List<BufferedImage> frames, File outputFile, int delayMs) throws IOException {
         if (frames == null || frames.isEmpty()) return;
+        saveAnimatedGif(frames.iterator(), outputFile, delayMs);
+    }
 
-        ImageOutputStream output = new FileImageOutputStream(outputFile);
+    public static void saveAnimatedGif(Iterator<BufferedImage> frames, File outputFile, int delayMs) throws IOException {
+        if (!frames.hasNext()) return;
+        BufferedImage first = frames.next();
 
-        // Initialize the writer using the format of the first frame
-        GifSequenceWriter writer = new GifSequenceWriter(
+        try (ImageOutputStream output = new FileImageOutputStream(outputFile);
+             GifSequenceWriter writer = new GifSequenceWriter(
                 output,
-                frames.get(0).getType(),
+                first.getType(),
                 delayMs,
                 true // Loop continuously
-        );
+        )) {
 
         // Write every frame to the file
-        for (BufferedImage frame : frames) {
-            writer.writeToSequence(frame);
-        }
+        writer.writeToSequence(first);
+        while (frames.hasNext()) writer.writeToSequence(frames.next());
 
-        writer.close();
-        output.close();
+        }
+        if (!ImageIO.write(first, "png", new File(outputFile.getParentFile(), outputFile.getName() + ".poster.png"))) {
+            throw new IOException("No PNG writer for animation poster");
+        }
     }
 }

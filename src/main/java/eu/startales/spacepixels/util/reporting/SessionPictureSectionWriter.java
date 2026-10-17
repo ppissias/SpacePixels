@@ -81,7 +81,7 @@ final class SessionPictureSectionWriter {
         int pictureHeight = Math.max(1, (int) Math.round(height * scale));
         boolean hasMask;
         try {
-            writeJpeg(downscale(DetectionReportGenerator.createDisplayImage(stack), pictureWidth, pictureHeight),
+            writeJpeg(downscale(TrackVisualizationRenderer.createDisplayImage(stack, context.settings), pictureWidth, pictureHeight),
                     new File(context.exportDir, STACK_FILE));
             hasMask = context.masterVetoMask != null && context.masterVetoMask.length == height;
             if (hasMask) {
@@ -95,6 +95,7 @@ final class SessionPictureSectionWriter {
         }
 
         String detections = detectionsLayer(context, localRescueTracks, width, height);
+        String variables = variablesLayer(context, width, height);
         SkyCatalogue catalogue = SessionCatalogue.of(context).catalogue;
         WcsCoordinateTransformer transformer = context.astrometryContext != null ? context.astrometryContext.getTransformer() : null;
         String catalogueLayer = catalogue != null && transformer != null ? catalogueLayer(catalogue, transformer, width, height) : null;
@@ -109,13 +110,15 @@ final class SessionPictureSectionWriter {
                 : "No sky catalogue: Fetch Sky Catalogue in SpacePixels (2 Astrometry) before Detect Moving Targets."));
         report.println(button("detections", "Detections", detections != null, detections != null,
                 "Tracks and single-frame events, named as on the detection map."));
+        report.println(button("variables", "Detected variables", variables != null, variables != null,
+                "Measured variable-star candidates V1, V2 and so on; click a label for the candidate."));
         report.println("<a class='sp-full' href='master_stack.png' target='_blank'>Full size</a>");
         report.println("</div>");
         report.println("<div class='sp-frame' data-mask-hover='off'>");
-        report.println("<a href='master_stack.png' target='_blank'><img class='sp-base' src='" + STACK_FILE
+        report.println("<a href='master_stack.png' target='_blank'><img loading='eager' decoding='async' class='sp-base' src='" + STACK_FILE
                 + "' width='" + pictureWidth + "' height='" + pictureHeight + "' alt='Median stack of the session' /></a>");
         if (hasMask) {
-            report.println("<img class='sp-layer' data-layer='mask' src='" + MASK_FILE + "' alt='' style='display:none;' />");
+            report.println("<img loading='lazy' decoding='async' class='sp-layer' data-layer='mask' src='" + MASK_FILE + "' alt='' style='display:none;' />");
         }
         if (catalogueLayer != null) {
             report.println(catalogueLayer);
@@ -123,7 +126,12 @@ final class SessionPictureSectionWriter {
         if (detections != null) {
             report.println(detections);
         }
+        if (variables != null) report.println(variables);
         report.println("</div>");
+        if (detections != null || variables != null) {
+            report.println(GlobalMapsSectionWriter.detectionLegendHtml(context, localRescueTracks));
+            report.println("<div class='sp-caption'>The number after a label identifies the object, for example A12 is single-frame anomaly 12.</div>");
+        }
         report.println("<div class='sp-caption'>The median stack of the frames kept"
                 + (catalogueLayer != null && transformer != null && transformer.isCorrected() ? "; catalogue positions use the plate solution corrected to the stars" : "")
                 + ". Click the picture for the full-size stack.</div>");
@@ -209,6 +217,7 @@ final class SessionPictureSectionWriter {
     private static int tracks(StringBuilder svg, List<TrackLinker.Track> tracks, Color color, String prefix, double offset) {
         int count = 0;
         int index = 1;
+        svg.append("<g data-category='").append(prefix).append("'>");
         for (TrackLinker.Track track : tracks) {
             if (track.points == null || track.points.isEmpty()) {
                 index++;
@@ -219,25 +228,42 @@ final class SessionPictureSectionWriter {
                 points.append(String.format(Locale.US, "%.1f,%.1f ", point.x + 0.5, point.y + 0.5));
             }
             String colour = hex(color);
-            svg.append("<polyline points='").append(points.toString().trim()).append("' fill='none' stroke='").append(colour)
-                    .append("' stroke-width='2' vector-effect='non-scaling-stroke'/>");
+            svg.append("<a href='#").append(ReportPresentation.anchor(prefix + index)).append("'><polyline points='")
+                    .append(points.toString().trim()).append("' fill='none' stroke='").append(colour)
+                    .append("' stroke-width='2' vector-effect='non-scaling-stroke'/></a>");
             SourceExtractor.DetectedObject first = track.points.get(0);
             label(svg, first.x + 0.5 + offset, first.y + 0.5 - offset, prefix + index, "#ffffff");
             count++;
             index++;
         }
+        svg.append("</g>");
         return count;
     }
 
     private static void circle(StringBuilder svg, double x, double y, double radius, Color color, String label, boolean dashed) {
-        svg.append(String.format(Locale.US, "<circle cx='%.1f' cy='%.1f' r='%.1f' fill='none' stroke='%s' stroke-width='2'%s vector-effect='non-scaling-stroke'/>",
-                x + 0.5, y + 0.5, radius, hex(color), dashed ? " stroke-dasharray='6 4'" : ""));
+        svg.append("<g data-category='").append(label.replaceAll("[0-9]+$", "")).append("'>");
+        svg.append(ReportPresentation.linkLabel(label, String.format(Locale.US, "<circle cx='%.1f' cy='%.1f' r='%.1f' fill='none' stroke='%s' stroke-width='2'%s vector-effect='non-scaling-stroke'/>",
+                x + 0.5, y + 0.5, radius, hex(color), dashed ? " stroke-dasharray='6 4'" : "")));
         label(svg, x + 0.5 + radius * 1.1, y + 0.5 - radius * 1.1, label, "#ffffff");
+        svg.append("</g>");
     }
 
     private static void label(StringBuilder svg, double x, double y, String text, String colour) {
-        svg.append(String.format(Locale.US, "<text x='%.1f' y='%.1f' fill='%s' stroke='#000' stroke-width='3' paint-order='stroke' stroke-opacity='0.7'>%s</text>",
-                x, y, colour, DetectionReportGenerator.escapeHtml(text)));
+        svg.append(ReportPresentation.linkLabel(text, String.format(Locale.US, "<text x='%.1f' y='%.1f' fill='%s' stroke='#000' stroke-width='3' paint-order='stroke' stroke-opacity='0.7'>%s</text>",
+                x, y, colour, DetectionReportGenerator.escapeHtml(text))));
+    }
+
+    static String variablesLayer(DetectionReportContext context, int width, int height) {
+        if (context.data == null || context.data.variableCandidates.isEmpty()) return null;
+        StringBuilder svg = new StringBuilder(svgStart("variables", width, height, true).replace("data-layer='variables'", "data-layer='variables' data-category='V'"));
+        for (var f : context.data.findings) {
+            if (f.starId() == null) continue;
+            svg.append("<a class='variable-mark' href='#").append(f.anchor()).append("'><circle cx='").append(f.x() + .5).append("' cy='").append(f.y() + .5)
+                    .append("' r='").append(width / 140.0).append("' fill='transparent' stroke='#ff5ad2' stroke-width='2' vector-effect='non-scaling-stroke'><title>")
+                    .append(f.id()).append(" · ").append(f.tier()).append("</title></circle><text x='").append(f.x() + width / 110.0)
+                    .append("' y='").append(f.y()).append("' fill='#ff5ad2' stroke='#000' stroke-width='3' paint-order='stroke'>").append(f.id()).append("</text></a>");
+        }
+        return svg.append("</svg>").toString();
     }
 
     /** Deep-sky objects with their outlines, and variable stars with names people know; null when none is on the frame. */
@@ -384,7 +410,7 @@ final class SessionPictureSectionWriter {
                 + ".sp-frame { position: relative; display: inline-block; max-width: 100%; line-height: 0; border: 1px solid #555; border-radius: 4px; overflow: hidden; }"
                 + ".sp-base { max-width: 100%; height: auto; display: block; }"
                 + ".sp-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }"
-                + "svg.sp-layer ellipse, svg.sp-layer path { pointer-events: stroke; }"
+                + "svg.sp-layer ellipse, svg.sp-layer path { pointer-events: stroke; }svg.sp-layer a,svg.sp-layer a text,svg.sp-layer a circle{pointer-events:all;}"
                 + ".sp-caption { color: #888; font-size: 12px; margin-top: 6px; }"
                 + "</style>");
         report.println("<script>(function(){"

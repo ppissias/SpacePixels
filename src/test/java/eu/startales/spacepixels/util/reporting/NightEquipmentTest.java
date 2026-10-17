@@ -14,6 +14,34 @@ import static org.junit.Assert.assertTrue;
 
 public class NightEquipmentTest {
 
+    @Test public void narrowGaiaRangeCannotPublishUnvalidatedSkyBrightness() {
+        var header = new java.util.LinkedHashMap<String, String>();
+        header.put("CTYPE1", "RA---TAN"); header.put("CTYPE2", "DEC--TAN");
+        header.put("CRPIX1", "300.5"); header.put("CRPIX2", "200.5");
+        header.put("CRVAL1", "150"); header.put("CRVAL2", "20");
+        header.put("CD1_1", "-0.00027777778"); header.put("CD1_2", "0");
+        header.put("CD2_1", "0"); header.put("CD2_2", "0.00027777778");
+        var transformer = eu.startales.spacepixels.util.WcsCoordinateTransformer.fromHeader(header);
+        var catalogue = new eu.startales.spacepixels.util.skycatalog.SkyCatalogue();
+        List<SourceExtractor.DetectedObject> stars = masterStars();
+        for (var star : stars) {
+            var position = transformer.pixelToSky(star.x, star.y);
+            var entry = new eu.startales.spacepixels.util.skycatalog.SkyCatalogue.Star();
+            entry.ra = position.getRaDegrees(); entry.dec = position.getDecDegrees(); entry.g = 12 + 0.1 * (catalogue.stars.size() % 5);
+            catalogue.stars.add(entry);
+        }
+        NightEquipment measured = NightEquipment.measure(frames(new Field() {
+            public double sigma(double x, double y) { return 1.4; }
+            public double[] tail(double x, double y) { return new double[]{0, 0}; }
+            public double sky(double x, double y) { return 1000; }
+        }, 3), List.of(0, 1, 2), null, stars, transformer, catalogue);
+        assertTrue(measured.calibrationStars > 20);
+        assertFalse(measured.calibrated);
+        assertTrue(Double.isNaN(measured.linearity));
+        assertTrue(measured.frames.stream().allMatch(f -> Double.isNaN(f.skyBrightness)));
+        assertTrue(measured.notes.stream().anyMatch(note -> note.contains("validate linearity")));
+    }
+
     private static final int WIDTH = 600;
     private static final int HEIGHT = 400;
     private static final int SPACING = 30;

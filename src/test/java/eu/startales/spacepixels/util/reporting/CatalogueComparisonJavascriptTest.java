@@ -24,7 +24,7 @@ public class CatalogueComparisonJavascriptTest {
         File log = temporary.newFile("javascript-tests.log");
         Process process;
         try {
-            process = new ProcessBuilder(node, "--test", "src/test/javascript/catalogue-comparison.test.js")
+            process = new ProcessBuilder(node, "--test", "src/test/javascript/catalogue-comparison.test.js", "src/test/javascript/report-lookups.test.js")
                     .redirectErrorStream(true).redirectOutput(log).start();
         } catch (IOException unavailable) {
             Assume.assumeNoException("Node is not installed; run the report JavaScript tests with NODE_EXECUTABLE set", unavailable);

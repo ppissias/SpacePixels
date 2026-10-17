@@ -39,6 +39,10 @@ final class SessionCatalogue {
 
     /** The catalogue of the session in the report's context; its {@link #catalogue} is null when there is none. */
     static SessionCatalogue of(DetectionReportContext context) {
+        return context.catalogue();
+    }
+
+    static SessionCatalogue load(DetectionReportContext context) {
         FitsFileInformation[] files = context.fitsFiles;
         WcsCoordinateTransformer transformer = context.astrometryContext != null ? context.astrometryContext.getTransformer() : null;
         if (files == null || files.length == 0 || files[0] == null || files[0].getFilePath() == null || transformer == null) {

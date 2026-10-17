@@ -145,7 +145,7 @@ final class ResidualReviewSectionWriter {
         String fileName = "common_motion_field.png";
         TrackVisualizationRenderer.saveLosslessPng(map, new File(context.exportDir, fileName));
         report.println("<div class='image-container'>");
-        report.println("<div><a href='" + fileName + "' target='_blank'><img src='" + fileName
+        report.println("<div><a href='" + fileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + fileName
                 + "' alt='Common motion field' /></a><br/><center><small>Shared motion across the field</small></center></div>");
         report.println("</div>");
         if (arrowFactor > 1.05) {
@@ -173,8 +173,8 @@ final class ResidualReviewSectionWriter {
         boolean gif = !context.rawFrames.isEmpty() && writeCommonMotionGif(context, pictured, color, gifName);
 
         String css = String.format(Locale.US, "#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
-        report.println("<div class='detection-card' style='border-left-color: " + css + ";'>");
-        report.println("<div class='detection-title' style='color: " + css + ";'>Common Motion Group " + groupNumber + "</div>");
+        report.println("<div class='detection-card' id='finding-cm" + groupNumber + "' style='border-left-color: " + css + ";'>");
+        report.println("<div class='detection-title' style='color: " + css + ";'>Common Motion Group CM" + groupNumber + "</div>");
         report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>"
                 + group.sources.size() + " sources, " + group.sharedFrameCount + " shared frames."
                 + (shown < group.sources.size()
@@ -183,11 +183,11 @@ final class ResidualReviewSectionWriter {
                 + " Each panel is one source, and the frames play together.</div>");
         report.println("<div class='image-container'>");
         if (trail) {
-            report.println("<div><a href='" + trailName + "' target='_blank'><img src='" + trailName
+            report.println("<div><a href='" + trailName + "' target='_blank'><img loading='lazy' decoding='async' src='" + trailName
                     + "' alt='Common motion trail' /></a><br/><center><small>Trails, blue to red</small></center></div>");
         }
         if (gif) {
-            report.println("<div><a href='" + gifName + "' target='_blank'><img src='" + gifName
+            report.println("<div><a href='" + gifName + "' target='_blank'><img loading='lazy' decoding='async' src='" + gifName
                     + "' alt='Common motion animation' /></a><br/><center><small>Same frames, side by side</small></center></div>");
         }
         report.println("</div>");
@@ -261,8 +261,7 @@ final class ResidualReviewSectionWriter {
         if (mandatory.isEmpty()) {
             return false;
         }
-        List<Integer> frames = DetectionReportGenerator.getRepresentativeSequence(
-                context.rawFrames.size(), mandatory, COMMON_MOTION_GIF_FRAMES);
+        List<Integer> frames = context.sampleFrames(mandatory, COMMON_MOTION_GIF_FRAMES);
         List<BufferedImage> gifFrames = new ArrayList<>();
         for (int frameIndex : frames) {
             List<BufferedImage> panels = new ArrayList<>();
@@ -291,7 +290,7 @@ final class ResidualReviewSectionWriter {
                 if (first) {
                     g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
                     g2d.setColor(new Color(255, 255, 255, 230));
-                    g2d.drawString("Frame " + (frameIndex + 1), 8, COMMON_MOTION_PANEL - 8);
+                    g2d.drawString(TrackVisualizationRenderer.frameLabel(context, frameIndex), 8, COMMON_MOTION_PANEL - 8);
                     first = false;
                 }
                 g2d.dispose();
@@ -471,7 +470,8 @@ final class ResidualReviewSectionWriter {
                     cropBounds.trackBoxWidth,
                     cropBounds.trackBoxHeight,
                     cropBounds.startX,
-                    cropBounds.startY);
+                    cropBounds.startY,
+                    context.settings);
             TrackVisualizationRenderer.saveLosslessPng(trailImage, new File(context.exportDir, trailFileName));
         }
 
@@ -486,7 +486,7 @@ final class ResidualReviewSectionWriter {
         if (!context.rawFrames.isEmpty()) {
             Set<Integer> mandatoryFrames = collectResidualFrameIndices(track);
             Map<Integer, SourceExtractor.DetectedObject> pointByFrame = buildPointByFrameMap(track);
-            List<Integer> sampledIndices = DetectionReportGenerator.getRepresentativeSequence(context.rawFrames.size(), mandatoryFrames, 12);
+            List<Integer> sampledIndices = context.sampleFrames(mandatoryFrames, 12);
             List<BufferedImage> contextFrames = new ArrayList<>();
             for (int frameIndex : sampledIndices) {
                 SourceExtractor.DetectedObject detectedPoint = pointByFrame.get(frameIndex);
@@ -498,7 +498,7 @@ final class ResidualReviewSectionWriter {
                         context.settings,
                         LOCAL_RESCUE_COLOR,
                         pointLabel,
-                        "Frame " + (frameIndex + 1),
+                        TrackVisualizationRenderer.frameLabel(context, frameIndex),
                         true);
                 contextFrames.add(frameImage);
             }
@@ -508,18 +508,18 @@ final class ResidualReviewSectionWriter {
         String candidateBadge = buildLocalRescueBadge(candidate.kind);
         String candidateNote = buildLocalRescueNote(candidate.kind);
         ResidualTransientAnalysis.LocalTransientMetrics metrics = candidate.metrics;
-        report.println("<div class='detection-card' style='border-left-color: #40e0d0;'>");
+        report.println("<div class='detection-card' id='finding-lr" + counter + "' style='border-left-color: #40e0d0;'>");
         report.println("<div class='detection-title' style='color: #40e0d0;'>Local Rescue Candidate LR" + counter + candidateBadge + "</div>");
         report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>" + candidateNote + "</div>");
         report.println("<div class='image-container'>");
         if (backgroundSource != null) {
-            report.println("<div><a href='" + backgroundFileName + "' target='_blank'><img src='" + backgroundFileName + "' alt='Reference Crop' /></a><br/><center><small>Reference Crop</small></center></div>");
-            report.println("<div><a href='" + trailFileName + "' target='_blank'><img src='" + trailFileName + "' alt='Local Trail Map' /></a><br/><center><small>Local Trail Map</small></center></div>");
+            report.println("<div><a href='" + backgroundFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + backgroundFileName + "' alt='Reference Crop' /></a><br/><center><small>Reference Crop</small></center></div>");
+            report.println("<div><a href='" + trailFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + trailFileName + "' alt='Local Trail Map' /></a><br/><center><small>Local Trail Map</small></center></div>");
         }
         if (!context.rawFrames.isEmpty()) {
-            report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Micro-Drift Animation' /></a><br/><center><small>Animation (Star-Centric)</small></center></div>");
+            report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + contextGifFileName + "' alt='Micro-Drift Animation' /></a><br/><center><small>Animation (Star-Centric)</small></center></div>");
         }
-        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint Evolution' /></a><br/><center><small>Shape Evolution</small></center></div>");
+        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + shapeFileName + "' alt='Shape Footprint Evolution' /></a><br/><center><small>Shape Evolution</small></center></div>");
         report.println("</div>");
 
         report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 10px;'>"
@@ -589,7 +589,8 @@ final class ResidualReviewSectionWriter {
                     cropBounds.trackBoxWidth,
                     cropBounds.trackBoxHeight,
                     cropBounds.startX,
-                    cropBounds.startY);
+                    cropBounds.startY,
+                    context.settings);
             TrackVisualizationRenderer.saveLosslessPng(trailImage, new File(context.exportDir, trailFileName));
         }
 
@@ -604,7 +605,7 @@ final class ResidualReviewSectionWriter {
         if (!context.rawFrames.isEmpty()) {
             Set<Integer> mandatoryFrames = collectResidualFrameIndices(track);
             Map<Integer, SourceExtractor.DetectedObject> pointByFrame = buildPointByFrameMap(track);
-            List<Integer> sampledIndices = DetectionReportGenerator.getRepresentativeSequence(context.rawFrames.size(), mandatoryFrames, 12);
+            List<Integer> sampledIndices = context.sampleFrames(mandatoryFrames, 12);
             List<BufferedImage> contextFrames = new ArrayList<>();
             for (int frameIndex : sampledIndices) {
                 SourceExtractor.DetectedObject detectedPoint = pointByFrame.get(frameIndex);
@@ -616,7 +617,7 @@ final class ResidualReviewSectionWriter {
                         context.settings,
                         LOCAL_ACTIVITY_COLOR,
                         pointLabel,
-                        "Frame " + (frameIndex + 1),
+                        TrackVisualizationRenderer.frameLabel(context, frameIndex),
                         true);
                 contextFrames.add(frameImage);
             }
@@ -624,7 +625,7 @@ final class ResidualReviewSectionWriter {
         }
 
         ResidualTransientAnalysis.LocalTransientMetrics metrics = cluster.metrics;
-        report.println("<div class='detection-card' style='border-left-color: #ffb347;'>");
+        report.println("<div class='detection-card' id='finding-lc" + counter + "' style='border-left-color: #ffb347;'>");
         report.println("<div class='detection-title' style='color: #ffb347;'>Local Activity Cluster LC" + counter
                 + " <span style='background: #7a4b14; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>"
                 + String.format(Locale.US, "%.0f px Linkage", cluster.linkageRadiusPixels)
@@ -632,13 +633,13 @@ final class ResidualReviewSectionWriter {
         report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>Leftover detections that keep appearing in the same area. Not a confirmed object; a place worth checking by eye.</div>");
         report.println("<div class='image-container'>");
         if (backgroundSource != null) {
-            report.println("<div><a href='" + backgroundFileName + "' target='_blank'><img src='" + backgroundFileName + "' alt='Reference Crop' /></a><br/><center><small>Reference Crop</small></center></div>");
-            report.println("<div><a href='" + trailFileName + "' target='_blank'><img src='" + trailFileName + "' alt='Local Cluster Trail Map' /></a><br/><center><small>Cluster Trail Map</small></center></div>");
+            report.println("<div><a href='" + backgroundFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + backgroundFileName + "' alt='Reference Crop' /></a><br/><center><small>Reference Crop</small></center></div>");
+            report.println("<div><a href='" + trailFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + trailFileName + "' alt='Local Cluster Trail Map' /></a><br/><center><small>Cluster Trail Map</small></center></div>");
         }
         if (!context.rawFrames.isEmpty()) {
-            report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Local Activity Animation' /></a><br/><center><small>Animation (Star-Centric)</small></center></div>");
+            report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + contextGifFileName + "' alt='Local Activity Animation' /></a><br/><center><small>Animation (Star-Centric)</small></center></div>");
         }
-        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Cluster Shape Evolution' /></a><br/><center><small>Shape Evolution</small></center></div>");
+        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + shapeFileName + "' alt='Cluster Shape Evolution' /></a><br/><center><small>Shape Evolution</small></center></div>");
         report.println("</div>");
 
         report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 10px;'>"
@@ -740,14 +741,14 @@ final class ResidualReviewSectionWriter {
                                                             int cropWidth,
                                                             int cropHeight,
                                                             int startX,
-                                                            int startY) {
+                                                            int startY, ExportVisualizationSettings settings) {
         short[][] croppedBackground = TrackVisualizationRenderer.robustEdgeAwareCrop(
                 backgroundData,
                 startX + (cropWidth / 2),
                 startY + (cropHeight / 2),
                 cropWidth,
                 cropHeight);
-        BufferedImage grayBackground = DetectionReportGenerator.createDisplayImage(croppedBackground);
+        BufferedImage grayBackground = TrackVisualizationRenderer.createDisplayImage(croppedBackground, settings);
         BufferedImage output = new BufferedImage(cropWidth, cropHeight, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = output.createGraphics();
         g2d.setColor(Color.BLACK);

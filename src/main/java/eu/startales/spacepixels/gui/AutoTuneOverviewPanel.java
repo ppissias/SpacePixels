@@ -303,7 +303,6 @@ public class AutoTuneOverviewPanel extends JPanel {
         actions.add(useProfileButton);
         actions.add(reportButton);
         actions.add(chartButton);
-        actions.add(previewButton);
         actions.add(Box.createHorizontalStrut(14));
         actions.add(detectButton);
         box.add(left(actions));
@@ -341,6 +340,11 @@ public class AutoTuneOverviewPanel extends JPanel {
         if (runButton.isEnabled()) {
             runButton.doClick();
         }
+    }
+
+    /** Places Preview Frame directly below the core settings, before the star-mask explorer. */
+    void addPreviewAction() {
+        addCoreAction(previewButton);
     }
 
     /** Adds a button under the core settings, enabled while frames are ready and no tune is running. */
@@ -933,10 +937,11 @@ public class AutoTuneOverviewPanel extends JPanel {
         runButton.setText(tuning ? "Tuning…" : "Run Auto-Tune");
         algorithmCombo.setEnabled(canTune);
         profileCombo.setEnabled(!tuning);
-        previewButton.setEnabled(sessionFrames > 0 && !tuning);
         for (JButton action : coreActions) {
             action.setEnabled(sessionReady && !tuning);
         }
+        // Preview remains available for imported frames even when Auto-Tune cannot run on the session.
+        previewButton.setEnabled(sessionFrames > 0 && !tuning);
         reportButton.setEnabled(lastResult != null && !tuning);
         chartButton.setEnabled(!tuning && chartAvailable(lastResult));
         useProfileButton.setEnabled(lastResult != null && !tuning && profileTable.getSelectedRow() >= 0);

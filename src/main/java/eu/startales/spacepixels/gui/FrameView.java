@@ -12,10 +12,12 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.RawImageAnnotator;
 import eu.startales.spacepixels.util.TrackOverlay;
+import eu.startales.spacepixels.util.VariableStarOverlay;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 
 import javax.swing.JComponent;
 import javax.swing.UIManager;
+import javax.swing.ToolTipManager;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -90,6 +92,8 @@ final class FrameView extends JComponent {
     private boolean skyVariables = true;
     /** The catalogue marks drawn last, for {@link #skyMarkAt}. */
     private List<SkyMark> drawnSkyMarks = new java.util.ArrayList<>();
+    private VariableStarOverlay variableStarOverlay;
+    private boolean variableStarsVisible = true;
     private String placeholder = "Loading…";
     private CursorListener cursorListener;
 
@@ -107,6 +111,7 @@ final class FrameView extends JComponent {
     FrameView() {
         setPreferredSize(new Dimension(800, 600));
         setOpaque(true);
+        ToolTipManager.sharedInstance().registerComponent(this);
         MouseAdapter mouse = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -188,6 +193,7 @@ final class FrameView extends JComponent {
         buffer = null;
         bufferPixels = null;
         overlay = null;
+        variableStarOverlay = null;
         detections = null;
         skyMarks = null;
         drawnSkyMarks = new java.util.ArrayList<>();
@@ -202,9 +208,7 @@ final class FrameView extends JComponent {
     void setSkyMarks(List<SkyMark> marks, double starMagnitudeLimit) {
         this.skyMarks = marks;
         this.skyStarLimit = starMagnitudeLimit;
-        if (marks == null) {
-            drawnSkyMarks = new java.util.ArrayList<>();
-        }
+        drawnSkyMarks = new java.util.ArrayList<>();
         repaint();
     }
 
@@ -213,7 +217,47 @@ final class FrameView extends JComponent {
         this.skyStars = stars;
         this.skyDeepSky = deepSky;
         this.skyVariables = variables;
+        drawnSkyMarks = new java.util.ArrayList<>();
         repaint();
+    }
+
+    void setVariableStarOverlay(VariableStarOverlay overlay) {
+        variableStarOverlay = overlay;
+        repaint();
+    }
+
+    void setVariableStarsVisible(boolean visible) {
+        variableStarsVisible = visible;
+        repaint();
+    }
+
+    /** Catalogue names remain available beside the pointer even when density limits hide their labels. */
+    @Override
+    public String getToolTipText(MouseEvent event) {
+        Point pixel = pixelAt(event.getX(), event.getY());
+        VariableStarOverlay.Candidate candidate = variableStarAt(pixel);
+        if (candidate != null) return candidate.description;
+        SkyMark mark = skyMarkAt(pixel);
+        return mark == null ? null : mark.description;
+    }
+
+    private VariableStarOverlay.Candidate variableStarAt(Point pixel) {
+        if (!hasVariableStars() || pixel == null) return null;
+        double nearest = 8 / scale();
+        VariableStarOverlay.Candidate found = null;
+        for (VariableStarOverlay.Candidate candidate : variableStarOverlay.getCandidates()) {
+            double distance = Math.hypot(candidate.x - pixel.x, candidate.y - pixel.y);
+            if (distance <= nearest) {
+                nearest = distance;
+                found = candidate;
+            }
+        }
+        return found;
+    }
+
+    private boolean hasVariableStars() {
+        return variableStarsVisible && frame != null && variableStarOverlay != null
+                && variableStarOverlay.covers(frame.getInfo());
     }
 
     /**
@@ -363,15 +407,16 @@ final class FrameView extends JComponent {
         if (cursorListener == null) {
             return;
         }
+        cursorListener.cursorMoved(pixelAt(screenX, screenY));
+    }
+
+    private Point pixelAt(int screenX, int screenY) {
         double scale = scale();
-        if (frame == null || scale <= 0) {
-            cursorListener.cursorMoved(null);
-            return;
-        }
+        if (frame == null || scale <= 0) return null;
         int x = (int) Math.floor((screenX - left(scale)) / scale);
         int y = (int) Math.floor((screenY - top(scale)) / scale);
         boolean inside = x >= 0 && y >= 0 && x < frame.getWidth() && y < frame.getHeight();
-        cursorListener.cursorMoved(inside ? new Point(x, y) : null);
+        return inside ? new Point(x, y) : null;
     }
 
     /** The reduced copy to draw from: the coarsest one that still has at least one pixel per device pixel. */
@@ -404,6 +449,7 @@ final class FrameView extends JComponent {
             if (overlayVisible && overlay != null) {
                 drawOverlay(g2);
             }
+            if (hasVariableStars()) drawVariableStars(g2);
             if (zoom > 1.0) {
                 String label = String.format(Locale.US, "%.0f %%", zoomPercent());
                 g2.setColor(new Color(10, 12, 20, 190));
@@ -484,12 +530,35 @@ final class FrameView extends JComponent {
         g2.drawImage(buffer, 0, 0, getWidth(), getHeight(), null);
     }
 
-    /**
-     * The catalogue objects on screen: deep-sky objects as yellow ellipses (or crosses when they have no size),
-     * variable stars as magenta diamonds and stars as blue circles, larger for brighter stars. When more would be on
-     * screen than can be told apart, only the brightest (or largest) are drawn and a note says so. Labels are
-     * written while few enough marks are drawn.
-     */
+    /** The last run's variable candidates, in frame pixels, with fixed-size rings and report numbers. */
+    private void drawVariableStars(Graphics2D g2) {
+        double scale = scale();
+        double left = left(scale);
+        double top = top(scale);
+        List<VariableStarOverlay.Candidate> visible = new java.util.ArrayList<>();
+        for (VariableStarOverlay.Candidate candidate : variableStarOverlay.getCandidates()) {
+            double x = left + (candidate.x + 0.5) * scale;
+            double y = top + (candidate.y + 0.5) * scale;
+            if (x >= 0 && y >= 0 && x <= getWidth() && y <= getHeight()) visible.add(candidate);
+        }
+        java.awt.Shape clip = g2.getClip();
+        g2.clip(new java.awt.geom.Rectangle2D.Double(left, top, frame.getWidth() * scale, frame.getHeight() * scale));
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setFont(g2.getFont().deriveFont(Font.BOLD, 12f));
+        for (VariableStarOverlay.Candidate candidate : visible) {
+            double x = left + (candidate.x + 0.5) * scale;
+            double y = top + (candidate.y + 0.5) * scale;
+            g2.setColor(SKY_VARIABLE_COLOR);
+            g2.setStroke(candidate.highConfidence ? new BasicStroke(1.5f)
+                    : new BasicStroke(1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 1, new float[]{3, 3}, 0));
+            g2.draw(new Ellipse2D.Double(x - 9, y - 9, 18, 18));
+            String text = candidate.label + (candidate.name != null && visible.size() <= 40 ? " · " + candidate.name : "");
+            drawLabel(g2, text, x + 12, y - 8, SKY_VARIABLE_COLOR);
+        }
+        g2.setClip(clip);
+    }
+
+    /** Catalogue marks are thinned by screen area, with labels shown while few enough marks are drawn. */
     private void drawSkyMarks(Graphics2D g2) {
         double scale = scale();
         double left = left(scale);

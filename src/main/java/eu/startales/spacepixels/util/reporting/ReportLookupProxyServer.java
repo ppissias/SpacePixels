@@ -183,19 +183,19 @@ public final class ReportLookupProxyServer {
                 return;
             }
 
-            JsonObject cachedSidecarResponse = ReportLookupCacheStore.tryLoadMatchingSidecarResponse(
+            JsonObject cachedSidecarResponse = "1".equals(queryParameters.get("refresh")) ? null : ReportLookupCacheStore.tryLoadMatchingSidecarResponse(
                     sidecarPath,
                     provider,
                     validatedUri.toString());
             if (cachedSidecarResponse != null) {
-                ReportLookupCacheStore.persistResponseInReportCache(reportPath, sidecarFileName, cachedSidecarResponse);
+                cachedSidecarResponse.addProperty("persisted", ReportLookupCacheStore.persistResponseInReportCache(reportPath, sidecarFileName, cachedSidecarResponse));
                 writeJson(exchange, 200, cachedSidecarResponse);
                 return;
             }
 
             JsonObject response = ReportLookupUpstreamClient.proxyLookup(provider, validatedUri.toString());
             ReportLookupCacheStore.writeSidecarResponse(sidecarPath, response);
-            ReportLookupCacheStore.persistResponseInReportCache(reportPath, sidecarFileName, response);
+            response.addProperty("persisted", ReportLookupCacheStore.persistResponseInReportCache(reportPath, sidecarFileName, response));
             writeJson(exchange, 200, response);
         }
     }

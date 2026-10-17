@@ -59,10 +59,16 @@ final class TargetVisualizationSectionWriter {
         }
     }
 
+    private static List<SourceExtractor.DetectedObject> uniqueFramePoints(TrackLinker.Track track) {
+        Map<Integer, SourceExtractor.DetectedObject> frames = new LinkedHashMap<>();
+        for (var point : track.points) frames.putIfAbsent(point.sourceFrameIndex, point);
+        return new ArrayList<>(frames.values());
+    }
+
     /** A detection image with its footprint laid over it on hover (the footprint image is black outside the detection). */
     static String footprintFigure(String imageFile, String footprintFile) {
-        return "<div class='footprint-figure'><a href='" + imageFile + "' target='_blank'><img src='" + imageFile + "' alt='Detection image' />"
-                + "<img class='footprint-overlay' src='" + footprintFile + "' alt='Detected footprint' /></a>"
+        return "<div class='footprint-figure'><a href='" + imageFile + "' target='_blank'><img loading='lazy' decoding='async' src='" + imageFile + "' alt='Detection image' />"
+                + "<img loading='lazy' decoding='async' class='footprint-overlay' src='" + footprintFile + "' alt='Detected footprint' /></a>"
                 + "<br/><center><small>Detection image &middot; hover to show the detected footprint in red (<a href='" + footprintFile + "' target='_blank'>open footprint</a>)</small></center></div>";
     }
 
@@ -79,7 +85,7 @@ final class TargetVisualizationSectionWriter {
                     ? " <span style='background: #6b4a20; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>" + partCount + " Parts</span>"
                     : "";
 
-            report.println("<div class='detection-card streak-title'>");
+            report.println("<div class='detection-card streak-title' id='finding-s" + counter + "'>");
             report.println("<div class='detection-title'>Single Streak Event S" + counter + partBadge + "</div>");
             report.print(buildSingleFrameEventSummaryHtml(track, context.fitsFiles));
 
@@ -144,23 +150,7 @@ final class TargetVisualizationSectionWriter {
         int counter = 1;
         for (TrackLinker.Track track : context.streakTracks) {
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
-            List<BufferedImage> starCentricFrames = new ArrayList<>();
-            Set<Integer> processedFrames = new HashSet<>();
-
-            for (SourceExtractor.DetectedObject point : track.points) {
-                if (!processedFrames.add(point.sourceFrameIndex)) {
-                    continue;
-                }
-                starCentricFrames.add(TrackVisualizationRenderer.createStarCentricHighlightedFrame(
-                        context.rawFrames.get(point.sourceFrameIndex),
-                        cropBounds,
-                        point,
-                        context.settings,
-                        Color.WHITE,
-                        null,
-                        null,
-                        false));
-            }
+            List<SourceExtractor.DetectedObject> framePoints = uniqueFramePoints(track);
 
             String shapeFileName = "streak_track_" + counter + "_shape.png";
             BufferedImage shapeImage = TrackVisualizationRenderer.createTrackShapeImage(
@@ -172,10 +162,10 @@ final class TargetVisualizationSectionWriter {
             TrackVisualizationRenderer.saveLosslessPng(shapeImage, new File(context.exportDir, shapeFileName));
 
             String starFileName = "streak_track_" + counter + "_star_centric.gif";
-            TrackVisualizationRenderer.saveAnimatedGif(
-                    starCentricFrames,
-                    new File(context.exportDir, starFileName),
-                    context.settings);
+            GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createStarCentricHighlightedFrame(
+                    context.rawFrames.get(point.sourceFrameIndex), cropBounds, point, context.settings, Color.WHITE,
+                    null, TrackVisualizationRenderer.frameLabel(context, point.sourceFrameIndex), false)).iterator(),
+                    new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs());
             SkyOrientationOverlay streakTrackOverlay = buildSkyOrientationOverlay(
                     context.astrometryContext,
                     cropBounds.fixedCenterX,
@@ -183,7 +173,7 @@ final class TargetVisualizationSectionWriter {
                     cropBounds.trackBoxWidth,
                     cropBounds.trackBoxHeight);
 
-            report.println("<div class='detection-card streak-title' style='border-left-color: #ffcc33;'>");
+            report.println("<div class='detection-card streak-title' id='finding-st" + counter + "' style='border-left-color: #ffcc33;'>");
             String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
             report.println("<div class='detection-title' style='color: #ffcc33;'>Confirmed Streak Track ST" + counter + timeBadge + "</div>");
             report.print(DetectionReportGenerator.buildTrackTimingSummaryHtml(track, context.astrometryContext));
@@ -232,7 +222,7 @@ final class TargetVisualizationSectionWriter {
                     : "";
             String groupingBadge = " <span style='background: #7a5a12; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>Same-Frame Anomaly Grouping</span>";
 
-            report.println("<div class='detection-card streak-title' style='border-left-color: #ff9933;'>");
+            report.println("<div class='detection-card streak-title' id='finding-sst" + suspectedCounter + "' style='border-left-color: #ff9933;'>");
             report.println("<div class='detection-title' style='color: #ffb347;'>Suspected Streak Track SST" + suspectedCounter + partBadge + groupingBadge + "</div>");
             report.print(buildSingleFrameEventSummaryHtml(track, context.fitsFiles));
 
@@ -293,32 +283,7 @@ final class TargetVisualizationSectionWriter {
         int counter = 1;
         for (TrackLinker.Track track : context.movingTargets) {
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
-            List<BufferedImage> objectCentricFrames = new ArrayList<>();
-            List<BufferedImage> starCentricFrames = new ArrayList<>();
-            Set<Integer> processedFrames = new HashSet<>();
-
-            for (SourceExtractor.DetectedObject point : track.points) {
-                if (!processedFrames.add(point.sourceFrameIndex)) {
-                    continue;
-                }
-                short[][] rawImage = context.rawFrames.get(point.sourceFrameIndex);
-                objectCentricFrames.add(TrackVisualizationRenderer.createCroppedDisplayImage(
-                        rawImage,
-                        (int) Math.round(point.x),
-                        (int) Math.round(point.y),
-                        context.settings.getTrackObjectCentricCropSize(),
-                        context.settings.getTrackObjectCentricCropSize(),
-                        context.settings));
-                starCentricFrames.add(TrackVisualizationRenderer.createStarCentricHighlightedFrame(
-                        rawImage,
-                        cropBounds,
-                        point,
-                        context.settings,
-                        Color.WHITE,
-                        null,
-                        null,
-                        false));
-            }
+            List<SourceExtractor.DetectedObject> framePoints = uniqueFramePoints(track);
 
             String shapeFileName = "moving_track_" + counter + "_shape.png";
             BufferedImage shapeImage = TrackVisualizationRenderer.createTrackShapeImage(
@@ -331,8 +296,14 @@ final class TargetVisualizationSectionWriter {
 
             String objectFileName = "moving_track_" + counter + "_object_centric.gif";
             String starFileName = "moving_track_" + counter + "_star_centric.gif";
-            TrackVisualizationRenderer.saveAnimatedGif(objectCentricFrames, new File(context.exportDir, objectFileName), context.settings);
-            TrackVisualizationRenderer.saveAnimatedGif(starCentricFrames, new File(context.exportDir, starFileName), context.settings);
+            GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createCroppedDisplayImage(
+                    context.rawFrames.get(point.sourceFrameIndex), (int) Math.round(point.x), (int) Math.round(point.y),
+                    context.settings.getTrackObjectCentricCropSize(), context.settings.getTrackObjectCentricCropSize(), context.settings)).iterator(),
+                    new File(context.exportDir, objectFileName), context.settings.getGifBlinkSpeedMs());
+            GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createStarCentricHighlightedFrame(
+                    context.rawFrames.get(point.sourceFrameIndex), cropBounds, point, context.settings, Color.WHITE, null,
+                    TrackVisualizationRenderer.frameLabel(context, point.sourceFrameIndex), false)).iterator(),
+                    new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs());
 
             double[] meanCenter = computeTrackMeanPixelCenter(track);
             SkyOrientationOverlay movingObjectOverlay = meanCenter != null
@@ -350,7 +321,7 @@ final class TargetVisualizationSectionWriter {
                     cropBounds.trackBoxWidth,
                     cropBounds.trackBoxHeight);
 
-            report.println("<div class='detection-card'>");
+            report.println("<div class='detection-card' id='finding-t" + counter + "'>");
             String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
             report.println("<div class='detection-title'>Moving Target Track T" + counter + timeBadge + "</div>");
             report.print(DetectionReportGenerator.buildTrackTimingSummaryHtml(track, context.astrometryContext));
@@ -398,7 +369,7 @@ final class TargetVisualizationSectionWriter {
                 BufferedImage tightImage = TrackVisualizationRenderer.createDisplayImage(tightCropData, context.settings);
                 String tightFileName = "moving_track_" + counter + "_pt_" + (i + 1) + "_tight.png";
                 TrackVisualizationRenderer.saveLosslessPng(tightImage, new File(context.exportDir, tightFileName));
-                report.println("<div><a href='" + tightFileName + "' target='_blank'><img src='" + tightFileName + "' alt='Pt " + (i + 1) + "' style='max-width: none; min-width: 50px;' /></a><br/><center><small>[" + (i + 1) + "]</small></center></div>");
+                report.println("<div><a href='" + tightFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + tightFileName + "' alt='Pt " + (i + 1) + "' style='max-width: none; min-width: 50px;' /></a><br/><center><small>[" + (i + 1) + "]</small></center></div>");
 
                 int startX = (int) Math.round(point.x) - (tightCropSize / 2);
                 int startY = (int) Math.round(point.y) - (tightCropSize / 2);
@@ -414,7 +385,7 @@ final class TargetVisualizationSectionWriter {
 
                 shapeEvolutionHtml.append("<div><a href='")
                         .append(tightShapeFileName)
-                        .append("' target='_blank'><img src='")
+                        .append("' target='_blank'><img loading='lazy' decoding='async' src='")
                         .append(tightShapeFileName)
                         .append("' alt='Shape ")
                         .append(i + 1)
@@ -463,7 +434,7 @@ final class TargetVisualizationSectionWriter {
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(point, context.settings.getTrackCropPadding());
             int frameIndex = point.sourceFrameIndex;
 
-            report.println("<div class='detection-card streak-title' style='border-left-color: #ff3333; color: #ff3333;'>");
+            report.println("<div class='detection-card streak-title' id='finding-a" + counter + "' style='border-left-color: #ff3333; color: #ff3333;'>");
             String lowConfidenceBadge = anomaly.lowConfidence
                     ? " <span style='background: #6b4a20; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;' title='On a streak in this frame'>Low confidence</span>"
                     : "";
@@ -513,9 +484,14 @@ final class TargetVisualizationSectionWriter {
 
             String contextGifFileName = "anomaly_" + counter + "_context.gif";
             List<BufferedImage> contextFrames = new ArrayList<>();
-            int[] frameSequence = {frameIndex - 1, frameIndex, frameIndex + 1};
+            List<Integer> frameSequence = context.data != null ? context.data.neighbours(frameIndex)
+                    : java.util.Arrays.asList(frameIndex - 1, frameIndex, frameIndex + 1);
+            short[][] eventCrop = TrackVisualizationRenderer.robustEdgeAwareCrop(context.rawFrames.get(frameIndex),
+                    cropBounds.fixedCenterX, cropBounds.fixedCenterY, cropBounds.trackBoxWidth, cropBounds.trackBoxHeight);
+            double[] sharedLevels = eu.startales.spacepixels.util.DisplayImageRenderer.displayLevels(eventCrop,
+                    context.settings.getAutoStretchBlackSigma(), context.settings.getAutoStretchWhiteSigma());
             for (int index : frameSequence) {
-                if (index >= 0 && index < context.rawFrames.size()) {
+                if (index >= 0 && index < context.rawFrames.size() && (context.data == null || !context.data.rejectedFrames.contains(index))) {
                     contextFrames.add(TrackVisualizationRenderer.createStarCentricHighlightedFrame(
                             context.rawFrames.get(index),
                             cropBounds,
@@ -523,19 +499,19 @@ final class TargetVisualizationSectionWriter {
                             context.settings,
                             Color.WHITE,
                             null,
-                            null,
-                            false));
+                            TrackVisualizationRenderer.frameLabel(context, index) + (index == frameIndex ? " · event" : index < frameIndex ? " · before" : " · after"),
+                            false, sharedLevels));
                 }
             }
             TrackVisualizationRenderer.saveAnimatedGif(contextFrames, new File(context.exportDir, contextGifFileName), context.settings);
 
             report.println("<div class='image-container'>");
-            report.println("<div><a href='" + detectionFileName + "' target='_blank'><img src='" + detectionFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
-            report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
+            report.println("<div><a href='" + detectionFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + detectionFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
+            report.println("<div><a href='" + shapeFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
             if (maskFileName != null) {
-                report.println("<div><a href='" + maskFileName + "' target='_blank'><img src='" + maskFileName + "' alt='Master Veto Mask' /></a><br/><center><small>Master Veto Mask</small></center></div>");
+                report.println("<div><a href='" + maskFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + maskFileName + "' alt='Master Veto Mask' /></a><br/><center><small>Master Veto Mask</small></center></div>");
             }
-            report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img src='" + contextGifFileName + "' alt='Anomaly Context' /></a><br/><center><small>Context (Before / Flash / After)</small></center></div>");
+            report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + contextGifFileName + "' alt='Anomaly Context' /></a><br/><center><small>Context (before / event / after; rejected frames skipped)</small></center></div>");
             report.println("</div>");
 
             String metricsText = buildAnomalyMetricsText(anomaly);
@@ -912,39 +888,42 @@ final class TargetVisualizationSectionWriter {
         StringBuilder html = new StringBuilder();
         html.append("<div>");
         html.append("<div class='sky-orientation-figure'>");
-        html.append("<a href='").append(DetectionReportGenerator.escapeHtml(fileName)).append("' target='_blank'>");
-        html.append("<img src='").append(DetectionReportGenerator.escapeHtml(fileName)).append("' alt='").append(DetectionReportGenerator.escapeHtml(altText)).append("'");
+        html.append("<a href='").append(DetectionReportGenerator.escapeHtml(fileName)).append("' target='_blank'");
+        if (overlay != null) {
+            html.append(" title='").append(DetectionReportGenerator.escapeHtml("FOV "
+                    + formatFieldOfViewDimensions(overlay.fovWidthDegrees, overlay.fovHeightDegrees)
+                    + " · Center RA " + overlay.centerRaText + " · Dec " + overlay.centerDecText)).append("'");
+        }
+        html.append(">");
+        html.append("<img loading='lazy' decoding='async' src='").append(DetectionReportGenerator.escapeHtml(fileName)).append("' alt='").append(DetectionReportGenerator.escapeHtml(altText)).append("'");
         if (imageStyle != null && !imageStyle.isBlank()) {
             html.append(" style='").append(DetectionReportGenerator.escapeHtml(imageStyle)).append("'");
         }
         html.append(" /></a>");
         if (overlay != null) {
             html.append("<div class='sky-orientation-overlay'>");
-            html.append("<div class='sky-orientation-title'>Sky Orientation</div>");
-            html.append("<div class='sky-orientation-compass'>");
-            html.append("<div class='sky-orientation-arrow north' style='--rotation:")
-                    .append(DetectionReportGenerator.escapeHtml(formatDecimal(overlay.northAngleFromUpDegrees, 1)))
-                    .append("deg;'><span>N</span></div>");
-            html.append("<div class='sky-orientation-arrow east' style='--rotation:")
-                    .append(DetectionReportGenerator.escapeHtml(formatDecimal(overlay.eastAngleFromUpDegrees, 1)))
-                    .append("deg;'><span>E</span></div>");
-            html.append("<div class='sky-orientation-center'></div>");
-            html.append("</div>");
-            html.append("<div class='sky-orientation-meta'>FOV ")
-                    .append(DetectionReportGenerator.escapeHtml(formatFieldOfViewDimensions(overlay.fovWidthDegrees, overlay.fovHeightDegrees)))
-                    .append("</div>");
-            html.append("<div class='sky-orientation-meta'>Center RA ")
-                    .append(DetectionReportGenerator.escapeHtml(overlay.centerRaText))
-                    .append("</div>");
-            html.append("<div class='sky-orientation-meta'>Center Dec ")
-                    .append(DetectionReportGenerator.escapeHtml(overlay.centerDecText))
-                    .append("</div>");
+            html.append(orientationSvg(overlay.northAngleFromUpDegrees, overlay.eastAngleFromUpDegrees));
             html.append("</div>");
         }
         html.append("</div>");
         html.append("<br/><center><small>").append(DetectionReportGenerator.escapeHtml(captionText)).append("</small></center>");
         html.append("</div>");
         return html.toString();
+    }
+
+    /** Thin north/east axes, with upright labels even when the frame is rotated or mirrored. */
+    static String orientationSvg(double northAngle, double eastAngle) {
+        StringBuilder svg = new StringBuilder("<svg viewBox='0 0 80 80' role='img' aria-label='North and east directions'>");
+        double[] angles = {northAngle, eastAngle};
+        String[] labels = {"N", "E"};
+        for (int i = 0; i < angles.length; i++) {
+            double angle = Math.toRadians(angles[i]);
+            double dx = Math.sin(angle);
+            double dy = -Math.cos(angle);
+            svg.append(String.format(Locale.US, "<line x1='40' y1='40' x2='%.2f' y2='%.2f'/><text x='%.2f' y='%.2f'>%s</text>",
+                    40 + 24 * dx, 40 + 24 * dy, 40 + 34 * dx, 40 + 34 * dy, labels[i]));
+        }
+        return svg.append("</svg>").toString();
     }
 
     private static double normalizeSkyAngleDeltaDegrees(double deltaDegrees) {

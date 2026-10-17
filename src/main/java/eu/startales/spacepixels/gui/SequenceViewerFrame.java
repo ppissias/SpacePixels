@@ -12,6 +12,7 @@ package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.VariableStarOverlay;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 
 import javax.swing.*;
@@ -62,6 +63,7 @@ abstract class SequenceViewerFrame extends JFrame {
     private final JButton previousButton = new JButton("◀");
     private final JButton nextButton = new JButton("▶");
     private final JCheckBox detectionsBox = new JCheckBox("Show detections", true);
+    private final JCheckBox variablesBox = new JCheckBox("Show variable stars", true);
     private final JPanel stretchRow = new JPanel(new BorderLayout());
     private final JLabel frameLabel = new JLabel(" ");
     private final JLabel cursorLabel = new JLabel(" ");
@@ -137,6 +139,12 @@ abstract class SequenceViewerFrame extends JFrame {
             updateCursorLabel();
         });
         ViewerSupport.bind(getRootPane(), "C", "correct", sky::toggleCorrection);
+        ViewerSupport.bind(getRootPane(), "V", "variables", () -> {
+            if (variablesBox.isVisible() && variablesBox.isEnabled()) {
+                variablesBox.setSelected(!variablesBox.isSelected());
+                view.setVariableStarsVisible(variablesBox.isSelected());
+            }
+        });
         sky.setOnSolutionChanged(() -> {
             cursorReadout.forgetSolutions();
             updateCursorLabel();
@@ -162,6 +170,18 @@ abstract class SequenceViewerFrame extends JFrame {
 
     /** Called when the window closes, to let go of what the subclass holds. */
     protected void released() {
+    }
+
+    /** Preview can show candidates from the last full run, independently of single-frame extraction. */
+    protected void setVariableStarOverlay(VariableStarOverlay overlay, FitsFileInformation[] files) {
+        boolean available = overlay != null && overlay.coversAnyOf(files);
+        variablesBox.setVisible(true);
+        variablesBox.setEnabled(available);
+        variablesBox.setToolTipText(available
+                ? "Variable-star candidates of the last detection run, numbered as in the report. Solid rings: high confidence; dashed rings: possible. Hover for details (V)."
+                : "Run Detect Moving Targets with variable-star photometry enabled on this session to see its candidates here.");
+        view.setVariableStarOverlay(available ? overlay : null);
+        view.setVariableStarsVisible(variablesBox.isSelected());
     }
 
     // ==========================================
@@ -241,6 +261,8 @@ abstract class SequenceViewerFrame extends JFrame {
     // ==========================================
 
     private JComponent buildControls() {
+        variablesBox.setVisible(false);
+        variablesBox.addActionListener(e -> view.setVariableStarsVisible(variablesBox.isSelected()));
         previousButton.setToolTipText("Previous frame (←).");
         previousButton.addActionListener(e -> step(-1));
         nextButton.setToolTipText("Next frame (→).");
@@ -255,6 +277,7 @@ abstract class SequenceViewerFrame extends JFrame {
         row.add(Box.createHorizontalStrut(10));
         if (showsDetections) {
             row.add(detectionsBox);
+            row.add(variablesBox);
             row.add(Box.createHorizontalStrut(10));
         }
         for (JComponent zoomControl : ViewerSupport.zoomControls(view)) {

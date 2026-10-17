@@ -33,6 +33,7 @@ final class StandardDetectionPipelineService {
     private final AppConfig appConfig;
     /** Tracks of the last run, for the blink viewer. */
     private volatile TrackOverlay lastTrackOverlay;
+    private volatile VariableStarOverlay lastVariableStarOverlay;
 
     StandardDetectionPipelineService(AppConfig appConfig) {
         this.appConfig = appConfig;
@@ -46,6 +47,7 @@ final class StandardDetectionPipelineService {
         ImageProcessing.PipelineExecutionData executionData = runDetectionPipeline(config, cachedFileInfo,
                 progressListener == null ? null : (percent, message) -> progressListener.onProgressUpdate((int) (percent * 0.9), message));
         lastTrackOverlay = TrackOverlay.from(executionData.getPipelineResult());
+        lastVariableStarOverlay = VariableStarOverlay.from(executionData.getPipelineResult(), cachedFileInfo);
 
         ReportInclusion reportInclusion = ReportInclusion.all();
         if (safetyPrompt != null) {
@@ -76,6 +78,10 @@ final class StandardDetectionPipelineService {
 
     TrackOverlay getLastTrackOverlay() {
         return lastTrackOverlay;
+    }
+
+    VariableStarOverlay getLastVariableStarOverlay() {
+        return lastVariableStarOverlay;
     }
 
     ImageProcessing.PipelineExecutionData runDetectionPipeline(DetectionConfig config,

@@ -13,7 +13,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Immutable bundle of inputs, intermediate products, and pipeline outputs shared across a single report export.
+ * Inputs and pipeline outputs shared across a single report export, with its report model and cached catalogue.
  */
 final class DetectionReportContext {
 
@@ -38,6 +38,18 @@ final class DetectionReportContext {
     final List<TrackLinker.Track> streakTracks;
     final List<TrackLinker.Track> suspectedStreakTracks;
     final List<TrackLinker.Track> movingTargets;
+    ReportData data;
+    private SessionCatalogue catalogue;
+
+    SessionCatalogue catalogue() {
+        if (catalogue == null) catalogue = SessionCatalogue.load(this);
+        return catalogue;
+    }
+
+    List<Integer> sampleFrames(java.util.Set<Integer> mandatory, int limit) {
+        return data != null ? data.sample(mandatory, limit)
+                : DetectionReportGenerator.getRepresentativeSequence(rawFrames.size(), mandatory, limit);
+    }
 
     DetectionReportContext(ExportVisualizationSettings settings,
                            File exportDir,

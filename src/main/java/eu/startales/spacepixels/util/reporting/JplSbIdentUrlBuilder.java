@@ -118,21 +118,13 @@ final class JplSbIdentUrlBuilder {
     }
 
     private static String formatJplRa(double raDegrees) {
-        double totalSeconds = normalizeDegrees(raDegrees) / 15.0 * 3600.0;
-        int hours = (int) (totalSeconds / 3600.0);
-        totalSeconds -= hours * 3600.0;
-        int minutes = (int) (totalSeconds / 60.0);
-        double seconds = totalSeconds - (minutes * 60.0);
-        return String.format(Locale.US, "%02d-%02d-%05.2f", hours, minutes, seconds);
+        long ticks = Math.round(normalizeDegrees(raDegrees) / 15.0 * 360000) % 8640000;
+        return String.format(Locale.US, "%02d-%02d-%05.2f", ticks / 360000, ticks / 6000 % 60, ticks % 6000 / 100.0);
     }
 
     private static String formatJplDec(double decDegrees) {
-        double absolute = Math.abs(decDegrees);
-        int degrees = (int) absolute;
-        double remainingMinutes = (absolute - degrees) * 60.0;
-        int minutes = (int) remainingMinutes;
-        double seconds = (remainingMinutes - minutes) * 60.0;
-        String formatted = String.format(Locale.US, "%02d-%02d-%05.2f", degrees, minutes, seconds);
+        long ticks = Math.round(Math.abs(decDegrees) * 360000);
+        String formatted = String.format(Locale.US, "%02d-%02d-%05.2f", ticks / 360000, ticks / 6000 % 60, ticks % 6000 / 100.0);
         return decDegrees < 0.0 ? "M" + formatted : formatted;
     }
 

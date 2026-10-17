@@ -868,6 +868,11 @@ public class ImageProcessing implements AutoCloseable {
         return standardDetectionPipelineService.getLastTrackOverlay();
     }
 
+    /** Variable-star candidates of the last standard detection run, numbered as in its report. */
+    public VariableStarOverlay getLastVariableStarOverlay() {
+        return standardDetectionPipelineService.getLastVariableStarOverlay();
+    }
+
     /**
      * Runs the standard detection pipeline and returns the in-memory engine output without writing
      * any report artifacts to disk.

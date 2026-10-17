@@ -14,6 +14,16 @@ import static org.junit.Assert.fail;
 
 public class VsxLookupTest {
 
+    @Test public void malformedSuccessBodiesAreNotEmptyCatalogueResults() {
+        for (String body : java.util.List.of("null", "\"Maintenance\"", "{}", "{\"error\":\"Query failed\"}")) {
+            try {
+                ReportLookupUpstreamClient.validatePayload("vsx", JsonParser.parseString(body));
+                fail("Malformed catalogue response accepted: " + body);
+            } catch (IllegalArgumentException expected) { }
+        }
+        ReportLookupUpstreamClient.validatePayload("vsx", JsonParser.parseString("{\"metadata\":[{\"name\":\"Name\"}],\"data\":[]}"));
+    }
+
     @Test
     public void tapUrlPassesProxyValidation() {
         String url = PhotometryReportSectionWriter.vsxTapUrl(new PhotometryReportSectionWriter.SkyTarget(97.5225, 6.2234, 15.0));

@@ -74,6 +74,14 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
 }
 
+tasks.named('processResources') {
+    filesMatching('spacepixels-build.properties') {
+        expand(appVersion: project.version,
+                engineVersion: configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts
+                        .find { it.moduleVersion.id.group == 'io.github.ppissias.jtransient' }?.moduleVersion?.id?.version ?: 'local')
+    }
+}
+
 application {
     mainClass = 'eu.startales.spacepixels.gui.ApplicationWindow'
     applicationName = mainLauncherName

@@ -15,6 +15,7 @@ import eu.startales.spacepixels.events.BlinkFrameClosedEvent;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.TrackOverlay;
+import eu.startales.spacepixels.util.VariableStarOverlay;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -63,6 +64,7 @@ public class BlinkFrame extends JFrame {
     private final JLabel speedLabel = new JLabel();
     private final JCheckBox skipBox = new JCheckBox("Skip this frame");
     private final JCheckBox tracksBox = new JCheckBox("Show tracks");
+    private final JCheckBox variablesBox = new JCheckBox("Show variable stars", true);
     /** Holds the stretch row, which is made when the first blink brings the Image Stretch tab. */
     private final JPanel stretchRow = new JPanel(new BorderLayout());
     private final JLabel frameLabel = new JLabel(" ");
@@ -157,7 +159,7 @@ public class BlinkFrame extends JFrame {
      * {@code overlay} holds the tracks of the last detection run on this session, or is null.
      */
     void open(BlinkSequence sequence, FitsFileInformation[] files, FitsFileInformation[] sessionFiles,
-              StretchPanel stretchPanel, TrackOverlay overlay) {
+              StretchPanel stretchPanel, TrackOverlay overlay, VariableStarOverlay variables) {
         bindStretch(stretchPanel);
         release();
         this.sequence = sequence;
@@ -183,6 +185,13 @@ public class BlinkFrame extends JFrame {
                 ? "Draw the tracks of the last detection run, numbered as in the report: T for moving objects, ST for streak tracks (T)."
                 : "Run Detect Moving Targets on this session to see its tracks here.");
         view.setOverlayVisible(tracksBox.isSelected());
+        boolean hasVariables = variables != null && variables.coversAnyOf(files);
+        variablesBox.setEnabled(hasVariables);
+        variablesBox.setToolTipText(hasVariables
+                ? "Variable-star candidates of the last detection run, numbered V1, V2, … as in its report. Solid rings: high confidence; dashed rings: possible. Hover for details (V)."
+                : "Run Detect Moving Targets with variable-star photometry enabled on this session to see its candidates here.");
+        view.setVariableStarOverlay(hasVariables ? variables : null);
+        view.setVariableStarsVisible(variablesBox.isSelected());
 
         setTitle("Blink · " + sessionName(sequence.getFrames().get(0).getInfo().getFilePath()) + " · "
                 + sequence.getFrames().size() + " frames");
@@ -290,6 +299,8 @@ public class BlinkFrame extends JFrame {
             }
         });
         tracksBox.addActionListener(e -> view.setOverlayVisible(tracksBox.isSelected()));
+        variablesBox.setEnabled(false);
+        variablesBox.addActionListener(e -> view.setVariableStarsVisible(variablesBox.isSelected()));
 
         // Wraps onto a second line when the window is narrow, so no control is cut off.
         JPanel playbackRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 0));
@@ -303,6 +314,7 @@ public class BlinkFrame extends JFrame {
         playbackRow.add(Box.createHorizontalStrut(10));
         playbackRow.add(skipBox);
         playbackRow.add(tracksBox);
+        playbackRow.add(variablesBox);
         playbackRow.add(Box.createHorizontalStrut(10));
         for (JComponent zoomControl : ViewerSupport.zoomControls(view)) {
             playbackRow.add(zoomControl);
@@ -448,6 +460,12 @@ public class BlinkFrame extends JFrame {
             if (tracksBox.isEnabled()) {
                 tracksBox.setSelected(!tracksBox.isSelected());
                 view.setOverlayVisible(tracksBox.isSelected());
+            }
+        });
+        bind("V", "variables", () -> {
+            if (variablesBox.isEnabled()) {
+                variablesBox.setSelected(!variablesBox.isSelected());
+                view.setVariableStarsVisible(variablesBox.isSelected());
             }
         });
         bind("A", "annotate", () -> {

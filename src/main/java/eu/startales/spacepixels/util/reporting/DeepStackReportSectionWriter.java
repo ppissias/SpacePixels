@@ -189,17 +189,20 @@ final class DeepStackReportSectionWriter {
         TrackVisualizationRenderer.saveLosslessPng(shapeImage, new File(context.exportDir, shapeFileName));
 
         if (!context.rawFrames.isEmpty()) {
-            List<Integer> sampledIndices = DetectionReportGenerator.getRepresentativeSequence(context.rawFrames.size(), new HashSet<>(), 10);
+            List<Integer> sampledIndices = context.sampleFrames(new HashSet<>(), 10);
             List<BufferedImage> gifFrames = new ArrayList<>();
             for (int frameIndex : sampledIndices) {
                 short[][] frameData = TrackVisualizationRenderer.robustEdgeAwareCrop(context.rawFrames.get(frameIndex), cx, cy, cropSize, cropSize);
-                gifFrames.add(TrackVisualizationRenderer.createDisplayImage(frameData, context.settings));
+                BufferedImage image = TrackVisualizationRenderer.createDisplayImage(frameData, context.settings);
+                var graphics = image.createGraphics(); graphics.setColor(Color.WHITE);
+                graphics.drawString(TrackVisualizationRenderer.frameLabel(context, frameIndex), 8, 16); graphics.dispose();
+                gifFrames.add(image);
             }
             GifSequenceWriter.saveAnimatedGif(gifFrames, new File(context.exportDir, gifFileName), context.settings.getGifBlinkSpeedMs());
         }
 
-        report.println("<div class='detection-card' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");
-        report.println("<div class='detection-title' style='color: #ff66ff; font-size: 1.1em; margin-bottom: 10px;'>Candidate #" + candidateNumber + "</div>");
+        report.println("<div class='detection-card' id='finding-ds" + candidateNumber + "' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");
+        report.println("<div class='detection-title' style='color: #ff66ff; font-size: 1.1em; margin-bottom: 10px;'>Slow-Mover Candidate DS" + candidateNumber + "</div>");
         if (!matchedTracks.isEmpty()) {
             report.println("<div class='astro-note' style='margin-top: 0; margin-bottom: 12px; border-left: 3px solid #66d9a3;'>"
                     + "<strong>Also identified as reported track"
@@ -210,21 +213,21 @@ final class DeepStackReportSectionWriter {
         }
         report.println("<div class='image-container' style='margin-bottom: 10px;'>");
         if (masterFileName != null) {
-            report.println("<div><a href='" + masterFileName + "' target='_blank'><img src='" + masterFileName + "' style='max-width: 150px;' alt='Median Stack Crop' /></a><br/><center><small>Median Stack</small></center></div>");
+            report.println("<div><a href='" + masterFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + masterFileName + "' style='max-width: 150px;' alt='Median Stack Crop' /></a><br/><center><small>Median Stack</small></center></div>");
         }
         if (context.slowMoverMedianVetoMask != null && context.masterStackData != null) {
-            report.println("<div><a href='" + auxiliaryMaskFileName + "' target='_blank'><img src='" + auxiliaryMaskFileName + "' style='max-width: 150px;' alt='Exact Median Mask Crop' /></a><br/><center><small>Exact Median Mask</small></center></div>");
+            report.println("<div><a href='" + auxiliaryMaskFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + auxiliaryMaskFileName + "' style='max-width: 150px;' alt='Exact Median Mask Crop' /></a><br/><center><small>Exact Median Mask</small></center></div>");
         }
         if (croppedPrimaryData != null && context.masterStackData != null) {
-            report.println("<div><a href='" + diffFileName + "' target='_blank'><img src='" + diffFileName + "' style='max-width: 150px;' alt='Maximum Minus Median Crop' /></a><br/><center><small>Maximum - Median (inspection only)</small></center></div>");
+            report.println("<div><a href='" + diffFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + diffFileName + "' style='max-width: 150px;' alt='Maximum Minus Median Crop' /></a><br/><center><small>Maximum - Median (inspection only)</small></center></div>");
         }
         if (context.slowMoverStackData != null) {
-            report.println("<div><a href='" + primaryStackFileName + "' target='_blank'><img src='" + primaryStackFileName + "' style='max-width: 150px;' alt='Maximum Stack Crop' /></a><br/><center><small>Maximum Stack</small></center></div>");
+            report.println("<div><a href='" + primaryStackFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + primaryStackFileName + "' style='max-width: 150px;' alt='Maximum Stack Crop' /></a><br/><center><small>Maximum Stack</small></center></div>");
         }
         if (!context.rawFrames.isEmpty()) {
-            report.println("<div><a href='" + gifFileName + "' target='_blank'><img src='" + gifFileName + "' style='max-width: 150px;' alt='Sampled Time-Lapse' /></a><br/><center><small>Animation (Sampled)</small></center></div>");
+            report.println("<div><a href='" + gifFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + gifFileName + "' style='max-width: 150px;' alt='Sampled Time-Lapse' /></a><br/><center><small>Animation (sampled kept frames)</small></center></div>");
         }
-        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img src='" + shapeFileName + "' style='max-width: 150px;' alt='Shape Footprint' /></a><br/><center><small>Shape</small></center></div>");
+        report.println("<div><a href='" + shapeFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + shapeFileName + "' style='max-width: 150px;' alt='Shape Footprint' /></a><br/><center><small>Shape</small></center></div>");
         report.println("</div>");
 
         StringBuilder deepStackStats = new StringBuilder();

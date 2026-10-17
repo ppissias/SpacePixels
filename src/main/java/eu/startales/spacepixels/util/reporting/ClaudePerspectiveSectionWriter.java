@@ -470,7 +470,7 @@ final class ClaudePerspectiveSectionWriter {
 
         // 5. A closing thought, grounded in the numbers.
         int found = summary.returnedTrackCount + summary.anomalyCount + summary.slowMoverCandidateCount
-                + (telemetry.photometryTelemetry != null ? telemetry.photometryTelemetry.highConfidence : 0);
+                + (variables != null && telemetry.photometryTelemetry != null ? telemetry.photometryTelemetry.highConfidence : 0);
         if (telemetry.totalRawObjectsExtracted > 0) {
             String remainder = found == 0
                     ? "every one of them turned out to be a star, noise or an artefact doing exactly what it should. Here the remainder is empty, and that is a result too."

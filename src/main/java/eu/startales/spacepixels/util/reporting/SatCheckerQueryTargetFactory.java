@@ -54,7 +54,11 @@ final class SatCheckerQueryTargetFactory {
         if (startTimestamp <= 0L) {
             return -1L;
         }
-        return startTimestamp + (resolveTrackPointExposureMillis(point) / 2L);
+        long exposure = resolveTrackPointExposureMillis(point);
+        if (exposure == 0 && astrometryContext != null) {
+            exposure = astrometryContext.getFrameExposureMillis(point.sourceFrameIndex);
+        }
+        return startTimestamp + (exposure / 2L);
     }
 
     static long resolveTimeWindowMidpointTimestamp(long startTimestampMillis,
