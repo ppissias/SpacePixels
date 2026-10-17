@@ -112,6 +112,8 @@ Click **Run Auto-Tune**, or **Auto-Tune Settings** on the Main tab (or press **C
 
 ![Auto-Tune results](docs/images/manual/ui-autotune-done.png)
 
+**Preview Frame** is below **Core Settings**, so you can try the current sigma settings on a frame before running the full detection.
+
 The table shows a ready set of settings for each **sensitivity profile**:
 
 | Profile | Use it when |
@@ -149,7 +151,7 @@ If a run finds a very large number of objects, a summary first lists them by kin
 
 ## 4. Reading the report
 
-The report starts with an overview, then the results. **Diagnostics** comes near the end and starts expanded; click its heading to collapse it. The sections follow the kinds of results:
+The report starts with an overview, then the results. **Diagnostics** comes near the end and starts collapsed; click its heading to open it. The sections follow the kinds of results:
 
 | Result | What it is | Typical objects |
 |---|---|---|
@@ -165,17 +167,22 @@ The report starts with an overview, then the results. **Diagnostics** comes near
 
 ![Report summary](docs/images/manual/report-summary.png)
 
-Under the title, one line describes the session: field, date and time span, frames kept, exposure, camera and whether the frames are plate-solved. The **Jump to** bar below it stays at the top of the window and leads to every section, with its count. The **Overview** has a card for each kind of result that was written (click a card to jump to it) and lists what was not found. A group left out of this report is named in that line. The results come first. The processing details (quality control with the rejected frames and their reasons, configuration, star mask, extraction, track linking, and the time taken by each detection step) are collected in the **Diagnostics** group near the end. It is open when the report loads; click the heading to collapse it. A line under the cards links to it, with the frames kept and rejected.
+Under the title, one line describes the session: field, date and time span, frames kept, exposure, camera and whether the frames are plate-solved. The **Jump to** bar below it stays at the top of the window and leads to every section, with its count. The **Overview** has a card for each kind of result that was written (click a card to jump to it) and lists what was not found. A group left out of this report is named in that line. The results come first. The processing details (quality control with the rejected frames and their reasons, configuration, star mask, extraction, track linking, and the time taken by each detection step) are collected in the **Diagnostics** group near the end. It starts collapsed; a link into Diagnostics opens the relevant group automatically. A line under the cards links to it, with the frames kept and rejected.
 
 ![The session, with the catalogue and the detections: NGC 2236, NGC 2251, IC 448 and the Monoceros Nebula](docs/images/manual/report-session-picture.png)
 
-Below the cards is **the session**: the median stack of the frames kept, with three switches over it.
+Below the cards is **the session**: the median stack of the frames kept, with switches over it.
 
-- **Detections** (on at first) draws every result with its label and colour, as on the detection map.
+- **Detections** (on at first) draws every result with its label and colour, as on the detection map. The legend below the picture explains the prefixes and gives their counts: T for moving-object tracks, ST for confirmed streak tracks, SST for suspected streak tracks, and so on. The number identifies the object; A12 is single-frame anomaly 12.
+- **Detected variables** marks the measured variable-star candidates V1, V2 and so on in magenta. Click a label to open its candidate card. These measured candidates are separate from the known variables on the Catalogue layer.
 - **Star mask** shows in red what the detection treated as stars: hover over the button to see it, click to keep it.
 - **Catalogue** names what is known in the field: Messier, NGC, IC and Sharpless objects with their outlines and common names, bright stars with a proper name, and the brightest variable stars with an old designation (at most 15). It needs the sky catalogue, fetched before **Detect Moving Targets** (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)). Survey numbers that nobody knows are left out.
 
 Click the picture for the full-size stack.
+
+The toolbar provides **Previous finding**, **Next finding**, a finding selector, **Pause animations** and **Report data JSON**. Pausing freezes the GIF previews and the inspector animation; their image links still open the original files. Reports honour the browser's reduced-motion preference. Most images below the first picture load as you scroll. Mixed exposures and filters are identified in the session header.
+
+`report-data.json` contains the included findings, their labels and card anchors, pixel/sky positions, and observed frame numbers. Labels are local to this report, not permanent identities across runs. Optional groups left out of the report are also left out of this export and the creative sections. The footer records application/engine versions, export time and report preparation time.
 
 **Detection Stage Timings**, under Diagnostics, shows the elapsed time and share of engine time for each major detection step. Faint streak fragment assembly is indented under tracking: its time is already included in the tracking total. Parallel steps show elapsed time, not the sum of worker times. Steps that were switched off are omitted. Image loading, Auto-Tune and report generation are outside the engine total.
 
@@ -201,17 +208,29 @@ Each object has a card with its times, speed and direction, and:
 
 A real object looks the same in every crop and moves evenly. A noise track jumps around, changes shape or appears in only some crops.
 
+Track duration covers the observing span from the start of the first exposure to the end of the last. Mean speed and identification epochs use exposure midpoints, corresponding to the measured centroids. Anomaly context uses the nearest kept frames before and after the event, with one shared stretch and visible frame/time labels. Slow-mover and residual animations also skip frames rejected by detection quality control.
+
+On plate-solved crops, hovering shows a small red N/E marker for north and east. The field of view and centre coordinates remain available in the image's tooltip.
+
 ### Maps
 
 ![Global trajectory map](docs/images/manual/report-map.jpg)
 
-The **Map of All Detections** draws every result over the whole field, with its label (T1, ST2, A3…) and one colour per kind, counted in the legend above it. Here the long lines are satellite trails, and the magenta circles single-frame anomalies. With the sky catalogue, the map also names the well-known deep-sky objects, the bright named stars and the brightest named variable stars of the field, as in the session picture. The **Time Maps** below it show every detection that was not a star, coloured by time, which is useful to see where the noise is.
+The **Map of All Detections** draws every result over the whole field, with its label (T1, ST2, A3…) and one colour per kind, counted in the legend above it. Here the long lines are satellite trails, and the magenta circles single-frame anomalies. With the sky catalogue, the map also names the well-known deep-sky objects, the bright named stars and the brightest named variable stars of the field, as in the session picture. The map category buttons hide or show each type of finding; click a label or marker to open its card. **Catalogue** toggles the known sky objects, while **Variable-star candidate** toggles measured candidates. The full-size PNG remains available. The **Time Maps** below it show every detection that was not a star, coloured by time, which is useful to see where the noise is.
 
 ### Unclassified Transient Inspector
 
 ![Unclassified Transient Inspector](docs/images/manual/report-inspector.png)
 
-Everything that was detected but did not become a result is shown here, coloured from blue (early frames) to red (late frames). Click a circle to see a short animation of that spot (two frames before and after the detection) and its measurements. This is where you look when you expect an object that the report did not find.
+Everything that was detected but did not become a result is shown here, coloured from blue (early frames) to red (late frames). Click a circle to see a short animation of that spot (two frames before and after the detection) and its measurements. This is where you look when you expect an object that the report did not find. Filter by frame and minimum peak sigma, focus a marker, and use the left/right arrow keys to move through visible detections.
+
+### Light curves and exports
+
+Candidate light curves have **Zoom in**, **Zoom out** and **Reset** controls; drag a zoomed chart to pan. Error bars show the engine's estimated sky-noise uncertainty, which is a lower bound rather than total uncertainty. Brightest/faintest cutouts use a common stretch but show raw frames; clouds, exposure and seeing can affect their appearance even when the differential light curve is corrected for transparency.
+
+The stars CSV includes the V label, sky coordinates, VSX matches and nearest-match separation. Candidate light curves also include the V label. CSVs and the HTML are published only after their writes finish successfully.
+
+Catalogue searches distinguish matches, valid searches with no match, and failures. **Retry lookup** retries a failure; **Refresh lookup** requests fresh data even when a result was saved earlier. Batch counts refer only to the candidates requested by that batch. Successful lookup results are saved into the report when its folder is writable.
 
 ### Night & Equipment
 
@@ -225,11 +244,13 @@ What the frames say about the night and your equipment. SpacePixels measures up 
   - **Sky brightness** in magnitudes per square arcsecond, like a sky quality meter, calibrated with the Gaia stars of each frame. It needs the sky catalogue and linear frames, and it assumes calibrated frames: a camera offset (bias or pedestal) left in the frames, or a background removed during processing, gives a wrong value.
 - **The setup**: the pixel scale, the field of view and the camera angle from the plate solution; the focal length (from the pixel size in the FITS header), compared with the header's focal length; the sampling (how many pixels a star covers); and the brightness range from the saturation limit down to the field depth. With a reducer or flattener the focal length depends on its distance to the camera, so a different value between sessions with the same equipment means the spacing changed.
 - **The optics**: three maps of the field, in the orientation of the report's pictures.
-  - **Star size against the centre**: larger stars in all corners mean field curvature (or a flattener at the wrong distance); larger stars on one side mean a tilted camera or a sagging focuser.
+  - **Star size against the centre**: larger stars in all corners can suggest field curvature (or a flattener at the wrong distance); larger stars on one side can suggest tilt, uneven focus or a sagging focuser.
   - **Star shapes**: the stretch of the stars after the stretch they all share (tracking, guiding, wind) is taken out. Stars stretched along or across the line to the centre in the outer field point to the flattener or reducer spacing.
-  - **Coma**: arrows from the core of the stars towards their light. Tails that grow towards the edges are coma; with a camera lens they can also be lateral colour. A point without coma away from the centre (a white cross) means, on a reflector, that the collimation is off.
+  - **Coma**: arrows from the core of the stars towards their light. Tails that grow towards the edges are coma; with a camera lens they can also be lateral colour. A point without coma away from the centre (a white cross) can suggest a collimation issue on a reflector.
   - Frames taken on the other side of the pier are turned back by 180°, since tilt and coma belong to the camera.
 - **Flat-field check**: the star brightness against Gaia across the field, and the sky background. Stars dimmer in the corners mean vignetting that the flats did not remove; brighter corners mean flats that over-correct. A sky that is brighter towards one side is a gradient from light pollution, the Moon or twilight.
+
+These readings are diagnostic patterns, not a unique diagnosis of a focus, tracking or optical problem. The brightness range describes saturation and detection depth; the Variable Stars readiness verdict remains authoritative for differential photometry. Sky brightness and Gaia-based flat-field readings require a measurable, acceptable linearity slope; inconclusive calibration is not treated as a pass. Field depth uses a ≥ sign when the catalogue sample ends before completeness falls.
 
 The measurement takes a few seconds. Without a plate solution the sizes are in pixels (or in arcseconds from the focal length and pixel size in the FITS header), and without the sky catalogue the sky brightness and the star brightness map are left out.
 
@@ -240,6 +261,8 @@ With **Include AI Creative Report Sections** ticked (Detection Settings, Report 
 ![The Night, Retold](docs/images/manual/ai-night-retold.png)
 
 ---
+
+Iteration reports analyse overlapping frame selections. Their counts must not be added: the same object may be found in several iterations. Compare positions and timestamps in the individual reports.
 
 ## 5. Identifying objects
 
@@ -351,6 +374,7 @@ Select three or more frames in the table and click **Blink Selected** to play th
 - **Zoom**: Fit, 100 %, 200 % and 400 %, or scroll to zoom around the cursor and drag to pan. Double-click switches between fit and 100 %. The view stays on the same spot while the frames change.
 - **The frame list** on the left shows every frame with its time since the first one; the frame on screen is highlighted. Click a frame to pause and show it. While paused, untick a frame, or press S or tick **Skip this frame**, to leave a cloudy or trailed frame out of the loop; stepping by hand still shows it. While playing, the ticks are greyed out: pause first, so you change the frame you meant. At least two frames stay in the loop.
 - **Show tracks** (T) draws the tracks of the last **Detect Moving Targets** run on this session, named as in the report (T1, T2… for moving objects, ST1… for streak tracks), with a ring where the object is in the frame shown.
+- **Show variable stars** (V) marks the variable-star candidates from the last **Detect Moving Targets** run with photometry enabled. Magenta rings and V1, V2… follow the report's numbering; solid rings mean high confidence and dashed rings mean possible. Names from the saved VSX catalogue are added when matched. Hover for the name, confidence and measured variation. This overlay also works without a plate solution or sky catalogue, using the measured star positions.
 - **Annotate** (A) labels the stars, deep-sky objects and variable stars of the field, once the sky catalogue is fetched, and **Correct plate solution** (C) aligns them, and all coordinates, with the stars (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
 
 Below the frame: the frame number, file name, capture time and time since the first frame, and under the cursor the pixel position, its value and, on a plate-solved frame, RA and Dec. Esc closes the window. The frames stay in memory while blinking (about 170 MB per 61-megapixel frame); if they would not fit, SpacePixels says so before reading them.
@@ -360,6 +384,8 @@ Below the frame: the frame number, file name, capture time and time since the fi
 ![Preview Frame at 100 %](docs/images/manual/ui-preview.jpg)
 
 Runs the source detection on the selected frame with the current settings and shows what it picks up: green boxes around point sources, red lines along streaks. **◀ ▶** (← →) move to the other frames of the session; each frame is detected when you get to it, and the status bar shows how many point sources and streaks it has. Use it to see what the detector picks up in a single frame.
+
+After a full detection with variable-star photometry, **Show variable stars** (V) also draws that run's candidates, with the same labels and hover details as Blink. Changing the single-frame preview settings does not change those candidates; run the full detection again to update them.
 
 ### Manual Transient Inspection
 
@@ -384,7 +410,7 @@ The detection report uses the catalogue too, when it was fetched before **Detect
 
 The fetch runs in the background, so you can keep working. The status bar shows each step and how long it has taken. The stars take longest, about 20 to 30 seconds for a 4° × 3° field to magnitude 15; each magnitude deeper roughly doubles the stars and the wait. Meanwhile the button reads **Cancel Sky Catalogue**. The catalogue is saved next to the frames as `sky_catalogue.json` and comes back by itself when you import the folder again. Click the button again to fetch a fresh one, for example after changing the star depth. The **2 Astrometry** status line shows what is loaded; its tooltip gives the details, and says why if a service did not answer (what did arrive is kept).
 
-In every viewer (Blink, Preview Frame, Manual Transient Inspection and Show full size), **Annotate** (A) draws the catalogue on the frame: blue circles for stars (larger for brighter stars), magenta diamonds for variable stars and yellow outlines for deep-sky objects, with their size and orientation. **Layers** chooses which of the three are shown. The status bar names the object under the cursor, above *NGC 2236 · open cluster · 8.4 × 8.4′*, or for a variable star for example *V0623 Mon · LB · 13.30–14.60 V*. When there are too many marks on screen to tell apart, only the brightest stars and variables and the largest deep-sky objects are drawn, and a note says so: zoom in to see more. Names and magnitudes are written next to the marks once few enough are on screen; the long survey names of many variables (such as *Gaia DR3 3131…*) only when you zoom further in.
+In every viewer (Blink, Preview Frame, Manual Transient Inspection and Show full size), **Annotate** (A) draws the catalogue on the frame: blue circles for stars (larger for brighter stars), magenta diamonds for variable stars and yellow outlines for deep-sky objects, with their size and orientation. **Layers** chooses which of the three are shown. The status bar and a tooltip beside the pointer name the object under the cursor, even when its label is hidden to reduce clutter: above *NGC 2236 · open cluster · 8.4 × 8.4′*, or for a variable star for example *V0623 Mon · LB · 13.30–14.60 V*. When there are too many marks on screen to tell apart, only the brightest stars and variables and the largest deep-sky objects are drawn, and a note says so: zoom in to see more. Names and magnitudes are written next to the marks once few enough are on screen; the long survey names of many variables (such as *Gaia DR3 3131…*) only when you zoom further in.
 
 If a viewer is open when the catalogue arrives, the frame does not change: the **Annotate** switch becomes available and a note next to it says *Sky catalogue ready · A shows it*.
 

@@ -391,6 +391,14 @@ Responsibilities:
 - coordinate section writers
 - generate standard `detection_report.html`
 - generate iterative index reports
+- build `ReportData`: report-local finding IDs/anchors, included variables and common-motion groups, and one shared quality-filtered frame selection
+- export versioned `report-data.json` without input paths or observing-site coordinates
+- publish HTML, JSON and CSV text artifacts through `AtomicReportFile`, checking write errors before replacing final files
+- emit testable `report-lookups.js` and `report-interactions.js` resources; GIF exports include PNG posters for pause/reduced-motion controls
+
+`ReportData` describes report presentation; it never changes the JTransient result. `DetectionReportContext` loads its catalogue once per export. `ExportVisualizationSettings` applies throughout image rendering. Long moving/streak GIFs stream images one at a time. Motion/lookup calculations use exposure midpoint times, while observing-span duration remains a separate metric. Detection-quality rejections are shared by all inspection animations.
+
+The HTML starts Diagnostics collapsed, links maps to object cards, separates measured variable candidates from catalogue layers, and exposes navigation, filters and animation controls. Photometry exports append report labels and sky/catalogue identification columns. Lookup responses are validated before normalization; only successful responses are cached, refresh bypasses saved results, and save failures remain visible.
 
 Consumes:
 

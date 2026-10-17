@@ -54,6 +54,8 @@ That means:
 
 Library consumers should use `getExportDirectory()` and `getReportFile()` rather than guessing the output path.
 
+The report directory also contains `report-data.json` (schema version 1): generation time, application/engine versions, included groups, rejected frame numbers and findings. A finding has a report-local `id`, `category`, HTML `anchor`, pixel position, optional sky position, observed `frames`, and optional variable-star `starId`/`tier`. Frame numbers in this file are one-based. Empty frame lists on maximum-stack candidates mean per-frame evidence is unavailable; they do not mean zero support. IDs are not persistent identities across reports or iterations. Input paths and observing-site coordinates are not included in this JSON. Existing photometry CSV columns are retained; report labels and identification columns are appended.
+
 ## Input preparation modes
 
 All imported images must use the same extension (case-insensitive). FITS frames must also share
