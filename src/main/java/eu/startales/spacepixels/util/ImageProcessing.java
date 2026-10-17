@@ -565,6 +565,9 @@ public class ImageProcessing implements AutoCloseable {
     }
 
     private static void logFitsTimestampDiagnostics(String stageLabel, FitsFileInformation[] filesInfo) {
+        if (!DebugOutput.isEnabled()) {
+            return;
+        }
         if (filesInfo == null) {
             System.out.println("\n--- " + stageLabel + " FITS Timestamp Diagnostics ---");
             System.out.println("No FITS metadata loaded.");
@@ -1135,7 +1138,7 @@ public class ImageProcessing implements AutoCloseable {
             return new FitsFileInformation[0];
         }
 
-        System.out.println("\n--- Fast-Loading Information for " + numFiles + " FITS files ---");
+        DebugOutput.println("\n--- Fast-Loading Information for " + numFiles + " FITS files ---");
 
         List<Callable<FitsFileInformation>> tasks = new ArrayList<>();
 
@@ -1201,7 +1204,7 @@ public class ImageProcessing implements AutoCloseable {
         FitsSequenceValidator.validateAndSort(ret);
 
         this.cachedFileInfo = ret;
-        System.out.println("Finished loading metadata for " + numFiles + " files instantly.");
+        DebugOutput.println("Finished loading metadata for " + numFiles + " files instantly.");
         logFitsTimestampDiagnostics("Interactive import", ret);
         return ret;
     }
@@ -1219,7 +1222,7 @@ public class ImageProcessing implements AutoCloseable {
             return this.cachedFileInfo;
         }
 
-        System.out.println("\n--- Validating " + numFiles + " FITS files for headless batch detection ---");
+        DebugOutput.println("\n--- Validating " + numFiles + " FITS files for headless batch detection ---");
 
         List<Callable<FitsMetadataLoadResult>> tasks = new ArrayList<>();
         for (File currentFile : fitsFiles) {
@@ -1256,7 +1259,7 @@ public class ImageProcessing implements AutoCloseable {
         FitsSequenceValidator.validateAndSort(ret);
 
         this.cachedFileInfo = ret;
-        System.out.println("Validated and loaded metadata for " + numFiles + " FITS files.");
+        DebugOutput.println("Validated and loaded metadata for " + numFiles + " FITS files.");
         logFitsTimestampDiagnostics("Headless import", ret);
         return ret;
     }
@@ -1740,6 +1743,9 @@ public class ImageProcessing implements AutoCloseable {
      * Dumps a compact debug summary of a FITS file's stored and display-scaled numeric range.
      */
     private void printFitsDebugInfo(String label, File fitsFile) {
+        if (!DebugOutput.isEnabled()) {
+            return;
+        }
         try (Fits fits = new Fits(fitsFile)) {
             BasicHDU<?> hdu = getImageHDU(fits);
             Header header = hdu.getHeader();
@@ -1847,7 +1853,7 @@ public class ImageProcessing implements AutoCloseable {
         if (!detectionsDir.exists()) {
             boolean created = detectionsDir.mkdirs();
             if (created) {
-                System.out.println("Created new export directory at: " + detectionsDir.getAbsolutePath());
+                DebugOutput.println("Created new export directory at: " + detectionsDir.getAbsolutePath());
             } else {
                 System.err.println("Failed to create export directory. Check folder permissions.");
             }

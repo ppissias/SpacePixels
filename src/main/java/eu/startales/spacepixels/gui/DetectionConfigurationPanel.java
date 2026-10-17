@@ -575,10 +575,10 @@ public class DetectionConfigurationPanel extends JPanel {
 
         if (selectedFiles != null && selectedFiles.length >= SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
             poolToUse = selectedFiles;
-            System.out.println("Auto-Tuning using user's explicit selection of " + poolToUse.length + " frames.");
+            DebugOutput.println("Auto-Tuning using user's explicit selection of " + poolToUse.length + " frames.");
         } else {
             poolToUse = mainAppWindow.getMainApplicationPanel().getImportedFiles();
-            System.out.println("Auto-Tuning using entire imported sequence.");
+            DebugOutput.println("Auto-Tuning using entire imported sequence.");
         }
 
         if (poolToUse == null || poolToUse.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
@@ -1432,7 +1432,7 @@ public class DetectionConfigurationPanel extends JPanel {
         EventQueue.invokeLater(() -> {
             setCursor(Cursor.getDefaultCursor());
             if (event.getResult() != null && event.getResult().telemetryReport != null) {
-                System.out.println(event.getResult().telemetryReport);
+                DebugOutput.println(event.getResult().telemetryReport);
             }
             overviewPanel.tuneFinished(event.isSuccess(), event.getMessage(), event.getResult());
         });

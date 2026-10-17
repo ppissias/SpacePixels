@@ -10,6 +10,7 @@ package eu.startales.spacepixels.api;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.util.AutoTunerRunner;
+import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.util.DetectionInputPreparation;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
@@ -40,6 +41,7 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
     @Override
     public SpacePixelsPipelineResult run(SpacePixelsPipelineRequest request) throws SpacePixelsPipelineException {
         Objects.requireNonNull(request, "request");
+        DebugOutput.applyToEngine();
         ImageProcessing imageProcessing = null;
         try {
             DetectionConfig baseConfig = request.getDetectionConfig();
@@ -70,7 +72,7 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
                         request.getAutoTuneProfile(),
                         request.getAutoTuneAlgorithm(),
                         (percentage, message) -> emitScaledProgress(progressListener, 15, 35, percentage, message));
-                System.out.println(autoTuneResult.telemetryReport);
+                DebugOutput.println(autoTuneResult.telemetryReport);
                 pipelineBaseConfig = autoTuneResult.optimizedConfig.clone();
             }
 

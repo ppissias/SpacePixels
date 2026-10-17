@@ -11,6 +11,7 @@
 package eu.startales.spacepixels.util.reporting;
 
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.util.DisplayImageRenderer;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ReportInclusion;
@@ -176,20 +177,14 @@ public class DetectionReportGenerator {
         int height = masterStackData.length;
         int width = masterStackData[0].length;
 
-        // --- DEBUG TRACE FOR JTRANSIENT ---
-        System.out.println("\n--- DEBUG: Master Mask Array Bounds ---");
-        System.out.println("masterStackData dimensions: " + width + "x" + height + " (W x H)");
-        if (masterMask == null) {
-            System.out.println("masterMask is null!");
-        } else {
+        if (masterMask != null) {
             int maskY = masterMask.length;
             int maskX = maskY > 0 && masterMask[0] != null ? masterMask[0].length : 0;
-            System.out.println("masterMask dimensions: " + maskX + "x" + maskY + " (W x H)");
             if (maskY != height || maskX != width) {
-                System.err.println("CRITICAL: masterMask dimensions do NOT match masterStackData dimensions!");
+                System.err.println("CRITICAL: masterMask dimensions " + maskX + "x" + maskY
+                        + " do NOT match masterStackData dimensions " + width + "x" + height + "!");
             }
         }
-        System.out.println("---------------------------------------\n");
 
         // Create an RGB image so we can paint the mask in color
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
@@ -1387,7 +1382,7 @@ public class DetectionReportGenerator {
             // Results first: overview, moving objects, slow movers, residual review, maps, inspector, variable stars.
             FieldDepth fieldDepth = FieldDepth.measure(reportContext, pipelineTelemetry);
             NightEquipment nightEquipment = NightEquipment.measure(reportContext, pipelineTelemetry, masterStars);
-            System.out.printf(Locale.US, "Night & Equipment measured in %.1f s%n", nightEquipment.millis / 1000.0);
+            DebugOutput.printf(Locale.US, "Night & Equipment measured in %.1f s%n", nightEquipment.millis / 1000.0);
             PipelineDiagnosticsSectionWriter.writeOverview(report, reportContext, pipelineTelemetry, summary, localRescueTracks, fieldDepth, nightEquipment,
                     commonMotionGroups.size(), inclusion);
 
@@ -1514,7 +1509,7 @@ public class DetectionReportGenerator {
             DetectionReportDocumentWriter.appendHtmlDocumentEnd(report);
             output.commit();
         }
-        System.out.println("\nFinished exporting visualizations and generated HTML report at: " + reportFile.getAbsolutePath());
+        DebugOutput.println("\nFinished exporting visualizations and generated HTML report at: " + reportFile.getAbsolutePath());
     }
 
 

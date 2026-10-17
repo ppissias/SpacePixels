@@ -53,16 +53,16 @@ final class IterativeDetectionPipelineService {
         int numFrames = cachedFileInfo.length;
 
         if (numFrames < 5) {
-            System.out.println("Not enough frames for iterative detection. Falling back to standard pipeline.");
+            DebugOutput.println("Not enough frames for iterative detection. Falling back to standard pipeline.");
             return standardDetectionPipelineService.detectObjects(config, cachedFileInfo, safetyPrompt, progressListener);
         }
 
-        System.out.println("\n--- Starting ITERATIVE PIPELINE for " + numFrames + " FITS files (On-Demand Loading) ---");
+        DebugOutput.println("\n--- Starting ITERATIVE PIPELINE for " + numFrames + " FITS files (On-Demand Loading) ---");
 
         File masterDir = createIterativeOutputDirectory(cachedFileInfo);
         int targetMaxLimit = resolveTargetMaxLimit(maxFramesLimit, numFrames);
 
-        System.out.println("\n--- Extracting Timestamps & Exposures for Temporal Spacing ---");
+        DebugOutput.println("\n--- Extracting Timestamps & Exposures for Temporal Spacing ---");
         long[] frameTimestamps = new long[numFrames];
         long[] frameExposures = new long[numFrames];
         boolean hasValidTime = true;
@@ -74,7 +74,7 @@ final class IterativeDetectionPipelineService {
             }
         }
 
-        System.out.println("\n--- Generating Global Master Map from " + targetMaxLimit + " globally spaced frames ---");
+        DebugOutput.println("\n--- Generating Global Master Map from " + targetMaxLimit + " globally spaced frames ---");
         TransientEngineProgressListener masterListener = (percent, msg) -> {
             if (progressListener != null) {
                 progressListener.onProgressUpdate(percent / 5, "Global Master Map: " + msg);
@@ -101,7 +101,7 @@ final class IterativeDetectionPipelineService {
         List<DetectionReportGenerator.IterationSummary> summaries = new ArrayList<>();
 
         for (int k = 5; k <= targetMaxLimit; k += 5) {
-            System.out.println("\n>>> RUNNING ITERATION: " + k + " Frames (Time-Spaced)");
+            DebugOutput.println("\n>>> RUNNING ITERATION: " + k + " Frames (Time-Spaced)");
 
             final int basePercent = 20 + (int) (((float) currentIteration / totalIterations) * 80);
             final int nextBasePercent = 20 + (int) (((float) (currentIteration + 1) / totalIterations) * 80);
@@ -141,7 +141,7 @@ final class IterativeDetectionPipelineService {
 
             ImageProcessing.DetectionSummary detectionSummary = DetectionPipelineSupport.summarizeDetections(result);
             if (safetyPrompt != null && !safetyPrompt.shouldProceed(detectionSummary)) {
-                System.out.println("Iteration " + k + " aborted by UI callback due to high detection count. Stopping further iterations.");
+                DebugOutput.println("Iteration " + k + " aborted by UI callback due to high detection count. Stopping further iterations.");
                 break;
             }
 
@@ -178,13 +178,13 @@ final class IterativeDetectionPipelineService {
         File indexFile = new File(masterDir, "index.html");
         try {
             DetectionReportGenerator.exportIterativeIndexReport(masterDir, summaries);
-            System.out.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
+            DebugOutput.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
             return indexFile;
         } catch (IOException e) {
             System.err.println("Failed to write iterative index report: " + e.getMessage());
         }
 
-        System.out.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
+        DebugOutput.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
         return masterDir;
     }
 

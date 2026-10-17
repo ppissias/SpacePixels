@@ -39,6 +39,9 @@ final class DetectionPipelineSupport {
     static void logPipelineFrameTimingPayload(String stageLabel,
                                               List<ImageFrame> frames,
                                               FitsFileInformation[] filesInfo) {
+        if (!DebugOutput.isEnabled()) {
+            return;
+        }
         if (frames == null) {
             System.out.println("\n--- " + stageLabel + " JTransient Frame Timing Payload ---");
             System.out.println("No frames prepared for JTransient.");
@@ -175,7 +178,7 @@ final class DetectionPipelineSupport {
             return result;
         }
 
-        System.out.println(
+        DebugOutput.println(
                 "Only " + keptFrames
                         + " frames remained after quality control. Suppressing downstream multi-frame report outputs.");
 

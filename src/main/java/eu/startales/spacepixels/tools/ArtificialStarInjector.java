@@ -8,6 +8,7 @@
 
 package eu.startales.spacepixels.tools;
 
+import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.util.ImageProcessing;
 import nom.tam.fits.*;
 import nom.tam.util.Cursor;
@@ -101,7 +102,7 @@ public class ArtificialStarInjector {
         Arrays.sort(fitsFiles, (a, b) -> a.getName().compareTo(b.getName()));
         int numFrames = fitsFiles.length;
 
-        System.out.println("Found " + numFrames + " FITS files.");
+        DebugOutput.println("Found " + numFrames + " FITS files.");
 
         // 2. Read the first frame to get dimensions
         int width, height;
@@ -133,12 +134,12 @@ public class ArtificialStarInjector {
                     totalMovement,
                     peakBrightness,
                     opticalSigma));
-            System.out.printf("Added deterministic test star at X: %.2f, Y: %.2f, angle: %.1f degrees.\n",
+            DebugOutput.printf("Added deterministic test star at X: %.2f, Y: %.2f, angle: %.1f degrees.\n",
                     TEST_STAR_START_X, TEST_STAR_START_Y, TEST_STAR_ANGLE_DEGREES);
         }
 
         int randomStarCount = Math.max(0, numStars - 1);
-        System.out.println("Generating " + randomStarCount + " random trajectories...");
+        DebugOutput.println("Generating " + randomStarCount + " random trajectories...");
         for (int i = 0; i < randomStarCount; i++) {
             // Keep them slightly away from the absolute edges
             double startX = 50 + (random.nextDouble() * (width - 100));
@@ -162,7 +163,7 @@ public class ArtificialStarInjector {
         // 5. Process sequence frame by frame
         for (int i = 0; i < numFrames; i++) {
             File inFile = fitsFiles[i];
-            System.out.printf("Processing frame [%d/%d]: %s\n", (i + 1), numFrames, inFile.getName());
+            DebugOutput.printf("Processing frame [%d/%d]: %s\n", (i + 1), numFrames, inFile.getName());
 
             try (Fits fits = new Fits(inFile)) {
                 BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
@@ -174,7 +175,7 @@ public class ArtificialStarInjector {
                 short[][] data = (short[][]) kernel;
 
                 double medianBg = calculateMedianBackground(data);
-                System.out.printf("    => Detected Median Background: %.1f ADU\n", medianBg);
+                DebugOutput.printf("    => Detected Median Background: %.1f ADU\n", medianBg);
 
                 // Calculate temporal fraction (0.0 at first frame, 1.0 at last frame)
                 double timeFraction = numFrames > 1 ? (double) i / (numFrames - 1) : 0.0;
@@ -186,7 +187,7 @@ public class ArtificialStarInjector {
                     double currentY = star.startY + (Math.sin(star.angleRad) * star.totalMovementPx * timeFraction);
                     
                     int pixelCount = drawGaussianStar(data, currentX, currentY, star.peakAdu, star.sigma);
-                    System.out.printf("    -> Injecting Star %d at X: %.2f, Y: %.2f (Added ADU: %.1f, Total Peak: ~%.1f ADU, Footprint: %d px)\n", 
+                    DebugOutput.printf("    -> Injecting Star %d at X: %.2f, Y: %.2f (Added ADU: %.1f, Total Peak: ~%.1f ADU, Footprint: %d px)\n", 
                             starIndex, currentX, currentY, star.peakAdu, medianBg + star.peakAdu, pixelCount);
                     starIndex++;
                 }

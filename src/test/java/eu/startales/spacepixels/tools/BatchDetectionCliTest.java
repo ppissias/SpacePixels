@@ -29,8 +29,8 @@ public class BatchDetectionCliTest {
         ExecutionResult result = executeCli(sequenceDirectory, configFile);
 
         assertEquals(result.stderr, 0, result.exitCode);
-        assertTrue(result.stdout.contains("Batch detection completed successfully."));
-        assertTrue(result.stdout.contains("Report file:"));
+        assertTrue(result.stdout, result.stdout.startsWith("Report file:"));
+        assertEquals(result.stdout, 1, result.stdout.trim().split("\\R").length);
     }
 
     @Test
@@ -46,6 +46,7 @@ public class BatchDetectionCliTest {
 
         assertEquals(1, result.exitCode);
         assertTrue(result.stderr.contains("Expected uncompressed 16-bit monochrome FITS files."));
+        assertTrue(result.stderr, !result.stderr.contains("\tat "));
     }
 
     private static ExecutionResult executeCli(Path inputDirectory, Path configFile) throws Exception {
@@ -56,8 +57,13 @@ public class BatchDetectionCliTest {
 
         Path tempUserHome = Files.createTempDirectory("spacepixels-cli-home");
         String originalUserHome = System.getProperty("user.home");
+        PrintStream originalOut = System.out;
+        PrintStream originalErr = System.err;
         try {
             System.setProperty("user.home", tempUserHome.toString());
+            // Everything the run prints, the engine included, counts as the command's output.
+            System.setOut(stdout);
+            System.setErr(stderr);
             int exitCode = BatchDetectionCli.execute(
                     new String[]{inputDirectory.toString(), configFile.toString()},
                     stdout,
@@ -67,6 +73,8 @@ public class BatchDetectionCliTest {
                     stdoutBytes.toString(StandardCharsets.UTF_8.name()),
                     stderrBytes.toString(StandardCharsets.UTF_8.name()));
         } finally {
+            System.setOut(originalOut);
+            System.setErr(originalErr);
             if (originalUserHome == null) {
                 System.clearProperty("user.home");
             } else {

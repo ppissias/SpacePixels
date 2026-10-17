@@ -20,6 +20,7 @@ import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import eu.startales.spacepixels.util.AutoTunerRunner;
+import eu.startales.spacepixels.util.DebugOutput;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 
 import java.io.File;
@@ -57,6 +58,7 @@ public class BatchDetectionCli {
     }
 
     public static void main(String[] args) {
+        DebugOutput.configureApplicationLogging();
         int exitCode = execute(args, System.out, System.err);
         System.exit(exitCode);
     }
@@ -82,7 +84,11 @@ public class BatchDetectionCli {
             exitCode = 2;
         } catch (Exception e) {
             err.println("Batch detection failed: " + e.getMessage());
-            e.printStackTrace(err);
+            if (DebugOutput.isEnabled()) {
+                e.printStackTrace(err);
+            } else {
+                err.println("(Run with -D" + DebugOutput.PROPERTY + "=true for the details.)");
+            }
             exitCode = 1;
         }
         return exitCode;
@@ -108,7 +114,7 @@ public class BatchDetectionCli {
                 .autoTuneMaxCandidateFrames(detectionProfile.getAutoTuneMaxCandidateFrames())
                 .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
                 .generateReport(true)
-                .progressListener(createConsoleProgressListener("Pipeline", out))
+                .progressListener(DebugOutput.isEnabled() ? createConsoleProgressListener("Pipeline", out) : null)
                 .build();
 
         SpacePixelsPipelineResult pipelineResult = pipelineApi.run(request);
@@ -117,9 +123,6 @@ public class BatchDetectionCli {
             throw new IOException("Pipeline completed without producing an export report.");
         }
 
-        out.println();
-        out.println("Batch detection completed successfully.");
-        out.println("Export directory: " + reportFile.getParentFile().getAbsolutePath());
         out.println("Report file: " + reportFile.getAbsolutePath());
     }
 
@@ -232,10 +235,11 @@ public class BatchDetectionCli {
         out.println("  java eu.startales.spacepixels.tools.BatchDetectionCli <fits_directory> <detection_config.json> [--auto-tune <low|medium|high|maximum>] [--tuner <calibrated|legacy>]");
         out.println();
         out.println("Notes:");
-        out.println("  - The input directory must contain only uncompressed 16-bit monochrome FITS files with identical dimensions.");
+        out.println("  - The input directory must contain only uncompressed unsigned 16-bit (BZERO 32768) monochrome FITS files with identical dimensions.");
         out.println("  - The configuration JSON should be a SpacePixels detection profile JSON (flat DetectionConfig fields plus autoTuneMaxCandidateFrames).");
         out.println("  - Packaged distributions include config/default_detection_profile.json as a starting point.");
         out.println("  - When Auto-Tune is enabled, the tuned configuration is used for the pipeline run and exported with the report.");
+        out.println("  - Only the report path and problems are printed; add -D" + DebugOutput.PROPERTY + "=true to the JVM options for progress and diagnostics.");
         out.println("  - --tuner selects the auto-tuning algorithm: calibrated (default, measures noise and sensitivity) or legacy (original score-based tuner).");
         out.println();
         out.println("Packaged launcher example:");

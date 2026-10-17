@@ -13,10 +13,12 @@ package eu.startales.spacepixels.tasks;
 import com.google.common.eventbus.EventBus;
 import nom.tam.fits.Fits;
 import eu.startales.spacepixels.events.PreviewGenerationFinishedEvent;
+import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 
 import java.awt.image.BufferedImage;
+import java.util.logging.Level;
 
 public class GeneratePreviewsTask implements Runnable {
     private final EventBus eventBus;
@@ -62,7 +64,7 @@ public class GeneratePreviewsTask implements Runnable {
 
             eventBus.post(new PreviewGenerationFinishedEvent(orig, stretched, true));
         } catch (Exception e) {
-            e.printStackTrace();
+            ApplicationWindow.logger.log(Level.WARNING, "Preview generation failed", e);
             eventBus.post(new PreviewGenerationFinishedEvent(null, null, false));
         }
     }

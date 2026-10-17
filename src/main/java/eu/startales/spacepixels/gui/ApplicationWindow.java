@@ -17,6 +17,7 @@ import com.google.gson.JsonParser;
 import eu.startales.spacepixels.events.FitsImportFinishedEvent;
 import eu.startales.spacepixels.events.FitsImportStartedEvent;
 import eu.startales.spacepixels.tasks.FitsImportTask;
+import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.reporting.ReportLookupProxyServer;
@@ -94,6 +95,7 @@ public class ApplicationWindow {
     public static volatile boolean OOM_FLAG = false;
 
     public static void main(String[] args) {
+        DebugOutput.configureApplicationLogging();
         // --- Global Uncaught Exception Handler for OutOfMemoryError ---
         Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
             Throwable rootCause = e;

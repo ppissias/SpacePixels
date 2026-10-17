@@ -51,7 +51,9 @@ public class FitsFormatChecker {
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
+            if (DebugOutput.isEnabled()) {
+                e.printStackTrace();
+            }
         }
         return FitsFormat.UNSUPPORTED;
     }

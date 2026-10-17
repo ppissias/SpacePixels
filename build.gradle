@@ -180,6 +180,13 @@ tasks.register('batchDetect', JavaExec) {
     }
 }
 
+// Opt-in console diagnostics for the app and the tools, e.g. -PspacepixelsDebug (otherwise only problems are printed)
+tasks.withType(JavaExec).configureEach {
+    if (project.hasProperty('spacepixelsDebug')) {
+        systemProperty 'spacepixels.debug', 'true'
+    }
+}
+
 // Opt-in larger heap for real-data diagnostic tests, e.g. -PtestMaxHeap=6g
 tasks.withType(Test).configureEach {
     if (project.hasProperty('testMaxHeap')) {

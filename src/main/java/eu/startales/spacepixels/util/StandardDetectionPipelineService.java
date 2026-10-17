@@ -53,13 +53,13 @@ final class StandardDetectionPipelineService {
         if (safetyPrompt != null) {
             ImageProcessing.DetectionSummary detectionSummary = DetectionPipelineSupport.summarizeDetections(executionData.getPipelineResult());
             if (!safetyPrompt.shouldProceed(detectionSummary)) {
-                System.out.println("Report generation aborted by UI callback. Detection count: " + detectionSummary.totalDetections);
+                DebugOutput.println("Report generation aborted by UI callback. Detection count: " + detectionSummary.totalDetections);
                 return null;
             }
             reportInclusion = detectionSummary.reportInclusion();
         }
 
-        System.out.println("\n--- PHASE 5: Exporting Visualizations ---");
+        DebugOutput.println("\n--- PHASE 5: Exporting Visualizations ---");
         if (progressListener != null) {
             progressListener.onProgressUpdate(90, "Exporting tracks and generating HTML report...");
         }
@@ -90,7 +90,7 @@ final class StandardDetectionPipelineService {
         long startTime = System.currentTimeMillis();
         int numFrames = cachedFileInfo.length;
 
-        System.out.println("\n--- Loading " + numFrames + " FITS files for JTransient Engine ---");
+        DebugOutput.println("\n--- Loading " + numFrames + " FITS files for JTransient Engine ---");
 
         List<ImageFrame> framesForLibrary = new ArrayList<>();
         List<short[][]> rawFramesForExport = new ArrayList<>();
@@ -120,7 +120,7 @@ final class StandardDetectionPipelineService {
 
         DetectionPipelineSupport.logPipelineFrameTimingPayload("Standard pipeline", framesForLibrary, cachedFileInfo);
 
-        System.out.println("\n--- Passing data to JTransient Engine ---");
+        DebugOutput.println("\n--- Passing data to JTransient Engine ---");
         if (progressListener != null) {
             progressListener.onProgressUpdate(20, "Initializing JTransient Engine...");
         }
@@ -128,7 +128,7 @@ final class StandardDetectionPipelineService {
         DetectionConfig effectiveConfig = DetectionPipelineSupport.createEffectiveDetectionConfig(config, framesForLibrary.size());
 
         JTransientEngine engine = new JTransientEngine();
-        JTransientEngine.DEBUG = true;
+        DebugOutput.applyToEngine();
 
         PipelineResult result;
         try {
@@ -141,7 +141,7 @@ final class StandardDetectionPipelineService {
         result = DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain(result);
 
         long pipelineDuration = System.currentTimeMillis() - startTime;
-        System.out.println("Total Pipeline Time: " + pipelineDuration + "ms");
+        DebugOutput.println("Total Pipeline Time: " + pipelineDuration + "ms");
 
         return new ImageProcessing.PipelineExecutionData(result, effectiveConfig, cachedFileInfo, rawFramesForExport, pipelineDuration);
     }
