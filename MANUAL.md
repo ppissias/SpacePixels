@@ -145,7 +145,7 @@ SpacePixels checks the quality of every frame (blank, blurred or failed frames a
 
 The report is a folder named `detections_<date>_<time>` next to your frames; open `detection_report.html` in it with any browser.
 
-If a run finds a very large number of objects, a summary first lists them by kind and asks whether to generate the report. Moving-object tracks, streak tracks, single streaks and suspected streak groupings are always included. Each other group that this run measured, and that found something, has an **In report** box, ticked to start with. Untick a group to leave it out of this report: its section, crops and animations are not written, and the line under the list says how many of these detections the report will still include. A group you had switched off before the run is not listed. The detection settings are not changed, so the next run still measures those groups. Many tracks or anomalies usually mean the settings are too sensitive for this session: try a lower profile.
+If a run finds a very large number of objects, a summary first lists them by kind and asks whether to generate the report. Moving-object tracks, streak tracks and single streaks are always included. Each other group that this run measured, and that found something, has an **In report** box, ticked to start with. Untick a group to leave it out of this report: its section, crops and animations are not written, and the line under the list says how many of these detections the report will still include. A group you had switched off before the run is not listed. The detection settings are not changed, so the next run still measures those groups. Many tracks or anomalies usually mean the settings are too sensitive for this session: try a lower profile.
 
 ---
 
@@ -157,7 +157,6 @@ The report starts with an overview, then the results. **Diagnostics** comes near
 |---|---|---|
 | **Moving-object tracks** (T#) | a point that moves in a straight line at a steady speed through several frames | asteroids, comets |
 | **Streaks** (S#) and **streak tracks** (ST#) | elongated trails, in one frame or several | satellites, aircraft, fast asteroids |
-| **Suspected streak tracks** (SST#) | fragments of a faint trail in one frame | faint satellites |
 | **Single-frame anomalies** (A#) | a bright point in one frame only | flashes, glints, cosmic rays |
 | **Slow-mover candidates** (DS#) | an elongated shape in the stack of all frames | very slow asteroids and comets |
 | **Local rescue candidates** (LR#) and **activity clusters** (LC#) | faint detections that line up or cluster | very faint movers, to be checked by eye |
@@ -173,8 +172,9 @@ Under the title, one line describes the session: field, date and time span, fram
 
 Below the cards is **the session**: the median stack of the frames kept, with switches over it.
 
-- **Detections** (on at first) draws every result with its label and colour, as on the detection map. The legend below the picture explains the prefixes and gives their counts: T for moving-object tracks, ST for confirmed streak tracks, SST for suspected streak tracks, and so on. The number identifies the object; A12 is single-frame anomaly 12.
+- **Detections** (on at first) draws every result with its label and colour, as on the detection map. The legend below the picture explains the prefixes and gives their counts: T for moving-object tracks, ST for confirmed streak tracks, A for single-frame anomalies, and so on. The number identifies the object; A12 is single-frame anomaly 12.
 - **Detected variables** marks the measured variable-star candidates V1, V2 and so on in magenta. Click a label to open its candidate card. These measured candidates are separate from the known variables on the Catalogue layer.
+- **Data area** (on at first) outlines in blue where every kept frame has image data, a few pixels in from the black registration border and the image edge. A sentence under the picture gives its share of the frame and, when one frame alone costs a noticeable part of it, names that frame. The detection map shows the same outline.
 - **Star mask** shows in red what the detection treated as stars: hover over the button to see it, click to keep it.
 - **Catalogue** names what is known in the field: Messier, NGC, IC and Sharpless objects with their outlines and common names, bright stars with a proper name, and the brightest variable stars with an old designation (at most 15). It needs the sky catalogue, fetched before **Detect Moving Targets** (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)). Survey numbers that nobody knows are left out.
 
@@ -488,7 +488,7 @@ In most sessions you only need Auto-Tune and the profile. Change single settings
 - Objects that cross bright stars are hidden by the star mask; the Star Mask Explorer shows where.
 - Objects that hardly move during the session end up in the median stack and are masked. Use a longer session, or look at the slow-mover candidates.
 
-**Frames were left out.** Quality control rejects blank frames, failed registrations, and frames much worse than the rest (clouds, wind, focus). The report lists every rejected frame and the reason.
+**Frames were left out.** Quality control rejects blank frames, failed registrations, a frame shifted so far from the others that keeping it would cost every frame 5 % of the sky, and frames much worse than the rest (clouds, wind, focus). The sky and the stars of each frame are measured where every frame has image data, so a frame with a wider black registration border is compared fairly. The report lists every rejected frame and the reason.
 
 **No identification buttons.** Plate-solve one frame (section [3, step 2](#step-2-optional-plate-solve-one-frame)). The buttons that show results **Here** need SpacePixels to be running.
 
