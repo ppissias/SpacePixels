@@ -28,8 +28,8 @@ public class ManualTransientInspectionTask implements Runnable {
 
     /**
      * Runs the engine on all frames of the session and opens the inspection window, with the shared stretch. The
-     * engine gets a copy of the settings: it raises the void radius for its own run, which must not reach the
-     * settings panel or the saved profile.
+     * engine gets a copy of the settings taken at the click, so nothing a run changes can reach the settings panel or
+     * the saved profile, and later edits don't affect the running inspection.
      */
     public ManualTransientInspectionTask(EventBus eventBus, ImageProcessing preProcessing, DetectionConfig config,
                                          StretchPanel stretchPanel) {
