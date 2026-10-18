@@ -9,6 +9,7 @@ package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.quality.FrameQualityAnalyzer;
 import nom.tam.fits.BasicHDU;
@@ -143,7 +144,8 @@ public final class AutoTuneCandidatePoolBuilder {
 
                 short[][] pixelData = (short[][]) kernel;
                 // Quality scoring is driven by DetectionConfig's dedicated quality-only thresholds.
-                FrameQualityAnalyzer.FrameMetrics metrics = FrameQualityAnalyzer.evaluateFrame(pixelData, baseConfig);
+                FrameQualityAnalyzer.FrameMetrics metrics = FrameQualityAnalyzer.evaluateFrame(pixelData, baseConfig,
+                        DataArea.ofFrame(pixelData));
                 double score = metrics.backgroundNoise * metrics.medianFWHM;
                 if (!Double.isFinite(score) || score <= 0.0d) {
                     score = Double.POSITIVE_INFINITY;

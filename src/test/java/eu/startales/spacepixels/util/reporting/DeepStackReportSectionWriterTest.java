@@ -32,8 +32,6 @@ public class DeepStackReportSectionWriterTest {
         config.masterSlowMoverSigmaMultiplier = 4.0;
         config.masterSlowMoverGrowSigmaMultiplier = 3.5;
         config.slowMoverMedianSupportMaxOverlapFraction = 1.0;
-        config.edgeMarginPixels = 4;
-        config.voidProximityRadius = 4;
         // Disable the frame-evidence gates so the stationary synthetic source survives and its diagnostics render.
         config.slowMoverMinFrameSupport = 0.0;
         config.slowMoverMaxStationaryLikelihood = 100.0;

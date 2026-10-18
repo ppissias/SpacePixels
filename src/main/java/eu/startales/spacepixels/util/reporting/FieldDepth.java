@@ -159,7 +159,8 @@ final class FieldDepth {
         if (patches.isEmpty()) {
             return result;
         }
-        DetectionConfig config = patchConfig(context.config);
+        // Patch cut-outs are searched up to a few pixels from their edge, with the run's thresholds.
+        DetectionConfig config = context.config;
         for (PipelineTelemetry.FrameQualityStat stat : telemetry.frameQualityStats) {
             if (stat.rejected || stat.frameIndex < 0 || stat.frameIndex >= context.rawFrames.size()) {
                 continue;
@@ -178,19 +179,6 @@ final class FieldDepth {
         return result;
     }
 
-    /**
-     * The run's detection settings for a small cut-out of a frame: the same thresholds, but the checks against the
-     * frame borders scaled back, since the borders of a cut-out are not empty sky (a void radius grown for the drift
-     * would reject every star of a small patch).
-     */
-    static DetectionConfig patchConfig(DetectionConfig config) {
-        com.google.gson.Gson gson = new com.google.gson.Gson();
-        DetectionConfig copy = gson.fromJson(gson.toJson(config), DetectionConfig.class);
-        DetectionConfig defaults = new DetectionConfig();
-        copy.voidProximityRadius = Math.min(copy.voidProximityRadius, defaults.voidProximityRadius);
-        copy.edgeMarginPixels = Math.min(copy.edgeMarginPixels, 5);
-        return copy;
-    }
 
     /** Adds the stars of a patch, with whether each was found; leaves the patch out when its brightest stars are mostly missed. */
     private static void count(Patch patch, short[][] data, DetectionConfig config, List<double[]> stars) {

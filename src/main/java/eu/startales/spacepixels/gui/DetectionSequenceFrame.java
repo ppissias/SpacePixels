@@ -14,6 +14,7 @@ import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import nom.tam.fits.Fits;
 
@@ -69,8 +70,9 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
             }
             data = (short[][]) kernel;
         }
+        DataArea frameArea = DataArea.ofFrame(data);
         List<SourceExtractor.DetectedObject> objects = SourceExtractor.extractSources(
-                data, config.detectionSigmaMultiplier, config.minDetectionPixels, config).objects;
+                data, config.detectionSigmaMultiplier, config.minDetectionPixels, config, frameArea, frameArea).objects;
         int stars = 0;
         int streaks = 0;
         for (SourceExtractor.DetectedObject object : objects) {

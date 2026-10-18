@@ -15,6 +15,7 @@ import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import nom.tam.fits.Fits;
 
@@ -120,7 +121,9 @@ public final class PlateCorrectionFitter {
                 notes.add(file.getFileName() + ": not 16-bit data, left out.");
                 continue;
             }
-            List<SourceExtractor.DetectedObject> objects = SourceExtractor.extractSources(data, 5.0, 5, new DetectionConfig()).objects;
+            DataArea frameArea = DataArea.ofFrame(data);
+            List<SourceExtractor.DetectedObject> objects = SourceExtractor.extractSources(data, 5.0, 5, new DetectionConfig(),
+                    frameArea, frameArea).objects;
             FramePairs pairs = FramePairs.match(file.getFileName(), stars, header, objects, width, height, file.getObservationTimestamp());
             if (pairs.size() >= MIN_FRAME_PAIRS) {
                 frames.add(pairs);
