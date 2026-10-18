@@ -198,7 +198,7 @@ final class PipelineDiagnosticsSectionWriter {
         if (!inclusion.commonMotion) {
             empty.add("common-motion groups (left out of this report)");
         } else if (reportContext.config != null && reportContext.config.enableCommonMotionRejection) {
-            addResult(cards, empty, commonMotionGroups, "Common-motion groups", "common-motion");
+            addResult(cards, empty, commonMotionGroups, "Common-motion groups · likely noise", "common-motion");
         } else {
             empty.add("common motion (switched off)");
         }
@@ -579,17 +579,21 @@ final class PipelineDiagnosticsSectionWriter {
 
         report.println("<div class='panel compact-diagnostics-panel'>");
         report.println("<h2>Quality Control: Rejected Frames</h2>");
+        report.println("<p class='compact-note'>Each reason includes the measured value and the rejection limit applied in this run, where available. "
+                + "Limits come from the engine's robust session statistics, rather than an arithmetic mean.</p>");
         report.println("<div class='scroll-box compact-table-box'>");
-        report.println("<table><tr><th>Frame</th><th>Filename</th><th>Median Ecc</th><th>Bright-Star Median Ecc</th><th>Bright Shape Stars</th><th>Rejection Reason</th></tr>");
+        report.println("<table><thead><tr><th>Frame</th><th>Filename</th><th>Median Ecc</th><th>Bright-Star Median Ecc</th><th>Bright Shape Stars</th><th>Rejection Reason</th></tr></thead><tbody>");
         for (PipelineTelemetry.FrameRejectionStat rej : pipelineTelemetry.rejectedFrames) {
             report.println("<tr><td>" + (rej.frameIndex + 1) + "</td>");
             report.println("<td>" + DetectionReportGenerator.escapeHtml(rej.filename) + "</td>");
             report.println("<td>" + DetectionReportGenerator.formatOptionalMetric(rej.medianEccentricity) + "</td>");
             report.println("<td>" + DetectionReportGenerator.formatOptionalMetric(rej.brightStarMedianEccentricity) + "</td>");
             report.println("<td>" + rej.brightStarShapeStarCount + "</td>");
-            report.println("<td class='alert'>" + DetectionReportGenerator.escapeHtml(rej.reason) + "</td></tr>");
+            String details = FrameRejectionExplanation.details(pipelineTelemetry, rej);
+            report.println("<td class='alert rejection-reason'>" + DetectionReportGenerator.escapeHtml(rej.reason)
+                    + (details.isEmpty() ? "" : "<small>" + DetectionReportGenerator.escapeHtml(details) + "</small>") + "</td></tr>");
         }
-        report.println("</table>");
+        report.println("</tbody></table>");
         report.println("</div>");
         report.println("</div>");
     }

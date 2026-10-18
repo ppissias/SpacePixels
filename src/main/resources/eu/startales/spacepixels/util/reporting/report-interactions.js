@@ -6,10 +6,35 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = {matchesMarker};
   const doc = root.document;
   if (!doc) return;
-  const select = doc.getElementById('report-finding-select');
-  function jump() {
-    if (select && select.value) root.location.hash = select.value;
+  const toolbar = doc.querySelector('.report-toolbar');
+  function sizeToolbar() {
+    if (toolbar) doc.documentElement.style.setProperty('--report-toolbar-height', toolbar.getBoundingClientRect().height + 'px');
   }
+  if (toolbar && root.ResizeObserver) new root.ResizeObserver(sizeToolbar).observe(toolbar);
+  root.addEventListener('resize', sizeToolbar);
+  sizeToolbar();
+  const select = doc.getElementById('report-finding-select');
+  function syncFinding() {
+    if (!select) return;
+    const anchor = root.location.hash.substring(1);
+    const option = Array.from(select.options).find(o => o.value === anchor);
+    if (option) select.value = anchor;
+    const previous = doc.getElementById('report-previous');
+    const next = doc.getElementById('report-next');
+    if (previous) previous.disabled = select.options.length < 2 || select.selectedIndex === 1;
+    if (next) next.disabled = select.options.length < 2 || select.selectedIndex === select.options.length - 1;
+  }
+  function jump() {
+    if (select && select.value) {
+      const target = doc.getElementById(select.value);
+      for (let node = target; node; node = node.parentElement) if (node.tagName === 'DETAILS') node.open = true;
+      root.location.hash = select.value;
+      if (target) target.scrollIntoView({block: 'start'});
+      syncFinding();
+    }
+  }
+  root.addEventListener('hashchange', syncFinding);
+  syncFinding();
   if (select) select.addEventListener('change', jump);
   for (const [id, step] of [['report-previous', -1], ['report-next', 1]]) {
     const button = doc.getElementById(id);
@@ -46,7 +71,17 @@
     button.addEventListener('click', () => {
       const show = button.getAttribute('aria-pressed') !== 'true';
       button.setAttribute('aria-pressed', String(show));
-      for (const layer of button.closest('.report-map').querySelectorAll('[data-category="' + button.dataset.reportCategory + '"]')) layer.style.display = show ? '' : 'none';
+      const map = button.closest('.report-map');
+      const category = button.dataset.reportCategory;
+      // A category click also enables its parent layer if the broad Detections/Variables switch was off.
+      const layerName = category === 'V' ? 'variables' : 'detections';
+      const layerToggle = map.querySelector('.sp-toggle[data-layer="' + layerName + '"]');
+      if (show && layerToggle && !layerToggle.classList.contains('active')) layerToggle.click();
+      if (layerToggle && category === 'V') {
+        layerToggle.classList.toggle('active', show);
+        layerToggle.setAttribute('aria-pressed', String(show));
+      }
+      for (const layer of map.querySelectorAll('[data-category="' + category + '"]')) layer.style.display = show ? '' : 'none';
     });
   }
 

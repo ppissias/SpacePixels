@@ -25,7 +25,8 @@ final class CreativeTributeRenderer {
         PULSE,
         DIAMOND,
         RESIDUAL,
-        DUST
+        DUST,
+        VARIABLE
     }
 
     private static class CreativeTributeLayout {
@@ -141,7 +142,8 @@ final class CreativeTributeRenderer {
                                                     List<TrackLinker.Track> streakTracks,
                                                     List<TrackLinker.Track> movingTargets,
                                                     List<SourceExtractor.DetectedObject> slowMoverCandidates,
-                                                    PipelineTelemetry pipelineTelemetry, ExportVisualizationSettings settings) {
+                                                    PipelineTelemetry pipelineTelemetry, ExportVisualizationSettings settings,
+                                                    DetectionReportContext context) {
         allTransients = safeList(allTransients);
         unclassifiedTransients = safeList(unclassifiedTransients);
         anomalies = safeList(anomalies);
@@ -168,7 +170,8 @@ final class CreativeTributeRenderer {
                 singleStreaks,
                 streakTracks,
                 movingTargets,
-                slowMoverCandidates
+                slowMoverCandidates,
+                context.data
         );
 
         short[][] croppedBackground = TrackVisualizationRenderer.robustEdgeAwareCrop(
@@ -226,6 +229,7 @@ final class CreativeTributeRenderer {
             }
         }
         drawRankedMotionLabels(g2d, movingTargets, streakTracks, layout);
+        drawSessionContext(g2d, context, layout);
 
         float vignetteRadius = (float) (Math.max(layout.outputWidth, layout.outputHeight) * 0.82);
         RadialGradientPaint vignette = new RadialGradientPaint(
@@ -245,13 +249,8 @@ final class CreativeTributeRenderer {
 
         int panelPadding = Math.max(18, Math.min(34, layout.outputWidth / 35));
         int interPanelGap = Math.max(14, panelPadding / 2);
-        int leftPanelWidth = Math.max(340, (int) Math.round(layout.outputWidth * 0.50));
-        int maxLegendWidth = layout.outputWidth - leftPanelWidth - (panelPadding * 2) - interPanelGap;
-        int legendWidth = Math.max(250, Math.min((int) Math.round(layout.outputWidth * 0.28), maxLegendWidth));
-        if (legendWidth > maxLegendWidth) {
-            legendWidth = maxLegendWidth;
-            leftPanelWidth = layout.outputWidth - legendWidth - (panelPadding * 2) - interPanelGap;
-        }
+        int leftPanelWidth = (int) Math.round((layout.outputWidth - panelPadding * 2 - interPanelGap) * 0.56);
+        int legendWidth = layout.outputWidth - leftPanelWidth - (panelPadding * 2) - interPanelGap;
         int leftPanelHeight = layout.headerHeight - (panelPadding * 2);
         g2d.setColor(new Color(10, 10, 16, 190));
         g2d.fillRoundRect(panelPadding, panelPadding, leftPanelWidth, leftPanelHeight, 24, 24);
@@ -260,7 +259,7 @@ final class CreativeTributeRenderer {
         g2d.drawRoundRect(panelPadding, panelPadding, leftPanelWidth, leftPanelHeight, 24, 24);
 
         String titleText = "Signal Weave of the Session";
-        String subtitleText = "Creative analysis by Codex";
+        String subtitleText = "A field atlas of motion, flicker and uncertainty · Codex";
         int panelTextWidth = leftPanelWidth - 48;
         Font titleFont = fitFontToWidth(
                 g2d,
@@ -297,6 +296,8 @@ final class CreativeTributeRenderer {
         drawCreativeMetric(g2d, textX, y, "unresolved", formatCompactCount(signalSummary.unclassifiedTransientCount), new Color(255, 174, 92), detailFont);
         drawCreativeMetric(g2d, textX + metricColumnGap, y, "peak frame", peakFrameValue(signalSummary), new Color(166, 255, 180), detailFont);
         drawCreativeMetric(g2d, textX + (metricColumnGap * 2), y, "shape hints", String.valueOf(signalSummary.deepStackHintCount), new Color(186, 122, 255), detailFont);
+        drawCreativeMetric(g2d, textX + (metricColumnGap * 3), y, "variables",
+                String.valueOf(context.data == null ? 0 : context.data.variableCandidates.size()), new Color(115, 240, 195), detailFont);
 
         int balanceY = y + 30;
         drawSignalCompositionBar(g2d, textX, balanceY, leftPanelWidth - 48, 12, signalSummary);
@@ -315,10 +316,10 @@ final class CreativeTributeRenderer {
         drawFittedString(g2d, "Active frames: " + signalSummary.framesWithTransients + "/" + signalSummary.totalFrames
                 + " | Mean active-frame load: " + String.format(Locale.US, "%.1f", signalSummary.meanTransientsPerActiveFrame), textX, y, panelTextWidth);
         y += 21;
-        drawFittedString(g2d, "Dominant motion: " + signalSummary.dominantMotion
-                + " | Longest confirmed path: " + String.format(Locale.US, "%.1f px", signalSummary.longestPath), textX, y, panelTextWidth);
+        drawFittedString(g2d, "Image-space trend: " + signalSummary.dominantMotion
+                + " | Longest linked path: " + String.format(Locale.US, "%.1f px", signalSummary.longestPath), textX, y, panelTextWidth);
 
-        int legendHeight = Math.min(layout.headerHeight - (panelPadding * 2), 208);
+        int legendHeight = layout.headerHeight - (panelPadding * 2);
         int legendX = panelPadding + leftPanelWidth + interPanelGap;
         int legendY = panelPadding;
         g2d.setColor(new Color(10, 10, 16, 175));
@@ -328,24 +329,65 @@ final class CreativeTributeRenderer {
 
         g2d.setFont(new Font("Segoe UI", Font.BOLD, Math.max(14, Math.min(18, layout.outputWidth / 85))));
         g2d.setColor(Color.WHITE);
-        g2d.drawString("What the colors and symbols mean", legendX + 18, legendY + 28);
+        drawFittedString(g2d, "Reading the weave", legendX + 18, legendY + 28, legendWidth - 36);
 
         int legendRowY = legendY + 52;
         Font legendFont = new Font("Segoe UI", Font.PLAIN, Math.max(12, Math.min(15, layout.outputWidth / 95)));
-        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(66, 210, 255), "Moving object track (line + nodes)", legendFont, CreativeLegendGlyph.TRACK);
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(66, 210, 255), "Linked moving-object paths", legendFont, CreativeLegendGlyph.TRACK);
         legendRowY += 24;
-        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 204, 102), "Confirmed streak track / single streak", legendFont, CreativeLegendGlyph.STREAK);
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 204, 102), "Streak tracks / single streaks", legendFont, CreativeLegendGlyph.STREAK);
         legendRowY += 24;
-        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 102, 204), "Anomaly pulse (circle + crosshair)", legendFont, CreativeLegendGlyph.PULSE);
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 102, 204), "Single-frame anomaly pulses", legendFont, CreativeLegendGlyph.PULSE);
         legendRowY += 24;
         drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(186, 122, 255), "Deep-stack hint (diamond)", legendFont, CreativeLegendGlyph.DIAMOND);
         legendRowY += 24;
         drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 174, 92), "Unresolved residue", legendFont, CreativeLegendGlyph.RESIDUAL);
         legendRowY += 24;
-        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(150, 220, 255), "Transient dust time map (cyan -> magenta)", legendFont, CreativeLegendGlyph.DUST);
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(150, 220, 255), "Detection time: cyan to magenta", legendFont, CreativeLegendGlyph.DUST);
+        legendRowY += 24;
+        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(115, 240, 195), "Variable candidates: double rings", legendFont, CreativeLegendGlyph.VARIABLE);
+        legendRowY += 24;
+        g2d.setFont(legendFont);
+        g2d.setColor(new Color(115, 190, 255));
+        g2d.drawString("- - Shared data-area boundary", legendX + 18, legendRowY + 2);
 
         g2d.dispose();
         return tribute;
+    }
+
+    private static void drawSessionContext(Graphics2D graphics, DetectionReportContext context, CreativeTributeLayout layout) {
+        Graphics2D g = (Graphics2D) graphics.create();
+        try {
+            g.clipRect(0, layout.plotOffsetY, layout.outputWidth, layout.outputHeight);
+            if (context.dataArea != null) {
+                var outline = context.dataArea.outline();
+                java.awt.geom.Path2D path = new java.awt.geom.Path2D.Double();
+                for (int i = 0; i < outline.size(); i++) {
+                    double[] p = outline.get(i);
+                    if (i == 0) path.moveTo(creativeX(p[0], layout), creativeY(p[1], layout));
+                    else path.lineTo(creativeX(p[0], layout), creativeY(p[1], layout));
+                }
+                if (!outline.isEmpty()) path.closePath();
+                g.setColor(new Color(115, 190, 255, 175));
+                g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10, new float[]{7, 6}, 0));
+                g.draw(path);
+            }
+            if (context.data == null) return;
+            g.setFont(new Font("Segoe UI", Font.BOLD, 13));
+            for (var finding : context.data.findings) {
+                if (finding.starId() == null || !isInsideCreativeLayout(finding.x(), finding.y(), layout)) continue;
+                int x = creativeX(finding.x(), layout), y = creativeY(finding.y(), layout);
+                g.setColor(new Color(115, 240, 195, 35));
+                g.fillOval(x - 18, y - 18, 36, 36);
+                g.setColor(new Color(115, 240, 195));
+                g.setStroke(new BasicStroke(1.6f));
+                g.drawOval(x - 9, y - 9, 18, 18);
+                g.drawOval(x - 14, y - 14, 28, 28);
+                g.drawString(finding.id(), x + 18, y - 12);
+            }
+        } finally {
+            g.dispose();
+        }
     }
 
     private static void drawCreativeTransientDust(Graphics2D g2d,
@@ -557,7 +599,7 @@ final class CreativeTributeRenderer {
                                                List<TrackLinker.Track> streakTracks,
                                                CreativeTributeLayout layout) {
         List<CreativeTrackSignal> trackSignals = new ArrayList<>();
-        addRankedSignals(trackSignals, movingTargets, "M", new Color(77, 166, 255));
+        addRankedSignals(trackSignals, movingTargets, "T", new Color(77, 166, 255));
         addRankedSignals(trackSignals, streakTracks, "ST", new Color(255, 204, 102));
         trackSignals.sort(Comparator.comparingDouble((CreativeTrackSignal signal) -> signal.pathLength).reversed());
 
@@ -573,7 +615,7 @@ final class CreativeTributeRenderer {
                 continue;
             }
 
-            String text = signal.label + (i + 1) + " " + String.format(Locale.US, "%.0fpx", signal.pathLength);
+            String text = signal.label + " " + String.format(Locale.US, "%.0fpx", signal.pathLength);
             int x = creativeX(anchor.x, layout) + 8;
             int y = creativeY(anchor.y, layout) - 8;
             int textWidth = metrics.stringWidth(text);
@@ -644,7 +686,7 @@ final class CreativeTributeRenderer {
             g2d.fillRect(x1, chartY + chartHeight - barHeight, barWidth, barHeight);
         }
 
-        String label = "Frame activity ribbon - peak F" + signalSummary.peakFrameIndex + " (" + signalSummary.peakFrameCount + " detections)";
+        String label = "Frame activity ribbon - peak F" + (signalSummary.peakFrameIndex + 1) + " (" + signalSummary.peakFrameCount + " detections)";
         Font ribbonFont = new Font("Segoe UI", Font.PLAIN, Math.max(11, Math.min(15, layout.outputWidth / 110)));
         g2d.setFont(ribbonFont);
         g2d.setColor(new Color(225, 235, 245, 210));
@@ -672,29 +714,17 @@ final class CreativeTributeRenderer {
                                                  int width,
                                                  int height,
                                                  CreativeSignalSummary signalSummary) {
-        int total = Math.max(1,
-                signalSummary.pointTransientCount
-                        + signalSummary.streakLikeTransientCount
-                        + signalSummary.anomalyCount
-                        + signalSummary.movingTrackCount
-                        + signalSummary.streakTrackCount
-                        + signalSummary.singleStreakCount
-                        + signalSummary.deepStackHintCount
-                        + signalSummary.unclassifiedTransientCount);
+        int total = Math.max(1, signalSummary.rawTransientCount);
         int currentX = x;
         int barEndX = x + width;
         currentX = fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.pointTransientCount, total, new Color(150, 220, 255));
-        currentX = fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.streakLikeTransientCount + signalSummary.streakTrackCount + signalSummary.singleStreakCount, total, new Color(255, 204, 102));
-        currentX = fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.anomalyCount, total, new Color(255, 102, 204));
-        currentX = fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.movingTrackCount, total, new Color(77, 166, 255));
-        currentX = fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.deepStackHintCount, total, new Color(186, 122, 255));
-        fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.unclassifiedTransientCount, total, new Color(255, 174, 92));
+        fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.streakLikeTransientCount, total, new Color(255, 204, 102));
 
         g2d.setColor(new Color(255, 255, 255, 60));
         g2d.drawRoundRect(x, y, width, height, height, height);
         g2d.setFont(new Font("Segoe UI", Font.PLAIN, 10));
         g2d.setColor(new Color(210, 210, 220));
-        drawFittedString(g2d, "signal balance: point / streak / anomaly / motion / candidates / residue", x, y + height + 13, width);
+        drawFittedString(g2d, "Post-veto detections: point-like / streak-like", x, y + height + 13, width);
     }
 
     private static Font fitFontToWidth(Graphics2D g2d, Font baseFont, String text, int maxWidth, float minSize) {
@@ -754,7 +784,8 @@ final class CreativeTributeRenderer {
                                                                      List<TrackLinker.Track> singleStreaks,
                                                                      List<TrackLinker.Track> streakTracks,
                                                                      List<TrackLinker.Track> movingTargets,
-                                                                     List<SourceExtractor.DetectedObject> slowMoverCandidates) {
+                                                                     List<SourceExtractor.DetectedObject> slowMoverCandidates,
+                                                                     ReportData reportData) {
         int imageWidth = backgroundData[0].length;
         int imageHeight = backgroundData.length;
 
@@ -766,6 +797,9 @@ final class CreativeTributeRenderer {
         includeCreativeTrackBounds(bounds, streakTracks);
         includeCreativeTrackBounds(bounds, movingTargets);
         includeCreativeDetectionBounds(bounds, slowMoverCandidates);
+        if (reportData != null) for (var finding : reportData.findings) {
+            if (finding.starId() != null) includeCreativePoint(bounds, finding.x(), finding.y());
+        }
 
         int cropX = 0;
         int cropY = 0;
@@ -904,6 +938,11 @@ final class CreativeTributeRenderer {
             case DIAMOND -> drawCreativeLegendDiamondGlyph(g2d, x, y, color);
             case RESIDUAL -> drawCreativeLegendResidualGlyph(g2d, x, y, color);
             case DUST -> drawCreativeLegendDustGlyph(g2d, x, y);
+            case VARIABLE -> {
+                g2d.setColor(color);
+                g2d.drawOval(x + 1, y - 7, 14, 14);
+                g2d.drawOval(x + 4, y - 4, 8, 8);
+            }
         }
         g2d.setFont(font);
         g2d.setColor(new Color(225, 225, 225));
@@ -1003,12 +1042,13 @@ final class CreativeTributeRenderer {
         if (tracks == null) {
             return;
         }
-        for (TrackLinker.Track track : tracks) {
+        for (int index = 0; index < tracks.size(); index++) {
+            TrackLinker.Track track = tracks.get(index);
             double pathLength = computeTrackPathLength(track);
             if (pathLength <= 0.0) {
                 continue;
             }
-            trackSignals.add(new CreativeTrackSignal(track, labelPrefix, color, pathLength));
+            trackSignals.add(new CreativeTrackSignal(track, labelPrefix + (index + 1), color, pathLength));
         }
     }
 
@@ -1084,7 +1124,7 @@ final class CreativeTributeRenderer {
         if (signalSummary.peakFrameCount <= 0) {
             return "n/a";
         }
-        return "F" + signalSummary.peakFrameIndex;
+        return "F" + (signalSummary.peakFrameIndex + 1);
     }
 
     private static String formatCompactCount(int value) {
@@ -1153,7 +1193,7 @@ final class CreativeTributeRenderer {
         if (peakFrameCount == 0) {
             return "n/a";
         }
-        return "F" + peakFrameIndex + " (" + peakFrameCount + ")";
+        return "F" + (peakFrameIndex + 1) + " (" + peakFrameCount + ")";
     }
 
     static String buildCreativeSignalInterpretation(List<List<SourceExtractor.DetectedObject>> allTransients,
@@ -1175,15 +1215,15 @@ final class CreativeTributeRenderer {
 
         String opening;
         if (signalSummary.movingTrackCount > 0 && signalSummary.streakTrackCount > 0) {
-            opening = "The run contains both slower linked motion and faster streak geometry.";
+            opening = "Blue paths and gold streaks trace two kinds of change: linked point detections and elongated events.";
         } else if (signalSummary.movingTrackCount > 0) {
-            opening = "The strongest structure is slower linked motion across multiple frames.";
+            opening = "The blue threads connect point detections across frames. Repeated motion gives them structure, but does not identify the objects.";
         } else if (signalSummary.streakTrackCount + signalSummary.singleStreakCount > 0) {
-            opening = "The strongest structure is streak-like: brief, directional energy rather than point-track drift.";
+            opening = "Gold strokes dominate the classified motion: elongated detections, seen once or linked across frames.";
         } else if (signalSummary.anomalyCount > 0) {
-            opening = "The run is dominated by isolated high-energy flashes that did not form tracks.";
+            opening = "Magenta pulses mark isolated detections that did not form tracks. They are anomalies to inspect, not confirmed astronomical flashes.";
         } else {
-            opening = "The section is mostly a transient-field texture because no strong linked target dominated the run.";
+            opening = "No linked motion or single-frame event dominates this view. The faint texture records detections, not a claim of discovery.";
         }
 
         String unresolved;
@@ -1194,11 +1234,9 @@ final class CreativeTributeRenderer {
             unresolved = " No leftover unclassified transient population remained after classification.";
         }
 
-        return opening + unresolved + " The activity ribbon peaks at "
-                + computePeakTransientFrameLabel(allTransients)
-                + ", while confirmed linked motion trends "
-                + signalSummary.dominantMotion
-                + ".";
+        return opening + unresolved + (signalSummary.rawTransientCount > 0
+                ? " The activity ribbon peaks at " + computePeakTransientFrameLabel(allTransients) + "."
+                : " There are no transient detections to draw in the activity ribbon.");
     }
 
     static double computeLongestTrackPathPx(List<TrackLinker.Track> streakTracks, List<TrackLinker.Track> movingTargets) {
@@ -1274,19 +1312,19 @@ final class CreativeTributeRenderer {
         String horizontal = "";
 
         if (sumDy < -5.0) {
-            vertical = "north";
+            vertical = "up";
         } else if (sumDy > 5.0) {
-            vertical = "south";
+            vertical = "down";
         }
 
         if (sumDx > 5.0) {
-            horizontal = "east";
+            horizontal = "right";
         } else if (sumDx < -5.0) {
-            horizontal = "west";
+            horizontal = "left";
         }
 
         if (!vertical.isEmpty() && !horizontal.isEmpty()) {
-            return vertical + "-" + horizontal;
+            return vertical + " and " + horizontal;
         }
         if (!horizontal.isEmpty()) {
             return horizontal;

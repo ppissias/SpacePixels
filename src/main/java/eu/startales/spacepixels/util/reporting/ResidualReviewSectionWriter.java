@@ -92,10 +92,12 @@ final class ResidualReviewSectionWriter {
             return;
         }
         report.println("<h2 id='common-motion'>Common Motion</h2>");
-        report.println("<p class='section-lede'>Compact sources that share one displacement across at least three frames, "
-                + "and that sit well apart. Their observations were set aside before local rescue and activity clustering, "
-                + "because matching motion at separated places suggests hot pixels or a registration residual. "
-                + "A real pair with this motion is still listed here.</p>");
+        report.println("<p class='section-lede'><strong>These groups are most likely noise or moving artifacts.</strong> "
+                + "The common-motion filter looks for separated compact sources that share the same apparent displacement across frames. "
+                + "This pattern often comes from hot pixels, registration residuals or other systematic artifacts. "
+                + "Their detections are filtered out before further local rescue and activity clustering, "
+                + "so they do not become candidates in those stages. They remain here for inspection: "
+                + "shared motion is a warning, not proof, and a real pair can occasionally be grouped together.</p>");
 
         short[][] background = context.masterStackData != null
                 ? context.masterStackData
@@ -175,6 +177,7 @@ final class ResidualReviewSectionWriter {
         String css = String.format(Locale.US, "#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
         report.println("<div class='detection-card' id='finding-cm" + groupNumber + "' style='border-left-color: " + css + ";'>");
         report.println("<div class='detection-title' style='color: " + css + ";'>Common Motion Group CM" + groupNumber + "</div>");
+        report.println("<p class='astro-note'>Most likely noise or a moving artifact; filtered out before local rescue and activity clustering.</p>");
         report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>"
                 + group.sources.size() + " sources, " + group.sharedFrameCount + " shared frames."
                 + (shown < group.sources.size()

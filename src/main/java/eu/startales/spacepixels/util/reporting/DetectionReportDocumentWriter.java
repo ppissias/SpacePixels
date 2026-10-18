@@ -114,8 +114,13 @@ final class DetectionReportDocumentWriter {
             // Links, navigation and section anchors
             "a { color: #7fc2ff; }",
             "a:visited { color: #a9c9ff; }",
-            "[id] { scroll-margin-top: 64px; }",
-            ".report-nav { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: -10px -30px 24px -30px; padding: 10px 30px; background: rgba(32, 34, 36, 0.96); border-bottom: 1px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.35); }",
+            "[id] { scroll-margin-top: calc(var(--report-toolbar-height, 120px) + 12px); }",
+            ".report-toolbar { position: sticky; top: 0; z-index: 50; margin: -10px -30px 24px; padding: 10px 30px; background: rgba(32, 34, 36, 0.98); border-bottom: 1px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.35); }",
+            ".report-nav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }",
+            ".report-toolbar .report-controls { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid #3c4248; }",
+            ".report-toolbar .report-controls label { display: flex; align-items: center; gap: 6px; min-width: 0; }",
+            ".compact-table-box td.rejection-reason { white-space: normal; min-width: 280px; max-width: 480px; line-height: 1.5; }",
+            ".rejection-reason small { display: block; margin-top: 4px; color: #d6dee5; font-size: 12px; font-weight: normal; }",
             ".report-nav a { color: #d6e6f5; text-decoration: none; font-size: 13px; padding: 5px 11px; border-radius: 999px; background: #33373b; border: 1px solid #474d53; white-space: nowrap; }",
             ".report-nav a:hover { background: #3d4a57; border-color: #4da6ff; color: #ffffff; }",
             ".report-nav a .nav-count { color: #4da6ff; font-weight: bold; margin-left: 5px; }",
@@ -180,7 +185,7 @@ final class DetectionReportDocumentWriter {
         for (String line : DETECTION_REPORT_STYLE_LINES) {
             report.println(line);
         }
-        report.println(".report-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0}.report-controls select{max-width:320px;background:#222;color:#eee;padding:6px}.image-container{flex-wrap:wrap}.image-container>div{min-width:0;max-width:100%}.source-list li{min-width:0;box-sizing:border-box;flex-basis:min(360px,100%)}.detection-card{min-width:0;max-width:100%;box-sizing:border-box}.chart-controls{display:flex;gap:6px;margin:4px 0}.chart-controls button{font-size:11px;padding:3px 8px}.report-map-stage{position:relative;line-height:0}.report-map svg.sp-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.report-map svg.sp-layer a,.report-map svg.sp-layer text{pointer-events:all}.report-map img{display:block;width:100%}.report-filter{display:flex;flex-wrap:wrap;gap:12px;align-items:center;line-height:1.5;margin-bottom:12px}svg[data-report-chart]{touch-action:pan-y}.map-category-controls{line-height:1.5;margin:8px 0}.map-category-controls button[aria-pressed=false]{opacity:.5}@media(max-width:700px){body{padding:10px}.panel{padding:12px}.report-nav{margin-left:-10px;margin-right:-10px;padding-left:10px;padding-right:10px}.report-controls select{max-width:220px}.image-container{gap:10px}} ");
+        report.println(".report-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0}.report-controls select{max-width:320px;background:#222;color:#eee;padding:6px}.image-container{flex-wrap:wrap}.image-container>div{min-width:0;max-width:100%}.source-list li{min-width:0;box-sizing:border-box;flex-basis:min(360px,100%)}.detection-card{min-width:0;max-width:100%;box-sizing:border-box}.chart-controls{display:flex;gap:6px;margin:4px 0}.chart-controls button{font-size:11px;padding:3px 8px}.report-map-stage{position:relative;line-height:0}.report-map svg.sp-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.report-map svg.sp-layer a,.report-map svg.sp-layer text{pointer-events:all}.report-map img{display:block;width:100%}.report-filter{display:flex;flex-wrap:wrap;gap:12px;align-items:center;line-height:1.5;margin-bottom:12px}svg[data-report-chart]{touch-action:pan-y}.map-category-controls{line-height:1.5;margin:8px 0}.map-category-controls button[aria-pressed=false]{opacity:.5}@media(max-width:700px){body{padding:10px}.panel{padding:12px}.report-toolbar{margin-left:-10px;margin-right:-10px;padding-left:10px;padding-right:10px}.report-controls select{max-width:220px}.image-container{gap:10px}} ");
         report.println("</style></head><body>");
         report.println("<h1>SpacePixels Session Report</h1>");
     }

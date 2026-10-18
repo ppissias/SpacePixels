@@ -104,6 +104,11 @@ final class GlobalMapsSectionWriter {
 
     /** The same labels, colours and counts on the overview picture and the full detection map. */
     static String detectionLegendHtml(DetectionReportContext reportContext, List<TrackLinker.Track> localRescueTracks) {
+        return detectionLegendHtml(reportContext, localRescueTracks, false);
+    }
+
+    static String detectionLegendHtml(DetectionReportContext reportContext, List<TrackLinker.Track> localRescueTracks,
+                                      boolean interactive) {
         return buildGlobalTrajectoryLegendHtml(
                 reportContext.movingTargets.size(),
                 reportContext.streakTracks.size(),
@@ -112,7 +117,7 @@ final class GlobalMapsSectionWriter {
                 reportContext.slowMoverCandidates.size(),
                 reportContext.anomalies.size(),
                 reportContext.singleStreaks.size(),
-                reportContext.data != null ? reportContext.data.variableCandidates.size() : 0);
+                reportContext.data != null ? reportContext.data.variableCandidates.size() : 0, interactive);
     }
 
     private static void paintVariableCandidates(BufferedImage map, ReportData data) {
@@ -178,11 +183,13 @@ final class GlobalMapsSectionWriter {
         return null;
     }
 
-    private static void appendGlobalTrajectoryLegendItem(StringBuilder html, String code, String label, Color color, int count) {
+    private static void appendGlobalTrajectoryLegendItem(StringBuilder html, String code, String label, Color color, int count, boolean interactive) {
         if (count <= 0) {
             return;
         }
-        html.append("<div class='legend-pill'>")
+        html.append(interactive ? "<button type='button' class='legend-pill' data-report-category='" + code
+                        + "' aria-pressed='true' title='Show or hide " + DetectionReportGenerator.escapeHtml(label) + "'>"
+                        : "<div class='legend-pill'>")
                 .append("<span class='legend-code' style='background:")
                 .append(colorToHex(color))
                 .append(";'>")
@@ -192,7 +199,7 @@ final class GlobalMapsSectionWriter {
                 .append(DetectionReportGenerator.escapeHtml(label))
                 .append(": <strong>")
                 .append(count)
-                .append("</strong></span></div>");
+                .append("</strong></span>").append(interactive ? "</button>" : "</div>");
     }
 
     private static String buildGlobalTrajectoryLegendHtml(int movingTargetCount,
@@ -202,17 +209,17 @@ final class GlobalMapsSectionWriter {
                                                           int deepStackCount,
                                                           int anomalyCount,
                                                           int singleStreakCount,
-                                                          int variableCount) {
+                                                          int variableCount, boolean interactive) {
         StringBuilder html = new StringBuilder();
-        html.append("<div class='map-legend'>");
-        appendGlobalTrajectoryLegendItem(html, "T", "Moving object tracks", DetectionReportGenerator.GLOBAL_MAP_MOVING_TARGET_COLOR, movingTargetCount);
-        appendGlobalTrajectoryLegendItem(html, "ST", "Confirmed streak tracks", DetectionReportGenerator.GLOBAL_MAP_STREAK_TRACK_COLOR, streakTrackCount);
-        appendGlobalTrajectoryLegendItem(html, "LR", "Local rescue candidates", DetectionReportGenerator.GLOBAL_MAP_LOCAL_RESCUE_COLOR, localRescueCount);
-        appendGlobalTrajectoryLegendItem(html, "LC", "Local activity clusters", DetectionReportGenerator.GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, localActivityCount);
-        appendGlobalTrajectoryLegendItem(html, "DS", "Maximum-stack shape candidates", DetectionReportGenerator.GLOBAL_MAP_DEEP_STACK_COLOR, deepStackCount);
-        appendGlobalTrajectoryLegendItem(html, "A", "Single-frame anomalies", DetectionReportGenerator.GLOBAL_MAP_ANOMALY_COLOR, anomalyCount);
-        appendGlobalTrajectoryLegendItem(html, "S", "Single streaks", DetectionReportGenerator.GLOBAL_MAP_SINGLE_STREAK_COLOR, singleStreakCount);
-        appendGlobalTrajectoryLegendItem(html, "V", "Variable-star candidates", CatalogueMapPainter.VARIABLE_COLOR, variableCount);
+        html.append("<div class='map-legend map-category-controls'>");
+        appendGlobalTrajectoryLegendItem(html, "T", "Moving object tracks", DetectionReportGenerator.GLOBAL_MAP_MOVING_TARGET_COLOR, movingTargetCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, "ST", "Confirmed streak tracks", DetectionReportGenerator.GLOBAL_MAP_STREAK_TRACK_COLOR, streakTrackCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, "LR", "Local rescue candidates", DetectionReportGenerator.GLOBAL_MAP_LOCAL_RESCUE_COLOR, localRescueCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, "LC", "Local activity clusters", DetectionReportGenerator.GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, localActivityCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, "DS", "Maximum-stack shape candidates", DetectionReportGenerator.GLOBAL_MAP_DEEP_STACK_COLOR, deepStackCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, "A", "Single-frame anomalies", DetectionReportGenerator.GLOBAL_MAP_ANOMALY_COLOR, anomalyCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, "S", "Single streaks", DetectionReportGenerator.GLOBAL_MAP_SINGLE_STREAK_COLOR, singleStreakCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, "V", "Variable-star candidates", CatalogueMapPainter.VARIABLE_COLOR, variableCount, interactive);
         html.append("</div>");
         return html.toString();
     }

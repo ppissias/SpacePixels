@@ -101,7 +101,7 @@ final class SessionPictureSectionWriter {
         WcsCoordinateTransformer transformer = context.astrometryContext != null ? context.astrometryContext.getTransformer() : null;
         String catalogueLayer = catalogue != null && transformer != null ? catalogueLayer(catalogue, transformer, width, height) : null;
 
-        report.println("<div class='session-picture'>");
+        report.println("<div class='session-picture report-map'>");
         report.println("<div class='sp-buttons'>");
         report.println("<span class='sp-title'>The session</span>");
         report.println(button("mask", "Star mask", hasMask, false,
@@ -117,6 +117,12 @@ final class SessionPictureSectionWriter {
                 "Measured variable-star candidates V1, V2 and so on; click a label for the candidate."));
         report.println("<a class='sp-full' href='master_stack.png' target='_blank'>Full size</a>");
         report.println("</div>");
+        report.println("<p class='sp-caption sp-help'>Click the layer buttons to show or hide overlays on the median stack. "
+                + "Click a detection category below to show or hide that class; click a label on the picture to open its finding.</p>");
+        if (detections != null || variables != null) {
+            report.println(GlobalMapsSectionWriter.detectionLegendHtml(context, localRescueTracks, true));
+            report.println("<div class='sp-caption'>Labels use a class and an object number: for example, A12 is single-frame anomaly 12.</div>");
+        }
         report.println("<div class='sp-frame' data-mask-hover='off'>");
         report.println("<a href='master_stack.png' target='_blank'><img loading='eager' decoding='async' class='sp-base' src='" + STACK_FILE
                 + "' width='" + pictureWidth + "' height='" + pictureHeight + "' alt='Median stack of the session' /></a>");
@@ -136,7 +142,6 @@ final class SessionPictureSectionWriter {
         report.println("</div>");
         if (detections != null || variables != null) {
             report.println(GlobalMapsSectionWriter.detectionLegendHtml(context, localRescueTracks));
-            report.println("<div class='sp-caption'>The number after a label identifies the object, for example A12 is single-frame anomaly 12.</div>");
         }
         report.println("<div class='sp-caption'>The median stack of the frames kept"
                 + (catalogueLayer != null && transformer != null && transformer.isCorrected() ? "; catalogue positions use the plate solution corrected to the stars" : "")
@@ -156,7 +161,7 @@ final class SessionPictureSectionWriter {
     }
 
     private static String button(String layer, String label, boolean available, boolean on, String tooltip) {
-        return "<button type='button' class='id-link sp-toggle" + (on ? " active" : "") + "' data-layer='" + layer + "'"
+        return "<button type='button' class='id-link sp-toggle" + (on ? " active" : "") + "' data-layer='" + layer + "' aria-pressed='" + on + "'"
                 + (available ? "" : " disabled") + " title='" + DetectionReportGenerator.escapeHtml(tooltip) + "'>" + label + "</button>";
     }
 
@@ -427,13 +432,15 @@ final class SessionPictureSectionWriter {
                 + ".sp-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }"
                 + "svg.sp-layer ellipse, svg.sp-layer path { pointer-events: stroke; }svg.sp-layer a,svg.sp-layer a text,svg.sp-layer a circle{pointer-events:all;}"
                 + ".sp-caption { color: #888; font-size: 12px; margin-top: 6px; }"
+                + ".sp-help { color: #c2cbd2; font-size: 13px; }"
                 + "</style>");
         report.println("<script>(function(){"
                 + "function layer(frame,name){return frame?frame.querySelector(\"[data-layer='\"+name+\"']\"):null;}"
                 + "document.addEventListener('click',function(e){"
                 + "var b=e.target.closest?e.target.closest('.sp-toggle'):null;"
                 + "if(b&&!b.disabled){var f=b.closest('.session-picture').querySelector('.sp-frame');var l=layer(f,b.getAttribute('data-layer'));"
-                + "b.classList.toggle('active');if(l){l.style.display=b.classList.contains('active')?'block':'none';}return;}"
+                + "b.classList.toggle('active');var on=b.classList.contains('active');b.setAttribute('aria-pressed',String(on));if(l){l.style.display=on?'block':'none';}"
+                + "if(b.getAttribute('data-layer')==='variables'){var c=b.closest('.session-picture').querySelector(\"[data-report-category='V']\");if(c)c.setAttribute('aria-pressed',String(on));}return;}"
                 + "var a=e.target.closest?e.target.closest('a[href^=\"#\"]'):null;"
                 + "if(a){var t=document.getElementById(a.getAttribute('href').substring(1));"
                 + "for(var n=t;n;n=n.parentElement){if(n.tagName==='DETAILS'){n.open=true;}}}"
