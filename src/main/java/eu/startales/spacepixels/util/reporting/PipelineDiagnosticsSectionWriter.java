@@ -535,7 +535,11 @@ final class PipelineDiagnosticsSectionWriter {
 
         report.println("<div class='panel compact-diagnostics-panel'>");
         report.println("<h2>Quality Control: Frame Quality Statistics</h2>");
-        report.println("<p class='compact-note'>Per-frame quality measurements and the session limits a frame had to meet. Bright-star eccentricity shows <code>n/a</code> when too few bright stars qualified in that frame." + (pipelineTelemetry.qualityThresholds.available ? "" : " No session limits could be derived for this run.") + "</p>");
+        report.println("<p class='compact-note'>Per-frame quality measurements and the session limits a frame had to meet. Bright-star eccentricity shows <code>n/a</code> when too few bright stars qualified in that frame."
+                + (Double.isFinite(pipelineTelemetry.qualityAreaFraction) ? String.format(Locale.US,
+                " The sky and the stars are measured where every registered frame has image data (%.1f %% of the frame), so frames with more registration fill are not penalised.",
+                100 * pipelineTelemetry.qualityAreaFraction) : "")
+                + (pipelineTelemetry.qualityThresholds.available ? "" : " No session limits could be derived for this run.") + "</p>");
         report.println("<div class='compact-threshold-grid'>");
         report.println("<div class='config-item'><span>Min Allowed Star Count</span><span class='val'>" + (Double.isFinite(pipelineTelemetry.qualityThresholds.minAllowedStarCount) ? String.valueOf((long) Math.ceil(pipelineTelemetry.qualityThresholds.minAllowedStarCount)) : "n/a") + "</span></div>");
         report.println("<div class='config-item'><span>Max Allowed FWHM</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedFwhm) + "</span></div>");
