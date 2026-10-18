@@ -342,12 +342,12 @@ public class AutoTuneOverviewPanel extends JPanel {
         }
     }
 
-    /** Places Preview Frame directly below the core settings, before the star-mask explorer. */
+    /** Places Preview Frame after the per-frame detection settings, before the star-mask group. */
     void addPreviewAction() {
         addCoreAction(previewButton);
     }
 
-    /** Adds a button under the core settings, enabled while frames are ready and no tune is running. */
+    /** Adds a button at the current position in the core settings. */
     void addCoreAction(JButton button) {
         GridBagConstraints c = new GridBagConstraints();
         c.anchor = GridBagConstraints.WEST;
@@ -369,12 +369,24 @@ public class AutoTuneOverviewPanel extends JPanel {
         if (group != null) {
             JLabel groupLabel = new JLabel(group);
             groupLabel.setFont(groupLabel.getFont().deriveFont(Font.BOLD));
+            JPanel groupHeader = new JPanel();
+            groupHeader.setOpaque(false);
+            groupHeader.setLayout(new BoxLayout(groupHeader, BoxLayout.X_AXIS));
+            groupHeader.add(groupLabel);
+            groupHeader.add(Box.createHorizontalStrut(10));
+            JSeparator divider = new JSeparator();
+            divider.setMaximumSize(new Dimension(Integer.MAX_VALUE, 2));
+            groupHeader.add(divider);
             c.gridx = 0;
             c.gridy = coreRowCount++;
             c.gridwidth = 3;
+            c.fill = GridBagConstraints.HORIZONTAL;
+            c.weightx = 1;
             c.insets = new Insets(coreRowCount == 1 ? 0 : 10, 0, 4, 0);
-            coreGrid.add(groupLabel, c);
+            coreGrid.add(groupHeader, c);
             c.gridwidth = 1;
+            c.fill = GridBagConstraints.NONE;
+            c.weightx = 0;
         }
         String tooltip = "<html><div style='width: 380px;'>" + description + "</div></html>";
         JLabel label = new JLabel(title);

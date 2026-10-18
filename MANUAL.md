@@ -112,7 +112,7 @@ Click **Run Auto-Tune**, or **Auto-Tune Settings** on the Main tab (or press **C
 
 ![Auto-Tune results](docs/images/manual/ui-autotune-done.png)
 
-**Preview Frame** is below **Core Settings**, so you can try the current sigma settings on a frame before running the full detection.
+**Preview Frame** is directly below **Min Detection Pixels** in **Detection in each frame**, before the **Star mask (master map)** group. The two groups have divider lines, so the preview stays with the per-frame settings it uses.
 
 The table shows a ready set of settings for each **sensitivity profile**:
 

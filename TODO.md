@@ -1,8 +1,7 @@
 - [x] Overview report section - add legends (SST, etc) like below
 in the first image of the report, we do not see the legends about what each detection is. They should also appear so that the user knows what SST and what ST and what A12 is for example.
 
-- [x] Move preview on frame button below the core sigma settings
-The preview button below the auto tuner results, should actually go below the sigma settings
+- [x] Move Preview Frame directly below Min Detection Pixels in Detection in each frame, above Star mask (master map), and separate the two groups with divider lines.
 
 - [x] star map should show also star names when on mouse over
 On preview

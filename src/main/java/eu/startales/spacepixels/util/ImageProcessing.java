@@ -243,26 +243,26 @@ public class ImageProcessing implements AutoCloseable {
             JCheckBox localRescueBox = null;
             JCheckBox localActivityBox = null;
             JCheckBox commonMotionBox = null;
-            JCheckBox[] boxes = {null, null, null, null, null, null, null, null, null};
+            JCheckBox[] boxes = new JCheckBox[rows.length];
             if (offerInReport(anomaliesOn, anomalies)) {
                 anomaliesBox = includeBox();
-                boxes[4] = anomaliesBox;
+                boxes[3] = anomaliesBox;
             }
             if (offerInReport(slowMoversOn, slowMoverCandidates)) {
                 slowMoversBox = includeBox();
-                boxes[5] = slowMoversBox;
+                boxes[4] = slowMoversBox;
             }
             if (offerInReport(localRescueOn, localRescueCandidates)) {
                 localRescueBox = includeBox();
-                boxes[6] = localRescueBox;
+                boxes[5] = localRescueBox;
             }
             if (offerInReport(localActivityOn, localActivityClusters)) {
                 localActivityBox = includeBox();
-                boxes[7] = localActivityBox;
+                boxes[6] = localActivityBox;
             }
             if (offerInReport(commonMotionOn, commonMotionGroups)) {
                 commonMotionBox = includeBox();
-                boxes[8] = commonMotionBox;
+                boxes[7] = commonMotionBox;
             }
             JCheckBox variableStarsBox = offerInReport(variableStarsOn, 1) ? includeBox() : null;
 

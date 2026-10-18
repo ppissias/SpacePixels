@@ -81,4 +81,51 @@ public class ReportExportConsistencyTest {
             assertEquals(measurements, new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(analysis));
         } finally { DetectionReportGenerator.includeAiCreativeReportSections = creative; }
     }
+    @Test public void localRescueAndCommonMotionCanBeOmittedIndependentlyWithoutGeneratingTheirAssets() throws Exception {
+        FitsFileInformation[] files = new FitsFileInformation[3];
+        List<short[][]> frames = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            files[i] = new FitsFileInformation("frame" + i + ".fit", "frame" + i + ".fit", true, 160, 120);
+            files[i].getFitsHeader().put("DATE-OBS", "2026-10-01T00:0" + (2 * i) + ":00");
+            files[i].getFitsHeader().put("EXPTIME", "120");
+            short[][] pixels = new short[120][160];
+            for (int y = 0; y < 120; y++) for (int x = 0; x < 160; x++) pixels[y][x] = (short) (-32000 + (x * y) % 100);
+            frames.add(pixels);
+        }
+        List<SourceExtractor.DetectedObject> rescued = new ArrayList<>(), commonA = new ArrayList<>(), commonB = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            for (var source : List.of(rescued, commonA, commonB)) {
+                var point = new SourceExtractor.DetectedObject(source == rescued ? 70 + 2 * i : source == commonA ? 30 + i : 120 + i,
+                        source == rescued ? 60 : source == commonA ? 30 : 90, 1000, 10);
+                point.sourceFrameIndex = i; point.timestamp = files[i].getObservationTimestamp(); point.exposureDuration = 120000;
+                source.add(point);
+            }
+        }
+        var metrics = new ResidualTransientAnalysis.LocalTransientMetrics(3, 3, 3, 0, 4, 2, 2, 0, 2, 1000, 1, 72, 60);
+        var candidate = new ResidualTransientAnalysis.LocalRescueCandidate(ResidualTransientAnalysis.LocalRescueKind.MICRO_DRIFT, rescued, metrics, 1);
+        var group = new ResidualTransientAnalysis.CommonMotionGroup(List.of(commonA, commonB), 3);
+        var residual = new ResidualTransientAnalysis(List.of(candidate), List.of(), List.of(group));
+        var telemetry = new PipelineTelemetry(); telemetry.totalFramesLoaded = 3; telemetry.totalFramesKept = 3;
+        var result = new PipelineResult(List.of(), telemetry, frames.get(0), List.of(), null, null, null,
+                List.of(), List.of(), List.of(), List.of(), residual, null, List.of(), frames.get(0), VariableStarAnalysis.empty());
+        var config = new DetectionConfig(); config.enableSlowMoverDetection = false;
+        String original = new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(residual);
+        for (boolean rescue : List.of(false, true)) for (boolean motion : List.of(false, true)) {
+            File export = temporary.newFolder("rescue-" + rescue + "-motion-" + motion);
+            DetectionReportGenerator.exportTrackVisualizations(result, frames, files, export, config, null,
+                    new ReportInclusion(true, false, rescue, false, motion, false));
+            String html = Files.readString(new File(export, "detection_report.html").toPath());
+            String data = Files.readString(new File(export, "report-data.json").toPath());
+            assertEquals(rescue, html.contains("id='finding-lr1'"));
+            assertEquals(motion, html.contains("id='finding-cm1'"));
+            assertEquals(rescue, data.contains("\"id\": \"LR1\""));
+            assertEquals(motion, data.contains("\"id\": \"CM1\""));
+            var names = Arrays.asList(Objects.requireNonNull(export.list()));
+            assertEquals(rescue, names.stream().anyMatch(n -> n.startsWith("micro_drift_")));
+            assertEquals(motion, names.stream().anyMatch(n -> n.startsWith("common_motion_")));
+            assertEquals(rescue, new File(export, "micro_drift_1_context.gif").isFile());
+            assertEquals(motion, new File(export, "common_motion_1.gif").isFile());
+        }
+        assertEquals(original, new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(residual));
+    }
 }

@@ -242,6 +242,7 @@ public class DetectionConfigurationPanel extends JPanel {
         overview.addCoreSetting(null, "Grow Sigma (Hysteresis)", "Secondary threshold used to expand a detection after it starts during per-frame object detection. Lower values capture fainter edges; higher values keep detections tighter. It cannot exceed Detection Sigma. If it goes below Master Sigma, faint star wings detected in the frames may extend past the veto mask and leak as transients; the calibrated Auto-Tuner measures that trade-off.", spinGrowSigma, true);
         spinMinPixels = createSpinner(intSpinnerModel(jTransientConfig.minDetectionPixels, 1, 2000, 1));
         overview.addCoreSetting(null, "Min Detection Pixels", "Minimum blob size required for a detection to be kept. Higher values reject hot pixels and noise; lower values allow smaller sources.", spinMinPixels, true);
+        overview.addPreviewAction();
 
         spinMasterSigma = createSpinner(doubleSpinnerModel(jTransientConfig.masterSigmaMultiplier, 0.5, 15.0, 0.1));
         overview.addCoreSetting("Star mask (master map)", "Master Sigma", "Detection threshold used when building the master star map. Lower values mask more faint stars and halos; higher values create a smaller, cleaner mask. Stars are seeded at this value and grown down to Master Grow Sigma (or this value when that is 0). A master shallower than the per-frame Grow Sigma hides less sky but lets more star wings leak; the calibrated Auto-Tuner measures that trade-off.", spinMasterSigma, false);
@@ -254,7 +255,6 @@ public class DetectionConfigurationPanel extends JPanel {
         spinStarJitter = createSpinner(doubleSpinnerModel(jTransientConfig.maxStarJitter, 0.0, 20.0, 0.1));
         overview.addCoreSetting(null, "Base Star Jitter Radius", "Baseline radius under which detections are treated as stationary star jitter instead of true moving points. Higher values are more conservative around registration residuals.", spinStarJitter, true);
 
-        overview.addPreviewAction();
         JButton testStarMaskButton = new JButton("Test Star Mask…");
         testStarMaskButton.setToolTipText("<html>Build the master stack as a detection run would, then try star mask settings "
                 + "and see the resulting veto mask on the stack, with statistics.</html>");
