@@ -14,6 +14,8 @@ yes that would be cool. After we go through a detection, to be able to visualize
 - [ ] Investigate if we can generate also the Sloe mover sigma and master sigma settings from the auto-tuner. First experiment by hand and then check if we should implement that.
 ring to
 
+- [x] On the variable stars section of the report, show the median stack with the variable stars overlayed (like in summary of detections), but then on click open a full size image on a new tab with the variable stars detected overlayed (circled) and next to each detection a micrography of the variability observed (how the magnitude changed)
+
 - [x] On the overview section, show also the legends of for each detection class, on top, now it is shown only below. There should also be a note that clicking each category shows it over the median stack. (next to the session, we just see the buttons and there is no explanation that we can click on them).
 - [x] on common motion group, write that this is most likely noise.  Please also write a better description under the common motion part, to mention that it is likely noise and that this section detects common moving artifacts and filters them out from further processing.
 - [x] the finding browser which is on top, it is great, but when I click on an item, it is no longer shown and I have to scroll all the way up again to see it. It should go below the "jump to" buttons, which I can actually see while I browse down.

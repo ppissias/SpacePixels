@@ -228,6 +228,8 @@ Everything that was detected but did not become a result is shown here, coloured
 
 Candidate light curves have **Zoom in**, **Zoom out** and **Reset** controls; drag a zoomed chart to pan. Error bars show the engine's estimated sky-noise uncertainty, which is a lower bound rather than total uncertainty. Brightest/faintest cutouts use a common stretch but show raw frames; clouds, exposure and seeing can affect their appearance even when the differential light curve is corrected for transparency.
 
+The **Variable candidates across the field** picture circles every reported candidate on the median stack, using the same V labels as the table: blue for high confidence, orange for possible. Click it to open a full-size image in a new tab, with a small differential light curve beside each candidate. Each curve has its own labelled magnitude scale, with brighter values upward; flagged measurements are omitted and break the line. The image works offline, and includes candidates beyond the first 40 detailed cards.
+
 The stars CSV includes the V label, sky coordinates, VSX matches and nearest-match separation. Candidate light curves also include the V label. CSVs and the HTML are published only after their writes finish successfully.
 
 Catalogue searches distinguish matches, valid searches with no match, and failures. **Retry lookup** retries a failure; **Refresh lookup** requests fresh data even when a result was saved earlier. Batch counts refer only to the candidates requested by that batch. Successful lookup results are saved into the report when its folder is writable.

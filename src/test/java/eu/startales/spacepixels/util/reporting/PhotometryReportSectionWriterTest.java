@@ -76,6 +76,8 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(html.contains("Spatial gradient X"));
         assertTrue(html.contains("pure power-law stretch from zero"));
         assertTrue(html.contains("Scatter ratio"));
+        assertTrue(html.contains("Variable candidates across the field"));
+        assertTrue(html.contains("href='photometry_candidate_map_full.svg' target='_blank'"));
         assertFalse(html.contains("Nearby comparison stars do not share the pattern"));
         assertFalse(html.contains("jumpiness"));
         assertFalse(html.contains("Tilt X"));
@@ -83,6 +85,8 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(new File(exportDir, "photometry_lightcurves.csv").isFile());
         assertTrue(new File(exportDir, "photometry_frames.csv").isFile());
         assertTrue(new File(exportDir, "photometry_v1_brightest.png").isFile());
+        assertTrue(new File(exportDir, "photometry_candidate_map.svg").isFile());
+        assertTrue(new File(exportDir, "photometry_candidate_map_full.svg").isFile());
         assertEquals(FRAMES + 1, Files.readAllLines(new File(exportDir, "photometry_frames.csv").toPath()).size());
 
         // Optional: keep a standalone page for visual review.
@@ -168,7 +172,7 @@ public class PhotometryReportSectionWriterTest {
         StringWriter output = new StringWriter();
         try (PrintWriter writer = new PrintWriter(output)) {
             DetectionReportDocumentWriter.appendDetectionReportStart(writer);
-            PhotometryReportSectionWriter.writeSection(writer, context(config, rawFrames, exportDir), result.variableStarAnalysis);
+            PhotometryReportSectionWriter.writeSection(writer, context(config, rawFrames, exportDir, result.masterStackData), result.variableStarAnalysis);
             writer.println("</body></html>");
         }
         Files.write(new File(exportDir, "photometry_preview.html").toPath(), output.toString().getBytes("UTF-8"));
@@ -176,6 +180,10 @@ public class PhotometryReportSectionWriterTest {
     }
 
     private static DetectionReportContext context(DetectionConfig config, List<short[][]> rawFrames, File exportDir) {
+        return context(config, rawFrames, exportDir, null);
+    }
+
+    private static DetectionReportContext context(DetectionConfig config, List<short[][]> rawFrames, File exportDir, short[][] masterStack) {
         return new DetectionReportContext(
                 new ExportVisualizationSettings(3.0, 10.0, 100, 10, 100, false, 12, 1.0f),
                 exportDir,
@@ -183,7 +191,7 @@ public class PhotometryReportSectionWriterTest {
                 null,
                 config,
                 null,
-                null,
+                masterStack,
                 null,
                 null,
                 null,

@@ -734,6 +734,7 @@ final class PhotometryReportSectionWriter {
             report.println("<p class='compact-note'><strong>Observed variation in this session</strong> is the 95th minus the 5th percentile of the usable differential magnitudes. "
                     + "It describes the observed time span, rather than a full-cycle amplitude. Catalogue ranges and amplitudes use the listed passbands; "
                     + "differences in filter, time coverage and phase limit direct comparisons.</p>");
+            VariableStarMapWriter.write(report, context, analysis, cards);
             SessionCatalogue sessionCatalogue = SessionCatalogue.of(context);
             writeCandidateTable(report, context, analysis, cards, sessionCatalogue);
             CatalogueComparisonWriter.writeData(report, context, analysis, cards, sessionCatalogue);
