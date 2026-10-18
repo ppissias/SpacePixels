@@ -1,156 +1,327 @@
 # Design improvements
 
-Reviewed on 2026-10-18 against the current `src/main/java` tree. This is a design review of SpacePixels as an application. It does not change behaviour, and it does not replace [HIGH_LEVEL_DESIGN.md](HIGH_LEVEL_DESIGN.md). That file describes the system as it is. This file says where the design is clear, where it has drifted, and what to straighten next.
+Deep review: 2026-10-18, against SpacePixels commit `bf8c687` and the current source tree. This document contains **proposals, not implementation decisions**. It extends and corrects the first review of the same date. [HIGH_LEVEL_DESIGN.md](HIGH_LEVEL_DESIGN.md) describes the current system; [REFACTOR.md](REFACTOR.md) records earlier class extractions. Neither class length nor the number of design patterns is a useful success measure by itself.
 
-[REFACTOR.md](REFACTOR.md) (2026-09-24) is about splitting large classes. Several of those splits already happened. The line counts there are out of date: `MainApplicationPanel` is well past the 967 lines recorded then, because sky catalogue, plate-solution correction and the workflow strip were added in place. Size is a symptom. The findings below are about responsibilities.
+## Overall assessment
 
-## What is already in good shape
+The application has a good foundation: Swing with FlatLaf, a separate detection engine, a usable Java API, shared image viewers, and report section writers. The next improvement should make **ownership, state and failure handling explicit**. Replacing Swing or reorganising every package would deliver less value than making a job, a settings edit and an imported session behave consistently.
 
-The split with JTransient is the right one. SpacePixels imports, prepares, shows and reports. JTransient detects. The public API (`SpacePixelsPipelineApi`, a request, a result, a progress listener) is a clean boundary, and the batch command uses it.
+The most valuable work is, in order:
 
-Three newer GUI pieces are the pattern to copy:
+1. Protect files during replacement and settings saves.
+2. Prevent obsolete previews and overlapping jobs from changing the current UI.
+3. Give long operations a clear lifecycle, honest cancellation and reliable cleanup.
+4. Validate settings into snapshots, and derive command availability from application state.
+5. Improve keyboard access, layout scaling and the distinction between application preferences, the current session and a completed run.
 
-- **Settings.** `SettingsNavigator`, `SettingRow` and `DetectionConfigurationPanel` build pages out of rows. A row knows its value, its changed marker and its reset. Dependent rows hide themselves. Expert sections are marked and filtered. The panel does not invent a new layout for each setting.
-- **Viewers.** Blink, Preview and Manual Transient Inspection share `FrameView`, `StretchControls`, `ViewerSupport` and `SequenceViewerFrame`. Keys live in one place. Stretch controls detach when a window closes, so a disposed viewer does not keep the session alive.
-- **Report sections.** `DetectionReportGenerator` asks a section writer for each part of the HTML. A new section is a class, not another thousand lines in the generator.
+These are engineering priorities, not findings that every possible failure has already occurred. The evidence below distinguishes code that is present from consequences inferred from it.
 
-The long jobs (import, convert, stretch, solve, blink, detect, auto-tune) already follow one shape: a `Runnable` in `tasks` posts a started event, progress, then a finished event. Subscribers on the Swing side hop to the event-dispatch thread with `EventQueue.invokeLater` before touching components. That rule is followed in `MainApplicationPanel` and `DetectionConfigurationPanel`.
+## Review scope and limits
 
-## How the GUI is wired today
+Reviewed startup and import, workflow buttons and table selection, background tasks and events, preview rendering, frame viewers, settings and persistence, the API and CLI boundary, processing services, report generation and live lookup support. Existing manual screenshots were inspected for visual context; some predate the latest control placements. Source references name methods so the findings remain useful when line numbers change.
 
+This was a source and architecture review, with primary documentation checked for Swing, FlatLaf and Guava. It was **not** a fresh interactive usability study, fault-injection run, accessibility audit or performance benchmark. Statements about races and I/O failures describe reachable design risks inferred from the code; their frequency has not been measured. No application code, user settings, FITS files or JTransient algorithms were changed by this review. M81 false-positive detection remains a separate investigation.
+
+## What to preserve
+
+- **The engine boundary.** SpacePixels prepares data, orchestrates work and presents results. JTransient owns detection. Do not move GUI workflow or FITS-file interaction into the engine.
+- **The public API shape.** [SpacePixelsPipelineRequest](src/main/java/eu/startales/spacepixels/api/SpacePixelsPipelineRequest.java) defensively copies its detection configuration, and [DefaultSpacePixelsPipelineApi](src/main/java/eu/startales/spacepixels/api/DefaultSpacePixelsPipelineApi.java) uses shared preparation and pipeline services. Those are useful patterns for GUI run requests too.
+- **The settings navigation.** [SettingsNavigator](src/main/java/eu/startales/spacepixels/gui/SettingsNavigator.java) already provides search, changed-only filtering and expert disclosure. Keep the maintainer's basic/expert/hidden classification and the preservation of hidden configuration fields.
+- **The shared viewers.** [SequenceViewerFrame](src/main/java/eu/startales/spacepixels/gui/SequenceViewerFrame.java), [FrameView](src/main/java/eu/startales/spacepixels/gui/FrameView.java), [StretchControls](src/main/java/eu/startales/spacepixels/gui/StretchControls.java) and [ViewerSupport](src/main/java/eu/startales/spacepixels/gui/ViewerSupport.java) reuse display and interaction code. The sequence viewer rejects obsolete work by worker identity and target frame; viewers detach listeners and release displayed data. Extend these patterns rather than replacing them.
+- **Report identities and export snapshots.** [ReportData](src/main/java/eu/startales/spacepixels/util/reporting/ReportData.java) centralises findings and frame selection. [ExportVisualizationSettings](src/main/java/eu/startales/spacepixels/util/reporting/ExportVisualizationSettings.java) captures export options. [AtomicReportFile](src/main/java/eu/startales/spacepixels/util/reporting/AtomicReportFile.java) publishes completed text files. These solve part of the problems below already.
+- **Existing validation and testing.** Input preparation, WCS handling, catalogue matching, API execution and reporting have focused tests. The site configuration already gives inline validation feedback. The review calls for extending these strengths, not starting over.
+
+## Assessment of the earlier document
+
+| Earlier recommendation | Assessment after deeper review |
+|---|---|
+| Introduce one job lifecycle | Agree, but job and session identity, admission control and typed outcomes matter more than reducing event-class count. A generic event containing nullable results would repeat the existing problem. |
+| Extract responsibilities from the main panel | Agree. Extract command handling and state first; moving anonymous listeners into another large controller is not enough. |
+| Use shared Swing actions | Strongly agree for commands used by buttons, shortcuts and context menus. Simple local listeners can remain simple. |
+| Standardise notifications | Agree, with distinct success, cancellation, partial success and failure outcomes. Do not replace every status message with another modal dialog. |
+| Introduce a session object | Agree, but acknowledge existing safeguards: sky jobs check their thread identity, saved catalogues are field-checked, corrections are solution-checked, and overlays check session coverage. |
+| Replace ad hoc thread starts | Agree for lifecycle and resource ownership. There is already a fixed-size worker pool in `ImageProcessing` and `SwingWorker` use in viewers; the whole application is not raw threads. |
+| Share GUI and API workflow | Share application services and requests. Keep GUI questions and API policy separate; do not make one public entry point pretend to be both. |
+| Clean up `util` | Extract cohesive responsibilities as they change. Package moves and class splitting alone have low priority. |
+| Extend the settings-row pattern | Agree, with typed bindings and shared validation. Do not generate new rows for hidden settings. |
+
+Three corrections are particularly important:
+
+- **Detection does not currently have cooperative cancellation through the progress dialog.** [ProcessingProgressDialog.confirmAndExit](src/main/java/eu/startales/spacepixels/gui/ProcessingProgressDialog.java) offers to exit the JVM. The old reference to a detection cancel flag was inaccurate.
+- **The API is already usable headlessly.** It explicitly uses headless preparation and metadata paths. Swing imports and GUI helpers in `ImageProcessing` make the boundary harder to maintain; they do not prove the current API needs a window.
+- **Do not globally move all EventBus subscribers onto the EDT.** For example, `StretchPanel.onPreviewGenerationFinished` deliberately computes histograms on the task thread before scheduling UI updates. Put an EDT adapter at the presentation boundary, not around every computational subscriber.
+
+Guava's own [EventBus guidance](https://github.com/google/guava/wiki/EventBusExplained#avoid-eventbus) now recommends against EventBus, citing weak typing, lifecycle, threading and observability limitations. Accordingly, “the bus is fine, never replace it” was too categorical. My recommendation is incremental: keep an adapter for existing subscribers while new workflow services use explicit typed requests and callbacks. A bus migration, if later justified, should be a consequence of clear boundaries; installing a reactive or dependency-injection framework is not required for this application.
+
+## Findings and priorities
+
+| ID | Priority | Improvement | First useful result |
+|---|---|---|---|
+| D01 | High | Safe publication of FITS files and settings | A failed replacement preserves the previous file; a failed save remains visibly unsaved. |
+| D02 | High | Job ownership and resource admission | A command acquires its job slot before the worker starts; only that job can finish it. |
+| D03 | High | Preview results belong to a request | A previous frame or stretch cannot overwrite the current preview. |
+| D04 | High | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
+| D05 | High | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
+| D06 | Medium | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
+| D07 | Medium | Shared actions and derived availability | Button, shortcut and context menu execute the same command under the same conditions. |
+| D08 | Medium | Keep slow work off the EDT | Accepting a WCS write does not perform the file rewrite on the UI thread. |
+| D09 | Medium | Complete the analysis/report separation | Display changes reuse prepared diagnostics and stable finding identities. |
+| D10 | Medium | Typed settings metadata and engine integration | A setting's identity and rules are not maintained in several unrelated lists. |
+| D11 | Medium | A clearer analysis workflow and persistent results | Users see what will run and can reopen its results without another detection. |
+| D12 | Medium | Shared visual rules and adaptable layout | Longer descriptions and larger fonts fit without fixed-height clipping. |
+| D13 | Medium | Keyboard and assistive-technology access | Visible links, settings inputs and viewer controls are reachable and named. |
+
+“High” means to address before expanding the affected workflow. It does not mean undertaking all high-priority items in one change.
+
+### D01. Treat file replacement as a shared application responsibility
+
+**Evidence.** [PlateSolveService.updateFitsHeaderWithWCS](src/main/java/eu/startales/spacepixels/util/PlateSolveService.java) writes `<original>.tmp`, deletes the original, then calls `renameTo`. If deletion succeeds but renaming fails, the original path is gone. A temporary replacement may remain, so this is not proof that all image data has been destroyed, but recovery is now manual. The temporary filename is also fixed rather than unique.
+
+[DetectionConfigurationPanel.savePersistedSettings](src/main/java/eu/startales/spacepixels/gui/DetectionConfigurationPanel.java) opens both settings files with `FileWriter` before writing either. Opening the second file can fail after the first has already been truncated. A later write or close can fail too. The saved-state marker is updated inside the try block before both resources have finished closing. [SpacePixelsAppConfigIO.write](src/main/java/eu/startales/spacepixels/config/SpacePixelsAppConfigIO.java) also writes directly to its destination. These failure paths were not exercised on user files.
+
+**Proposal.** Extract a small file-publication helper from the pattern already used by `AtomicReportFile`: unique temporary file beside the target, complete and close the write, validate as appropriate, then replace. Prefer an atomic move where supported. Specify a recovery/backup strategy when it is unavailable; a regular replacement fallback is not automatically crash-safe. Never deliberately remove the only original before publishing its replacement.
+
+Stage both settings serialisations before replacing either, and mark the editor saved only after the selected publication policy succeeds. **Two individually atomic file moves are not a two-file transaction.** Either provide rollback/recovery for a partially completed pair or expose which file failed and retain an unsaved state. Keep the current profile formats and migration backups; combining all preferences into a new format is not necessary for this fix.
+
+**Acceptance.** With disposable fixtures, inject failure before replacement, during replacement and on the second settings file. Verify the previous FITS path remains readable, recovery files have an intentional policy, and the UI does not claim a failed save succeeded. This is SpacePixels work; it needs no detection-engine change.
+
+### D02. Give every background job an owner and an identity
+
+**Evidence.** [MainApplicationPanel](src/main/java/eu/startales/spacepixels/gui/MainApplicationPanel.java) starts work from listeners, then reacts to a started event posted by the worker. The lock is therefore acquired asynchronously after submission. `lockUI` stores enabled flags recursively; another lock clears that snapshot, and a finish event calls `unlockUI` without checking which job owns the lock. `EngineProgressUpdateEvent` carries only a percentage and message. `DetectionFinishedEvent` mixes report, quick-preview and count fields; inspection and star-mask work use it to borrow detection's progress handling.
+
+The current modal dialog prevents many user interactions once it is visible. That reduces exposure, but does not establish a synchronous admission rule or make overlapping lifecycle events safe. Sky fetching has its own indicator and does not post this generic progress event, so the earlier example of sky-fetch percentages directly moving the modal bar was too broad.
+
+**Proposal.** Add a small application-owned job coordinator. On the EDT, validate the command and reserve its resource slot **before** launching a worker. Record a job ID, session ID, job kind, stage, progress and terminal outcome. Ignore updates from obsolete IDs. Model heavy image processing separately from bounded network work; decide explicitly whether catalogue fitting, preview loading and full detection may overlap given memory use. Do not put all work into one unrestricted executor, or queue many full-resolution previews.
+
+Use typed outcomes such as completed report, imported session, tuned settings, cancelled and failed. An `Object result`, several nullable fields or `JobFinished<T>` subscriptions on Guava would weaken this: Guava does not support parameterised subscription types. A typed job handle can return its result directly, with an adapter for existing UI lifecycle messages.
+
+**Acceptance.** Starting the same command twice admits only the permitted work. A late progress/finish event from job A cannot unlock job B, change B's status or apply A's result to a new session. Tests should assert this without constructing the entire main window.
+
+### D03. Extend the viewer's “latest request wins” rule to stretch previews
+
+**Evidence.** [StretchPanel.executePreviewTask](src/main/java/eu/startales/spacepixels/gui/StretchPanel.java) starts `GeneratePreviewsTask` after a debounce timer. Debouncing already exists and should stay. However, [PreviewGenerationFinishedEvent](src/main/java/eu/startales/spacepixels/events/PreviewGenerationFinishedEvent.java) has images and success only: no session, frame, stretch parameters or request number. `onPreviewGenerationFinished` accepts every result.
+
+**Consequence inferred from the code.** If request A is still loading when B starts, and A finishes last, A can replace B's images while the frame label or controls describe B. Debouncing limits starts close together; it cannot order jobs already running. There is also no per-preview worker handle to limit in-flight full-frame reads.
+
+**Proposal.** Capture a preview request containing session ID, file identity, stretch snapshot and increasing generation. Allow one in-flight render with at most the newest pending request. Apply a result only if its generation is still current; invalidate it on session changes and disposal. Use cancellation when the underlying read supports it, but keep the identity check even after requesting cancellation. `SequenceViewerFrame.prepareCurrent` is an existing local model for worker/target checks, rather than another framework to introduce.
+
+**Acceptance.** Force A to finish after B and verify the visible image, histogram and frame label all describe B. Include rapid parameter edits, import of another session and closing the view. This requires no JTransient algorithm change.
+
+### D04. Make cancellation, failure and resource cleanup explicit
+
+**Evidence.** [ProcessingProgressDialog](src/main/java/eu/startales/spacepixels/gui/ProcessingProgressDialog.java) is modal, fixed-size, and its close action exits the application after confirmation. Blink and sky fetching have separate cancellation mechanisms. Declining report generation after detection is represented as failure in [DetectionTask](src/main/java/eu/startales/spacepixels/tasks/DetectionTask.java), even though detection completed.
+
+There are inconsistent error paths too. [ManualTransientInspectionTask](src/main/java/eu/startales/spacepixels/tasks/ManualTransientInspectionTask.java) calls `engine.shutdown()` only after a successful `detectTransients`; its catch logs an OOM without rethrowing it despite the comment about a global handler. [StarMaskStackTask](src/main/java/eu/startales/spacepixels/tasks/StarMaskStackTask.java) does shut down in `finally`, but its OOM branch logs without posting a terminal event or forwarding the error. Consequently, those paths can leave progress handling unfinished; an uncaught handler cannot handle an error swallowed by a catch. This was established from the branches, not by inducing OOM in the running application.
+
+**Proposal.** Use a common job runner for ordinary start/progress/outcome handling and resource cleanup. Put engine shutdown and file closure in `finally`/try-with-resources. Have one fatal-error policy instead of copying JVM exit timers into individual tasks; after a genuine OOM, do not promise the session can safely continue. Distinguish detection succeeded/report skipped, user cancellation, partial export and actual failure.
+
+A Cancel control should request cancellation, show a stopping state and retain resource ownership until work actually ends. For a stage that cannot stop safely, say it will stop after that stage. `Future.cancel` alone does not prove that engine computation or blocking I/O stopped. [SwingWorker's contract](https://docs.oracle.com/en/java/javase/21/docs/api/java.desktop/javax/swing/SwingWorker.html) supplies worker/EDT completion mechanics; application and engine code still need a cooperative policy. If JTransient needs a new cancellation contract, discuss that engine change separately before implementing it.
+
+**Acceptance.** Fail each ordinary stage, decline export, request cancellation, and close a viewer while it prepares data. Verify one terminal outcome, resource release and a correct command state. Test fatal-policy routing through an injected policy rather than exhausting real memory. Keep a “Details / Copy error” path for diagnostics and a persistent result link after success.
+
+### D05. Build a validated settings snapshot instead of reading a mutable panel
+
+**Evidence.** [DetectionConfigurationPanel.commitSpinners](src/main/java/eu/startales/spacepixels/gui/DetectionConfigurationPanel.java) catches and ignores `commitEdit` failures. `applySettingsToMemory` changes the live config field by field and logs a broad exception. `getJTransientConfig` returns that same mutable object. Detection and Auto-Tune tasks retain that reference at construction, whereas manual inspection clones it. Standard detection does clone the effective config later; this is useful, but happens after loading, rather than defining one uniform click-time boundary.
+
+Invalid text can therefore be rejected by the editor while a Save or Run path continues using the previous model value. Constraints are also implemented in spinner listeners and normalisation code, while callers of the API do not use those widgets. This is a validation/feedback weakness, not evidence that the engine receives every invalid edit.
+
+**Proposal.** Read the editor into a draft; commit and validate it; then create the run snapshot or update the session settings as one operation. Return structured validation errors, focus the relevant input, and explain any automatic adjustment. Reuse applicable validation in the API and profile-loading boundary, with mode-specific policy where needed. Reject non-finite values and inconsistent pairs explicitly rather than relying only on spinner bounds.
+
+Preserve auto-apply for valid edits and the current hidden-field behaviour. Build on a clone of the loaded configuration; do not rebuild it from visible rows and lose hidden values. All long tasks should receive the same kind of click-time config snapshot, frame identities and export choices. Prefer “Save as startup defaults” wording where that is what Save does; saving is not the step that first activates the current values.
+
+**Acceptance.** Invalid typed input prevents Save/Run with an inline explanation. Editing the UI after a run starts cannot change that run. Revert, defaults, migration, auto-tuned values and hidden fields retain their current documented semantics. Validation that changes detection decisions needs the appropriate real-data comparison and maintainer discussion.
+
+### D06. Separate application preferences, the session and individual viewers
+
+**Evidence.** [ApplicationWindow](src/main/java/eu/startales/spacepixels/gui/ApplicationWindow.java) owns an `ImageProcessing` for the current folder. [SkyCatalogueModel](src/main/java/eu/startales/spacepixels/gui/SkyCatalogueModel.java) is process-wide. `MainApplicationPanel` owns selection, sky jobs and a preview window; `DetectionConfigurationPanel` owns a master-stack cache; viewers own other frames and listeners. [ImageProcessing](src/main/java/eu/startales/spacepixels/util/ImageProcessing.java) reloads the user-level `AppConfig` for each instance. `SpacePixelsDetectionProfileIO` also retains an active Auto-Tune frame limit in static state.
+
+Existing session guards deserve credit: sky completion checks worker identity; restore checks the saved field and correction key; overlays check coverage; viewer cleanup detaches listeners. Do not describe these as absent or assume every import currently mixes catalogues. The remaining concern is scattered ownership and dependence on a single process-wide current session, especially for tests or future multiple windows.
+
+**Proposal.** Load application preferences once, independently of importing a folder. Give the window a current session containing an ID, metadata references, selection model, catalogue/correction state, last-result references and session-scoped caches. Replace it only after a successful import handover. Use explicit outcomes for cancelled imports: `FitsImportTask` currently reports an empty successful import when the mixed-exposure choice is cancelled, which can clear the prior session through `ApplicationWindow.clearImportedDataset`.
+
+Pass the session or an immutable session snapshot to viewers/services. Treat large frame buffers as owned resources, not data to deep-copy into every snapshot. An old viewer may keep its old session intentionally, but must not silently adopt the new session's catalogue. Retain field/solution guards after removing the singleton.
+
+**Acceptance.** Open A, begin background work, import B, then let A finish: B stays unchanged. Failed or cancelled import preserves the agreed previous-session behaviour. Closing a viewer releases listeners and owned buffers. Two test sessions cannot change each other's catalogue or tuning preferences. Do not add multi-window UI merely to justify this refactor.
+
+### D07. Derive availability from state and use real command actions
+
+**Evidence.** [MainApplicationPanel](src/main/java/eu/startales/spacepixels/gui/MainApplicationPanel.java) keeps enable rules in `lockUI`/`unlockUI`, selection listeners, workflow refresh, import handlers and helper methods. A saved component-state map records what happened to be enabled rather than why. The main Auto-Tune button follows another button's enabled property. Shortcuts call `button.doClick()`, and the table menu copies button checks. These controls are partly synchronised already, but the button hierarchy is serving as the application model.
+
+**Proposal.** Calculate a small immutable availability model from session facts, valid settings, selection and job ownership. Each entry contains an enabled flag and reason. Apply it to shared `Action` objects for commands that have several entry points. The action dispatches a typed request; it does not discover its policy by walking Swing components. Oracle's [Action contract](https://docs.oracle.com/en/java/javase/21/docs/api/java.desktop/javax/swing/Action.html) explicitly supports sharing command properties and enabled state across controls; it does not imply every local listener needs a command class.
+
+Keep the useful disabled-button explanations, generated from the same availability result. Remove numeric tab-index assumptions as affected code is touched; address the tab/component by identity. Avoid a state machine containing every possible UI combination: a session lifecycle plus independently computed capabilities is sufficient initially.
+
+**Table enhancement constraint.** The current table has no installed row sorter, so its direct selected-row-to-model indexing is not an existing sorting bug. If sorting/filtering is added, convert view rows to model rows in all selected-file and solve-result paths, and use file/session identity in events instead of a saved visible row number. Return numeric values and column classes before offering numeric sorting.
+
+**Acceptance.** Button, shortcut and menu have identical availability and behaviour after imports, colour conversion, selection changes, errors and job completion. A late event cannot re-enable a prohibited operation. Preserve the current workflow policy first; relaxing locks is a separate product decision.
+
+### D08. Keep UI access on the EDT and slow work off it
+
+**Evidence.** `MainApplicationPanel.onSolveFinished` enters the EDT with `invokeLater`, asks permission, then directly calls `updateFitsHeaderWithWCS`, refreshes metadata and cleans solve artifacts there. The service rewrites the FITS file and can download referenced WCS header data through `loadWcsHeaderCardsFromReference`. `restoreSkyCatalogue`, called while applying an imported table model, reads catalogue/correction files on the EDT. Config writes and ASTAP-directory scans also run from UI callbacks. These can be small on local storage, but their duration is not bounded by the GUI code.
+
+The reverse boundary also needs attention: `FitsImportTask.run` calls `ImageProcessing.getFitsfileInformation` on its worker, and that method directly opens compression/format confirmation dialogs. Other helpers correctly bridge to Swing, but there is no consistent rule that prevents a processing method from touching GUI components on a worker thread.
+
+**Proposal.** Ask the question on the EDT, submit the accepted write as a job, and update table/state from its completion. Load the session's saved catalogue/correction as part of background session preparation, while preserving field checks. Separate a fast edit from potentially slow persistence. The rule is about slow operations, not banning every trivial local read. Swing's [threading contract](https://docs.oracle.com/en/java/javase/21/docs/api/java.desktop/javax/swing/SwingWorker.html) puts UI access on the EDT and lengthy work elsewhere.
+
+Move GUI prompts out of the processing facade into an explicit preparation-decision adapter. `DetectionInputPreparation` already gives the API a policy-driven path. Retain differences between headless refusal/automatic preparation and interactive questions; share the underlying facts and conversions.
+
+**Acceptance.** A deliberately slow disposable file store does not stop repainting or keyboard navigation while a header write or metadata restore runs. Import questions are created and handled on the EDT. Completion returns to the correct session/file, and errors release the command lock. A modal dialog's nested event loop is not itself proof of a deadlock; avoid using modality as the lifecycle mechanism.
+
+### D09. Complete the distinction between measurements and report presentation
+
+**Evidence.** [DetectionReportGenerator](src/main/java/eu/startales/spacepixels/util/reporting/DetectionReportGenerator.java) already delegates sections, snapshots display settings, constructs `ReportData` and atomically publishes HTML. But [NightEquipment](src/main/java/eu/startales/spacepixels/util/reporting/NightEquipment.java) and [FieldDepth](src/main/java/eu/startales/spacepixels/util/reporting/FieldDepth.java) calculate diagnostics from frames during report export. `SessionCatalogue` loads catalogue state lazily from the session folder. `ReportData`, section writers, maps, CSVs and the report-selection dialog still contain some separate category/label rules.
+
+**Proposal.** Keep section writers, but prepare a read-only report model once: stable finding IDs, accepted candidates, included categories, rejected frames, coordinates, catalogue snapshot and optional session diagnostics. Extend `ReportData`; do not introduce a competing identity system. A small category descriptor can provide the label, colour, prefix, count, inclusion option and anchor rule for the dialog, legends and maps. The recently fixed checkbox-index mismatch is a concrete example of what parallel row/index lists make possible.
+
+Separate diagnostic measurement services from HTML emission when the next diagnostic feature needs it. Their FITS/session orchestration can remain in SpacePixels; moving them into JTransient is not implied. Carry explicit diagnostic states such as unavailable, failed and measured instead of making every failure indistinguishable from an empty result. Keep browser lookup enrichment separate from detection confidence and preserve current offline exports.
+
+Capture resolved catalogue/correction/export context at a documented point. Current export snapshots and field checks already help; the concern is completing reproducibility across a full run, not claiming every report changes midway. Keep live rendering defaults out of new APIs: pass options rather than changing process-wide statics.
+
+**Acceptance.** HTML, JSON, maps and CSVs agree on IDs, numbering, counts and exclusions. Re-rendering an existing prepared result with different presentation options does not re-run detection or silently recompute diagnostics against newer catalogue state. Do not retain all raw frames forever merely to enable a later re-export; define what a lightweight saved result supports.
+
+### D10. Describe settings and engine compatibility once, with typed boundaries
+
+**Evidence.** `DetectionConfigurationPanel` describes a field in its UI construction, copies it in `applySettingsToMemory`, loads it in `updateSpinnersFromConfig`, normalises dependencies and maintains separate saved/core/tuned lists. Optional reflection helpers accept engine field names as strings. Loaded hidden `DetectionConfig` fields survive applying the visible controls, and the API already clones request configuration; both behaviours should remain. This is distinct from preserving arbitrary unknown JSON keys: Gson ignores those, and migration compares the key sets.
+
+**Proposal.** Introduce typed setting definitions incrementally for an existing page: stable ID, title, unit, description, basic/expert visibility, typed getter/setter and validation. Use the same identity for search, changed markers and validation messages. Preserve shared button models between Overview and detail pages. Keep “changed from saved” distinct from “set by Auto-Tune”. Do not turn all engine fields into a generated form or add hidden rows back.
+
+Make side effects clear in new method names. `getJTransientConfig()` currently commits editors and applies changes, while `ImageProcessing.getInstance()` constructs a new processor rather than returning a singleton. A name such as `captureValidatedSettings` or `openProcessor` would convey the actual operation. Preserve compatibility wrappers where public callers depend on existing names; this is gradual clarity work, not a mass rename.
+
+If supporting several engine versions is a real requirement, isolate capability/reflection handling in one adapter and expose unsupported capabilities clearly. Otherwise prefer a pinned compile-time contract over silently ignoring a missing setting. The maintainer's composite build currently requires newer local engine changes than the published dependency; release validation must check an explicit supported SpacePixels/JTransient pair before distribution. Do not treat a local composite compile as proof that a published-dependency build works.
+
+[AutoTunerRunner](src/main/java/eu/startales/spacepixels/util/AutoTunerRunner.java) temporarily changes a legacy engine static, and the API documents a concurrency restriction. Keep that restriction visible in application admission policy. An eventual engine-instance option would be a separate JTransient proposal, not a GUI-only refactor.
+
+**Acceptance.** Moving a setting between existing sections does not require editing unrelated string/index lists. UI and API validation use the intended shared rules, hidden values survive, unsupported settings are not falsely shown as applied, and release builds test the dependency pair they distribute.
+
+### D11. Make the main window a clear analysis workspace
+
+**Evidence.** The numbered workflow strip, primary action, status explanations, selected-frame preview and active-settings readout already improve orientation. However, application preferences live behind imported-session availability: `ApplicationWindow` disables configuration/settings tabs at startup, and `ConfigurationPanel.config()` reaches them through `ImageProcessing`. A completed report is offered by a one-time dialog; the main panel has no persistent completed-run list. The large-dataset warning uses a frame-count threshold, while blink already has a dimension-aware memory estimate.
+
+**Proposal.** Keep the four workflow groups, but make their roles clearer:
+
+- **Current session:** folder display name, frame count, dimensions, mono/colour, timing readiness and solved status in one compact summary. Use text as well as colour. Do not display observing-site details unnecessarily.
+- **Preferences:** allow ASTAP and site defaults to be configured before import. Dataset-dependent actions stay disabled with a reason. This follows D06; it is not just enabling a tab while its backing processor is null.
+- **Analysis plan:** show which analyses are enabled and what frames they use. Blink uses the selected frames; Preview opens the sequence at the selected frame; Auto-Tune uses a sufficiently large selection or falls back to the imported sequence; a normal run uses the whole sequence. Make these differences and the Auto-Tune fallback visible before starting.
+- **Run:** consider “Run analysis” or an adjacent explanation when variable stars and diagnostics are included under “Detect Moving Targets”. Keep the familiar wording until a deliberate UI wording decision is made. Clearly distinguish analyses to compute from categories to include in the report; omitting a report category need not disable a filter used by detection.
+- **Results:** keep an Open report / Open output folder action and a compact local run history. Record when, which session, which profile and the outcome. Do not hold full-resolution frame arrays in run-history entries.
+
+Use image dimensions and a conservative estimate of stage buffers to recommend normal versus iterative processing. Reuse the blink preflight pattern; do not label an estimate an exact peak-memory guarantee. Show progress stage and elapsed time; use counts when available, and avoid invented ETA precision.
+
+A useful larger idea is a small, persistent **session workspace** connecting frames, settings and completed results. It can remain a single-session desktop app; it does not require a database, project-file format or dockable-window framework.
+
+**Acceptance.** A new user can tell what will be analysed, which steps are optional, why an action is unavailable, where output goes and how to reopen the result. Cancelling/skipping a report is not presented as a failed detection. Validate these choices with a short task-based usability pass rather than assuming new labels are automatically better.
+
+### D12. Use shared visual rules and content-driven layout
+
+**Evidence.** [DetectionConfigurationPanel.addSettingRow](src/main/java/eu/startales/spacepixels/gui/DetectionConfigurationPanel.java) fixes a description panel to `480 × 85` for preferred, minimum and maximum size. Several controls use explicit dimensions and absolute derived font sizes. Explanatory text frequently uses `Label.disabledForeground` even while it is active content. `ProcessingProgressDialog` is fixed at `400 × 90`. The main workflow does already wrap and `WindowPlacement` restores a screen-aware window; preserve those improvements.
+
+**Proposal.** Define a small set of application UI defaults: body/help/section typography, spacing, content widths and semantic status colours. Use relative typography and scale custom dimensions with the supported FlatLaf/JDK mechanisms; prefer measured text and wrapping to fixed description heights. FlatLaf's [customisation guide](https://www.formdev.com/flatlaf/how-to-customize/) supports application-specific defaults, and its [scaling guidance](https://www.formdev.com/flatlaf/properties-files/#scaled-values) distinguishes scaled UI values. This is not a recommendation to use newer APIs unavailable in the pinned FlatLaf version.
+
+Keep the existing dark theme and restrained primary-action emphasis. Make enabled help text readable rather than visually identical to disabled controls; measure contrast before calling it a standards failure. Use standard text/buttons and consistent spacing before adding decorative icons. Charts may keep domain-specific colours, with consistent labels and legends across the app and reports.
+
+**Acceptance.** Inspect the empty and loaded main window, core/expert settings, configuration and viewers at representative small/large windows, 100/150/200% scale and a larger base font. Long descriptions and error messages wrap, primary actions remain visible and the workflow strip does not consume the usable frame/table area. Existing screenshots are context, not evidence that these tests have passed.
+
+### D13. Restore keyboard access without breaking viewer navigation
+
+**Evidence.** `AutoTuneOverviewPanel.addAnalysis` makes “Settings ›” a `JLabel` with a mouse listener. The manual/update links and ASTAP download link use similar mouse-driven labels. Settings labels are not associated with their input through `setLabelFor`. [SettingRow](src/main/java/eu/startales/spacepixels/gui/SettingRow.java) makes its reset button non-focusable. `ViewerSupport.removeFocus` recursively removes focusability to stop controls consuming Space and arrow keys. That last choice solved a real viewer interaction problem, but also removes ordinary keyboard access to controls.
+
+**Proposal.** Use link-styled buttons/actions for interactive text, with accessible names and keyboard activation. Associate labels with editors, supply units and descriptions, and make changed state available beyond colour. Provide a keyboard path to reset a setting. Audit `FrameView`'s custom accessible context if it is to expose more than an image, including useful frame/status text and selected-overlay information.
+
+For viewers, scope stepping/playback shortcuts to the image-navigation context while allowing deliberate Tab navigation into controls. Do not simply set everything focusable and reintroduce the Space/arrow bug. Editing a numeric value or operating a combo box must not step the sequence. Oracle's [Swing accessibility guidance](https://docs.oracle.com/javase/tutorial/uiswing/misc/access.html) specifically covers label associations, accessible descriptions and keyboard alternatives.
+
+**Acceptance.** Complete import, settings search/edit/reset, Auto-Tune, preview navigation and result opening using the keyboard. Drive actual key events to the focus owner in viewer tests, as the maintainer's existing harness guidance requires. Check the accessible names of inputs and link controls; do not claim a full screen-reader audit from a source search alone.
+
+## Proposed architecture: a few clear boundaries
+
+The following is a target flow of requests and results, not a requirement to create a package or interface for every box. The UI completion adapter lives on the Swing side; the worker and application services do not acquire a dependency on Swing by returning results to it.
+
+```mermaid
+flowchart TD
+    UI["Swing views + shared Actions"] --> C["Workflow coordinator + availability"]
+    C --> J["Owned jobs + typed requests"]
+    API["Java API / CLI"] --> S["Application services"]
+    J --> S
+    S --> IO["Input preparation / FITS / catalogue adapters"]
+    S --> E["JTransient engine"]
+    S --> R["Run result + prepared diagnostics"]
+    R --> P["Report model + section writers"]
+    R --> V["Viewer overlays"]
+    J --> U["UI completion adapter on EDT"]
+    U --> UI
 ```
-ApplicationWindow
-  owns the Guava EventBus, the four tabs, and the ImageProcessing for the open folder
-  MainApplicationPanel     workflow buttons, file table, status, progress dialog
-  ConfigurationPanel       solver and site
-  StretchPanel             display stretch
-  DetectionConfigurationPanel   settings and the Overview
-  BlinkFrame               separate window, same bus
-```
 
-A button listener builds a task and starts `new Thread(task)`. The task calls `ImageProcessing` or a service and posts events. Guava delivers those events on the **worker thread**, not on the Swing thread. Every subscriber that touches a component must move to the event-dispatch thread itself. There is no bus wrapper that does this.
+- **Views** build components and show state. The main panel stops being the place that decides job policy, rewrites FITS and owns catalogue fetching.
+- **Workflow coordinator** handles user intent, session handover, admission and outcomes. It has no dependence on individual button enabled flags.
+- **Application services** take explicit inputs and options and return data. They do not show Swing dialogs or reach through `ApplicationWindow` for logging/configuration. Keep concrete services unless a seam needs substituting in tests or has multiple implementations.
+- **Adapters** contain file formats, solver/network calls, persistence and interactive preparation decisions. The GUI and API supply different decision policies to shared operations.
+- **Presentation** consumes a stable result. Existing report writers and shared viewer components stay in use.
 
-Keyboard shortcuts (`Ctrl+D`, `Ctrl+B`, `Ctrl+P`, `Ctrl+T`) are `AbstractAction`s that call `button.doClick()`. The buttons themselves are anonymous `addActionListener` blocks. Viewers use `InputMap` / `ActionMap` directly. The main window does not have a shared action object that both a button and a menu item would use.
+The pattern is close to a modest **model–view–presenter** arrangement: a state model and testable workflow/presenter between Swing widgets and services. Use plain Java constructor injection, typed requests, `Action`s and explicit completion callbacks. A service locator, a second global event bus, deep inheritance tree or mandatory DI/reactive framework would add machinery without resolving the ownership questions.
 
-Progress is one modal `ProcessingProgressDialog`. `EngineProgressUpdateEvent` is the only progress message, shared by import, detection, tuning, stretch and conversion. Started/finished pairs then open the dialog, lock the buttons, and unlock them again. Failure is a `JOptionPane` inside the finished subscriber.
+### Common patterns that fit this codebase
 
-Two newer jobs do not use this shape. Fetch Sky Catalogue and the plate-solution check are a raw thread inside `MainApplicationPanel`, with progress written straight to a label. Batch stretch is posted from an inline thread in the panel even though `BatchStretchTask` exists and does the same posts.
+| Pattern | Concrete use here | Limit |
+|---|---|---|
+| Command | A shared Swing `Action` starts a typed operation from a button, shortcut or menu. | A local one-off listener does not need a command hierarchy. |
+| Model–view–presenter | Availability, validation and workflow transitions can be tested independently of component layout. | Avoid replacing the panel with an equally large presenter. |
+| Immutable request / result | Capture settings and identities once; return a typed outcome and stable report model. | Share large read-only image data by ownership contract rather than deep-copying it. |
+| Strategy / adapter | GUI preparation questions and API preparation policy choose how to handle the same conversion facts. | Introduce an interface where behaviour really varies, not for every concrete helper. |
+| Observer | Notify views about session/catalogue/settings changes through explicit, scoped subscriptions. | Subscriptions need an owner, detach path and stated delivery thread. |
+| Composition and focused reuse | Keep shared stretch, drawing, navigation and report helpers behind their existing views. | Do not force every viewer or report section into a large inheritance framework. |
+| Resource ownership | A job or viewer owns its engine, worker, listener subscription and buffers, and releases them predictably. | A cancelled future is not proof that its underlying operation has terminated. |
 
-## Findings
+## State and resource ownership to make explicit
 
-### 1. One event means several different jobs
+| Scope | Owned state | Lifetime / rule |
+|---|---|---|
+| Application | User-level configuration, startup defaults, supported integrations, job resources | Loaded independently of a dataset; save failures are visible. |
+| Session | Session ID, frame metadata, current selection, catalogue/correction, session caches and last-result references | Replaced on a successful handover; stale results cannot attach to its successor. |
+| Run | Click-time config and export options, input identities, resolved context, diagnostics, outcome and artifact paths | Stable for reproducibility; does not read live controls during work. |
+| Viewer | Current frame, zoom, playback state, listeners and owned display buffers | Explicitly detached/released on close; shared stretch models retain intentional semantics. |
+| Report lookup | Provider request, report identity and enrichment cache | Independent of detection verdict; bounded work and existing target/path validation remain. |
 
-`DetectionStartedEvent` and `DetectionFinishedEvent` are posted by the full detection, the iterative detection, Manual Transient Inspection and the star-mask stack. The finished event carries `isQuickDetection`, a nullable report file, a nullable image and unused star/streak counts. Inspection and the mask stack pass `isQuickDetection = true` and a null report so the main panel will not offer to open a report. The main panel still treats the event as "object detection completed": it closes the progress dialog, unlocks the workflow and sets that status text.
+A future run record should include a schema version, supported application/engine build identifiers, original/prepared input identities, effective settings, resolved catalogue/correction identity, analysis/export inclusion and artifact manifest. Some of this exists already in `detection_config.json`, `report-data.json` and report metadata; extend those rather than writing a conflicting summary. Avoid storing private absolute paths or observing-site data in a shareable manifest by default. A reproducibility record is distinct from retaining all image buffers or promising replay from data that is no longer available.
 
-`EngineProgressUpdateEvent` has the same problem in a milder form. Any job can move the same dialog. Two jobs at once (a detection and a sky fetch, or a stretch and an import) share one dialog and one status label with no owner.
+The localhost lookup proxy's lifecycle can remain application-scoped. Give it an explicit owner and a bounded I/O policy when expanding it, rather than starting services merely by constructing UI views. Its existing provider/target/path validation and atomic cache work should be preserved; this review did not establish a new security defect there.
 
-This is the main reason the bus is hard to extend. A new background job either reuses a finished event whose fields do not describe it, or skips the bus, as the sky catalogue did.
+## Delivery plan
 
-### 2. The main panel is the controller, the view and the session
+| Stage | Work | Why this order |
+|---|---|---|
+| A: focused correctness | D01 file publication; D03 preview identity; D05 invalid-editor feedback | Small, concrete failure modes; do not wait for a broad architecture migration. |
+| B: workflow foundation | D02 ownership/admission and D04 outcomes/cleanup for detection, inspection and star-mask jobs; then D07 actions | Makes lifecycle explicit before replacing UI locking. |
+| C: session boundary | D06 application preferences/session handover; D08 background WCS write and metadata restoration | Reduces UI/service coupling and protects session transitions. |
+| D: presentation and polish | D09 prepared report data; D10 one page of typed settings bindings; D11 results/readiness; D12/D13 layout and access | Builds on explicit state; accessibility fixes that are independent can start earlier. |
 
-`MainApplicationPanel` builds the workflow strip, owns the file table, starts the threads, subscribes to every lifecycle event, locks and unlocks controls, confirms memory, writes a plate solution into a FITS header, and runs the sky-catalogue job. `ApplicationWindow` is a thin shell around it, but the panel reaches back through the window for the bus, `ImageProcessing`, the stretch panel and the settings panel.
+Reusing `BatchStretchTask` instead of the duplicate inline worker is a useful small change within Stage B, not the main architectural solution. Add one adapter/command at a time and keep the public API and file formats compatible. Do not combine the file-safety fix, EventBus migration and a settings redesign in one commit.
 
-The enable/disable rules (`disableControlsProcessing`, `disableControlsBlinking`, `disableControlsSolving`, and the matching enable methods) are the real workflow state. They are not a state value. Each new button has to be added to several of them, and a shortcut checks `uiLocked` separately. A missed call leaves a button clickable during a run.
+## Verification strategy
 
-### 3. Actions are not first-class
+The existing automated suite covers important data and report paths, and there are GUI tests for several components. The reviewed tree has no dedicated `MainApplicationPanel`, `SettingsNavigator` or `SettingRow` test class. Make newly extracted state and workflow logic easy to test without reflection into large panels or opening the whole application.
 
-Swing's intended pattern is an `Action`: one object holds the name, the enabled flag and the work, and a button, a menu item and a key binding all use it. Here the work lives in the listener, the enabled flag lives on the button, and the key binding clicks the button if it is enabled and `uiLocked` is false. The table popup copies the same three checks again (`blinkItem.setEnabled(blinkButton.isEnabled())`).
+| Behaviour | Verification that would justify the change |
+|---|---|
+| File publication | Fault-injected writes/replacements using disposable FITS and config fixtures; previous files remain usable and failure is visible. |
+| Job ownership | Deterministic fake jobs: duplicate start, A finishes after B, late progress, session replaced, ordinary failure, export declined. |
+| Preview identity | Controlled out-of-order completion; assert frame, image, histogram and parameter version agree. |
+| Settings | Invalid typed values, dependent limits, non-finite profile/API inputs, hidden-value round trips, migration, defaults/revert and failed-save dirty state. |
+| Actions and table | Same enabled reason/action across button, shortcut and menu; correct model-row conversion if sorting is introduced. |
+| EDT responsiveness | Slow fake storage/service with a responsive UI heartbeat; UI mutations happen on the EDT. Do not use fragile timing thresholds as the only proof. |
+| Viewer lifecycle/access | Actual focused key events, editing versus navigation, listener counts and released frame references after close. |
+| Report refactors | Same engine results, IDs, counts, CSV values, rejected frames and assets for equivalent options; offline browser checks for changed interactions. |
+| Release compatibility | Compile/test the supported engine pair, plus opt-in local composites; do not assume an unpublished engine change is available from Maven Central. |
 
-`ViewerSupport` already does this the other way, with named actions on the root pane. The main workflow is the place that would benefit, because every command there has a button, a shortcut or a menu item, and an enabled rule.
+For behavioural changes, follow the maintainer's real-data comparison method. Anything affecting detection, preparation or numeric diagnostics needs the relevant before/after datasets and one engine fix at a time. A pure wiring/presentation change should demonstrate unchanged processing inputs and outputs and exercise its GUI/interaction boundary. Do not rewrite user settings during verification; use an isolated JVM home and preserve or isolate Java preferences.
 
-### 4. Notifications have no single path
+## Changes to avoid
 
-A finished job reports itself in three ways, chosen inside the subscriber: the status label, the progress dialog, and a `JOptionPane`. Wording and buttons differ per job ("Import the newly created mono directory now?" lives in the convert subscriber; the WCS write question lives in the solve subscriber). There is no small type for "the job ended, here is the message and the optional next step".
+- A wholesale Swing-to-JavaFX/web rewrite to solve lifecycle and state problems.
+- Splitting every long class or moving all `util` files before extracting a real responsibility.
+- A single giant controller replacing a single giant panel.
+- Generic jobs with untyped results, a global EDT EventBus wrapper, or assuming interruption instantly stops computation.
+- Making every domain object observable or giving every one-off callback its own interface.
+- Reintroducing hidden settings, silently changing thresholds, or tying engine acceptance to a report checkbox.
+- Keeping large image buffers in session history to make later rendering convenient.
+- Replacing the current viewer focus rules without testing real keyboard focus and editing.
 
-The status label is also used for progress that is not a dialog (blink frame counts, sky-catalogue stages). That is fine. The inconsistency is that some failures are dialogs, some are only the label, and the sky-catalogue failure is a field (`skyFetchProblem`) shown in the workflow status.
-
-### 5. Session state is reached from wherever the caller is
-
-After import, the open folder is `ApplicationWindow.imagePreProcessing`. The last track overlay and the last variable-star overlay are fields on `ImageProcessing`. The sky catalogue and the plate correction are `SkyCatalogueModel.shared()`, a process-wide holder. Detection settings are the live `DetectionConfig` in the settings panel, also saved as JSON. Display stretch and a few window choices are Java preferences. The GUI reads each of these from a different place.
-
-`SkyCatalogueModel.shared()` is the one that will hurt first. A second window, a test, or a headless call in the same JVM sees the catalogue of whichever folder was fetched last. The API path does not use it. The viewers do.
-
-### 6. Threading is ad hoc
-
-Every job is `new Thread(...).start()`, with no shared pool and no common cancellation. Blink uses an `AtomicBoolean`. The sky job uses `Thread.interrupt`. Detection uses the progress dialog's cancel flag. A second click is prevented by disabling buttons, not by the job knowing it should not start.
-
-`ImageProcessing` and `IterativeDetectionTask` call `SwingUtilities.invokeAndWait` from a worker to show a dialog. Guava then delivers events on that same worker. A subscriber that also waits for the worker, or a modal dialog opened while the worker holds a lock, can stall the session. The progress dialog's `setVisible(true)` is itself modal; the comment in `onDetectionStarted` depends on that. It works, and it is brittle.
-
-### 7. The API and the GUI do not share a workflow
-
-`DefaultSpacePixelsPipelineApi` prepares input, optionally tunes, runs the pipeline and writes the report, and reports progress through `SpacePixelsProgressListener`. The GUI does the same steps through tasks and `ImageProcessing`, with the bus as its listener. The two paths already share `DetectionInputPreparation`, `StandardDetectionPipelineService` and `AutoTunerRunner`. They do not share the decision of what a run is.
-
-That is acceptable. The GUI has questions the API must not ask (write this header? open this report? blink anyway?). The drift to avoid is a third copy of those steps inside a panel, which is what the inline batch-stretch thread is.
-
-### 8. `util` is still a leftover drawer
-
-Import, WCS, stretch, blink data, auto-tune storage and the report all sit in `eu.startales.spacepixels.util`. The services extracted in 2026 (`PlateSolveService`, `DetectionInputPreparation`, the two pipeline services) are the right grain. `ImageProcessing` is still the object the GUI asks for all of them, and it still opens Swing dialogs itself (conversion, exposure groups, decompression). A processing type that shows a dialog cannot be called from the API without a window.
-
-The reporting package is large and mostly cohesive. Leave it. New report behaviour belongs in a section writer, not in the GUI.
-
-### 9. Settings are ahead of the workflow
-
-The settings panel is the clearest design in the GUI: pages, rows, one apply path, hidden settings left in the config. The workflow strip above the file table is still assembled control by control. Both are Swing. Only one of them will stay understandable as buttons are added.
-
-`DetectionConfigurationPanel` still subscribes to import and auto-tune itself, and it still starts auto-tune. That is reasonable today. It should not also grow sky-catalogue or detection-run logic. Those belong with the workflow.
-
-## Proposed shape
-
-Keep Swing, Guava and the current packages. Do not introduce a UI framework. Change the seams the next feature would otherwise cut through.
-
-### A small job type
-
-One type, posted on the bus, instead of a new started/finished pair per feature:
-
-- name of the job (import, solve, detect, tune, blink, stretch, convert, sky catalogue)
-- phase: started, progress, finished
-- percent and message
-- success and error text
-- an optional result (report file, imported files, solve result)
-
-The worker posts it. One subscriber on the main panel owns the progress dialog, the status label and the button lock. A second subscriber handles only the result it cares about (the settings overview handles tune results; the file table handles solve results). Inspection and the star-mask stack stop pretending to be a detection.
-
-Progress from a worker still arrives on the worker thread. The subscriber that touches Swing stays responsible for `invokeLater`, until a single decorator on the bus does that hop in one place. Do that decorator when the job type is introduced, so it is not a second change later.
-
-### Actions for the workflow commands
-
-Each command in the strip (import, convert, stretch, solve, blink, preview, inspect, tune, detect) becomes an `Action` with a name and `setEnabled`. The button, the table menu and the shortcut all use that action. `uiLocked` becomes "every workflow action is disabled except Stop", set in one method. `ViewerSupport` already shows the key-binding half of this.
-
-### Jobs that are not tasks yet
-
-Move the sky-catalogue thread and the inline batch-stretch thread into `tasks`, posting the same job type. `BatchStretchTask` already exists; the panel should start it instead of copying it. The sky job keeps its cancel-by-interrupt behaviour inside the task.
-
-### One session object
-
-A session value, owned by `ApplicationWindow` and replaced on import:
-
-- the open folder and the `FitsFileInformation` list
-- the `ImageProcessing` (or the services under it)
-- the sky catalogue and the plate correction, instead of `SkyCatalogueModel.shared()`
-- the last overlays the viewers draw
-
-Viewers take the session they are opened with. A test builds a session without a window. The API keeps its own request and does not see this object.
-
-### `ImageProcessing` stops showing windows
-
-Dialogs for "this folder mixes exposures" and "convert these frames" are GUI questions. `ImageProcessing` should return the fact (mixed exposures, signed pixels, the largest group). The panel decides whether to ask. The API already answers those by refusing or by the request's preparation mode. After this, a service method is safe to call from both.
-
-### What not to do
-
-- Do not replace the EventBus with property-change listeners, a message queue, or a reactive library. The bus is fine. The messages are fuzzy.
-- Do not split `CreativeTributeRenderer` or the section writers because they are long. They have one job.
-- Do not rewrite `DetectionConfigurationPanel` into a generated form. Extract persistence only when a change needs it; [REFACTOR.md](REFACTOR.md) already says that.
-- Do not make the GUI call `SpacePixelsPipelineApi` for a button click. The API is the headless contract. Share the services underneath, not the entry point.
-
-## Suggested order
-
-Each step should leave the screens behaving as they do now.
-
-1. **Document the EDT rule next to the bus** in `HIGH_LEVEL_DESIGN.md` when that file is next touched: events are delivered on the posting thread, and Swing updates happen in the subscriber. No code.
-2. **One job event, and a single progress subscriber.** Start with detection, inspection and the star-mask stack, which already share `DetectionFinishedEvent`. Leave blink's richer events until the dialog and the status label have one owner.
-3. **Route batch stretch through `BatchStretchTask`.** Delete the inline copy. Small, and it removes a second way to post the same events.
-4. **Workflow actions and one lock method.** Buttons, popup and shortcuts share an `Action`. No change to what the commands do.
-5. **Sky catalogue as a task** posting the same job event. This is the feature that most recently bypassed the pattern.
-6. **A session object, and dialogs out of `ImageProcessing`.** Do this when the next import or viewer change needs it. Doing it alone touches every panel.
-
-Steps 2 and 4 are the ones that make the design visible in the GUI code. The others stop the next feature from adding a third style.
+The first implementation should be a small, reviewable correction with a measurable acceptance condition. Safe file publication and preview result identity are the strongest starting points; they improve reliability now and do not depend on the larger restructuring.
