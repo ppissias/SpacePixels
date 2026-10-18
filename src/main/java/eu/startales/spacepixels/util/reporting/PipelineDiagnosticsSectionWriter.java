@@ -715,6 +715,10 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<h2>Dither & Sensor Drift Diagnostics</h2>");
         report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
         report.println("Shows how the image frame drifted across the session. Sensor dust or hot pixels move exactly along this trajectory, potentially creating false moving targets.</p>");
+        if (!reportContext.dataAreaText.isEmpty()) {
+            report.println("<div class='astro-note'>" + DetectionReportGenerator.escapeHtml(reportContext.dataAreaText)
+                    + " The Overview picture and the detection map outline it in blue.</div>");
+        }
         if (excludedFrames != null && !excludedFrames.isEmpty()) {
             StringBuilder frames = new StringBuilder();
             for (Integer index : excludedFrames) {

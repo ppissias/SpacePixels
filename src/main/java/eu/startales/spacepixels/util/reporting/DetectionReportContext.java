@@ -2,6 +2,7 @@ package eu.startales.spacepixels.util.reporting;
 
 import eu.startales.spacepixels.util.FitsFileInformation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
 import io.github.ppissias.jtransient.core.SlowMoverCandidateResult;
 import io.github.ppissias.jtransient.core.SlowMoverSummaryTelemetry;
@@ -39,6 +40,10 @@ final class DetectionReportContext {
     final List<TrackLinker.Track> suspectedStreakTracks;
     final List<TrackLinker.Track> movingTargets;
     ReportData data;
+    /** Where every kept frame holds image data; set after construction, null when not measured. */
+    DataArea dataArea;
+    /** One sentence about the data area for the reader, empty when not measured. */
+    String dataAreaText = "";
     private SessionCatalogue catalogue;
 
     SessionCatalogue catalogue() {

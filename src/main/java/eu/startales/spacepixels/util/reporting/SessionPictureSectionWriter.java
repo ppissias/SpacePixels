@@ -96,6 +96,7 @@ final class SessionPictureSectionWriter {
 
         String detections = detectionsLayer(context, localRescueTracks, width, height);
         String variables = variablesLayer(context, width, height);
+        String area = areaLayer(context, width, height);
         SkyCatalogue catalogue = SessionCatalogue.of(context).catalogue;
         WcsCoordinateTransformer transformer = context.astrometryContext != null ? context.astrometryContext.getTransformer() : null;
         String catalogueLayer = catalogue != null && transformer != null ? catalogueLayer(catalogue, transformer, width, height) : null;
@@ -105,6 +106,8 @@ final class SessionPictureSectionWriter {
         report.println("<span class='sp-title'>The session</span>");
         report.println(button("mask", "Star mask", hasMask, false,
                 "The star mask in red: what the detection treated as stars. Hover to see it, click to keep it."));
+        report.println(button("area", "Data area", area != null, area != null,
+                "The data area in blue: where every kept frame has image data."));
         report.println(button("catalogue", "Catalogue", catalogueLayer != null, false, catalogueLayer != null
                 ? "Messier, NGC, IC and Sharpless objects, bright stars with a proper name and named variable stars, from the sky catalogue of the session."
                 : "No sky catalogue: Fetch Sky Catalogue in SpacePixels (2 Astrometry) before Detect Moving Targets."));
@@ -119,6 +122,9 @@ final class SessionPictureSectionWriter {
                 + "' width='" + pictureWidth + "' height='" + pictureHeight + "' alt='Median stack of the session' /></a>");
         if (hasMask) {
             report.println("<img loading='lazy' decoding='async' class='sp-layer' data-layer='mask' src='" + MASK_FILE + "' alt='' style='display:none;' />");
+        }
+        if (area != null) {
+            report.println(area);
         }
         if (catalogueLayer != null) {
             report.println(catalogueLayer);
@@ -135,6 +141,10 @@ final class SessionPictureSectionWriter {
         report.println("<div class='sp-caption'>The median stack of the frames kept"
                 + (catalogueLayer != null && transformer != null && transformer.isCorrected() ? "; catalogue positions use the plate solution corrected to the stars" : "")
                 + ". Click the picture for the full-size stack.</div>");
+        if (area != null && !context.dataAreaText.isEmpty()) {
+            report.println("<div class='sp-caption'>" + DetectionReportGenerator.escapeHtml(context.dataAreaText)
+                    + " It is outlined in blue.</div>");
+        }
         report.println("</div>");
     }
 
@@ -163,6 +173,12 @@ final class SessionPictureSectionWriter {
     /** Labels about as large as ordinary text when the picture fills the report width. */
     private static int fontSize(int width) {
         return Math.max(12, width / 110);
+    }
+
+    /** The data area's outline; null when it was not measured. */
+    static String areaLayer(DetectionReportContext context, int width, int height) {
+        String polygon = DataAreaPresentation.svgPolygon(context.dataArea);
+        return polygon == null ? null : svgStart("area", width, height, true) + polygon + "</svg>";
     }
 
     /** The detections, with the labels and colours of the detection map; null when there are none. */

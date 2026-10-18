@@ -1363,6 +1363,8 @@ public class DetectionReportGenerator {
                 suspectedStreakTracks,
                 movingTargets);
 
+        reportContext.dataArea = result.dataArea;
+        reportContext.dataAreaText = DataAreaPresentation.describe(result.dataArea, pipelineTelemetry);
         reportContext.data = ReportData.create(reportContext, pipelineTelemetry, result.variableStarAnalysis, commonMotionGroups, inclusion);
         java.nio.file.Files.createDirectories(exportDir.toPath());
         reportContext.data.writeJson(exportDir);

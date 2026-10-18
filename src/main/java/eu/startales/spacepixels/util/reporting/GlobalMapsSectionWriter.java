@@ -63,6 +63,7 @@ final class GlobalMapsSectionWriter {
         int catalogueObjects = CatalogueMapPainter.paint(globalMap, sessionCatalogue.catalogue,
                 reportContext.astrometryContext != null ? reportContext.astrometryContext.getTransformer() : null);
         paintVariableCandidates(globalMap, reportContext.data);
+        DataAreaPresentation.paint(globalMap, reportContext.dataArea);
         TrackVisualizationRenderer.saveLosslessPng(globalMap, new File(reportContext.exportDir, "global_track_map.png"));
 
         report.println("<div class='panel'>");
@@ -73,6 +74,7 @@ final class GlobalMapsSectionWriter {
                 "Local activity clusters are ringed as <strong>LC#</strong>, while maximum-stack slow-mover shape candidates, single-frame anomalies, and single streaks are marked as <strong>DS#</strong>, <strong>A#</strong>, and <strong>S#</strong>. " +
                 "Measured variable-star candidates are circled in magenta as <strong>V#</strong>. Common-motion groups and unclassified detections are in their own sections."
                 + (catalogueObjects > 0 ? " From the sky catalogue of the session: Messier, NGC, IC and Sharpless objects in yellow, bright named stars in white and named variable stars in magenta." : "")
+                + (reportContext.dataArea != null ? " The dashed blue outline is the data area, where every kept frame has image data." : "")
                 + "</p>");
         report.println(detectionLegendHtml(reportContext, localRescueTracks));
         int width = globalMap.getWidth(), height = globalMap.getHeight();
@@ -90,6 +92,8 @@ final class GlobalMapsSectionWriter {
                 ? SessionPictureSectionWriter.catalogueLayer(sessionCatalogue.catalogue, reportContext.astrometryContext.getTransformer(), width, height) : null;
         if (catalogueLayer != null) report.println("<button class='id-link' type='button' data-report-category='catalogue' aria-pressed='false'>Catalogue</button>");
         report.println("</div><div class='report-map-stage'><img loading='lazy' decoding='async' src='report_map_background.png' alt='Median stack with selectable detection layers' />");
+        String area = SessionPictureSectionWriter.areaLayer(reportContext, width, height);
+        if (area != null) report.println(area);
         String detections = SessionPictureSectionWriter.detectionsLayer(reportContext, localRescueTracks, width, height);
         if (detections != null) report.println(detections);
         String variables = SessionPictureSectionWriter.variablesLayer(reportContext, width, height);

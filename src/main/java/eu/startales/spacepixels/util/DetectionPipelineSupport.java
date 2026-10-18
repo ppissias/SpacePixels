@@ -14,6 +14,7 @@ import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
 import io.github.ppissias.jtransient.core.TrackLinker;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.PipelineResult;
+import io.github.ppissias.jtransient.photometry.VariableStarAnalysis;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 
 import java.time.Instant;
@@ -203,7 +204,9 @@ final class DetectionPipelineSupport {
                 ResidualTransientAnalysis.empty(),
                 result.masterVetoMask,
                 result.driftPoints == null ? Collections.emptyList() : result.driftPoints,
-                result.maximumStackData);
+                result.maximumStackData,
+                VariableStarAnalysis.empty(),
+                result.dataArea);
     }
 
     private static String formatTraceTimestamp(long timestampMillis) {
