@@ -37,16 +37,15 @@ final class TargetVisualizationSectionWriter {
         if (context.singleStreaks.isEmpty()
                 && context.streakTracks.isEmpty()
                 && context.movingTargets.isEmpty()
-                && context.anomalies.isEmpty()
-                && context.suspectedStreakTracks.isEmpty()) {
-            report.println("<div class='panel'><p>No moving tracks, single-frame streaks, anomaly rescues, or suspected streak tracks were detected in this session.</p></div>");
+                && context.anomalies.isEmpty()) {
+            report.println("<div class='panel'><p>No moving tracks, single-frame streaks or anomaly rescues were detected in this session.</p></div>");
         }
 
         if (!context.singleStreaks.isEmpty()) {
             writeSingleStreaks(report, context);
         }
 
-        if (!context.streakTracks.isEmpty() || !context.suspectedStreakTracks.isEmpty()) {
+        if (!context.streakTracks.isEmpty()) {
             writeStreakTracks(report, context);
         }
 
@@ -143,10 +142,6 @@ final class TargetVisualizationSectionWriter {
     private static void writeStreakTracks(PrintWriter report,
                                           DetectionReportContext context) throws IOException {
         report.println("<h3 id='streak-tracks' style='color: #ffcc33; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Streak Tracks</h3>");
-        if (!context.suspectedStreakTracks.isEmpty()) {
-            report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>Suspected streak tracks grouped from same-frame rescued anomalies are shown here alongside the confirmed multi-frame streak tracks.</p>");
-        }
-
         int counter = 1;
         for (TrackLinker.Track track : context.streakTracks) {
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
@@ -211,70 +206,6 @@ final class TargetVisualizationSectionWriter {
             counter++;
         }
 
-        int suspectedCounter = 1;
-        for (TrackLinker.Track track : context.suspectedStreakTracks) {
-            TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
-            SourceExtractor.DetectedObject point = track.points.get(0);
-            int frameIndex = point.sourceFrameIndex;
-            int partCount = track.points.size();
-            String partBadge = partCount > 1
-                    ? " <span style='background: #6b4a20; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>" + partCount + " Parts</span>"
-                    : "";
-            String groupingBadge = " <span style='background: #7a5a12; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>Same-Frame Anomaly Grouping</span>";
-
-            report.println("<div class='detection-card streak-title' id='finding-sst" + suspectedCounter + "' style='border-left-color: #ff9933;'>");
-            report.println("<div class='detection-title' style='color: #ffb347;'>Suspected Streak Track SST" + suspectedCounter + partBadge + groupingBadge + "</div>");
-            report.print(buildSingleFrameEventSummaryHtml(track, context.fitsFiles));
-
-            short[][] croppedData = TrackVisualizationRenderer.robustEdgeAwareCrop(
-                    context.rawFrames.get(frameIndex),
-                    cropBounds.fixedCenterX,
-                    cropBounds.fixedCenterY,
-                    cropBounds.trackBoxWidth,
-                    cropBounds.trackBoxHeight);
-            BufferedImage streakImage = TrackVisualizationRenderer.createDisplayImage(croppedData, context.settings);
-            String streakFileName = "suspected_streak_track_" + suspectedCounter + ".png";
-            TrackVisualizationRenderer.saveLosslessPng(streakImage, new File(context.exportDir, streakFileName));
-
-            String shapeFileName = "suspected_streak_track_" + suspectedCounter + "_shape.png";
-            BufferedImage streakShapeImage = TrackVisualizationRenderer.createSingleStreakShapeImage(
-                    track.points,
-                    cropBounds.trackBoxWidth,
-                    cropBounds.trackBoxHeight,
-                    cropBounds.startX,
-                    cropBounds.startY,
-                    false);
-            TrackVisualizationRenderer.saveLosslessPng(streakShapeImage, new File(context.exportDir, shapeFileName));
-
-            report.println("<div class='image-container'>");
-            report.println(footprintFigure(streakFileName, shapeFileName));
-            report.println("</div>");
-
-            String entriesHtml = buildStreakPointEntriesHtml(track, context.astrometryContext, true);
-            if (partCount > 1) {
-                report.println(buildFoldableStreakDetailsHtml(
-                        "Show individual streak parts (" + partCount + ")",
-                        "Detection Coordinates & Part Metrics",
-                        entriesHtml));
-            } else {
-                report.println("<strong>Detection Coordinates:</strong><ul class='source-list'>");
-                report.println(entriesHtml);
-                report.println("</ul>");
-            }
-            if (partCount > 1) {
-                report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(
-                        context.astrometryContext,
-                        track,
-                        "Reference epoch for suspected streak frame lookup"));
-            } else {
-                report.print(DetectionReportAstrometry.buildSingleFrameSkyViewerHtml(
-                        context.astrometryContext,
-                        point,
-                        "Reference epoch for suspected streak lookup"));
-            }
-            report.println("</div>");
-            suspectedCounter++;
-        }
     }
 
     private static void writeMovingTargets(PrintWriter report,

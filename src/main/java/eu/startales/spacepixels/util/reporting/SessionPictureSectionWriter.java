@@ -188,7 +188,6 @@ final class SessionPictureSectionWriter {
         double offset = width / 160.0;
         int count = 0;
         count += tracks(svg, context.streakTracks, DetectionReportGenerator.GLOBAL_MAP_STREAK_TRACK_COLOR, "ST", offset);
-        count += tracks(svg, context.suspectedStreakTracks, DetectionReportGenerator.GLOBAL_MAP_SUSPECTED_STREAK_COLOR, "SST", offset);
         count += tracks(svg, context.movingTargets, DetectionReportGenerator.GLOBAL_MAP_MOVING_TARGET_COLOR, "T", offset);
         count += tracks(svg, localRescueTracks, DetectionReportGenerator.GLOBAL_MAP_LOCAL_RESCUE_COLOR, "LR", offset);
         int index = 1;

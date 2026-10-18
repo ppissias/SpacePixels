@@ -16,7 +16,7 @@ final class ReportPresentation {
     static String version(String component) { return BUILD.getProperty(component, "development"); }
     static String anchor(String id) { return id.startsWith("V") ? "variable-v" + id.substring(1) : "finding-" + id.toLowerCase(Locale.ROOT); }
     static String linkLabel(String label, String svg) {
-        if (!label.matches("(?:SST|ST|DS|LR|LC|T|S|A|V)[1-9][0-9]*")) return svg;
+        if (!label.matches("(?:ST|DS|LR|LC|T|S|A|V)[1-9][0-9]*")) return svg;
         return "<a href='#" + anchor(label) + "'>" + svg + "</a>";
     }
 

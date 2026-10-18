@@ -192,8 +192,7 @@ final class ClaudePerspectiveSectionWriter {
                 .append("' y2='").append(eventsTop + eventsHeight / 2).append("' stroke='").append(GRID).append("' stroke-width='1'/>");
         int row = 0;
         row = trackBars(svg, timeline, context.movingTargets, "T", "#4da6ff", "moving-object track", eventsTop, row);
-        row = trackBars(svg, timeline, context.streakTracks, "ST", "#ffcc33", "streak track", eventsTop, row);
-        trackBars(svg, timeline, context.suspectedStreakTracks, "SST", "#ffb347", "suspected streak track", eventsTop, row);
+        trackBars(svg, timeline, context.streakTracks, "ST", "#ffcc33", "streak track", eventsTop, row);
         int counter = 1;
         for (TrackLinker.Track track : context.singleStreaks) {
             int frame = track.points.isEmpty() ? -1 : track.points.get(0).sourceFrameIndex;

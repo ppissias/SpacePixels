@@ -103,7 +103,6 @@ public class DeepStackReportSectionWriterTest {
                 Collections.emptyList(),
                 Collections.emptyList(),
                 Collections.emptyList(),
-                Collections.emptyList(),
                 Collections.emptyList());
         StringWriter output = new StringWriter();
         DeepStackReportSectionWriter.writeSection(new PrintWriter(output), context);

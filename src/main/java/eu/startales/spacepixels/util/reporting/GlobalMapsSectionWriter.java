@@ -39,7 +39,6 @@ final class GlobalMapsSectionWriter {
                                                  List<TrackLinker.Track> localRescueTracks) throws IOException {
         if (reportContext.singleStreaks.isEmpty()
                 && reportContext.streakTracks.isEmpty()
-                && reportContext.suspectedStreakTracks.isEmpty()
                 && reportContext.movingTargets.isEmpty()
                 && reportContext.anomalies.isEmpty()
                 && localRescueTracks.isEmpty()
@@ -54,7 +53,6 @@ final class GlobalMapsSectionWriter {
                 reportContext.anomalies,
                 reportContext.singleStreaks,
                 reportContext.streakTracks,
-                reportContext.suspectedStreakTracks,
                 reportContext.movingTargets,
                 localRescueTracks,
                 reportContext.localActivityClusters,
@@ -70,7 +68,7 @@ final class GlobalMapsSectionWriter {
         report.println("<h2>Map of All Detections</h2>");
         report.println("<p class='section-lede'>");
         report.println("Every classified track and single-frame event over the median stack. " +
-                "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>SST#</strong> for suspected streak groupings, <strong>LR#</strong> for local rescue candidates). " +
+                "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>LR#</strong> for local rescue candidates). " +
                 "Local activity clusters are ringed as <strong>LC#</strong>, while maximum-stack slow-mover shape candidates, single-frame anomalies, and single streaks are marked as <strong>DS#</strong>, <strong>A#</strong>, and <strong>S#</strong>. " +
                 "Measured variable-star candidates are circled in magenta as <strong>V#</strong>. Common-motion groups and unclassified detections are in their own sections."
                 + (catalogueObjects > 0 ? " From the sky catalogue of the session: Messier, NGC, IC and Sharpless objects in yellow, bright named stars in white and named variable stars in magenta." : "")
@@ -109,7 +107,6 @@ final class GlobalMapsSectionWriter {
         return buildGlobalTrajectoryLegendHtml(
                 reportContext.movingTargets.size(),
                 reportContext.streakTracks.size(),
-                reportContext.suspectedStreakTracks.size(),
                 localRescueTracks.size(),
                 reportContext.localActivityClusters.size(),
                 reportContext.slowMoverCandidates.size(),
@@ -200,7 +197,6 @@ final class GlobalMapsSectionWriter {
 
     private static String buildGlobalTrajectoryLegendHtml(int movingTargetCount,
                                                           int streakTrackCount,
-                                                          int suspectedStreakCount,
                                                           int localRescueCount,
                                                           int localActivityCount,
                                                           int deepStackCount,
@@ -211,7 +207,6 @@ final class GlobalMapsSectionWriter {
         html.append("<div class='map-legend'>");
         appendGlobalTrajectoryLegendItem(html, "T", "Moving object tracks", DetectionReportGenerator.GLOBAL_MAP_MOVING_TARGET_COLOR, movingTargetCount);
         appendGlobalTrajectoryLegendItem(html, "ST", "Confirmed streak tracks", DetectionReportGenerator.GLOBAL_MAP_STREAK_TRACK_COLOR, streakTrackCount);
-        appendGlobalTrajectoryLegendItem(html, "SST", "Suspected streak tracks", DetectionReportGenerator.GLOBAL_MAP_SUSPECTED_STREAK_COLOR, suspectedStreakCount);
         appendGlobalTrajectoryLegendItem(html, "LR", "Local rescue candidates", DetectionReportGenerator.GLOBAL_MAP_LOCAL_RESCUE_COLOR, localRescueCount);
         appendGlobalTrajectoryLegendItem(html, "LC", "Local activity clusters", DetectionReportGenerator.GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, localActivityCount);
         appendGlobalTrajectoryLegendItem(html, "DS", "Maximum-stack shape candidates", DetectionReportGenerator.GLOBAL_MAP_DEEP_STACK_COLOR, deepStackCount);

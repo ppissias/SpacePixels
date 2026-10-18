@@ -37,7 +37,6 @@ final class DetectionReportContext {
     final List<TrackLinker.AnomalyDetection> anomalies;
     final List<TrackLinker.Track> singleStreaks;
     final List<TrackLinker.Track> streakTracks;
-    final List<TrackLinker.Track> suspectedStreakTracks;
     final List<TrackLinker.Track> movingTargets;
     ReportData data;
     /** Where every kept frame holds image data; set after construction, null when not measured. */
@@ -75,7 +74,6 @@ final class DetectionReportContext {
                            List<TrackLinker.AnomalyDetection> anomalies,
                            List<TrackLinker.Track> singleStreaks,
                            List<TrackLinker.Track> streakTracks,
-                           List<TrackLinker.Track> suspectedStreakTracks,
                            List<TrackLinker.Track> movingTargets) {
         this.settings = settings;
         this.exportDir = exportDir;
@@ -96,7 +94,6 @@ final class DetectionReportContext {
         this.anomalies = anomalies != null ? anomalies : Collections.emptyList();
         this.singleStreaks = singleStreaks != null ? singleStreaks : Collections.emptyList();
         this.streakTracks = streakTracks != null ? streakTracks : Collections.emptyList();
-        this.suspectedStreakTracks = suspectedStreakTracks != null ? suspectedStreakTracks : Collections.emptyList();
         this.movingTargets = movingTargets != null ? movingTargets : Collections.emptyList();
     }
 }

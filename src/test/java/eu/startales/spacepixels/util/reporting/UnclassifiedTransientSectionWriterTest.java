@@ -95,7 +95,6 @@ public class UnclassifiedTransientSectionWriterTest {
                 Collections.emptyList(),
                 Collections.emptyList(),
                 Collections.emptyList(),
-                Collections.emptyList(),
                 Collections.emptyList());
         List<List<SourceExtractor.DetectedObject>> allTransients = Arrays.asList(
                 Collections.singletonList(classified),
@@ -144,8 +143,7 @@ public class UnclassifiedTransientSectionWriterTest {
                 new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, false, 12, 1.0f),
                 exportDirectory, rawFrames, null, new DetectionConfig(), null, rawFrames.get(0), null, null, null, null,
                 Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(),
-                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
-                Collections.emptyList());
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
         List<List<SourceExtractor.DetectedObject>> transients = Arrays.asList(
                 Collections.emptyList(), Collections.singletonList(flash), Collections.emptyList(), Collections.emptyList());
         StringWriter html = new StringWriter();
@@ -188,8 +186,7 @@ public class UnclassifiedTransientSectionWriterTest {
                     new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, false, 12, 1.0f),
                     exportDirectory, Collections.singletonList(pixels), null, new DetectionConfig(), null, pixels, null, null, null, null,
                     Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(),
-                    Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
-                    Collections.emptyList());
+                    Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
             List<List<SourceExtractor.DetectedObject>> transients = Collections.singletonList(Collections.singletonList(detection(20, 20, 0)));
             StringWriter html = new StringWriter();
 

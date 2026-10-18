@@ -21,10 +21,9 @@ public class TrackOverlayTest {
         return object;
     }
 
-    private static TrackLinker.Track track(boolean streak, boolean suspected, SourceExtractor.DetectedObject... points) {
+    private static TrackLinker.Track track(boolean streak, SourceExtractor.DetectedObject... points) {
         TrackLinker.Track track = new TrackLinker.Track();
         track.isStreakTrack = streak;
-        track.isSuspectedStreakTrack = suspected;
         for (SourceExtractor.DetectedObject point : points) {
             track.addPoint(point);
         }
@@ -34,11 +33,10 @@ public class TrackOverlayTest {
     @Test
     public void tracksAreNumberedAsInTheReport() {
         List<TrackLinker.Track> tracks = Arrays.asList(
-                track(false, false, point(0, 10, 10), point(1, 12, 11)),
-                track(true, false, point(0, 50, 50), point(2, 90, 60)),
-                track(false, false, point(3, 5, 5)),                       // one frame only: not followed
-                track(true, true, point(1, 1, 1), point(2, 2, 2)),         // suspected streak: not drawn
-                track(false, false, point(1, 30, 30), point(2, 31, 32)));
+                track(false, point(0, 10, 10), point(1, 12, 11)),
+                track(true, point(0, 50, 50), point(2, 90, 60)),
+                track(false, point(3, 5, 5)),                       // one frame only: not followed
+                track(false, point(1, 30, 30), point(2, 31, 32)));
 
         TrackOverlay overlay = TrackOverlay.fromTracks(tracks);
 
@@ -53,7 +51,7 @@ public class TrackOverlayTest {
 
     @Test
     public void coversOnlyFramesWithATrackPosition() {
-        TrackOverlay overlay = TrackOverlay.fromTracks(Arrays.asList(track(false, false, point(0, 1, 1), point(1, 2, 2))));
+        TrackOverlay overlay = TrackOverlay.fromTracks(Arrays.asList(track(false, point(0, 1, 1), point(1, 2, 2))));
         assertTrue(overlay.coversAnyOf(new HashSet<>(Arrays.asList("f1.fit", "f9.fit"))));
         assertFalse(overlay.coversAnyOf(new HashSet<>(Arrays.asList("f7.fit", "f9.fit"))));
         assertTrue(TrackOverlay.fromTracks(null).getTracks().isEmpty());

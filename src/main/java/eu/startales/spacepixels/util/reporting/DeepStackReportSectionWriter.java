@@ -87,7 +87,6 @@ final class DeepStackReportSectionWriter {
 
         List<ReportTrackReference> reportTrackReferences = buildReportTrackReferences(
                 context.streakTracks,
-                context.suspectedStreakTracks,
                 context.movingTargets);
 
         report.println("<div class='flex-container'>");
@@ -284,19 +283,12 @@ final class DeepStackReportSectionWriter {
     }
 
     private static List<ReportTrackReference> buildReportTrackReferences(List<TrackLinker.Track> streakTracks,
-                                                                         List<TrackLinker.Track> suspectedStreakTracks,
                                                                          List<TrackLinker.Track> movingTargets) {
         List<ReportTrackReference> references = new ArrayList<>();
         int streakCounter = 1;
         for (TrackLinker.Track track : streakTracks) {
             references.add(new ReportTrackReference(track, "ST" + streakCounter, "streak track"));
             streakCounter++;
-        }
-
-        int suspectedCounter = 1;
-        for (TrackLinker.Track track : suspectedStreakTracks) {
-            references.add(new ReportTrackReference(track, "SST" + suspectedCounter, "suspected streak track"));
-            suspectedCounter++;
         }
 
         int movingCounter = 1;

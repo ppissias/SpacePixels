@@ -10,7 +10,7 @@ public class DetectionSummaryTest {
     @Test
     public void warningKeepsSlowMoversAndLocalRescueApart() {
         ImageProcessing.DetectionSummary summary = new ImageProcessing.DetectionSummary(
-                77, 2, 1, 4, 50, 3, 5, 6, 2, "READY", 3, 1, 4, 12, 7);
+                77, 2, 1, 4, 50, 5, 6, 2, "READY", 3, 1, 4, 12, 7);
         String message = summary.warningMessage(true, 50);
 
         assertTrue(message.contains("Slow-mover candidates (maximum stack): 5"));
@@ -27,12 +27,12 @@ public class DetectionSummaryTest {
     @Test
     public void warningSaysWhenPhotometryAndAstrometryAreMissing() {
         ImageProcessing.DetectionSummary off = new ImageProcessing.DetectionSummary(
-                60, 0, 0, 60, 0, 0, 0, 0, 0, null, 0, 0, 0, 0, 0);
+                60, 0, 0, 60, 0, 0, 0, 0, null, 0, 0, 0, 0, 0);
         assertTrue(off.warningMessage(false, 50).contains("Variable stars: off"));
         assertTrue(off.warningMessage(false, 50).contains("no plate-solved frame"));
 
         ImageProcessing.DetectionSummary notReady = new ImageProcessing.DetectionSummary(
-                60, 0, 0, 60, 0, 0, 0, 0, 0, "NOT_READY", 0, 0, 0, 0, 0);
+                60, 0, 0, 60, 0, 0, 0, 0, "NOT_READY", 0, 0, 0, 0, 0);
         assertTrue(notReady.warningMessage(false, 50).contains("not ready for photometry"));
     }
 

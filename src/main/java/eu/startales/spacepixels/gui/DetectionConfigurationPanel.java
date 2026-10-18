@@ -71,7 +71,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     // --- Anomaly Rescue ---
     private JCheckBox chkEnableAnomalyRescue;
-    private JSpinner spinAnomalyMinPeakSigma, spinAnomalyMinPixels, spinAnomalyMinIntegratedSigma, spinAnomalyMinIntegratedPixels, spinAnomalyMinPeakSigmaFloor, spinSuspectedStreakLineTolerance;
+    private JSpinner spinAnomalyMinPeakSigma, spinAnomalyMinPixels, spinAnomalyMinIntegratedSigma, spinAnomalyMinIntegratedPixels, spinAnomalyMinPeakSigmaFloor;
 
     // --- Residual transient analysis ---
     private JCheckBox chkEnableResidualTransientAnalysis, chkEnableLocalRescueCandidates, chkEnableLocalActivityClusters;
@@ -769,7 +769,7 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        panel.add(createTabIntro("Anomalies are either transient high energy events or transient larger but fainter events. Here are the controls for single-frame anomaly rescue and suspected same-frame anomaly streak identification. A faint streak through a star can change the star's shape and produce an anomaly; when that anomaly sits on a known streak in the same frame, the report marks it low confidence."));
+        panel.add(createTabIntro("Anomalies are either transient high energy events or transient larger but fainter events. Here are the controls for single-frame anomaly rescue. A faint streak through a star can change the star's shape and produce an anomaly; when that anomaly sits on a known streak in the same frame, the report marks it low confidence."));
 
         panel.add(createSectionHeader("Common Settings"));
         chkEnableAnomalyRescue = addCheckboxRow(panel, "Enable Anomaly Rescue", "Keeps single-frame anomaly rescue active for flashes and fragments that do not become full multi-frame tracks.", jTransientConfig.enableAnomalyRescue);
@@ -781,7 +781,6 @@ public class DetectionConfigurationPanel extends JPanel {
         spinAnomalyMinIntegratedSigma = addRow(panel, "Anomaly Min Integrated Sigma", "Minimum integrated signal-to-noise required for the broader single-frame anomaly rescue path. Higher values demand stronger total support from faint but larger flashes.", doubleSpinnerModel(jTransientConfig.anomalyMinIntegratedSigma, 1.0, 200.0, 0.5));
         spinAnomalyMinIntegratedPixels = addRow(panel, "Anomaly Min Integrated Pixels", "Minimum footprint size required for the integrated-sigma anomaly path. Higher values reject small high-energy fragments from the broader rescue branch.", intSpinnerModel(jTransientConfig.anomalyMinIntegratedPixels, 1, 2000, 1));
         spinAnomalyMinPeakSigmaFloor = addRow(panel, "Anomaly Min Peak Sigma Floor", "Safety floor for diffuse anomaly rescue. Even broader anomalies must retain at least some local prominence to avoid low-contrast mush.", doubleSpinnerModel(jTransientConfig.anomalyMinPeakSigmaFloor, 0.0, 20.0, 0.1));
-        spinSuspectedStreakLineTolerance = addRow(panel, "Suspected Streak Line Tolerance", "Maximum perpendicular centroid distance allowed when grouping rescued same-frame anomalies into a suspected streak line. Higher values group faint streak fragments more permissively; lower values keep the grouping tighter.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "suspectedStreakLineTolerance", 6.0), 0.0, 50.0, 0.1));
 
         return panel;
     }
@@ -817,7 +816,7 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        panel.add(createTabIntro("Analysis of point transients left after tracks, streaks, suspected streaks and standalone anomalies. Common-motion filtering first sets aside compact sources that share a displacement, independently of the residual-analysis switch. Optional residual analysis then looks for weak local rescue candidates and builds activity clusters from the remaining points."));
+        panel.add(createTabIntro("Analysis of point transients left after tracks, streaks and standalone anomalies. Common-motion filtering first sets aside compact sources that share a displacement, independently of the residual-analysis switch. Optional residual analysis then looks for weak local rescue candidates and builds activity clusters from the remaining points."));
 
         panel.add(createSectionHeader("Common Settings"));
         chkEnableResidualTransientAnalysis = addCheckboxRow(panel, "Enable Residual Transient Analysis", "Enables local rescue and activity clustering after common-motion filtering. Common-motion filtering has its own switch and still runs when residual analysis is off.", getOptionalBooleanField(jTransientConfig, "enableResidualTransientAnalysis", true));
@@ -1253,7 +1252,6 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.anomalyMinIntegratedSigma = ((Number) spinAnomalyMinIntegratedSigma.getValue()).doubleValue();
             jTransientConfig.anomalyMinIntegratedPixels = ((Number) spinAnomalyMinIntegratedPixels.getValue()).intValue();
             jTransientConfig.anomalyMinPeakSigmaFloor = ((Number) spinAnomalyMinPeakSigmaFloor.getValue()).doubleValue();
-            setOptionalDoubleField(jTransientConfig, "suspectedStreakLineTolerance", ((Number) spinSuspectedStreakLineTolerance.getValue()).doubleValue());
             setOptionalBooleanField(jTransientConfig, "enableResidualTransientAnalysis", chkEnableResidualTransientAnalysis.isSelected());
             setOptionalBooleanField(jTransientConfig, "enableLocalRescueCandidates", chkEnableLocalRescueCandidates.isSelected());
             setOptionalBooleanField(jTransientConfig, "enableLocalActivityClusters", chkEnableLocalActivityClusters.isSelected());
@@ -1503,7 +1501,6 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinAnomalyMinIntegratedSigma, config.anomalyMinIntegratedSigma);
         setSpinnerValueClamped(spinAnomalyMinIntegratedPixels, config.anomalyMinIntegratedPixels);
         setSpinnerValueClamped(spinAnomalyMinPeakSigmaFloor, config.anomalyMinPeakSigmaFloor);
-        setSpinnerValueClamped(spinSuspectedStreakLineTolerance, getOptionalDoubleField(config, "suspectedStreakLineTolerance", 6.0));
         chkEnableResidualTransientAnalysis.setSelected(getOptionalBooleanField(config, "enableResidualTransientAnalysis", true));
         chkEnableLocalRescueCandidates.setSelected(getOptionalBooleanField(config, "enableLocalRescueCandidates", true));
         chkEnableLocalActivityClusters.setSelected(getOptionalBooleanField(config, "enableLocalActivityClusters", true));

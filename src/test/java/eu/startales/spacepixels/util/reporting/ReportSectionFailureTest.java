@@ -70,7 +70,6 @@ public class ReportSectionFailureTest {
                 Collections.emptyList(),
                 Collections.emptyList(),
                 Collections.emptyList(),
-                Collections.emptyList(),
                 Collections.emptyList());
     }
 

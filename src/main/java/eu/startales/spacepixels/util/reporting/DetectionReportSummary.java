@@ -14,7 +14,6 @@ final class DetectionReportSummary {
     final int movingTargetCount;
     final int confirmedLinkedTrackCount;
     final boolean insufficientFramesAfterQuality;
-    final int suspectedStreakTrackCount;
     final int returnedTrackCount;
     final int masterStarCount;
     final int masterMapObjectCount;
@@ -32,7 +31,6 @@ final class DetectionReportSummary {
                            int movingTargetCount,
                            int confirmedLinkedTrackCount,
                            boolean insufficientFramesAfterQuality,
-                           int suspectedStreakTrackCount,
                            int returnedTrackCount,
                            int masterStarCount,
                            int masterMapObjectCount,
@@ -49,7 +47,6 @@ final class DetectionReportSummary {
         this.movingTargetCount = movingTargetCount;
         this.confirmedLinkedTrackCount = confirmedLinkedTrackCount;
         this.insufficientFramesAfterQuality = insufficientFramesAfterQuality;
-        this.suspectedStreakTrackCount = suspectedStreakTrackCount;
         this.returnedTrackCount = returnedTrackCount;
         this.masterStarCount = masterStarCount;
         this.masterMapObjectCount = masterMapObjectCount;

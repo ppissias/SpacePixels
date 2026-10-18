@@ -97,18 +97,12 @@ final class DetectionPipelineSupport {
     static ImageProcessing.DetectionSummary summarizeDetections(PipelineResult result) {
         List<TrackLinker.Track> tracks = result.tracks != null ? result.tracks : Collections.emptyList();
         List<TrackLinker.AnomalyDetection> anomalies = result.anomalies != null ? result.anomalies : Collections.emptyList();
-        int suspectedStreakTracks = 0;
         int singleStreaks = 0;
         int streakTracks = 0;
         int movingTargets = 0;
 
         for (TrackLinker.Track track : tracks) {
             if (track == null || track.points == null || track.points.isEmpty()) {
-                continue;
-            }
-
-            if (track.isSuspectedStreakTrack) {
-                suspectedStreakTracks++;
                 continue;
             }
 
@@ -150,14 +144,13 @@ final class DetectionPipelineSupport {
         PipelineTelemetry.PhotometryTelemetry photometry = result.telemetry != null ? result.telemetry.photometryTelemetry : null;
 
         return new ImageProcessing.DetectionSummary(
-                singleStreaks + streakTracks + movingTargets + anomalyCount + suspectedStreakTracks
+                singleStreaks + streakTracks + movingTargets + anomalyCount
                         + slowMoverCandidates + localRescueCandidates + localActivityClusters
                         + residualAnalysis.commonMotionGroups.size(),
                 singleStreaks,
                 streakTracks,
                 movingTargets,
                 anomalyCount,
-                suspectedStreakTracks,
                 slowMoverCandidates,
                 localRescueCandidates,
                 localActivityClusters,
@@ -185,7 +178,6 @@ final class DetectionPipelineSupport {
 
         result.telemetry.totalTracksFound = 0;
         result.telemetry.totalAnomaliesFound = 0;
-        result.telemetry.totalSuspectedStreakTracksFound = 0;
         result.telemetry.trackerTelemetry = null;
         result.telemetry.slowMoverTelemetry = null;
 

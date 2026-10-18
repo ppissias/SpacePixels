@@ -192,7 +192,6 @@ public class ImageProcessingTest {
         telemetry.totalFramesKept = 2;
         telemetry.totalTracksFound = 4;
         telemetry.totalAnomaliesFound = 2;
-        telemetry.totalSuspectedStreakTracksFound = 1;
         telemetry.trackerTelemetry = new TrackerTelemetry();
         telemetry.slowMoverTelemetry = new PipelineTelemetry.SlowMoverTelemetry();
 
@@ -231,7 +230,6 @@ public class ImageProcessingTest {
         assertNull(sanitized.telemetry.slowMoverTelemetry);
         assertEquals(0, sanitized.telemetry.totalTracksFound);
         assertEquals(0, sanitized.telemetry.totalAnomaliesFound);
-        assertEquals(0, sanitized.telemetry.totalSuspectedStreakTracksFound);
         assertSame(masterStack, sanitized.masterStackData);
         assertSame(vetoMask, sanitized.masterVetoMask);
         assertSame(maximumStack, sanitized.maximumStackData);

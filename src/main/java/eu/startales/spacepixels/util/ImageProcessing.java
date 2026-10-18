@@ -73,7 +73,6 @@ public class ImageProcessing implements AutoCloseable {
         public final int streakTracks;
         public final int movingTargets;
         public final int anomalies;
-        public final int suspectedStreakTracks;
         public final int slowMoverCandidates;
         public final int localRescueCandidates;
         public final int localActivityClusters;
@@ -95,7 +94,6 @@ public class ImageProcessing implements AutoCloseable {
                          int streakTracks,
                          int movingTargets,
                          int anomalies,
-                         int suspectedStreakTracks,
                          int slowMoverCandidates,
                          int localRescueCandidates,
                          int localActivityClusters,
@@ -110,7 +108,6 @@ public class ImageProcessing implements AutoCloseable {
             this.streakTracks = streakTracks;
             this.movingTargets = movingTargets;
             this.anomalies = anomalies;
-            this.suspectedStreakTracks = suspectedStreakTracks;
             this.slowMoverCandidates = slowMoverCandidates;
             this.localRescueCandidates = localRescueCandidates;
             this.localActivityClusters = localActivityClusters;
@@ -190,7 +187,6 @@ public class ImageProcessing implements AutoCloseable {
                     + "Moving-object tracks: " + movingTargets + "\n"
                     + "Streak tracks (multi-frame): " + streakTracks + "\n"
                     + "Single streaks: " + singleStreaks + "\n"
-                    + "Suspected streak groupings: " + suspectedStreakTracks + "\n"
                     + "Single-frame anomalies: " + anomalyCount + "\n"
                     + "Slow-mover candidates (maximum stack): " + slowMoverCandidates + "\n"
                     + "Local rescue candidates: " + localRescueCandidates + "\n"
@@ -236,7 +232,6 @@ public class ImageProcessing implements AutoCloseable {
                     OptionalRow.always("Moving-object tracks", Integer.toString(movingTargets), movingTargets),
                     OptionalRow.always("Streak tracks", Integer.toString(streakTracks), streakTracks),
                     OptionalRow.always("Single streaks", Integer.toString(singleStreaks), singleStreaks),
-                    OptionalRow.always("Suspected streak groupings", Integer.toString(suspectedStreakTracks), suspectedStreakTracks),
                     OptionalRow.when(anomaliesOn, "Single-frame anomalies", anomalyValue, anomalies),
                     OptionalRow.when(slowMoversOn, "Slow-mover candidates", Integer.toString(slowMoverCandidates), slowMoverCandidates),
                     OptionalRow.when(localRescueOn, "Local rescue candidates", Integer.toString(localRescueCandidates), localRescueCandidates),
@@ -353,7 +348,7 @@ public class ImageProcessing implements AutoCloseable {
         }
 
         private String includedLine(JCheckBox[] boxes) {
-            int included = movingTargets + streakTracks + singleStreaks + suspectedStreakTracks;
+            int included = movingTargets + streakTracks + singleStreaks;
             if (boxes[0] == null || boxes[0].isSelected()) {
                 included += anomalies;
             }
@@ -451,7 +446,7 @@ public class ImageProcessing implements AutoCloseable {
         private String largestGroup() {
             String[] names = {"moving objects", "single-frame anomalies", "slow-mover candidates",
                     "residual analysis", "common-motion groups"};
-            int[] counts = {movingTargets + streakTracks + singleStreaks + suspectedStreakTracks, anomalies,
+            int[] counts = {movingTargets + streakTracks + singleStreaks, anomalies,
                     slowMoverCandidates, localRescueCandidates + localActivityClusters, commonMotionGroups};
             int best = 0;
             for (int i = 1; i < counts.length; i++) {

@@ -421,7 +421,6 @@ public class DetectionReportGenerator {
     static final Color GLOBAL_MAP_ANOMALY_COLOR = new Color(255, 51, 255);
     static final Color GLOBAL_MAP_SINGLE_STREAK_COLOR = new Color(255, 153, 51);
     static final Color GLOBAL_MAP_STREAK_TRACK_COLOR = new Color(255, 204, 51);
-    static final Color GLOBAL_MAP_SUSPECTED_STREAK_COLOR = new Color(255, 128, 128);
     static final Color GLOBAL_MAP_MOVING_TARGET_COLOR = new Color(77, 166, 255);
     static final Color GLOBAL_MAP_LOCAL_RESCUE_COLOR = new Color(64, 224, 208);
     static final Color GLOBAL_MAP_LOCAL_ACTIVITY_COLOR = new Color(150, 120, 255);
@@ -431,7 +430,6 @@ public class DetectionReportGenerator {
                                               List<TrackLinker.AnomalyDetection> anomalies,
                                               List<TrackLinker.Track> singleStreaks,
                                               List<TrackLinker.Track> streakTracks,
-                                              List<TrackLinker.Track> suspectedStreakTracks,
                                               List<TrackLinker.Track> movingTargets,
                                               List<TrackLinker.Track> localRescueTracks,
                                               List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters,
@@ -446,11 +444,6 @@ public class DetectionReportGenerator {
         for (TrackLinker.Track t : streakTracks) {
             drawMultiFrameTrack(g2d, t, GLOBAL_MAP_STREAK_TRACK_COLOR, "ST" + stCounter);
             stCounter++;
-        }
-        int sstCounter = 1;
-        for (TrackLinker.Track t : suspectedStreakTracks) {
-            drawMultiFrameTrack(g2d, t, GLOBAL_MAP_SUSPECTED_STREAK_COLOR, "SST" + sstCounter);
-            sstCounter++;
         }
         int tCounter = 1;
         for (TrackLinker.Track t : movingTargets) {
@@ -1076,7 +1069,7 @@ public class DetectionReportGenerator {
         List<PipelineDiagnosticsSectionWriter.NavItem> items = new ArrayList<>();
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("overview", "Overview", null, false));
         int movingObjects = summary.movingTargetCount + summary.streakTrackCount + summary.singleStreakCount
-                + summary.anomalyCount + summary.suspectedStreakTrackCount;
+                + summary.anomalyCount;
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("moving-objects", "Moving objects & events",
                 String.valueOf(movingObjects), movingObjects == 0));
         if (inclusion.slowMovers && context.config != null && context.config.enableSlowMoverDetection) {
@@ -1115,7 +1108,6 @@ public class DetectionReportGenerator {
                                                                       List<TrackLinker.Track> singleStreaks,
                                                                       List<TrackLinker.Track> streakTracks,
                                                                       List<TrackLinker.Track> movingTargets,
-                                                                      List<TrackLinker.Track> suspectedStreakTracks,
                                                                       List<TrackLinker.AnomalyDetection> anomalies,
                                                                       List<SourceExtractor.DetectedObject> slowMoverCandidates,
                                                                       List<ResidualTransientAnalysis.LocalRescueCandidate> localRescueCandidates,
@@ -1131,12 +1123,9 @@ public class DetectionReportGenerator {
         int confirmedLinkedTrackCount = movingTargetCount + streakTrackCount;
         boolean insufficientFramesAfterQuality = pipelineTelemetry != null
                 && pipelineTelemetry.totalFramesKept < ImageProcessing.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS;
-        int suspectedStreakTrackCount = pipelineTelemetry != null
-                ? pipelineTelemetry.totalSuspectedStreakTracksFound
-                : suspectedStreakTracks.size();
         int returnedTrackCount = pipelineTelemetry != null
                 ? pipelineTelemetry.totalTracksFound
-                : singleStreakCount + confirmedLinkedTrackCount + suspectedStreakTrackCount;
+                : singleStreakCount + confirmedLinkedTrackCount;
         int masterStarCount = pipelineTelemetry != null
                 ? pipelineTelemetry.totalMasterStarsIdentified
                 : (masterStars == null ? 0 : masterStars.size());
@@ -1157,7 +1146,6 @@ public class DetectionReportGenerator {
                 movingTargetCount,
                 confirmedLinkedTrackCount,
                 insufficientFramesAfterQuality,
-                suspectedStreakTrackCount,
                 returnedTrackCount,
                 masterStarCount,
                 masterMapObjectCount,
@@ -1299,15 +1287,10 @@ public class DetectionReportGenerator {
         List<TrackLinker.Track> singleStreaks = new ArrayList<>();
         List<TrackLinker.Track> streakTracks = new ArrayList<>();
         List<TrackLinker.Track> movingTargets = new ArrayList<>();
-        List<TrackLinker.Track> suspectedStreakTracks = new ArrayList<>();
         List<TrackLinker.Track> localRescueTracks = new ArrayList<>();
 
         for (TrackLinker.Track track : tracks) {
             if (track.points == null || track.points.isEmpty()) continue;
-            if (track.isSuspectedStreakTrack) {
-                suspectedStreakTracks.add(track);
-                continue;
-            }
             java.util.Set<Integer> uniqueFrames = new java.util.HashSet<>();
             for (SourceExtractor.DetectedObject pt : track.points) uniqueFrames.add(pt.sourceFrameIndex);
 
@@ -1319,7 +1302,6 @@ public class DetectionReportGenerator {
             }
         }
         singleStreaks = sortTracksForFrameDisplay(singleStreaks);
-        suspectedStreakTracks = sortTracksForFrameDisplay(suspectedStreakTracks);
         for (ResidualTransientAnalysis.LocalRescueCandidate candidate : localRescueCandidates) {
             TrackLinker.Track residualTrack = ResidualReviewSectionWriter.buildResidualTrack(candidate.points);
             if (residualTrack.points != null && !residualTrack.points.isEmpty()) {
@@ -1333,7 +1315,6 @@ public class DetectionReportGenerator {
                 singleStreaks,
                 streakTracks,
                 movingTargets,
-                suspectedStreakTracks,
                 anomalies,
                 slowMoverCandidates,
                 localRescueCandidates,
@@ -1360,7 +1341,6 @@ public class DetectionReportGenerator {
                 anomalies,
                 singleStreaks,
                 streakTracks,
-                suspectedStreakTracks,
                 movingTargets);
 
         reportContext.dataArea = result.dataArea;
@@ -1450,7 +1430,6 @@ public class DetectionReportGenerator {
                         anomalies,
                         singleStreaks,
                         streakTracks,
-                        suspectedStreakTracks,
                         movingTargets,
                         slowMoverCandidates,
                         pipelineTelemetry,
@@ -1463,7 +1442,6 @@ public class DetectionReportGenerator {
                 int streakLikeTransientCount = CreativeTributeRenderer.countStreakLikeTransientDetections(allTransients);
                 int pointTransientCount = Math.max(0, rawTransientCount - streakLikeTransientCount);
                 int confirmedTrackCount = summary.confirmedLinkedTrackCount;
-                int suspectedTrackCount = summary.suspectedStreakTrackCount;
                 int deepStackHintCount = summary.slowMoverCandidateCount;
                 double longestPath = CreativeTributeRenderer.computeLongestTrackPathPx(streakTracks, movingTargets);
                 String dominantMotion = CreativeTributeRenderer.computeDominantMotionLabel(movingTargets, streakTracks);
@@ -1474,13 +1452,12 @@ public class DetectionReportGenerator {
                         anomalies,
                         singleStreaks,
                         streakTracks,
-                        suspectedStreakTracks,
                         movingTargets,
                         slowMoverCandidates);
 
                 report.println("<div class='panel' style='background: linear-gradient(180deg, #24303a 0%, #2b2b2b 100%); border: 1px solid #53606a;'>");
                 report.println("<h2>The AI's Perspective: Signal Weave</h2>");
-                report.println("<p style='color: #c7d2dc; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>A creative analysis by Codex. I treated the report output as a signal field: every post-veto transient becomes time-colored dust, unclassified leftovers become amber residue, moving targets become blue paths, confirmed streaks become gold vectors, suspected streak groupings become red paths, and rescued anomalies become magenta pulses.</p>");
+                report.println("<p style='color: #c7d2dc; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>A creative analysis by Codex. I treated the report output as a signal field: every post-veto transient becomes time-colored dust, unclassified leftovers become amber residue, moving targets become blue paths, confirmed streaks become gold vectors, and rescued anomalies become magenta pulses.</p>");
                 report.println("<a href='" + creativeFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + creativeFileName + "' class='native-size-image' style='border: 1px solid #666; border-radius: 6px;' alt='Creative Signal Weave report image' /></a>");
                 report.println("<div class='flex-container' style='margin-top: 16px; margin-bottom: 4px;'>");
                 report.println("<div class='metric-box compact' style='border-left-color:#96dcff;'><span class='metric-value'>" + rawTransientCount + "</span><span class='metric-label'>All transients</span></div>");
@@ -1488,7 +1465,6 @@ public class DetectionReportGenerator {
                 report.println("<div class='metric-box compact' style='border-left-color:#ffcc66;'><span class='metric-value'>" + streakLikeTransientCount + "</span><span class='metric-label'>Streak-like dust</span></div>");
                 report.println("<div class='metric-box compact' style='border-left-color:#ffae5c;'><span class='metric-value'>" + unclassifiedTransientCount + "</span><span class='metric-label'>Unresolved residue</span></div>");
                 report.println("<div class='metric-box compact' style='border-left-color:#4da6ff;'><span class='metric-value'>" + confirmedTrackCount + "</span><span class='metric-label'>Confirmed tracks</span></div>");
-                report.println("<div class='metric-box compact' style='border-left-color:#ff80a0;'><span class='metric-value'>" + suspectedTrackCount + "</span><span class='metric-label'>Suspected streaks</span></div>");
                 report.println("<div class='metric-box compact' style='border-left-color:#ff66cc;'><span class='metric-value'>" + summary.anomalyCount + "</span><span class='metric-label'>Anomalies</span></div>");
                 report.println("<div class='metric-box compact' style='border-left-color:#ba7aff;'><span class='metric-value'>" + deepStackHintCount + "</span><span class='metric-label'>Deep-stack hints</span></div>");
                 report.println("</div>");

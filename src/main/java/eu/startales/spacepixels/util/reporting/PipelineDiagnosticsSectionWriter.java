@@ -178,7 +178,6 @@ final class PipelineDiagnosticsSectionWriter {
         } else {
             addResult(cards, empty, summary.anomalyCount, "Single-frame anomalies", "anomalies");
         }
-        addResult(cards, empty, summary.suspectedStreakTrackCount, "Suspected streak tracks", "streak-tracks");
         if (!inclusion.slowMovers) {
             empty.add("slow movers (left out of this report)");
         } else if (reportContext.config.enableSlowMoverDetection) {
@@ -255,8 +254,7 @@ final class PipelineDiagnosticsSectionWriter {
 
         report.println("<div class='astro-note'>" + plural(summary.returnedTrackCount, "track-like detection") + " in total: "
                 + plural(summary.singleStreakCount, "single-frame streak") + ", "
-                + plural(summary.confirmedLinkedTrackCount, "multi-frame track") + " and "
-                + plural(summary.suspectedStreakTrackCount, "suspected streak grouping") + ".</div>");
+                + plural(summary.confirmedLinkedTrackCount, "multi-frame track") + ".</div>");
         if (!reportContext.anomalies.isEmpty()) {
             int lowConfidence = 0;
             for (TrackLinker.AnomalyDetection anomaly : reportContext.anomalies) {
@@ -826,9 +824,6 @@ final class PipelineDiagnosticsSectionWriter {
             if (summary.otherAnomalyCount > 0) {
                 report.println(" <strong>" + summary.otherAnomalyCount + "</strong> anomaly rescues carried other or unknown type labels.");
             }
-        }
-        if (linkerTelemetry.suspectedStreakTracksFound > 0) {
-            report.println(" The tracker also flagged <strong>" + linkerTelemetry.suspectedStreakTracksFound + "</strong> suspected streak tracks.");
         }
         report.println("</p>");
         report.println("</div>");

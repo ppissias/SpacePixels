@@ -32,7 +32,6 @@ final class ReportData {
         List<Finding> output = new ArrayList<>();
         tracks(output, context, "T", "Moving target", context.movingTargets);
         tracks(output, context, "ST", "Streak track", context.streakTracks);
-        tracks(output, context, "SST", "Suspected streak", context.suspectedStreakTracks);
         tracks(output, context, "S", "Single-frame streak", context.singleStreaks);
         for (int i = 0; i < context.anomalies.size(); i++) {
             var a = context.anomalies.get(i);

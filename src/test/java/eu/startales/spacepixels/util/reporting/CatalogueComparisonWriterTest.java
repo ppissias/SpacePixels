@@ -63,7 +63,7 @@ public class CatalogueComparisonWriterTest {
         telemetry.frames.add(frame(0, "a.fit", 100));
         VariableStarAnalysis analysis = new VariableStarAnalysis(new PhotometricReadiness(), List.of(star), telemetry);
         DetectionReportContext context = new DetectionReportContext(null, null, null, files, new DetectionConfig(),
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
         Constructor<SessionCatalogue> constructor = SessionCatalogue.class.getDeclaredConstructor(SkyCatalogue.class, long.class);
         constructor.setAccessible(true);
         SessionCatalogue catalogue = constructor.newInstance(new SkyCatalogue(), 0L);

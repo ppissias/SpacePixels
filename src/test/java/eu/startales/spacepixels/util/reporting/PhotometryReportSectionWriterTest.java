@@ -196,7 +196,6 @@ public class PhotometryReportSectionWriterTest {
                 Collections.emptyList(),
                 Collections.emptyList(),
                 Collections.emptyList(),
-                Collections.emptyList(),
                 Collections.emptyList());
     }
 

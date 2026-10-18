@@ -84,8 +84,8 @@ public final class TrackOverlay {
     }
 
     /**
-     * The multi-frame tracks of a run, split as the report splits them. Suspected streaks and single-frame streaks
-     * are left out: they are not followed across frames.
+     * The multi-frame tracks of a run, split as the report splits them. Single-frame streaks are left out: they are
+     * not followed across frames.
      */
     public static TrackOverlay from(PipelineResult result) {
         return fromTracks(result == null ? null : result.tracks);
@@ -96,7 +96,7 @@ public final class TrackOverlay {
         List<Track> movingTracks = new ArrayList<>();
         if (linkedTracks != null) {
             for (TrackLinker.Track track : linkedTracks) {
-                if (track == null || track.points == null || track.points.isEmpty() || track.isSuspectedStreakTrack) {
+                if (track == null || track.points == null || track.points.isEmpty()) {
                     continue;
                 }
                 Set<Integer> frames = new HashSet<>();

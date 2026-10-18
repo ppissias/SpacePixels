@@ -13,7 +13,7 @@ public class ReportDataTest {
     private DetectionReportContext context() {
         return new DetectionReportContext(new ExportVisualizationSettings(3, 10, 100, 10, 100, false, 12, 1), new File("."),
                 Collections.nCopies(20, new short[20][30]), new FitsFileInformation[0], new DetectionConfig(), null,
-                null, null, null, null, null, List.of(), List.of(), null, List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+                null, null, null, null, null, List.of(), List.of(), null, List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
     @Test public void samplesAndNeighboursShareQualityRejection() {

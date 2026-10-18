@@ -72,7 +72,6 @@ final class CreativeTributeRenderer {
         public final int movingTrackCount;
         public final int streakTrackCount;
         public final int singleStreakCount;
-        public final int suspectedStreakTrackCount;
         public final int deepStackHintCount;
         public final int totalFrames;
         public final int framesWithTransients;
@@ -90,7 +89,6 @@ final class CreativeTributeRenderer {
                                       int movingTrackCount,
                                       int streakTrackCount,
                                       int singleStreakCount,
-                                      int suspectedStreakTrackCount,
                                       int deepStackHintCount,
                                       int totalFrames,
                                       int framesWithTransients,
@@ -107,7 +105,6 @@ final class CreativeTributeRenderer {
             this.movingTrackCount = movingTrackCount;
             this.streakTrackCount = streakTrackCount;
             this.singleStreakCount = singleStreakCount;
-            this.suspectedStreakTrackCount = suspectedStreakTrackCount;
             this.deepStackHintCount = deepStackHintCount;
             this.totalFrames = totalFrames;
             this.framesWithTransients = framesWithTransients;
@@ -142,7 +139,6 @@ final class CreativeTributeRenderer {
                                                     List<TrackLinker.AnomalyDetection> anomalies,
                                                     List<TrackLinker.Track> singleStreaks,
                                                     List<TrackLinker.Track> streakTracks,
-                                                    List<TrackLinker.Track> suspectedStreakTracks,
                                                     List<TrackLinker.Track> movingTargets,
                                                     List<SourceExtractor.DetectedObject> slowMoverCandidates,
                                                     PipelineTelemetry pipelineTelemetry, ExportVisualizationSettings settings) {
@@ -151,7 +147,6 @@ final class CreativeTributeRenderer {
         anomalies = safeList(anomalies);
         singleStreaks = safeList(singleStreaks);
         streakTracks = safeList(streakTracks);
-        suspectedStreakTracks = safeList(suspectedStreakTracks);
         movingTargets = safeList(movingTargets);
         slowMoverCandidates = safeList(slowMoverCandidates);
 
@@ -161,7 +156,6 @@ final class CreativeTributeRenderer {
                 anomalies,
                 singleStreaks,
                 streakTracks,
-                suspectedStreakTracks,
                 movingTargets,
                 slowMoverCandidates
         );
@@ -173,7 +167,6 @@ final class CreativeTributeRenderer {
                 anomalies,
                 singleStreaks,
                 streakTracks,
-                suspectedStreakTracks,
                 movingTargets,
                 slowMoverCandidates
         );
@@ -216,9 +209,6 @@ final class CreativeTributeRenderer {
         }
         for (TrackLinker.Track track : streakTracks) {
             drawGlowingTrack(g2d, track, layout, new Color(255, 204, 102), 2.8f, 9.5f);
-        }
-        for (TrackLinker.Track track : suspectedStreakTracks) {
-            drawGlowingTrack(g2d, track, layout, new Color(255, 128, 128), 2.4f, 8.2f);
         }
         for (TrackLinker.AnomalyDetection anomaly : anomalies) {
             if (anomaly != null && anomaly.object != null) {
@@ -302,12 +292,11 @@ final class CreativeTributeRenderer {
         drawCreativeMetric(g2d, textX, y, "raw", formatCompactCount(signalSummary.rawTransientCount), new Color(150, 220, 255), detailFont);
         drawCreativeMetric(g2d, textX + metricColumnGap, y, "moving", String.valueOf(signalSummary.movingTrackCount), new Color(77, 166, 255), detailFont);
         drawCreativeMetric(g2d, textX + (metricColumnGap * 2), y, "streaks", String.valueOf(signalSummary.streakTrackCount + signalSummary.singleStreakCount), new Color(255, 204, 102), detailFont);
-        drawCreativeMetric(g2d, textX + (metricColumnGap * 3), y, "suspect", String.valueOf(signalSummary.suspectedStreakTrackCount), new Color(255, 128, 128), detailFont);
+        drawCreativeMetric(g2d, textX + (metricColumnGap * 3), y, "anomalies", String.valueOf(signalSummary.anomalyCount), new Color(255, 102, 204), detailFont);
         y += 42;
-        drawCreativeMetric(g2d, textX, y, "anomalies", String.valueOf(signalSummary.anomalyCount), new Color(255, 102, 204), detailFont);
-        drawCreativeMetric(g2d, textX + metricColumnGap, y, "unresolved", formatCompactCount(signalSummary.unclassifiedTransientCount), new Color(255, 174, 92), detailFont);
-        drawCreativeMetric(g2d, textX + (metricColumnGap * 2), y, "peak frame", peakFrameValue(signalSummary), new Color(166, 255, 180), detailFont);
-        drawCreativeMetric(g2d, textX + (metricColumnGap * 3), y, "shape hints", String.valueOf(signalSummary.deepStackHintCount), new Color(186, 122, 255), detailFont);
+        drawCreativeMetric(g2d, textX, y, "unresolved", formatCompactCount(signalSummary.unclassifiedTransientCount), new Color(255, 174, 92), detailFont);
+        drawCreativeMetric(g2d, textX + metricColumnGap, y, "peak frame", peakFrameValue(signalSummary), new Color(166, 255, 180), detailFont);
+        drawCreativeMetric(g2d, textX + (metricColumnGap * 2), y, "shape hints", String.valueOf(signalSummary.deepStackHintCount), new Color(186, 122, 255), detailFont);
 
         int balanceY = y + 30;
         drawSignalCompositionBar(g2d, textX, balanceY, leftPanelWidth - 48, 12, signalSummary);
@@ -329,7 +318,7 @@ final class CreativeTributeRenderer {
         drawFittedString(g2d, "Dominant motion: " + signalSummary.dominantMotion
                 + " | Longest confirmed path: " + String.format(Locale.US, "%.1f px", signalSummary.longestPath), textX, y, panelTextWidth);
 
-        int legendHeight = Math.min(layout.headerHeight - (panelPadding * 2), 232);
+        int legendHeight = Math.min(layout.headerHeight - (panelPadding * 2), 208);
         int legendX = panelPadding + leftPanelWidth + interPanelGap;
         int legendY = panelPadding;
         g2d.setColor(new Color(10, 10, 16, 175));
@@ -346,8 +335,6 @@ final class CreativeTributeRenderer {
         drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(66, 210, 255), "Moving object track (line + nodes)", legendFont, CreativeLegendGlyph.TRACK);
         legendRowY += 24;
         drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 204, 102), "Confirmed streak track / single streak", legendFont, CreativeLegendGlyph.STREAK);
-        legendRowY += 24;
-        drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 128, 128), "Suspected streak grouping", legendFont, CreativeLegendGlyph.TRACK);
         legendRowY += 24;
         drawCreativeLegendRow(g2d, legendX + 18, legendRowY, new Color(255, 102, 204), "Anomaly pulse (circle + crosshair)", legendFont, CreativeLegendGlyph.PULSE);
         legendRowY += 24;
@@ -692,7 +679,6 @@ final class CreativeTributeRenderer {
                         + signalSummary.movingTrackCount
                         + signalSummary.streakTrackCount
                         + signalSummary.singleStreakCount
-                        + signalSummary.suspectedStreakTrackCount
                         + signalSummary.deepStackHintCount
                         + signalSummary.unclassifiedTransientCount);
         int currentX = x;
@@ -701,7 +687,7 @@ final class CreativeTributeRenderer {
         currentX = fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.streakLikeTransientCount + signalSummary.streakTrackCount + signalSummary.singleStreakCount, total, new Color(255, 204, 102));
         currentX = fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.anomalyCount, total, new Color(255, 102, 204));
         currentX = fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.movingTrackCount, total, new Color(77, 166, 255));
-        currentX = fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.suspectedStreakTrackCount + signalSummary.deepStackHintCount, total, new Color(186, 122, 255));
+        currentX = fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.deepStackHintCount, total, new Color(186, 122, 255));
         fillSignalSegment(g2d, currentX, y, barEndX, width, height, signalSummary.unclassifiedTransientCount, total, new Color(255, 174, 92));
 
         g2d.setColor(new Color(255, 255, 255, 60));
@@ -767,7 +753,6 @@ final class CreativeTributeRenderer {
                                                                      List<TrackLinker.AnomalyDetection> anomalies,
                                                                      List<TrackLinker.Track> singleStreaks,
                                                                      List<TrackLinker.Track> streakTracks,
-                                                                     List<TrackLinker.Track> suspectedStreakTracks,
                                                                      List<TrackLinker.Track> movingTargets,
                                                                      List<SourceExtractor.DetectedObject> slowMoverCandidates) {
         int imageWidth = backgroundData[0].length;
@@ -779,7 +764,6 @@ final class CreativeTributeRenderer {
         includeCreativeAnomalyBounds(bounds, anomalies);
         includeCreativeTrackBounds(bounds, singleStreaks);
         includeCreativeTrackBounds(bounds, streakTracks);
-        includeCreativeTrackBounds(bounds, suspectedStreakTracks);
         includeCreativeTrackBounds(bounds, movingTargets);
         includeCreativeDetectionBounds(bounds, slowMoverCandidates);
 
@@ -1040,7 +1024,6 @@ final class CreativeTributeRenderer {
                                                                     List<TrackLinker.AnomalyDetection> anomalies,
                                                                     List<TrackLinker.Track> singleStreaks,
                                                                     List<TrackLinker.Track> streakTracks,
-                                                                    List<TrackLinker.Track> suspectedStreakTracks,
                                                                     List<TrackLinker.Track> movingTargets,
                                                                     List<SourceExtractor.DetectedObject> slowMoverCandidates) {
         int rawTransientCount = countTotalTransientDetections(allTransients);
@@ -1051,7 +1034,6 @@ final class CreativeTributeRenderer {
         int movingTrackCount = movingTargets == null ? 0 : movingTargets.size();
         int streakTrackCount = streakTracks == null ? 0 : streakTracks.size();
         int singleStreakCount = singleStreaks == null ? 0 : singleStreaks.size();
-        int suspectedStreakTrackCount = suspectedStreakTracks == null ? 0 : suspectedStreakTracks.size();
         int deepStackHintCount = slowMoverCandidates == null ? 0 : slowMoverCandidates.size();
         int totalFrames = allTransients == null ? 0 : allTransients.size();
         int framesWithTransients = 0;
@@ -1087,7 +1069,6 @@ final class CreativeTributeRenderer {
                 movingTrackCount,
                 streakTrackCount,
                 singleStreakCount,
-                suspectedStreakTrackCount,
                 deepStackHintCount,
                 totalFrames,
                 framesWithTransients,
@@ -1180,7 +1161,6 @@ final class CreativeTributeRenderer {
                                                     List<TrackLinker.AnomalyDetection> anomalies,
                                                     List<TrackLinker.Track> singleStreaks,
                                                     List<TrackLinker.Track> streakTracks,
-                                                    List<TrackLinker.Track> suspectedStreakTracks,
                                                     List<TrackLinker.Track> movingTargets,
                                                     List<SourceExtractor.DetectedObject> slowMoverCandidates) {
         CreativeSignalSummary signalSummary = buildCreativeSignalSummary(
@@ -1189,7 +1169,6 @@ final class CreativeTributeRenderer {
                 safeList(anomalies),
                 safeList(singleStreaks),
                 safeList(streakTracks),
-                safeList(suspectedStreakTracks),
                 safeList(movingTargets),
                 safeList(slowMoverCandidates)
         );
@@ -1199,7 +1178,7 @@ final class CreativeTributeRenderer {
             opening = "The run contains both slower linked motion and faster streak geometry.";
         } else if (signalSummary.movingTrackCount > 0) {
             opening = "The strongest structure is slower linked motion across multiple frames.";
-        } else if (signalSummary.streakTrackCount + signalSummary.singleStreakCount + signalSummary.suspectedStreakTrackCount > 0) {
+        } else if (signalSummary.streakTrackCount + signalSummary.singleStreakCount > 0) {
             opening = "The strongest structure is streak-like: brief, directional energy rather than point-track drift.";
         } else if (signalSummary.anomalyCount > 0) {
             opening = "The run is dominated by isolated high-energy flashes that did not form tracks.";
