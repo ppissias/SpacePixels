@@ -16,6 +16,7 @@ import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
 import eu.startales.spacepixels.events.AutoTuneFinishedEvent;
 import eu.startales.spacepixels.events.AutoTuneStartedEvent;
 import eu.startales.spacepixels.events.FitsImportFinishedEvent;
+import eu.startales.spacepixels.config.DetectionSettingsRules;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.config.SpacePixelsSettingsFiles;
@@ -39,7 +40,10 @@ import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class DetectionConfigurationPanel extends JPanel {
 
@@ -127,8 +131,17 @@ public class DetectionConfigurationPanel extends JPanel {
     private FitsFileInformation[] cachedStackFiles;
     private String cachedStackKey;
     private final List<SettingRow> settingRows = new ArrayList<>();
+    // The title of each number setting, in page order, for the messages about its field.
+    private final Map<JSpinner, String> inputTitles = new LinkedHashMap<>();
+    // The spinners of each pair of settings kept in order: the first, then the second.
+    private final Map<DetectionSettingsRules.Pair, JSpinner[]> pairedSpinners = new EnumMap<>(DetectionSettingsRules.Pair.class);
     private final JLabel footerStateLabel = new JLabel(" ");
     private final JLabel footerMessageLabel = new JLabel(" ");
+    // The footer message: a note (saved, reverted, a setting moved to keep its pair in order), replaced by what to
+    // enter while a field holds invalid text, after the name of a save or run that it stopped.
+    private String footerNote = " ";
+    private boolean footerNoteIsProblem;
+    private String refusedAction;
 
     // Last saved state, for the unsaved-changes indicator and Revert.
     private DetectionConfig savedConfig;
@@ -166,7 +179,7 @@ public class DetectionConfigurationPanel extends JPanel {
             mainPanel.bindAutoTuneButton(overviewPanel.getRunButton(), this::openOverviewAndRunAutoTune);
         }
 
-        setupConstraints();
+        setupPairs();
         setupFrameRejectionPreset();
         // Settings that only matter while their feature is on appear with it.
         showOnlyWhen(chkEnableGeometricTrackLinking, spinMaxJump, spinRhythmVar, spinRhythmMinRatio, spinRhythmStatThresh);
@@ -209,7 +222,7 @@ public class DetectionConfigurationPanel extends JPanel {
         loadDefaultsBtn.setToolTipText("Reset the detection settings to the DetectionConfig defaults for this session. The saved profile is unchanged until you click Save; Revert undoes it.");
         loadDefaultsBtn.addActionListener(e -> {
             loadDetectionDefaults();
-            footerMessageLabel.setText("Defaults loaded. Revert restores the saved settings.");
+            showFooterNote("Defaults loaded. Revert restores the saved settings.");
         });
 
         footerStateLabel.setBorder(new EmptyBorder(0, 4, 0, 12));
@@ -238,29 +251,35 @@ public class DetectionConfigurationPanel extends JPanel {
     /** The settings the Auto-Tuner chooses, shown on the Overview page. */
     private void buildCoreSettings(AutoTuneOverviewPanel overview) {
         spinDetectionSigma = createSpinner(doubleSpinnerModel(jTransientConfig.detectionSigmaMultiplier, 1.0, 20.0, 0.1));
-        overview.addCoreSetting("Detection in each frame", "Detection Sigma", "Minimum brightness threshold for starting a new detection. Higher values reduce noise; lower values detect fainter objects.", spinDetectionSigma, true);
+        addCoreSetting(overview, "Detection in each frame", "Detection Sigma", "Minimum brightness threshold for starting a new detection. Higher values reduce noise; lower values detect fainter objects.", spinDetectionSigma, true);
         spinGrowSigma = createSpinner(doubleSpinnerModel(jTransientConfig.growSigmaMultiplier, 0.1, 20.0, 0.1));
-        overview.addCoreSetting(null, "Grow Sigma (Hysteresis)", "Secondary threshold used to expand a detection after it starts during per-frame object detection. Lower values capture fainter edges; higher values keep detections tighter. It cannot exceed Detection Sigma. If it goes below Master Sigma, faint star wings detected in the frames may extend past the veto mask and leak as transients; the calibrated Auto-Tuner measures that trade-off.", spinGrowSigma, true);
+        addCoreSetting(overview, null, "Grow Sigma (Hysteresis)", "Secondary threshold used to expand a detection after it starts during per-frame object detection. Lower values capture fainter edges; higher values keep detections tighter. It cannot exceed Detection Sigma. If it goes below Master Sigma, faint star wings detected in the frames may extend past the veto mask and leak as transients; the calibrated Auto-Tuner measures that trade-off.", spinGrowSigma, true);
         spinMinPixels = createSpinner(intSpinnerModel(jTransientConfig.minDetectionPixels, 1, 2000, 1));
-        overview.addCoreSetting(null, "Min Detection Pixels", "Minimum blob size required for a detection to be kept. Higher values reject hot pixels and noise; lower values allow smaller sources.", spinMinPixels, true);
+        addCoreSetting(overview, null, "Min Detection Pixels", "Minimum blob size required for a detection to be kept. Higher values reject hot pixels and noise; lower values allow smaller sources.", spinMinPixels, true);
         overview.addPreviewAction();
 
         spinMasterSigma = createSpinner(doubleSpinnerModel(jTransientConfig.masterSigmaMultiplier, 0.5, 15.0, 0.1));
-        overview.addCoreSetting("Star mask (master map)", "Master Sigma", "Detection threshold used when building the master star map. Lower values mask more faint stars and halos; higher values create a smaller, cleaner mask. Stars are seeded at this value and grown down to Master Grow Sigma (or this value when that is 0). A master shallower than the per-frame Grow Sigma hides less sky but lets more star wings leak; the calibrated Auto-Tuner measures that trade-off.", spinMasterSigma, false);
+        addCoreSetting(overview, "Star mask (master map)", "Master Sigma", "Detection threshold used when building the master star map. Lower values mask more faint stars and halos; higher values create a smaller, cleaner mask. Stars are seeded at this value and grown down to Master Grow Sigma (or this value when that is 0). A master shallower than the per-frame Grow Sigma hides less sky but lets more star wings leak; the calibrated Auto-Tuner measures that trade-off.", spinMasterSigma, false);
         spinMasterGrowSigma = createSpinner(doubleSpinnerModel(jTransientConfig.masterGrowSigmaMultiplier, 0.0, 15.0, 0.1));
-        overview.addCoreSetting(null, "Master Grow Sigma", "Threshold for growing master-map stars after they are seeded at Master Sigma. A lower value covers the faint wings of stars without adding noise islands; 0 uses Master Sigma (no hysteresis). Cannot exceed Master Sigma.", spinMasterGrowSigma, false);
+        addCoreSetting(overview, null, "Master Grow Sigma", "Threshold for growing master-map stars after they are seeded at Master Sigma. A lower value covers the faint wings of stars without adding noise islands; 0 uses Master Sigma (no hysteresis). Cannot exceed Master Sigma.", spinMasterGrowSigma, false);
         spinMasterMinPix = createSpinner(intSpinnerModel(jTransientConfig.masterMinDetectionPixels, 1, 2000, 1));
-        overview.addCoreSetting(null, "Master Min Pixels", "Minimum size required for a source to be included in the master star map. Lower values include fainter stars.", spinMasterMinPix, false);
+        addCoreSetting(overview, null, "Master Min Pixels", "Minimum size required for a source to be included in the master star map. Lower values include fainter stars.", spinMasterMinPix, false);
         spinMaxMaskOverlapFraction = createSpinner(doubleSpinnerModel(jTransientConfig.maxMaskOverlapFraction, 0.0, 1.0, 0.01));
-        overview.addCoreSetting(null, "Max Mask Overlap Fraction", "Maximum fraction of a point footprint that may overlap the master veto mask before it is rejected as likely stellar residual contamination.", spinMaxMaskOverlapFraction, true);
+        addCoreSetting(overview, null, "Max Mask Overlap Fraction", "Maximum fraction of a point footprint that may overlap the master veto mask before it is rejected as likely stellar residual contamination.", spinMaxMaskOverlapFraction, true);
         spinStarJitter = createSpinner(doubleSpinnerModel(jTransientConfig.maxStarJitter, 0.0, 20.0, 0.1));
-        overview.addCoreSetting(null, "Base Star Jitter Radius", "Baseline radius under which detections are treated as stationary star jitter instead of true moving points. Higher values are more conservative around registration residuals.", spinStarJitter, true);
+        addCoreSetting(overview, null, "Base Star Jitter Radius", "Baseline radius under which detections are treated as stationary star jitter instead of true moving points. Higher values are more conservative around registration residuals.", spinStarJitter, true);
 
         JButton testStarMaskButton = new JButton("Test Star Mask…");
         testStarMaskButton.setToolTipText("<html>Build the master stack as a detection run would, then try star mask settings "
                 + "and see the resulting veto mask on the stack, with statistics.</html>");
         testStarMaskButton.addActionListener(e -> openStarMaskExplorer());
         overview.addCoreAction(testStarMaskButton);
+    }
+
+    private void addCoreSetting(AutoTuneOverviewPanel overview, String group, String title, String description,
+                                JSpinner spinner, boolean setByLegacyTuner) {
+        overview.addCoreSetting(group, title, description, spinner, setByLegacyTuner);
+        inputTitles.put(spinner, title);
     }
 
     /** The analyses of a run, each switched on the Overview and in step with the checkbox on its detailed tab. */
@@ -295,29 +314,30 @@ public class DetectionConfigurationPanel extends JPanel {
         if (files == null || files.length == 0) {
             return;
         }
-        DetectionConfig config = getJTransientConfig();
+        DetectionConfig config = checkedSettings("Test Star Mask did not start.");
+        if (config == null) {
+            return;
+        }
         String stackKey = masterStackKey(config);
         if (cachedMasterStack != null && cachedStackFiles == files && stackKey.equals(cachedStackKey)) {
-            showStarMaskExplorer(files);
+            showStarMaskExplorer(files, config);
             return;
         }
         new Thread(new StarMaskStackTask(mainAppWindow.getEventBus(), files, config.clone(), result -> {
             cachedMasterStack = result;
             cachedStackFiles = files;
             cachedStackKey = stackKey;
-            showStarMaskExplorer(files);
+            showStarMaskExplorer(files, config);
         })).start();
     }
 
-    private void showStarMaskExplorer(FitsFileInformation[] files) {
+    /** Opens the explorer on the settings taken when Test Star Mask was clicked. */
+    private void showStarMaskExplorer(FitsFileInformation[] files, DetectionConfig config) {
         File first = new File(files[0].getFilePath());
         String sessionName = first.getParentFile() != null ? first.getParentFile().getName() : first.getName();
         StarMaskExplorerFrame.Settings current = new StarMaskExplorerFrame.Settings(
-                ((Number) spinMasterSigma.getValue()).doubleValue(),
-                ((Number) spinMasterGrowSigma.getValue()).doubleValue(),
-                ((Number) spinMasterMinPix.getValue()).intValue(),
-                ((Number) spinStarJitter.getValue()).doubleValue());
-        new StarMaskExplorerFrame(mainAppWindow.getFrame(), sessionName, cachedMasterStack, getJTransientConfig(), current,
+                config.masterSigmaMultiplier, config.masterGrowSigmaMultiplier, config.masterMinDetectionPixels, config.maxStarJitter);
+        new StarMaskExplorerFrame(mainAppWindow.getFrame(), sessionName, cachedMasterStack, config, current,
                 this::applyStarMaskSettings).setVisible(true);
     }
 
@@ -360,7 +380,8 @@ public class DetectionConfigurationPanel extends JPanel {
 
         @Override
         public DetectionConfig currentConfig() {
-            return getJTransientConfig();
+            applySettingsToMemory();
+            return jTransientConfig.clone();
         }
 
         @Override
@@ -429,12 +450,13 @@ public class DetectionConfigurationPanel extends JPanel {
             return;
         }
         suppressAutoApply = true;
+        List<String> adjustments;
         try {
-            applySettingsToMemory();
+            adjustments = applySettingsToMemory();
         } finally {
             suppressAutoApply = false;
         }
-        footerMessageLabel.setText(" ");
+        showFooterNote(String.join(" · ", adjustments));
         updateSavedState();
     }
 
@@ -501,7 +523,7 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinAutoTuneMaxCandidateFrames, savedAutoTuneMaxCandidateFrames);
         applySettingsToMemory();
         overviewPanel.forgetTunedValues();
-        footerMessageLabel.setText("Reverted to the saved settings.");
+        showFooterNote("Reverted to the saved settings.");
         updateSavedState();
     }
 
@@ -517,57 +539,18 @@ public class DetectionConfigurationPanel extends JPanel {
         chkIncludeAiCreativeReportSections.setSelected(DetectionReportGenerator.includeAiCreativeReportSections);
     }
 
-    private void setupConstraints() {
-        // Ensure Grow Sigma <= Detection Sigma. The master-map settings are independent of the per-frame
-        // settings: a master shallower than the per-frame grow hides less sky but lets more star wings leak.
-        spinDetectionSigma.addChangeListener(e -> {
-            double detSigma = ((Number) spinDetectionSigma.getValue()).doubleValue();
-            double growSigma = ((Number) spinGrowSigma.getValue()).doubleValue();
-            if (detSigma < growSigma) {
-                spinGrowSigma.setValue(detSigma);
-            }
-        });
-        spinGrowSigma.addChangeListener(e -> {
-            double detSigma = ((Number) spinDetectionSigma.getValue()).doubleValue();
-            double growSigma = ((Number) spinGrowSigma.getValue()).doubleValue();
-            if (growSigma > detSigma) {
-                spinGrowSigma.setValue(detSigma);
-            }
-        });
-
-        // Ensure Master Grow Sigma <= Master Sigma (0 means "same as Master Sigma").
-        spinMasterSigma.addChangeListener(e -> {
-            double masterSigma = ((Number) spinMasterSigma.getValue()).doubleValue();
-            double masterGrow = ((Number) spinMasterGrowSigma.getValue()).doubleValue();
-            if (masterGrow > masterSigma) {
-                spinMasterGrowSigma.setValue(masterSigma);
-            }
-        });
-
-        // Ensure Master Slow Mover Grow Sigma <= Master Slow Mover Detection Sigma
-        spinMasterSlowMoverSigma.addChangeListener(e -> {
-            double detSigma = ((Number) spinMasterSlowMoverSigma.getValue()).doubleValue();
-            double growSigma = ((Number) spinMasterSlowMoverGrowSigma.getValue()).doubleValue();
-            if (detSigma < growSigma) spinMasterSlowMoverGrowSigma.setValue(detSigma);
-        });
-
-        spinMasterSlowMoverGrowSigma.addChangeListener(e -> {
-            double detSigma = ((Number) spinMasterSlowMoverSigma.getValue()).doubleValue();
-            double growSigma = ((Number) spinMasterSlowMoverGrowSigma.getValue()).doubleValue();
-            if (growSigma > detSigma) spinMasterSlowMoverGrowSigma.setValue(detSigma);
-        });
-
-        // A stationary threshold above the maximum jump makes geometric tracking self-contradictory.
-        spinMaxJump.addChangeListener(e -> {
-            double maxJump = ((Number) spinMaxJump.getValue()).doubleValue();
-            double stationaryThreshold = ((Number) spinRhythmStatThresh.getValue()).doubleValue();
-            if (stationaryThreshold > maxJump) spinRhythmStatThresh.setValue(maxJump);
-        });
-        spinRhythmStatThresh.addChangeListener(e -> {
-            double maxJump = ((Number) spinMaxJump.getValue()).doubleValue();
-            double stationaryThreshold = ((Number) spinRhythmStatThresh.getValue()).doubleValue();
-            if (stationaryThreshold > maxJump) spinRhythmStatThresh.setValue(maxJump);
-        });
+    /**
+     * The spinners of the settings that come in pairs. Every edit is applied through {@link #applySettingsToMemory},
+     * which keeps each pair in order as {@link DetectionSettingsRules.Pair} says and reports what it moved.
+     */
+    private void setupPairs() {
+        pairedSpinners.put(DetectionSettingsRules.Pair.GROW_SIGMA, new JSpinner[]{spinGrowSigma, spinDetectionSigma});
+        pairedSpinners.put(DetectionSettingsRules.Pair.MASTER_GROW_SIGMA, new JSpinner[]{spinMasterGrowSigma, spinMasterSigma});
+        pairedSpinners.put(DetectionSettingsRules.Pair.SLOW_MOVER_GROW_SIGMA, new JSpinner[]{spinMasterSlowMoverGrowSigma, spinMasterSlowMoverSigma});
+        pairedSpinners.put(DetectionSettingsRules.Pair.SLOW_MOVER_AXIS_RATIO, new JSpinner[]{spinSlowMoverMinAxisRatio, spinSlowMoverMaxAxisRatio});
+        pairedSpinners.put(DetectionSettingsRules.Pair.MEDIAN_MASK_OVERLAP,
+                new JSpinner[]{spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction});
+        pairedSpinners.put(DetectionSettingsRules.Pair.RHYTHM_STATIONARY_THRESHOLD, new JSpinner[]{spinRhythmStatThresh, spinMaxJump});
     }
 
     private void runAutoTuner(JTransientAutoTuner.AutoTuneProfile selectedProfile, AutoTunerRunner.Algorithm algorithm) {
@@ -590,14 +573,17 @@ public class DetectionConfigurationPanel extends JPanel {
             return;
         }
 
-        applySettingsToMemory();
+        DetectionConfig settings = checkedSettings("Auto-Tune did not start.");
+        if (settings == null) {
+            return;
+        }
 
         mainAppWindow.getEventBus().post(new EngineProgressUpdateEvent(0, "Initializing Mathematical Auto-Tuner..."));
 
         AutoTuneTask tuneTask = new AutoTuneTask(
                 mainAppWindow.getEventBus(),
                 poolToUse,
-                jTransientConfig,
+                settings,
                 autoTuneMaxCandidateFrames,
                 selectedProfile,
                 algorithm);
@@ -675,11 +661,14 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void savePersistedSettings() {
-        applySettingsToMemory();
+        DetectionConfig settings = checkedSettings("Not saved.");
+        if (settings == null) {
+            return;
+        }
 
         try {
             SpacePixelsSettingsFiles.save(
-                    detectionProfileFile, new SpacePixelsDetectionProfile(jTransientConfig, autoTuneMaxCandidateFrames),
+                    detectionProfileFile, new SpacePixelsDetectionProfile(settings, autoTuneMaxCandidateFrames),
                     visualizationPreferencesFile, SpacePixelsVisualizationPreferences.captureCurrent());
         } catch (IOException e) {
             // Nothing is marked as saved, so the changes keep showing as unsaved.
@@ -690,7 +679,7 @@ public class DetectionConfigurationPanel extends JPanel {
         // Saved values are simply the settings now: drop the "set by Auto-Tune" marks.
         overviewPanel.clearTunedMarkers();
         updateSavedState();
-        footerMessageLabel.setText("Saved to " + detectionProfileFile.getParent());
+        showFooterNote("Saved to " + detectionProfileFile.getParent());
         footerMessageLabel.setToolTipText("<html>" + detectionProfileFile.getAbsolutePath() + "<br>"
                 + visualizationPreferencesFile.getAbsolutePath() + "</html>");
     }
@@ -702,9 +691,122 @@ public class DetectionConfigurationPanel extends JPanel {
         updateSavedState();
     }
 
-    public DetectionConfig getJTransientConfig() {
-        applySettingsToMemory();
-        return jTransientConfig;
+    /**
+     * The detection settings for a save or a run starting now: a copy of the session settings, hidden settings
+     * included, so later edits cannot change that run. When a field holds invalid text or the settings break a rule
+     * of {@link DetectionSettingsRules}, nothing is copied: this tab shows why, starting with {@code refusedAction}
+     * (for example "Detect Moving Targets did not start."), the cursor goes into the field, and the result is null.
+     */
+    DetectionConfig checkedSettings(String refusedAction) {
+        JSpinner invalid = invalidInputToShow();
+        if (invalid != null) {
+            mainAppWindow.getTabbedPane().setSelectedComponent(this);
+            // First, since revealing the setting can clear a filter, an edit that replaces the footer note.
+            focusInput(invalid);
+            this.refusedAction = refusedAction;
+            renderFooter();
+            return null;
+        }
+        List<String> adjustments = applySettingsToMemory();
+        List<String> problems = DetectionSettingsRules.problems(jTransientConfig);
+        if (!problems.isEmpty()) {
+            mainAppWindow.getTabbedPane().setSelectedComponent(this);
+            showFooterNote(refusedAction + " " + problems.get(0), true);
+            return null;
+        }
+        if (!adjustments.isEmpty()) {
+            showFooterNote(String.join(" · ", adjustments));
+        }
+        return jTransientConfig.clone();
+    }
+
+    // ==========================================
+    // INVALID TEXT AND THE FOOTER MESSAGE
+    // ==========================================
+
+    /** What to enter in the setting's field, or null when its text is a valid value. */
+    private String inputProblem(JSpinner spinner) {
+        if (!(spinner.getEditor() instanceof CheckedNumberEditor)) {
+            return null;
+        }
+        CheckedNumberEditor editor = (CheckedNumberEditor) spinner.getEditor();
+        return editor.isTextValid() ? null : inputTitles.get(spinner) + ": " + editor.expected();
+    }
+
+    /** The field with invalid text to talk about: the one being edited, otherwise the first in page order. */
+    private JSpinner invalidInputToShow() {
+        Component focused = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        JSpinner edited = focused == null ? null : (JSpinner) SwingUtilities.getAncestorOfClass(JSpinner.class, focused);
+        if (edited != null && inputTitles.containsKey(edited) && inputProblem(edited) != null) {
+            return edited;
+        }
+        for (JSpinner spinner : inputTitles.keySet()) {
+            if (inputProblem(spinner) == null) {
+                continue;
+            }
+            // A setting whose feature is switched off is hidden and not used, so its text does not count.
+            SettingRow row = rowOf(spinner);
+            if (row == null || row.applies.getAsBoolean()) {
+                return spinner;
+            }
+        }
+        return null;
+    }
+
+    /** The row of a setting on a detailed page, or null for a core setting on the Overview. */
+    private SettingRow rowOf(JSpinner spinner) {
+        for (SettingRow row : settingRows) {
+            if (row.input == spinner) {
+                return row;
+            }
+        }
+        return null;
+    }
+
+    /** Shows the setting's page with the setting on it, scrolled into view, and puts the cursor into its field. */
+    private void focusInput(JSpinner spinner) {
+        SettingRow settingRow = rowOf(spinner);
+        if (settingRow == null) {
+            navigator.showPage("Overview");
+        } else {
+            navigator.reveal(settingRow);
+        }
+        JComponent shown = settingRow == null ? spinner : settingRow.row;
+        // After the page and filters have been laid out.
+        SwingUtilities.invokeLater(() -> {
+            shown.scrollRectToVisible(new Rectangle(shown.getSize()));
+            ((JSpinner.DefaultEditor) spinner.getEditor()).getTextField().requestFocusInWindow();
+        });
+    }
+
+    /** Replaces the footer note, for example after a save or an edit; a blank note clears it. */
+    private void showFooterNote(String note) {
+        showFooterNote(note, false);
+    }
+
+    private void showFooterNote(String note, boolean problem) {
+        footerNote = note == null || note.isBlank() ? " " : note;
+        footerNoteIsProblem = problem;
+        refusedAction = null;
+        footerMessageLabel.setToolTipText(null);
+        renderFooter();
+    }
+
+    /**
+     * Shows the note, or, while a field holds invalid text, what to enter there (after the save or run it stopped).
+     * Runs after every change of a field's text, so the message follows the fields.
+     */
+    private void renderFooter() {
+        JSpinner invalid = invalidInputToShow();
+        if (invalid == null) {
+            refusedAction = null;
+        }
+        boolean problem = invalid != null || footerNoteIsProblem;
+        Color error = UIManager.getColor("Actions.Red");
+        footerMessageLabel.setForeground(problem ? (error != null ? error : new Color(0xDB5860))
+                : UIManager.getColor("Label.disabledForeground"));
+        footerMessageLabel.setText(invalid == null ? footerNote
+                : (refusedAction == null ? "" : refusedAction + " ") + inputProblem(invalid));
     }
 
     private JPanel buildStreakDetectionPanel() {
@@ -1005,9 +1107,10 @@ public class DetectionConfigurationPanel extends JPanel {
     private void configureSpinnerEditor(JSpinner spinner) {
         int decimals = spinnerDecimalPlaces(spinner);
         String pattern = decimals == 0 ? "#0" : "#0." + "0".repeat(decimals);
-        spinner.setEditor(new JSpinner.NumberEditor(spinner, pattern));
-        JFormattedTextField textField = ((JSpinner.NumberEditor) spinner.getEditor()).getTextField();
-        textField.setColumns(Math.max(5, decimals + 5));
+        CheckedNumberEditor editor = new CheckedNumberEditor(spinner, pattern, this::renderFooter);
+        spinner.setEditor(editor);
+        editor.getTextField().setColumns(Math.max(5, decimals + 5));
+        renderFooter();
     }
 
     private String formatSpinnerValue(JSpinner spinner) {
@@ -1198,15 +1301,23 @@ public class DetectionConfigurationPanel extends JPanel {
         // Keep the row at its own height, so rows do not stretch when a filter leaves only a few of them on a page.
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
         settingRows.add(setting);
+        if (input instanceof JSpinner) {
+            inputTitles.put((JSpinner) input, title);
+        }
         navigator.registerRow(setting);
     }
 
-    private void applySettingsToMemory() {
+    /**
+     * Commits the fields with valid text and copies every setting into the session configuration, in place, so the
+     * hidden settings keep their loaded values. Returns what was moved to keep a pair of settings in order.
+     */
+    private List<String> applySettingsToMemory() {
         boolean wasSuppressed = suppressAutoApply;
         suppressAutoApply = true;
+        List<String> adjustments = List.of();
         try {
             commitAllSpinners();
-            normalizeDependentSpinners();
+            adjustments = normalizeDependentSpinners();
 
             jTransientConfig.detectionSigmaMultiplier = ((Number) spinDetectionSigma.getValue()).doubleValue();
             jTransientConfig.growSigmaMultiplier = ((Number) spinGrowSigma.getValue()).doubleValue();
@@ -1313,6 +1424,7 @@ public class DetectionConfigurationPanel extends JPanel {
             suppressAutoApply = wasSuppressed;
         }
         publishActiveSettings();
+        return adjustments;
     }
 
     /** Pushes the auto-tuned detection values to the readout on the main window. */
@@ -1335,40 +1447,22 @@ public class DetectionConfigurationPanel extends JPanel {
                 ((Number) spinStarJitter.getValue()).doubleValue());
     }
 
-    private void normalizeDependentSpinners() {
-        double detectionSigma = ((Number) spinDetectionSigma.getValue()).doubleValue();
-        double masterSigma = ((Number) spinMasterSigma.getValue()).doubleValue();
-        double growSigma = ((Number) spinGrowSigma.getValue()).doubleValue();
-        if (growSigma > detectionSigma) {
-            spinGrowSigma.setValue(detectionSigma);
+    /** Puts each pair of settings back in order by moving the one its rule names, and says what was moved. */
+    private List<String> normalizeDependentSpinners() {
+        List<String> adjustments = new ArrayList<>();
+        for (Map.Entry<DetectionSettingsRules.Pair, JSpinner[]> entry : pairedSpinners.entrySet()) {
+            DetectionSettingsRules.Pair pair = entry.getKey();
+            JSpinner first = entry.getValue()[0];
+            JSpinner second = entry.getValue()[1];
+            double firstValue = ((Number) first.getValue()).doubleValue();
+            double secondValue = ((Number) second.getValue()).doubleValue();
+            if (firstValue > secondValue) {
+                JSpinner moved = pair.lowersFirst ? first : second;
+                moved.setValue(pair.lowersFirst ? secondValue : firstValue);
+                adjustments.add(pair.adjustment(formatSpinnerValue(moved)));
+            }
         }
-
-        double slowMoverSigma = ((Number) spinMasterSlowMoverSigma.getValue()).doubleValue();
-        double slowMoverGrowSigma = ((Number) spinMasterSlowMoverGrowSigma.getValue()).doubleValue();
-        if (slowMoverGrowSigma > slowMoverSigma) {
-            spinMasterSlowMoverGrowSigma.setValue(slowMoverSigma);
-        }
-        double minAxisRatio = ((Number) spinSlowMoverMinAxisRatio.getValue()).doubleValue();
-        if (((Number) spinSlowMoverMaxAxisRatio.getValue()).doubleValue() < minAxisRatio) {
-            spinSlowMoverMaxAxisRatio.setValue(minAxisRatio);
-        }
-
-        double minSupportOverlap = ((Number) spinSlowMoverMedianSupportOverlapFraction.getValue()).doubleValue();
-        double maxSupportOverlap = ((Number) spinSlowMoverMedianSupportMaxOverlapFraction.getValue()).doubleValue();
-        if (minSupportOverlap > maxSupportOverlap) {
-            spinSlowMoverMedianSupportMaxOverlapFraction.setValue(minSupportOverlap);
-        }
-
-        double maxJump = ((Number) spinMaxJump.getValue()).doubleValue();
-        double stationaryThreshold = ((Number) spinRhythmStatThresh.getValue()).doubleValue();
-        if (stationaryThreshold > maxJump) {
-            spinRhythmStatThresh.setValue(maxJump);
-        }
-
-        double masterGrow = ((Number) spinMasterGrowSigma.getValue()).doubleValue();
-        if (masterGrow > masterSigma) {
-            spinMasterGrowSigma.setValue(masterSigma);
-        }
+        return adjustments;
     }
 
     private void commitAllSpinners() {
@@ -1381,6 +1475,8 @@ public class DetectionConfigurationPanel extends JPanel {
                 try {
                     ((JSpinner) c).commitEdit();
                 } catch (Exception ignored) {
+                    // Invalid text stays in its field and the setting keeps its value; saves and runs
+                    // (checkedSettings) refuse to start until the text is corrected.
                 }
             } else if (c instanceof Container) {
                 commitSpinners((Container) c);

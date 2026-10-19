@@ -21,6 +21,7 @@ import eu.startales.spacepixels.util.skycatalog.SkyCatalogueClient;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogueStore;
 import eu.startales.spacepixels.util.skycatalog.SkyField;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
+import io.github.ppissias.jtransient.config.DetectionConfig;
 import eu.startales.spacepixels.events.*;
 import eu.startales.spacepixels.tasks.*;
 
@@ -299,29 +300,42 @@ public class MainApplicationPanel extends JPanel {
 
         detectSingleButton.addActionListener(e -> previewSelectedFrame());
 
+        // Each run gets the detection settings as they are at the click, or does not start while a setting is invalid.
         manualTransientInspectionButton.addActionListener(e -> {
+            DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Manual Transient Inspection did not start.");
+            if (settings == null) {
+                return;
+            }
             new Thread(new ManualTransientInspectionTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImageProcessing(),
-                    mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig(),
+                    settings,
                     mainAppWindow.getStretchPanel()
             )).start();
         });
 
         detectBatchButton.addActionListener(e -> {
+            DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Detect Moving Targets did not start.");
+            if (settings == null) {
+                return;
+            }
             new Thread(new DetectionTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImageProcessing(),
-                    mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
+                    settings
             )).start();
         });
 
         // Wire up the new button to the new task
         detectIterativelyButton.addActionListener(e -> {
+            DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Detect Iteratively did not start.");
+            if (settings == null) {
+                return;
+            }
             new Thread(new IterativeDetectionTask(
                     mainAppWindow.getEventBus(),
                     mainAppWindow.getImageProcessing(),
-                    mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig()
+                    settings
             )).start();
         });
 
@@ -1371,8 +1385,8 @@ public class MainApplicationPanel extends JPanel {
     private void enableControlsProcessingBlinkingFinished() { unlockUI(); }
 
     /**
-     * Opens Preview Frame on the selected frame, with the current detection settings.
-     * The Detection Settings button uses this same window.
+     * Opens Preview Frame on the selected frame, with the detection settings as they are now; later edits apply
+     * when Preview Frame is opened again. The Detection Settings button uses this same window.
      */
     void previewSelectedFrame() {
         FitsFileTableModel model = (FitsFileTableModel) table.getModel();
@@ -1390,6 +1404,10 @@ public class MainApplicationPanel extends JPanel {
             startIndex = 0;
         }
 
+        DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Preview Frame did not open.");
+        if (settings == null) {
+            return;
+        }
         if (detectionSequenceFrame == null) {
             detectionSequenceFrame = new DetectionSequenceFrame(mainAppWindow);
         }
@@ -1397,7 +1415,7 @@ public class MainApplicationPanel extends JPanel {
         detectionSequenceFrame.openSequence(
                 allFiles,
                 startIndex,
-                mainAppWindow.getDetectionConfigurationPanel().getJTransientConfig(),
+                settings,
                 mainAppWindow.getStretchPanel()
         );
     }

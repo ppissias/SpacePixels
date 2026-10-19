@@ -275,6 +275,23 @@ final class SettingsNavigator extends JPanel {
         }
     }
 
+    /**
+     * Shows the page of the row with the row on it. A row hidden by the filters, or as an expert setting, is found
+     * with a search for its title, which leaves the "Show expert settings" choice as it is.
+     */
+    void reveal(SettingRow row) {
+        if (!row.row.isVisible()) {
+            onlyChangedCheck.setSelected(false);
+        }
+        if (!row.row.isVisible()) {
+            searchField.setText(row.title);
+        }
+        Page page = pageOf(row);
+        if (page != null) {
+            showPage(page.title);
+        }
+    }
+
     private Page pageOf(SettingRow row) {
         for (Page page : pages.values()) {
             if (page.content == row.parent) {
