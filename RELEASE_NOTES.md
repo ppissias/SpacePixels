@@ -1,5 +1,80 @@
 # SpacePixels Release Notes
 
+## 2026.10-03
+
+This release searches each session only where every frame has image data, sets hot pixels and dust aside before tracking, and builds a better star mask on frames with a sky gradient. It also makes SpacePixels safer with your files and settings. Detection engine: **JTransient 1.0.4**.
+
+### Highlights
+
+- **Detection keeps to the session data area.** Registration fills the parts of a shifted frame that have no data with black. Before, a fixed border and darkness probes around each object kept detection away from that fill, and on drifted sessions they left 10–25 % of the frame unsearched.
+  - The engine now measures where every kept frame has image data and searches only there.
+  - Sky levels, frame quality, slow movers, photometry and both auto-tuners use the same area.
+  - Frames with some fill no longer have their noise overestimated, so they are searched as deeply as the others.
+  - The report draws the area as a blue dashed outline on the Overview picture and the detection maps. It says how much of the frame the area covers and which frame limits it most. See [Overview](MANUAL.md#overview).
+- **Hot pixels and dust are set aside before tracking.** Some defects stay at one place on the camera while the dither moves the sky. Detections within 2 px of one camera position in at least 3 frames, while those frames moved at least 4 px, are now removed before tracks are linked, so they no longer become tracks.
+  - The report lists them as camera-fixed groups (FC1, FC2…) with positions and animations.
+  - The switch is **Reject Camera-Fixed Sources** on the Track Linking page, on by default.
+- **Likely Artifacts.** The camera-fixed groups and the common-motion groups are folded into one collapsed **Likely Artifacts** group after the variable stars. Their trail and animation pictures are drawn in colour.
+- **A better star mask on frames with a sky gradient.** The master star map also looks for stars against the local sky. A gradient no longer hides the faint stars on its darker side, which used to come back from the frames as many stationary leftovers.
+- **Variable stars across the field.** A new picture circles every reported variable candidate on the median stack, with full-size light curves. Blink and Preview Frame can mark the candidates of the last run with **Show variable stars** (key V). See [Light curves and exports](MANUAL.md#light-curves-and-exports).
+
+### Detection changes
+
+- **Suspected streaks are gone.** Anomalies of one frame that lie on a line are kept as a streak only when they complete a confirmed streak, for example the pieces of a broken satellite trail. Otherwise they stay separate anomalies; on noisy sessions such groups were mostly noise. The suspected-streak category, its report sections and the **Suspected Streak Line Tolerance** setting are removed.
+- **Streak checks.**
+  - A streak seen in several frames that does not move is no longer confirmed as a streak track.
+  - Streak motion is compared in pixels, so a tiny step between distant fragments no longer merges unrelated streaks.
+- **Quality control.** The sky and the frame-quality statistics are measured inside the data area. A frame that alone shrinks the data area by 5 % of the frame or more is left out as "Shifted away from the other frames", at most a tenth of the frames.
+- **Residual analysis** counts gaps and coverage over the kept frames, so a frame left out by quality control no longer counts as a gap.
+- **Point tracks** always need at least three points, whatever the profile says.
+- **Auto-Tune.**
+  - The auto-tuners count noise rates per searchable pixel and can recover test stars near the edge of their crops.
+  - The Legacy tuner scores the same star mask that the detection run applies.
+- The **edge margin and void settings** are removed; the data area replaces them.
+
+### Import
+
+- **One exposure time per session.** Frames whose exposure time differs by more than 2 % (at least 0.1 s) are refused. SpacePixels names the odd frames and offers to copy the largest set into a subfolder and import that. The batch command and the API refuse the folder with the same list.
+- **Signed 16-bit FITS.** Frames not stored as unsigned 16 bit (`BZERO` 32768) were read 32768 ADU too high.
+  - The window offers to convert them, the batch command refuses them with a clear message, and the API's input preparation converts them.
+  - Pixels below zero either get the same offset in every frame (recommended; recorded as `SPOFFSET`) or are set to 0.
+  - See [Tips and troubleshooting](MANUAL.md#9-tips-and-troubleshooting).
+- **Sequence checks before conversion.** XISF folders are checked before conversion: every frame must have the same size, channels, colour space and sample format, and either all frames have timestamps or none do. FITS sequences must share `BZERO` and `BSCALE`.
+
+### The settings tab and the application
+
+- **Invalid input is shown, not silently replaced.**
+  - Text that is not a number, or is outside a setting's range, stays in the field, outlined in red. The line at the bottom says what to enter.
+  - Save and the runs do not start until it is corrected; SpacePixels shows you the setting instead.
+  - A value such as "4,5" where "4.5" is expected is no longer read as 4.
+- **A run uses the settings as they are when it starts.** Editing the settings during a run no longer affects that run. Preview Frame keeps the settings it was opened with until you open it again.
+- **Typed values keep their decimals.** Before, 4.25 typed into a field showing one decimal was saved as 4.2.
+- **Pairs of settings are explained.** When a change crosses a pair, such as Grow Sigma above Detection Sigma, the bottom line says which setting was moved. See [Detection settings in brief](MANUAL.md#8-detection-settings-in-brief).
+- **Image Stretch preview.** The preview always shows the last frame and stretch you chose, however quickly you change them, and renders one frame at a time.
+- **A quiet console.** By default only problems are printed. The progress and diagnostics appear with `-Dspacepixels.debug=true` (Gradle: `-PspacepixelsDebug`).
+- **Report details.**
+  - The report records the SpacePixels and JTransient versions.
+  - Navigation and the explanations of detections and rejected frames are clearer.
+  - Groups left out of a large report are also left out of the Unclassified Transient Inspector.
+
+### Fixes
+
+- **Files are replaced safely.** Writing a plate solution into a frame no longer deletes the original first. The updated frame is written beside it, read back to check it, and swapped in; if anything fails, the original is kept.
+  - The settings, session files, report files and converted copies are written the same way.
+  - A settings Save that fails says which file was not saved and keeps showing unsaved changes.
+- Manual Transient Inspection could change the saved detection settings; it now works on a copy.
+- The **In report** checkboxes of the high-detection-count summary now control the right groups.
+
+### Upgrading and API changes
+
+- **Saved settings and profiles.** Your saved detection settings are kept. Profiles with the removed fields (`suspectedStreakLineTolerance`, `edgeMarginPixels`, `voidThresholdFraction`, `voidProximityRadius`) or without the new `enableCameraFixedRejection` trigger the existing one-time profile migration, with a backup.
+- Java 21 or newer is still required. Detection engine: **JTransient 1.0.4**.
+- **API changes.**
+  - `PipelineResult.dataArea` and `PipelineResult.cameraFixedGroups` are new, and the telemetry reports `dataAreaFraction` and `dataAreaLimitingFrames`.
+  - Input preparation takes `NegativeValueHandling`, and a folder with mixed exposure times fails with `MixedExposureException` as the cause. See [Input preparation modes](API.md#input-preparation-modes).
+  - The engine throws `IllegalArgumentException`, naming the frames, when frames differ in size, only some frames have timestamps or exposure times, or exposure times differ.
+  - `Track.isSuspectedStreakTrack` is removed.
+
 ## 2026.10-02
 
 This release adds **Night & Equipment** diagnostics, remembers each session's Auto-Tune results, improves faint-streak and common-motion handling, and strengthens the variable-star checks. The report now explains where processing time went and how a candidate's measured variation compares with its catalogue entry.
