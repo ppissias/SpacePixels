@@ -57,5 +57,3 @@ The JavaScript tests run through the Java test suite when Node is available. Set
 ```text
 node --test src/test/javascript/catalogue-comparison.test.js
 ```
-
-A fresh Klangwolde run with the original report configuration retained all 45 high-confidence and 22 possible candidates; all three photometry CSV exports were byte-identical to the original. The comparison notes identified five known source-metadata issues and one amplitude review. Read-only production adapter/evaluator checks also covered the 19 existing reference reports: the other amplitude review was in M81, while datasets without usable catalogue/filter information remained limited. No comparison changed an input measurement, tier or gate.

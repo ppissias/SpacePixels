@@ -125,8 +125,8 @@ For the underlying detection logic and the meaning of the engine configuration o
 - [JTransient repository](https://github.com/ppissias/JTransient)
 - [JTransient algorithm overview](https://github.com/ppissias/JTransient/blob/main/ALGORITHM.md)
 - [JTransient configuration reference](https://github.com/ppissias/JTransient/blob/main/CONFIG.md)
-- [JTransient auto-tuners](https://github.com/ppissias/JTransient/blob/main/AUTOTUNER.md)
-- [JTransient variable-star photometry](https://github.com/ppissias/JTransient/blob/main/VariableStarAlgorithm.md)
+- [JTransient auto-tuners](https://github.com/ppissias/JTransient/blob/main/ALGORITHM.md#auto-tuning)
+- [JTransient variable-star photometry](https://github.com/ppissias/JTransient/blob/main/ALGORITHM.md#variable-star-photometry)
 
 ## What SpacePixels does
 

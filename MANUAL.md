@@ -43,6 +43,8 @@ Supported files: FITS (`.fit`, `.fits`, `.fts`), compressed FITS (`.fz`) and XIS
 
 A typical source is the folder of registered frames that your stacking program writes before it stacks them (for example the `r_*.fit` files of Siril or the registered frames of PixInsight).
 
+With Deep Sky Stacker, open Stacking Settings and choose **Standard Mode** on the **Result** tab. The registered frames then keep a dark border where a frame was shifted which is useful for the analysis done by SpacePixels. On the **Intermediate Files** tab, tick **Create a registered/calibrated file for each light frame**, choose **FITS Files**, and leave **Compress FITS files** unticked. Import the folder of those frames. Screenshots of both settings are on the [Deep Sky Stacker export settings](https://github.com/ppissias/SpacePixels/wiki/Deep-Sky-Stacker-export-settings) page of the project wiki.
+
 ### Installing
 
 1. Install Java 21 or newer.

@@ -1,3 +1,5 @@
+> Historical record, archived 2026-10-19. This preserves the review and evidence from its original dates, including superseded statements and decisions. It is not the current specification or work queue. See [DESIGN-IMPROVEMENTS.md](../../DESIGN-IMPROVEMENTS.md) for current guidance. Source line numbers and temporary harness paths below refer to the original session and may no longer exist.
+
 - [x] Overview report section - add legends (SST, etc) like below
 in the first image of the report, we do not see the legends about what each detection is. They should also appear so that the user knows what SST and what ST and what A12 is for example.
 

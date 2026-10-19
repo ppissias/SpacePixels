@@ -1,16 +1,16 @@
 # High-Level Design
 
-Snapshot date: 2026-09-23
+Reviewed against the source tree: 2026-10-19. This document describes implemented behavior; future work is tracked separately in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md).
 
 Purpose:
 - Describe the current SpacePixels architecture at subsystem and facade level.
 - Record the main runtime flows for GUI, API, CLI, reporting, and plate solving.
-- Keep stable design context separate from user-facing behavior in `MANUAL.md` and tactical work in `REFACTOR.md`.
+- Keep stable design context separate from user-facing behavior in `MANUAL.md` and proposed work in `DESIGN-IMPROVEMENTS.md`.
 
 Related documents:
 - User workflows and operational behavior: [MANUAL.md](MANUAL.md)
 - Public embedding surface: [API.md](API.md)
-- Refactor sequencing and migration notes: [REFACTOR.md](REFACTOR.md)
+- Improvement status, sequencing and acceptance criteria: [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md)
 - JTransient algorithm, pipeline, config, and Auto-Tune details live in the JTransient project docs.
 
 ## 1. System Summary
@@ -70,6 +70,7 @@ Public contract:
 - `SpacePixelsPipelineException`
 - `SpacePixelsProgressListener`
 - `InputPreparationMode`
+- `NegativeValueHandling`
 
 Everything outside this package is internal unless explicitly exposed through the API result/request types.
 
@@ -135,7 +136,7 @@ Main tasks:
 - `PlateSolveTask`
 - `AutoTuneTask`
 - `TuningPreviewTask`
-- preview/full-size generation tasks
+- `GeneratePreviewsTask` for the Image Stretch preview; full-size sequence viewers load frames through `SequenceViewerFrame` and `BlinkSequence`
 
 ### `eu.startales.spacepixels.tools`
 
@@ -187,17 +188,21 @@ Supporting groups:
 - document and model:
   - `DetectionReportContext`
   - `DetectionReportSummary`
+  - `ReportData` (stable finding identities and JSON/CSV exports)
+  - `AtomicReportFile`
   - `ExportVisualizationSettings`
   - `DetectionReportDocumentWriter`
   - `ReportClientScriptWriter`
 - section writers:
+  - `SessionPictureSectionWriter` (median stack, data area, detections and catalogue layers)
+  - `NightEquipmentSectionWriter`
   - `PipelineDiagnosticsSectionWriter`
   - `TargetVisualizationSectionWriter`
   - `DeepStackReportSectionWriter`
   - `ResidualReviewSectionWriter`
   - `GlobalMapsSectionWriter`
   - `PhotometryReportSectionWriter` (variable-star photometry: readiness, noise model, per-frame diagnostics, candidate light curves, CSV exports, VSX lookup buttons)
-  - `CatalogueComparisonWriter` and the embedded `catalogue-comparison.js` (read-only catalogue comparison notes for saved/live matches, separate from detection confidence; see [CATALOGUE_COMPARISON.md](CATALOGUE_COMPARISON.md))
+  - `CatalogueComparisonWriter` and the embedded `catalogue-comparison.js` (read-only catalogue comparison notes for saved/live matches, separate from detection confidence; see [catalogue comparison technical note](docs/features/catalogue-comparison.md))
 - rendering helpers:
   - `TrackVisualizationRenderer`
   - `PhotometrySvgChart`
@@ -281,14 +286,15 @@ Design notes:
 
 ### `AutoTuneOverviewPanel`
 
-The first tab of the Detection Settings.
+The Overview page of Detection Settings.
 
 Owns:
 
 - the tuner and profile choice and the run button
 - the profile table, built from `AutoTunerResult.calibration` (one calibrated run covers all profiles; `CalibratedAutoTuner.configFor(...)` applies a chosen row)
 - the expected false detections for the imported session (measured rate × megapixels × frames)
-- the core-settings layout with the markers for values set by Auto-Tune
+- the eight core fields: detection sigma/grow/min pixels, master sigma/grow/min pixels, mask overlap and jitter; the calibrated tuner supplies all eight, while the legacy tuner supplies only the three per-frame values, overlap and jitter
+- markers showing which displayed values still equal the applied tune; applying a legacy result preserves the current master settings
 - the settings summary shown in the main window's Detect group
 
 A tune result belongs to the imported session and is cleared when another dataset is imported.
@@ -450,10 +456,14 @@ GUI import may prompt for:
 
 - compressed FITS decompression
 - XISF-to-FITS conversion
-- 32-bit-to-16-bit standardization
+- signed/scaled 16-bit or 32-bit to unsigned-16-bit standardization
+- treatment of negative converted pixels: one sequence-wide offset (recommended) or clipping to zero
+- importing the largest exposure group into a working subdirectory when exposure times differ
 - color-to-mono conversion through the main UI
 
-The GUI path is interactive and may redirect the active import directory to a generated working directory.
+`FitsSequenceValidator` and `XisfImageConverter.validateSequence` check headers before conversion: uniform dimensions, channel layout/sample type, all-or-none usable timestamps, and one exposure group. FITS also compares `BZERO`/`BSCALE`. Exposure durations may differ within 2% (at least 0.1 s); missing durations form a separate group. The GUI can copy the largest exposure group to a working subdirectory; headless runs reject the mixed sequence.
+
+The engine receives unsigned-16-bit-equivalent pixels (`BZERO` 32768, `BSCALE` 1), represented in signed Java shorts. A conversion offset is shared across frames and recorded in `SPOFFSET`, while row-end zero padding stays zero. The GUI path is interactive and may redirect the active import directory to a generated working directory.
 
 ### Headless/API Input Flow
 
@@ -500,7 +510,7 @@ SpacePixels owns candidate-pool preparation:
 - otherwise the full imported sequence
 - for large sets, a deterministic mix of best-quality, median-quality, and evenly spaced frames
 
-JTransient owns the actual tuning search and validation. `AutoTunerRunner` only selects the tuner (the `Tuner` box in the GUI, `--tuner` in the CLI, `autoTuneAlgorithm(...)` in the API) and the profile (conservative, balanced, aggressive, maximum).
+JTransient owns the actual tuning search and validation. `AutoTunerRunner` only selects the tuner (the `Tuner` box in the GUI, `--tuner` in the CLI, `autoTuneAlgorithm(...)` in the API) and the profile (`LOW`, `MEDIUM`, `HIGH`, `MAXIMUM`; the earlier names remain parsing aliases).
 
 ### Iterative Detection Flow
 
@@ -584,17 +594,42 @@ Report categories are driven by JTransient result data:
 
 - moving-object tracks
 - streak tracks
-- suspected same-frame streak tracks
 - anomalies
 - slow-mover candidates
+- camera-fixed groups (`FC`), removed from point detections and `allTransients` before linking
+- variable-star candidates and photometric readiness
 - common-motion groups, filtered from unclassified observations before optional residual analysis
 - residual local rescue candidates
 - residual local activity clusters
 - diagnostic transients, masks, drift, and telemetry
 
+Same-frame groups of rescued anomalies are offered to confirmed-streak consolidation; an unmerged group remains separate anomalies. There is no suspected-streak result category.
+
+Camera-fixed filtering (`enableCameraFixedRejection`) uses registrations inferred from fill edges. At least three frames must map detections within 2 px of the same camera position while their registered-frame positions spread at least 4 px. Unusable registrations are excluded. `ReportInclusion.cameraFixed` controls presentation, independently of the engine filter.
+
 Common-motion filtering has its own switch and runs before local rescue and activity clustering. It assigns each observation once, preserves ambiguous associations for review, and removes accepted groups from the residual input while retaining them in the report. The residual-analysis switch controls only local rescue and clustering.
 
 `PipelineTelemetry.stageTimeMs` provides ordered, non-overlapping major-phase wall-clock durations, and `processingTimeMs` includes the full engine run through photometry. `TrackerTelemetry.faintStreakFragmentTimeMs` is a substep already included in tracking (-1 when not run). `PipelineDiagnosticsSectionWriter` displays these durations under Diagnostics. `PhotometryTelemetry.framesExcludedSpatial` supplies the spatial-exclusion summary and diagnostic count. Engine timing excludes application image loading, Auto-Tune and report export.
+
+### Sky catalogue and plate correction
+
+- `SkyCatalogueClient` queries SIMBAD, VSX and Gaia for the solved field. `SkyCatalogueStore` persists results in `sky_catalogue.json`; restore requires a matching field. Catalogue errors are retained as problems, and fetching runs off the EDT with its own cancellation/progress UI.
+- `SkyCatalogueModel.shared()` currently shares catalogue/correction state between viewers. `SkyAnnotations` controls annotations and layers without fetching data. `FrameView` clips and thins marks to manage density.
+- `WcsCoordinateTransformer` handles TAN-SIP distortion. `PlateCorrectionFitter` matches isolated Gaia/extracted stars, fits a global displacement of order 1–3 plus per-frame terms, and uses held-out frames to choose the lowest order within 3% of the best. It skips already-good header solutions (90% within 0.5 px) or solutions already within 3% of the best fit.
+- A correction is saved in `plate_correction.json`, starts disabled, and retains its enabled state on refit. `WcsSolutionResolver.resolve` applies only a compatible correction with the same header-solution identity and dimensions. A concrete frame uses its per-frame correction; report-wide resolution uses the global part.
+- `SessionCatalogue` supplies field-matched report context. Saved and live VSX matches enrich reports without changing engine confidence. The detailed comparison rules, provenance exceptions and validation are in [catalogue comparison](docs/features/catalogue-comparison.md).
+
+### Shared frame viewers
+
+Blink, Preview Frame, Manual Transient Inspection and Show full size share `FrameView`, `StretchControls` and `ViewerSupport`. `SequenceViewerFrame` prepares one frame at a time on a `SwingWorker`, rejects obsolete worker results, and releases listeners on disposal. `BlinkSequence` holds 16-bit frames, histograms and half-size display copies. Stretch controls share their models with the main stretch panel and must detach on disposal. Detection overlays use the last standard-run results, including variable-star positions when available.
+
+Settings rows apply valid edits to the loaded config in place so hidden fields survive. Core fields live on Overview; basic fields are visible by default; expert sections disclose through the navigator, search or unsaved-changes filter. Strictness presets set the five frame-outlier limits together and show Custom for other combinations. Unknown JSON keys are ignored by Gson, and key-set differences trigger the backed-up migration offer. No edge/void fields remain; single-frame preview, tuning-pool and correction extraction use `DataArea.ofFrame`.
+
+### Report diagnostics
+
+`DataAreaPresentation` draws the kept-frame intersection on the Overview picture and explains where sky/star measurements are made. `StarShape`, `NightEquipment` and `FieldDepth` measure diagnostics during export; these calculations currently sit in the reporting layer.
+
+`NightEquipment` measures isolated stars across kept frames for seeing, relative transparency, field shape/brightness maps, and sky estimates. It accounts for `SPOFFSET`, uses PIERSIDE to orient minority-side frames, and requires catalogue/linearity support for calibrated sky estimates. Optical interpretations remain diagnostic hints. `FieldDepth` compares Gaia stars with detections in catalogue depth patches, using the run's thresholds and cut-out data areas; crowded or inadequately recovered patches are excluded. These measurements do not change engine detections.
 
 ## 6. Main Data Contracts
 
@@ -667,6 +702,8 @@ Detection report output:
 
 - `detections_YYYYMMDD_HHMMSS/detection_report.html`
 - image and GIF assets beside the report
+- effective settings in `detection_config.json`, stable finding data in `report-data.json` and CSV exports
+- session catalogue/correction files (`sky_catalogue.json`, `plate_correction.json`) in the imported dataset folder, guarded by field and plate-solution identity
 - iterative root directory containing per-pass report directories plus `index.html`
 
 ## 8. Threading and Progress Model
@@ -730,7 +767,7 @@ Use this document for:
 - runtime flow reference
 - integration boundaries
 
-Use `REFACTOR.md` for:
+Use [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md) for:
 
 - current refactor priorities
 - extraction order

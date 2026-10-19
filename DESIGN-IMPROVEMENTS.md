@@ -1,6 +1,14 @@
-# Design improvements
+# Design improvements and feature plan
 
-Deep review: 2026-10-18, against SpacePixels commit `bf8c687` and the current source tree. This document contains **proposals, not implementation decisions**. It extends and corrects the first review of the same date. [HIGH_LEVEL_DESIGN.md](HIGH_LEVEL_DESIGN.md) describes the current system; [REFACTOR.md](REFACTOR.md) records earlier class extractions. Neither class length nor the number of design patterns is a useful success measure by itself.
+Reviewed against the source tree on 2026-10-19. This is the single active plan for SpacePixels application design, GUI improvements and refactoring. [HIGH_LEVEL_DESIGN.md](HIGH_LEVEL_DESIGN.md) describes implemented architecture. The D01–D13 findings originated in the 2026-10-18 review at `bf8c687`; their cited mechanisms were checked again during consolidation. No fault-injection or real-data run was performed for this documentation change.
+
+## Status and maintenance
+
+**Proposed** means an idea awaiting a decision; **Accepted** records an explicit implementation decision; **In progress** means implementation has started; **Deferred** records a deliberate postponement; **Implemented** means the feature exists; **Dropped** retires a superseded proposal. Priority is separate from authorization. None of D01–D13 has been promoted to Accepted by this documentation cleanup.
+
+Use the findings table and detailed acceptance criteria below as the work queue. Add unique feature proposals to the additional-work table; do not maintain a separate TODO or refactor list. Update a status with its decision or implementation evidence. Current behavioral documentation belongs in the manual/API/architecture references; archive detailed investigations once their useful conclusions have been transferred.
+
+Historical sources: [GUI review](docs/archive/gui-enhancements-2026-10.md), [refactor snapshot](docs/archive/refactor-2026-09.md), [completed task list](docs/archive/completed-tasks-2026-10.md), and [maintenance notes and regression evidence](docs/archive/maintenance-notes-2026-10-19.md). Their old priorities, line counts, machine bootstrap commands and session-specific dirty-file lists do not override this plan.
 
 ## Overall assessment
 
@@ -31,45 +39,23 @@ This was a source and architecture review, with primary documentation checked fo
 - **Report identities and export snapshots.** [ReportData](src/main/java/eu/startales/spacepixels/util/reporting/ReportData.java) centralises findings and frame selection. [ExportVisualizationSettings](src/main/java/eu/startales/spacepixels/util/reporting/ExportVisualizationSettings.java) captures export options. [AtomicReportFile](src/main/java/eu/startales/spacepixels/util/reporting/AtomicReportFile.java) publishes completed text files. These solve part of the problems below already.
 - **Existing validation and testing.** Input preparation, WCS handling, catalogue matching, API execution and reporting have focused tests. The site configuration already gives inline validation feedback. The review calls for extending these strengths, not starting over.
 
-## Assessment of the earlier document
-
-| Earlier recommendation | Assessment after deeper review |
-|---|---|
-| Introduce one job lifecycle | Agree, but job and session identity, admission control and typed outcomes matter more than reducing event-class count. A generic event containing nullable results would repeat the existing problem. |
-| Extract responsibilities from the main panel | Agree. Extract command handling and state first; moving anonymous listeners into another large controller is not enough. |
-| Use shared Swing actions | Strongly agree for commands used by buttons, shortcuts and context menus. Simple local listeners can remain simple. |
-| Standardise notifications | Agree, with distinct success, cancellation, partial success and failure outcomes. Do not replace every status message with another modal dialog. |
-| Introduce a session object | Agree, but acknowledge existing safeguards: sky jobs check their thread identity, saved catalogues are field-checked, corrections are solution-checked, and overlays check session coverage. |
-| Replace ad hoc thread starts | Agree for lifecycle and resource ownership. There is already a fixed-size worker pool in `ImageProcessing` and `SwingWorker` use in viewers; the whole application is not raw threads. |
-| Share GUI and API workflow | Share application services and requests. Keep GUI questions and API policy separate; do not make one public entry point pretend to be both. |
-| Clean up `util` | Extract cohesive responsibilities as they change. Package moves and class splitting alone have low priority. |
-| Extend the settings-row pattern | Agree, with typed bindings and shared validation. Do not generate new rows for hidden settings. |
-
-Three corrections are particularly important:
-
-- **Detection does not currently have cooperative cancellation through the progress dialog.** [ProcessingProgressDialog.confirmAndExit](src/main/java/eu/startales/spacepixels/gui/ProcessingProgressDialog.java) offers to exit the JVM. The old reference to a detection cancel flag was inaccurate.
-- **The API is already usable headlessly.** It explicitly uses headless preparation and metadata paths. Swing imports and GUI helpers in `ImageProcessing` make the boundary harder to maintain; they do not prove the current API needs a window.
-- **Do not globally move all EventBus subscribers onto the EDT.** For example, `StretchPanel.onPreviewGenerationFinished` deliberately computes histograms on the task thread before scheduling UI updates. Put an EDT adapter at the presentation boundary, not around every computational subscriber.
-
-Guava's own [EventBus guidance](https://github.com/google/guava/wiki/EventBusExplained#avoid-eventbus) now recommends against EventBus, citing weak typing, lifecycle, threading and observability limitations. Accordingly, “the bus is fine, never replace it” was too categorical. My recommendation is incremental: keep an adapter for existing subscribers while new workflow services use explicit typed requests and callbacks. A bus migration, if later justified, should be a consequence of clear boundaries; installing a reactive or dependency-injection framework is not required for this application.
-
 ## Findings and priorities
 
-| ID | Priority | Improvement | First useful result |
-|---|---|---|---|
-| D01 | High | Safe publication of FITS files and settings | A failed replacement preserves the previous file; a failed save remains visibly unsaved. |
-| D02 | High | Job ownership and resource admission | A command acquires its job slot before the worker starts; only that job can finish it. |
-| D03 | High | Preview results belong to a request | A previous frame or stretch cannot overwrite the current preview. |
-| D04 | High | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
-| D05 | High | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
-| D06 | Medium | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
-| D07 | Medium | Shared actions and derived availability | Button, shortcut and context menu execute the same command under the same conditions. |
-| D08 | Medium | Keep slow work off the EDT | Accepting a WCS write does not perform the file rewrite on the UI thread. |
-| D09 | Medium | Complete the analysis/report separation | Display changes reuse prepared diagnostics and stable finding identities. |
-| D10 | Medium | Typed settings metadata and engine integration | A setting's identity and rules are not maintained in several unrelated lists. |
-| D11 | Medium | A clearer analysis workflow and persistent results | Users see what will run and can reopen its results without another detection. |
-| D12 | Medium | Shared visual rules and adaptable layout | Longer descriptions and larger fonts fit without fixed-height clipping. |
-| D13 | Medium | Keyboard and assistive-technology access | Visible links, settings inputs and viewer controls are reachable and named. |
+| ID | Priority | Status | Improvement | First useful result |
+|---|---|---|---|---|
+| D01 | High | Proposed | Safe publication of FITS files and settings | A failed replacement preserves the previous file; a failed save remains visibly unsaved. |
+| D02 | High | Proposed | Job ownership and resource admission | A command acquires its job slot before the worker starts; only that job can finish it. |
+| D03 | High | Proposed | Preview results belong to a request | A previous frame or stretch cannot overwrite the current preview. |
+| D04 | High | Proposed | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
+| D05 | High | Proposed | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
+| D06 | Medium | Proposed | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
+| D07 | Medium | Proposed | Shared actions and derived availability | Button, shortcut and context menu execute the same command under the same conditions. |
+| D08 | Medium | Proposed | Keep slow work off the EDT | Accepting a WCS write does not perform the file rewrite on the UI thread. |
+| D09 | Medium | Proposed | Complete the analysis/report separation | Display changes reuse prepared diagnostics and stable finding identities. |
+| D10 | Medium | Proposed | Typed settings metadata and engine integration | A setting's identity and rules are not maintained in several unrelated lists. |
+| D11 | Medium | Proposed | A clearer analysis workflow and persistent results | Users see what will run and can reopen its results without another detection. |
+| D12 | Medium | Proposed | Shared visual rules and adaptable layout | Longer descriptions and larger fonts fit without fixed-height clipping. |
+| D13 | Medium | Proposed | Keyboard and assistive-technology access | Visible links, settings inputs and viewer controls are reachable and named. |
 
 “High” means to address before expanding the affected workflow. It does not mean undertaking all high-priority items in one change.
 
@@ -171,7 +157,7 @@ Move GUI prompts out of the processing facade into an explicit preparation-decis
 
 **Evidence.** [DetectionReportGenerator](src/main/java/eu/startales/spacepixels/util/reporting/DetectionReportGenerator.java) already delegates sections, snapshots display settings, constructs `ReportData` and atomically publishes HTML. But [NightEquipment](src/main/java/eu/startales/spacepixels/util/reporting/NightEquipment.java) and [FieldDepth](src/main/java/eu/startales/spacepixels/util/reporting/FieldDepth.java) calculate diagnostics from frames during report export. `SessionCatalogue` loads catalogue state lazily from the session folder. `ReportData`, section writers, maps, CSVs and the report-selection dialog still contain some separate category/label rules.
 
-**Proposal.** Keep section writers, but prepare a read-only report model once: stable finding IDs, accepted candidates, included categories, rejected frames, coordinates, catalogue snapshot and optional session diagnostics. Extend `ReportData`; do not introduce a competing identity system. A small category descriptor can provide the label, colour, prefix, count, inclusion option and anchor rule for the dialog, legends and maps. The recently fixed checkbox-index mismatch is a concrete example of what parallel row/index lists make possible.
+**Proposal.** Keep section writers, but prepare a read-only report model once: stable finding IDs, accepted candidates, included categories, rejected frames, coordinates, catalogue snapshot and optional session diagnostics. Extend `ReportData`; do not introduce a competing identity system. A small category descriptor can provide the label, colour, prefix, count, inclusion option and anchor rule for the dialog, legends and maps. Existing report consistency checks are useful protection when consolidating these rules.
 
 Separate diagnostic measurement services from HTML emission when the next diagnostic feature needs it. Their FITS/session orchestration can remain in SpacePixels; moving them into JTransient is not implied. Carry explicit diagnostic states such as unavailable, failed and measured instead of making every failure indistinguishable from an empty result. Keep browser lookup enrichment separate from detection confidence and preserve current offline exports.
 
@@ -187,7 +173,7 @@ Capture resolved catalogue/correction/export context at a documented point. Curr
 
 Make side effects clear in new method names. `getJTransientConfig()` currently commits editors and applies changes, while `ImageProcessing.getInstance()` constructs a new processor rather than returning a singleton. A name such as `captureValidatedSettings` or `openProcessor` would convey the actual operation. Preserve compatibility wrappers where public callers depend on existing names; this is gradual clarity work, not a mass rename.
 
-If supporting several engine versions is a real requirement, isolate capability/reflection handling in one adapter and expose unsupported capabilities clearly. Otherwise prefer a pinned compile-time contract over silently ignoring a missing setting. The maintainer's composite build currently requires newer local engine changes than the published dependency; release validation must check an explicit supported SpacePixels/JTransient pair before distribution. Do not treat a local composite compile as proof that a published-dependency build works.
+If supporting several engine versions is a real requirement, isolate capability/reflection handling in one adapter and expose unsupported capabilities clearly. Otherwise prefer a pinned compile-time contract over silently ignoring a missing setting. A composite build can use unpublished engine changes; release validation must check an explicit supported SpacePixels/JTransient pair before distribution. Do not treat a local composite compile as proof that a published-dependency build works.
 
 [AutoTunerRunner](src/main/java/eu/startales/spacepixels/util/AutoTunerRunner.java) temporarily changes a legacy engine static, and the API documents a concurrency restriction. Keep that restriction visible in application admission policy. An eventual engine-instance option would be a separate JTransient proposal, not a GUI-only refactor.
 
@@ -297,7 +283,7 @@ Reusing `BatchStretchTask` instead of the duplicate inline worker is a useful sm
 
 ## Verification strategy
 
-The existing automated suite covers important data and report paths, and there are GUI tests for several components. The reviewed tree has no dedicated `MainApplicationPanel`, `SettingsNavigator` or `SettingRow` test class. Make newly extracted state and workflow logic easy to test without reflection into large panels or opening the whole application.
+The existing automated suite covers important data and report paths, and there are GUI tests for several components. The source tree checked on 2026-10-19 has no dedicated `MainApplicationPanel`, `SettingsNavigator` or `SettingRow` test class. Make newly extracted state and workflow logic easy to test without reflection into large panels or opening the whole application.
 
 | Behaviour | Verification that would justify the change |
 |---|---|
@@ -325,3 +311,32 @@ For behavioural changes, follow the maintainer's real-data comparison method. An
 - Replacing the current viewer focus rules without testing real keyboard focus and editing.
 
 The first implementation should be a small, reviewable correction with a measurable acceptance condition. Safe file publication and preview result identity are the strongest starting points; they improve reliability now and do not depend on the larger restructuring.
+
+
+## Consolidated feature work
+
+| ID | Status | Remaining work and acceptance boundary |
+|---|---|---|
+| F01 | Proposed; experiment first | Test whether slow-mover sigma should follow tuned per-frame sigma. Compare manually on real datasets before proposing an engine change; account for the different maximum-stack noise distribution (JTransient SM-2). Calibrated master sigma/grow/min-pixel tuning already exists, so that part of the old TODO is complete. Do not silently change legacy tuning. |
+| F02 | Deferred | A compact header-derived session summary and a possible multiple-night warning. Fold this into D11; do not restore the original proposal for an expensive pre-run quality-analysis table without a new decision. Frame QC and numerical rejection reasons already appear in the report. |
+| F03 | Proposed | Viewer label controls: a Faintest magnitude limit and a Names switch, with persistent viewer preferences. First establish whether star marks or variable names cause the clutter; variables may need an independent limit. Keep current density thinning. |
+| F04 | Proposed | Agent services over a saved result summary. The earlier external proposal is not a checked-in specification. Define the use cases and missing contract before implementation; extend existing `report-data.json`/run metadata rather than assume a new `results.json` is required. |
+| F05 | Deferred | Image Stretch preview sampling remains reduced to at most 2400 px on its long side; Show full size provides full-resolution inspection. If revisited, compare averaging or full-resolution rendering for small-star visibility and memory cost. This is separate from D03 request ordering. |
+
+Results summaries/run history and stage-aware progress are covered by D11 and D04. Their detailed information should live there rather than become competing feature entries. The old drift-grown void-band concern is Dropped: those settings and the old border mechanism were replaced by session data areas.
+
+## Refactor scope retained from the earlier plan
+
+- **Settings (D01, D05, D10):** extract persistence and compatibility handling, then validated config/widget and visualization bindings. Split page builders only after those boundaries are useful. Preserve profile formats, hidden values, shared Overview/detail models, migration backups, defaults/revert and auto-apply semantics.
+- **Input preparation (D06, D08):** share discovery/validation, metadata and conversion facts between GUI and headless paths; keep interactive decisions separate from API policy. Extract WCS writeback and solve-artifact cleanup as their own boundary. Keep `ImageProcessing` as a compatibility facade, preserve output-directory naming and avoid combining this with preview/stretch changes.
+- **Reporting (D09):** extract image assets, maps or iterative index helpers when relevant feature work needs them. Preserve stable finding identities, filenames, CSV data and lookup/live-render behavior. `DetectionReportAstrometry` already delegates its query/URL/HTML helpers; it is not a standing extraction project.
+- **Main panel (D02, D07):** move ownership, command policy and state into tested seams before moving listeners into controllers. A component's size does not determine the extraction order.
+- **Cohesive renderers:** leave `CreativeTributeRenderer` and target section writers intact unless feature work exposes an independent responsibility. No target line counts or mass static-helper replacement are proposed.
+
+Verification follows the strategy above and [AGENTS.md](AGENTS.md). Import changes cover ready mono FITS, compressed files, signed/scaled and 32-bit conversions, color, XISF, exposure groups and negative-value policy in both GUI and headless modes. Settings changes cover load/save, failed saves, defaults/revert, migration, hidden values, previews and both tuners. Report changes compare equivalent standard/iterative bundles, CSVs, identities, crops/GIFs and offline/live lookup behavior against a baseline. Use disposable settings and inputs.
+
+## Completed work removed from the queue
+
+The workflow strip, primary detection action, disabled-reason tooltips, frame context menu and common shortcuts are implemented. So are the Overview with calibrated-profile choices, analysis switches, settings navigation/search, saved-value markers, expert disclosure, auto-apply and explicit Save/Revert/Defaults.
+
+The completed task list also covers report legends and layer guidance, variable-star overlays/maps, compact sky orientation, common-motion explanations, the persistent finding-browser placement, numerical frame-rejection reasons and the updated Signal Weave section. These are maintained as current behavior in the source/user documentation, not scheduled again here. Historical screenshots and mock-up numbers are not acceptance targets for new changes.

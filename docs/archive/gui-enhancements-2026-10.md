@@ -1,3 +1,5 @@
+> Historical record, archived 2026-10-19. This preserves the review and evidence from its original dates, including superseded statements and decisions. It is not the current specification or work queue. See [DESIGN-IMPROVEMENTS.md](../../DESIGN-IMPROVEMENTS.md) for current guidance. Source line numbers and temporary harness paths below refer to the original session and may no longer exist.
+
 # GUI Enhancements
 
 Suggestions for the SpacePixels desktop GUI, collected on 2026-10-07. They are based on the main-window screenshot (`docs/images/user-interface-04-04.png`) and on the GUI code; the Detection Settings tabs and the progress dialog were reviewed in code only.
