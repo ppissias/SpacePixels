@@ -26,12 +26,20 @@ import java.text.ParsePosition;
  */
 final class CheckedNumberEditor extends JSpinner.NumberEditor {
 
+    /** The most decimals {@link java.text.DecimalFormat} writes for a double. */
+    private static final int ALL_DECIMALS = 340;
+
     private final JSpinner spinner;
 
-    /** {@code textChanged} runs after every change of the text, typed or set. */
+    /**
+     * {@code pattern} sets the decimals shown at least; any further decimals of the value are shown too, so the shown
+     * text, when committed again, never rounds the value (4.25 set while the pattern shows one decimal stays 4.25).
+     * {@code textChanged} runs after every change of the text, typed or set.
+     */
     CheckedNumberEditor(JSpinner spinner, String pattern, Runnable textChanged) {
         super(spinner, pattern);
         this.spinner = spinner;
+        getFormat().setMaximumFractionDigits(ALL_DECIMALS);
         JFormattedTextField field = getTextField();
         field.setFormatterFactory(new DefaultFormatterFactory(new WholeTextFormatter((SpinnerNumberModel) spinner.getModel(), getFormat())));
         field.setFocusLostBehavior(JFormattedTextField.COMMIT);

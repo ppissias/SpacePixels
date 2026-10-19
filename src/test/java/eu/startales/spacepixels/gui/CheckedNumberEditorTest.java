@@ -92,6 +92,20 @@ public class CheckedNumberEditorTest {
     }
 
     @Test
+    public void aValueWithMoreDecimalsThanThePatternIsNotRounded() throws Exception {
+        CheckedNumberEditor editor = editor(new SpinnerNumberModel(5.5, 1.0, 20.0, 0.1), "#0.0", () -> { });
+        JSpinner spinner = editor.getSpinner();
+
+        spinner.setValue(4.25);
+        assertEquals("4.25", editor.getTextField().getText());
+        spinner.commitEdit();
+        assertEquals(4.25, spinner.getValue());
+
+        spinner.setValue(4.0);
+        assertEquals("the pattern's decimals are still shown", "4.0", editor.getTextField().getText());
+    }
+
+    @Test
     public void aNewEditorClearsTheOutline() {
         JSpinner spinner = new JSpinner(new SpinnerNumberModel(5.0, 1.0, 20.0, 0.1));
         CheckedNumberEditor first = new CheckedNumberEditor(spinner, "#0.0", () -> { });
