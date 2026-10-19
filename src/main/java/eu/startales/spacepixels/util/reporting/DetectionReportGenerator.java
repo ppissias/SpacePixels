@@ -1084,6 +1084,10 @@ public class DetectionReportGenerator {
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("common-motion", "Common motion",
                     String.valueOf(commonMotionGroupCount), false));
         }
+        if (!context.cameraFixedGroups.isEmpty()) {
+            items.add(new PipelineDiagnosticsSectionWriter.NavItem("camera-fixed", "Camera-fixed",
+                    String.valueOf(context.cameraFixedGroups.size()), false));
+        }
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("maps", "Maps", null, false));
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("inspector", "Unclassified", null, false));
         PipelineTelemetry.PhotometryTelemetry photometry = pipelineTelemetry != null ? pipelineTelemetry.photometryTelemetry : null;
@@ -1344,6 +1348,7 @@ public class DetectionReportGenerator {
                 movingTargets);
 
         reportContext.dataArea = result.dataArea;
+        reportContext.cameraFixedGroups = inclusion.cameraFixed ? result.cameraFixedGroups : java.util.Collections.emptyList();
         reportContext.dataAreaText = DataAreaPresentation.describe(result.dataArea, pipelineTelemetry);
         reportContext.data = ReportData.create(reportContext, pipelineTelemetry, result.variableStarAnalysis, commonMotionGroups, inclusion);
         java.nio.file.Files.createDirectories(exportDir.toPath());
@@ -1383,6 +1388,12 @@ public class DetectionReportGenerator {
             if (inclusion.localRescue || inclusion.localActivity || inclusion.commonMotion) {
                 report.println("<section id='residual-review'>");
                 ResidualReviewSectionWriter.writeSection(report, reportContext, commonMotionGroups);
+                report.println("</section>");
+            }
+
+            if (!reportContext.cameraFixedGroups.isEmpty()) {
+                report.println("<section id='camera-fixed-review'>");
+                ResidualReviewSectionWriter.writeCameraFixedSection(report, reportContext, reportContext.cameraFixedGroups);
                 report.println("</section>");
             }
 

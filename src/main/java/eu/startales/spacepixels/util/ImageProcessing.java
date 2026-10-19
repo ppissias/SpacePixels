@@ -78,6 +78,8 @@ public class ImageProcessing implements AutoCloseable {
         public final int localActivityClusters;
         /** Compact sources that share one displacement. Included in {@link #totalDetections}. */
         public final int commonMotionGroups;
+        /** Detections that stay at one camera position (hot pixels, dust). Included in {@link #totalDetections}. */
+        public final int cameraFixedGroups;
         /** Leftover detections. Shown in the summary, and not added to {@link #totalDetections}. */
         public final int unclassifiedDetections;
         /** Anomalies that lie on a confirmed streak in the same frame. Already included in {@link #anomalies}. */
@@ -102,7 +104,8 @@ public class ImageProcessing implements AutoCloseable {
                          int possibleVariableStars,
                          int commonMotionGroups,
                          int unclassifiedDetections,
-                         int lowConfidenceAnomalies) {
+                         int lowConfidenceAnomalies,
+                         int cameraFixedGroups) {
             this.totalDetections = totalDetections;
             this.singleStreaks = singleStreaks;
             this.streakTracks = streakTracks;
@@ -117,6 +120,7 @@ public class ImageProcessing implements AutoCloseable {
             this.commonMotionGroups = commonMotionGroups;
             this.unclassifiedDetections = unclassifiedDetections;
             this.lowConfidenceAnomalies = lowConfidenceAnomalies;
+            this.cameraFixedGroups = cameraFixedGroups;
         }
 
         /** Which optional groups this report should contain. All of them, unless the warning dialog said otherwise. */
@@ -192,6 +196,7 @@ public class ImageProcessing implements AutoCloseable {
                     + "Local rescue candidates: " + localRescueCandidates + "\n"
                     + "Local activity clusters: " + localActivityClusters + "\n"
                     + "Common-motion groups: " + commonMotionGroups + "\n"
+                    + "Camera-fixed groups (hot pixels, dust): " + cameraFixedGroups + "\n"
                     + "Still unclassified, not counted above: " + unclassifiedDetections + "\n"
                     + "Variable stars: " + photometry + "\n"
                     + "Astrometry: " + (plateSolved
@@ -226,6 +231,7 @@ public class ImageProcessing implements AutoCloseable {
             boolean localRescueOn = residualOn && (config == null || config.enableLocalRescueCandidates);
             boolean localActivityOn = residualOn && (config == null || config.enableLocalActivityClusters);
             boolean commonMotionOn = config == null || config.enableCommonMotionRejection;
+            boolean cameraFixedOn = config == null || config.enableCameraFixedRejection;
             boolean variableStarsOn = config != null && config.enableVariableStarDetection
                     && photometryVerdict != null && !"NOT_RUN".equals(photometryVerdict);
             OptionalRow[] rows = {
@@ -236,13 +242,15 @@ public class ImageProcessing implements AutoCloseable {
                     OptionalRow.when(slowMoversOn, "Slow-mover candidates", Integer.toString(slowMoverCandidates), slowMoverCandidates),
                     OptionalRow.when(localRescueOn, "Local rescue candidates", Integer.toString(localRescueCandidates), localRescueCandidates),
                     OptionalRow.when(localActivityOn, "Local activity clusters", Integer.toString(localActivityClusters), localActivityClusters),
-                    OptionalRow.when(commonMotionOn, "Common-motion groups", Integer.toString(commonMotionGroups), commonMotionGroups)
+                    OptionalRow.when(commonMotionOn, "Common-motion groups", Integer.toString(commonMotionGroups), commonMotionGroups),
+                    OptionalRow.when(cameraFixedOn, "Camera-fixed groups", Integer.toString(cameraFixedGroups), cameraFixedGroups)
             };
             JCheckBox anomaliesBox = null;
             JCheckBox slowMoversBox = null;
             JCheckBox localRescueBox = null;
             JCheckBox localActivityBox = null;
             JCheckBox commonMotionBox = null;
+            JCheckBox cameraFixedBox = null;
             JCheckBox[] boxes = new JCheckBox[rows.length];
             if (offerInReport(anomaliesOn, anomalies)) {
                 anomaliesBox = includeBox();
@@ -263,6 +271,10 @@ public class ImageProcessing implements AutoCloseable {
             if (offerInReport(commonMotionOn, commonMotionGroups)) {
                 commonMotionBox = includeBox();
                 boxes[7] = commonMotionBox;
+            }
+            if (offerInReport(cameraFixedOn, cameraFixedGroups)) {
+                cameraFixedBox = includeBox();
+                boxes[8] = cameraFixedBox;
             }
             JCheckBox variableStarsBox = offerInReport(variableStarsOn, 1) ? includeBox() : null;
 
@@ -317,7 +329,7 @@ public class ImageProcessing implements AutoCloseable {
                 }
             }
             panel.add(grid);
-            JCheckBox[] watched = {anomaliesBox, slowMoversBox, localRescueBox, localActivityBox, commonMotionBox};
+            JCheckBox[] watched = {anomaliesBox, slowMoversBox, localRescueBox, localActivityBox, commonMotionBox, cameraFixedBox};
             Runnable refreshIncluded = () -> included.setText(includedLine(watched));
             for (JCheckBox box : watched) {
                 if (box != null) {
@@ -344,7 +356,8 @@ public class ImageProcessing implements AutoCloseable {
             }
             panel.add(Box.createVerticalStrut(10));
             panel.add(aligned(label("Generate the report?", true)));
-            return new ReportChoice(panel, anomaliesBox, slowMoversBox, localRescueBox, localActivityBox, commonMotionBox, variableStarsBox);
+            return new ReportChoice(panel, anomaliesBox, slowMoversBox, localRescueBox, localActivityBox, commonMotionBox,
+                    cameraFixedBox, variableStarsBox);
         }
 
         private String includedLine(JCheckBox[] boxes) {
@@ -363,6 +376,9 @@ public class ImageProcessing implements AutoCloseable {
             }
             if (boxes[4] == null || boxes[4].isSelected()) {
                 included += commonMotionGroups;
+            }
+            if (boxes[5] == null || boxes[5].isSelected()) {
+                included += cameraFixedGroups;
             }
             return "The report will include " + included + " of these detections.";
         }
@@ -445,9 +461,10 @@ public class ImageProcessing implements AutoCloseable {
 
         private String largestGroup() {
             String[] names = {"moving objects", "single-frame anomalies", "slow-mover candidates",
-                    "residual analysis", "common-motion groups"};
+                    "residual analysis", "common-motion groups", "camera-fixed groups"};
             int[] counts = {movingTargets + streakTracks + singleStreaks, anomalies,
-                    slowMoverCandidates, localRescueCandidates + localActivityClusters, commonMotionGroups};
+                    slowMoverCandidates, localRescueCandidates + localActivityClusters, commonMotionGroups,
+                    cameraFixedGroups};
             int best = 0;
             for (int i = 1; i < counts.length; i++) {
                 if (counts[i] > counts[best]) {
@@ -487,16 +504,18 @@ public class ImageProcessing implements AutoCloseable {
         final JCheckBox localRescue;
         final JCheckBox localActivity;
         final JCheckBox commonMotion;
+        final JCheckBox cameraFixed;
         final JCheckBox variableStars;
 
         ReportChoice(JComponent panel, JCheckBox anomalies, JCheckBox slowMovers, JCheckBox localRescue,
-                     JCheckBox localActivity, JCheckBox commonMotion, JCheckBox variableStars) {
+                     JCheckBox localActivity, JCheckBox commonMotion, JCheckBox cameraFixed, JCheckBox variableStars) {
             this.panel = panel;
             this.anomalies = anomalies;
             this.slowMovers = slowMovers;
             this.localRescue = localRescue;
             this.localActivity = localActivity;
             this.commonMotion = commonMotion;
+            this.cameraFixed = cameraFixed;
             this.variableStars = variableStars;
         }
 
@@ -507,6 +526,7 @@ public class ImageProcessing implements AutoCloseable {
                     selected(localRescue),
                     selected(localActivity),
                     selected(commonMotion),
+                    selected(cameraFixed),
                     selected(variableStars));
         }
 

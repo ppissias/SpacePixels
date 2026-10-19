@@ -76,6 +76,7 @@ public class DetectionConfigurationPanel extends JPanel {
     // --- Residual transient analysis ---
     private JCheckBox chkEnableResidualTransientAnalysis, chkEnableLocalRescueCandidates, chkEnableLocalActivityClusters;
     private JCheckBox chkEnableCommonMotionRejection;
+    private JCheckBox chkEnableCameraFixedRejection;
     private JSpinner spinLocalActivityClusterRadiusPixels, spinLocalActivityClusterMinFrames, spinCommonMotionShiftTolerance;
 
     // --- Quality Control Spinners ---
@@ -742,8 +743,12 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        panel.add(createTabIntro("Configuration for moving-object track construction. Base Star Jitter Radius is on the Overview with the other values the Auto-Tuner sets. The time-based linker is used when the frames have timestamps; the geometric linker is an optional extra."));
+        panel.add(createTabIntro("Configuration for moving-object track construction. Base Star Jitter Radius is on the Overview with the other values the Auto-Tuner sets. Hot pixels and dust are set aside before tracking. The time-based linker is used when the frames have timestamps; the geometric linker is an optional extra."));
 
+        panel.add(createSectionHeader("Hot Pixels And Dust"));
+        chkEnableCameraFixedRejection = addCheckboxRow(panel, "Reject Camera-Fixed Sources", "Before tracking, sets aside detections that stay at one camera position while the sky moves between frames: hot pixels, warm pixels and dust that the calibration left, which registration moves with the dither and the drift. How each frame was moved is measured from its registration fill, so frames without fill are not checked. The groups remain visible in the report.", jTransientConfig.enableCameraFixedRejection);
+
+        panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Track Linking"));
         chkStrictExposureKinematics = addCheckboxRow(panel, "Strict Exposure Kinematics", "Rejects candidate links when the implied motion is inconsistent with exposure timing assumptions. Usually it is a good way to filter out false positives", jTransientConfig.strictExposureKinematics);
         spinPredTol = addRow(panel, "Prediction Line Tolerance", "Maximum distance a candidate point may sit from the projected track line and still be accepted. Higher values allow noisier tracks but increase false links.", doubleSpinnerModel(jTransientConfig.predictionTolerance, 0.1, 50.0, 0.1));
@@ -1258,6 +1263,7 @@ public class DetectionConfigurationPanel extends JPanel {
             setOptionalDoubleField(jTransientConfig, "localActivityClusterRadiusPixels", ((Number) spinLocalActivityClusterRadiusPixels.getValue()).doubleValue());
             setOptionalIntField(jTransientConfig, "localActivityClusterMinFrames", ((Number) spinLocalActivityClusterMinFrames.getValue()).intValue());
             jTransientConfig.enableCommonMotionRejection = chkEnableCommonMotionRejection.isSelected();
+            jTransientConfig.enableCameraFixedRejection = chkEnableCameraFixedRejection.isSelected();
             jTransientConfig.commonMotionShiftTolerance = ((Number) spinCommonMotionShiftTolerance.getValue()).doubleValue();
 
             autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
@@ -1507,6 +1513,7 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinLocalActivityClusterRadiusPixels, getOptionalDoubleField(config, "localActivityClusterRadiusPixels", 10.0));
         setSpinnerValueClamped(spinLocalActivityClusterMinFrames, getOptionalIntField(config, "localActivityClusterMinFrames", 3));
         chkEnableCommonMotionRejection.setSelected(config.enableCommonMotionRejection);
+        chkEnableCameraFixedRejection.setSelected(config.enableCameraFixedRejection);
         setSpinnerValueClamped(spinCommonMotionShiftTolerance, config.commonMotionShiftTolerance);
 
         setSpinnerValueClamped(spinStarCountSigma, config.starCountSigmaDeviation);

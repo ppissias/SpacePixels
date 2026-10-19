@@ -146,7 +146,7 @@ final class DetectionPipelineSupport {
         return new ImageProcessing.DetectionSummary(
                 singleStreaks + streakTracks + movingTargets + anomalyCount
                         + slowMoverCandidates + localRescueCandidates + localActivityClusters
-                        + residualAnalysis.commonMotionGroups.size(),
+                        + residualAnalysis.commonMotionGroups.size() + result.cameraFixedGroups.size(),
                 singleStreaks,
                 streakTracks,
                 movingTargets,
@@ -159,7 +159,8 @@ final class DetectionPipelineSupport {
                 photometry != null ? photometry.possible : 0,
                 residualAnalysis.commonMotionGroups.size(),
                 unclassifiedDetections,
-                lowConfidenceAnomalies);
+                lowConfidenceAnomalies,
+                result.cameraFixedGroups.size());
     }
 
     static PipelineResult suppressLatePhaseOutputsWhenTooFewFramesRemain(PipelineResult result) {

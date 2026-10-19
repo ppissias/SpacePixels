@@ -202,6 +202,13 @@ final class PipelineDiagnosticsSectionWriter {
         } else {
             empty.add("common motion (switched off)");
         }
+        if (!inclusion.cameraFixed) {
+            empty.add("camera-fixed groups (left out of this report)");
+        } else if (reportContext.config != null && reportContext.config.enableCameraFixedRejection) {
+            addResult(cards, empty, reportContext.cameraFixedGroups.size(), "Camera-fixed groups · hot pixels or dust", "camera-fixed");
+        } else {
+            empty.add("camera-fixed sources (switched off)");
+        }
         PipelineTelemetry.PhotometryTelemetry photometry = pipelineTelemetry.photometryTelemetry;
         if (!inclusion.variableStars) {
             empty.add("variable stars (left out of this report)");

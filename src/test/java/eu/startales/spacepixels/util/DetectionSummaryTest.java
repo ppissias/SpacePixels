@@ -16,7 +16,7 @@ public class DetectionSummaryTest {
     @Test
     public void warningKeepsSlowMoversAndLocalRescueApart() {
         ImageProcessing.DetectionSummary summary = new ImageProcessing.DetectionSummary(
-                77, 2, 1, 4, 50, 5, 6, 2, "READY", 3, 1, 4, 12, 7);
+                80, 2, 1, 4, 50, 5, 6, 2, "READY", 3, 1, 4, 12, 7, 3);
         String message = summary.warningMessage(true, 50);
 
         assertTrue(message.contains("Slow-mover candidates (maximum stack): 5"));
@@ -26,6 +26,7 @@ public class DetectionSummaryTest {
         assertTrue(message.contains("a plate-solved frame is available"));
         assertTrue(message.contains("Largest group: single-frame anomalies (50)"));
         assertTrue(message.contains("Common-motion groups: 4"));
+        assertTrue(message.contains("Camera-fixed groups (hot pixels, dust): 3"));
         assertTrue(message.contains("Still unclassified, not counted above: 12"));
         assertTrue(message.contains("Single-frame anomalies: 50 (7 low confidence)"));
     }
@@ -33,12 +34,12 @@ public class DetectionSummaryTest {
     @Test
     public void warningSaysWhenPhotometryAndAstrometryAreMissing() {
         ImageProcessing.DetectionSummary off = new ImageProcessing.DetectionSummary(
-                60, 0, 0, 60, 0, 0, 0, 0, null, 0, 0, 0, 0, 0);
+                60, 0, 0, 60, 0, 0, 0, 0, null, 0, 0, 0, 0, 0, 0);
         assertTrue(off.warningMessage(false, 50).contains("Variable stars: off"));
         assertTrue(off.warningMessage(false, 50).contains("no plate-solved frame"));
 
         ImageProcessing.DetectionSummary notReady = new ImageProcessing.DetectionSummary(
-                60, 0, 0, 60, 0, 0, 0, 0, "NOT_READY", 0, 0, 0, 0, 0);
+                60, 0, 0, 60, 0, 0, 0, 0, "NOT_READY", 0, 0, 0, 0, 0, 0);
         assertTrue(notReady.warningMessage(false, 50).contains("not ready for photometry"));
     }
 
@@ -53,7 +54,7 @@ public class DetectionSummaryTest {
     public void localRescueAndCommonMotionCanBeUncheckedOnTheirOwnRows() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var summary = new ImageProcessing.DetectionSummary(
-                    328, 0, 1, 0, 1, 0, 274, 0, "READY", 10, 18, 52, 1991, 0);
+                    328, 0, 1, 0, 1, 0, 274, 0, "READY", 10, 18, 52, 1991, 0, 0);
             var config = new DetectionConfig();
             config.enableVariableStarDetection = true;
             var choice = new Choice(summary, config);
@@ -84,7 +85,7 @@ public class DetectionSummaryTest {
     public void everyOptionalCheckboxControlsItsMatchingCategory() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var summary = new ImageProcessing.DetectionSummary(
-                    46, 2, 1, 4, 3, 5, 7, 11, "READY", 1, 1, 13, 0, 0);
+                    46, 2, 1, 4, 3, 5, 7, 11, "READY", 1, 1, 13, 0, 0, 0);
             var config = new DetectionConfig();
             config.enableLocalActivityClusters = true;
             config.enableVariableStarDetection = true;

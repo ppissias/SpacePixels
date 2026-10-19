@@ -71,6 +71,7 @@
   "localActivityClusterRadiusPixels": 10.0,
   "localActivityClusterMinFrames": 3,
   "enableCommonMotionRejection": true,
+  "enableCameraFixedRejection": true,
   "commonMotionShiftTolerance": 1.0,
   "enableVariableStarDetection": false,
   "photometryMaxStars": 0,

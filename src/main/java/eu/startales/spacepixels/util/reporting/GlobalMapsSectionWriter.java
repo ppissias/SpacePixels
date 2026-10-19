@@ -83,7 +83,7 @@ final class GlobalMapsSectionWriter {
         report.println("<div class='report-map'><div class='map-category-controls'>");
         java.util.Map<String, String> categories = new java.util.LinkedHashMap<>();
         if (reportContext.data != null) for (var finding : reportContext.data.findings) {
-            if (!finding.id().startsWith("CM")) categories.putIfAbsent(finding.id().replaceAll("[0-9]+$", ""), finding.category());
+            if (!finding.id().startsWith("CM") && !finding.id().startsWith("FC")) categories.putIfAbsent(finding.id().replaceAll("[0-9]+$", ""), finding.category());
         }
         for (var entry : categories.entrySet()) report.println("<button class='id-link' type='button' data-report-category='" + entry.getKey() + "' aria-pressed='true'>" + entry.getValue() + "</button> ");
         String catalogueLayer = sessionCatalogue.catalogue != null && reportContext.astrometryContext != null && reportContext.astrometryContext.getTransformer() != null

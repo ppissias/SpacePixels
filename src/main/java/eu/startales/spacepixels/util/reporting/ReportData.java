@@ -52,6 +52,9 @@ final class ReportData {
         for (int i = 0; i < groups.size(); i++) {
             addPoints(output, context, "CM" + (i + 1), "Common motion", groups.get(i).sources.stream().flatMap(List::stream).toList());
         }
+        for (int i = 0; i < context.cameraFixedGroups.size(); i++) {
+            addPoints(output, context, "FC" + (i + 1), "Camera-fixed", context.cameraFixedGroups.get(i).points);
+        }
         List<StarLightCurve> candidates = new ArrayList<>();
         if (inclusion.variableStars && variables != null && variables.readiness != null && variables.readiness.allowsScoring()) {
             for (StarLightCurve star : variables.candidates) {
@@ -87,7 +90,7 @@ final class ReportData {
         if (points == null || points.isEmpty()) return;
         double x = 0, y = 0;
         for (var p : points) { x += p.x; y += p.y; }
-        boolean centroid = category.equals("Local activity") || category.equals("Common motion");
+        boolean centroid = category.equals("Local activity") || category.equals("Common motion") || category.equals("Camera-fixed");
         add(out, c, id, category, centroid ? x / points.size() : points.get(0).x, centroid ? y / points.size() : points.get(0).y, points, null, null);
     }
 

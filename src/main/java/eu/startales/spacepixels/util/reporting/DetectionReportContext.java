@@ -2,6 +2,7 @@ package eu.startales.spacepixels.util.reporting;
 
 import eu.startales.spacepixels.util.FitsFileInformation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.core.CameraFixedRejector;
 import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
 import io.github.ppissias.jtransient.core.SlowMoverCandidateResult;
@@ -43,6 +44,8 @@ final class DetectionReportContext {
     DataArea dataArea;
     /** One sentence about the data area for the reader, empty when not measured. */
     String dataAreaText = "";
+    /** Detections set aside before tracking because they stay at one camera position; empty when left out. */
+    List<CameraFixedRejector.Group> cameraFixedGroups = Collections.emptyList();
     private SessionCatalogue catalogue;
 
     SessionCatalogue catalogue() {

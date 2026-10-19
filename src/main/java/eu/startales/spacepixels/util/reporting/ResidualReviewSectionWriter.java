@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.core.CameraFixedRejector;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.core.TrackLinker;
@@ -83,6 +84,71 @@ final class ResidualReviewSectionWriter {
                 counter++;
             }
         }
+    }
+
+    /** The detections set aside before tracking because they stay at one camera position (hot pixels, dust). */
+    static void writeCameraFixedSection(PrintWriter report,
+                                        DetectionReportContext context,
+                                        List<CameraFixedRejector.Group> groups) throws IOException {
+        if (groups == null || groups.isEmpty()) {
+            return;
+        }
+        report.println("<h2 id='camera-fixed'>Camera-Fixed Groups</h2>");
+        report.println("<p class='section-lede'><strong>These groups are most likely hot pixels or dust.</strong> "
+                + "Each one stays at the same position on the camera while the frames move across the sky with the dither and the drift. "
+                + "Registration moves such a spot along with the frames, so it can look like a faint mover, a repeat at one spot or common motion. "
+                + "They are set aside before tracking, so they do not become tracks, anomalies or rescue candidates. "
+                + "How each frame moved is measured from its registration fill; frames without fill are not checked.</p>");
+        short[][] background = context.masterStackData != null
+                ? context.masterStackData
+                : (!context.rawFrames.isEmpty() ? context.rawFrames.get(0) : null);
+        int groupNumber = 1;
+        for (CameraFixedRejector.Group group : groups) {
+            writeCameraFixedCard(report, context, background, group, groupNumber);
+            groupNumber++;
+        }
+    }
+
+    private static void writeCameraFixedCard(PrintWriter report,
+                                             DetectionReportContext context,
+                                             short[][] background,
+                                             CameraFixedRejector.Group group,
+                                             int groupNumber) throws IOException {
+        Color color = COMMON_MOTION_COLORS[(groupNumber - 1) % COMMON_MOTION_COLORS.length];
+        List<List<SourceExtractor.DetectedObject>> pictured = List.of(group.points);
+        String trailName = "camera_fixed_" + groupNumber + "_trail.png";
+        String gifName = "camera_fixed_" + groupNumber + ".gif";
+        boolean trail = background != null && writeCommonMotionTrail(context, background, pictured, color, trailName);
+        boolean gif = !context.rawFrames.isEmpty() && writeCommonMotionGif(context, pictured, color, gifName);
+        double spread = 0;
+        for (SourceExtractor.DetectedObject a : group.points) {
+            for (SourceExtractor.DetectedObject b : group.points) {
+                spread = Math.max(spread, Math.hypot(a.x - b.x, a.y - b.y));
+            }
+        }
+
+        String css = String.format(Locale.US, "#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
+        report.println("<div class='detection-card' id='finding-fc" + groupNumber + "' style='border-left-color: " + css + ";'>");
+        report.println("<div class='detection-title' style='color: " + css + ";'>Camera-Fixed Group FC" + groupNumber + "</div>");
+        report.printf(Locale.US, "<p class='astro-note'>Stays at one camera position in %d frames while it moved up to %.0f px across "
+                + "the frames: most likely a hot pixel or dust. Set aside before tracking.</p>%n", group.points.size(), spread);
+        report.println("<div class='image-container'>");
+        if (trail) {
+            report.println("<div><a href='" + trailName + "' target='_blank'><img loading='lazy' decoding='async' src='" + trailName
+                    + "' alt='Camera-fixed trail' /></a><br/><center><small>Positions, blue to red</small></center></div>");
+        }
+        if (gif) {
+            report.println("<div><a href='" + gifName + "' target='_blank'><img loading='lazy' decoding='async' src='" + gifName
+                    + "' alt='Camera-fixed animation' /></a><br/><center><small>The frames</small></center></div>");
+        }
+        report.println("</div>");
+        report.println("<details class='foldable-streak-details'><summary>Coordinates</summary><div class='foldable-streak-body'>");
+        report.print("<ul class='source-list'><li>");
+        for (SourceExtractor.DetectedObject point : group.points) {
+            report.printf(Locale.US, " frame %d (%.1f, %.1f)", point.sourceFrameIndex + 1, point.x, point.y);
+        }
+        report.println("</li></ul></div></details>");
+        report.println("</div>");
     }
 
     private static void writeCommonMotion(PrintWriter report,
