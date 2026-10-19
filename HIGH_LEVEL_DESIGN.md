@@ -110,7 +110,7 @@ Main classes:
 - `DetectionConfigurationPanel`
 - `AutoTuneOverviewPanel`
 - `SettingsNavigator`, `SettingRow`
-- `CheckedNumberEditor` (the editor of every number setting: only text that is one complete number within the setting's range becomes its value; other text stays in the field, outlined)
+- `CheckedNumberEditor` (the editor of every number setting: only text that is one complete number within the setting's range becomes its value; other text stays in the field, outlined. It shows every decimal of its value, so committing the shown text never rounds it)
 - `WrapLayout`
 - `WindowPlacement`
 - `StarMaskExplorerFrame`

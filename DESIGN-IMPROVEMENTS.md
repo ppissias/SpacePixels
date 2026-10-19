@@ -47,7 +47,7 @@ This was a source and architecture review, with primary documentation checked fo
 | D02 | High | Proposed | Job ownership and resource admission | A command acquires its job slot before the worker starts; only that job can finish it. |
 | D03 | High | Proposed | Preview results belong to a request | A previous frame or stretch cannot overwrite the current preview. |
 | D04 | High | Proposed | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
-| D05 | High | Implemented | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
+| D05 | High | Implemented; Preview Frame question open | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
 | D06 | Medium | Proposed | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
 | D07 | Medium | Proposed | Shared actions and derived availability | Button, shortcut and context menu execute the same command under the same conditions. |
 | D08 | Medium | Proposed | Keep slow work off the EDT | Accepting a WCS write does not perform the file rewrite on the UI thread. |
@@ -133,7 +133,8 @@ A Cancel control should request cancellation, show a stopping state and retain r
   - the settings a run receives were byte-identical;
   - all 75 number fields were identical in value, type and text.
 - **Not done:** profile loading and the API do not apply `DetectionSettingsRules` yet; they stay unchanged for now. Save keeps its name.
-- **Found, not changed:** typing a value with more decimals than the field shows keeps the rounded value; for example, 4.25 typed where the field shows 4.0 becomes 4.2. The field first shows the new value with its old number of decimals, and the auto-apply commits that text. This predates D05; the fix is to be discussed.
+- **Fixed afterwards:** a value with more decimals than its field showed was kept rounded; 4.25 typed where the field showed 5.5 became 4.2. The field first showed the new value with its old number of decimals, and the auto-apply committed that text back. This predated D05. A field now shows every decimal of its value.
+- **Open question: Preview Frame.** It keeps the settings it was opened with, and clicking Preview Frame again picks up changes. Before D05, a frame stepped to in an open Preview Frame used the settings of that moment. The alternative is to take a fresh checked copy at each frame step, so an open preview follows edits. Undecided (maintainer, 2026-10-19).
 
 The original review follows.
 
