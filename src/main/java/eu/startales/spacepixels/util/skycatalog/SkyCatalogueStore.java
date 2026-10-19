@@ -12,6 +12,7 @@ package eu.startales.spacepixels.util.skycatalog;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
+import eu.startales.spacepixels.util.StagedFile;
 
 import java.io.File;
 import java.io.IOException;
@@ -19,7 +20,6 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 
 /** Keeps the sky catalogue of a session in its folder, as {@value SkyCatalogue#FILE_NAME}. */
@@ -36,12 +36,12 @@ public final class SkyCatalogueStore {
 
     /** Writes the catalogue, replacing the previous one only once the new file is complete. */
     public static void save(File sessionFolder, SkyCatalogue catalogue) throws IOException {
-        File target = fileIn(sessionFolder);
-        File partial = new File(sessionFolder, SkyCatalogue.FILE_NAME + ".part");
-        try (Writer writer = Files.newBufferedWriter(partial.toPath(), StandardCharsets.UTF_8)) {
-            GSON.toJson(catalogue, writer);
+        try (StagedFile staged = new StagedFile(fileIn(sessionFolder))) {
+            try (Writer writer = staged.newWriter()) {
+                GSON.toJson(catalogue, writer);
+            }
+            staged.publish();
         }
-        Files.move(partial.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
     }
 
     /** The catalogue of the session, or null when there is none or it cannot be read. */

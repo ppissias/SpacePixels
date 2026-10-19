@@ -175,8 +175,7 @@ public final class DetectionInputPreparation {
     private static void prepareFitsFile(File inputFile, File outputDirectory, int addedOffset) throws Exception {
         try (Fits preparedFits = createPreparedFits(inputFile, addedOffset)) {
             File outputFile = new File(outputDirectory, buildPreparedFilename(inputFile));
-            Files.deleteIfExists(outputFile.toPath());
-            preparedFits.write(outputFile);
+            StagedFile.write(outputFile, staged -> preparedFits.write(staged.toFile()));
         }
     }
 

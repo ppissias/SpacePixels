@@ -1,20 +1,25 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.StagedFile;
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 
 /** Publishes a text artifact only after its writer has completed without errors. */
 final class AtomicReportFile implements AutoCloseable {
-    private final Path target;
-    private final Path temporary;
+    private final String name;
+    private final StagedFile staged;
     private final PrintWriter writer;
 
     AtomicReportFile(File file) throws IOException {
-        target = file.toPath().toAbsolutePath();
-        Files.createDirectories(target.getParent());
-        temporary = Files.createTempFile(target.getParent(), ".spacepixels-export-", ".tmp");
-        writer = new PrintWriter(Files.newBufferedWriter(temporary, StandardCharsets.UTF_8));
+        name = file.getName();
+        Files.createDirectories(file.toPath().toAbsolutePath().getParent());
+        staged = new StagedFile(file);
+        try {
+            writer = new PrintWriter(staged.newWriter());
+        } catch (IOException e) {
+            staged.close();
+            throw e;
+        }
     }
 
     PrintWriter writer() { return writer; }
@@ -23,16 +28,12 @@ final class AtomicReportFile implements AutoCloseable {
         writer.flush();
         boolean failed = writer.checkError();
         writer.close();
-        if (failed || writer.checkError()) throw new IOException("Could not finish writing " + target.getFileName());
-        try {
-            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException e) {
-            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
-        }
+        if (failed || writer.checkError()) throw new IOException("Could not finish writing " + name);
+        staged.publish();
     }
 
     @Override public void close() throws IOException {
         writer.close();
-        Files.deleteIfExists(temporary);
+        staged.close();
     }
 }

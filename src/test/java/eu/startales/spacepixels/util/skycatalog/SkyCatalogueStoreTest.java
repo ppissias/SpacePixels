@@ -8,8 +8,8 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -43,7 +43,7 @@ public class SkyCatalogueStoreTest {
         File session = folder.newFolder("session");
         SkyCatalogueStore.save(session, catalogue);
         assertTrue(SkyCatalogueStore.fileIn(session).isFile());
-        assertFalse(new File(session, SkyCatalogue.FILE_NAME + ".part").exists());
+        assertArrayEquals(new String[]{SkyCatalogue.FILE_NAME}, session.list());
 
         SkyCatalogue loaded = SkyCatalogueStore.load(session);
         assertEquals(1, loaded.stars.size());

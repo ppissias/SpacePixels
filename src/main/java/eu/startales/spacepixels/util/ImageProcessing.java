@@ -1528,16 +1528,13 @@ public class ImageProcessing implements AutoCloseable {
     }
 
     /**
-     * Writes a FITS object to disk using SpacePixels' suffix-based naming convention.
+     * Writes a FITS object to disk using SpacePixels' suffix-based naming convention. An earlier file of that name is
+     * replaced only once the new one is complete, so an interrupted write never leaves a cut-off image.
      */
     private void writeFitsWithSuffix(Fits fitsImage, String fitsFilename, String suffix) throws IOException, FitsException {
         int lastSepPosition = fitsFilename.lastIndexOf(".");
         fitsFilename = fitsFilename.substring(0, lastSepPosition) + suffix + ".fit";
-        File toDeleteFile = new File(fitsFilename);
-        if (toDeleteFile.exists()) {
-            toDeleteFile.delete();
-        }
-        fitsImage.write(new File(fitsFilename));
+        StagedFile.write(new File(fitsFilename), staged -> fitsImage.write(staged.toFile()));
     }
 
     /**
@@ -1587,9 +1584,7 @@ public class ImageProcessing implements AutoCloseable {
                     }
 
                     if (targetDir == null) targetDir = new File(outName).getParentFile();
-                    File outFile = new File(outName);
-                    if (outFile.exists()) outFile.delete();
-                    decompressedFits.write(outFile);
+                    StagedFile.write(new File(outName), staged -> decompressedFits.write(staged.toFile()));
                 }
                 originalFits.close();
             }

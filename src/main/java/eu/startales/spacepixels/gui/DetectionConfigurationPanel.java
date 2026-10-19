@@ -18,6 +18,7 @@ import eu.startales.spacepixels.events.AutoTuneStartedEvent;
 import eu.startales.spacepixels.events.FitsImportFinishedEvent;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
+import eu.startales.spacepixels.config.SpacePixelsSettingsFiles;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.tasks.AutoTuneTask;
@@ -33,7 +34,6 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.io.File;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.lang.reflect.Field;
@@ -677,24 +677,22 @@ public class DetectionConfigurationPanel extends JPanel {
     private void savePersistedSettings() {
         applySettingsToMemory();
 
-        try (FileWriter detectionWriter = new FileWriter(detectionProfileFile);
-             FileWriter visualizationWriter = new FileWriter(visualizationPreferencesFile)) {
-            SpacePixelsDetectionProfileIO.write(
-                    detectionWriter,
-                    new SpacePixelsDetectionProfile(jTransientConfig, autoTuneMaxCandidateFrames));
-            SpacePixelsVisualizationPreferencesIO.write(
-                    visualizationWriter,
-                    SpacePixelsVisualizationPreferences.captureCurrent());
-            rememberSavedState();
-            // Saved values are simply the settings now: drop the "set by Auto-Tune" marks.
-            overviewPanel.clearTunedMarkers();
-            updateSavedState();
-            footerMessageLabel.setText("Saved to " + detectionProfileFile.getParent());
-            footerMessageLabel.setToolTipText("<html>" + detectionProfileFile.getAbsolutePath() + "<br>"
-                    + visualizationPreferencesFile.getAbsolutePath() + "</html>");
+        try {
+            SpacePixelsSettingsFiles.save(
+                    detectionProfileFile, new SpacePixelsDetectionProfile(jTransientConfig, autoTuneMaxCandidateFrames),
+                    visualizationPreferencesFile, SpacePixelsVisualizationPreferences.captureCurrent());
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(this, "Failed to write configuration JSON: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            // Nothing is marked as saved, so the changes keep showing as unsaved.
+            JOptionPane.showMessageDialog(this, "Could not save the settings.\n" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            return;
         }
+        rememberSavedState();
+        // Saved values are simply the settings now: drop the "set by Auto-Tune" marks.
+        overviewPanel.clearTunedMarkers();
+        updateSavedState();
+        footerMessageLabel.setText("Saved to " + detectionProfileFile.getParent());
+        footerMessageLabel.setToolTipText("<html>" + detectionProfileFile.getAbsolutePath() + "<br>"
+                + visualizationPreferencesFile.getAbsolutePath() + "</html>");
     }
 
     private void loadDetectionDefaults() {

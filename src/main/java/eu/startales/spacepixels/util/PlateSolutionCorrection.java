@@ -19,7 +19,6 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -145,11 +144,12 @@ public final class PlateSolutionCorrection {
     }
 
     public static void save(File sessionFolder, PlateSolutionCorrection correction) throws IOException {
-        File partial = new File(sessionFolder, FILE_NAME + ".part");
-        try (Writer writer = Files.newBufferedWriter(partial.toPath(), StandardCharsets.UTF_8)) {
-            GSON.toJson(correction, writer);
+        try (StagedFile staged = new StagedFile(fileIn(sessionFolder))) {
+            try (Writer writer = staged.newWriter()) {
+                GSON.toJson(correction, writer);
+            }
+            staged.publish();
         }
-        Files.move(partial.toPath(), fileIn(sessionFolder).toPath(), StandardCopyOption.REPLACE_EXISTING);
     }
 
     /** The correction kept in the session folder, or null when there is none or it cannot be read. */

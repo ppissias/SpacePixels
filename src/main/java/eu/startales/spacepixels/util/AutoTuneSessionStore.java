@@ -22,7 +22,6 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -106,12 +105,12 @@ public final class AutoTuneSessionStore {
         document.version = CURRENT_VERSION;
         document.fileNames = sortedNames(document.fileNames);
         slim(document);
-        File target = fileIn(sessionFolder);
-        File partial = new File(sessionFolder, FILE_NAME + ".part");
-        try (Writer writer = Files.newBufferedWriter(partial.toPath(), StandardCharsets.UTF_8)) {
-            GSON.toJson(document, writer);
+        try (StagedFile staged = new StagedFile(fileIn(sessionFolder))) {
+            try (Writer writer = staged.newWriter()) {
+                GSON.toJson(document, writer);
+            }
+            staged.publish();
         }
-        Files.move(partial.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
     }
 
     /**

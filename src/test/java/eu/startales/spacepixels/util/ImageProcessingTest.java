@@ -8,16 +8,23 @@ import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import io.github.ppissias.jtransient.telemetry.TrackerTelemetry;
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
+import nom.tam.fits.FitsException;
 import nom.tam.fits.Header;
+import org.junit.Assume;
 import org.junit.Test;
 
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -97,33 +104,68 @@ public class ImageProcessingTest {
 
         writeFitsFile(fitsPath, 100, 80, new HashMap<>());
 
-        Map<String, String> solveInfo = new LinkedHashMap<>();
-        solveInfo.put("source", "astap");
-        solveInfo.put("WCSAXES", "2");
-        solveInfo.put("CTYPE1", "RA---TAN");
-        solveInfo.put("CTYPE2", "DEC--TAN");
-        solveInfo.put("CUNIT1", "deg");
-        solveInfo.put("CUNIT2", "deg");
-        solveInfo.put("CRPIX1", "50.5");
-        solveInfo.put("CRPIX2", "40.5");
-        solveInfo.put("CRVAL1", "140.89806");
-        solveInfo.put("CRVAL2", "-7.0669513");
-        solveInfo.put("CD1_1", "0.000467862222");
-        solveInfo.put("CD1_2", "0.0");
-        solveInfo.put("CD2_1", "0.0");
-        solveInfo.put("CD2_2", "-0.000467862222");
-
         ImageProcessing imageProcessing = ImageProcessing.getInstance(tempDirectory.toFile());
-        imageProcessing.updateFitsHeaderWithWCS(fitsPath.toString(), solveInfo);
+        imageProcessing.updateFitsHeaderWithWCS(fitsPath.toString(), createStandardWcsSolveInfo());
 
         try (Fits updatedFits = new Fits(fitsPath.toFile())) {
-            Header header = ImageProcessing.getImageHDU(updatedFits).getHeader();
+            BasicHDU<?> hdu = ImageProcessing.getImageHDU(updatedFits);
+            Header header = hdu.getHeader();
 
             assertEquals(2, header.getIntValue("WCSAXES"));
             assertEquals(50.5d, header.getDoubleValue("CRPIX1"), 1.0e-9);
             assertEquals(40.5d, header.getDoubleValue("CRPIX2"), 1.0e-9);
             assertEquals("astap", header.getStringValue("SOURCE"));
             assertFalse(header.containsKey("WCS_LINK"));
+            assertEquals(80, hdu.getAxes()[0]);
+            assertEquals(100, hdu.getAxes()[1]);
+        }
+        // The updated copy took the original's place; no temporary file is left beside it.
+        assertEquals(Collections.singletonList("sample.fit"), listFileNames(tempDirectory));
+    }
+
+    @Test
+    public void updateFitsHeaderWithWcsKeepsTheOriginalWhenItCannotBeReplaced() throws Exception {
+        // Windows does not let a file that another program holds open be replaced.
+        Assume.assumeTrue(System.getProperty("os.name", "").startsWith("Windows"));
+        Path tempDirectory = Files.createTempDirectory("spacepixels-wcs-locked");
+        Path fitsPath = tempDirectory.resolve("sample.fit");
+        Map<String, Object> originalHeader = new HashMap<>();
+        originalHeader.put("OBJECT", "M81");
+        writeFitsFile(fitsPath, 100, 80, originalHeader);
+
+        ImageProcessing imageProcessing = ImageProcessing.getInstance(tempDirectory.toFile());
+        try (FileInputStream heldOpen = new FileInputStream(fitsPath.toFile())) {
+            imageProcessing.updateFitsHeaderWithWCS(fitsPath.toString(), createStandardWcsSolveInfo());
+            fail("Expected the replacement of an open file to fail.");
+        } catch (IOException ex) {
+            assertTrue(ex.getMessage(), ex.getMessage().startsWith("Cannot replace sample.fit"));
+        }
+
+        try (Fits unchangedFits = new Fits(fitsPath.toFile())) {
+            Header header = ImageProcessing.getImageHDU(unchangedFits).getHeader();
+            assertEquals("M81", header.getStringValue("OBJECT"));
+            assertFalse(header.containsKey("CTYPE1"));
+        }
+        assertEquals(Collections.singletonList("sample.fit"), listFileNames(tempDirectory));
+    }
+
+    @Test
+    public void aTruncatedCopyDoesNotReadBackAsTheUpdatedFrame() throws Exception {
+        Path tempDirectory = Files.createTempDirectory("spacepixels-wcs-truncated");
+        Path fitsPath = tempDirectory.resolve("sample.fit");
+        writeFitsFile(fitsPath, 100, 80, new HashMap<>());
+        int[] axes = {80, 100};
+
+        PlateSolveService.checkReadsBack(fitsPath.toFile(), axes, "sample.fit");
+
+        try (RandomAccessFile file = new RandomAccessFile(fitsPath.toFile(), "rw")) {
+            file.setLength(file.length() / 2);
+        }
+        try {
+            PlateSolveService.checkReadsBack(fitsPath.toFile(), axes, "sample.fit");
+            fail("Expected a truncated copy to be refused.");
+        } catch (IOException | FitsException expected) {
+            // Refused: the copy would not replace the original.
         }
     }
 
@@ -258,6 +300,31 @@ public class ImageProcessingTest {
                 null);
 
         assertSame(original, DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain(original));
+    }
+
+    private static Map<String, String> createStandardWcsSolveInfo() {
+        Map<String, String> solveInfo = new LinkedHashMap<>();
+        solveInfo.put("source", "astap");
+        solveInfo.put("WCSAXES", "2");
+        solveInfo.put("CTYPE1", "RA---TAN");
+        solveInfo.put("CTYPE2", "DEC--TAN");
+        solveInfo.put("CUNIT1", "deg");
+        solveInfo.put("CUNIT2", "deg");
+        solveInfo.put("CRPIX1", "50.5");
+        solveInfo.put("CRPIX2", "40.5");
+        solveInfo.put("CRVAL1", "140.89806");
+        solveInfo.put("CRVAL2", "-7.0669513");
+        solveInfo.put("CD1_1", "0.000467862222");
+        solveInfo.put("CD1_2", "0.0");
+        solveInfo.put("CD2_1", "0.0");
+        solveInfo.put("CD2_2", "-0.000467862222");
+        return solveInfo;
+    }
+
+    private static List<String> listFileNames(Path directory) throws IOException {
+        try (Stream<Path> files = Files.list(directory)) {
+            return files.map(path -> path.getFileName().toString()).sorted().collect(Collectors.toList());
+        }
     }
 
     private static Map<String, String> createAstrometrySolveInfo(String wcsLink) {

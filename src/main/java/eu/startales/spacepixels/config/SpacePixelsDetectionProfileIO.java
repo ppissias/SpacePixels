@@ -12,13 +12,14 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import eu.startales.spacepixels.util.StagedFile;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
-import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -77,14 +78,17 @@ public final class SpacePixelsDetectionProfileIO {
     public static File migrate(File sourceFile, File targetFile, SpacePixelsDetectionProfile detectionProfile) throws IOException {
         Path source = sourceFile.toPath().toAbsolutePath().normalize();
         Path target = targetFile.toPath().toAbsolutePath().normalize();
-        Path temporary = Files.createTempFile(target.getParent(), target.getFileName().toString() + ".", ".tmp");
-        try {
-            try (Writer writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
+        try (StagedFile staged = new StagedFile(target.toFile())) {
+            try (Writer writer = staged.newWriter()) {
                 write(writer, detectionProfile);
             }
 
             if (!source.equals(target)) {
-                Files.move(temporary, target);
+                // A profile under the legacy name moves to the current name, which must not exist yet.
+                if (Files.exists(target)) {
+                    throw new FileAlreadyExistsException(target.toString());
+                }
+                staged.publish();
                 return sourceFile;
             }
 
@@ -95,10 +99,8 @@ public final class SpacePixelsDetectionProfileIO {
                 Files.deleteIfExists(backup);
                 throw ex;
             }
-            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            staged.publish();
             return backup.toFile();
-        } finally {
-            Files.deleteIfExists(temporary);
         }
     }
 

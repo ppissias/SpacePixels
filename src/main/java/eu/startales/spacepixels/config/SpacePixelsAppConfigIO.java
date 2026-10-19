@@ -9,10 +9,10 @@ package eu.startales.spacepixels.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import eu.startales.spacepixels.util.StagedFile;
 
 import java.io.File;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -43,9 +43,13 @@ public final class SpacePixelsAppConfigIO {
         return appConfig;
     }
 
+    /** Replaces the file only once the new configuration is completely written. */
     public static void write(File file, AppConfig appConfig) throws IOException {
-        try (FileWriter writer = new FileWriter(file)) {
-            write(writer, appConfig);
+        try (StagedFile staged = new StagedFile(file)) {
+            try (Writer writer = staged.newWriter()) {
+                write(writer, appConfig);
+            }
+            staged.publish();
         }
     }
 

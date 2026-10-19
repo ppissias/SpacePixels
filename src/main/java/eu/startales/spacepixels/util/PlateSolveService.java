@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -144,38 +145,49 @@ final class PlateSolveService {
         }
 
         File originalFile = new File(fitsFileFullPath);
-        File tempFile = new File(fitsFileFullPath + ".tmp");
         Map<String, String> updatedHeader;
 
-        try (Fits fits = new Fits(originalFile)) {
-            BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
-            if (hdu == null || hdu.getHeader() == null) {
-                throw new IOException("Could not locate an image header in " + originalFile.getName());
+        // The updated copy replaces the original only once it is complete and reads back as the same image.
+        try (StagedFile staged = new StagedFile(originalFile)) {
+            int[] axes;
+            try (Fits fits = new Fits(originalFile)) {
+                BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
+                if (hdu == null || hdu.getHeader() == null) {
+                    throw new IOException("Could not locate an image header in " + originalFile.getName());
+                }
+
+                Header header = hdu.getHeader();
+                clearExistingWcsHeader(header);
+                clearLegacySolveMetadata(header);
+
+                List<HeaderCard> wcsHeaderCards = resolveWcsHeaderCards(wcsData);
+                for (HeaderCard card : wcsHeaderCards) {
+                    header.addLine(card.copy());
+                }
+
+                writeSolveProvenance(header, wcsData);
+                updatedHeader = extractHeaderMap(header);
+                axes = hdu.getAxes();
+                fits.write(staged.path().toFile());
             }
-
-            Header header = hdu.getHeader();
-            clearExistingWcsHeader(header);
-            clearLegacySolveMetadata(header);
-
-            List<HeaderCard> wcsHeaderCards = resolveWcsHeaderCards(wcsData);
-            for (HeaderCard card : wcsHeaderCards) {
-                header.addLine(card.copy());
-            }
-
-            writeSolveProvenance(header, wcsData);
-            updatedHeader = extractHeaderMap(header);
-            fits.write(tempFile);
-        }
-
-        if (originalFile.delete()) {
-            if (!tempFile.renameTo(originalFile)) {
-                throw new IOException("Failed to rename temporary FITS file back to original.");
-            }
-        } else {
-            throw new IOException("Failed to delete original FITS file to overwrite it.");
+            checkReadsBack(staged.path().toFile(), axes, originalFile.getName());
+            staged.publish();
         }
 
         return updatedHeader;
+    }
+
+    /** Fails unless the written copy holds an image of the expected size with all of its data present. */
+    static void checkReadsBack(File written, int[] expectedAxes, String name) throws IOException, FitsException {
+        try (Fits fits = new Fits(written)) {
+            BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
+            boolean complete = hdu != null
+                    && Arrays.equals(hdu.getAxes(), expectedAxes)
+                    && hdu.getData().getFileOffset() + hdu.getData().getSize() <= written.length();
+            if (!complete) {
+                throw new IOException("The updated copy of " + name + " did not read back correctly; the original is unchanged.");
+            }
+        }
     }
 
     public void cleanupSolveArtifacts(String fitsFileFullPath, PlateSolveResult result) {

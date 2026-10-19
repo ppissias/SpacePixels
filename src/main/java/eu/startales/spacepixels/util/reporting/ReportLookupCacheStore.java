@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import eu.startales.spacepixels.util.StagedFile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -13,10 +14,8 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.logging.Logger;
 import java.util.stream.IntStream;
@@ -184,17 +183,9 @@ final class ReportLookupCacheStore {
     }
 
     private static void writeAtomically(Path path, String contents) throws IOException {
-        Path target = path.toAbsolutePath().normalize();
-        Path temporary = Files.createTempFile(target.getParent(), ".spacepixels-cache-", ".tmp");
-        try {
-            Files.writeString(temporary, contents, StandardCharsets.UTF_8);
-            try {
-                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException unsupported) {
-                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-        } finally {
-            Files.deleteIfExists(temporary);
+        try (StagedFile staged = new StagedFile(path.toFile())) {
+            staged.writeString(contents);
+            staged.publish();
         }
     }
 
