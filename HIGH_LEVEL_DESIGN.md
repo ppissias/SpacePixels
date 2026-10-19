@@ -86,6 +86,7 @@ Owns:
 - `SpacePixelsDetectionProfileIO`
 - `SpacePixelsVisualizationPreferences`
 - `SpacePixelsVisualizationPreferencesIO`
+- `SpacePixelsSettingsFiles` (Save on the detection settings tab)
 
 The detection profile wraps JTransient `DetectionConfig` plus SpacePixels' Auto-Tune candidate-frame limit. Visualization preferences are intentionally separate because they do not affect detection results.
 
@@ -172,6 +173,7 @@ Important classes:
 - `WcsCoordinateTransformer`
 - `WcsSolutionResolver`
 - `XisfImageConverter`
+- `StagedFile` (safe replacement of a file; see section 7)
 
 `ImageProcessing` is still the main internal backend facade. New work should prefer extracting focused services behind it instead of expanding it further.
 
@@ -399,7 +401,7 @@ Responsibilities:
 - generate iterative index reports
 - build `ReportData`: report-local finding IDs/anchors, included variables and common-motion groups, and one shared quality-filtered frame selection
 - export versioned `report-data.json` without input paths or observing-site coordinates
-- publish HTML, JSON and CSV text artifacts through `AtomicReportFile`, checking write errors before replacing final files
+- publish HTML, JSON and CSV text artifacts through `AtomicReportFile` (built on `StagedFile`), checking write errors before replacing final files
 - emit testable `report-lookups.js` and `report-interactions.js` resources; GIF exports include PNG posters for pause/reduced-motion controls
 
 `ReportData` describes report presentation; it never changes the JTransient result. `DetectionReportContext` loads its catalogue once per export. `ExportVisualizationSettings` applies throughout image rendering. Long moving/streak GIFs stream images one at a time. Motion/lookup calculations use exposure midpoint times, while observing-span duration remains a separate metric. Detection-quality rejections are shared by all inspection animations.
@@ -538,6 +540,8 @@ MainApplicationPanel
 -> ImageProcessing.updateFitsHeaderWithWCS(...) / applyWCSHeader(...)
 -> WCS-aware viewers and reports
 ```
+
+Writing a solution into a frame changes the user's own file. `PlateSolveService` writes the updated frame to a temporary file beside it, reads it back to check the image size and that all of its data is present, and only then replaces the original in one step. A failure leaves the original unchanged.
 
 Report export later resolves WCS through:
 
@@ -706,6 +710,12 @@ Detection report output:
 - session catalogue/correction files (`sky_catalogue.json`, `plate_correction.json`) in the imported dataset folder, guarded by field and plate-solution identity
 - iterative root directory containing per-pass report directories plus `index.html`
 
+Replacing files:
+
+- The settings files, the session files, report text files, plate-solved frames and the converted FITS copies are written through `util.StagedFile`. (Report images, which go into a new folder per run, and plate-solver downloads are written directly.) The new contents are written to a temporary file in the same folder (`.<name>.<number>.tmp`) and moved over the target in one step only once complete. The previous file is never deleted first, and a failed write or move removes the temporary file and leaves the previous file as it was.
+- Without an atomic move (not expected for a file in the same folder), the previous file is renamed aside and put back if the new one cannot take its place.
+- Save on the detection settings tab writes both settings files completely before replacing either. The two files are independent, so if the second replacement fails the new profile stays saved; the error names the file that was not saved, and the tab keeps showing unsaved changes.
+
 ## 8. Threading and Progress Model
 
 Desktop:
@@ -740,6 +750,7 @@ JTransient:
 - Prefer focused services behind `ImageProcessing` for new backend capabilities.
 - Keep detection config and visualization preferences separate.
 - Keep GUI-only prompting out of headless/API paths.
+- Replace files through `StagedFile`; never delete a user's file before its replacement is complete.
 - Do not add concurrent Auto-Tune API execution without removing the shared JTransient sample-size mutation.
 
 ## 10. Current Design Debt and Refactor Boundaries

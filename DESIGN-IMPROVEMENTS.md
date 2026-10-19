@@ -43,7 +43,7 @@ This was a source and architecture review, with primary documentation checked fo
 
 | ID | Priority | Status | Improvement | First useful result |
 |---|---|---|---|---|
-| D01 | High | Proposed | Safe publication of FITS files and settings | A failed replacement preserves the previous file; a failed save remains visibly unsaved. |
+| D01 | High | Implemented | Safe publication of FITS files and settings | A failed replacement preserves the previous file; a failed save remains visibly unsaved. |
 | D02 | High | Proposed | Job ownership and resource admission | A command acquires its job slot before the worker starts; only that job can finish it. |
 | D03 | High | Proposed | Preview results belong to a request | A previous frame or stretch cannot overwrite the current preview. |
 | D04 | High | Proposed | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
@@ -60,6 +60,19 @@ This was a source and architecture review, with primary documentation checked fo
 “High” means to address before expanding the affected workflow. It does not mean undertaking all high-priority items in one change.
 
 ### D01. Treat file replacement as a shared application responsibility
+
+**Implemented (2026-10-19).**
+- **One helper.** `util.StagedFile` writes into a unique temporary file beside the target and replaces the target in one atomic move. It falls back to keeping a backup when an atomic move is unavailable, and removes the temporary file on failure.
+- **Where it is used:**
+  - the plate-solve WCS write, which also reads the copy back first to check the image size and that its data is complete;
+  - the settings files (`SpacePixelsSettingsFiles` stages both files before replacing either, and names the file that failed);
+  - the application config and profile migration;
+  - the session files (Auto-Tune results, plate correction, sky catalogue), report text files, the lookup cache, and converted, decompressed and prepared FITS copies.
+- **Settings Save** marks the settings saved only after both files are replaced.
+- **Tests** inject failures while writing, during replacement (a folder in the target's place, and on Windows a frame held open), on either settings file, in the non-atomic fallback, and for a truncated FITS copy.
+- **Real data:** a WCS write on a copy of a klangwolke-2 frame (121 MB) left the pixels identical and kept the other header cards. A klangwolke-2 batch run wrote the same `report-data.json` findings as before.
+
+The original review follows.
 
 **Evidence.** [PlateSolveService.updateFitsHeaderWithWCS](src/main/java/eu/startales/spacepixels/util/PlateSolveService.java) writes `<original>.tmp`, deletes the original, then calls `renameTo`. If deletion succeeds but renaming fails, the original path is gone. A temporary replacement may remain, so this is not proof that all image data has been destroyed, but recovery is now manual. The temporary filename is also fixed rather than unique.
 
