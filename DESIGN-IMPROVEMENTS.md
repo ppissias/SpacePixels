@@ -45,7 +45,7 @@ This was a source and architecture review, with primary documentation checked fo
 |---|---|---|---|---|
 | D01 | High | Implemented | Safe publication of FITS files and settings | A failed replacement preserves the previous file; a failed save remains visibly unsaved. |
 | D02 | High | Proposed | Job ownership and resource admission | A command acquires its job slot before the worker starts; only that job can finish it. |
-| D03 | High | Proposed | Preview results belong to a request | A previous frame or stretch cannot overwrite the current preview. |
+| D03 | High | Implemented | Preview results belong to a request | A previous frame or stretch cannot overwrite the current preview. |
 | D04 | High | Proposed | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
 | D05 | High | Implemented; Preview Frame question open | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
 | D06 | Medium | Proposed | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
@@ -98,7 +98,34 @@ Use typed outcomes such as completed report, imported session, tuned settings, c
 
 ### D03. Extend the viewer's “latest request wins” rule to stretch previews
 
-**Evidence.** [StretchPanel.executePreviewTask](src/main/java/eu/startales/spacepixels/gui/StretchPanel.java) starts `GeneratePreviewsTask` after a debounce timer. Debouncing already exists and should stay. However, [PreviewGenerationFinishedEvent](src/main/java/eu/startales/spacepixels/events/PreviewGenerationFinishedEvent.java) has images and success only: no session, frame, stretch parameters or request number. `onPreviewGenerationFinished` accepts every result.
+**Implemented (2026-10-19).**
+- **One render at a time.** `gui.StretchPreviewRenderer` renders the Image Stretch previews on one `SwingWorker`, as `SequenceViewerFrame.prepareCurrent` prepares frames.
+  - A request carries the session (`ImageProcessing`), the frame's file and the stretch.
+  - A request made during a render waits, replacing any request already waiting.
+  - A result is shown only if its request is still the newest.
+  - Before, every change started its own thread that read a whole frame, and every result was shown in the order the threads finished.
+- **What makes a result stale:**
+  - any change of frame or stretch, already before the 250 ms debounce fires;
+  - hiding the tab;
+  - another import, which also removes the previews of the previous session.
+
+  While a render is due, the frame line ends in "rendering…". Once a result is shown, the label and the images describe the same request. With no frame selected, the previews are removed.
+- **Event removed.** `GeneratePreviewsTask` returns the two images and now closes the frame on failure too. `PreviewGenerationFinishedEvent` is gone.
+- **Tests:** `StretchPreviewRendererTest` holds an earlier render until a later request is made. It checks that:
+  - only the later request's images and both histograms are shown;
+  - waiting requests are replaced;
+  - a cancelled render is not shown;
+  - one render runs at a time.
+- **Window harness**, on four klangwolke-2 frames copied to a scratch folder. It made two frame changes and two stretch changes while previews rendered, hid the tab during a render, and imported again. Each time:
+  - the shown images and both histograms were identical to a direct render of the selected frame with the current stretch;
+  - the frame label named that frame.
+- **Not done:**
+  - an abandoned render is not interrupted; it finishes its read and is dropped;
+  - preview sampling (F05) is unchanged.
+
+The original review follows.
+
+**Evidence.** [StretchPanel.executePreviewTask](src/main/java/eu/startales/spacepixels/gui/StretchPanel.java) starts `GeneratePreviewsTask` after a debounce timer. Debouncing already exists and should stay. However, `PreviewGenerationFinishedEvent` (since removed) has images and success only: no session, frame, stretch parameters or request number. `onPreviewGenerationFinished` accepts every result.
 
 **Consequence inferred from the code.** If request A is still loading when B starts, and A finishes last, A can replace B's images while the frame label or controls describe B. Debouncing limits starts close together; it cannot order jobs already running. There is also no per-preview worker handle to limit in-flight full-frame reads.
 

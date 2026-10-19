@@ -107,6 +107,7 @@ Main classes:
 - `MainApplicationPanel`
 - `ConfigurationPanel`
 - `StretchPanel` (display stretch, remembered in Java preferences; whole-frame preview with `ZoomableImageView` and a histogram)
+- `StretchPreviewRenderer` (renders the `StretchPanel` previews one request at a time and shows a result only while its request is the newest; a change of frame or stretch, hiding the tab or another import makes a render under way stale)
 - `DetectionConfigurationPanel`
 - `AutoTuneOverviewPanel`
 - `SettingsNavigator`, `SettingRow`
@@ -139,7 +140,7 @@ Main tasks:
 - `PlateSolveTask`
 - `AutoTuneTask`
 - `TuningPreviewTask`
-- `GeneratePreviewsTask` for the Image Stretch preview; full-size sequence viewers load frames through `SequenceViewerFrame` and `BlinkSequence`
+- `GeneratePreviewsTask`, which renders the Image Stretch previews of one frame and returns them to `StretchPreviewRenderer`; full-size sequence viewers load frames through `SequenceViewerFrame` and `BlinkSequence`
 
 ### `eu.startales.spacepixels.tools`
 
