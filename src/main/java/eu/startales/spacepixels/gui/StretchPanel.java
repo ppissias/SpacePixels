@@ -11,7 +11,7 @@
 package eu.startales.spacepixels.gui;
 
 import com.google.common.eventbus.Subscribe;
-import eu.startales.spacepixels.events.PreviewGenerationFinishedEvent;
+import eu.startales.spacepixels.events.FitsImportFinishedEvent;
 import eu.startales.spacepixels.tasks.GeneratePreviewsTask;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.StretchAlgorithm;
@@ -53,6 +53,9 @@ public class StretchPanel extends JPanel {
     private final JButton nextButton = new JButton("Next ▶");
 
     private final Timer previewDebounceTimer;
+    private final StretchPreviewRenderer renderer = new StretchPreviewRenderer(StretchPanel::render, this::showPreviews);
+    /** True from a change of frame or stretch until its previews are shown; the frame label then says "rendering…". */
+    private boolean rendering;
     private final Preferences preferences = preferences();
     /** True while the controls are set programmatically, so the change is not saved or previewed twice. */
     private boolean adjusting;
@@ -172,12 +175,20 @@ public class StretchPanel extends JPanel {
         stretchIterationsSlider.addChangeListener(e -> sliderChanged());
         showFullSizeButton.addActionListener(e -> openFullSize());
 
-        // Preview whenever the tab becomes visible; selection changes elsewhere only refresh a visible tab.
+        // Preview whenever the tab becomes visible; selection changes elsewhere only refresh a visible tab. A hidden
+        // tab shows no render that was under way: it renders again when it is shown.
         addHierarchyListener(e -> {
-            if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing()) {
+            if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0) {
+                return;
+            }
+            if (isShowing()) {
                 mainAppWindow.getMainApplicationPanel().selectFirstFileIfNoneSelected();
                 updateFrameLabel();
                 triggerPreviewUpdate();
+            } else {
+                previewDebounceTimer.stop();
+                renderer.cancel();
+                rendering = false;
             }
         });
     }
@@ -302,7 +313,8 @@ public class StretchPanel extends JPanel {
         previousButton.setEnabled(selection[0] > 0);
         nextButton.setEnabled(selection[0] >= 0 && selection[0] < selection[1] - 1);
         frameLabel.setText(selection[0] < 0 || selected == null ? "No frame selected"
-                : "Frame " + (selection[0] + 1) + " of " + selection[1] + " · " + new File(selected.getFilePath()).getName());
+                : "Frame " + (selection[0] + 1) + " of " + selection[1] + " · " + new File(selected.getFilePath()).getName()
+                + (rendering ? " · rendering…" : ""));
     }
 
     public void triggerPreviewUpdate() {
@@ -310,6 +322,10 @@ public class StretchPanel extends JPanel {
         if (!isShowing()) {
             return;
         }
+        // A render under way is for the previous frame or stretch, so it is not shown.
+        renderer.cancel();
+        rendering = true;
+        updateFrameLabel();
         if (previewDebounceTimer.isRunning()) {
             previewDebounceTimer.restart();
         } else {
@@ -320,34 +336,58 @@ public class StretchPanel extends JPanel {
     private void executePreviewTask() {
         FitsFileInformation selected = mainAppWindow.getMainApplicationPanel().getSelectedFileInformation();
         if (selected == null || mainAppWindow.getImageProcessing() == null) {
-            originalView.setPlaceholder("Import frames and select one to preview it");
-            stretchedView.setPlaceholder("Import frames and select one to preview it");
+            clearPreviews("Import frames and select one to preview it");
             return;
         }
+        originalView.setPlaceholder("Rendering…");
         stretchedView.setPlaceholder("Rendering…");
-        new Thread(new GeneratePreviewsTask(
-                mainAppWindow.getEventBus(),
-                mainAppWindow.getImageProcessing(),
-                selected.getFilePath(),
-                stretchSlider.getValue(),
-                stretchIterationsSlider.getValue(),
-                getStretchAlgorithm()
-        )).start();
+        renderer.request(new StretchPreviewRenderer.Request(mainAppWindow.getImageProcessing(), selected.getFilePath(),
+                getStretchAlgorithm(), stretchSlider.getValue(), stretchIterationsSlider.getValue()));
     }
 
+    /** Renders both previews and their histograms, on the renderer's worker thread. */
+    private static StretchPreviewRenderer.Previews render(StretchPreviewRenderer.Request request) throws Exception {
+        BufferedImage[] images = new GeneratePreviewsTask(request.session, request.filePath, request.strength,
+                request.iterations, request.algorithm).call();
+        return new StretchPreviewRenderer.Previews(request, images[0], images[1],
+                HistogramView.luminanceHistogram(images[0]), HistogramView.luminanceHistogram(images[1]));
+    }
+
+    /** Shows the previews of the newest request; the renderer drops any other. */
+    private void showPreviews(StretchPreviewRenderer.Previews previews) {
+        originalView.setImage(previews.original);
+        stretchedView.setImage(previews.stretched);
+        if (!previews.isRendered()) {
+            stretchedView.setPlaceholder("The preview could not be rendered");
+        }
+        originalHistogramView.setHistogram(previews.originalHistogram);
+        histogramView.setHistogram(previews.stretchedHistogram);
+        rendering = false;
+        updateFrameLabel();
+    }
+
+    /** Removes the previews (and any render under way), showing {@code placeholder} instead. */
+    private void clearPreviews(String placeholder) {
+        renderer.cancel();
+        rendering = false;
+        originalView.setImage(null);
+        stretchedView.setImage(null);
+        originalView.setPlaceholder(placeholder);
+        stretchedView.setPlaceholder(placeholder);
+        originalHistogramView.setHistogram(null);
+        histogramView.setHistogram(null);
+        updateFrameLabel();
+    }
+
+    /** The previews belong to the session they were rendered for: another import removes them. */
     @Subscribe
-    public void onPreviewGenerationFinished(PreviewGenerationFinishedEvent event) {
-        // Runs on the task thread: compute the histogram here, then update the views on the event thread.
-        int[] histogram = event.isSuccess() ? HistogramView.luminanceHistogram(event.getStretchedImage()) : null;
-        int[] originalHistogram = event.isSuccess() ? HistogramView.luminanceHistogram(event.getOriginalImage()) : null;
+    public void onImportFinished(FitsImportFinishedEvent event) {
+        if (!event.isSuccess()) {
+            return;
+        }
         EventQueue.invokeLater(() -> {
-            originalView.setImage(event.isSuccess() ? event.getOriginalImage() : null);
-            stretchedView.setImage(event.isSuccess() ? event.getStretchedImage() : null);
-            if (!event.isSuccess()) {
-                stretchedView.setPlaceholder("The preview could not be rendered");
-            }
-            histogramView.setHistogram(histogram);
-            originalHistogramView.setHistogram(originalHistogram);
+            clearPreviews("Select a frame to preview it");
+            triggerPreviewUpdate();
         });
     }
 

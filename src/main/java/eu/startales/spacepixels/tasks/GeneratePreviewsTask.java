@@ -10,27 +10,26 @@
 
 package eu.startales.spacepixels.tasks;
 
-import com.google.common.eventbus.EventBus;
 import nom.tam.fits.Fits;
-import eu.startales.spacepixels.events.PreviewGenerationFinishedEvent;
-import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 
 import java.awt.image.BufferedImage;
-import java.util.logging.Level;
+import java.util.concurrent.Callable;
 
-public class GeneratePreviewsTask implements Runnable {
-    private final EventBus eventBus;
+/**
+ * Renders the Image Stretch previews of one frame: {original (linear), stretched}. The Image Stretch tab runs it on its
+ * own worker, one frame at a time, and shows a result only while it is the newest one asked for.
+ */
+public class GeneratePreviewsTask implements Callable<BufferedImage[]> {
     private final ImageProcessing preProcessing;
     private final String filePath;
     private final int stretchFactor;
     private final int iterations;
     private final StretchAlgorithm algo;
 
-    public GeneratePreviewsTask(EventBus eventBus, ImageProcessing preProcessing, String filePath,
+    public GeneratePreviewsTask(ImageProcessing preProcessing, String filePath,
                                 int stretchFactor, int iterations, StretchAlgorithm algo) {
-        this.eventBus = eventBus;
         this.preProcessing = preProcessing;
         this.filePath = filePath;
         this.stretchFactor = stretchFactor;
@@ -42,30 +41,19 @@ public class GeneratePreviewsTask implements Runnable {
     public static final int MAX_PREVIEW_SIDE = 2400;
 
     @Override
-    public void run() {
-        try {
-            Fits fitsImage = new Fits(filePath);
+    public BufferedImage[] call() throws Exception {
+        try (Fits fitsImage = new Fits(filePath)) {
             Object kernelData = ImageProcessing.getImageHDU(fitsImage).getKernel();
 
             // The whole frame, reduced to display size; the stretch statistics then cover the whole frame too.
             Object previewData = reduce(kernelData, MAX_PREVIEW_SIDE);
-            BufferedImage orig;
-            BufferedImage stretched;
             if (previewData != null) {
                 int[] size = size(previewData);
-                orig = linearImage(previewData);
-                stretched = preProcessing.getStretchedImageFullSize(previewData, size[0], size[1], stretchFactor, iterations, algo);
-            } else {
-                orig = preProcessing.getImagePreview(kernelData);
-                stretched = preProcessing.getStretchedImagePreview(kernelData, stretchFactor, iterations, algo);
+                return new BufferedImage[]{linearImage(previewData),
+                        preProcessing.getStretchedImageFullSize(previewData, size[0], size[1], stretchFactor, iterations, algo)};
             }
-
-            fitsImage.close();
-
-            eventBus.post(new PreviewGenerationFinishedEvent(orig, stretched, true));
-        } catch (Exception e) {
-            ApplicationWindow.logger.log(Level.WARNING, "Preview generation failed", e);
-            eventBus.post(new PreviewGenerationFinishedEvent(null, null, false));
+            return new BufferedImage[]{preProcessing.getImagePreview(kernelData),
+                    preProcessing.getStretchedImagePreview(kernelData, stretchFactor, iterations, algo)};
         }
     }
 
