@@ -125,7 +125,25 @@ public class ReportExportConsistencyTest {
             assertEquals(motion, names.stream().anyMatch(n -> n.startsWith("common_motion_")));
             assertEquals(rescue, new File(export, "micro_drift_1_context.gif").isFile());
             assertEquals(motion, new File(export, "common_motion_1.gif").isFile());
+            // Common motion is folded under Likely Artifacts after the results; local rescue stays with the results.
+            int artifacts = html.indexOf("<details class='report-group' id='likely-artifacts'>");
+            assertEquals(motion, artifacts >= 0);
+            assertEquals(motion, html.contains("href='#likely-artifacts'"));
+            if (motion) {
+                assertTrue(html.indexOf("id='finding-cm1'") > artifacts);
+                assertTrue(hasColour(new File(export, "common_motion_1_trail.png")));
+            }
+            if (rescue && motion) assertTrue(html.indexOf("id='finding-lr1'") < artifacts);
         }
         assertEquals(original, new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(residual));
+    }
+
+    private static boolean hasColour(File png) throws IOException {
+        var image = javax.imageio.ImageIO.read(png);
+        for (int y = 0; y < image.getHeight(); y++) for (int x = 0; x < image.getWidth(); x++) {
+            int rgb = image.getRGB(x, y), r = (rgb >> 16) & 0xff, g = (rgb >> 8) & 0xff, b = rgb & 0xff;
+            if (r != g || g != b) return true;
+        }
+        return false;
     }
 }

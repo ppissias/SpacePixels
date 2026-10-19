@@ -1080,14 +1080,6 @@ public class DetectionReportGenerator {
         if ((inclusion.localRescue || inclusion.localActivity) && residual > 0) {
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("residual-review", "Local rescue", String.valueOf(residual), false));
         }
-        if (inclusion.commonMotion && commonMotionGroupCount > 0) {
-            items.add(new PipelineDiagnosticsSectionWriter.NavItem("common-motion", "Common motion",
-                    String.valueOf(commonMotionGroupCount), false));
-        }
-        if (!context.cameraFixedGroups.isEmpty()) {
-            items.add(new PipelineDiagnosticsSectionWriter.NavItem("camera-fixed", "Camera-fixed",
-                    String.valueOf(context.cameraFixedGroups.size()), false));
-        }
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("maps", "Maps", null, false));
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("inspector", "Unclassified", null, false));
         PipelineTelemetry.PhotometryTelemetry photometry = pipelineTelemetry != null ? pipelineTelemetry.photometryTelemetry : null;
@@ -1098,6 +1090,11 @@ public class DetectionReportGenerator {
                     notReady ? "not ready" : String.valueOf(candidates), notReady || candidates == 0));
         } else if (inclusion.variableStars) {
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("variables", "Variable stars", "off", true));
+        }
+        int likelyArtifacts = (inclusion.commonMotion ? commonMotionGroupCount : 0) + context.cameraFixedGroups.size();
+        if (likelyArtifacts > 0) {
+            items.add(new PipelineDiagnosticsSectionWriter.NavItem("likely-artifacts", "Likely artifacts",
+                    String.valueOf(likelyArtifacts), true));
         }
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("night-equipment", "Night & equipment", null, false));
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("diagnostics", "Diagnostics", null, true));
@@ -1368,7 +1365,8 @@ public class DetectionReportGenerator {
             ReportPresentation.controls(report, reportContext);
             report.println("</div>");
 
-            // Results first: overview, moving objects, slow movers, residual review, maps, inspector, variable stars.
+            // Results first: overview, moving objects, slow movers, residual review, maps, inspector, variable stars,
+            // then the likely artifacts, folded.
             FieldDepth fieldDepth = FieldDepth.measure(reportContext, pipelineTelemetry);
             NightEquipment nightEquipment = NightEquipment.measure(reportContext, pipelineTelemetry, masterStars);
             DebugOutput.printf(Locale.US, "Night & Equipment measured in %.1f s%n", nightEquipment.millis / 1000.0);
@@ -1385,15 +1383,9 @@ public class DetectionReportGenerator {
                 report.println("</section>");
             }
 
-            if (inclusion.localRescue || inclusion.localActivity || inclusion.commonMotion) {
+            if (inclusion.localRescue || inclusion.localActivity) {
                 report.println("<section id='residual-review'>");
-                ResidualReviewSectionWriter.writeSection(report, reportContext, commonMotionGroups);
-                report.println("</section>");
-            }
-
-            if (!reportContext.cameraFixedGroups.isEmpty()) {
-                report.println("<section id='camera-fixed-review'>");
-                ResidualReviewSectionWriter.writeCameraFixedSection(report, reportContext, reportContext.cameraFixedGroups);
+                ResidualReviewSectionWriter.writeSection(report, reportContext);
                 report.println("</section>");
             }
 
@@ -1412,6 +1404,8 @@ public class DetectionReportGenerator {
                 PhotometryReportSectionWriter.writeSection(report, reportContext, result.variableStarAnalysis);
                 report.println("</section>");
             }
+
+            ResidualReviewSectionWriter.writeLikelyArtifactsSection(report, reportContext, reportContext.cameraFixedGroups, commonMotionGroups);
 
             report.println("<section id='night-equipment'>");
             NightEquipmentSectionWriter.writeSection(report, nightEquipment, fieldDepth);

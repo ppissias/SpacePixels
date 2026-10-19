@@ -49,12 +49,6 @@ final class ReportData {
             var a = context.localActivityClusters.get(i);
             addPoints(output, context, "LC" + (i + 1), "Local activity", a.points);
         }
-        for (int i = 0; i < groups.size(); i++) {
-            addPoints(output, context, "CM" + (i + 1), "Common motion", groups.get(i).sources.stream().flatMap(List::stream).toList());
-        }
-        for (int i = 0; i < context.cameraFixedGroups.size(); i++) {
-            addPoints(output, context, "FC" + (i + 1), "Camera-fixed", context.cameraFixedGroups.get(i).points);
-        }
         List<StarLightCurve> candidates = new ArrayList<>();
         if (inclusion.variableStars && variables != null && variables.readiness != null && variables.readiness.allowsScoring()) {
             for (StarLightCurve star : variables.candidates) {
@@ -70,6 +64,13 @@ final class ReportData {
                             f.x, f.y, f.raDegrees, f.decDegrees, List.copyOf(frames), star.id, f.tier));
                 }
             }
+        }
+        // The likely artifacts come after the variable stars, in report order.
+        for (int i = 0; i < context.cameraFixedGroups.size(); i++) {
+            addPoints(output, context, "FC" + (i + 1), "Camera-fixed", context.cameraFixedGroups.get(i).points);
+        }
+        for (int i = 0; i < groups.size(); i++) {
+            addPoints(output, context, "CM" + (i + 1), "Common motion", groups.get(i).sources.stream().flatMap(List::stream).toList());
         }
         variableCandidates = List.copyOf(candidates);
         variablesByStar = new HashMap<>();

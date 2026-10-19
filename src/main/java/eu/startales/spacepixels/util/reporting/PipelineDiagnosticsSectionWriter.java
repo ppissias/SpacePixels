@@ -195,19 +195,19 @@ final class PipelineDiagnosticsSectionWriter {
         } else {
             addResult(cards, empty, summary.localActivityClusterCount, "Local activity clusters", "activity-clusters");
         }
-        if (!inclusion.commonMotion) {
-            empty.add("common-motion groups (left out of this report)");
-        } else if (reportContext.config != null && reportContext.config.enableCommonMotionRejection) {
-            addResult(cards, empty, commonMotionGroups, "Common-motion groups · likely noise", "common-motion");
-        } else {
-            empty.add("common motion (switched off)");
-        }
         if (!inclusion.cameraFixed) {
             empty.add("camera-fixed groups (left out of this report)");
         } else if (reportContext.config != null && reportContext.config.enableCameraFixedRejection) {
             addResult(cards, empty, reportContext.cameraFixedGroups.size(), "Camera-fixed groups · hot pixels or dust", "camera-fixed");
         } else {
             empty.add("camera-fixed sources (switched off)");
+        }
+        if (!inclusion.commonMotion) {
+            empty.add("common-motion groups (left out of this report)");
+        } else if (reportContext.config != null && reportContext.config.enableCommonMotionRejection) {
+            addResult(cards, empty, commonMotionGroups, "Common-motion groups · likely noise", "common-motion");
+        } else {
+            empty.add("common motion (switched off)");
         }
         PipelineTelemetry.PhotometryTelemetry photometry = pipelineTelemetry.photometryTelemetry;
         if (!inclusion.variableStars) {
@@ -280,7 +280,8 @@ final class PipelineDiagnosticsSectionWriter {
         if (reportContext.config.enableSlowMoverDetection) {
             report.println("<div class='astro-note'>Local rescue candidates are short motions found among the detections the tracker left over. "
                     + "Activity clusters only mark places where leftovers repeat; they do not collect every leftover. "
-                    + "Common-motion groups are listed on their own. Anything still left is in the unclassified inspector.</div>");
+                    + "Camera-fixed and common-motion groups are folded under Likely Artifacts near the end. "
+                    + "Anything still left is in the unclassified inspector.</div>");
         } else {
             report.println("<div class='astro-note'>Slow-mover analysis was switched off for this session.</div>");
         }

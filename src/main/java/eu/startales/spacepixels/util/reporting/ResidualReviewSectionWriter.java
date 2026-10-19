@@ -28,7 +28,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Writes the residual-review report sections for local rescue candidates and broader residual activity clusters.
+ * Writes the residual-review report sections for local rescue candidates and broader residual activity clusters,
+ * and the folded group of likely artifacts (camera-fixed and common-motion groups).
  */
 final class ResidualReviewSectionWriter {
 
@@ -53,10 +54,7 @@ final class ResidualReviewSectionWriter {
     private ResidualReviewSectionWriter() {
     }
 
-    static void writeSection(PrintWriter report,
-                             DetectionReportContext context,
-                             List<ResidualTransientAnalysis.CommonMotionGroup> commonMotionGroups) throws IOException {
-        writeCommonMotion(report, context, commonMotionGroups);
+    static void writeSection(PrintWriter report, DetectionReportContext context) throws IOException {
         if (!context.localRescueCandidates.isEmpty()) {
             short[][] background = context.masterStackData != null
                     ? context.masterStackData
@@ -86,10 +84,38 @@ final class ResidualReviewSectionWriter {
         }
     }
 
+    /**
+     * The groups the pipeline set aside as likely artifacts, folded near the end of the report: camera-fixed
+     * groups first (removed before tracking), then common-motion groups (removed from the tracker's leftovers).
+     */
+    static void writeLikelyArtifactsSection(PrintWriter report,
+                                            DetectionReportContext context,
+                                            List<CameraFixedRejector.Group> cameraFixedGroups,
+                                            List<ResidualTransientAnalysis.CommonMotionGroup> commonMotionGroups) throws IOException {
+        int cameraFixed = cameraFixedGroups == null ? 0 : cameraFixedGroups.size();
+        int commonMotion = commonMotionGroups == null ? 0 : commonMotionGroups.size();
+        if (cameraFixed + commonMotion == 0) {
+            return;
+        }
+        List<String> counts = new ArrayList<>();
+        if (cameraFixed > 0) {
+            counts.add(cameraFixed + " camera-fixed group" + (cameraFixed == 1 ? "" : "s") + " (hot pixels or dust)");
+        }
+        if (commonMotion > 0) {
+            counts.add(commonMotion + " common-motion group" + (commonMotion == 1 ? "" : "s") + " (likely noise)");
+        }
+        report.println("<details class='report-group' id='likely-artifacts'>");
+        report.println("<summary>Likely Artifacts<span class='summary-note'>" + String.join(" and ", counts)
+                + ". The pipeline set them aside; open this to check them by eye.</span></summary>");
+        writeCameraFixedSection(report, context, cameraFixedGroups);
+        writeCommonMotion(report, context, commonMotionGroups);
+        report.println("</details>");
+    }
+
     /** The detections set aside before tracking because they stay at one camera position (hot pixels, dust). */
-    static void writeCameraFixedSection(PrintWriter report,
-                                        DetectionReportContext context,
-                                        List<CameraFixedRejector.Group> groups) throws IOException {
+    private static void writeCameraFixedSection(PrintWriter report,
+                                                DetectionReportContext context,
+                                                List<CameraFixedRejector.Group> groups) throws IOException {
         if (groups == null || groups.isEmpty()) {
             return;
         }
@@ -303,7 +329,9 @@ final class ResidualReviewSectionWriter {
                 g2d.setColor(timeColor);
                 g2d.fillOval(localX - 3, localY - 3, 6, 6);
             }
-            labelPanel(g2d, Integer.toString(index), color);
+            if (sources.size() > 1) {
+                labelPanel(g2d, Integer.toString(index), color);
+            }
             g2d.dispose();
             panels.add(panel);
             index++;
@@ -355,7 +383,9 @@ final class ResidualReviewSectionWriter {
                     g2d.setStroke(new BasicStroke(2f));
                     g2d.drawOval(localX - 5, localY - 5, 10, 10);
                 }
-                labelPanel(g2d, Integer.toString(index), color);
+                if (sources.size() > 1) {
+                    labelPanel(g2d, Integer.toString(index), color);
+                }
                 if (first) {
                     g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
                     g2d.setColor(new Color(255, 255, 255, 230));
@@ -436,9 +466,15 @@ final class ResidualReviewSectionWriter {
         g2d.fillOval(x1 - 2, y1 - 2, 4, 4);
     }
 
+    /** A colour copy of the stretched crop: drawing on the grayscale display image would turn every marker gray. */
     private static BufferedImage croppedDisplay(short[][] image, int cx, int cy, ExportVisualizationSettings settings) {
         short[][] crop = TrackVisualizationRenderer.robustEdgeAwareCrop(image, cx, cy, COMMON_MOTION_PANEL, COMMON_MOTION_PANEL);
-        return TrackVisualizationRenderer.createDisplayImage(crop, settings);
+        BufferedImage gray = TrackVisualizationRenderer.createDisplayImage(crop, settings);
+        BufferedImage panel = new BufferedImage(gray.getWidth(), gray.getHeight(), BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = panel.createGraphics();
+        g2d.drawImage(gray, 0, 0, null);
+        g2d.dispose();
+        return panel;
     }
 
     private static BufferedImage stitch(List<BufferedImage> panels) {
