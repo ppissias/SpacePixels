@@ -188,6 +188,8 @@ The toolbar provides **Previous finding**, **Next finding**, a finding selector,
 
 ![Detection stage timings](docs/images/manual/report-diagnostics.png)
 
+Hot pixels, warm pixels and dust that the calibration left stay at one place on the camera, while registration moves them with the dither and the drift; in the registered frames they look like faint movers, repeats at one spot or common motion. Before tracking, SpacePixels sets aside detections that stay at one camera position in at least three frames while the frames moved, and shows them in the **Camera-Fixed Groups** section of the report (IDs FC1, FC2 and so on), so they become no tracks, anomalies or rescue candidates. How each frame moved is measured from its registration fill, so frames without fill are not checked. The switch is **Reject Camera-Fixed Sources** on the Track Linking page (on by default).
+
 Common-motion filtering runs after the main tracks, streaks and anomalies, before local rescue and activity clustering. It sets aside separated compact sources with matching displacement and keeps their observations available in the Common Motion report section. Ambiguous associations are kept for further review. **Reject Common Motion** has its own switch; turning off **Enable Residual Transient Analysis** skips local rescue and activity clustering but does not turn off common-motion filtering.
 
 In Variable Stars, **Frames excluded: spatial residuals** counts frames omitted from photometry because a region of the field retains a brightness offset relative to the centre after ensemble correction. The count appears in the session summary when nonzero and in the detailed readiness diagnostics. Per-frame reasons remain in the table and CSV. These photometry exclusions do not remove frames from moving-object detection.
@@ -468,7 +470,7 @@ The **Detection Settings** tab has a list of pages on the left, a search box at 
 
 - **Overview**: Auto-Tune, the most important settings (detection, star mask and star jitter) and the analyses of a run: slow movers, anomaly rescue, residual analysis and variable stars, each with a switch and a link to its settings.
 - **Detection**: how objects are found in each frame (Streak Detection) and which frames are used (Quality Control, with a **Strictness** choice of Lenient, Normal or Strict for leaving out frames that differ from the rest of the session).
-- **Moving objects**: how detections are linked into tracks (Track Linking) and the extra searches (Anomaly Detection, Slow Movers, Residual Analysis).
+- **Moving objects**: how detections are linked into tracks (Track Linking, with **Reject Camera-Fixed Sources** for hot pixels and dust) and the extra searches (Anomaly Detection, Slow Movers, Residual Analysis).
 - **Variable stars**: the photometry settings.
 - **Report**: how images in the report are stretched and animated.
 
