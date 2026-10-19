@@ -1,6 +1,9 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.ReportInclusion;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.core.CameraFixedRejector;
+import io.github.ppissias.jtransient.core.FrameRegistration;
 import io.github.ppissias.jtransient.core.PixelEncoding;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
 import io.github.ppissias.jtransient.core.SourceExtractor;
@@ -120,6 +123,75 @@ public class UnclassifiedTransientSectionWriterTest {
         assertTrue(html.toString().contains("new Path2D"));
         assertTrue(html.toString().contains("&lt;script&gt;alert(1)&lt;/script&gt;.fits"));
         assertFalse(html.toString().contains("<script>alert(1)</script>.fits"));
+    }
+
+    @Test
+    public void groupsLeftOutOfTheReportStayOffTheMapAndAreCounted() throws Exception {
+        SourceExtractor.DetectedObject trackPoint = detection(5, 5, 0);
+        SourceExtractor.DetectedObject commonMotion = detection(10, 30, 1);
+        SourceExtractor.DetectedObject rescued = detection(30, 10, 1);
+        SourceExtractor.DetectedObject left = detection(30, 30, 2);
+        // A hot pixel at camera x 10 that the dither moves by 5 px per frame.
+        List<List<SourceExtractor.DetectedObject>> hotPixel = Arrays.asList(
+                new java.util.ArrayList<>(Collections.singletonList(detection(10, 20, 0))),
+                new java.util.ArrayList<>(Collections.singletonList(detection(15, 20, 1))),
+                new java.util.ArrayList<>(Collections.singletonList(detection(20, 20, 2))));
+        java.util.Map<Integer, FrameRegistration> registrations = new java.util.HashMap<>();
+        for (int frame = 0; frame < 3; frame++) {
+            registrations.put(frame, FrameRegistration.of(frame, 5.0 * frame, 0, 0));
+        }
+        List<CameraFixedRejector.Group> cameraFixed = CameraFixedRejector.reject(hotPixel, registrations);
+        assertEquals(1, cameraFixed.size());
+        ResidualTransientAnalysis residual = new ResidualTransientAnalysis(
+                Collections.singletonList(new ResidualTransientAnalysis.LocalRescueCandidate(
+                        ResidualTransientAnalysis.LocalRescueKind.MICRO_DRIFT, Collections.singletonList(rescued), null, 1.0)),
+                Collections.emptyList(),
+                Collections.singletonList(new ResidualTransientAnalysis.CommonMotionGroup(
+                        Collections.singletonList(Collections.singletonList(commonMotion)), 1)));
+        // The engine already took the camera-fixed points out of every list and the common-motion point out of the
+        // unclassified list.
+        List<List<SourceExtractor.DetectedObject>> allTransients = Arrays.asList(
+                Collections.singletonList(trackPoint), Arrays.asList(commonMotion, rescued), Collections.singletonList(left));
+        List<List<SourceExtractor.DetectedObject>> unclassified = Arrays.asList(
+                Collections.emptyList(), Collections.singletonList(rescued), Collections.singletonList(left));
+        ReportInclusion leftOut = new ReportInclusion(true, true, false, true, false, false, true);
+
+        String html = inspectorHtml(allTransients, unclassified, residual, cameraFixed, leftOut);
+
+        assertEquals(1, html.split("<circle class='unclassified-marker'", -1).length - 1);
+        assertTrue(html.contains("data-x='30.00' data-y='30.00'"));
+        assertTrue(html.contains("<strong>7</strong> Post-veto detections"));
+        assertTrue(html.contains("<strong>1</strong> Tracks, streaks and anomalies"));
+        assertTrue(html.contains("<strong>1</strong> Common motion, not in this report"));
+        assertTrue(html.contains("<strong>3</strong> Camera-fixed, not in this report"));
+        assertTrue(html.contains("<strong>1</strong> Local rescue points, not in this report"));
+        assertTrue(html.contains("<strong>1</strong> Still unclassified"));
+        assertTrue(html.contains("Groups left out of this report are counted here but not shown."));
+
+        String included = inspectorHtml(allTransients, unclassified, residual, cameraFixed, ReportInclusion.all());
+
+        assertEquals(1, included.split("<circle class='unclassified-marker'", -1).length - 1);
+        assertTrue(included.contains("<strong>3</strong> Camera-fixed</div>"));
+        assertFalse(included.contains("not in this report"));
+        assertFalse(included.contains("Groups left out"));
+    }
+
+    private String inspectorHtml(List<List<SourceExtractor.DetectedObject>> allTransients,
+                                 List<List<SourceExtractor.DetectedObject>> unclassified,
+                                 ResidualTransientAnalysis residual,
+                                 List<CameraFixedRejector.Group> cameraFixed,
+                                 ReportInclusion inclusion) throws Exception {
+        short[][] medianStack = new short[40][40];
+        DetectionReportContext context = new DetectionReportContext(
+                new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, false, 12, 1.0f),
+                temporaryFolder.newFolder(), Collections.emptyList(), null, new DetectionConfig(), null, medianStack,
+                null, null, null, null, Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
+                Collections.emptyList());
+        StringWriter html = new StringWriter();
+        UnclassifiedTransientSectionWriter.writeSection(new PrintWriter(html), context, allTransients, unclassified,
+                Collections.emptySet(), residual, cameraFixed, inclusion);
+        return html.toString();
     }
 
     @Test

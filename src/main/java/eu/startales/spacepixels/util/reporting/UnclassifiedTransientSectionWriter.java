@@ -1,5 +1,7 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.ReportInclusion;
+import io.github.ppissias.jtransient.core.CameraFixedRejector;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
@@ -84,39 +86,55 @@ final class UnclassifiedTransientSectionWriter {
                              DetectionReportContext context,
                              List<List<SourceExtractor.DetectedObject>> allTransients,
                              List<List<SourceExtractor.DetectedObject>> unclassifiedTransients) throws IOException {
-        writeSection(report, context, allTransients, unclassifiedTransients, Collections.emptySet(), null);
+        writeSection(report, context, allTransients, unclassifiedTransients, Collections.emptySet(),
+                new ResidualTransientAnalysis(context.localRescueCandidates, context.localActivityClusters),
+                context.cameraFixedGroups, ReportInclusion.all());
     }
 
     /**
      * Writes the inspector. {@code rejectedFrames} are left out of the cutout animations, as they were left out of
      * the detection.
+     *
+     * <p>{@code residual} and {@code cameraFixedGroups} are the engine's full results. Their detections stay off the
+     * map whether or not this report shows their groups; groups that {@code inclusion} leaves out are only counted.</p>
      */
     static void writeSection(PrintWriter report,
                              DetectionReportContext context,
                              List<List<SourceExtractor.DetectedObject>> allTransients,
                              List<List<SourceExtractor.DetectedObject>> unclassifiedTransients,
                              Set<Integer> rejectedFrames,
-                             List<ResidualTransientAnalysis.CommonMotionGroup> commonMotionGroups) throws IOException {
+                             ResidualTransientAnalysis residual,
+                             List<CameraFixedRejector.Group> cameraFixedGroups,
+                             ReportInclusion inclusion) throws IOException {
         List<List<SourceExtractor.DetectedObject>> remaining = selectRemaining(
-                unclassifiedTransients, context.localRescueCandidates);
-        int totalCount = countDistinct(allTransients);
+                unclassifiedTransients, residual.localRescueCandidates);
+        // Camera-fixed detections left before tracking, so they are not in allTransients.
+        int cameraFixedCount = countCameraFixed(cameraFixedGroups);
+        int totalCount = countDistinct(allTransients) + cameraFixedCount;
         int beforeRescueCount = countDistinct(unclassifiedTransients);
         int remainingCount = countDistinct(remaining);
-        int classifiedCount = Math.max(0, totalCount - beforeRescueCount);
+        int commonMotionCount = countRemovedCommonMotion(unclassifiedTransients, residual.commonMotionGroups);
         int rescueCount = Math.max(0, beforeRescueCount - remainingCount);
+        int tracksAndAnomalies = Math.max(0, totalCount - cameraFixedCount - beforeRescueCount - commonMotionCount);
+        boolean groupsLeftOut = (!inclusion.commonMotion && commonMotionCount > 0)
+                || (!inclusion.cameraFixed && cameraFixedCount > 0)
+                || (!inclusion.localRescue && rescueCount > 0);
 
         report.println("<div class='panel' id='unclassified-transient-inspector'>");
         report.println("<h2>Unclassified Transient Inspector</h2>");
-        int commonMotionCount = countRemovedCommonMotion(unclassifiedTransients, commonMotionGroups);
-        int tracksAndAnomalies = Math.max(0, classifiedCount - commonMotionCount);
-        report.println("<p class='astro-note'>Detections left after accepted tracks, streak parts, standalone anomalies, common-motion groups and local rescue candidates. Local activity clusters remain here because they group detections for review without classifying them. The background uses the median stack when available; colors run from blue for early frames to red for late frames.</p>");
+        report.println("<p class='astro-note'>Detections left after accepted tracks, streak parts, standalone anomalies, common-motion groups, camera-fixed groups (hot pixels, dust) and local rescue candidates."
+                + (groupsLeftOut ? " Groups left out of this report are counted here but not shown." : "")
+                + " Local activity clusters remain here because they group detections for review without classifying them. The background uses the median stack when available; colors run from blue for early frames to red for late frames.</p>");
         report.println("<div class='map-legend'>");
         report.println(metric("Post-veto detections", totalCount));
         report.println(metric("Tracks, streaks and anomalies", tracksAndAnomalies));
         if (commonMotionCount > 0) {
-            report.println(metric("Common motion", commonMotionCount));
+            report.println(metric(groupLabel("Common motion", inclusion.commonMotion), commonMotionCount));
         }
-        report.println(metric("Local rescue points", rescueCount));
+        if (cameraFixedCount > 0) {
+            report.println(metric(groupLabel("Camera-fixed", inclusion.cameraFixed), cameraFixedCount));
+        }
+        report.println(metric(groupLabel("Local rescue points", inclusion.localRescue), rescueCount));
         report.println(metric("Still unclassified", remainingCount));
         report.println("</div>");
 
@@ -246,6 +264,23 @@ final class UnclassifiedTransientSectionWriter {
             }
         }
         return removed;
+    }
+
+    private static int countCameraFixed(List<CameraFixedRejector.Group> groups) {
+        if (groups == null) {
+            return 0;
+        }
+        Set<SourceExtractor.DetectedObject> points = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (CameraFixedRejector.Group group : groups) {
+            if (group != null && group.points != null) {
+                points.addAll(group.points);
+            }
+        }
+        return points.size();
+    }
+
+    private static String groupLabel(String label, boolean inReport) {
+        return inReport ? label : label + ", not in this report";
     }
 
     private static String metric(String label, int count) {

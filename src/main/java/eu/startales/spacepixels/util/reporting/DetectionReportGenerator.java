@@ -1404,7 +1404,7 @@ public class DetectionReportGenerator {
             report.println("<section id='inspector'>");
             UnclassifiedTransientSectionWriter.writeSection(report, reportContext, allTransients, unclassifiedTransients,
                     UnclassifiedTransientSectionWriter.rejectedFrameIndices(pipelineTelemetry),
-                    commonMotionGroups);
+                    residualTransientAnalysis, result.cameraFixedGroups, inclusion);
             report.println("</section>");
 
             if (inclusion.variableStars) {
