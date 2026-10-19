@@ -47,7 +47,7 @@ This was a source and architecture review, with primary documentation checked fo
 | D02 | High | Proposed | Job ownership and resource admission | A command acquires its job slot before the worker starts; only that job can finish it. |
 | D03 | High | Proposed | Preview results belong to a request | A previous frame or stretch cannot overwrite the current preview. |
 | D04 | High | Proposed | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
-| D05 | High | Proposed | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
+| D05 | High | Implemented | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
 | D06 | Medium | Proposed | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
 | D07 | Medium | Proposed | Shared actions and derived availability | Button, shortcut and context menu execute the same command under the same conditions. |
 | D08 | Medium | Proposed | Keep slow work off the EDT | Accepting a WCS write does not perform the file rewrite on the UI thread. |
@@ -119,6 +119,23 @@ A Cancel control should request cancellation, show a stopping state and retain r
 **Acceptance.** Fail each ordinary stage, decline export, request cancellation, and close a viewer while it prepares data. Verify one terminal outcome, resource release and a correct command state. Test fatal-policy routing through an injected policy rather than exhausting real memory. Keep a “Details / Copy error” path for diagnostics and a persistent result link after success.
 
 ### D05. Build a validated settings snapshot instead of reading a mutable panel
+
+**Implemented (2026-10-19), in the settings tab.**
+- **One step for saves and runs.** `DetectionConfigurationPanel.checkedSettings(...)` is behind Save, Detect Moving Targets, Detect Iteratively, Manual Transient Inspection, Preview Frame, Auto-Tune and Test Star Mask. It returns a copy of the session `DetectionConfig`, hidden settings included, so later edits cannot change a run. `getJTransientConfig` is gone.
+- **Invalid text is visible and stops saves and runs.**
+  - `CheckedNumberEditor` takes only text that is one complete number within the setting's range. Before, "4,5" was read as 4, and "4.5" in a whole-number field as 4.
+  - Other text stays when the field loses focus; before, it silently went back to the previous value. The field is outlined in red, and the footer says what to enter.
+  - A refused save or run names itself, brings the tab forward and puts the cursor into the field. A setting hidden by a filter or by the expert switch is found with a search for its title.
+  - A setting whose feature is switched off does not count.
+- **Pairs in one place.** `config.DetectionSettingsRules` defines the six ordered pairs and the check for finite numbers. The tab moves the same setting as before when an edit crosses a pair, now only in `applySettingsToMemory` (the spinner listeners are gone), and says so in the footer, for example "Grow Sigma lowered to 4.0 (cannot be above Detection Sigma)".
+- **Tests:** `DetectionSettingsRulesTest` and `CheckedNumberEditorTest`.
+- **Window harness**, on a copy of the maintainer's profile. Its 43 checks cover refused saves and runs, focus, filters and expert settings, Revert, a NaN in a hidden setting, and a run's copy against later edits. Compared with the previous code:
+  - the settings a run receives were byte-identical;
+  - all 75 number fields were identical in value, type and text.
+- **Not done:** profile loading and the API do not apply `DetectionSettingsRules` yet; they stay unchanged for now. Save keeps its name.
+- **Found, not changed:** typing a value with more decimals than the field shows keeps the rounded value; for example, 4.25 typed where the field shows 4.0 becomes 4.2. The field first shows the new value with its old number of decimals, and the auto-apply commits that text. This predates D05; the fix is to be discussed.
+
+The original review follows.
 
 **Evidence.** [DetectionConfigurationPanel.commitSpinners](src/main/java/eu/startales/spacepixels/gui/DetectionConfigurationPanel.java) catches and ignores `commitEdit` failures. `applySettingsToMemory` changes the live config field by field and logs a broad exception. `getJTransientConfig` returns that same mutable object. Detection and Auto-Tune tasks retain that reference at construction, whereas manual inspection clones it. Standard detection does clone the effective config later; this is useful, but happens after loading, rather than defining one uniform click-time boundary.
 

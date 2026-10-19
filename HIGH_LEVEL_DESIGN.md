@@ -87,6 +87,7 @@ Owns:
 - `SpacePixelsVisualizationPreferences`
 - `SpacePixelsVisualizationPreferencesIO`
 - `SpacePixelsSettingsFiles` (Save on the detection settings tab)
+- `DetectionSettingsRules` (finite numbers and the ordered pairs of settings; checked by the detection settings tab, not yet by profile loading or the API)
 
 The detection profile wraps JTransient `DetectionConfig` plus SpacePixels' Auto-Tune candidate-frame limit. Visualization preferences are intentionally separate because they do not affect detection results.
 
@@ -109,6 +110,7 @@ Main classes:
 - `DetectionConfigurationPanel`
 - `AutoTuneOverviewPanel`
 - `SettingsNavigator`, `SettingRow`
+- `CheckedNumberEditor` (the editor of every number setting: only text that is one complete number within the setting's range becomes its value; other text stays in the field, outlined)
 - `WrapLayout`
 - `WindowPlacement`
 - `StarMaskExplorerFrame`
@@ -280,11 +282,16 @@ Owns:
 - detection preview action through `TuningPreviewManager`
 - Auto-Tune launch through `AutoTuneTask`
 - applying every edit to the session right away, the unsaved-changes indicator, and Revert to the last saved state
+- keeping the pairs of `DetectionSettingsRules` in order while applying an edit, and saying in the footer which setting it moved
+- `checkedSettings(...)`, the one step behind Save and every run: Detect Moving Targets, Detect Iteratively, Manual Transient Inspection, Preview Frame, Auto-Tune and Test Star Mask
+
+`checkedSettings` returns a copy of the session `DetectionConfig` (hidden settings included), so editing the tab while a run works cannot change that run. It returns null instead, and nothing starts, while a field holds invalid text or the settings break a rule (for example a hidden setting loaded as NaN). The tab then comes forward, the footer names the action that did not start and what to enter, and the cursor goes into the field; `SettingsNavigator.reveal` shows a setting hidden by the filters or the expert switch with a search for its title. A setting whose feature is switched off is hidden and unused, so its text does not stop a run.
 
 Design notes:
 
 - detection fields and visualization fields are intentionally stored in separate JSON files even though the same panel edits both.
 - the settings spinners stay owned by `DetectionConfigurationPanel`; `AutoTuneOverviewPanel` only lays out the core ones and talks back through a small `Host` interface.
+- the visualization settings are still static runtime values, applied with each edit and read when the report is written; they are not part of the run's copy.
 
 ### `AutoTuneOverviewPanel`
 
@@ -751,6 +758,7 @@ JTransient:
 - Keep detection config and visualization preferences separate.
 - Keep GUI-only prompting out of headless/API paths.
 - Replace files through `StagedFile`; never delete a user's file before its replacement is complete.
+- Start every GUI run and save from `DetectionConfigurationPanel.checkedSettings(...)`; never hand a task the panel's live `DetectionConfig`.
 - Do not add concurrent Auto-Tune API execution without removing the shared JTransient sample-size mutation.
 
 ## 10. Current Design Debt and Refactor Boundaries
