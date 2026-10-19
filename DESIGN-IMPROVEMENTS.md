@@ -381,6 +381,8 @@ The first implementation should be a small, reviewable correction with a measura
 | F04 | Proposed; explore design | An MCP server for AI agents: run the existing pipeline on a folder with a profile/settings, retrieve results and access the report, then explore single-frame extraction and session-aware transient inspection. See [MCP agent services](#mcp-agent-services-f04). |
 | F05 | Deferred | Image Stretch preview sampling remains reduced to at most 2400 px on its long side; Show full size provides full-resolution inspection. If revisited, compare averaging or full-resolution rendering for small-star visibility and memory cost. This is separate from D03 request ordering. |
 | F06 | Proposed; Windows first | Explore native platform installers, starting with a native Windows installer. Decide packaging, Java runtime distribution, installation/update behavior and release validation before implementation. See [native platform installers](#native-platform-installers-f06). |
+| F07 | Proposed | Prepare compressed 32-bit FITS (`.fz`) directly as uncompressed unsigned 16-bit FITS in one import operation, avoiding an intermediate uncompressed 32-bit directory and a second conversion/import step. See [combined FITS preparation](#combined-fits-preparation-f07). |
+| F08 | Proposed | Improve the variable-candidate field image: prefer matched/catalogue star names and show compact, transparent light-curve overlays containing only the curve and delta magnitude, without axes or axis labels. See [variable-star field image](#variable-star-field-image-f08). |
 
 Results summaries/run history and stage-aware progress are covered by D11 and D04. Their detailed information should live there rather than become competing feature entries. The old drift-grown void-band concern is Dropped: those settings and the old border mechanism were replaced by session data areas.
 
@@ -404,6 +406,27 @@ Explore a native installer for SpacePixels, starting on Windows. The goal is a n
 Decide the Windows package format (for example, EXE or MSI), whether to bundle a Java runtime, installation scope/location, shortcuts, signing and how new releases update an existing installation. Keep user settings and datasets separate from application files so upgrades preserve them and uninstall behavior is explicit. Consider how the desktop application, CLI and a future MCP server would be distributed or selected during installation; this does not require delivering all three in the first installer.
 
 Compare packaging options against the existing Gradle distribution and publishing workflow before selecting tooling. Validate a proposed installer on a clean Windows environment: install, launch, run a small analysis and open its report, upgrade from a previous version, and uninstall while preserving saved profiles and observing data. These are exploration criteria, not a claim that a native installer or bundled runtime already exists.
+
+### Combined FITS preparation (F07)
+
+When a compressed FITS sequence contains 32-bit images, importing it should offer one preparation operation that decompresses and converts directly to uncompressed unsigned 16-bit output, then loads that output. The current GUI compression gate in `ImageProcessing.getFitsfileInformation()` first calls `batchDecompress` and redirects import to an `_uncompressed` directory; the later format gate can then require another conversion and import. This creates an unnecessary intermediate 32-bit sequence and repeated user steps.
+
+Inspect the image HDU's actual sample format during preparation and normalize its decompressed pixels before writing the final files. Reuse the existing conversion rules and the headless `DetectionInputPreparation` path, which already reads the image HDU and writes normalized 16-bit output. Connect this with the shared GUI/API preparation work in D08 rather than adding another independent conversion policy.
+
+Preserve sequence validation before conversion, header/WCS and timing metadata, the sequence-wide negative-value offset or clipping choice, zero registration padding, and `SPOFFSET`. Keep the existing mono/color output behavior and original compressed files. Already-ready compressed unsigned 16-bit data should only need decompression, with no unnecessary rescaling. The headless refusal mode must continue to reject inputs requiring preparation.
+
+Acceptance: import representative compressed 32-bit integer and floating-point sequences, including negative pixels, through one preparation flow; load the final detection-ready directory without creating an intermediate uncompressed 32-bit sequence. Compare output pixels and relevant headers with the existing decompression-then-conversion path, check compressed 16-bit controls and color handling, and verify that GUI and API preparation apply the same rules. Detection results should match for equivalent prepared pixels and settings.
+
+### Variable-star field image (F08)
+
+Improve the overall **Variable candidates across the field** image and its full-size version, generated by `VariableStarMapWriter`:
+
+- Label a candidate with its actual star name from an available match or catalogue entry. Use the V identifier as the display fallback when no unambiguous name exists, and retain stable candidate IDs for report links and data associations.
+- Simplify the small light curves beside the stars: show the curve and a compact delta-magnitude annotation, with no axes, tick labels, grid or axis names. Use the existing definition of observed variation for the delta-magnitude summary, with the unit shown as mag.
+- Use transparent or lightly translucent backgrounds and compact placement so the overlays reveal the sky beneath them and obscure as few nearby objects as possible. Keep the star name, curve and delta magnitude readable on both bright and dark sky backgrounds.
+- Preserve brighter-up orientation, the current usable-measurement selection and gaps for flagged/missing observations. This is a presentation change; it must not change photometry, candidate confidence or matching decisions.
+
+Acceptance: compare matched and unnamed candidates, long names and crowded fields in both embedded and full-size images. Verify that names refer to the correct candidates, curves and delta magnitudes agree with the existing measurements, and the image remains readable offline while showing substantially more of the underlying sky.
 
 ## Refactor scope retained from the earlier plan
 
