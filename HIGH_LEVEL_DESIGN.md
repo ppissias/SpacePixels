@@ -199,7 +199,7 @@ Supporting groups:
   - `PipelineDiagnosticsSectionWriter`
   - `TargetVisualizationSectionWriter`
   - `DeepStackReportSectionWriter`
-  - `ResidualReviewSectionWriter`
+  - `ResidualReviewSectionWriter` (local rescue and activity clusters with the results; camera-fixed and common-motion groups in the collapsed Likely Artifacts group)
   - `GlobalMapsSectionWriter`
   - `PhotometryReportSectionWriter` (variable-star photometry: readiness, noise model, per-frame diagnostics, candidate light curves, CSV exports, VSX lookup buttons)
   - `CatalogueComparisonWriter` and the embedded `catalogue-comparison.js` (read-only catalogue comparison notes for saved/live matches, separate from detection confidence; see [catalogue comparison technical note](docs/features/catalogue-comparison.md))
@@ -404,7 +404,7 @@ Responsibilities:
 
 `ReportData` describes report presentation; it never changes the JTransient result. `DetectionReportContext` loads its catalogue once per export. `ExportVisualizationSettings` applies throughout image rendering. Long moving/streak GIFs stream images one at a time. Motion/lookup calculations use exposure midpoint times, while observing-span duration remains a separate metric. Detection-quality rejections are shared by all inspection animations.
 
-The HTML starts Diagnostics collapsed, links maps to object cards, separates measured variable candidates from catalogue layers, and exposes navigation, filters and animation controls. Photometry exports append report labels and sky/catalogue identification columns. Lookup responses are validated before normalization; only successful responses are cached, refresh bypasses saved results, and save failures remain visible.
+The HTML places the results first. After the variable stars, a collapsed Likely Artifacts group holds the camera-fixed groups and then the common-motion groups, in pipeline order; local rescue candidates stay with the results. Diagnostics also starts collapsed, and links into a collapsed group open it. The HTML links maps to object cards, separates measured variable candidates from catalogue layers, and exposes navigation, filters and animation controls. Photometry exports append report labels and sky/catalogue identification columns. Lookup responses are validated before normalization; only successful responses are cached, refresh bypasses saved results, and save failures remain visible.
 
 Consumes:
 

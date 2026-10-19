@@ -153,7 +153,7 @@ If a run finds a very large number of objects, a summary first lists them by kin
 
 ## 4. Reading the report
 
-The report starts with an overview, then the results. **Diagnostics** comes near the end and starts collapsed; click its heading to open it. The sections follow the kinds of results:
+The report starts with an overview, then the results. **Likely Artifacts** and **Diagnostics** come near the end and start collapsed; click a heading to open it. The sections follow the kinds of results:
 
 | Result | What it is | Typical objects |
 |---|---|---|
@@ -163,6 +163,7 @@ The report starts with an overview, then the results. **Diagnostics** comes near
 | **Slow-mover candidates** (DS#) | an elongated shape in the stack of all frames | very slow asteroids and comets |
 | **Local rescue candidates** (LR#) and **activity clusters** (LC#) | faint detections that line up or cluster | very faint movers, to be checked by eye |
 | **Variable stars** | stars whose brightness changes | variable stars (optional analysis) |
+| **Likely artifacts**: camera-fixed groups (FC#) and common-motion groups (CM#) | detections the pipeline set aside; collapsed near the end of the report | hot pixels, dust, registration residuals |
 
 ### Overview
 
@@ -190,9 +191,9 @@ The toolbar provides **Previous finding**, **Next finding**, a finding selector,
 
 ![Detection stage timings](docs/images/manual/report-diagnostics.png)
 
-Hot pixels, warm pixels and dust that the calibration left stay at one place on the camera, while registration moves them with the dither and the drift; in the registered frames they look like faint movers, repeats at one spot or common motion. Before tracking, SpacePixels sets aside detections that stay at one camera position in at least three frames while the frames moved, and shows them in the **Camera-Fixed Groups** section of the report (IDs FC1, FC2 and so on), so they become no tracks, anomalies or rescue candidates. How each frame moved is measured from its registration fill, so frames without fill are not checked. The switch is **Reject Camera-Fixed Sources** on the Track Linking page (on by default).
+Hot pixels, warm pixels and dust that the calibration left stay at one place on the camera, while registration moves them with the dither and the drift; in the registered frames they look like faint movers, repeats at one spot or common motion. Before tracking, SpacePixels sets aside detections that stay at one camera position in at least three frames while the frames moved, and shows them under **Camera-Fixed Groups** in the collapsed **Likely Artifacts** group near the end of the report (IDs FC1, FC2 and so on), so they become no tracks, anomalies or rescue candidates. How each frame moved is measured from its registration fill, so frames without fill are not checked. The switch is **Reject Camera-Fixed Sources** on the Track Linking page (on by default).
 
-Common-motion filtering runs after the main tracks, streaks and anomalies, before local rescue and activity clustering. It sets aside separated compact sources with matching displacement and keeps their observations available in the Common Motion report section. Ambiguous associations are kept for further review. **Reject Common Motion** has its own switch; turning off **Enable Residual Transient Analysis** skips local rescue and activity clustering but does not turn off common-motion filtering.
+Common-motion filtering runs after the main tracks, streaks and anomalies, before local rescue and activity clustering. It sets aside separated compact sources with matching displacement and keeps their observations available under **Common Motion** in **Likely Artifacts**, after the camera-fixed groups. Ambiguous associations are kept for further review. **Reject Common Motion** has its own switch; turning off **Enable Residual Transient Analysis** skips local rescue and activity clustering but does not turn off common-motion filtering.
 
 In Variable Stars, **Frames excluded: spatial residuals** counts frames omitted from photometry because a region of the field retains a brightness offset relative to the centre after ensemble correction. The count appears in the session summary when nonzero and in the detailed readiness diagnostics. Per-frame reasons remain in the table and CSV. These photometry exclusions do not remove frames from moving-object detection.
 
