@@ -617,6 +617,8 @@ Report categories are driven by JTransient result data:
 
 Same-frame groups of rescued anomalies are offered to confirmed-streak consolidation; an unmerged group remains separate anomalies. There is no suspected-streak result category.
 
+`AnomalySectionWriter` presents these as unconfirmed single-frame events: exposure timing and coordinates, plain-language detection reasons, a static before/event/after comparison and a shareable GIF. Both views use the same event-derived display stretch and nearest kept neighbours; labels sit outside the sky crops. Raw measurements, footprints and mask overlap are collapsed under Detection details. Anomaly SatChecker queries use the event position and the whole exposure, with metadata fallback from the FITS frame; they do not use the shortened streak-query window. They reuse the report's live lookup and cache/sidecar flow and present satellite results as possible associations without changing detection classifications.
+
 Camera-fixed filtering (`enableCameraFixedRejection`) uses registrations inferred from fill edges. At least three frames must map detections within 2 px of the same camera position while their registered-frame positions spread at least 4 px. Unusable registrations are excluded. `ReportInclusion.cameraFixed` controls presentation, independently of the engine filter.
 
 Common-motion filtering has its own switch and runs before local rescue and activity clustering. It assigns each observation once, preserves ambiguous associations for review, and removes accepted groups from the residual input while retaining them in the report. The residual-analysis switch controls only local rescue and clustering.

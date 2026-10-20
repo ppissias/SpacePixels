@@ -217,6 +217,16 @@ Track duration covers the observing span from the start of the first exposure to
 
 On plate-solved crops, hovering shows a small red N/E marker for north and east. The field of view and centre coordinates remain available in the image's tooltip.
 
+### A single-frame anomaly
+
+**Anomaly A1**, A2 and so on are single-frame event candidates whose cause is unconfirmed. Each card gives the frame, UTC exposure start and end, exposure length and position (including RA/Dec when plate-solved). The exposure length is not a measurement of how long the flash lasted.
+
+Compare **Before / Event / After** side by side, or use the **Blink comparison** GIF, which can also be opened and shared separately. The circle marks the same position in every image, with the event highlighted in gold. All three images use the event's brightness stretch. The neighbouring images are the nearest frames kept by quality control; their numbers and times show any gaps. Missing neighbours are labelled explicitly.
+
+**Why it was retained** describes the detection check in plain language: a strong peak signal, or a strong combined signal across the detected pixels. Hover for an explanation. These describe detection strength, not the physical cause. Open **Detection details** for the source filename, peak and integrated sigma, flux, pixel count, elongation, footprint and star-mask overlap.
+
+With a plate solution, observing location and exposure timing, **Check satellites** searches SatChecker around the event position over the whole exposure. Keep SpacePixels running to display and save the results inside the report, or use **Open SatChecker response** for the raw reply. Results are possible associations: a predicted passage does not confirm a satellite flash, and no match does not rule one out. When required metadata is missing, the card explains what is needed.
+
 ### Maps
 
 ![Global trajectory map](docs/images/manual/report-map.jpg)
