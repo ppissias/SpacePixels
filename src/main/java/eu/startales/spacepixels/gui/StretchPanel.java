@@ -165,7 +165,7 @@ public class StretchPanel extends JPanel {
         // LISTENERS
         // ==========================================
         stretchCheckbox.addItemListener(e -> {
-            mainAppWindow.getMainApplicationPanel().setBatchStretchButtonEnabled(stretchCheckbox.isSelected());
+            mainAppWindow.getMainApplicationPanel().refreshCommands();
         });
         displayStretchCheckbox.addItemListener(e -> {
             updateDisplayControls();

@@ -37,7 +37,6 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -102,7 +101,30 @@ public class MainApplicationPanel extends JPanel {
     private final CommandAction solveAction = new CommandAction("Plate Solve Selected",
             "Calculate the celestial coordinates (WCS) for the selected frame.",
             CommandAvailability.Command.PLATE_SOLVE, this::commandFacts, this::solveSelectedFrame);
-    private final List<CommandAction> commandActions = List.of(detectAction, autoTuneAction, previewAction, blinkAction, solveAction);
+    // The commands with one entry point, enabled the same way.
+    private final CommandAction importAction = new CommandAction("Import Aligned Frames…",
+            "Choose a folder of aligned FITS or XISF frames to import (or drop the folder onto the window). "
+                    + "Compressed, 32-bit and XISF data are converted to a working folder first.",
+            CommandAvailability.Command.IMPORT, this::commandFacts, this::chooseAndImportFolder);
+    private final CommandAction convertMonoAction = new CommandAction("Convert to Mono",
+            "Extract luminance and convert all loaded FITS files to 16-bit monochrome. Applies stretch if enabled.",
+            CommandAvailability.Command.CONVERT_TO_MONO, this::commandFacts, this::convertToMono);
+    private final CommandAction stretchAction = new CommandAction("Batch Stretch",
+            "Apply the current non-linear stretch settings to all imported FITS files and save as new files.",
+            CommandAvailability.Command.BATCH_STRETCH, this::commandFacts, this::batchStretch);
+    private final CommandAction skyCatalogueAction = new CommandAction(FETCH_SKY_CATALOGUE,
+            "<html>Download the stars (Gaia), galaxies, nebulae and clusters (SIMBAD) and variable stars "
+                    + "(AAVSO VSX)<br>in the field of the plate-solved frames, for the Annotate switch (A) of the viewers. "
+                    + "Runs in the background;<br>the star depth is set in the Astrometry Config tab.</html>",
+            CommandAvailability.Command.SKY_CATALOGUE, this::commandFacts, this::onSkyCatalogueButton);
+    private final CommandAction inspectionAction = new CommandAction("Manual Transient Inspection",
+            "Extract purified transients from all frames against the master background and navigate through them using arrow keys.",
+            CommandAvailability.Command.INSPECTION, this::commandFacts, this::startTransientInspection);
+    private final CommandAction iterativeAction = new CommandAction("Detect Iteratively (large datasets)",
+            "For datasets too large for the standard run: multiple temporally spaced passes across the sequence.",
+            CommandAvailability.Command.DETECT_ITERATIVELY, this::commandFacts, this::startIterativeDetection);
+    private final List<CommandAction> commandActions = List.of(importAction, convertMonoAction, stretchAction, solveAction,
+            skyCatalogueAction, blinkAction, previewAction, inspectionAction, autoTuneAction, detectAction, iterativeAction);
     private final JRadioButton astapSolveRadio = new JRadioButton("ASTAP");
     private final JRadioButton astrometryNetSolveRadio = new JRadioButton("Astrometry.net (online)");
 
@@ -116,15 +138,11 @@ public class MainApplicationPanel extends JPanel {
     private final JLabel activeMaskValue = new JLabel("—");
     private final JLabel activeOverlapValue = new JLabel("—");
     private final JLabel activeJitterValue = new JLabel("—");
-    // Tooltip of each action button while it is enabled; a disabled button adds the reason
-    private final Map<JButton, String> actionTooltips = new HashMap<>();
     private final List<JPanel> workflowGroups = new ArrayList<>();
     private volatile boolean uiLocked;
     private boolean hasSolvedFrame;
 
     private final JLabel statusLabel = new JLabel(" Ready");
-    // Map to hold the state of UI components
-    private final Map<Component, Boolean> savedComponentStates = new HashMap<>();
 
     private volatile boolean containsColorImages = true;
 
@@ -213,22 +231,13 @@ public class MainApplicationPanel extends JPanel {
         // TOP CONTROL AREA
         // ==========================================
         // A workflow strip: four labelled groups in the order of use, wrapping onto a second line when narrow.
-        setActionTooltip(importButton, "Choose a folder of aligned FITS or XISF frames to import (or drop the folder onto the window). "
-                + "Compressed, 32-bit and XISF data are converted to a working folder first.");
-        importButton.addActionListener(e -> mainAppWindow.chooseAndImportFolder());
-        setActionTooltip(convertMonoButton, "Extract luminance and convert all loaded FITS files to 16-bit monochrome. Applies stretch if enabled.");
-        setActionTooltip(stretchButton, "Apply the current non-linear stretch settings to all imported FITS files and save as new files.");
-        setActionTooltip(skyCatalogueButton, "<html>Download the stars (Gaia), galaxies, nebulae and clusters (SIMBAD) and variable stars "
-                + "(AAVSO VSX)<br>in the field of the plate-solved frames, for the Annotate switch (A) of the viewers. "
-                + "Runs in the background;<br>the star depth is set in the Astrometry Config tab.</html>");
-        setActionTooltip(manualTransientInspectionButton, "Extract purified transients from all frames against the master background and navigate through them using arrow keys.");
-        setActionTooltip(detectIterativelyButton, "For datasets too large for the standard run: multiple temporally spaced passes across the sequence.");
-        for (JButton button : actionTooltips.keySet()) {
-            button.setEnabled(false);
-        }
-        // Importing is the one action available before any frames are loaded.
-        importButton.setEnabled(true);
-        // The commands with several entry points take their caption, tooltip and enabled state from their action.
+        // Every workflow button takes its caption, tooltip and enabled state from its command (see commandFacts).
+        importButton.setAction(importAction);
+        convertMonoButton.setAction(convertMonoAction);
+        stretchButton.setAction(stretchAction);
+        skyCatalogueButton.setAction(skyCatalogueAction);
+        manualTransientInspectionButton.setAction(inspectionAction);
+        detectIterativelyButton.setAction(iterativeAction);
         solveButton.setAction(solveAction);
         blinkButton.setAction(blinkAction);
         detectSingleButton.setAction(previewAction);
@@ -325,67 +334,6 @@ public class MainApplicationPanel extends JPanel {
         refreshWorkflowStatus();
 
         // ==========================================
-        // ACTION LISTENERS
-        // ==========================================
-
-        convertMonoButton.addActionListener(e -> {
-            int stretchFactor = mainAppWindow.getStretchPanel().getStretchSlider().getValue();
-            int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
-            boolean stretchEnabled = mainAppWindow.getStretchPanel().isStretchEnabled();
-            StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
-
-            ImageProcessing session = mainAppWindow.getImageProcessing();
-            startJob(JobKind.CONVERT_TO_MONO, session,
-                    new BatchConvertMonoTask(session, stretchEnabled, stretchFactor, iterations, algo), this::showConversionOutcome);
-        });
-
-        stretchButton.addActionListener(e -> {
-            int stretchFactor = mainAppWindow.getStretchPanel().getStretchSlider().getValue();
-            int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
-            StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
-
-            ImageProcessing session = mainAppWindow.getImageProcessing();
-            startJob(JobKind.BATCH_STRETCH, session, new BatchStretchTask(session, stretchFactor, iterations, algo),
-                    this::showStretchOutcome);
-        });
-
-        // Each run gets the detection settings as they are at the click, or does not start while a setting is invalid.
-        manualTransientInspectionButton.addActionListener(e -> {
-            DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Manual Transient Inspection did not start.");
-            if (settings == null) {
-                return;
-            }
-            ImageProcessing session = mainAppWindow.getImageProcessing();
-            startJob(JobKind.TRANSIENT_INSPECTION, session, new ManualTransientInspectionTask(session, settings), (handle, outcome) -> {
-                if (outcome instanceof JobOutcome.Completed<ManualTransientInspectionTask.Result> completed) {
-                    ManualTransientInspectionTask.Result result = completed.result();
-                    TransientInspectionFrame frame = new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
-                            mainAppWindow.getStretchPanel());
-                    if (!frame.open()) {
-                        JOptionPane.showMessageDialog(null, "The detection kept no frames to inspect.",
-                                "Manual Transient Inspection", JOptionPane.INFORMATION_MESSAGE);
-                    }
-                } else {
-                    showDetectionProblem(outcome);
-                }
-            });
-        });
-
-        detectIterativelyButton.addActionListener(e -> {
-            DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Detect Iteratively did not start.");
-            if (settings == null) {
-                return;
-            }
-            Integer maxFrames = askIterativeFrameLimit();
-            if (maxFrames == null) {
-                return;
-            }
-            ImageProcessing session = mainAppWindow.getImageProcessing();
-            startJob(JobKind.ITERATIVE_DETECTION, session, new IterativeDetectionTask(session, settings, maxFrames),
-                    this::showDetectionOutcome);
-        });
-
-        // ==========================================
         // MAIN TABLE AREA
         // ==========================================
         JScrollPane scrollPane = new JScrollPane();
@@ -422,7 +370,6 @@ public class MainApplicationPanel extends JPanel {
             refreshWorkflowStatus();
         });
 
-        skyCatalogueButton.addActionListener(e -> onSkyCatalogueButton());
         // A viewer switches the correction on or off; the Astrometry status follows.
         SkyCatalogueModel.shared().addCorrectionListener(this::refreshWorkflowStatus);
 
@@ -436,21 +383,42 @@ public class MainApplicationPanel extends JPanel {
     private CommandAvailability.Facts commandFacts() {
         int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
         int selectedRow = table == null ? -1 : table.getSelectedRow();
-        boolean selectedSolved = selectedRow >= 0
-                && "Yes".equalsIgnoreCase(String.valueOf(table.getValueAt(selectedRow, FitsFileTableModel.COL_SOLVED)));
+        int solved = 0;
+        for (int row = 0; row < frames; row++) {
+            if (isSolvedRow(row)) {
+                solved++;
+            }
+        }
         JobCoordinator coordinator = mainAppWindow.getJobCoordinator();
         JobHandle running = coordinator == null ? null : coordinator.current();
         boolean blinking = blinkPlaying || (running != null && running.kind() == JobKind.BLINK);
+        StretchPanel stretchPanel = mainAppWindow.getStretchPanel();
         return new CommandAvailability.Facts(frames, !containsColorImages,
-                table == null ? 0 : table.getSelectedRowCount(), selectedSolved, uiLocked, blinking);
+                table == null ? 0 : table.getSelectedRowCount(), selectedRow >= 0 && isSolvedRow(selectedRow), solved,
+                stretchPanel != null && stretchPanel.isStretchEnabled(), uiLocked, blinking, skyFetchThread != null);
     }
 
-    /** Enables the shared commands from the facts as they are now; while a blink loads or plays, Blink stops it. */
-    private void refreshCommands() {
+    private boolean isSolvedRow(int row) {
+        return "Yes".equalsIgnoreCase(String.valueOf(table.getValueAt(row, FitsFileTableModel.COL_SOLVED)));
+    }
+
+    /**
+     * Enables every command from the facts as they are now. While a blink loads or plays, Blink stops it, and while
+     * the sky catalogue is fetched, its command cancels the fetch. Call it when a fact changes outside this panel,
+     * such as the batch-stretch switch.
+     */
+    void refreshCommands() {
         for (CommandAction action : commandActions) {
             action.refresh();
         }
-        blinkAction.putValue(Action.NAME, commandFacts().blinking() ? "Stop Blinking" : BLINK_SELECTED);
+        CommandAvailability.Facts facts = commandFacts();
+        blinkAction.putValue(Action.NAME, facts.blinking() ? "Stop Blinking" : BLINK_SELECTED);
+        skyCatalogueAction.putValue(Action.NAME, facts.skyFetching() ? "Cancel Sky Catalogue" : FETCH_SKY_CATALOGUE);
+    }
+
+    /** Whether a folder can be imported now, from the button or by dropping it on the window. */
+    boolean isImportEnabled() {
+        return CommandAvailability.of(CommandAvailability.Command.IMPORT, commandFacts()).enabled();
     }
 
     /** The Detect Moving Targets command, for the Overview's button and the Ctrl+D of the settings tab. */
@@ -497,6 +465,70 @@ public class MainApplicationPanel extends JPanel {
         }
         blinkStop = stop;
         blinkFrame.showLoading(selectedFitsFilesInfo);
+    }
+
+    private void chooseAndImportFolder() {
+        mainAppWindow.chooseAndImportFolder();
+    }
+
+    /** Converts every frame to 16-bit monochrome in a new folder, stretched when the Image Stretch tab says so. */
+    private void convertToMono() {
+        int stretchFactor = mainAppWindow.getStretchPanel().getStretchSlider().getValue();
+        int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
+        boolean stretchEnabled = mainAppWindow.getStretchPanel().isStretchEnabled();
+        StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
+
+        ImageProcessing session = mainAppWindow.getImageProcessing();
+        startJob(JobKind.CONVERT_TO_MONO, session,
+                new BatchConvertMonoTask(session, stretchEnabled, stretchFactor, iterations, algo), this::showConversionOutcome);
+    }
+
+    /** Writes stretched copies of every frame, with the Image Stretch tab's stretch. */
+    private void batchStretch() {
+        int stretchFactor = mainAppWindow.getStretchPanel().getStretchSlider().getValue();
+        int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
+        StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
+
+        ImageProcessing session = mainAppWindow.getImageProcessing();
+        startJob(JobKind.BATCH_STRETCH, session, new BatchStretchTask(session, stretchFactor, iterations, algo),
+                this::showStretchOutcome);
+    }
+
+    /** Manual Transient Inspection, with the detection settings as they are now; a setting with invalid text stops it. */
+    private void startTransientInspection() {
+        DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Manual Transient Inspection did not start.");
+        if (settings == null) {
+            return;
+        }
+        ImageProcessing session = mainAppWindow.getImageProcessing();
+        startJob(JobKind.TRANSIENT_INSPECTION, session, new ManualTransientInspectionTask(session, settings), (handle, outcome) -> {
+            if (outcome instanceof JobOutcome.Completed<ManualTransientInspectionTask.Result> completed) {
+                ManualTransientInspectionTask.Result result = completed.result();
+                TransientInspectionFrame frame = new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
+                        mainAppWindow.getStretchPanel());
+                if (!frame.open()) {
+                    JOptionPane.showMessageDialog(null, "The detection kept no frames to inspect.",
+                            "Manual Transient Inspection", JOptionPane.INFORMATION_MESSAGE);
+                }
+            } else {
+                showDetectionProblem(outcome);
+            }
+        });
+    }
+
+    /** Detect Iteratively, with the detection settings as they are now and the frame limit asked for. */
+    private void startIterativeDetection() {
+        DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Detect Iteratively did not start.");
+        if (settings == null) {
+            return;
+        }
+        Integer maxFrames = askIterativeFrameLimit();
+        if (maxFrames == null) {
+            return;
+        }
+        ImageProcessing session = mainAppWindow.getImageProcessing();
+        startJob(JobKind.ITERATIVE_DETECTION, session, new IterativeDetectionTask(session, settings, maxFrames),
+                this::showDetectionOutcome);
     }
 
     /** Plate-solves the selected frame; the result belongs to that file, wherever its row is when the solve ends. */
@@ -560,15 +592,8 @@ public class MainApplicationPanel extends JPanel {
             }
         }
 
-        if (containsColorImages) {
-            ApplicationWindow.logger.info("Color images detected. Enabling 'Batch Convert to Mono'.");
-            convertMonoButton.setEnabled(true);
-            setDetectionButtonsDisabled();
-        } else {
-            ApplicationWindow.logger.info("All images are Monochrome. Enabling 'Detect Objects'.");
-            convertMonoButton.setEnabled(false);
-            setDetectionButtonsEnabled();
-        }
+        // The commands follow: Convert to Mono for colour frames, the detection commands for monochrome ones.
+        ApplicationWindow.logger.info(containsColorImages ? "Color images detected." : "All images are Monochrome.");
         // Plate solving updates the table; keep the solved count current.
         model.addTableModelListener(e -> refreshWorkflowStatus());
         refreshWorkflowStatus();
@@ -576,9 +601,6 @@ public class MainApplicationPanel extends JPanel {
 
     private void clearLoadedControls() {
         containsColorImages = false;
-        convertMonoButton.setEnabled(false);
-        stretchButton.setEnabled(false);
-        setDetectionButtonsDisabled();
         refreshWorkflowStatus();
     }
 
@@ -628,48 +650,7 @@ public class MainApplicationPanel extends JPanel {
         return row;
     }
 
-    /** Sets a button's tooltip; while the button is disabled the tooltip also says why. */
-    private void setActionTooltip(JButton button, String tooltip) {
-        actionTooltips.put(button, tooltip);
-        button.addPropertyChangeListener("enabled", e -> updateActionTooltip(button));
-        updateActionTooltip(button);
-    }
-
-    private void updateActionTooltip(JButton button) {
-        String tooltip = actionTooltips.get(button);
-        String reason = button.isEnabled() ? null : disabledReason(button);
-        String body = tooltip.replaceFirst("^<html>", "").replaceFirst("</html>$", "");
-        button.setToolTipText(reason == null ? tooltip
-                : "<html>" + body + "<br><i>Not available: " + reason + "</i></html>");
-    }
-
-    private String disabledReason(JButton button) {
-        if (uiLocked) {
-            return "wait until the current task has finished.";
-        }
-        if (button == importButton) {
-            return "an import or another task is running.";
-        }
-        int frames = table == null ? 0 : table.getRowCount();
-        if (frames == 0) {
-            return "import frames first (Import Aligned Frames…, or drop a folder on the window).";
-        }
-        if (button == convertMonoButton) {
-            return "all frames are already monochrome.";
-        }
-        if (button == stretchButton) {
-            return "tick \"Enable batch stretch\" in the Image Stretch tab first.";
-        }
-        if (button == skyCatalogueButton) {
-            return "plate solve at least one frame first, and write the solution to its FITS header.";
-        }
-        if (containsColorImages) {
-            return "convert the frames to monochrome first (1 Prepare).";
-        }
-        return null;
-    }
-
-    /** Updates the status line of every group and the disabled-button reasons. */
+    /** Updates the status line of every group, and the commands with their disabled-button reasons. */
     void refreshWorkflowStatus() {
         int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
         // The import button is the primary action until frames are loaded, then an ordinary button for another dataset.
@@ -710,13 +691,7 @@ public class MainApplicationPanel extends JPanel {
                         : "Settings: " + detectionSettingsSummary() + "<br>" + saved);
             }
         }
-        boolean fetching = skyFetchThread != null;
-        skyCatalogueButton.setText(fetching ? "Cancel Sky Catalogue" : FETCH_SKY_CATALOGUE);
-        skyCatalogueButton.setEnabled(!uiLocked && (fetching || hasSolvedFrame));
         updateAutoTuneTooltip();
-        for (JButton button : actionTooltips.keySet()) {
-            updateActionTooltip(button);
-        }
         refreshCommands();
     }
 
@@ -765,7 +740,7 @@ public class MainApplicationPanel extends JPanel {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (!uiLocked) {
-                    mainAppWindow.getTabbedPane().setSelectedIndex(3);
+                    mainAppWindow.getTabbedPane().setSelectedComponent(mainAppWindow.getDetectionConfigurationPanel());
                 }
             }
         });
@@ -1340,15 +1315,6 @@ public class MainApplicationPanel extends JPanel {
         return new int[]{table == null ? -1 : table.getSelectedRow(), table == null ? 0 : table.getRowCount()};
     }
 
-    /** Enables or disables importing (the button and dropping folders), for example while an import runs. */
-    void setImportEnabled(boolean enabled) {
-        importButton.setEnabled(enabled);
-    }
-
-    boolean isImportEnabled() {
-        return importButton.isEnabled() && !uiLocked;
-    }
-
     /** Accepts a folder (or a file in it) dropped on the frame table or the empty area, and imports it. */
     void installFolderDrop(TransferHandler handler) {
         table.setTransferHandler(handler);
@@ -1381,54 +1347,41 @@ public class MainApplicationPanel extends JPanel {
         progressBar.setIndeterminate(false);
     }
 
-    public void setBatchStretchButtonEnabled(boolean state) {
-        stretchButton.setEnabled(state);
-    }
-
+    /**
+     * Ends the lock: the other controls are enabled again, the commands follow the facts, and the session tabs open
+     * when there is a session. Nothing is restored from before the lock, so a second lock cannot leave stale states.
+     */
     private void unlockUI() {
-        for (Map.Entry<Component, Boolean> entry : savedComponentStates.entrySet()) {
-            entry.getKey().setEnabled(entry.getValue());
-        }
-        savedComponentStates.clear();
         uiLocked = false;
+        setControlsEnabled(this, true);
         refreshWorkflowStatus();
         if (detectionSequenceFrame != null) {
             detectionSequenceFrame.setSettingsEditable(true);
         }
-
-        mainAppWindow.setMenuState(true);
-        mainAppWindow.getTabbedPane().setEnabledAt(1, true);
-        mainAppWindow.getTabbedPane().setEnabledAt(2, true);
-        mainAppWindow.getTabbedPane().setEnabledAt(3, true);
+        mainAppWindow.setSessionTabsEnabled(mainAppWindow.getImageProcessing() != null);
     }
 
+    /** While a job runs (or a blink plays), the window's controls and the session tabs are locked. */
     private void lockUI() {
         uiLocked = true;
-        savedComponentStates.clear();
-        saveAndDisableRecursive(this);
+        setControlsEnabled(this, false);
         refreshCommands();
         // The settings do not change while a job runs: the Detection Settings tab is locked, and so is Preview Frame.
         if (detectionSequenceFrame != null) {
             detectionSequenceFrame.setSettingsEditable(false);
         }
-
-        mainAppWindow.setMenuState(false);
-        mainAppWindow.getTabbedPane().setEnabledAt(1, false);
-        mainAppWindow.getTabbedPane().setEnabledAt(2, false);
-        mainAppWindow.getTabbedPane().setEnabledAt(3, false);
+        mainAppWindow.setSessionTabsEnabled(false);
     }
 
-    /** Disables every control, remembering its state; the shared commands are left to their actions. */
-    private void saveAndDisableRecursive(Container container) {
+    /** Enables or disables every control of the panel for the lock; the commands follow their actions instead. */
+    private static void setControlsEnabled(Container container, boolean enabled) {
         for (Component c : container.getComponents()) {
             if (c instanceof AbstractButton button && button.getAction() instanceof CommandAction) {
                 continue;
             }
-            savedComponentStates.put(c, c.isEnabled());
-            c.setEnabled(false);
-
-            if (c instanceof Container) {
-                saveAndDisableRecursive((Container) c);
+            c.setEnabled(enabled);
+            if (c instanceof Container inner) {
+                setControlsEnabled(inner, enabled);
             }
         }
     }
@@ -1540,17 +1493,6 @@ public class MainApplicationPanel extends JPanel {
         }
 
         detectionSequenceFrame.openSequence(allFiles, startIndex, mainAppWindow.getStretchPanel());
-    }
-
-    /** The detection buttons without a shared command; Detect Moving Targets and Preview Frame follow their actions. */
-    public void setDetectionButtonsEnabled() {
-        this.manualTransientInspectionButton.setEnabled(true);
-        this.detectIterativelyButton.setEnabled(true);
-    }
-
-    public void setDetectionButtonsDisabled() {
-        this.manualTransientInspectionButton.setEnabled(false);
-        this.detectIterativelyButton.setEnabled(false);
     }
 
     // ==========================================

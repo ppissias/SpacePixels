@@ -282,8 +282,7 @@ public class ApplicationWindow {
             mainApplicationPanel.showStatus("Import failed");
             FailureDialog.show(frmIpodImage, "Import Error", "Error loading files: " + failed.reason(), failed.cause());
         }
-        // Unlocking after the import enabled every tab; without a session they stay closed.
-        setSessionTabsEnabled(imagePreProcessing != null);
+        // The session is unchanged, and the end of the lock opened the session tabs only if there is one.
     }
 
     /** Makes the imported folder the window's session, in place of the one before it. */
@@ -342,8 +341,11 @@ public class ApplicationWindow {
 
     // --- HELPER METHODS ---
 
-    /** The tabs that need a session: Astrometry Config, Image Stretch and Detection Settings. */
-    private void setSessionTabsEnabled(boolean state) {
+    /**
+     * The tabs that need a session: Astrometry Config, Image Stretch and Detection Settings. They are found by their
+     * panel, not by their position.
+     */
+    void setSessionTabsEnabled(boolean state) {
         setTabEnabled(configurationApplicationPanel, state);
         setTabEnabled(stretchPanel, state);
         setTabEnabled(detectionConfigurationPanel, state);
@@ -360,10 +362,6 @@ public class ApplicationWindow {
 
     public JobCoordinator getJobCoordinator() {
         return jobCoordinator;
-    }
-
-    public void setMenuState(boolean state) {
-        mainApplicationPanel.setImportEnabled(state);
     }
 
     public BlinkFrame getBlinkFrame() {
