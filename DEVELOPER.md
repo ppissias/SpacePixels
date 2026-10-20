@@ -38,9 +38,12 @@ Every long operation is a **job**. One pattern serves all eleven: import, Conver
 3. **The work, on a worker thread.** The task (for example `DetectionTask`) implements `Job<R>`. It reports progress through `JobContext.progress(...)` and returns a `JobOutcome`:
    - `Completed`, with the result;
    - `Declined`, when the user said no during the job;
+   - `Cancelled`, when the user pressed Cancel in the progress dialog;
    - `Failed`, with a reason.
 
-   An exception or `Error` becomes `Failed`. Running out of memory goes to the application's handler, which closes SpacePixels; the other jobs stop at their next progress report.
+   An exception or `Error` becomes `Failed`.
+   - **Cancel:** `JobCoordinator.cancel()` makes the job's next progress report throw `JobCancelledException`, and the coordinator turns that into `Cancelled`. Progress at 100% never throws, so a finished result is kept. Each `JobKind` says whether it can be cancelled.
+   - **Out of memory:** goes to the application's handler, which closes SpacePixels; the other jobs stop at their next progress report.
 4. **The outcome, back on the EDT.** It arrives exactly once, after the window is unlocked. The handler that was passed in at the click shows what follows: the report question, the inspection window, the imported session, an error message.
 
 **Example: Detect Moving Targets.**

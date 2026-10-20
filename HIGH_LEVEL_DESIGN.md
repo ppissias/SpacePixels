@@ -92,13 +92,18 @@ The detection profile wraps JTransient `DetectionConfig` plus SpacePixels' Auto-
 
 ### `eu.startales.spacepixels.jobs`
 
-The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker and returns a `JobOutcome`: completed with its result, declined by the user, or failed with a reason.
+The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker and returns a `JobOutcome`: completed with its result, declined or cancelled by the user, or failed with a reason.
 
 `JobCoordinator` behaves as follows:
 - **Admission:** it admits one job at a time, on the UI thread, before the worker starts. It refuses a job while another runs, or while other work holds the window (the blink window, while a blink plays).
 - **The window's lock:** its listener, in `MainApplicationPanel`, locks the window and shows the progress dialog on admission, and unlocks the window when the job ends.
 - **Progress:** it reaches the window only while the job is current.
 - **Outcome:** it is delivered exactly once, on the UI thread, after the unlock.
+- **Cancel:** the progress dialog's Cancel (or closing it) calls `cancel()`.
+  - The job's next progress report throws `JobCancelledException`; the job's own clean-up runs as it leaves; the outcome is `Cancelled`, also when the job wrapped the exception.
+  - Progress at 100% never throws, so finished work is kept.
+  - Plate solving, the WCS write and Blink cannot be cancelled (`JobKind.cancellable()`).
+  - The dialog offers to exit SpacePixels if a cancelled job has not stopped after 15 seconds.
 - **Failures:** an exception or `Error` becomes a failure. Running out of memory leaves the worker for the application's uncaught-exception handler. The handler marks it in `JobFailures`, and every other running job then stops at its next progress report while SpacePixels closes.
 
 Each `JobHandle` carries the session the job was started for. Until there is a session object, that is the `ImageProcessing` instance.

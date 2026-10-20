@@ -141,6 +141,13 @@ The **Legacy** tuner sets only the per-frame detection settings, the mask overla
 
 Click **Detect Moving Targets**, on the Overview or on the Main tab (or press **Ctrl+D**). A progress window shows each stage.
 
+**Cancel** in the progress window (or closing it) stops the run at its next step; the status bar then says it was cancelled, and nothing changes. This works for the detection runs, Manual Transient Inspection, Test Star Mask, Auto-Tune, import, Convert to Mono and Batch Stretch.
+- **A run that doesn't stop.** If it hasn't stopped after a while, the button offers to exit SpacePixels instead.
+- **What can't be cancelled:**
+  - Plate solving waits for the solver.
+  - Writing the plate solution into a frame must finish, so the file is not left half written.
+- **What a cancelled run leaves:** files it has already written stay. These are the finished passes of an iterative run, and the frames converted or stretched so far.
+
 SpacePixels checks the quality of every frame (blank, blurred or failed frames are left out), builds a star mask from the median of the frames, finds everything that is not a star in each frame, links the detections into tracks, and writes the report with crops and animations of every object. When it finishes, it offers to open the report:
 
 ![Detection finished](docs/images/manual/ui-complete.png)
