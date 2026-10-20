@@ -262,7 +262,7 @@ Responsibilities:
 - wire the four top-level tabs
 - launch import (the Import Aligned Frames… button in the Main tab or a folder dropped on the window; there is no menu bar), and show the "new version" notice in the Main tab's status bar
 - enable tabs after successful import
-- listen for import and progress events
+- install the session an import job returns, and tell the panels through their `SessionListener`s
 - stop the report lookup proxy on window close
 
 ### `MainApplicationPanel`
@@ -295,7 +295,8 @@ Owns:
 - current Auto-Tune candidate-frame limit
 - the Overview page (`AutoTuneOverviewPanel`) and the page navigation (`SettingsNavigator`)
 - the saved value of every setting row (`SettingRow`) and of the Overview core settings, taken after loading and after each Save; changes are marked against it
-- detection preview action through `TuningPreviewManager`
+- the Overview's Preview Frame button, which opens the Main tab's Preview Frame (`DetectionSequenceFrame`)
+- the per-frame thresholds that Preview Frame edits on this tab's spinner models (`perFrameDetectionSettings()`), and the copy of the settings in use it detects each frame with (`settingsInUse()`)
 - Auto-Tune launch through `AutoTuneTask`
 - applying every edit to the session right away, the unsaved-changes indicator, and Revert to the last saved state
 - keeping the pairs of `DetectionSettingsRules` in order while applying an edit, and saying in the footer which setting it moved
@@ -473,9 +474,11 @@ ApplicationWindow
 -> XisfImageConverter.prepareDirectoryForFitsImport(...)
 -> ImageProcessing.getInstance(importDirectory)
 -> ImageProcessing.getFitsfileInformation()
--> FitsImportFinishedEvent
--> ApplicationWindow enables tabs and refreshes UI
+-> JobOutcome (Completed with the session, Declined, Cancelled or Failed)
+-> ApplicationWindow.installSession(...) and the SessionListeners
 ```
+
+A declined, cancelled or failed import keeps the open session.
 
 GUI import may prompt for:
 
@@ -590,15 +593,7 @@ MainApplicationPanel
 -> detection markers drawn by FrameView
 ```
 
-Detection settings preview:
-
-```text
-DetectionConfigurationPanel
--> TuningPreviewManager
--> TuningPreviewTask
--> JTransient SourceExtractor.extractSources(...)
--> annotated preview image
-```
+The Overview's Preview Frame button opens the same window. Its Detection Sigma, Grow Sigma and Min Detection Pixels fields are the settings of the Detection Settings tab, and a change detects the frame on show again.
 
 Manual transient inspection:
 

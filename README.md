@@ -137,7 +137,8 @@ For the underlying detection logic and the meaning of the engine configuration o
 - Auto-tunes the detection settings for each session. The default calibrated tuner measures false detections and sensitivity on the session's own frames and offers four profiles: low, medium, high (the default) and maximum (as sensitive as possible, for small sensors or targeted searches for a faint object). The original score-based tuner is still available.
 - Optionally measures the photometry of the stationary stars and reports variable-star candidates with light curves, readiness checks and a lookup in the AAVSO VSX catalogue. Switch it on under Analyses in This Run on the Detection Settings Overview; plate-solve one frame so candidates can be matched against VSX.
 - Generates an HTML report with diagnostics, GIFs, geometric overlays, global maps, object-identification links, and optional AI-themed summary sections.
-- Supports manual transient inspection and frame-by-frame single-image detection preview.
+- Supports manual transient inspection and frame-by-frame single-image detection preview, where the per-frame detection thresholds can be tried directly on the frame.
+- Long jobs, such as a detection run or Auto-Tune, can be cancelled from their progress window.
 - Blinks aligned frames for traditional visual inspection.
 - Plate-solves images through ASTAP or Astrometry.net and uses WCS for RA/Dec overlays, SkyBoT/JPL moving-object identification, SatChecker satellite identification for streaks, and Stellarium Web context links.
 - Batch-converts color FITS to monochrome and batch-stretches imported datasets.

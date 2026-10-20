@@ -146,6 +146,19 @@ The original review follows.
 
 ### D04. Make cancellation, failure and resource cleanup explicit
 
+**Status (2026-10-20).**
+- **Done:**
+  - **One ending per job (S1).** Every job ends with its outcome or the out-of-memory exit.
+  - **Real reasons (S11).** Failures are reported with their real reason.
+  - **Typed outcomes (S3):** completed, declined, cancelled and failed. A declined report is not a failure, and a declined or cancelled import keeps the open session.
+  - **One out-of-memory policy (`JobFailures`).**
+  - **Cancel in the progress dialog.** It shows a stopping state, and the job stops at its next progress report; the job's own clean-up runs as it leaves. Closing the dialog cancels instead of exiting. Plate solving, the WCS write and Blink cannot be cancelled.
+- **Open:**
+  - **How long a cancel takes.** Some engine stages report no progress while they run, for example the median master stack, residual analysis and the start of photometry. A cancel waits for the end of such a stage. To measure on real data; finer cancellation inside JTransient would be a separate engine discussion.
+  - **A "Details / Copy error" path** in the failure messages.
+  - **A lasting link to the last result.**
+  - **The viewer check:** closing a viewer while it prepares a frame.
+
 **Evidence.** [ProcessingProgressDialog](src/main/java/eu/startales/spacepixels/gui/ProcessingProgressDialog.java) is modal, fixed-size, and its close action exits the application after confirmation. Blink and sky fetching have separate cancellation mechanisms. Declining report generation after detection is represented as failure in [DetectionTask](src/main/java/eu/startales/spacepixels/tasks/DetectionTask.java), even though detection completed.
 
 There are inconsistent error paths too. [ManualTransientInspectionTask](src/main/java/eu/startales/spacepixels/tasks/ManualTransientInspectionTask.java) calls `engine.shutdown()` only after a successful `detectTransients`; its catch logs an OOM without rethrowing it despite the comment about a global handler. [StarMaskStackTask](src/main/java/eu/startales/spacepixels/tasks/StarMaskStackTask.java) does shut down in `finally`, but its OOM branch logs without posting a terminal event or forwarding the error. Consequently, those paths can leave progress handling unfinished; an uncaught handler cannot handle an error swallowed by a catch. This was established from the branches, not by inducing OOM in the running application.
@@ -369,13 +382,13 @@ Record what the review did not cover and any deliberate exceptions. The review i
 
 The coverage limits and the deliberate exceptions are listed in the [review summary](docs/architecture-review.md#review-summary).
 
-**Steps from the review.** The review has the details. They are proposals; none is accepted yet.
+**Steps from the review.** The review has the details. A step is accepted when the maintainer takes it up; its status is in the table, and the steps without one are still proposals.
 
 | Step | Stage | Work | Covers |
 |---|---|---|---|
 | S1 | A | **Done 2026-10-20 (`01d983e`).** Every job ends with a finished event or the out-of-memory exit; before, some failures left the UI locked. | D04 (new evidence) |
 | S2 | B | **Done for every job, 2026-10-20** (`54e32b6` to `23acc9b`). A job coordinator: admission before the worker starts, and job and session identity. Session identity is a placeholder until S7 | D02 |
-| S3 | B | **Done 2026-10-20**, with S2: every job returns a `JobOutcome` (completed, declined or failed). Typed outcomes per job kind | D04 |
+| S3 | B | **Done 2026-10-20**, with S2: every job returns a `JobOutcome` (completed, declined or failed; cancelled since D04's Cancel, 2026-10-20). Typed outcomes per job kind | D04 |
 | S4 | B | Shared actions and availability: one Detect action; tabs and solve results addressed by identity. Solve results are matched by file since the plate-solve slice (2026-10-20) | D07 |
 | S5 | B | **Done 2026-10-20 (`01d983e`, with S1).** Use `BatchStretchTask` instead of its inline copy | — |
 | S6 | B–C | **Done 2026-10-20.** No GUI in `tasks`: their own logger and out-of-memory policy, and results returned instead of windows and dialogs opened. `DependencyRulesTest` keeps `tasks` and `jobs` free of `gui` and Swing | new |
@@ -392,7 +405,7 @@ The coverage limits and the deliberate exceptions are listed in the [review summ
 
 S1 and S11 were the small correctness fixes that needed nothing else first; both are done.
 
-**Known starting points.**
+**Starting points at the time of the review.** Since then the bus and its events are gone (S9), and the tasks no longer build Swing views (S6).
 - `ApplicationWindow` owns the shared event bus.
 - Task classes post the lifecycle and progress events, and some also build Swing views.
 - `ImageProcessing` still asks import questions in Swing dialogs and logs through `ApplicationWindow.logger`.
@@ -573,8 +586,8 @@ The localhost lookup proxy's lifecycle can remain application-scoped. Give it an
 | Stage | Work | Why this order |
 |---|---|---|
 | Architecture review | Done 2026-10-20: steps S1–S16 above, mapped to the stages below. The EventBus question was decided the same day: retire it gradually | Makes the remaining scope explicit before the architecture work grows. Focused correctness fixes need not wait. |
-| A: focused correctness | D01 file publication; D03 preview identity; D05 invalid-editor feedback | Small, concrete failure modes; do not wait for a broad architecture migration. |
-| B: workflow foundation | D02 ownership/admission and D04 outcomes/cleanup for detection, inspection and star-mask jobs; then D07 actions | Makes lifecycle explicit before replacing UI locking. |
+| A: focused correctness | **Done (2026-10-19).** D01 file publication; D03 preview identity; D05 invalid-editor feedback | Small, concrete failure modes; do not wait for a broad architecture migration. |
+| B: workflow foundation | **Mostly done (2026-10-20).** D02 ownership/admission and D04 outcomes/cleanup, for every job rather than only the detection, inspection and star-mask jobs. Open: the rest of D04 (see its status) and D07 actions (S4) | Makes lifecycle explicit before replacing UI locking. |
 | C: session boundary | D06 application preferences/session handover; D08 background WCS write and metadata restoration | Reduces UI/service coupling and protects session transitions. |
 | D: presentation and polish | D09 prepared report data; D10 one page of typed settings bindings; D11 results/readiness; D12/D13 layout and access | Builds on explicit state; accessibility fixes that are independent can start earlier. |
 
@@ -622,7 +635,7 @@ For behavioural changes, follow the maintainer's real-data comparison method. An
 
 `./gradlew guiMechanicsTest` passed these four on 2026-10-20, on synthetic frames, in about 14 seconds.
 
-**Still to draft.** The remaining buttons and viewers; search, expert rows, Revert and Load Defaults; the stretch tab; plate-solve availability; cancelling the sky-catalogue fetch; the iterative frame-limit question. Auto-Tune has no Cancel control. Its progress uses the **Processing...** dialog, and closing that dialog exits the application, so a cancel test for Auto-Tune waits until a real cancel control exists.
+**Still to draft.** The remaining buttons and viewers; search, expert rows, Revert and Load Defaults; the stretch tab; plate-solve availability; cancelling the sky-catalogue fetch; the iterative frame-limit question; Cancel in the progress dialog (since D04, 2026-10-20), for example for Auto-Tune and a detection run.
 
 ## Changes to avoid
 
