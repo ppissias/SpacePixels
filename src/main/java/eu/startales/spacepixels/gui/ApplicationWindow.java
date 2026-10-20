@@ -82,7 +82,7 @@ public class ApplicationWindow {
 
     public static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
 
-    private final BlinkFrame blinkFrame = new BlinkFrame(getEventBus());
+    private final BlinkFrame blinkFrame = new BlinkFrame();
     private final JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
 
 

@@ -1,14 +1,13 @@
 package eu.startales.spacepixels.tasks;
 
-import com.google.common.eventbus.EventBus;
-import com.google.common.eventbus.Subscribe;
-import eu.startales.spacepixels.events.BlinkFinishedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
+import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.AutoTunerRunner;
+import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
@@ -19,34 +18,23 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 /**
- * A failed task ends with its finished event, which closes the progress dialog and unlocks the window; running out of
- * memory leaves the task for the application's handler instead of being swallowed.
+ * Every task ends with one outcome: a failure carries its reason, which the window shows after unlocking; running out
+ * of memory leaves the job for the application's handler instead of being swallowed, except in Blink, which recovers.
  */
-public class TaskFailureEventsTest {
+public class TaskOutcomesTest {
 
     @Rule
     public TemporaryFolder folder = new TemporaryFolder();
-
-    @Test
-    public void failingTasksPostTheirFinishedEventWithTheReason() throws Exception {
-        FitsFileInformation missing = missingFrame();
-
-        BlinkFinishedEvent blink = last(run(new BlinkImagesTask(bus(), new FitsFileInformation[]{missing}, new AtomicBoolean(true))),
-                BlinkFinishedEvent.class);
-        assertFalse(blink.isSuccess());
-        assertNotNull(blink.getErrorMessage());
-    }
 
     @Test
     public void aFailedPlateSolveCarriesItsReasonWithoutOpeningADialog() throws Exception {
@@ -71,6 +59,25 @@ public class TaskFailureEventsTest {
         assertFailed(outcomeOf(new IterativeDetectionTask(null, new DetectionConfig(), 0)));
         assertFailed(outcomeOf(new ManualTransientInspectionTask(null, new DetectionConfig())));
         assertFailed(outcomeOf(new StarMaskStackTask(new FitsFileInformation[]{missingFrame()}, new DetectionConfig())));
+        assertFailed(outcomeOf(new BlinkImagesTask(new FitsFileInformation[]{missingFrame()}, new AtomicBoolean(), (read, total) -> { })));
+    }
+
+    @Test
+    public void blinkLoadsEveryFrameAndStopsWhenAsked() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 3);
+        try (ImageProcessing processing = ImageProcessing.getInstance(sequence.toFile())) {
+            FitsFileInformation[] files = processing.getFitsfileInformationHeadless();
+            List<String> reads = new ArrayList<>();
+            JobOutcome<BlinkSequence> loaded = outcomeOf(new BlinkImagesTask(files, new AtomicBoolean(),
+                    (read, total) -> reads.add(read + "/" + total)));
+            assertTrue(String.valueOf(loaded), loaded instanceof JobOutcome.Completed<BlinkSequence> completed
+                    && completed.result().getFrames().size() == 3);
+            assertEquals(List.of("0/3", "1/3", "2/3"), reads);
+
+            JobOutcome<BlinkSequence> stopped = outcomeOf(new BlinkImagesTask(files, new AtomicBoolean(true), (read, total) -> { }));
+            assertTrue(String.valueOf(stopped), stopped instanceof JobOutcome.Declined<BlinkSequence> declined
+                    && declined.reason().equals("Blinking stopped."));
+        }
     }
 
     @Test
@@ -103,36 +110,5 @@ public class TaskFailureEventsTest {
     private FitsFileInformation missingFrame() {
         File file = new File(folder.getRoot(), "missing.fit");
         return new FitsFileInformation(file.getAbsolutePath(), file.getName(), true, 6, 4);
-    }
-
-    private Recorder recorder;
-
-    private EventBus bus() {
-        recorder = new Recorder();
-        EventBus bus = new EventBus();
-        bus.register(recorder);
-        return bus;
-    }
-
-    private List<Object> run(Runnable task) {
-        task.run();
-        return recorder.events;
-    }
-
-    private static <T> T last(List<Object> events, Class<T> type) {
-        assertFalse("No events were posted", events.isEmpty());
-        Object last = events.get(events.size() - 1);
-        assertTrue("Last event was " + last.getClass().getSimpleName(), type.isInstance(last));
-        return type.cast(last);
-    }
-
-    /** Records every event posted on its bus. */
-    public static final class Recorder {
-        final List<Object> events = new ArrayList<>();
-
-        @Subscribe
-        public void on(Object event) {
-            events.add(event);
-        }
     }
 }

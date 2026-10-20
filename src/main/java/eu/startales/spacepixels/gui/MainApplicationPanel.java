@@ -104,10 +104,10 @@ public class MainApplicationPanel extends JPanel {
 
     private volatile boolean containsColorImages = true;
 
-    // --- CHANGED to AtomicBoolean for thread safety ---
-    private final AtomicBoolean isBlinking = new AtomicBoolean(false);
-    /** The thread reading the frames of the current or last blink. */
-    private Thread blinkLoader;
+    /** Set to stop the frames of the current blink from loading. */
+    private AtomicBoolean blinkStop = new AtomicBoolean();
+    /** The blink window is playing: it holds the window's lock until it closes. */
+    private boolean blinkPlaying;
 
     // Sky catalogue: fetched in the background, shown at the right of the status bar while it loads.
     private static final String FETCH_SKY_CATALOGUE = "Fetch Sky Catalogue";
@@ -133,13 +133,25 @@ public class MainApplicationPanel extends JPanel {
         // --- NEW: PROGRESS DIALOG INITIALIZATION ---
         // Pass the main app frame so the dialog knows who to lock and where to center itself
         this.progressDialog = new ProcessingProgressDialog((JFrame) mainAppWindow.getFrame());
+        mainAppWindow.getBlinkFrame().setOnClose(this::blinkWindowClosed);
         mainAppWindow.getJobCoordinator().setListener(new JobCoordinator.Listener() {
             @Override
             public void jobStarted(JobHandle handle) {
                 JobTexts texts = JobTexts.of(handle.kind());
-                setProgressBarWorking();
+                if (texts.initializing() == null) {
+                    // The blink window opens in front once this returns. Disabling the control that has the focus
+                    // would move the focus to another control here, which brings this window back in front of it.
+                    KeyboardFocusManager.getCurrentKeyboardFocusManager().clearGlobalFocusOwner();
+                }
                 disableControlsProcessing();
                 statusLabel.setText(texts.started());
+                if (texts.initializing() == null) {
+                    // Blink shows its loading in its own window; its button stays available to stop it.
+                    blinkButton.setEnabled(true);
+                    blinkButton.setText("Stop Blinking");
+                    return;
+                }
+                setProgressBarWorking();
                 if (texts.indeterminate()) {
                     progressDialog.showIndeterminateProgress(texts.initializing());
                 } else {
@@ -155,7 +167,9 @@ public class MainApplicationPanel extends JPanel {
 
             @Override
             public void jobProgress(JobHandle handle, int percent, String message) {
-                if (progressDialog.isVisible()) {
+                if (JobTexts.of(handle.kind()).initializing() == null) {
+                    statusLabel.setText(message);
+                } else if (progressDialog.isVisible()) {
                     progressDialog.updateProgress(percent, message);
                 }
             }
@@ -299,9 +313,9 @@ public class MainApplicationPanel extends JPanel {
         });
 
         blinkButton.addActionListener(e -> {
-            if (isBlinking.get()) {
-                // Stop: while loading the task sees the flag; once playing, closing the window ends the blink.
-                isBlinking.set(false);
+            JobHandle running = mainAppWindow.getJobCoordinator().current();
+            if (blinkPlaying || (running != null && running.kind() == JobKind.BLINK)) {
+                // Stop: closing the window ends the blink, or the loading, which then stops at the next frame.
                 mainAppWindow.getBlinkFrame().close();
                 return;
             }
@@ -309,15 +323,18 @@ public class MainApplicationPanel extends JPanel {
             if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0 || !confirmBlinkMemory(selectedFitsFilesInfo)) {
                 return;
             }
-            if (blinkLoader != null && blinkLoader.isAlive()) {
-                // A stopped blink is still finishing the frame it was reading; its events would end the new one.
-                statusLabel.setText("Still stopping the previous blink, try again in a moment.");
+            AtomicBoolean stop = new AtomicBoolean();
+            BlinkFrame blinkFrame = mainAppWindow.getBlinkFrame();
+            BlinkImagesTask task = new BlinkImagesTask(selectedFitsFilesInfo, stop,
+                    (read, total) -> EventQueue.invokeLater(() -> blinkFrame.showLoadProgress(read, total)));
+            JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.BLINK,
+                    mainAppWindow.getImageProcessing(), task, (handle, outcome) -> blinkLoaded(selectedFitsFilesInfo, outcome));
+            if (!admission.admitted()) {
+                statusLabel.setText(admission.refusal());
                 return;
             }
-            isBlinking.set(true);
-            mainAppWindow.getBlinkFrame().showLoading(selectedFitsFilesInfo);
-            blinkLoader = new Thread(new BlinkImagesTask(mainAppWindow.getEventBus(), selectedFitsFilesInfo, isBlinking), "blink-loader");
-            blinkLoader.start();
+            blinkStop = stop;
+            blinkFrame.showLoading(selectedFitsFilesInfo);
         });
 
         detectSingleButton.addActionListener(e -> previewSelectedFrame());
@@ -1584,72 +1601,44 @@ public class MainApplicationPanel extends JPanel {
         return choice == JOptionPane.YES_OPTION;
     }
 
-    @Subscribe
-    public void onBlinkStarted(BlinkStartedEvent event) {
-        EventQueue.invokeLater(() -> {
+    /**
+     * The end of loading a blink: plays the frames, or says why it did not. While the blink plays, its window holds
+     * the main window's lock, as the loading job did; closing it ends the blink.
+     */
+    private void blinkLoaded(FitsFileInformation[] files, JobOutcome<BlinkSequence> outcome) {
+        BlinkFrame blinkFrame = mainAppWindow.getBlinkFrame();
+        if (outcome instanceof JobOutcome.Completed<BlinkSequence> completed && !blinkStop.get()) {
             disableControlsBlinking();
-            // The button stays available to stop the blink.
             blinkButton.setEnabled(true);
             blinkButton.setText("Stop Blinking");
-            statusLabel.setText("Loading frames for blinking...");
-        });
-    }
-
-    @Subscribe
-    public void onBlinkLoadProgress(BlinkLoadProgressEvent event) {
-        EventQueue.invokeLater(() -> {
-            statusLabel.setText(String.format("Loading frame %d of %d for blinking...", event.getLoaded() + 1, event.getTotal()));
-            mainAppWindow.getBlinkFrame().showLoadProgress(event.getLoaded(), event.getTotal());
-        });
-    }
-
-    @Subscribe
-    public void onBlinkSequenceLoaded(BlinkSequenceLoadedEvent event) {
-        EventQueue.invokeLater(() -> {
-            if (!isBlinking.get()) {
-                // Stopped just as the last frame was read.
-                endBlink("Blinking stopped.");
-                return;
-            }
-            statusLabel.setText("Blinking " + event.getSequence().getFrames().size()
+            blinkPlaying = true;
+            statusLabel.setText("Blinking " + completed.result().getFrames().size()
                     + " frames. Close the blink window or click Stop Blinking to end.");
-            mainAppWindow.getBlinkFrame().open(event.getSequence(), event.getFiles(), getImportedFiles(), mainAppWindow.getStretchPanel(),
+            blinkFrame.open(completed.result(), files, getImportedFiles(), mainAppWindow.getStretchPanel(),
                     mainAppWindow.getImageProcessing() == null ? null : mainAppWindow.getImageProcessing().getLastTrackOverlay(),
                     mainAppWindow.getImageProcessing() == null ? null : mainAppWindow.getImageProcessing().getLastVariableStarOverlay());
-        });
-    }
-
-    /** Loading ended without showing the frames: stopped while loading, or failed. */
-    @Subscribe
-    public void onBlinkFinished(BlinkFinishedEvent event) {
-        EventQueue.invokeLater(() -> {
-            isBlinking.set(false);
-            // Hides the window if it still shows the loading progress.
-            mainAppWindow.getBlinkFrame().close();
-            endBlink("Blinking stopped.");
-            if (!event.isSuccess()) {
-                JOptionPane.showMessageDialog(this,
-                        "Blink process failed: " + event.getErrorMessage(),
-                        "Error", JOptionPane.ERROR_MESSAGE);
-            }
-        });
-    }
-
-    @Subscribe
-    public void onBlinkFrameClosed(BlinkFrameClosedEvent event) {
-        EventQueue.invokeLater(() -> {
-            isBlinking.set(false);
-            endBlink("Blinking stopped.");
-        });
-    }
-
-    private void endBlink(String status) {
-        if (!uiLocked) {
             return;
         }
+        // Stopped, or failed: hides the window if it still shows the loading progress.
+        blinkFrame.close();
         blinkButton.setText("Blink Selected");
-        enableControlsProcessingBlinkingFinished();
-        statusLabel.setText(status);
+        statusLabel.setText("Blinking stopped.");
+        if (outcome instanceof JobOutcome.Failed<BlinkSequence> failed) {
+            JOptionPane.showMessageDialog(this,
+                    "Blink process failed: " + failed.reason(),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /** The blink window closed: ends the blink, or stops the loading, whose job then ends at the next frame. */
+    private void blinkWindowClosed() {
+        blinkStop.set(true);
+        if (blinkPlaying) {
+            blinkPlaying = false;
+            blinkButton.setText("Blink Selected");
+            enableControlsProcessingBlinkingFinished();
+            statusLabel.setText("Blinking stopped.");
+        }
     }
 
     /**
@@ -1761,11 +1750,12 @@ public class MainApplicationPanel extends JPanel {
 
     /**
      * What the status bar and the progress dialog say while a job of this kind runs, and after it; an indeterminate
-     * job reports no percentage.
+     * job reports no percentage, and a job without {@code initializing} text shows no progress dialog.
      */
     private record JobTexts(String started, String initializing, boolean indeterminate, String ended) {
         static JobTexts of(JobKind kind) {
             return switch (kind) {
+                case BLINK -> new JobTexts("Loading frames for blinking...", null, false, "Blink frames loaded");
                 case CONVERT_TO_MONO -> new JobTexts("Batch conversion started", "Initializing batch conversion...", false, "Batch conversion finished");
                 case BATCH_STRETCH -> new JobTexts("Batch stretch started", "Initializing batch stretch...", false, "Batch stretch finished");
                 case PLATE_SOLVE -> new JobTexts("Plate solving image...", "Plate solving selected image...", true, "Plate solve finished");

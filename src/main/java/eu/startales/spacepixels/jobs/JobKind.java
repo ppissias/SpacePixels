@@ -18,7 +18,8 @@ public enum JobKind {
     CONVERT_TO_MONO("Convert to Mono"),
     BATCH_STRETCH("Batch Stretch"),
     PLATE_SOLVE("Plate Solve"),
-    AUTO_TUNE("Auto-Tune");
+    AUTO_TUNE("Auto-Tune"),
+    BLINK("Blink");
 
     private final String title;
 

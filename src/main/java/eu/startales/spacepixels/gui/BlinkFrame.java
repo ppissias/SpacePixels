@@ -10,8 +10,6 @@
 
 package eu.startales.spacepixels.gui;
 
-import com.google.common.eventbus.EventBus;
-import eu.startales.spacepixels.events.BlinkFrameClosedEvent;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.TrackOverlay;
@@ -55,7 +53,8 @@ public class BlinkFrame extends JFrame {
     private static final String SKIP_TOOLTIP = "Leave this frame out of the loop, for example a cloudy or trailed frame (S). "
             + "Stepping by hand still shows it.";
 
-    private final EventBus eventBus;
+    /** Told when a blink, or the loading before it, ends because the window closed; set by the main window. */
+    private Runnable onClose = () -> { };
     private final FrameView view = new FrameView();
     private final JButton playButton = new JButton("❚❚ Pause");
     private final JButton previousButton = new JButton("◀");
@@ -97,8 +96,7 @@ public class BlinkFrame extends JFrame {
     private FitsFileInformation[] loadingFiles;
     private Point cursorPixel;
 
-    public BlinkFrame(EventBus eventBus) {
-        this.eventBus = eventBus;
+    public BlinkFrame() {
         setTitle("Blink");
         AppIcon.apply(this);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
@@ -248,8 +246,13 @@ public class BlinkFrame extends JFrame {
         release();
         setVisible(false);
         if (active) {
-            eventBus.post(new BlinkFrameClosedEvent());
+            onClose.run();
         }
+    }
+
+    /** Sets what to do when the window ends a blink or its loading. */
+    void setOnClose(Runnable onClose) {
+        this.onClose = onClose;
     }
 
     /** Stops and lets go of the frames of the current blink, if any. */
