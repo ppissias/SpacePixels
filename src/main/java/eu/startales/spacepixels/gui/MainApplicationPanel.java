@@ -23,7 +23,6 @@ import eu.startales.spacepixels.util.skycatalog.SkyCatalogueStore;
 import eu.startales.spacepixels.util.skycatalog.SkyField;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import eu.startales.spacepixels.events.*;
 import eu.startales.spacepixels.jobs.*;
 import eu.startales.spacepixels.tasks.*;
 
@@ -44,7 +43,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import com.google.common.eventbus.Subscribe;
 
 public class MainApplicationPanel extends JPanel {
 
@@ -128,7 +126,6 @@ public class MainApplicationPanel extends JPanel {
 
     public MainApplicationPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
-        this.mainAppWindow.getEventBus().register(this);
 
         // --- NEW: PROGRESS DIALOG INITIALIZATION ---
         // Pass the main app frame so the dialog knows who to lock and where to center itself
@@ -1541,18 +1538,8 @@ public class MainApplicationPanel extends JPanel {
     }
 
     // ==========================================
-    // EVENT SUBSCRIBERS
+    // JOB AND SESSION OUTCOMES
     // ==========================================
-
-    // --- NEW: PROGRESS DIALOG SUBSCRIBER ---
-    @Subscribe
-    public void onEngineProgressUpdate(EngineProgressUpdateEvent event) {
-        EventQueue.invokeLater(() -> {
-            if (progressDialog != null && progressDialog.isVisible()) {
-                progressDialog.updateProgress(event.getPercentage(), event.getMessage());
-            }
-        });
-    }
 
     /** A new session, or none: the status line says how many frames it has. */
     void sessionChanged(FitsFileInformation[] files) {

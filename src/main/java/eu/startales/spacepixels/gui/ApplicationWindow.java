@@ -10,7 +10,6 @@
 package eu.startales.spacepixels.gui;
 
 import com.formdev.flatlaf.FlatDarkLaf;
-import com.google.common.eventbus.EventBus;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import eu.startales.spacepixels.jobs.JobCoordinator;
@@ -62,9 +61,6 @@ public class ApplicationWindow {
 
     private JFrame frmIpodImage;
     private final String version = "2026.10-04";
-
-    // --- EVENT BUS INSTANCE ---
-    private final EventBus eventBus = new EventBus("SpacePixelsBus");
 
     private volatile ImageProcessing imagePreProcessing;
 
@@ -368,10 +364,6 @@ public class ApplicationWindow {
     }
 
     // --- GETTERS AND SETTERS ---
-
-    public EventBus getEventBus() {
-        return eventBus;
-    }
 
     public JobCoordinator getJobCoordinator() {
         return jobCoordinator;
