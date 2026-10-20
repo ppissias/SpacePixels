@@ -221,6 +221,14 @@ On plate-solved crops, hovering shows a small red N/E marker for north and east.
 
 **Anomaly A1**, A2 and so on are single-frame event candidates whose cause is unconfirmed. Each card gives the frame, UTC exposure start and end, exposure length and position (including RA/Dec when plate-solved). The exposure length is not a measurement of how long the flash lasted.
 
+Some cards carry a green badge such as **Likely part of T1**. The badge appears when three things hold:
+
+- the moving-object track has no detection in the event's frame;
+- the track's motion puts its object at the event's position;
+- the event has the size and brightness of the track's detections.
+
+The note under the title gives the distance from the predicted position. Such an event is most likely the track's object, detected in that frame but not linked to the track. The badge and the track name lead to the track's card. A slow-mover candidate that the detections of a reported track lie on is marked the same way, for example **Already tracked: T3**.
+
 Compare **Before / Event / After** side by side, or use the **Blink comparison** GIF, which can also be opened and shared separately. The circle marks the same position in every image, with the event highlighted in gold. All three images use the event's brightness stretch. The neighbouring images are the nearest frames kept by quality control; their numbers and times show any gaps. Missing neighbours are labelled explicitly.
 
 **Why it was retained** describes the detection check in plain language: a strong peak signal, or a strong combined signal across the detected pixels. Hover for an explanation. These describe detection strength, not the physical cause. Open **Detection details** for the source filename, peak and integrated sigma, flux, pixel count, elongation, footprint and star-mask overlap.

@@ -28,6 +28,8 @@ These are engineering priorities, not findings that every possible failure has a
 
 Reviewed startup and import, workflow buttons and table selection, background tasks and events, preview rendering, frame viewers, settings and persistence, the API and CLI boundary, processing services, report generation and live lookup support. Existing manual screenshots were inspected for visual context; some predate the latest control placements. Source references name methods so the findings remain useful when line numbers change.
 
+**Coverage clarification (2026-10-20).** This is a broad review of subsystems and important execution paths. It is not a completed class-by-class audit against the proposed architecture, and there is no exhaustive inventory of the changes needed to reach it. D01–D13 identify evidenced problems and useful next steps; they are not proof that every remaining dependency and ownership issue has been found. The architecture adoption review below is the next step for completing that inventory.
+
 This was a source and architecture review, with primary documentation checked for Swing, FlatLaf and Guava. It was **not** a fresh interactive usability study, fault-injection run, accessibility audit or performance benchmark. Statements about races and I/O failures describe reachable design risks inferred from the code; their frequency has not been measured. No application code, user settings, FITS files or JTransient algorithms were changed by this review. M81 false-positive detection remains a separate investigation.
 
 ## What to preserve
@@ -302,6 +304,91 @@ flowchart TD
 
 The pattern is close to a modest **model–view–presenter** arrangement: a state model and testable workflow/presenter between Swing widgets and services. Use plain Java constructor injection, typed requests, `Action`s and explicit completion callbacks. A service locator, a second global event bus, deep inheritance tree or mandatory DI/reactive framework would add machinery without resolving the ownership questions.
 
+### Architecture adoption review
+
+**Next step (2026-10-20).** The maintainer wants to move SpacePixels toward this architecture. Before any code changes for it, review the whole codebase and work out the steps that lead there. D01–D13 came from a broad review, not a class-by-class one, so they are a starting point, not the full list.
+
+**Scope.**
+- **Packages:** every production package, including the build wiring and the relevant tests:
+  - `api`, `config`, `events`, `gui`, `tasks`, `tools`;
+  - `util`, including `util.reporting` and `util.skycatalog`.
+- **Out of scope:** JTransient and JPlateSolve are external contracts; their internals are not part of this review.
+- **Paths to follow through the GUI, the API and the CLI:**
+  - import and conversion;
+  - plate solve, and catalogue fetch and correction;
+  - preview and inspection;
+  - Auto-Tune;
+  - standard and iterative detection;
+  - report and lookup.
+- **Outcomes to follow:** cancellation, failure, session replacement and closing, as well as success. Searching the imports helps with the inventory, but it does not show that a path behaves correctly.
+
+**What to record.**
+- **Per subsystem:**
+  - what it does now, and where its boundary should be;
+  - which way its dependencies actually point;
+  - who owns its state and resources, and which thread it runs on.
+- **Per class:** **retain**, **move responsibility**, **adapt boundary** or **investigate**, with the reason. Propose a change only where the code conflicts with the target.
+
+**Result.** The review produces a list of steps, kept in this document. Each step has:
+- a delivery stage;
+- what must stay compatible;
+- how the step will be verified;
+- a link to D01–D13 where those already cover the work.
+
+Record what the review did not cover and any deliberate exceptions. The review is complete when every production class and every entry path is accounted for.
+
+**Known starting points.**
+- `ApplicationWindow` owns the shared event bus.
+- Task classes post the lifecycle and progress events, and some also build Swing views.
+- `ImageProcessing` still asks import questions in Swing dialogs and logs through `ApplicationWindow.logger`.
+- The existing findings that cover parts of the work:
+  - D02/D04: the job lifecycle;
+  - D06/D08: the session and interactive preparation;
+  - D09/D10: the report and settings contracts.
+
+**Constraints.**
+- Preserve the public API, the settings formats, the detection measurements and the current viewer and report behaviour, unless a separately agreed feature changes them.
+- Once a boundary is extracted, protect it with a dependency rule that tests can check, such as "application services do not depend on Swing or `gui`".
+
+### Guava EventBus: keep or replace? (open question)
+
+The maintainer asked whether SpacePixels should keep Guava's `EventBus` or move to something else. The architecture review should answer this; nothing is decided yet.
+
+**Current use (2026-10-20).**
+- **The bus:** `ApplicationWindow` owns one synchronous bus.
+- **The events:** 18 event classes in `events`. They carry the start, progress and end of import, conversion, stretch, blink, plate solve, Auto-Tune and detection, plus the blink window's close.
+- **Publishers:** 13 classes post these events: the task classes, `BlinkFrame`, `MainApplicationPanel` and `DetectionConfigurationPanel`.
+- **Subscribers:** 24 `@Subscribe` methods in four GUI classes receive them: `ApplicationWindow`, `MainApplicationPanel`, `DetectionConfigurationPanel` and `StretchPanel`. All four are registered for the window's lifetime, and each method moves its work to the EDT itself.
+- **The dependency:** Guava is used for nothing else, so retiring the bus would also remove the dependency.
+
+**For keeping it.**
+- It works, and it is small and contained.
+- The problems in D02 and D04 do not come from the bus itself:
+  - the events carry no job or session identity;
+  - the UI lock is taken after the worker has started.
+
+  Replacing the bus alone fixes neither problem.
+
+**For replacing it.**
+- Guava's own [guidance](https://github.com/google/guava/wiki/EventBusExplained#avoid-eventbus) advises against using it. Its reasons that matter here:
+  - who posts an event and who receives it is not visible in the code;
+  - a subscription cannot be generic (no `JobFinished<T>`);
+  - the delivery thread cannot be controlled;
+  - an exception in a subscriber is only logged and never reaches the poster.
+- Typed job handles (D02/D04) would return results and failures directly to whoever started the job.
+
+**Options.**
+1. **Keep it as it is.**
+2. **Retire it gradually.** When D02/D04 give a workflow a typed job handle, its progress and outcome go through that handle, and its events are removed. Guava goes when the last event does.
+3. **Replace it with another event-bus library.** This keeps the same hidden coupling, so it gains little.
+
+**Suggestion (not a decision).** Option 2:
+- no separate migration project;
+- no new events on the bus in the meantime;
+- plain Java (listener interfaces, `SwingWorker`, `PropertyChangeSupport`) covers what remains, so no new library is needed.
+
+To ground the decision, the review should list every publisher, subscriber and registration, including inline workers.
+
 ### Common patterns that fit this codebase
 
 | Pattern | Concrete use here | Limit |
@@ -332,12 +419,13 @@ The localhost lookup proxy's lifecycle can remain application-scoped. Give it an
 
 | Stage | Work | Why this order |
 |---|---|---|
+| Architecture review | Review the codebase as described above, turn the findings into steps mapped to the stages below, and answer the EventBus question | Makes the remaining scope explicit before the architecture work grows. Focused correctness fixes need not wait. |
 | A: focused correctness | D01 file publication; D03 preview identity; D05 invalid-editor feedback | Small, concrete failure modes; do not wait for a broad architecture migration. |
 | B: workflow foundation | D02 ownership/admission and D04 outcomes/cleanup for detection, inspection and star-mask jobs; then D07 actions | Makes lifecycle explicit before replacing UI locking. |
 | C: session boundary | D06 application preferences/session handover; D08 background WCS write and metadata restoration | Reduces UI/service coupling and protects session transitions. |
 | D: presentation and polish | D09 prepared report data; D10 one page of typed settings bindings; D11 results/readiness; D12/D13 layout and access | Builds on explicit state; accessibility fixes that are independent can start earlier. |
 
-Reusing `BatchStretchTask` instead of the duplicate inline worker is a useful small change within Stage B, not the main architectural solution. Add one adapter/command at a time and keep the public API and file formats compatible. Do not combine the file-safety fix, EventBus migration and a settings redesign in one commit.
+Reusing `BatchStretchTask` instead of the duplicate inline worker is a useful small change within Stage B, not the main architectural solution. Add one adapter/command at a time and keep the public API and file formats compatible. Do not combine the file-safety fix, an EventBus change and a settings redesign in one commit.
 
 ## Verification strategy
 

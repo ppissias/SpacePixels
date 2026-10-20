@@ -619,6 +619,14 @@ Same-frame groups of rescued anomalies are offered to confirmed-streak consolida
 
 `AnomalySectionWriter` presents these as unconfirmed single-frame events: exposure timing and coordinates, plain-language detection reasons, a static before/event/after comparison and a shareable GIF. Both views use the same event-derived display stretch and nearest kept neighbours; labels sit outside the sky crops. Raw measurements, footprints and mask overlap are collapsed under Detection details. Anomaly SatChecker queries use the event position and the whole exposure, with metadata fallback from the FITS frame; they do not use the shortened streak-query window. They reuse the report's live lookup and cache/sidecar flow and present satellite results as possible associations without changing detection classifications.
 
+An anomaly is marked as likely part of a moving-object track when all of these hold:
+
+- The track has no detection in the anomaly's frame, and that frame lies within the track's frames or just before or after them.
+- The track's predicted position lies within `predictionTolerance` of the anomaly. The prediction interpolates between the neighbouring detections at the exposure midpoints, or uses frame order without timestamps. Next to the track it extends the first or last step.
+- The anomaly passes the linker's profile check (`maxFwhmRatio`, `maxSurfaceBrightnessRatio`) against the track's nearest detection.
+
+The card gets a title badge and a note, both linking to the track card. `DeepStackReportSectionWriter` marks a slow-mover candidate the same way when the detections of a reported track lie on its smear. These marks change only the presentation: the findings keep their categories, numbers and JSON entries.
+
 Camera-fixed filtering (`enableCameraFixedRejection`) uses registrations inferred from fill edges. At least three frames must map detections within 2 px of the same camera position while their registered-frame positions spread at least 4 px. Unusable registrations are excluded. `ReportInclusion.cameraFixed` controls presentation, independently of the engine filter.
 
 Common-motion filtering has its own switch and runs before local rescue and activity clustering. It assigns each observation once, preserves ambiguous associations for review, and removes accepted groups from the residual input while retaining them in the report. The residual-analysis switch controls only local rescue and clustering.
