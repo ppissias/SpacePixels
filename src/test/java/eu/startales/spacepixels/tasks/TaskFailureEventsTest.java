@@ -2,7 +2,6 @@ package eu.startales.spacepixels.tasks;
 
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
-import eu.startales.spacepixels.events.AutoTuneFinishedEvent;
 import eu.startales.spacepixels.events.BlinkFinishedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.jobs.Job;
@@ -43,11 +42,6 @@ public class TaskFailureEventsTest {
     public void failingTasksPostTheirFinishedEventWithTheReason() throws Exception {
         FitsFileInformation missing = missingFrame();
 
-        AutoTuneFinishedEvent tune = last(run(new AutoTuneTask(bus(), null, new DetectionConfig(), 10,
-                JTransientAutoTuner.AutoTuneProfile.values()[0], AutoTunerRunner.Algorithm.CALIBRATED)), AutoTuneFinishedEvent.class);
-        assertFalse(tune.isSuccess());
-        assertNotNull(tune.getMessage());
-
         BlinkFinishedEvent blink = last(run(new BlinkImagesTask(bus(), new FitsFileInformation[]{missing}, new AtomicBoolean(true))),
                 BlinkFinishedEvent.class);
         assertFalse(blink.isSuccess());
@@ -71,6 +65,8 @@ public class TaskFailureEventsTest {
         assertFailed(outcomeOf(new BatchStretchTask(null, 1, 1, algorithm)));
         assertFailed(outcomeOf(new BatchConvertMonoTask(null, false, 1, 1, algorithm)));
         assertFailed(outcomeOf(new PlateSolveTask(null, missingFrame().getFilePath(), true, false)));
+        assertFailed(outcomeOf(new AutoTuneTask(null, new DetectionConfig(), 10,
+                JTransientAutoTuner.AutoTuneProfile.values()[0], AutoTunerRunner.Algorithm.CALIBRATED)));
         assertFailed(outcomeOf(new DetectionTask(null, new DetectionConfig())));
         assertFailed(outcomeOf(new IterativeDetectionTask(null, new DetectionConfig(), 0)));
         assertFailed(outcomeOf(new ManualTransientInspectionTask(null, new DetectionConfig())));

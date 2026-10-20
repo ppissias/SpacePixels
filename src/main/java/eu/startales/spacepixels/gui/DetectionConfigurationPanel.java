@@ -11,9 +11,6 @@
 package eu.startales.spacepixels.gui;
 
 import com.google.common.eventbus.Subscribe;
-import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
-import eu.startales.spacepixels.events.AutoTuneFinishedEvent;
-import eu.startales.spacepixels.events.AutoTuneStartedEvent;
 import eu.startales.spacepixels.events.FitsImportFinishedEvent;
 import eu.startales.spacepixels.config.DetectionSettingsRules;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
@@ -593,16 +590,20 @@ public class DetectionConfigurationPanel extends JPanel {
             return;
         }
 
-        mainAppWindow.getEventBus().post(new EngineProgressUpdateEvent(0, "Initializing Mathematical Auto-Tuner..."));
-
         AutoTuneTask tuneTask = new AutoTuneTask(
-                mainAppWindow.getEventBus(),
                 poolToUse,
                 settings,
                 autoTuneMaxCandidateFrames,
                 selectedProfile,
                 algorithm);
-        new Thread(tuneTask).start();
+        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.AUTO_TUNE,
+                mainAppWindow.getImageProcessing(), tuneTask, (handle, outcome) -> autoTuneFinished(outcome));
+        if (!admission.admitted()) {
+            showFooterNote(admission.refusal(), true);
+            return;
+        }
+        overviewPanel.tuneStarted();
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
     }
 
     private void loadPersistedSettings() {
@@ -1532,23 +1533,22 @@ public class DetectionConfigurationPanel extends JPanel {
         });
     }
 
-    @Subscribe
-    public void onAutoTuneStarted(AutoTuneStartedEvent event) {
-        EventQueue.invokeLater(() -> {
-            overviewPanel.tuneStarted();
-            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-        });
-    }
-
-    @Subscribe
-    public void onAutoTuneFinished(AutoTuneFinishedEvent event) {
-        EventQueue.invokeLater(() -> {
-            setCursor(Cursor.getDefaultCursor());
-            if (event.getResult() != null && event.getResult().telemetryReport != null) {
-                DebugOutput.println(event.getResult().telemetryReport);
-            }
-            overviewPanel.tuneFinished(event.isSuccess(), event.getMessage(), event.getResult());
-        });
+    /** The end of Auto-Tune: the Overview shows the result or the problem, and the status bar says how it ended. */
+    private void autoTuneFinished(JobOutcome<JTransientAutoTuner.AutoTunerResult> outcome) {
+        setCursor(Cursor.getDefaultCursor());
+        boolean completed = outcome instanceof JobOutcome.Completed<?>;
+        JTransientAutoTuner.AutoTunerResult result =
+                outcome instanceof JobOutcome.Completed<JTransientAutoTuner.AutoTunerResult> done ? done.result() : null;
+        if (result != null && result.telemetryReport != null) {
+            DebugOutput.println(result.telemetryReport);
+        }
+        String message = completed ? "Auto-Tuning completed successfully."
+                : outcome instanceof JobOutcome.Failed<JTransientAutoTuner.AutoTunerResult> failed ? failed.reason() : null;
+        overviewPanel.tuneFinished(completed, message, result);
+        MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
+        if (mainPanel != null) {
+            mainPanel.showStatus(completed ? "Auto-Tuning completed successfully." : "Auto-Tuning failed or aborted.");
+        }
     }
 
     /**

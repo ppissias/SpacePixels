@@ -17,7 +17,8 @@ public enum JobKind {
     STAR_MASK_STACK("Test Star Mask"),
     CONVERT_TO_MONO("Convert to Mono"),
     BATCH_STRETCH("Batch Stretch"),
-    PLATE_SOLVE("Plate Solve");
+    PLATE_SOLVE("Plate Solve"),
+    AUTO_TUNE("Auto-Tune");
 
     private final String title;
 

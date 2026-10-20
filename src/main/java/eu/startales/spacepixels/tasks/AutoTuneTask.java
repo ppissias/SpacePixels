@@ -9,39 +9,40 @@
  */
 package eu.startales.spacepixels.tasks;
 
-import eu.startales.spacepixels.jobs.JobFailures;
-import com.google.common.eventbus.EventBus;
-import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
-import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
-import eu.startales.spacepixels.events.AutoTuneFinishedEvent;
-import eu.startales.spacepixels.events.AutoTuneStartedEvent;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
-import eu.startales.spacepixels.gui.ApplicationWindow;
+import eu.startales.spacepixels.jobs.Job;
+import eu.startales.spacepixels.jobs.JobContext;
+import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
+import eu.startales.spacepixels.util.AutoTunerRunner;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
-import eu.startales.spacepixels.util.AutoTunerRunner;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
+import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
+
 import java.util.List;
-import java.util.logging.Level;
+import java.util.logging.Logger;
 
-public class AutoTuneTask implements Runnable {
+/**
+ * Runs the chosen Auto-Tuner on a pool of the session's frames. The result is the tuner's answer, which says itself
+ * whether it found usable settings.
+ */
+public class AutoTuneTask implements Job<JTransientAutoTuner.AutoTunerResult> {
 
-    private final EventBus eventBus;
+    private static final Logger LOGGER = Logger.getLogger(AutoTuneTask.class.getName());
+
     private final FitsFileInformation[] filesInfo;
     private final DetectionConfig baseConfig;
     private final int autoTuneMaxCandidateFrames;
     private final JTransientAutoTuner.AutoTuneProfile profile;
     private final AutoTunerRunner.Algorithm algorithm;
 
-    public AutoTuneTask(EventBus eventBus,
-                        FitsFileInformation[] filesInfo,
+    public AutoTuneTask(FitsFileInformation[] filesInfo,
                         DetectionConfig baseConfig,
                         int autoTuneMaxCandidateFrames,
                         JTransientAutoTuner.AutoTuneProfile profile,
                         AutoTunerRunner.Algorithm algorithm) {
-        this.eventBus = eventBus;
         this.filesInfo = filesInfo;
         this.baseConfig = baseConfig;
         this.autoTuneMaxCandidateFrames = autoTuneMaxCandidateFrames;
@@ -50,42 +51,33 @@ public class AutoTuneTask implements Runnable {
     }
 
     @Override
-    public void run() {
-        eventBus.post(new AutoTuneStartedEvent());
-
-        try {
-            if (filesInfo == null || filesInfo.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
-                throw new IllegalStateException("Not enough frames to run Auto-Tuning.");
-            }
-
-            ApplicationWindow.logger.info("Auto-Tuner evaluating up to " + autoTuneMaxCandidateFrames + " candidate frames from " + filesInfo.length + " inputs.");
-
-            List<ImageFrame> candidateFrames = AutoTuneCandidatePoolBuilder.buildCandidatePool(
-                    filesInfo,
-                    baseConfig,
-                    autoTuneMaxCandidateFrames,
-                    (percentage, message) -> eventBus.post(new EngineProgressUpdateEvent(percentage, message)));
-
-            ApplicationWindow.logger.info("Candidate pool ready. Passing " + candidateFrames.size() + " frames to AutoTuner.");
-
-            TransientEngineProgressListener autoTuneListener = (enginePercent, message) -> {
-                int scaledPercent = 50 + (int) ((enginePercent / 100.0f) * 50);
-                eventBus.post(new EngineProgressUpdateEvent(scaledPercent, "Tuning: " + message));
-            };
-
-            eventBus.post(new EngineProgressUpdateEvent(50, "Starting mathematical tuning algorithms..."));
-
-            ApplicationWindow.logger.info("Auto-Tuner algorithm: " + algorithm + ", profile: " + profile);
-            JTransientAutoTuner.AutoTunerResult result =
-                    AutoTunerRunner.run(candidateFrames, baseConfig, profile, algorithm, autoTuneListener);
-
-            eventBus.post(new EngineProgressUpdateEvent(100, "Auto-Tuning complete!"));
-            eventBus.post(new AutoTuneFinishedEvent(true, "Auto-Tuning completed successfully.", result));
-
-        } catch (Throwable ex) {
-            String message = JobFailures.rethrowOutOfMemory(ex);
-            ApplicationWindow.logger.log(Level.SEVERE, "Auto-Tuning failed", ex);
-            eventBus.post(new AutoTuneFinishedEvent(false, message, null));
+    public JobOutcome<JTransientAutoTuner.AutoTunerResult> run(JobContext context) throws Exception {
+        if (filesInfo == null || filesInfo.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
+            throw new IllegalStateException("Not enough frames to run Auto-Tuning.");
         }
+
+        LOGGER.info("Auto-Tuner evaluating up to " + autoTuneMaxCandidateFrames + " candidate frames from " + filesInfo.length + " inputs.");
+
+        List<ImageFrame> candidateFrames = AutoTuneCandidatePoolBuilder.buildCandidatePool(
+                filesInfo,
+                baseConfig,
+                autoTuneMaxCandidateFrames,
+                context::progress);
+
+        LOGGER.info("Candidate pool ready. Passing " + candidateFrames.size() + " frames to AutoTuner.");
+
+        TransientEngineProgressListener autoTuneListener = (enginePercent, message) -> {
+            int scaledPercent = 50 + (int) ((enginePercent / 100.0f) * 50);
+            context.progress(scaledPercent, "Tuning: " + message);
+        };
+
+        context.progress(50, "Starting mathematical tuning algorithms...");
+
+        LOGGER.info("Auto-Tuner algorithm: " + algorithm + ", profile: " + profile);
+        JTransientAutoTuner.AutoTunerResult result =
+                AutoTunerRunner.run(candidateFrames, baseConfig, profile, algorithm, autoTuneListener);
+
+        context.progress(100, "Auto-Tuning complete!");
+        return JobOutcome.completed(result);
     }
 }

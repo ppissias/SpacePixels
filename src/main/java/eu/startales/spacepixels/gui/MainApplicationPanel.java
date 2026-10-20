@@ -1454,6 +1454,11 @@ public class MainApplicationPanel extends JPanel {
         }
     }
 
+    /** Shows a line in the status bar, for an outcome handled outside this panel. */
+    void showStatus(String text) {
+        statusLabel.setText(text);
+    }
+
     /** Tells the user that a detection job was declined or failed, as the detection jobs always have. */
     void showDetectionProblem(JobOutcome<?> outcome) {
         String reason = outcome instanceof JobOutcome.Declined<?> declined ? declined.reason()
@@ -1556,37 +1561,6 @@ public class MainApplicationPanel extends JPanel {
                 statusLabel.setText(importedCount == 0 ? "No files loaded" : "Imported " + importedCount + " file(s)");
             } else {
                 statusLabel.setText("Import failed");
-            }
-        });
-    }
-
-    @Subscribe
-    public void onAutoTuneStarted(AutoTuneStartedEvent event) {
-        EventQueue.invokeLater(() -> {
-            setProgressBarWorking();
-            disableControlsProcessing();
-
-            statusLabel.setText("Auto-Tuning mathematical sequence...");
-
-            // --- SHOW PROGRESS DIALOG ---
-            progressDialog.updateProgress(0, "Initializing Auto-Tuner...");
-            progressDialog.setVisible(true);
-        });
-    }
-
-    @Subscribe
-    public void onAutoTuneFinished(AutoTuneFinishedEvent event) {
-        EventQueue.invokeLater(() -> {
-            // --- HIDE PROGRESS DIALOG ---
-            progressDialog.setVisible(false);
-
-            setProgressBarIdle();
-            enableControlsProcessingFinished();
-
-            if (event.isSuccess()) {
-                statusLabel.setText("Auto-Tuning completed successfully.");
-            } else {
-                statusLabel.setText("Auto-Tuning failed or aborted.");
             }
         });
     }
@@ -1795,6 +1769,7 @@ public class MainApplicationPanel extends JPanel {
                 case CONVERT_TO_MONO -> new JobTexts("Batch conversion started", "Initializing batch conversion...", false, "Batch conversion finished");
                 case BATCH_STRETCH -> new JobTexts("Batch stretch started", "Initializing batch stretch...", false, "Batch stretch finished");
                 case PLATE_SOLVE -> new JobTexts("Plate solving image...", "Plate solving selected image...", true, "Plate solve finished");
+                case AUTO_TUNE -> new JobTexts("Auto-Tuning mathematical sequence...", "Initializing Auto-Tuner...", false, "Auto-Tune finished");
                 default -> new JobTexts("Object detection started...", "Initializing object detection...", false, "Object detection completed");
             };
         }
