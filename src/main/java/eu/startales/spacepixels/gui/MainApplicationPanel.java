@@ -1572,46 +1572,6 @@ public class MainApplicationPanel extends JPanel {
     }
 
     @Subscribe
-    public void onDetectionStarted(DetectionStartedEvent event) {
-        EventQueue.invokeLater(() -> {
-            setProgressBarWorking();
-            disableControlsProcessing();
-
-            statusLabel.setText("Object detection started...");
-
-            // --- NEW: SHOW PROGRESS DIALOG ---
-            // Because JDialog.setVisible(true) is blocking when modal, it acts as its own event loop.
-            // Tasks wrapped in invokeLater() will still execute behind the scenes!
-            progressDialog.updateProgress(0, "Initializing object detection...");
-            progressDialog.setVisible(true);
-        });
-    }
-
-    @Subscribe
-    public void onDetectionFinished(DetectionFinishedEvent event) {
-        EventQueue.invokeLater(() -> {
-
-            // --- NEW: HIDE PROGRESS DIALOG ---
-            progressDialog.setVisible(false);
-
-            setProgressBarIdle();
-            enableControlsProcessingFinished();
-            statusLabel.setText("Object detection completed");
-
-            if (event.isSuccess()) {
-                if (!event.isQuickDetection()) {
-                    promptUserToOpenReport(event.getReportFilename());
-                }
-            } else {
-                JOptionPane.showMessageDialog(this,
-                        "Detection failed: " + event.getErrorMessage(),
-                        "Error",
-                        JOptionPane.ERROR_MESSAGE);
-            }
-        });
-    }
-
-    @Subscribe
     public void onAutoTuneStarted(AutoTuneStartedEvent event) {
         EventQueue.invokeLater(() -> {
             setProgressBarWorking();
