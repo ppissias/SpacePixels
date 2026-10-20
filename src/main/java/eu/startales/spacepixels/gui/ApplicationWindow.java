@@ -11,12 +11,11 @@ package eu.startales.spacepixels.gui;
 
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.google.common.eventbus.EventBus;
-import com.google.common.eventbus.Subscribe;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import eu.startales.spacepixels.events.FitsImportFinishedEvent;
-import eu.startales.spacepixels.events.FitsImportStartedEvent;
 import eu.startales.spacepixels.jobs.JobCoordinator;
+import eu.startales.spacepixels.jobs.JobKind;
+import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.tasks.FitsImportTask;
 import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.util.FitsFileInformation;
@@ -75,6 +74,8 @@ public class ApplicationWindow {
     private volatile DetectionConfigurationPanel detectionConfigurationPanel;
 
     /** Runs the jobs that have moved off the event bus; the others still lock the window through their own events. */
+    private final List<SessionListener> sessionListeners = new ArrayList<>();
+
     private final JobCoordinator jobCoordinator = new JobCoordinator(
             work -> new Thread(work, "SpacePixels-job").start(),
             EventQueue::invokeLater,
@@ -157,8 +158,6 @@ public class ApplicationWindow {
     }
 
     public ApplicationWindow() {
-        // Register this class to listen for EventBus events
-        eventBus.register(this);
         initialize();
     }
 
@@ -194,7 +193,11 @@ public class ApplicationWindow {
         stretchPanel = new StretchPanel(this);
 
         detectionConfigurationPanel = new DetectionConfigurationPanel(ApplicationWindow.this);
-        eventBus.register(detectionConfigurationPanel);
+
+        // In the order the panels used to hear of a new session.
+        addSessionListener(mainApplicationPanel::sessionChanged);
+        addSessionListener(stretchPanel::sessionChanged);
+        addSessionListener(detectionConfigurationPanel::sessionChanged);
 
         tabbedPane.addTab("Main", mainApplicationPanel);
         tabbedPane.addTab("Astrometry Config", configurationApplicationPanel);
@@ -255,101 +258,95 @@ public class ApplicationWindow {
     /** Imports a folder of aligned frames in the background. */
     public void importFolder(File folder) {
         if (folder != null && folder.isDirectory()) {
-            new Thread(new FitsImportTask(eventBus, folder)).start();
+            JobCoordinator.Admission admission = jobCoordinator.start(JobKind.IMPORT, imagePreProcessing,
+                    new FitsImportTask(folder), (handle, outcome) -> importFinished(outcome));
+            if (!admission.admitted()) {
+                mainApplicationPanel.showStatus(admission.refusal());
+            }
         }
     }
 
-    // --- EVENT BUS SUBSCRIBERS ---
-
-    @Subscribe
-    public void onImportStarted(FitsImportStartedEvent event) {
-        EventQueue.invokeLater(() -> {
-            mainApplicationPanel.setProgressBarWorking();
-            setMenuState(false);
-            setTabEnabled(configurationApplicationPanel, false);
-            setTabEnabled(stretchPanel, false);
-            setTabEnabled(detectionConfigurationPanel, false);
-        });
+    /** Registers a panel to hear, on the event thread, when the session changes. */
+    void addSessionListener(SessionListener listener) {
+        sessionListeners.add(listener);
     }
 
-    @Subscribe
-    public void onImportFinished(FitsImportFinishedEvent event) {
-        EventQueue.invokeLater(() -> {
-            mainApplicationPanel.setProgressBarIdle();
-            setMenuState(true);
+    private void fireSessionChanged(FitsFileInformation[] files) {
+        for (SessionListener listener : sessionListeners) {
+            listener.sessionChanged(files);
+        }
+    }
 
-            if (event.isSuccess()) {
-                FitsFileInformation[] filesInfo = event.getFilesInformation();
-                if (filesInfo == null) {
-                    filesInfo = new FitsFileInformation[0];
+    /** The end of an import: installs the imported session, or says why there is none. */
+    private void importFinished(JobOutcome<FitsImportTask.Result> outcome) {
+        if (outcome instanceof JobOutcome.Completed<FitsImportTask.Result> completed) {
+            installSession(completed.result().processing(), completed.result().files());
+            return;
+        }
+        if (outcome instanceof JobOutcome.Declined<FitsImportTask.Result>) {
+            clearImportedDataset();
+        } else if (outcome instanceof JobOutcome.Failed<FitsImportTask.Result> failed) {
+            mainApplicationPanel.showStatus("Import failed");
+            JOptionPane.showMessageDialog(frmIpodImage,
+                    "Error loading files: " + failed.reason(),
+                    "Import Error", JOptionPane.ERROR_MESSAGE);
+        }
+        // Unlocking after the import enabled every tab; without a session they stay closed.
+        setSessionTabsEnabled(imagePreProcessing != null);
+    }
+
+    /** Makes the imported folder the window's session, in place of the one before it. */
+    private void installSession(ImageProcessing processing, FitsFileInformation[] filesInfo) {
+        if (this.imagePreProcessing != null && this.imagePreProcessing != processing) {
+            this.imagePreProcessing.close();
+        }
+        this.imagePreProcessing = processing;
+
+        // Update UI components
+        AbstractTableModel tableModel = new FitsFileTableModel(filesInfo);
+        mainApplicationPanel.setTableModel(tableModel);
+
+        setSessionTabsEnabled(true);
+
+        configurationApplicationPanel.refreshComponents();
+        fireSessionChanged(filesInfo);
+
+        int unusableTimestampCount = 0;
+        StringBuilder examples = new StringBuilder();
+        for (FitsFileInformation fileInfo : filesInfo) {
+            if (fileInfo != null && fileInfo.hasDisplayableObservationDateWithoutUsableTimestamp()) {
+                unusableTimestampCount++;
+                if (examples.length() < 700) {
+                    examples.append(" - ")
+                            .append(fileInfo.getFileName())
+                            .append(": ")
+                            .append(fileInfo.getObservationTimestampDiagnostics())
+                            .append("\n");
                 }
-
-                if (filesInfo.length == 0) {
-                    clearImportedDataset();
-                    return;
-                }
-
-                // Update internal state
-                if (this.imagePreProcessing != null && this.imagePreProcessing != event.getImagePreProcessing()) {
-                    this.imagePreProcessing.close();
-                }
-                this.imagePreProcessing = event.getImagePreProcessing();
-
-                // Update UI components
-                AbstractTableModel tableModel = new FitsFileTableModel(filesInfo);
-                mainApplicationPanel.setTableModel(tableModel);
-
-                setTabEnabled(configurationApplicationPanel, true);
-                setTabEnabled(stretchPanel, true);
-                setTabEnabled(detectionConfigurationPanel, true);
-
-                configurationApplicationPanel.refreshComponents();
-
-                if (filesInfo != null) {
-                    int unusableTimestampCount = 0;
-                    StringBuilder examples = new StringBuilder();
-                    for (FitsFileInformation fileInfo : filesInfo) {
-                        if (fileInfo != null && fileInfo.hasDisplayableObservationDateWithoutUsableTimestamp()) {
-                            unusableTimestampCount++;
-                            if (examples.length() < 700) {
-                                examples.append(" - ")
-                                        .append(fileInfo.getFileName())
-                                        .append(": ")
-                                        .append(fileInfo.getObservationTimestampDiagnostics())
-                                        .append("\n");
-                            }
-                        }
-                    }
-
-                    if (unusableTimestampCount > 0) {
-                        JOptionPane.showMessageDialog(
-                                frmIpodImage,
-                                "SpacePixels imported " + unusableTimestampCount + " file(s) with a visible FITS date/time\n" +
-                                        "that still could not be converted into the timestamp passed to JTransient.\n\n" +
-                                        "Those frames will be sent with no usable timing information, so time-based linking\n" +
-                                        "and any timing-sensitive diagnostics may be skipped or degraded.\n\n" +
-                                        "Examples:\n" + examples,
-                                "Timestamp Parsing Warning",
-                                JOptionPane.WARNING_MESSAGE);
-                    }
-                }
-                
-                // --- Issue warning for large datasets ---
-                if (filesInfo != null && filesInfo.length > 100) {
-                    JOptionPane.showMessageDialog(frmIpodImage,
-                            "You have imported a large dataset (" + filesInfo.length + " files).\n" +
-                            "Please be aware that running the standard detection pipeline on the entire dataset at once\n" +
-                            "may cause the application to run out of memory depending on your system's resources.\n\n" +
-                            "Consider using the Iterative Detection option with a safe frame limit.",
-                            "Large Dataset Warning", JOptionPane.WARNING_MESSAGE);
-                }
-            } else {
-                // Handle Error
-                JOptionPane.showMessageDialog(frmIpodImage,
-                        "Error loading files: " + event.getErrorMessage(),
-                        "Import Error", JOptionPane.ERROR_MESSAGE);
             }
-        });
+        }
+
+        if (unusableTimestampCount > 0) {
+            JOptionPane.showMessageDialog(
+                    frmIpodImage,
+                    "SpacePixels imported " + unusableTimestampCount + " file(s) with a visible FITS date/time\n" +
+                            "that still could not be converted into the timestamp passed to JTransient.\n\n" +
+                            "Those frames will be sent with no usable timing information, so time-based linking\n" +
+                            "and any timing-sensitive diagnostics may be skipped or degraded.\n\n" +
+                            "Examples:\n" + examples,
+                    "Timestamp Parsing Warning",
+                    JOptionPane.WARNING_MESSAGE);
+        }
+
+        // --- Issue warning for large datasets ---
+        if (filesInfo.length > 100) {
+            JOptionPane.showMessageDialog(frmIpodImage,
+                    "You have imported a large dataset (" + filesInfo.length + " files).\n" +
+                    "Please be aware that running the standard detection pipeline on the entire dataset at once\n" +
+                    "may cause the application to run out of memory depending on your system's resources.\n\n" +
+                    "Consider using the Iterative Detection option with a safe frame limit.",
+                    "Large Dataset Warning", JOptionPane.WARNING_MESSAGE);
+        }
     }
 
     // --- HELPER METHODS ---
@@ -360,9 +357,15 @@ public class ApplicationWindow {
         }
         this.imagePreProcessing = null;
         mainApplicationPanel.setTableModel(new FitsFileTableModel(new FitsFileInformation[0]));
-        setTabEnabled(configurationApplicationPanel, false);
-        setTabEnabled(stretchPanel, false);
-        setTabEnabled(detectionConfigurationPanel, false);
+        setSessionTabsEnabled(false);
+        fireSessionChanged(new FitsFileInformation[0]);
+    }
+
+    /** The tabs that need a session: Astrometry Config, Image Stretch and Detection Settings. */
+    private void setSessionTabsEnabled(boolean state) {
+        setTabEnabled(configurationApplicationPanel, state);
+        setTabEnabled(stretchPanel, state);
+        setTabEnabled(detectionConfigurationPanel, state);
     }
 
     private void setTabEnabled(Component component, boolean state) {

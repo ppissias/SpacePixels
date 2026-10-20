@@ -19,7 +19,8 @@ public enum JobKind {
     BATCH_STRETCH("Batch Stretch"),
     PLATE_SOLVE("Plate Solve"),
     AUTO_TUNE("Auto-Tune"),
-    BLINK("Blink");
+    BLINK("Blink"),
+    IMPORT("Import");
 
     private final String title;
 

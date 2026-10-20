@@ -10,8 +10,6 @@
 
 package eu.startales.spacepixels.gui;
 
-import com.google.common.eventbus.Subscribe;
-import eu.startales.spacepixels.events.FitsImportFinishedEvent;
 import eu.startales.spacepixels.tasks.GeneratePreviewsTask;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.StretchAlgorithm;
@@ -67,7 +65,6 @@ public class StretchPanel extends JPanel {
 
     public StretchPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
-        this.mainAppWindow.getEventBus().register(this);
 
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(10, 20, 20, 20));
@@ -407,16 +404,10 @@ public class StretchPanel extends JPanel {
         updateFrameLabel();
     }
 
-    /** The previews belong to the session they were rendered for: another import removes them. */
-    @Subscribe
-    public void onImportFinished(FitsImportFinishedEvent event) {
-        if (!event.isSuccess()) {
-            return;
-        }
-        EventQueue.invokeLater(() -> {
-            clearPreviews("Select a frame to preview it");
-            triggerPreviewUpdate();
-        });
+    /** The previews belong to the session they were rendered for: another session removes them. */
+    void sessionChanged(FitsFileInformation[] files) {
+        clearPreviews("Select a frame to preview it");
+        triggerPreviewUpdate();
     }
 
     private void openFullSize() {

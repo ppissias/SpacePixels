@@ -10,86 +10,78 @@
 
 package eu.startales.spacepixels.tasks;
 
-import eu.startales.spacepixels.jobs.JobFailures;
-import com.google.common.eventbus.EventBus;
-import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
-import eu.startales.spacepixels.events.FitsImportFinishedEvent;
-import eu.startales.spacepixels.events.FitsImportStartedEvent;
-import eu.startales.spacepixels.gui.ApplicationWindow;
+import eu.startales.spacepixels.jobs.Job;
+import eu.startales.spacepixels.jobs.JobContext;
+import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.MixedExposureException;
 import eu.startales.spacepixels.util.XisfImageConverter;
 
 import java.io.File;
-import java.util.logging.Level;
+import java.util.logging.Logger;
 
-public class FitsImportTask implements Runnable {
-    private final EventBus eventBus;
+/**
+ * Imports a folder of aligned frames. A conversion that writes a new folder, or the choice of one exposure time,
+ * continues the import with that folder. The result is the new session processor, which the window then owns, and
+ * its frames; the import is declined when no frames were loaded, for example because a conversion was declined.
+ */
+public class FitsImportTask implements Job<FitsImportTask.Result> {
+
+    /** The imported session: its processor and its frames. */
+    public record Result(ImageProcessing processing, FitsFileInformation[] files) {
+    }
+
+    private static final Logger LOGGER = Logger.getLogger(FitsImportTask.class.getName());
+
     private final File directory;
 
-    public FitsImportTask(EventBus eventBus, File directory) {
-        this.eventBus = eventBus;
+    public FitsImportTask(File directory) {
         this.directory = directory;
     }
 
     @Override
-    public void run() {
-        // 1. Tell the UI to lock up and show progress
-        eventBus.post(new FitsImportStartedEvent());
-        ImageProcessing imgProcessing = null;
-        boolean ownershipTransferred = false;
-        try {
-            File importDirectory = XisfImageConverter.prepareDirectoryForFitsImport(
-                    directory,
-                    (percentage, message) -> eventBus.post(new EngineProgressUpdateEvent(percentage, message)));
-            if (!directory.equals(importDirectory)) {
-                ApplicationWindow.logger.info("Redirecting import to converted XISF directory: " + importDirectory.getAbsolutePath());
-                eventBus.post(new EngineProgressUpdateEvent(90, "Loading generated FITS metadata..."));
-            }
-
-            // 2. Do the heavy lifting
-            imgProcessing = ImageProcessing.getInstance(importDirectory);
-            FitsFileInformation[] filesInfo = imgProcessing.getFitsfileInformation();
-            eventBus.post(new EngineProgressUpdateEvent(100, "Import complete."));
-
-            // 3. Post success with the extracted data
-            eventBus.post(new FitsImportFinishedEvent(true, null, filesInfo.length == 0 ? null : imgProcessing, filesInfo));
-            ownershipTransferred = filesInfo.length > 0;
-
-        } catch (ImageProcessing.RedirectImportException e) {
-            // The user opted to automatically load the newly converted directory!
-            ApplicationWindow.logger.info("Redirecting import to newly created directory: " + e.getNewDirectory().getAbsolutePath());
-            new FitsImportTask(eventBus, e.getNewDirectory()).run();
-        } catch (MixedExposureException e) {
-            // Only the window can ask; the API and batch runs reject the folder with the exception's message.
-            if (!e.canImportLargestGroup()) {
-                postFailure(e);
-                return;
-            }
+    public JobOutcome<Result> run(JobContext context) throws Exception {
+        File folder = directory;
+        while (true) {
+            ImageProcessing imgProcessing = null;
+            boolean ownershipTransferred = false;
             try {
+                File importDirectory = XisfImageConverter.prepareDirectoryForFitsImport(folder, context::progress);
+                if (!folder.equals(importDirectory)) {
+                    LOGGER.info("Redirecting import to converted XISF directory: " + importDirectory.getAbsolutePath());
+                    context.progress(90, "Loading generated FITS metadata...");
+                }
+
+                imgProcessing = ImageProcessing.getInstance(importDirectory);
+                FitsFileInformation[] filesInfo = imgProcessing.getFitsfileInformation();
+                context.progress(100, "Import complete.");
+                if (filesInfo.length == 0) {
+                    return JobOutcome.declined("No frames were imported.");
+                }
+                ownershipTransferred = true;
+                return JobOutcome.completed(new Result(imgProcessing, filesInfo));
+
+            } catch (ImageProcessing.RedirectImportException e) {
+                // The user opted to automatically load the newly converted directory!
+                LOGGER.info("Redirecting import to newly created directory: " + e.getNewDirectory().getAbsolutePath());
+                folder = e.getNewDirectory();
+            } catch (MixedExposureException e) {
+                // Only the window can ask; the API and batch runs reject the folder with the exception's message.
+                if (!e.canImportLargestGroup()) {
+                    throw e;
+                }
                 File largestGroup = ImageProcessing.offerToImportLargestExposureGroup(e);
                 if (largestGroup == null) {
-                    eventBus.post(new FitsImportFinishedEvent(true, null, null, new FitsFileInformation[0]));
-                } else {
-                    ApplicationWindow.logger.info("Redirecting import to the images of one exposure time: " + largestGroup.getAbsolutePath());
-                    new FitsImportTask(eventBus, largestGroup).run();
+                    return JobOutcome.declined("The import was cancelled.");
                 }
-            } catch (Throwable copyFailure) {
-                postFailure(copyFailure);
-            }
-        } catch (Throwable t) {
-            postFailure(t);
-        } finally {
-            if (!ownershipTransferred && imgProcessing != null) {
-                imgProcessing.close();
+                LOGGER.info("Redirecting import to the images of one exposure time: " + largestGroup.getAbsolutePath());
+                folder = largestGroup;
+            } finally {
+                if (!ownershipTransferred && imgProcessing != null) {
+                    imgProcessing.close();
+                }
             }
         }
-    }
-
-    private void postFailure(Throwable failure) {
-        String message = JobFailures.rethrowOutOfMemory(failure);
-        ApplicationWindow.logger.log(Level.SEVERE, "Error loading FITS files", failure);
-        eventBus.post(new FitsImportFinishedEvent(false, message, null, null));
     }
 }

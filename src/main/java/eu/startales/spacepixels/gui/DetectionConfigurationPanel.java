@@ -10,8 +10,6 @@
 
 package eu.startales.spacepixels.gui;
 
-import com.google.common.eventbus.Subscribe;
-import eu.startales.spacepixels.events.FitsImportFinishedEvent;
 import eu.startales.spacepixels.config.DetectionSettingsRules;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
@@ -1501,36 +1499,30 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
 
-    @Subscribe
-    public void onImportFinished(FitsImportFinishedEvent event) {
-        EventQueue.invokeLater(() -> {
-            if (!event.isSuccess()) {
-                return;
+    /** A new session, or none: the Overview shows it, and the master stack of the last one is dropped. */
+    void sessionChanged(FitsFileInformation[] filesInfo) {
+        cachedMasterStack = null;
+        cachedStackFiles = null;
+        if (filesInfo.length == 0) {
+            overviewPanel.setSession(null, 0, 0, 0, false, null, new ArrayList<>());
+            return;
+        }
+        boolean existsColor = false;
+        for (FitsFileInformation fitsFile : filesInfo) {
+            if (!fitsFile.isMonochrome()) {
+                existsColor = true;
+                break;
             }
-            FitsFileInformation[] filesInfo = event.getFilesInformation();
-            cachedMasterStack = null;
-            cachedStackFiles = null;
-            if (filesInfo == null || filesInfo.length == 0) {
-                overviewPanel.setSession(null, 0, 0, 0, false, null, new ArrayList<>());
-                return;
-            }
-            boolean existsColor = false;
-            for (FitsFileInformation fitsFile : filesInfo) {
-                if (!fitsFile.isMonochrome()) {
-                    existsColor = true;
-                    break;
-                }
-            }
-            File firstFile = new File(filesInfo[0].getFilePath());
-            String sessionName = firstFile.getParentFile() != null ? firstFile.getParentFile().getName() : firstFile.getName();
-            List<String> fileNames = new ArrayList<>();
-            for (FitsFileInformation file : filesInfo) {
-                fileNames.add(new File(file.getFilePath()).getName());
-            }
-            boolean readyForTuning = !existsColor && filesInfo.length >= SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
-            overviewPanel.setSession(sessionName, filesInfo.length, filesInfo[0].getSizeWidth(), filesInfo[0].getSizeHeight(),
-                    readyForTuning, firstFile.getParentFile(), fileNames);
-        });
+        }
+        File firstFile = new File(filesInfo[0].getFilePath());
+        String sessionName = firstFile.getParentFile() != null ? firstFile.getParentFile().getName() : firstFile.getName();
+        List<String> fileNames = new ArrayList<>();
+        for (FitsFileInformation file : filesInfo) {
+            fileNames.add(new File(file.getFilePath()).getName());
+        }
+        boolean readyForTuning = !existsColor && filesInfo.length >= SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
+        overviewPanel.setSession(sessionName, filesInfo.length, filesInfo[0].getSizeWidth(), filesInfo[0].getSizeHeight(),
+                readyForTuning, firstFile.getParentFile(), fileNames);
     }
 
     /** The end of Auto-Tune: the Overview shows the result or the problem, and the status bar says how it ended. */

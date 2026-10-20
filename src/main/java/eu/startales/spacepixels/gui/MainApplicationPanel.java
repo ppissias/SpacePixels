@@ -1554,32 +1554,9 @@ public class MainApplicationPanel extends JPanel {
         });
     }
 
-    @Subscribe
-    public void onImportStarted(FitsImportStartedEvent event) {
-        EventQueue.invokeLater(() -> {
-            setProgressBarWorking();
-            statusLabel.setText("Importing FITS/XISF sequence...");
-            progressDialog.showIndeterminateProgress("Loading FITS/XISF sequence in the background...");
-            if (!progressDialog.isVisible()) {
-                progressDialog.setVisible(true);
-            }
-        });
-    }
-
-    @Subscribe
-    public void onImportFinished(FitsImportFinishedEvent event) {
-        EventQueue.invokeLater(() -> {
-            progressDialog.setVisible(false);
-            setProgressBarIdle();
-
-            if (event.isSuccess()) {
-                FitsFileInformation[] files = event.getFilesInformation();
-                int importedCount = files == null ? 0 : files.length;
-                statusLabel.setText(importedCount == 0 ? "No files loaded" : "Imported " + importedCount + " file(s)");
-            } else {
-                statusLabel.setText("Import failed");
-            }
-        });
+    /** A new session, or none: the status line says how many frames it has. */
+    void sessionChanged(FitsFileInformation[] files) {
+        statusLabel.setText(files.length == 0 ? "No files loaded" : "Imported " + files.length + " file(s)");
     }
 
     /**
@@ -1756,6 +1733,7 @@ public class MainApplicationPanel extends JPanel {
         static JobTexts of(JobKind kind) {
             return switch (kind) {
                 case BLINK -> new JobTexts("Loading frames for blinking...", null, false, "Blink frames loaded");
+                case IMPORT -> new JobTexts("Importing FITS/XISF sequence...", "Loading FITS/XISF sequence in the background...", true, "Import finished");
                 case CONVERT_TO_MONO -> new JobTexts("Batch conversion started", "Initializing batch conversion...", false, "Batch conversion finished");
                 case BATCH_STRETCH -> new JobTexts("Batch stretch started", "Initializing batch stretch...", false, "Batch stretch finished");
                 case PLATE_SOLVE -> new JobTexts("Plate solving image...", "Plate solving selected image...", true, "Plate solve finished");
