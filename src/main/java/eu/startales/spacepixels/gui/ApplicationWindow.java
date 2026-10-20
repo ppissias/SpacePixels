@@ -13,6 +13,7 @@ import com.formdev.flatlaf.FlatDarkLaf;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import eu.startales.spacepixels.jobs.JobCoordinator;
+import eu.startales.spacepixels.jobs.JobFailures;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.tasks.FitsImportTask;
@@ -96,21 +97,14 @@ public class ApplicationWindow {
         }
     };
 
-    public static volatile boolean OOM_FLAG = false;
-
     public static void main(String[] args) {
         DebugOutput.configureApplicationLogging();
         // --- Global Uncaught Exception Handler for OutOfMemoryError ---
         Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
-            Throwable rootCause = e;
-            while (rootCause != null && !(rootCause instanceof OutOfMemoryError)) {
-                if (rootCause == rootCause.getCause()) break;
-                rootCause = rootCause.getCause();
-            }
-            if (rootCause instanceof OutOfMemoryError) {
-                if (!OOM_FLAG) {
-                    OOM_FLAG = true;
-                    logger.log(Level.SEVERE, "Out of Memory on thread " + t.getName(), rootCause);
+            if (JobFailures.isOutOfMemory(e)) {
+                // Marking it also stops the running jobs at their next progress report.
+                if (JobFailures.markApplicationOutOfMemory()) {
+                    logger.log(Level.SEVERE, "Out of Memory on thread " + t.getName(), e);
                     
                     // Failsafe exit timer in case the EDT is completely frozen
                     Thread doomThread = new Thread(() -> {

@@ -9,7 +9,6 @@
  */
 package eu.startales.spacepixels.tasks;
 
-import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import io.github.ppissias.jtransient.engine.ImageFrame;
@@ -31,16 +30,14 @@ final class SessionFrameLoader {
 
     /**
      * @param filesInfo the imported frames, in sequence order
-     * @param listener progress from 0 to {@code progressEnd} percent
+     * @param listener progress from 0 to {@code progressEnd} percent, told before each frame; a job's progress stops
+     *                 the loading once the application has run out of memory
      */
     static List<ImageFrame> loadAll(FitsFileInformation[] filesInfo, TransientEngineProgressListener listener, int progressEnd)
             throws Exception {
         int numFrames = filesInfo.length;
         List<ImageFrame> frames = new ArrayList<>();
         for (int i = 0; i < numFrames; i++) {
-            if (ApplicationWindow.OOM_FLAG) {
-                throw new OutOfMemoryError("Global OOM triggered");
-            }
             if (listener != null) {
                 listener.onProgressUpdate((int) (((float) i / numFrames) * progressEnd), "Loading frame " + (i + 1) + " of " + numFrames + "...");
             }

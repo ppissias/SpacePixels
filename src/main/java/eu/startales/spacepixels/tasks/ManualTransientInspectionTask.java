@@ -1,6 +1,5 @@
 package eu.startales.spacepixels.tasks;
 
-import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
@@ -40,10 +39,8 @@ public class ManualTransientInspectionTask implements Job<ManualTransientInspect
             FitsFileInformation[] filesInfo = preProcessing.getImportedFiles();
             List<ImageFrame> framesForLibrary = SessionFrameLoader.loadAll(filesInfo, context::progress, 20);
 
-            TransientEngineProgressListener progressListener = (percentage, message) -> {
-                if (ApplicationWindow.OOM_FLAG) throw new OutOfMemoryError("Global OOM triggered");
-                context.progress(20 + (int) (percentage * 0.8), message);
-            };
+            TransientEngineProgressListener progressListener =
+                    (percentage, message) -> context.progress(20 + (int) (percentage * 0.8), message);
 
             List<FrameTransients> cleanTransients = engine.detectTransients(framesForLibrary, config, progressListener);
             return JobOutcome.completed(new Result(framesForLibrary, cleanTransients, filesInfo));

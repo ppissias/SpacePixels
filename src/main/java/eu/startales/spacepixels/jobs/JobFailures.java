@@ -9,6 +9,8 @@
  */
 package eu.startales.spacepixels.jobs;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 /**
  * How a job ends after an error, so that no failure leaves the window locked: running out of memory goes to the
  * application's uncaught-exception handler, which closes SpacePixels with a message; any other error, an
@@ -19,7 +21,28 @@ public final class JobFailures {
     /** Deep enough for any real cause chain; stops a chain that loops. */
     private static final int MAX_CAUSE_DEPTH = 32;
 
+    /** Set once the application has run out of memory, which closes it; running jobs then stop at their next report. */
+    private static final AtomicBoolean APPLICATION_OUT_OF_MEMORY = new AtomicBoolean();
+
     private JobFailures() {
+    }
+
+    /**
+     * Records that the application has run out of memory. Returns true only the first time, for the one handler that
+     * tells the user and closes SpacePixels.
+     */
+    public static boolean markApplicationOutOfMemory() {
+        return APPLICATION_OUT_OF_MEMORY.compareAndSet(false, true);
+    }
+
+    /** Whether the application has run out of memory and is closing. */
+    public static boolean isApplicationOutOfMemory() {
+        return APPLICATION_OUT_OF_MEMORY.get();
+    }
+
+    /** For tests only: forgets that the application ran out of memory. */
+    static void clearApplicationOutOfMemory() {
+        APPLICATION_OUT_OF_MEMORY.set(false);
     }
 
     /** Whether {@code failure} or one of its causes is an {@link OutOfMemoryError}. */

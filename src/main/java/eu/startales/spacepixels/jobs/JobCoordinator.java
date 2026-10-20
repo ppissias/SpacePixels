@@ -152,6 +152,10 @@ public final class JobCoordinator {
 
         @Override
         public void progress(int percent, String message) {
+            if (JobFailures.isApplicationOutOfMemory()) {
+                // Another job ran out of memory and SpacePixels is closing: this one stops here.
+                throw new OutOfMemoryError("SpacePixels ran out of memory in another job.");
+            }
             ui.execute(() -> {
                 Listener target = listener;
                 if (current == handle && target != null) {

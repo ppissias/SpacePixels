@@ -14,6 +14,9 @@ public interface JobContext {
 
     JobHandle handle();
 
-    /** Reports progress; it reaches the window only while this job is the current one. */
+    /**
+     * Reports progress; it reaches the window only while this job is the current one. Once the application has run
+     * out of memory, it throws {@link OutOfMemoryError} instead, so that the job stops while SpacePixels closes.
+     */
     void progress(int percent, String message);
 }

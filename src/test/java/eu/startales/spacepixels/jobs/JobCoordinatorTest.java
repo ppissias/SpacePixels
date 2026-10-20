@@ -105,6 +105,23 @@ public class JobCoordinatorTest {
     }
 
     @Test
+    public void onceTheApplicationRanOutOfMemoryAJobStopsAtItsNextProgress() {
+        assertTrue(JobFailures.markApplicationOutOfMemory());
+        try {
+            // Only the first mark tells the user and closes SpacePixels.
+            assertFalse(JobFailures.markApplicationOutOfMemory());
+            coordinator.start(JobKind.DETECTION, null, context -> {
+                context.progress(10, "Loading frame 1 of 5...");
+                return JobOutcome.completed("report");
+            }, record());
+            assertThrows(OutOfMemoryError.class, () -> workers.remove(0).run());
+            assertEquals(List.of("started 1"), calls);
+        } finally {
+            JobFailures.clearApplicationOutOfMemory();
+        }
+    }
+
+    @Test
     public void progressReachesTheWindowOnlyWhileTheJobRuns() {
         AtomicReference<JobContext> kept = new AtomicReference<>();
         coordinator.start(JobKind.TRANSIENT_INSPECTION, null, context -> {

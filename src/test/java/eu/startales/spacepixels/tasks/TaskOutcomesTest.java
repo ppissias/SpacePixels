@@ -1,6 +1,5 @@
 package eu.startales.spacepixels.tasks;
 
-import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
@@ -24,12 +23,11 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Every task ends with one outcome: a failure carries its reason, which the window shows after unlocking; running out
- * of memory leaves the job for the application's handler instead of being swallowed, except in Blink, which recovers.
+ * Every task ends with one outcome: a failure carries its reason, which the window shows after unlocking. (Running out
+ * of memory is the coordinator's part; see {@code JobCoordinatorTest}. Blink recovers from it itself.)
  */
 public class TaskOutcomesTest {
 
@@ -77,21 +75,6 @@ public class TaskOutcomesTest {
             JobOutcome<BlinkSequence> stopped = outcomeOf(new BlinkImagesTask(files, new AtomicBoolean(true), (read, total) -> { }));
             assertTrue(String.valueOf(stopped), stopped instanceof JobOutcome.Declined<BlinkSequence> declined
                     && declined.reason().equals("Blinking stopped."));
-        }
-    }
-
-    @Test
-    public void outOfMemoryLeavesTheJobInsteadOfBeingSwallowed() {
-        // The flag is how the application stops the other jobs once one has run out of memory.
-        ApplicationWindow.OOM_FLAG = true;
-        try {
-            List<JobOutcome<?>> outcomes = new ArrayList<>();
-            JobCoordinator coordinator = new JobCoordinator(Runnable::run, Runnable::run, () -> false);
-            assertThrows(OutOfMemoryError.class, () -> coordinator.start(JobKind.STAR_MASK_STACK, null,
-                    new StarMaskStackTask(new FitsFileInformation[]{missingFrame()}, new DetectionConfig()), (handle, outcome) -> outcomes.add(outcome)));
-            assertTrue(outcomes.isEmpty());
-        } finally {
-            ApplicationWindow.OOM_FLAG = false;
         }
     }
 

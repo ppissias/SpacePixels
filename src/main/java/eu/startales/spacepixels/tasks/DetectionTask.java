@@ -10,13 +10,11 @@
 
 package eu.startales.spacepixels.tasks;
 
-import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.ImageProcessing;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 
 import java.io.File;
 
@@ -38,14 +36,7 @@ public class DetectionTask implements Job<File> {
         ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) ->
                 summary.confirmReport(preProcessing.hasPlateSolvedFrame(), 50, null, config);
 
-        TransientEngineProgressListener progressListener = (percentage, message) -> {
-            if (ApplicationWindow.OOM_FLAG) {
-                throw new OutOfMemoryError("Global OOM triggered");
-            }
-            context.progress(percentage, message);
-        };
-
-        File exportDir = preProcessing.detectObjects(config, safetyPrompt, progressListener);
+        File exportDir = preProcessing.detectObjects(config, safetyPrompt, context::progress);
         if (exportDir == null) {
             return JobOutcome.declined("Report generation aborted by user due to high track count. Try raising your thresholds.");
         }
