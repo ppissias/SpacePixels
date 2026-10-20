@@ -27,7 +27,13 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.SocketTimeoutException;
 import java.net.URL;
+import java.net.UnknownHostException;
+import java.net.http.HttpTimeoutException;
+import java.nio.channels.UnresolvedAddressException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -116,10 +122,32 @@ final class PlateSolveService {
                 throw new IOException("Astrometry.net was interrupted.", e);
             } catch (IOException e) {
                 // The caller reports the failure; this runs on the solve worker, which must not open a dialog.
-                throw new IOException("Astrometry.net could not solve the image: " + e.getMessage(), e);
+                throw new IOException(astrometryNetFailure(e), e);
             }
         }
         throw new IOException("No plate solver was chosen.");
+    }
+
+    /**
+     * What to tell the user when Astrometry.net fails. A lost connection often comes without any message, so the
+     * network failures are named by their type; otherwise the first message in the cause chain is used.
+     */
+    static String astrometryNetFailure(IOException failure) {
+        String message = null;
+        Throwable cause = failure;
+        for (int depth = 0; cause != null && depth < 32; depth++, cause = cause.getCause()) {
+            if (cause instanceof ConnectException || cause instanceof UnknownHostException
+                    || cause instanceof NoRouteToHostException || cause instanceof UnresolvedAddressException) {
+                return "Could not reach Astrometry.net (nova.astrometry.net). Check the internet connection.";
+            }
+            if (cause instanceof HttpTimeoutException || cause instanceof SocketTimeoutException) {
+                return "Astrometry.net did not answer in time. Try again later.";
+            }
+            if (message == null && cause.getMessage() != null && !cause.getMessage().isBlank()) {
+                message = cause.getMessage();
+            }
+        }
+        return "Astrometry.net could not solve the image: " + (message != null ? message : failure.getClass().getSimpleName());
     }
 
     public void applyWCSHeader(String wcsHeaderFile, File[] fitsFileInformation, FitsWriteHandler writeHandler)
