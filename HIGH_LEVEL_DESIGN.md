@@ -49,7 +49,7 @@ Primary runtime dependencies:
 - `gov.nasa.gsfc.heasarc:nom-tam-fits`
   - FITS read/write and compressed FITS support
 - `com.google.guava:guava`
-  - GUI event bus
+  - GUI event bus, being retired job by job (DESIGN-IMPROVEMENTS S9)
 - `com.google.code.gson:gson`
   - JSON configuration and report lookup payloads
 - `com.formdev:flatlaf`
@@ -95,7 +95,20 @@ The detection profile wraps JTransient `DetectionConfig` plus SpacePixels' Auto-
 
 Small EventBus message types for GUI/task coordination.
 
-These events carry progress, lifecycle, and result notifications across background tasks and Swing panels. They are not part of the public API.
+These events carry progress, lifecycle, and result notifications across background tasks and Swing panels. They are not part of the public API. Jobs that move to the job coordinator lose their events; the detection jobs already have.
+
+### `eu.startales.spacepixels.jobs`
+
+The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker and returns a `JobOutcome`: completed with its result, declined by the user, or failed with a reason.
+
+`JobCoordinator` behaves as follows:
+- **Admission:** it admits one job at a time, on the UI thread, before the worker starts. It refuses a job while another runs, or while a task still on the event bus holds the window.
+- **The window's lock:** its listener, in `MainApplicationPanel`, locks the window and shows the progress dialog on admission, and unlocks the window when the job ends.
+- **Progress:** it reaches the window only while the job is current.
+- **Outcome:** it is delivered exactly once, on the UI thread, after the unlock.
+- **Failures:** an exception or `Error` becomes a failure. Running out of memory leaves the worker for the application's uncaught-exception handler (`JobFailures`).
+
+Each `JobHandle` carries the session the job was started for. Until there is a session object, that is the `ImageProcessing` instance.
 
 ### `eu.startales.spacepixels.gui`
 
@@ -126,7 +139,9 @@ The GUI layer currently combines view and controller behavior in several panels.
 
 Background runnables launched by the GUI.
 
-Tasks are the boundary between Swing actions and longer-running work. They post lifecycle and progress events back to the GUI through the Guava `EventBus`.
+Tasks are the boundary between Swing actions and longer-running work. They run in one of two ways:
+- **Jobs under the `JobCoordinator`:** `DetectionTask`, `IterativeDetectionTask`, `ManualTransientInspectionTask` and `StarMaskStackTask`. They return their result, and the window opens what follows (the report question, the inspection view, the Star Mask Explorer).
+- **Through the Guava `EventBus`:** the others post lifecycle and progress events to the GUI.
 
 Main tasks:
 
@@ -139,7 +154,7 @@ Main tasks:
 - `ManualTransientInspectionTask`
 - `PlateSolveTask`
 - `AutoTuneTask`
-- `TuningPreviewTask`
+- `StarMaskStackTask`
 - `GeneratePreviewsTask`, which renders the Image Stretch previews of one frame and returns them to `StretchPreviewRenderer`; full-size sequence viewers load frames through `SequenceViewerFrame` and `BlinkSequence`
 
 ### `eu.startales.spacepixels.tools`
@@ -738,9 +753,10 @@ Replacing files:
 
 Desktop:
 
-- long work runs in explicit background `Thread`s around task `Runnable`s
-- tasks post EventBus messages back to the UI
-- Swing updates are scheduled back onto the EDT by subscribers where required
+- **The detection jobs** run under `JobCoordinator`:
+  - admission and locking happen on the EDT before the worker starts;
+  - progress and the single outcome come back on the EDT.
+- **Other long work** runs in explicit background `Thread`s around task `Runnable`s that post EventBus messages. Their subscribers move Swing updates onto the EDT.
 
 Headless/API:
 
@@ -780,7 +796,7 @@ Accepted current debt:
 - `DetectionConfigurationPanel` and `MainApplicationPanel` still combine Swing view logic and workflow control.
 - `DetectionReportGenerator` still contains substantial static rendering/helper behavior even though major sections have been split into writers.
 - Some visualization settings are static runtime values captured at report-export time.
-- GUI tasks launch raw threads instead of using a centralized executor abstraction.
+- GUI tasks still on the event bus launch raw threads; only the detection jobs run under the job coordinator so far.
 
 Preferred refactor direction:
 
