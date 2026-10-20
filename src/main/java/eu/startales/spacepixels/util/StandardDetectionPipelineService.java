@@ -67,8 +67,13 @@ final class StandardDetectionPipelineService {
         // Null means only that the user declined the report; a failed export says so with its reason.
         File reportFile;
         try {
-            reportFile = exportDetectionReport(executionData, reportInclusion);
+            // Writing the report takes 90-99%.
+            reportFile = exportDetectionReport(executionData, reportInclusion, progressListener == null ? null
+                    : (percent, message) -> progressListener.onProgressUpdate(90 + percent / 10, message));
         } catch (IOException | RuntimeException e) {
+            if (Cancellation.isCancellation(e)) {
+                throw e;
+            }
             throw new IOException("The detection finished, but the report could not be written: "
                     + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
         }
@@ -151,11 +156,17 @@ final class StandardDetectionPipelineService {
         return new ImageProcessing.PipelineExecutionData(result, effectiveConfig, cachedFileInfo, rawFramesForExport, pipelineDuration);
     }
 
-    File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData) throws IOException {
-        return exportDetectionReport(executionData, ReportInclusion.all());
+    File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData,
+                               TransientEngineProgressListener progressListener) throws IOException {
+        return exportDetectionReport(executionData, ReportInclusion.all(), progressListener);
     }
 
-    File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData, ReportInclusion inclusion) throws IOException {
+    /**
+     * Writes the report into a new {@code detections_} folder; {@code progressListener} (which may be null) hears
+     * 0-99%. When it stops the report with a cancel ({@link Cancellation}), the unfinished folder is removed.
+     */
+    File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData, ReportInclusion inclusion,
+                               TransientEngineProgressListener progressListener) throws IOException {
         if (executionData == null) {
             throw new IllegalArgumentException("executionData must not be null");
         }
@@ -166,14 +177,22 @@ final class StandardDetectionPipelineService {
         }
 
         File exportDir = ImageProcessing.createDetectionsDirectory(new File(filesInformation[0].getFilePath()));
-        DetectionReportGenerator.exportTrackVisualizations(
-                executionData.getPipelineResult(),
-                executionData.getRawFramesForExport(),
-                filesInformation,
-                exportDir,
-                executionData.getEffectiveConfig(),
-                appConfig,
-                inclusion);
+        try {
+            DetectionReportGenerator.exportTrackVisualizations(
+                    executionData.getPipelineResult(),
+                    executionData.getRawFramesForExport(),
+                    filesInformation,
+                    exportDir,
+                    executionData.getEffectiveConfig(),
+                    appConfig,
+                    inclusion,
+                    progressListener);
+        } catch (IOException | RuntimeException e) {
+            if (Cancellation.isCancellation(e)) {
+                OutputFolders.deleteUnfinished(exportDir);
+            }
+            throw e;
+        }
         return new File(exportDir, DetectionReportGenerator.detectionReportName);
     }
 }

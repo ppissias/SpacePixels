@@ -19,8 +19,6 @@ import nom.tam.fits.Fits;
 
 import java.io.File;
 import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,9 +29,6 @@ import java.util.List;
  * time-spaced subsets while keeping a shared master stack.
  */
 final class IterativeDetectionPipelineService {
-
-    private static final DateTimeFormatter ITERATIVE_DIRECTORY_TIMESTAMP =
-            DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 
     private final AppConfig appConfig;
     private final StandardDetectionPipelineService standardDetectionPipelineService;
@@ -60,6 +55,58 @@ final class IterativeDetectionPipelineService {
         DebugOutput.println("\n--- Starting ITERATIVE PIPELINE for " + numFrames + " FITS files (On-Demand Loading) ---");
 
         File masterDir = createIterativeOutputDirectory(cachedFileInfo);
+        List<DetectionReportGenerator.IterationSummary> summaries = new ArrayList<>();
+        try {
+            runPasses(config, cachedFileInfo, safetyPrompt, progressListener, maxFramesLimit, masterDir, summaries);
+        } catch (Exception e) {
+            if (Cancellation.isCancellation(e)) {
+                keepFinishedPasses(masterDir, summaries);
+            }
+            throw e;
+        }
+
+        if (progressListener != null) {
+            progressListener.onProgressUpdate(100, "All iterative passes complete!");
+        }
+
+        File indexFile = new File(masterDir, "index.html");
+        try {
+            DetectionReportGenerator.exportIterativeIndexReport(masterDir, summaries);
+        } catch (IOException | RuntimeException e) {
+            throw new IOException("The passes were written to " + masterDir.getAbsolutePath()
+                    + ", but their index page could not be written: "
+                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
+        }
+        DebugOutput.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
+        return indexFile;
+    }
+
+    /**
+     * After a cancel: the passes that finished keep their reports, and the index lists them. With none finished,
+     * the run's folder is removed.
+     */
+    private static void keepFinishedPasses(File masterDir, List<DetectionReportGenerator.IterationSummary> summaries) {
+        if (summaries.isEmpty()) {
+            OutputFolders.deleteUnfinished(masterDir);
+            return;
+        }
+        try {
+            DetectionReportGenerator.exportIterativeIndexReport(masterDir, summaries, "The run was cancelled after "
+                    + summaries.size() + (summaries.size() == 1 ? " pass" : " passes") + ". The passes listed here are complete.");
+        } catch (IOException | RuntimeException e) {
+            System.err.println("Could not write the index of the finished passes in " + masterDir.getAbsolutePath() + ": " + e.getMessage());
+        }
+    }
+
+    /** Builds the master map, then runs the passes; each finished pass adds its summary to {@code summaries}. */
+    private void runPasses(DetectionConfig config,
+                           FitsFileInformation[] cachedFileInfo,
+                           ImageProcessing.DetectionSafetyPrompt safetyPrompt,
+                           TransientEngineProgressListener progressListener,
+                           int maxFramesLimit,
+                           File masterDir,
+                           List<DetectionReportGenerator.IterationSummary> summaries) throws Exception {
+        int numFrames = cachedFileInfo.length;
         int targetMaxLimit = resolveTargetMaxLimit(maxFramesLimit, numFrames);
 
         DebugOutput.println("\n--- Extracting Timestamps & Exposures for Temporal Spacing ---");
@@ -98,7 +145,6 @@ final class IterativeDetectionPipelineService {
 
         int totalIterations = (int) Math.ceil((targetMaxLimit - 4.0) / 5.0);
         int currentIteration = 0;
-        List<DetectionReportGenerator.IterationSummary> summaries = new ArrayList<>();
 
         for (int k = 5; k <= targetMaxLimit; k += 5) {
             DebugOutput.println("\n>>> RUNNING ITERATION: " + k + " Frames (Time-Spaced)");
@@ -154,6 +200,7 @@ final class IterativeDetectionPipelineService {
 
             String reportFailure = null;
             try {
+                // The pass's report takes 95-98% of the pass.
                 DetectionReportGenerator.exportTrackVisualizations(
                         result,
                         createOnDemandRawFramesForExport(cachedFileInfo),
@@ -161,8 +208,13 @@ final class IterativeDetectionPipelineService {
                         iterationDir,
                         effectiveConfig,
                         appConfig,
-                        detectionSummary.reportInclusion());
+                        detectionSummary.reportInclusion(),
+                        (percent, message) -> scaledListener.onProgressUpdate(95 + percent / 25, message));
             } catch (IOException | RuntimeException e) {
+                if (Cancellation.isCancellation(e)) {
+                    OutputFolders.deleteUnfinished(iterationDir);
+                    throw e;
+                }
                 // The other passes go on; the index says that this pass has no report, and why.
                 reportFailure = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                 System.err.println("Failed to export visualization for iteration " + k + ": " + reportFailure);
@@ -174,21 +226,6 @@ final class IterativeDetectionPipelineService {
 
             currentIteration++;
         }
-
-        if (progressListener != null) {
-            progressListener.onProgressUpdate(100, "All iterative passes complete!");
-        }
-
-        File indexFile = new File(masterDir, "index.html");
-        try {
-            DetectionReportGenerator.exportIterativeIndexReport(masterDir, summaries);
-        } catch (IOException | RuntimeException e) {
-            throw new IOException("The passes were written to " + masterDir.getAbsolutePath()
-                    + ", but their index page could not be written: "
-                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
-        }
-        DebugOutput.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
-        return indexFile;
     }
 
     static List<Integer> sampleFrameIndices(long[] times, boolean hasValidTime, int maxLimit, int k) {
@@ -239,11 +276,7 @@ final class IterativeDetectionPipelineService {
         if (parentDir == null) {
             parentDir = new File(System.getProperty("user.dir"));
         }
-        File masterDir = new File(parentDir, "iterative_detections_" + LocalDateTime.now().format(ITERATIVE_DIRECTORY_TIMESTAMP));
-        if (!masterDir.exists()) {
-            masterDir.mkdirs();
-        }
-        return masterDir;
+        return OutputFolders.createNew(parentDir, "iterative_detections_");
     }
 
     private static int resolveTargetMaxLimit(int maxFramesLimit, int numFrames) {

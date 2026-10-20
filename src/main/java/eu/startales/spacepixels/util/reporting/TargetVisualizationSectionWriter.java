@@ -40,6 +40,8 @@ final class TargetVisualizationSectionWriter {
                 && context.anomalies.isEmpty()) {
             report.println("<div class='panel'><p>No moving tracks, single-frame streaks or anomaly rescues were detected in this session.</p></div>");
         }
+        context.progress.expect(context.singleStreaks.size() + context.streakTracks.size()
+                + context.movingTargets.size() + context.anomalies.size());
 
         if (!context.singleStreaks.isEmpty()) {
             writeSingleStreaks(report, context);
@@ -76,6 +78,7 @@ final class TargetVisualizationSectionWriter {
         report.println("<h3 id='single-streaks' style='color: #ff9933; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single-Frame Streaks</h3>");
         int counter = 1;
         for (TrackLinker.Track track : context.singleStreaks) {
+            context.progress.next();
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
             SourceExtractor.DetectedObject point = track.points.get(0);
             int frameIndex = point.sourceFrameIndex;
@@ -144,6 +147,7 @@ final class TargetVisualizationSectionWriter {
         report.println("<h3 id='streak-tracks' style='color: #ffcc33; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Streak Tracks</h3>");
         int counter = 1;
         for (TrackLinker.Track track : context.streakTracks) {
+            context.progress.next();
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
             List<SourceExtractor.DetectedObject> framePoints = uniqueFramePoints(track);
 
@@ -213,6 +217,7 @@ final class TargetVisualizationSectionWriter {
         report.println("<h3 id='moving-targets' style='color: #4da6ff; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Moving-Object Tracks</h3>");
         int counter = 1;
         for (TrackLinker.Track track : context.movingTargets) {
+            context.progress.next();
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
             List<SourceExtractor.DetectedObject> framePoints = uniqueFramePoints(track);
 

@@ -21,6 +21,7 @@ public class ProcessingProgressDialog extends JDialog {
     private final Timer exitOffer = new Timer(EXIT_OFFER_DELAY_MILLIS, e -> offerExit());
     private Runnable cancel;
     private boolean exitOffered;
+    private int dialogWidth;
 
     public ProcessingProgressDialog(JFrame parentWindow) {
         // true makes it Modal (blocks input to the main window)
@@ -43,6 +44,8 @@ public class ProcessingProgressDialog extends JDialog {
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         buttons.setBorder(BorderFactory.createEmptyBorder(0, 20, 12, 20));
         buttons.add(cancelButton);
+        // Shown only for a job that can be cancelled (offerCancel); the import's own progress windows have none.
+        cancelButton.setVisible(false);
         cancelButton.addActionListener(e -> {
             if (exitOffered) {
                 confirmAndExit();
@@ -69,10 +72,21 @@ public class ProcessingProgressDialog extends JDialog {
         });
         exitOffer.setRepeats(false);
 
-        pack();
-        setSize(Math.max(420, getWidth()), getHeight());
+        fitSize();
         setResizable(false);
         setLocationRelativeTo(parentWindow); // Centers it over the main app
+    }
+
+    /**
+     * Fits the height to the content, with or without the Cancel button. The width is set once, at least 420 pixels,
+     * so a long message from the previous job does not widen the dialog.
+     */
+    private void fitSize() {
+        pack();
+        if (dialogWidth == 0) {
+            dialogWidth = Math.max(420, getWidth());
+        }
+        setSize(dialogWidth, getHeight());
     }
 
     /**
@@ -85,7 +99,10 @@ public class ProcessingProgressDialog extends JDialog {
         exitOffer.stop();
         cancelButton.setText("Cancel");
         cancelButton.setEnabled(true);
-        cancelButton.setVisible(cancel != null);
+        if (cancelButton.isVisible() != (cancel != null)) {
+            cancelButton.setVisible(cancel != null);
+            fitSize();
+        }
     }
 
     @Override

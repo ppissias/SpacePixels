@@ -46,6 +46,8 @@ final class DetectionReportContext {
     String dataAreaText = "";
     /** Detections set aside before tracking because they stay at one camera position; empty when left out. */
     List<CameraFixedRejector.Group> cameraFixedGroups = Collections.emptyList();
+    /** Where the slow sections report their items; set after construction. */
+    ReportProgress progress = ReportProgress.NONE;
     private SessionCatalogue catalogue;
 
     SessionCatalogue catalogue() {

@@ -37,6 +37,7 @@ final class AnomalySectionWriter {
                 + "is marked as likely part of that track.</p>");
         int number = 1;
         for (TrackLinker.AnomalyDetection anomaly : context.anomalies) {
+            context.progress.next();
             writeCard(report, context, anomaly, number++);
         }
     }

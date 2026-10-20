@@ -363,8 +363,10 @@ final class UnclassifiedTransientSectionWriter {
         int cropWidth = Math.min(INSPECTION_SIZE, width);
         int cropHeight = Math.min(INSPECTION_SIZE, height);
         int written = 0;
+        context.progress.expect(animated.size());
         for (Marker marker : animated) {
-            int frame = marker.detection.sourceFrameIndex >= 0 && marker.detection.sourceFrameIndex < frameCount
+            context.progress.next();
+            int frame =marker.detection.sourceFrameIndex >= 0 && marker.detection.sourceFrameIndex < frameCount
                     ? marker.detection.sourceFrameIndex : marker.frameIndex;
             if (frame < 0 || frame >= frameCount) {
                 continue;

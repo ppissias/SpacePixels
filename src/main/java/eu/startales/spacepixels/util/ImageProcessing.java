@@ -894,7 +894,12 @@ public class ImageProcessing implements AutoCloseable {
      * Exports the HTML report and visualization bundle for a previously executed pipeline run.
      */
     public File exportDetectionReport(PipelineExecutionData executionData) throws IOException {
-        return standardDetectionPipelineService.exportDetectionReport(executionData);
+        return exportDetectionReport(executionData, null);
+    }
+
+    /** As {@link #exportDetectionReport(PipelineExecutionData)}, telling {@code progressListener} 0-99% as it writes. */
+    public File exportDetectionReport(PipelineExecutionData executionData, TransientEngineProgressListener progressListener) throws IOException {
+        return standardDetectionPipelineService.exportDetectionReport(executionData, progressListener);
     }
 
 // =========================================================================
@@ -1880,30 +1885,16 @@ public class ImageProcessing implements AutoCloseable {
     }
 
     /**
-     * Creates a timestamped sibling directory for detection exports and returns its location.
+     * Creates a new timestamped sibling directory for detection exports and returns its location. It is never the
+     * folder of another run, even when two runs start in the same second.
      */
     public static File createDetectionsDirectory(File anyFitsFile) {
         File parentDir = anyFitsFile.getParentFile();
         if (parentDir == null) {
             parentDir = new File(System.getProperty("user.dir"));
         }
-
-        // Generate a sortable timestamp
-        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
-        String timestamp = java.time.LocalDateTime.now().format(formatter);
-
-        // Create the uniquely named detections directory
-        File detectionsDir = new File(parentDir, "detections_" + timestamp);
-
-        if (!detectionsDir.exists()) {
-            boolean created = detectionsDir.mkdirs();
-            if (created) {
-                DebugOutput.println("Created new export directory at: " + detectionsDir.getAbsolutePath());
-            } else {
-                System.err.println("Failed to create export directory. Check folder permissions.");
-            }
-        }
-
+        File detectionsDir = OutputFolders.createNew(parentDir, "detections_");
+        DebugOutput.println("Created new export directory at: " + detectionsDir.getAbsolutePath());
         return detectionsDir;
     }
 }

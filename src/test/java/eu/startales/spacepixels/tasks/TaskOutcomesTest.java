@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -81,11 +82,55 @@ public class TaskOutcomesTest {
     @Test
     public void aDetectionCancelledWhileItRunsStopsBeforeWritingAReport() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 5);
+        // The user cancels as soon as the first progress appears.
+        JobOutcome<File> outcome = runCancelledAt(sequence, "", processing ->
+                new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig()), new ArrayList<>());
+        assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
+        assertEquals(0, foldersStartingWith(sequence, "detections_").length);
+    }
+
+    @Test
+    public void aDetectionCancelledWhileItWritesItsReportRemovesTheUnfinishedFolder() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 5);
+        List<String> messages = new ArrayList<>();
+        JobOutcome<File> outcome = runCancelledAt(sequence, "Writing the report: unclassified transients", processing ->
+                new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig()), messages);
+        assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
+        assertTrue("the report reports its steps: " + messages, messages.contains("Writing the report: maps..."));
+        assertEquals(0, foldersStartingWith(sequence, "detections_").length);
+    }
+
+    @Test
+    public void anIterativeRunCancelledDuringItsSecondPassKeepsTheFirstWithAnIndex() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 10);
+        JobOutcome<File> outcome = runCancelledAt(sequence, "Pass 10 frames: Writing the report", processing ->
+                new IterativeDetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig(), 0), new ArrayList<>());
+        assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
+        File[] runs = foldersStartingWith(sequence, "iterative_detections_");
+        assertEquals(1, runs.length);
+        assertTrue(new File(runs[0], "5_frames/detection_report.html").isFile());
+        assertFalse("the unfinished pass is removed", new File(runs[0], "10_frames").exists());
+        String index = java.nio.file.Files.readString(new File(runs[0], "index.html").toPath());
+        assertTrue(index, index.contains("The run was cancelled after 1 pass."));
+    }
+
+    @Test
+    public void anIterativeRunCancelledBeforeAnyPassFinishedLeavesNoFolder() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 10);
+        JobOutcome<File> outcome = runCancelledAt(sequence, "Global Master Map", processing ->
+                new IterativeDetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig(), 0), new ArrayList<>());
+        assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
+        assertEquals(0, foldersStartingWith(sequence, "iterative_detections_").length);
+    }
+
+    /** Runs the job on the sequence and cancels it at the first progress message starting with {@code cancelAt}. */
+    private static JobOutcome<File> runCancelledAt(Path sequence, String cancelAt,
+                                                   java.util.function.Function<ImageProcessing, Job<File>> job,
+                                                   List<String> messages) throws Exception {
         try (ImageProcessing processing = ImageProcessing.getInstance(sequence.toFile())) {
             processing.getFitsfileInformationHeadless();
             List<JobOutcome<File>> outcomes = new ArrayList<>();
             JobCoordinator coordinator = new JobCoordinator(Runnable::run, Runnable::run, () -> false);
-            // The user cancels as soon as the first progress appears.
             coordinator.setListener(new JobCoordinator.Listener() {
                 @Override
                 public void jobStarted(eu.startales.spacepixels.jobs.JobHandle handle) {
@@ -93,20 +138,25 @@ public class TaskOutcomesTest {
 
                 @Override
                 public void jobProgress(eu.startales.spacepixels.jobs.JobHandle handle, int percent, String message) {
-                    coordinator.cancel();
+                    messages.add(message);
+                    if (message.startsWith(cancelAt)) {
+                        coordinator.cancel();
+                    }
                 }
 
                 @Override
                 public void jobEnded(eu.startales.spacepixels.jobs.JobHandle handle, JobOutcome<?> outcome) {
                 }
             });
-            coordinator.start(JobKind.DETECTION, processing, new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig()),
-                    (handle, outcome) -> outcomes.add(outcome));
+            coordinator.start(JobKind.DETECTION, processing, job.apply(processing), (handle, outcome) -> outcomes.add(outcome));
             assertEquals(1, outcomes.size());
-            assertTrue(String.valueOf(outcomes.get(0)), outcomes.get(0) instanceof JobOutcome.Cancelled<?>);
-            File[] reports = sequence.toFile().listFiles(file -> file.getName().startsWith("detections_"));
-            assertEquals(0, reports == null ? 0 : reports.length);
+            return outcomes.get(0);
         }
+    }
+
+    private static File[] foldersStartingWith(Path sequence, String prefix) {
+        File[] folders = sequence.toFile().listFiles(file -> file.isDirectory() && file.getName().startsWith(prefix));
+        return folders == null ? new File[0] : folders;
     }
 
     /** Runs the job under a coordinator that works on the calling thread, and returns its one outcome. */

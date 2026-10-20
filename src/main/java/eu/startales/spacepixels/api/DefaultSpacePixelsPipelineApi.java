@@ -87,7 +87,8 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
             File exportDirectory = null;
             if (request.isGenerateReport()) {
                 emitProgress(progressListener, 90, "Exporting tracks and generating HTML report...");
-                reportFile = imageProcessing.exportDetectionReport(executionData);
+                reportFile = imageProcessing.exportDetectionReport(executionData,
+                        (percentage, message) -> emitScaledProgress(progressListener, 90, 100, percentage, message));
                 if (reportFile == null) {
                     throw new SpacePixelsPipelineException("Pipeline completed without producing an export report.");
                 }

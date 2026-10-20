@@ -24,6 +24,7 @@ import io.github.ppissias.jtransient.core.SlowMoverSummaryTelemetry;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.core.TrackLinker;
 import io.github.ppissias.jtransient.engine.PipelineResult;
+import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import io.github.ppissias.jtransient.telemetry.TrackerTelemetry;
 
@@ -1223,8 +1224,23 @@ public class DetectionReportGenerator {
                                                  DetectionConfig config,
                                                  AppConfig appConfig,
                                                  ReportInclusion inclusion) throws IOException {
+        exportTrackVisualizations(result, rawFrames, fitsFiles, exportDir, config, appConfig, inclusion, null);
+    }
+
+    /**
+     * Writes the report, telling {@code progress} (which may be null) how far it is, from 0 to 99 %. The listener may
+     * throw to stop the report, for example when its job is cancelled; the HTML page is then not written.
+     */
+    public static void exportTrackVisualizations(PipelineResult result,
+                                                 List<short[][]> rawFrames,
+                                                 FitsFileInformation[] fitsFiles,
+                                                 File exportDir,
+                                                 DetectionConfig config,
+                                                 AppConfig appConfig,
+                                                 ReportInclusion inclusion,
+                                                 TransientEngineProgressListener progress) throws IOException {
         exportTrackVisualizationsInternal(result, rawFrames, fitsFiles, exportDir, config, appConfig,
-                inclusion == null ? ReportInclusion.all() : inclusion);
+                inclusion == null ? ReportInclusion.all() : inclusion, new ReportProgress(progress));
     }
 
     static void exportTrackVisualizationsInternal(PipelineResult result,
@@ -1233,7 +1249,9 @@ public class DetectionReportGenerator {
                                                   File exportDir,
                                                   DetectionConfig config,
                                                   AppConfig appConfig,
-                                                  ReportInclusion inclusion) throws IOException {
+                                                  ReportInclusion inclusion,
+                                                  ReportProgress progress) throws IOException {
+        progress.step(0, 2, "preparing");
         ExportVisualizationSettings settings = snapshotCurrentExportVisualizationSettings();
 
         // Extract variables from the PipelineResult and normalize newer track categories for rendering.
@@ -1351,6 +1369,7 @@ public class DetectionReportGenerator {
                 streakTracks,
                 movingTargets);
 
+        reportContext.progress = progress;
         reportContext.dataArea = result.dataArea;
         reportContext.cameraFixedGroups = inclusion.cameraFixed ? result.cameraFixedGroups : java.util.Collections.emptyList();
         reportContext.dataAreaText = DataAreaPresentation.describe(result.dataArea, pipelineTelemetry);
@@ -1373,33 +1392,41 @@ public class DetectionReportGenerator {
             report.println("</div>");
 
             // Results first: overview, moving objects, slow movers, residual review, maps, inspector, variable stars,
-            // then the likely artifacts, folded.
+            // then the likely artifacts, folded. The shares of the bar follow the time each step took on a 33-frame
+            // 61-megapixel session.
+            progress.step(2, 16, "measuring the field depth and the night");
             FieldDepth fieldDepth = FieldDepth.measure(reportContext, pipelineTelemetry);
             NightEquipment nightEquipment = NightEquipment.measure(reportContext, pipelineTelemetry, masterStars);
             DebugOutput.printf(Locale.US, "Night & Equipment measured in %.1f s%n", nightEquipment.millis / 1000.0);
+            progress.step(16, 20, "overview");
             PipelineDiagnosticsSectionWriter.writeOverview(report, reportContext, pipelineTelemetry, summary, localRescueTracks, fieldDepth, nightEquipment,
                     commonMotionGroups.size(), inclusion);
 
+            progress.step(20, 26, "moving objects and streaks");
             report.println("<section id='moving-objects'>");
             TargetVisualizationSectionWriter.writeSection(report, reportContext);
             report.println("</section>");
 
             if (inclusion.slowMovers) {
+                progress.step(26, 27, "slow movers");
                 report.println("<section id='slow-movers'>");
                 DeepStackReportSectionWriter.writeSection(report, reportContext);
                 report.println("</section>");
             }
 
             if (inclusion.localRescue || inclusion.localActivity) {
+                progress.step(27, 28, "residual review");
                 report.println("<section id='residual-review'>");
                 ResidualReviewSectionWriter.writeSection(report, reportContext);
                 report.println("</section>");
             }
 
+            progress.step(28, 36, "maps");
             report.println("<section id='maps'>");
             GlobalMapsSectionWriter.writeSections(report, reportContext, localRescueTracks, allTransients);
             report.println("</section>");
 
+            progress.step(36, 66, "unclassified transients");
             report.println("<section id='inspector'>");
             UnclassifiedTransientSectionWriter.writeSection(report, reportContext, allTransients, unclassifiedTransients,
                     UnclassifiedTransientSectionWriter.rejectedFrameIndices(pipelineTelemetry),
@@ -1407,13 +1434,16 @@ public class DetectionReportGenerator {
             report.println("</section>");
 
             if (inclusion.variableStars) {
+                progress.step(66, 68, "variable stars");
                 report.println("<section id='variables'>");
                 PhotometryReportSectionWriter.writeSection(report, reportContext, result.variableStarAnalysis);
                 report.println("</section>");
             }
 
+            progress.step(68, 96, "likely artifacts");
             ResidualReviewSectionWriter.writeLikelyArtifactsSection(report, reportContext, reportContext.cameraFixedGroups, commonMotionGroups);
 
+            progress.step(96, 99, "night & equipment and diagnostics");
             report.println("<section id='night-equipment'>");
             NightEquipmentSectionWriter.writeSection(report, nightEquipment, fieldDepth);
             report.println("</section>");
@@ -1458,10 +1488,15 @@ public class DetectionReportGenerator {
 
 
     public static void exportIterativeIndexReport(File masterDir, List<IterationSummary> summaries) throws IOException {
-        exportIterativeIndexReportInternal(masterDir, summaries);
+        exportIterativeIndexReport(masterDir, summaries, null);
     }
 
-    static void exportIterativeIndexReportInternal(File masterDir, List<IterationSummary> summaries) throws IOException {
+    /** Writes the index of the passes; {@code note} (or null) says why the list stops early, for example after a cancel. */
+    public static void exportIterativeIndexReport(File masterDir, List<IterationSummary> summaries, String note) throws IOException {
+        exportIterativeIndexReportInternal(masterDir, summaries, note);
+    }
+
+    static void exportIterativeIndexReportInternal(File masterDir, List<IterationSummary> summaries, String note) throws IOException {
         File indexFile = new File(masterDir, "index.html");
         try (AtomicReportFile output = new AtomicReportFile(indexFile)) {
             java.io.PrintWriter report = output.writer();
@@ -1469,6 +1504,9 @@ public class DetectionReportGenerator {
             report.println("<div class='panel'>");
             report.println("<h2>Iteration Results</h2>");
             report.println("<p>Each iteration analyses an overlapping selection of frames. Counts must not be added: the same object can occur in several reports. Compare its position and timestamps in the detailed reports.</p>");
+            if (note != null) {
+                report.println("<p class='alert'>" + escapeHtml(note) + "</p>");
+            }
             report.println("<table><tr><th>Iteration (Frames Used)</th><th>Total Tracks Found</th><th>Anomalies Found</th><th>Action</th></tr>");
 
             for (IterationSummary summary : summaries) {

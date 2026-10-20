@@ -104,6 +104,7 @@ final class ResidualReviewSectionWriter {
         if (commonMotion > 0) {
             counts.add(commonMotion + " common-motion group" + (commonMotion == 1 ? "" : "s") + " (likely noise)");
         }
+        context.progress.expect(cameraFixed + commonMotion);
         report.println("<details class='report-group' id='likely-artifacts'>");
         report.println("<summary>Likely Artifacts<span class='summary-note'>" + String.join(" and ", counts)
                 + ". The pipeline set them aside; open this to check them by eye.</span></summary>");
@@ -130,6 +131,7 @@ final class ResidualReviewSectionWriter {
                 : (!context.rawFrames.isEmpty() ? context.rawFrames.get(0) : null);
         int groupNumber = 1;
         for (CameraFixedRejector.Group group : groups) {
+            context.progress.next();
             writeCameraFixedCard(report, context, background, group, groupNumber);
             groupNumber++;
         }
@@ -198,6 +200,7 @@ final class ResidualReviewSectionWriter {
 
         int groupNumber = 1;
         for (ResidualTransientAnalysis.CommonMotionGroup group : groups) {
+            context.progress.next();
             writeCommonMotionCard(report, context, background, group, groupNumber);
             groupNumber++;
         }

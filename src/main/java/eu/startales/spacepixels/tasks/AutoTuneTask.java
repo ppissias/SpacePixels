@@ -76,6 +76,11 @@ public class AutoTuneTask implements Job<JTransientAutoTuner.AutoTunerResult> {
         LOGGER.info("Auto-Tuner algorithm: " + algorithm + ", profile: " + profile);
         JTransientAutoTuner.AutoTunerResult result =
                 AutoTunerRunner.run(candidateFrames, baseConfig, profile, algorithm, autoTuneListener);
+        // The calibrated tuner catches the cancel in its workers and goes on, or returns a failed result. Either way a
+        // result made after a cancel may rest on measurements the cancel cut short, so it is not used.
+        if (context.isCancelled()) {
+            return JobOutcome.cancelled();
+        }
 
         context.progress(100, "Auto-Tuning complete!");
         return JobOutcome.completed(result);
