@@ -88,6 +88,15 @@ Stage both settings serialisations before replacing either, and mark the editor 
 
 ### D02. Give every background job an owner and an identity
 
+**Status (2026-10-20).**
+- **Done:** every long job goes through `JobCoordinator` (S2/S3).
+  - The coordinator admits a job on the EDT before its worker starts.
+  - Each job has a handle with its id, kind and session.
+  - Each job ends with one typed outcome, delivered once after the window is unlocked. Cancelled is one of the outcomes (D04).
+  - A late progress report from an ended job is dropped.
+- **Deliberate exception: the sky-catalogue fetch** (with the plate-solution check that follows it) stays outside the coordinator. It is bounded network work and does not lock the window, so it may run beside a job, as the proposal below asks for network work. It has its own indicator and Cancel. It runs one at a time on its own thread (`MainApplicationPanel.startSkyJob`), and that thread is its identity: a result whose thread is no longer the current one is dropped, so a new import discards the previous session's fetch.
+- **Open:** the session in a job handle is the `ImageProcessing` of the import, a placeholder until the session object (S7). The acceptance check "cannot apply A's result to a new session" is complete once S7 exists.
+
 **Evidence.** [MainApplicationPanel](src/main/java/eu/startales/spacepixels/gui/MainApplicationPanel.java) starts work from listeners, then reacts to a started event posted by the worker. The lock is therefore acquired asynchronously after submission. `lockUI` stores enabled flags recursively; another lock clears that snapshot, and a finish event calls `unlockUI` without checking which job owns the lock. `EngineProgressUpdateEvent` carries only a percentage and message. `DetectionFinishedEvent` mixes report, quick-preview and count fields; inspection and star-mask work use it to borrow detection's progress handling.
 
 The current modal dialog prevents many user interactions once it is visible. That reduces exposure, but does not establish a synchronous admission rule or make overlapping lifecycle events safe. Sky fetching has its own indicator and does not post this generic progress event, so the earlier example of sky-fetch percentages directly moving the modal bar was too broad.
