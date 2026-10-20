@@ -28,7 +28,7 @@ These are engineering priorities, not findings that every possible failure has a
 
 Reviewed startup and import, workflow buttons and table selection, background tasks and events, preview rendering, frame viewers, settings and persistence, the API and CLI boundary, processing services, report generation and live lookup support. Existing manual screenshots were inspected for visual context; some predate the latest control placements. Source references name methods so the findings remain useful when line numbers change.
 
-**Coverage clarification (2026-10-20).** This is a broad review of subsystems and important execution paths. It is not a completed class-by-class audit against the proposed architecture, and there is no exhaustive inventory of the changes needed to reach it. D01–D13 identify evidenced problems and useful next steps; they are not proof that every remaining dependency and ownership issue has been found. The architecture adoption review below is the next step for completing that inventory.
+**Coverage clarification (2026-10-20).** This is a broad review of subsystems and important execution paths. It is not a completed class-by-class audit against the proposed architecture, and there is no exhaustive inventory of the changes needed to reach it. D01–D13 identify evidenced problems and useful next steps; they are not proof that every remaining dependency and ownership issue has been found. The [architecture adoption review](#architecture-adoption-review) below completed that inventory on 2026-10-20.
 
 This was a source and architecture review, with primary documentation checked for Swing, FlatLaf and Guava. It was **not** a fresh interactive usability study, fault-injection run, accessibility audit or performance benchmark. Statements about races and I/O failures describe reachable design risks inferred from the code; their frequency has not been measured. No application code, user settings, FITS files or JTransient algorithms were changed by this review. M81 false-positive detection remains a separate investigation.
 
@@ -343,9 +343,16 @@ Record what the review did not cover and any deliberate exceptions. The review i
 |---|---|---|
 | 1. Workflow core | `gui`, `tasks`, `events` | Done 2026-10-20 |
 | 2. Services and boundaries | `util`, `api`, `tools`, `config` | Done 2026-10-20 |
-| 3. Presentation | `util.reporting`, `util.skycatalog` | To do |
+| 3. Presentation | `util.reporting`, `util.skycatalog` | Done 2026-10-20 |
 
-**Steps found so far.** These come from parts 1 and 2, and the review has the details. They are proposals; none is accepted yet.
+**The review is complete (2026-10-20).** All 166 production classes are accounted for:
+- 114 are retained;
+- the 18 event classes retire with the bus;
+- 34 change.
+
+The coverage limits and the deliberate exceptions are listed in the [review summary](docs/architecture-review.md#review-summary).
+
+**Steps from the review.** The review has the details. They are proposals; none is accepted yet.
 
 | Step | Stage | Work | Covers |
 |---|---|---|---|
@@ -363,6 +370,10 @@ Record what the review did not cover and any deliberate exceptions. The review i
 | S12 | C | One preparation flow for the GUI and the API, with the GUI's questions asked on the EDT and typed import outcomes. Today declining a conversion closes the current session | D08, D06, F07 |
 | S13 | B–C | No `gui` and no Swing in `util` | new |
 | S14 | D | An explicit run context: the site, rendering options and Auto-Tune frame limit go with the run, instead of coming from the home folder and static fields | D09, D10 |
+| S15 | D | One source of finding labels and categories. Today T1, ST1, A1… are computed in seven places that agree only by walking the tracks in the same order | D09 |
+| S16 | D | Prepared diagnostics with explicit states (*measured*, *unavailable*, *failed*), and one failure policy for optional report sections. Today a failed field-depth measurement reads as "not measured", and other section failures abort the report | D09 |
+
+S1 and S11 are small correctness fixes that need nothing else first. They are discussed before they are implemented.
 
 **Known starting points.**
 - `ApplicationWindow` owns the shared event bus.
@@ -458,7 +469,7 @@ The localhost lookup proxy's lifecycle can remain application-scoped. Give it an
 
 | Stage | Work | Why this order |
 |---|---|---|
-| Architecture review | Review the codebase as described above, turn the findings into steps mapped to the stages below, and answer the EventBus question | Makes the remaining scope explicit before the architecture work grows. Focused correctness fixes need not wait. |
+| Architecture review | Done 2026-10-20: steps S1–S16 above, mapped to the stages below. The EventBus question awaits the maintainer's decision | Makes the remaining scope explicit before the architecture work grows. Focused correctness fixes need not wait. |
 | A: focused correctness | D01 file publication; D03 preview identity; D05 invalid-editor feedback | Small, concrete failure modes; do not wait for a broad architecture migration. |
 | B: workflow foundation | D02 ownership/admission and D04 outcomes/cleanup for detection, inspection and star-mask jobs; then D07 actions | Makes lifecycle explicit before replacing UI locking. |
 | C: session boundary | D06 application preferences/session handover; D08 background WCS write and metadata restoration | Reduces UI/service coupling and protects session transitions. |

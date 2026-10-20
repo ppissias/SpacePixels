@@ -6,7 +6,9 @@ This is the working record of the [architecture adoption review](../DESIGN-IMPRO
 |---|---|---|
 | 1. Workflow core | `gui`, `tasks`, `events` | Done 2026-10-20, against `9a87c74` |
 | 2. Services and boundaries | `util` (outside reporting and sky catalogue), `api`, `tools`, `config` | Done 2026-10-20, against `b52d64d` |
-| 3. Presentation | `util.reporting`, `util.skycatalog` | To do |
+| 3. Presentation | `util.reporting`, `util.skycatalog` | Done 2026-10-20, against `ee80fa5` |
+
+All three parts are done. See [Review summary](#review-summary) at the end.
 
 **Classifications**, as defined in DESIGN-IMPROVEMENTS:
 
@@ -15,7 +17,10 @@ This is the working record of the [architecture adoption review](../DESIGN-IMPRO
 - **adapt boundary:** the class stays, but how it is called or what it returns changes.
 - **investigate:** not enough is known yet.
 
-Step numbers refer to [Steps from part 1](#steps-from-part-1) (S1–S9) and [Steps from part 2](#steps-from-part-2) (S10–S14).
+Step numbers refer to:
+- [Steps from part 1](#steps-from-part-1): S1–S9;
+- [Steps from part 2](#steps-from-part-2): S10–S14;
+- [Steps from part 3](#steps-from-part-3): S15–S16.
 
 ## Part 1: workflow core
 
@@ -465,3 +470,173 @@ The main work is splitting `ImageProcessing`, and making the run's context expli
 | S14 | D | An explicit run context: the application config (site), rendering options and the Auto-Tune frame limit go with the run, captured when it starts, instead of being read from the home folder and static fields | D09, D10, P2-6, P2-9 | New request fields are optional; their defaults keep today's behaviour | Two API runs in one process with different sites write different reports; the report's frame limit is the run's |
 
 S11's message fix is the second small correctness fix, after S1. Like S1, it is discussed before it is implemented.
+
+## Part 3: presentation
+
+**Scope and method.**
+- **Read in full:**
+  - the export orchestration (`DetectionReportGenerator.exportTrackVisualizationsInternal`);
+  - the lookup proxy's lifecycle;
+  - how field depth and night & equipment are measured and fail.
+- **Read for responsibilities, dependencies, threads, network use, static state, writes and failure handling:**
+  - every other class of `util.reporting` and `util.skycatalog`;
+  - the four web resources, for their role only.
+- **How:** no code was changed or run.
+
+**Size:** 57 classes, about 20,600 lines, plus 4 web resources:
+- `util.reporting`: 49 classes, 18,811 lines;
+- `util.skycatalog`: 8 classes, 1,774 lines.
+
+### Paths followed
+
+- **Report export** (on the detection worker):
+  1. Snapshot the rendering settings (`ExportVisualizationSettings`).
+  2. Sort the tracks into single streaks, streak tracks and moving objects.
+  3. Build the report context and `ReportData`, and write `report-data.json`.
+  4. Open the HTML as an `AtomicReportFile`.
+  5. Measure field depth and night & equipment from the frames.
+  6. Write the sections in order.
+  7. Publish the HTML in one move. Images and GIFs are written directly beside it.
+- **Context read during export:**
+  - the WCS, through `WcsSolutionResolver`, which also reads the plate-solution correction from the session folder;
+  - the site, from `AppConfig`;
+  - the sky catalogue, read lazily from the session folder by `SessionCatalogue`;
+  - the Auto-Tune frame limit, from the static of P2-6.
+- **Live lookups:**
+  - The window starts the proxy on `127.0.0.1:47831` when it is built.
+  - A report's buttons call the proxy. It validates the target, queries SatChecker, JPL or SkyBoT with timeouts, normalises the reply, and stores it in a sidecar and in the report itself (`ReportLookupCacheStore`, staged).
+- **Sky catalogue:**
+  - `SkyCatalogueClient` queries the TAP services. Each query has a timeout, and an interrupt cancels the fetch.
+  - `SkyCatalogueStore` saves the result staged.
+  - `PlateCorrectionFitter` fits the correction.
+
+  The GUI's sky job (part 1) drives all three.
+
+### Findings
+
+**P3-1. Reporting is well contained (keep).**
+- **No upward dependencies:** no `gui`, no Swing, no event bus.
+- **Two entry points:** outside code uses only `DetectionReportGenerator`, for export and the rendering statics, and `ReportLookupProxyServer`, from the window. Everything else is package-private.
+- **Atomic text output:** the report text files are published atomically (D01).
+- **Tests:** 29 test classes cover reporting and the sky catalogue.
+
+**P3-2. Finding labels and categories are worked out in many places (confirms D09).** The numbering T1, ST1, A1, DS1… is computed separately in:
+- `ReportData`, for the finding list and the JSON;
+- the card counters of `TargetVisualizationSectionWriter`;
+- `DeepStackReportSectionWriter`'s track references;
+- `AnomalySectionWriter`'s track match;
+- the global map (`DetectionReportGenerator`);
+- `SessionPictureSectionWriter`;
+- `TrackOverlay`, for the viewers.
+
+Sorting a track into single streak, streak track or moving object happens in three places: `DetectionReportGenerator`, `TrackOverlay` and `DetectionPipelineSupport`. They agree today because each walks the tracks in the same order; nothing makes them agree. `ReportData` exists, but the writers do not take their labels from it.
+
+**P3-3. Measurements run during export, and their failures look like "not measured" (confirms D09).**
+- `FieldDepth` and `NightEquipment` measure the frames while the report is written; `NightEquipment` uses its own parallel pool.
+- If either throws, it prints to the console and returns an empty result. The report then reads as if there was nothing to measure.
+
+Each section fails in its own way:
+
+| Section | What a failure does |
+|---|---|
+| Session picture | Leaves a note (tested) |
+| Catalogue map | Draws no labels |
+| Field depth, night & equipment | Turn empty |
+| Any other section | Aborts the whole report. The GUI then shows either P2-4's misleading message or "Detection failed". |
+
+**P3-4. The report reads the session's state from disk at export time (confirms D09).**
+- The catalogue and the plate-solution correction come from the session folder when the report is written.
+- The site comes from `AppConfig`, and the frame limit from a static (P2-6).
+
+So a report written later, or re-rendered, would use whatever is on disk then. Capturing them with the run belongs to the run context (S14).
+
+**P3-5. The rendering settings are static fields, snapshotted at export (partly done; S14).**
+- `DetectionReportGenerator` has six public static fields; four of them are set from the preferences.
+- `UnclassifiedTransientSectionWriter` has one more.
+- The `ExportVisualizationSettings` snapshot is the right pattern, but the statics are still its source.
+
+**P3-6. `DetectionReportGenerator` is also a box of helpers (low).**
+- About 250 of its 1,483 lines orchestrate the export.
+- The rest builds images: mask overlays, maps, the drift map, the corner mosaic and the cluster maps. It also holds the formatting and HTML-escaping helpers that 15 writers call.
+
+This matches the retained plan: extract helpers when feature work needs them, not as a project of their own.
+
+**P3-7. The lookup proxy is as the plan describes (no new defect).**
+- It runs on a fixed loopback port with an unbounded cached thread pool, and starts with the window.
+- A second SpacePixels window cannot bind the port, so its reports use the first instance's proxy.
+- The plan already says to give it an owner and a bounded I/O policy when it is expanded.
+
+**P3-8. The sky catalogue package is clean (keep).**
+- Data and network classes only.
+- Requests have timeouts, and an interrupt cancels a fetch.
+- Writes are staged.
+
+### Class inventory: `util.reporting`
+
+Grouped by role. Each class is named once.
+
+| Group | Classes | Lines | Classification | Step |
+|---|---|---|---|---|
+| Orchestration | `DetectionReportGenerator` | 1483 | adapt boundary (options instead of statics, labels from one model, one failure policy) | S14, S15, S16 |
+| Report model | `ReportData` | 142 | adapt boundary (the single source of labels) | S15 |
+| Report model and output | `DetectionReportContext`, `DetectionReportSummary`, `ExportVisualizationSettings`, `AtomicReportFile`, `DetectionReportDocumentWriter`, `ReportPresentation`, `ReportClientScriptWriter` | 589 | retain | — |
+| Section writers | `AnomalySectionWriter`, `DeepStackReportSectionWriter`, `TargetVisualizationSectionWriter`, `ResidualReviewSectionWriter`, `GlobalMapsSectionWriter`, `UnclassifiedTransientSectionWriter`, `PhotometryReportSectionWriter`, `PipelineDiagnosticsSectionWriter`, `NightEquipmentSectionWriter`, `SessionPictureSectionWriter`, `VariableStarMapWriter`, `CatalogueComparisonWriter`, `SignalWeaveSectionWriter`, `ClaudePerspectiveSectionWriter` | 8535 | retain; their labels come from `ReportData` with S15 | S15 |
+| Measurements | `FieldDepth`, `NightEquipment` | 1666 | move responsibility (measured before export, with explicit states) | S16 |
+| Measurements | `SessionCatalogue` | 180 | adapt boundary (catalogue captured with the run) | S14, S16 |
+| Measurements | `StarShape`, `FrameRejectionExplanation`, `DataAreaPresentation` | 399 | retain | — |
+| Rendering helpers | `TrackVisualizationRenderer`, `TrackCropGeometry`, `GifSequenceWriter`, `PhotometrySvgChart`, `CatalogueMapPainter`, `CreativeTributeRenderer` | 2399 | retain | — |
+| Astrometry and identification | `DetectionReportAstrometry`, `AstrometryContextFactory`, `AstrometryIdentificationHtmlBuilder`, `SkyViewerHtmlBuilder`, `JplSbIdentUrlBuilder`, `SatCheckerUrlBuilder`, `SatCheckerQueryTarget`, `SatCheckerQueryTargetFactory`, `SolarSystemQueryTarget`, `SolarSystemQueryTargetFactory` | 2193 | retain (the site comes from the run context with S14) | S14 |
+| Live lookups | `ReportLookupProxyServer`, `ReportLookupUpstreamClient`, `ReportLookupPayloadNormalizer`, `ReportLookupCacheStore` | 1225 | retain (owner and bounded pool when the proxy grows, as planned) | — |
+
+### Class inventory: `util.skycatalog`
+
+| Classes | Lines | Classification |
+|---|---|---|
+| `CsvTable`, `PlateCorrectionFitter`, `PolynomialFit`, `SkyCatalogue`, `SkyCatalogueClient`, `SkyCatalogueStore`, `SkyField`, `SkyProjection` | 1774 | retain |
+
+Of the 57 classes:
+- 52 are retained;
+- 5 change: `DetectionReportGenerator`, `ReportData`, `FieldDepth`, `NightEquipment` and `SessionCatalogue`.
+
+### Steps from part 3
+
+| Step | Stage | Work | Links | Compatibility | Verification |
+|---|---|---|---|---|---|
+| S15 | D | One source of finding identities and categories: a category descriptor (prefix, label, colour, inclusion option, anchor rule) and `ReportData`'s numbering. The section writers, maps, session picture, viewer overlay and JSON all use it | D09, P3-2 | Labels, anchors, file names and JSON unchanged | The report consistency tests compare labels across the HTML, JSON, maps and overlays on standard and iterative bundles |
+| S16 | D | Prepared diagnostics with explicit states: field depth, night & equipment and the catalogue snapshot measured as a step of the run, each *measured*, *unavailable* or *failed* with a reason. One failure policy for optional sections: a failing section leaves a note, as the session picture does, instead of aborting the report or vanishing | D09, P3-3, P3-4 | Same measurements and report for a successful run | A forced failure in each optional section leaves a note and a complete report; same values on a real dataset |
+
+## Review summary
+
+| Part | Classes | Retained | Event classes retired | Changed |
+|---|---|---|---|---|
+| 1. Workflow core | 60 | 23 | 18 | 19 |
+| 2. Services and boundaries | 49 | 39 | — | 10 |
+| 3. Presentation | 57 | 52 | — | 5 |
+| **All production classes** | **166** | **114** | **18** | **34** |
+
+**What the review shows.**
+- The data, rendering and reporting code mostly fits the target already.
+- The work concentrates in four areas:
+  - the job lifecycle and the window's panels (S2–S5, S9);
+  - the session (S7, S10);
+  - the GUI dependencies of `tasks` and `util` (S6, S13);
+  - explicit run context and prepared results (S12, S14–S16).
+- Two small correctness fixes can come first and stand alone:
+  - S1: no job leaves the UI locked;
+  - S11: failures are reported with their real reason.
+
+**Coverage and exceptions.**
+- **Every production class** in the eight packages is classified.
+- **Entry paths:** every GUI, API and CLI entry path named in DESIGN-IMPROVEMENTS was followed.
+- **Build wiring:**
+  - One Gradle module holds the application, the API and the CLI. So API users also receive FlatLaf and Guava, and the package boundaries are not enforced by modules.
+  - The dependency rule tests of S6 and S13 are the intended enforcement. Splitting modules is not proposed.
+- **Not reviewed line by line:**
+  - the report's JavaScript resources, beyond their role;
+  - the launcher and distribution scripts;
+  - test internals.
+- **Out of scope:** JTransient and JPlateSolve, as external contracts.
+- **Deliberate exceptions:**
+  - `FitsFileInformation` stays mutable, so a WCS write reaches every holder (P2-8);
+  - the lookup proxy stays application-scoped (P3-7);
+  - the AI perspective sections and `CreativeTributeRenderer` stay as cohesive optional writers.
