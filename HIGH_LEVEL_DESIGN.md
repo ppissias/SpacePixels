@@ -132,7 +132,7 @@ The GUI layer currently combines view and controller behavior in several panels.
 Background runnables launched by the GUI.
 
 Tasks are the boundary between Swing actions and longer-running work. Each is a job under the `JobCoordinator`:
-- **What a job returns:** its result. The window then opens what follows: the imported session, the report question, the inspection view, the Star Mask Explorer, the offer to import the mono folder, the offer to write the WCS solution, the tuned settings on the Overview, or the blink window.
+- **What a job returns:** its result. The window then opens what follows: the imported session, the report question, the inspection view, the Star Mask Explorer, the offer to import the mono folder, the offer to write the WCS solution (which starts `WriteWcsTask`), the tuned settings on the Overview, or the blink window.
 - **Blink:** while a blink plays, the blink window holds the main window's lock until it closes.
 - **Import:** an import that loads no frames, for example because a conversion was declined, keeps the open session.
 
@@ -148,6 +148,7 @@ Main tasks:
 - `PlateSolveTask`
 - `AutoTuneTask`
 - `StarMaskStackTask`
+- `WriteWcsTask`
 - `GeneratePreviewsTask`, which renders the Image Stretch previews of one frame and returns them to `StretchPreviewRenderer`; full-size sequence viewers load frames through `SequenceViewerFrame` and `BlinkSequence`
 
 ### `eu.startales.spacepixels.tools`
@@ -553,11 +554,15 @@ MainApplicationPanel
 -> ImageProcessing.solve(...)
 -> PlateSolveService
 -> JPlateSolve
--> ImageProcessing.updateFitsHeaderWithWCS(...) / applyWCSHeader(...)
+-> (the user agrees to write the solution) WriteWcsTask
+-> ImageProcessing.updateFitsHeaderWithWCS(...)
 -> WCS-aware viewers and reports
 ```
 
-Writing a solution into a frame changes the user's own file. `PlateSolveService` writes the updated frame to a temporary file beside it, reads it back to check the image size and that all of its data is present, and only then replaces the original in one step. A failure leaves the original unchanged.
+Writing a solution into a frame changes the user's own file:
+- **Safe replacement:** `PlateSolveService` writes the updated frame to a temporary file beside it. It reads the copy back to check the image size and that all of its data is present, and only then replaces the original in one step. A failure leaves the original unchanged.
+- **Off the Swing thread:** the write rewrites the whole frame, so it runs as a job (`WriteWcsTask`), with the window locked and an indeterminate progress dialog. The solver's temporary files are removed after it either way.
+- **The table:** the frame's row and its shared header are updated on the Swing thread once the write is done.
 
 Report export later resolves WCS through:
 
