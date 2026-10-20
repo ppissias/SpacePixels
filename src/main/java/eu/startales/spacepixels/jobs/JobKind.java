@@ -20,7 +20,8 @@ public enum JobKind {
     PLATE_SOLVE("Plate Solve"),
     AUTO_TUNE("Auto-Tune"),
     BLINK("Blink"),
-    IMPORT("Import");
+    IMPORT("Import"),
+    WRITE_WCS("Write WCS header");
 
     private final String title;
 

@@ -1610,7 +1610,6 @@ public class MainApplicationPanel extends JPanel {
      * not solved. The solver's temporary files are removed either way.
      */
     private void showSolveOutcome(FitsFileInformation fileInfo, JobOutcome<PlateSolveResult> outcome) {
-        FitsFileTableModel model = (FitsFileTableModel) table.getModel();
         PlateSolveResult result = outcome instanceof JobOutcome.Completed<PlateSolveResult> completed ? completed.result() : null;
         if (result != null && result.isSuccess()) {
             ApplicationWindow.logger.info(result.toString());
@@ -1622,39 +1621,48 @@ public class MainApplicationPanel extends JPanel {
                     JOptionPane.YES_NO_OPTION,
                     JOptionPane.QUESTION_MESSAGE);
 
-            if (choice == JOptionPane.YES_OPTION && fileInfo != null) {
-                try {
-                    Map<String, String> updatedHeader = mainAppWindow.getImageProcessing()
-                            .updateFitsHeaderWithWCS(fileInfo.getFilePath(), result.getSolveInformation());
-                    fileInfo.getFitsHeader().clear();
-                    fileInfo.getFitsHeader().putAll(updatedHeader);
-                    model.refreshRow(model.rowOf(fileInfo));
-                    statusLabel.setText("FITS header updated with WCS solution");
-                    JOptionPane.showMessageDialog(this, "FITS header successfully updated.", "Success", JOptionPane.INFORMATION_MESSAGE);
-                } catch (Exception ex) {
-                    statusLabel.setText("Failed to update FITS header");
-                    JOptionPane.showMessageDialog(this, "Failed to update FITS header: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                } finally {
-                    if (fileInfo != null) {
-                        mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
-                    }
+            if (choice == JOptionPane.YES_OPTION) {
+                // Writing rewrites the whole frame, which takes a while for a large one: it is a job, off this thread.
+                ImageProcessing session = mainAppWindow.getImageProcessing();
+                JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.WRITE_WCS, session,
+                        new WriteWcsTask(session, fileInfo.getFilePath(), result),
+                        (handle, written) -> showWcsWriteOutcome(fileInfo, written));
+                if (admission.admitted()) {
+                    return;
                 }
+                statusLabel.setText(admission.refusal());
             } else {
-                if (fileInfo != null) {
-                    mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
-                }
                 statusLabel.setText("Plate solve completed; WCS was not written to the FITS header");
             }
+            mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
         } else {
             String errorMsg = result != null ? result.getFailureReason() + " " + result.getWarning()
                     : outcome instanceof JobOutcome.Failed<PlateSolveResult> failed ? failed.reason() : "Internal Error";
-            if (fileInfo != null) {
-                mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
-            }
+            mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
             statusLabel.setText("Plate solve failed");
             JOptionPane.showMessageDialog(this, "Image was not plate-solved successfully: " + errorMsg, "Error", JOptionPane.ERROR_MESSAGE);
         }
+        refreshSolveButton();
+    }
 
+    /** The end of writing the WCS solution: the frame's row shows its new header, or the error says why it is unchanged. */
+    private void showWcsWriteOutcome(FitsFileInformation fileInfo, JobOutcome<Map<String, String>> outcome) {
+        if (outcome instanceof JobOutcome.Completed<Map<String, String>> completed) {
+            fileInfo.getFitsHeader().clear();
+            fileInfo.getFitsHeader().putAll(completed.result());
+            FitsFileTableModel model = (FitsFileTableModel) table.getModel();
+            model.refreshRow(model.rowOf(fileInfo));
+            statusLabel.setText("FITS header updated with WCS solution");
+            JOptionPane.showMessageDialog(this, "FITS header successfully updated.", "Success", JOptionPane.INFORMATION_MESSAGE);
+        } else if (outcome instanceof JobOutcome.Failed<Map<String, String>> failed) {
+            statusLabel.setText("Failed to update FITS header");
+            JOptionPane.showMessageDialog(this, "Failed to update FITS header: " + failed.reason(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+        refreshSolveButton();
+    }
+
+    /** Plate Solve is available for the selected frame while it is not solved. */
+    private void refreshSolveButton() {
         int selectedRow = table.getSelectedRow();
         if (selectedRow >= 0) {
             FitsFileInformation selectedFileInfo = getSelectedFileInformation();
@@ -1721,6 +1729,7 @@ public class MainApplicationPanel extends JPanel {
             return switch (kind) {
                 case BLINK -> new JobTexts("Loading frames for blinking...", null, false, "Blink frames loaded");
                 case IMPORT -> new JobTexts("Importing FITS/XISF sequence...", "Loading FITS/XISF sequence in the background...", true, "Import finished");
+                case WRITE_WCS -> new JobTexts("Writing the WCS solution into the FITS header...", "Writing the WCS solution into the FITS header...", true, "FITS header write finished");
                 case CONVERT_TO_MONO -> new JobTexts("Batch conversion started", "Initializing batch conversion...", false, "Batch conversion finished");
                 case BATCH_STRETCH -> new JobTexts("Batch stretch started", "Initializing batch stretch...", false, "Batch stretch finished");
                 case PLATE_SOLVE -> new JobTexts("Plate solving image...", "Plate solving selected image...", true, "Plate solve finished");
