@@ -587,7 +587,7 @@ public class MainApplicationPanel extends JPanel {
             return "all frames are already monochrome.";
         }
         if (button == stretchButton) {
-            return "tick \"Write stretched copies\" in the Image Stretch tab first.";
+            return "tick \"Enable batch stretch\" in the Image Stretch tab first.";
         }
         if (button == solveButton) {
             return table.getSelectedRow() < 0 ? "select one frame in the table." : "the selected frame is already solved.";

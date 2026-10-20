@@ -27,14 +27,21 @@ public class GeneratePreviewsTask implements Callable<BufferedImage[]> {
     private final int stretchFactor;
     private final int iterations;
     private final StretchAlgorithm algo;
+    private final boolean stretchEnabled;
 
     public GeneratePreviewsTask(ImageProcessing preProcessing, String filePath,
                                 int stretchFactor, int iterations, StretchAlgorithm algo) {
+        this(preProcessing, filePath, stretchFactor, iterations, algo, true);
+    }
+
+    public GeneratePreviewsTask(ImageProcessing preProcessing, String filePath,
+                                int stretchFactor, int iterations, StretchAlgorithm algo, boolean stretchEnabled) {
         this.preProcessing = preProcessing;
         this.filePath = filePath;
         this.stretchFactor = stretchFactor;
         this.iterations = iterations;
         this.algo = algo;
+        this.stretchEnabled = stretchEnabled;
     }
 
     /** Longest side of the preview images; larger frames are reduced by taking every n-th pixel. */
@@ -49,11 +56,14 @@ public class GeneratePreviewsTask implements Callable<BufferedImage[]> {
             Object previewData = reduce(kernelData, MAX_PREVIEW_SIDE);
             if (previewData != null) {
                 int[] size = size(previewData);
-                return new BufferedImage[]{linearImage(previewData),
-                        preProcessing.getStretchedImageFullSize(previewData, size[0], size[1], stretchFactor, iterations, algo)};
+                BufferedImage linear = linearImage(previewData);
+                return new BufferedImage[]{linear, stretchEnabled
+                        ? preProcessing.getStretchedImageFullSize(previewData, size[0], size[1], stretchFactor, iterations, algo)
+                        : linear};
             }
-            return new BufferedImage[]{preProcessing.getImagePreview(kernelData),
-                    preProcessing.getStretchedImagePreview(kernelData, stretchFactor, iterations, algo)};
+            BufferedImage original = preProcessing.getImagePreview(kernelData);
+            return new BufferedImage[]{original, stretchEnabled
+                    ? preProcessing.getStretchedImagePreview(kernelData, stretchFactor, iterations, algo) : original};
         }
     }
 

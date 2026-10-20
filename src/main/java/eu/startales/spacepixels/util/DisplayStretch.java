@@ -25,6 +25,15 @@ public final class DisplayStretch {
     private DisplayStretch() {
     }
 
+    /** Full-range linear display, matching the Image Stretch tab's original preview; no histogram rescaling. */
+    public static byte[] linearLookupTable() {
+        byte[] table = new byte[VALUES];
+        for (int value = 0; value < VALUES; value++) {
+            table[value] = (byte) (value >>> 8);
+        }
+        return table;
+    }
+
     /** Histogram of one channel, indexed by {@code value - Short.MIN_VALUE}. */
     public static int[] histogram(short[] data) {
         int[] histogram = new int[VALUES];

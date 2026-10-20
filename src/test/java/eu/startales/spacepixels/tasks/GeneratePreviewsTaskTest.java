@@ -1,8 +1,15 @@
 package eu.startales.spacepixels.tasks;
 
 import org.junit.Test;
+import org.junit.Rule;
+import org.junit.rules.TemporaryFolder;
+import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.StretchAlgorithm;
+import nom.tam.fits.Fits;
 
 import java.awt.image.BufferedImage;
+import java.io.File;
+import java.nio.file.Files;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -10,6 +17,32 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
 public class GeneratePreviewsTaskTest {
+    @Rule public TemporaryFolder temporary = new TemporaryFolder();
+
+    @Test
+    public void stretchOffShowsLinearMonoAndColourWithoutChangingTheFitsFile() throws Exception {
+        short[][] mono = {{Short.MIN_VALUE, -32512, 0, Short.MAX_VALUE}};
+        short[][][] colour = {{{Short.MAX_VALUE, Short.MIN_VALUE}}, {{0, Short.MAX_VALUE}}, {{Short.MIN_VALUE, 0}}};
+        Object[] frames = {mono, colour};
+        int[][] expected = {{0x000000, 0x010101, 0x808080, 0xffffff}, {0xff8000, 0x00ff80}};
+        try (ImageProcessing processor = ImageProcessing.getInstance(temporary.getRoot())) {
+            for (int i = 0; i < frames.length; i++) {
+                File file = new File(temporary.getRoot(), "frame" + i + ".fit");
+                try (Fits fits = new Fits()) {
+                    fits.addHDU(Fits.makeHDU(frames[i]));
+                    fits.write(file);
+                }
+                byte[] originalFile = Files.readAllBytes(file.toPath());
+                BufferedImage[] previews = new GeneratePreviewsTask(processor, file.toString(), 100, 20,
+                        StretchAlgorithm.EXTREME, false).call();
+                for (int x = 0; x < expected[i].length; x++) {
+                    assertEquals(expected[i][x], previews[0].getRGB(x, 0) & 0xffffff);
+                    assertEquals(expected[i][x], previews[1].getRGB(x, 0) & 0xffffff);
+                }
+                assertArrayEquals(originalFile, Files.readAllBytes(file.toPath()));
+            }
+        }
+    }
 
     @Test
     public void largeFramesAreReducedToTheMaximumSide() {

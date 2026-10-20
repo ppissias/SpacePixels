@@ -35,12 +35,15 @@ public class StretchPanel extends JPanel {
 
     // Controls
     private final JSlider stretchSlider = new JSlider();
-    private final JCheckBox stretchCheckbox = new JCheckBox("Write stretched copies (Batch Stretch, Convert to Mono)");
+    private final JCheckBox stretchCheckbox = new JCheckBox("Enable batch stretch");
+    private final JCheckBox displayStretchCheckbox = new JCheckBox("Stretch display", true);
     private final JComboBox<StretchAlgorithm> stretchAlgoCombo = new JComboBox<>(StretchAlgorithm.values());
     private final JSlider stretchIterationsSlider = new JSlider();
     private final JButton showFullSizeButton = new JButton("Show full size");
     private final JLabel stretchIntensityLabel = new JLabel();
     private final JLabel stretchIterationsLabel = new JLabel();
+    private final JButton resetButton = new JButton("Reset to Defaults");
+    private final JLabel displayPreviewTitle = new JLabel("Stretched", SwingConstants.CENTER);
 
     // Preview
     private final ZoomableImageView.ViewState viewState = new ZoomableImageView.ViewState();
@@ -93,11 +96,13 @@ public class StretchPanel extends JPanel {
                 return c;
             }
         });
-        JButton resetButton = new JButton("Reset to Defaults");
         resetButton.setToolTipText("Return the sliders to the defaults of the selected algorithm.");
         resetButton.addActionListener(e -> resetStretchToDefaults());
         JPanel algorithmRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         algorithmRow.setBorder(new EmptyBorder(12, 0, 6, 0));
+        displayStretchCheckbox.setToolTipText("Apply the display stretch in this tab and all frame viewers. Untick for a linear view; your stretch settings are kept.");
+        algorithmRow.add(displayStretchCheckbox);
+        algorithmRow.add(Box.createHorizontalStrut(8));
         algorithmRow.add(new JLabel("Algorithm:"));
         algorithmRow.add(stretchAlgoCombo);
         algorithmRow.add(Box.createHorizontalStrut(8));
@@ -112,8 +117,10 @@ public class StretchPanel extends JPanel {
         slidersRow.add(sliderPanel(stretchIterationsLabel, stretchIterationsSlider));
         controls.add(left(slidersRow));
 
-        stretchCheckbox.setToolTipText("When ticked, Batch Stretch is available and Convert to Mono also writes stretched copies "
-                + "(in a separate _mono_stretched folder). The linear files used for detection are never changed.");
+        stretchCheckbox.setToolTipText("<html>Enable this to batch stretch a dataset from the main screen by clicking <b>Batch Stretch</b>.<br>"
+                + "Uses the selected algorithm and sliders, independently of Stretch display.<br>"
+                + "Convert to Mono also writes stretched copies in a separate _mono_stretched folder.<br>"
+                + "The original linear files used for detection are never changed.</html>");
         JPanel outputRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         outputRow.setBorder(new EmptyBorder(4, 0, 0, 0));
         outputRow.add(stretchCheckbox);
@@ -142,7 +149,7 @@ public class StretchPanel extends JPanel {
 
         JPanel images = new JPanel(new GridLayout(1, 2, 15, 0));
         images.add(titled("Original (linear)", originalView, originalHistogramView));
-        images.add(titled("Stretched", stretchedView, histogramView));
+        images.add(titled(displayPreviewTitle, stretchedView, histogramView));
 
         JPanel previewPanel = new JPanel(new BorderLayout(0, 8));
         previewPanel.add(previewTop, BorderLayout.NORTH);
@@ -162,6 +169,13 @@ public class StretchPanel extends JPanel {
         // ==========================================
         stretchCheckbox.addItemListener(e -> {
             mainAppWindow.getMainApplicationPanel().setBatchStretchButtonEnabled(stretchCheckbox.isSelected());
+        });
+        displayStretchCheckbox.addItemListener(e -> {
+            updateDisplayControls();
+            if (!adjusting) {
+                saveSettings();
+                triggerPreviewUpdate();
+            }
         });
         stretchAlgoCombo.addActionListener(e -> {
             if (adjusting) {
@@ -255,10 +269,12 @@ public class StretchPanel extends JPanel {
                 }
             }
             stretchAlgoCombo.setSelectedItem(algorithm);
+            displayStretchCheckbox.setSelected(preferences == null || preferences.getBoolean("stretch.enabled", true));
         } finally {
             adjusting = false;
         }
         applySelectedAlgorithmConfiguration(false);
+        updateDisplayControls();
     }
 
     private void saveSettings() {
@@ -267,6 +283,7 @@ public class StretchPanel extends JPanel {
             return;
         }
         preferences.put("stretch.algorithm", algorithm.name());
+        preferences.putBoolean("stretch.enabled", isDisplayStretchEnabled());
         preferences.putInt("stretch." + algorithm.name() + ".primary", stretchSlider.getValue());
         preferences.putInt("stretch." + algorithm.name() + ".secondary", stretchIterationsSlider.getValue());
     }
@@ -274,6 +291,17 @@ public class StretchPanel extends JPanel {
     private int savedValue(StretchAlgorithm algorithm, String which, int fallback, int min, int max) {
         int value = preferences == null ? fallback : preferences.getInt("stretch." + algorithm.name() + "." + which, fallback);
         return Math.max(min, Math.min(max, value));
+    }
+
+    private void updateDisplayControls() {
+        boolean enabled = isDisplayStretchEnabled();
+        stretchAlgoCombo.setEnabled(enabled);
+        stretchSlider.setEnabled(enabled);
+        stretchIterationsSlider.setEnabled(enabled);
+        stretchIntensityLabel.setEnabled(enabled);
+        stretchIterationsLabel.setEnabled(enabled);
+        resetButton.setEnabled(enabled);
+        displayPreviewTitle.setText(enabled ? "Stretched" : "Linear (stretch off)");
     }
 
     /** What each algorithm does, for its tooltip. */
@@ -342,13 +370,13 @@ public class StretchPanel extends JPanel {
         originalView.setPlaceholder("Rendering…");
         stretchedView.setPlaceholder("Rendering…");
         renderer.request(new StretchPreviewRenderer.Request(mainAppWindow.getImageProcessing(), selected.getFilePath(),
-                getStretchAlgorithm(), stretchSlider.getValue(), stretchIterationsSlider.getValue()));
+                getStretchAlgorithm(), stretchSlider.getValue(), stretchIterationsSlider.getValue(), isDisplayStretchEnabled()));
     }
 
     /** Renders both previews and their histograms, on the renderer's worker thread. */
     private static StretchPreviewRenderer.Previews render(StretchPreviewRenderer.Request request) throws Exception {
         BufferedImage[] images = new GeneratePreviewsTask(request.session, request.filePath, request.strength,
-                request.iterations, request.algorithm).call();
+                request.iterations, request.algorithm, request.stretchEnabled).call();
         return new StretchPreviewRenderer.Previews(request, images[0], images[1],
                 HistogramView.luminanceHistogram(images[0]), HistogramView.luminanceHistogram(images[1]));
     }
@@ -431,6 +459,15 @@ public class StretchPanel extends JPanel {
         return stretchCheckbox.isSelected();
     }
 
+    public boolean isDisplayStretchEnabled() {
+        return displayStretchCheckbox.isSelected();
+    }
+
+    /** Shared with each viewer; the separate batch-stretch checkbox only controls disk output. */
+    ButtonModel getDisplayStretchModel() {
+        return displayStretchCheckbox.getModel();
+    }
+
     public JSlider getStretchSlider() {
         return stretchSlider;
     }
@@ -463,8 +500,11 @@ public class StretchPanel extends JPanel {
     }
 
     private static JPanel titled(String title, JComponent view, JComponent below) {
+        return titled(new JLabel(title, SwingConstants.CENTER), view, below);
+    }
+
+    private static JPanel titled(JLabel label, JComponent view, JComponent below) {
         JPanel panel = new JPanel(new BorderLayout(0, 5));
-        JLabel label = new JLabel(title, SwingConstants.CENTER);
         label.setForeground(UIManager.getColor("Label.disabledForeground"));
         panel.add(label, BorderLayout.NORTH);
         panel.add(view, BorderLayout.CENTER);

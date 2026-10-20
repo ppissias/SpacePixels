@@ -19,6 +19,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.event.ChangeListener;
 import java.awt.*;
 import java.awt.event.ActionListener;
+import java.awt.event.ItemListener;
 import java.util.Map;
 import java.util.WeakHashMap;
 
@@ -31,6 +32,8 @@ final class StretchControls {
 
     private final StretchPanel panel;
     private final JComboBox<StretchAlgorithm> algorithmCombo;
+    private final JCheckBox displayStretchCheckbox = new JCheckBox("Stretch display");
+    private final JButton resetButton = new JButton("Reset");
     private final JSlider primarySlider;
     private final JSlider secondarySlider;
     private final JLabel primaryLabel = new JLabel();
@@ -38,6 +41,7 @@ final class StretchControls {
     private final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     private final ChangeListener modelListener = e -> scheduleRefresh();
     private final ActionListener algorithmListener = e -> scheduleRefresh();
+    private final ItemListener displayListener = e -> scheduleRefresh();
     private final Runnable onChange;
     /** Weak keys: a viewer that shows one frame at a time lets the old frames go. */
     private final Map<BlinkSequence.Frame, byte[][]> tables = new WeakHashMap<>();
@@ -47,6 +51,9 @@ final class StretchControls {
     StretchControls(StretchPanel panel, Runnable onChange) {
         this.panel = panel;
         this.onChange = onChange;
+        displayStretchCheckbox.setModel(panel.getDisplayStretchModel());
+        displayStretchCheckbox.setToolTipText("Apply the display stretch in all viewers and the Image Stretch tab. Untick for a linear view; your stretch settings are kept.");
+        displayStretchCheckbox.getModel().addItemListener(displayListener);
         algorithmCombo = new JComboBox<>(panel.getStretchAlgorithmModel());
         algorithmCombo.setRenderer(new DefaultListCellRenderer() {
             @Override
@@ -64,12 +71,11 @@ final class StretchControls {
             slider.getModel().addChangeListener(modelListener);
         }
         algorithmCombo.addActionListener(algorithmListener);
-        JButton resetButton = new JButton("Reset");
         resetButton.setToolTipText("Return the sliders to the defaults of the selected algorithm.");
         resetButton.addActionListener(e -> panel.resetStretchToDefaults());
 
         row.setBorder(new EmptyBorder(4, 0, 0, 0));
-        row.add(new JLabel("Stretch:"));
+        row.add(displayStretchCheckbox);
         row.add(algorithmCombo);
         row.add(Box.createHorizontalStrut(8));
         row.add(primaryLabel);
@@ -106,7 +112,9 @@ final class StretchControls {
             int secondary = panel.getStretchIterationsSlider().getValue();
             byte[][] channelTables = new byte[f.getChannelCount()][];
             for (int channel = 0; channel < channelTables.length; channel++) {
-                channelTables[channel] = DisplayStretch.lookupTable(f.getHistogram(channel), algorithm, primary, secondary);
+                channelTables[channel] = panel.isDisplayStretchEnabled()
+                        ? DisplayStretch.lookupTable(f.getHistogram(channel), algorithm, primary, secondary)
+                        : DisplayStretch.linearLookupTable();
             }
             return channelTables;
         });
@@ -114,7 +122,7 @@ final class StretchControls {
 
     /** Whether a colour frame is drawn as its brightest channel, as the Extreme stretch does. */
     boolean extremeColour(BlinkSequence.Frame frame) {
-        return panel.getStretchAlgorithm() == StretchAlgorithm.EXTREME && frame.getChannelCount() == 3;
+        return panel.isDisplayStretchEnabled() && panel.getStretchAlgorithm() == StretchAlgorithm.EXTREME && frame.getChannelCount() == 3;
     }
 
     void clearTables() {
@@ -126,6 +134,8 @@ final class StretchControls {
      * not be used afterwards.
      */
     void detach() {
+        displayStretchCheckbox.getModel().removeItemListener(displayListener);
+        displayStretchCheckbox.setModel(new JToggleButton.ToggleButtonModel());
         algorithmCombo.removeActionListener(algorithmListener);
         for (JSlider slider : new JSlider[]{primarySlider, secondarySlider}) {
             slider.getModel().removeChangeListener(modelListener);
@@ -150,6 +160,13 @@ final class StretchControls {
     }
 
     private void updateLabels() {
+        boolean enabled = panel.isDisplayStretchEnabled();
+        algorithmCombo.setEnabled(enabled);
+        primarySlider.setEnabled(enabled);
+        secondarySlider.setEnabled(enabled);
+        primaryLabel.setEnabled(enabled);
+        secondaryLabel.setEnabled(enabled);
+        resetButton.setEnabled(enabled);
         StretchAlgorithm algorithm = panel.getStretchAlgorithm();
         if (algorithm == null) {
             return;

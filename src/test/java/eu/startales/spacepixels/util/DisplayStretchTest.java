@@ -9,6 +9,16 @@ import static org.junit.Assert.assertEquals;
 
 public class DisplayStretchTest {
 
+    @Test
+    public void linearDisplayUsesTheFullUnsignedRangeWithoutHistogramScaling() {
+        byte[] table = DisplayStretch.linearLookupTable();
+        int[] input = {0, 1, 255, 256, 32767, 32768, 65535};
+        int[] expected = {0, 0, 0, 1, 127, 128, 255};
+        for (int i = 0; i < input.length; i++) {
+            assertEquals("Linear display at " + input[i], expected[i], table[input[i]] & 255);
+        }
+    }
+
     private static final int WIDTH = 97;
     private static final int HEIGHT = 61;
 

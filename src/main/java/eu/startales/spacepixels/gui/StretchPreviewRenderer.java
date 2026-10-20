@@ -33,13 +33,19 @@ final class StretchPreviewRenderer {
         final StretchAlgorithm algorithm;
         final int strength;
         final int iterations;
+        final boolean stretchEnabled;
 
         Request(ImageProcessing session, String filePath, StretchAlgorithm algorithm, int strength, int iterations) {
+            this(session, filePath, algorithm, strength, iterations, true);
+        }
+
+        Request(ImageProcessing session, String filePath, StretchAlgorithm algorithm, int strength, int iterations, boolean stretchEnabled) {
             this.session = session;
             this.filePath = filePath;
             this.algorithm = algorithm;
             this.strength = strength;
             this.iterations = iterations;
+            this.stretchEnabled = stretchEnabled;
         }
     }
 
