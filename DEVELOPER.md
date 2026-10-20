@@ -86,7 +86,7 @@ Some session state still lives elsewhere, and a session object will collect it (
 
   Each setting is core, basic, expert or hidden.
 - **When edits apply.** Edits change the session's `DetectionConfig` at once. Save writes the profile and the visualization preferences together, through `SpacePixelsSettingsFiles`.
-- **Runs use a copy.** Every run takes its own validated copy, so later edits never change a running job.
+- **Runs use a copy.** Every run takes its own validated copy, so later edits never change a running job. Preview Frame takes a fresh copy for each frame it detects, and edits the per-frame thresholds on the tab's own spinner models.
 - **The astrometry settings** (ASTAP path, observing site) are an `AppConfig`, edited in `ConfigurationPanel`.
 
 ## Frame viewers
@@ -138,7 +138,7 @@ The report never changes the engine's results. The report's live lookups (SatChe
 | Pattern | Where |
 |---|---|
 | Command with a coordinator | `Job` and `JobCoordinator`: one admission rule, one outcome per job |
-| Typed outcome | `JobOutcome` (completed, declined, failed) |
+| Typed outcome | `JobOutcome` (completed, declined, cancelled, failed) |
 | Observer, with explicit listeners | `SessionListener`, `JobCoordinator.Listener`, `SkyCatalogueModel` |
 | Facade | `ImageProcessing`, in front of the import, pipeline and plate-solve services |
 | Immutable request and snapshot | `SpacePixelsPipelineRequest`, `checkedSettings(...)`, `ExportVisualizationSettings` |

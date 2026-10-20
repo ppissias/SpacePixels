@@ -49,7 +49,7 @@ This was a source and architecture review, with primary documentation checked fo
 | D02 | High | In progress (every job admitted by the coordinator, 2026-10-20) | Job ownership and resource admission | A command acquires its job slot before the worker starts; only that job can finish it. |
 | D03 | High | Implemented | Preview results belong to a request | A previous frame or stretch cannot overwrite the current preview. |
 | D04 | High | In progress (S1, S11, typed outcomes, Cancel for long jobs, 2026-10-20) | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
-| D05 | High | Implemented; Preview Frame question open | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
+| D05 | High | Implemented (Preview Frame follows the edits, 2026-10-20) | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
 | D06 | Medium | Proposed | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
 | D07 | Medium | Proposed | Shared actions and derived availability | Button, shortcut and context menu execute the same command under the same conditions. |
 | D08 | Medium | In progress (WCS write, 2026-10-20) | Keep slow work off the EDT | Accepting a WCS write does not perform the file rewrite on the UI thread. |
@@ -163,7 +163,15 @@ A Cancel control should request cancellation, show a stopping state and retain r
   - all 75 number fields were identical in value, type and text.
 - **Not done:** profile loading and the API do not apply `DetectionSettingsRules` yet; they stay unchanged for now. Save keeps its name.
 - **Fixed afterwards:** a value with more decimals than its field showed was kept rounded; 4.25 typed where the field showed 5.5 became 4.2. The field first showed the new value with its old number of decimals, and the auto-apply committed that text back. This predated D05. A field now shows every decimal of its value.
-- **Open question: Preview Frame.** It keeps the settings it was opened with, and clicking Preview Frame again picks up changes. Before D05, a frame stepped to in an open Preview Frame used the settings of that moment. The alternative is to take a fresh checked copy at each frame step, so an open preview follows edits. Undecided (maintainer, 2026-10-19).
+- **Preview Frame (decided by the maintainer and implemented, 2026-10-20).** Preview Frame shows Detection Sigma, Grow Sigma and Min Detection Pixels, so they can be tried on the frame:
+  - **Shared models.** Their spinners share the models of the tab (`perFrameDetectionSettings()`), so an edit there is an ordinary unsaved edit, pairs included.
+  - **Re-detect.** The frame on show is detected again 300 ms after the last change.
+  - **A fresh copy per frame.** Every frame is prepared with a copy of the settings in use (`settingsInUse()`), taken on the EDT. Unlike `checkedSettings`, it changes nothing on the tab. Opening the window still goes through `checkedSettings`.
+  - **Invalid text** keeps the last valid value, and a note says what to enter.
+  - **Locked during jobs,** like the tab.
+  - **Keys.** The window's keys do not fire while a text field has the focus (`ViewerSupport.bind`): "1" typed there does not zoom.
+  - **Checked** with a window harness on three Apophis frames, with real key and mouse events.
+- Before D05, a frame stepped to in an open Preview Frame also used the settings of that moment; from D05 until this change it kept the settings it was opened with.
 
 The original review follows.
 

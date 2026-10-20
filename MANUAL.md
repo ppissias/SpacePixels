@@ -417,7 +417,14 @@ Below the frame: the frame number, file name, capture time and time since the fi
 
 ![Preview Frame at 100 %](docs/images/manual/ui-preview.jpg)
 
-Runs the source detection on the selected frame with the current settings and shows what it picks up: green boxes around point sources, red lines along streaks. **◀ ▶** (← →) move to the other frames of the session; each frame is detected when you get to it, and the status bar shows how many point sources and streaks it has. Use it to see what the detector picks up in a single frame.
+Runs the source detection on the selected frame with the current settings and shows what it picks up: green boxes around point sources, red lines along streaks. **◀ ▶** (← →) move to the other frames of the session; each frame is detected when you get to it, with the settings as they are then, and the status bar shows how many point sources and streaks it has. Use it to see what the detector picks up in a single frame.
+
+To try the per-frame settings on the frame itself, use **Detection Sigma**, **Grow Sigma (Hysteresis)** and **Min Detection Pixels** under the buttons:
+- Click the arrows, or click into a field, type a value and press Enter; Esc discards a typed value. Enter, Esc or a click on the frame gives the keys back to the window.
+- The frame is detected again a moment after the change.
+- They are the settings of the Detection Settings tab, not a copy: a change here is marked as unsaved there, and **Save** keeps it.
+- Text that is not a valid value is outlined in red, a note says what to enter, and the frame keeps the last valid value.
+- While a job runs, the three fields are locked, like the Detection Settings tab.
 
 After a full detection with variable-star photometry, **Show variable stars** (V) also draws that run's candidates, with the same labels and hover details as Blink. Changing the single-frame preview settings does not change those candidates; run the full detection again to update them.
 
@@ -514,7 +521,7 @@ Each page shows its main settings. The fine-tuning settings are expert settings:
 
 A setting you changed since the last save shows its name in blue; **Show only unsaved changes** lists only those, and the **Reset** button next to a changed setting puts it back to the saved value. **Save** keeps the settings for the next start; **Load Defaults** goes back to the starting settings of SpacePixels.
 
-Changes apply as soon as you make them. A run uses the settings as they are when you start it, so changing a setting during a run does not affect that run; Preview Frame keeps the settings it was opened with until you open it again. Text that is not a number, or is outside a setting's range, stays in the field outlined in red, and the line at the bottom says what to enter, for example *Detection Sigma: enter a number between 1.0 and 20.0*. Save and the runs do not start until it is corrected; SpacePixels shows you the setting instead. Some settings come in pairs: Grow Sigma, for example, cannot be above Detection Sigma. When a change crosses a pair, SpacePixels moves the other setting and says so at the bottom.
+Changes apply as soon as you make them. A run uses the settings as they are when you start it, so changing a setting during a run does not affect that run. An open Preview Frame follows your changes: it detects each frame with the settings as they are then, and its three per-frame settings are the ones on this tab. Text that is not a number, or is outside a setting's range, stays in the field outlined in red, and the line at the bottom says what to enter, for example *Detection Sigma: enter a number between 1.0 and 20.0*. Save and the runs do not start until it is corrected; SpacePixels shows you the setting instead. Some settings come in pairs: Grow Sigma, for example, cannot be above Detection Sigma. When a change crosses a pair, SpacePixels moves the other setting and says so at the bottom.
 
 In most sessions you only need Auto-Tune and the profile. Change single settings when a report shows a specific problem; the tooltip of each setting explains what it does.
 
