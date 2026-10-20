@@ -155,7 +155,7 @@ The original review follows.
   - **Cancel in the progress dialog.** It shows a stopping state, and the job stops at its next progress report; the job's own clean-up runs as it leaves. Closing the dialog cancels instead of exiting. Plate solving, the WCS write and Blink cannot be cancelled, and their dialog shows no Cancel.
   - **The report reports its progress (2026-10-20).** Measured on klangwolke-2 (33 frames of 61 MPix), the report reported once, at 90 %, and then nothing for 107–118 s, so a cancel there waited up to two minutes. Profiling put two thirds of that time in Unclassified Transients (35 %) and Likely Artifacts (30 %). `ReportProgress` now reports each step and each item of the slow steps. A cancel during the report then stopped in 0.10–0.16 s. The report output is unchanged (klangwolke-1: the same `report-data.json` and files).
   - **Clean-up after a cancel.** A cancelled detection removes the report folder it was writing; a cancelled iterative run keeps its finished passes with an index that says so. Every run gets a folder of its own (`OutputFolders`).
-  - **Auto-Tune cancel fixed.** The calibrated tuner catches a cancel in its workers and returned a result anyway, so a cancel during tuning ended as "completed" or "no usable settings". A cancel made while the tuner runs now ends as cancelled.
+  - **Auto-Tune cancel fixed.** The calibrated tuner reports its progress inside a `try` that catches every exception, so a cancel during tuning came back as a failed result: the status bar said "Auto-Tuning completed successfully." and the Overview "Auto-Tune found no usable settings", naming the cancel exception. A cancel made while the tuner runs now ends as cancelled.
   - **Copy details** in the failure messages (`FailureDialog`): the message, the versions and the stack trace.
   - **Open last report** in the Detect group: the newest report beside the frames, found on import and after each run.
 - **Open:**
@@ -625,7 +625,7 @@ For behavioural changes, follow the maintainer's real-data comparison method. An
 
 **Where it lives.** The tests and their support are in `src/test/java/eu/startales/spacepixels/gui/mechanics/`. `build.gradle` holds the test dependency and the `guiMechanicsTest` task. Run `./gradlew guiMechanicsTest`. That task is not part of `./gradlew test`: it needs a desktop, it moves the mouse, and it runs one test at a time. `./gradlew test` excludes this package and opens no window. The mechanics task runs again even when the classes have not changed, prints each case name, and brings the window to the front of the main display.
 
-**Isolation.** Each test sets `user.home` to a scratch folder before the window is created, and restores it afterwards. Java preferences are not in that folder. The test exports `/eu/startales/spacepixels` (the window placement, the stretch, the blink speed, the auto-tune profile and `showExpertSettings`) and restores that node after the window is gone. The frame's close operation is set to dispose, so closing it does not exit the JVM. The modal **Processing...** dialog's close box exits the application; the suite must not click it.
+**Isolation.** Each test sets `user.home` to a scratch folder before the window is created, and restores it afterwards. Java preferences are not in that folder. The test exports `/eu/startales/spacepixels` (the window placement, the stretch, the blink speed, the auto-tune profile and `showExpertSettings`) and restores that node after the window is gone. The frame's close operation is set to dispose, so closing it does not exit the JVM. Since D04's Cancel, the modal **Processing...** dialog's close box cancels a job that can be cancelled. For plate solving, the WCS write and Blink it still asks to exit SpacePixels, so the suite must not click it there.
 
 **Data.** Synthetic frames from `SyntheticDatasetFactory`. The reference datasets are not opened. The folder chooser is the real one: the test clicks **Import Aligned Frames…**, selects the synthetic folder and approves the chooser. The approve button's own caption follows the operating-system language, so the test uses the chooser's approve action rather than that caption.
 
@@ -639,6 +639,15 @@ For behavioural changes, follow the maintainer's real-data comparison method. An
 `./gradlew guiMechanicsTest` passed these four on 2026-10-20, on synthetic frames, in about 14 seconds.
 
 **Still to draft.** The remaining buttons and viewers; search, expert rows, Revert and Load Defaults; the stretch tab; plate-solve availability; cancelling the sky-catalogue fetch; the iterative frame-limit question; Cancel in the progress dialog (since D04, 2026-10-20), for example for Auto-Tune and a detection run.
+
+**Review notes (Claude, 2026-10-20).** The draft is a good base: lookup by visible text, the scratch home with the preference snapshot, synthetic data and an opt-in task are the right choices. Suggestions, roughly in order of value:
+- **Split availability from wiring after S4.** Once `CommandAvailability` exists, the "which button is enabled when" checks (the first case, Blink with three frames, Convert on colour frames) belong in fast unit tests of the model. Keep one mechanics test per shared command for the wiring: button, shortcut, table menu and Overview button agree, and a shortcut does nothing while its command is unavailable.
+- **Port two scratch-harness checks into the suite.** Both catch regressions that unit tests cannot:
+  - **Preview Frame:** a value typed into a settings field stays in the field ("1" does not zoom), Enter and Esc give the keys back to the frame, and an arrow click leaves them there.
+  - **Report link and Copy details:** **Open last report** appears after importing a folder with reports, and Copy details puts the versions and the error on the clipboard. The clipboard must be saved and restored, as the preferences are.
+- **Cancel is hard to time on synthetic frames:** a detection finishes in about a second. Cancel at a progress message from inside the test instead (the job tests do this without a window). In the window, check that Cancel is shown for a cancellable job and hidden otherwise.
+- **Matching captions.** The **Open last report** link's caption is HTML with the date, so it needs a "contains" matcher. S4 keeps every button caption as it is today, so `VisibleText.button` keeps working.
+- **Speed and robustness.** `pauseForTheEye` adds 1.2 s per test; a system property could turn it off for unattended runs. The robot takes over the mouse for the whole run, which the task description says; a note in the run output to keep hands off the mouse would help.
 
 ## Changes to avoid
 
