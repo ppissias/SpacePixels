@@ -1680,7 +1680,8 @@ public class MainApplicationPanel extends JPanel {
                     statusLabel.setText("Plate solve completed; WCS was not written to the FITS header");
                 }
             } else {
-                String errorMsg = (result != null) ? (result.getFailureReason() + " " + result.getWarning()) : "Internal Error";
+                String errorMsg = result != null ? result.getFailureReason() + " " + result.getWarning()
+                        : event.getFailureMessage() != null ? event.getFailureMessage() : "Internal Error";
                 if (fileInfo != null) {
                     mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
                 }

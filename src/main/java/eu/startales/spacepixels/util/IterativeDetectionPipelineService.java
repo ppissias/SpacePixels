@@ -152,6 +152,7 @@ final class IterativeDetectionPipelineService {
             File iterationDir = new File(masterDir, k + "_frames");
             iterationDir.mkdirs();
 
+            String reportFailure = null;
             try {
                 DetectionReportGenerator.exportTrackVisualizations(
                         result,
@@ -161,12 +162,15 @@ final class IterativeDetectionPipelineService {
                         effectiveConfig,
                         appConfig,
                         detectionSummary.reportInclusion());
-            } catch (IOException e) {
-                System.err.println("Failed to export visualization for iteration " + k + ": " + e.getMessage());
+            } catch (IOException | RuntimeException e) {
+                // The other passes go on; the index says that this pass has no report, and why.
+                reportFailure = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                System.err.println("Failed to export visualization for iteration " + k + ": " + reportFailure);
             }
 
             int anomalyCount = result.anomalies == null ? 0 : result.anomalies.size();
-            summaries.add(new DetectionReportGenerator.IterationSummary(k, k + "_frames", result.tracks.size(), anomalyCount));
+            summaries.add(new DetectionReportGenerator.IterationSummary(k, k + "_frames", result.tracks.size(), anomalyCount,
+                    reportFailure));
 
             currentIteration++;
         }
@@ -178,14 +182,13 @@ final class IterativeDetectionPipelineService {
         File indexFile = new File(masterDir, "index.html");
         try {
             DetectionReportGenerator.exportIterativeIndexReport(masterDir, summaries);
-            DebugOutput.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
-            return indexFile;
-        } catch (IOException e) {
-            System.err.println("Failed to write iterative index report: " + e.getMessage());
+        } catch (IOException | RuntimeException e) {
+            throw new IOException("The passes were written to " + masterDir.getAbsolutePath()
+                    + ", but their index page could not be written: "
+                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
         }
-
         DebugOutput.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
-        return masterDir;
+        return indexFile;
     }
 
     static List<Integer> sampleFrameIndices(long[] times, boolean hasValidTime, int maxLimit, int k) {

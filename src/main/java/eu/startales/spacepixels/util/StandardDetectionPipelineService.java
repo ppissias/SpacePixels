@@ -64,16 +64,21 @@ final class StandardDetectionPipelineService {
             progressListener.onProgressUpdate(90, "Exporting tracks and generating HTML report...");
         }
 
+        // Null means only that the user declined the report; a failed export says so with its reason.
+        File reportFile;
         try {
-            File reportFile = exportDetectionReport(executionData, reportInclusion);
-            if (progressListener != null) {
-                progressListener.onProgressUpdate(100, "Finished!");
-            }
-            return reportFile;
-        } catch (IOException e) {
-            System.err.println("Failed to export visualizations: " + e.getMessage());
+            reportFile = exportDetectionReport(executionData, reportInclusion);
+        } catch (IOException | RuntimeException e) {
+            throw new IOException("The detection finished, but the report could not be written: "
+                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
         }
-        return null;
+        if (reportFile == null) {
+            throw new IOException("The detection finished, but there were no frames to write a report for.");
+        }
+        if (progressListener != null) {
+            progressListener.onProgressUpdate(100, "Finished!");
+        }
+        return reportFile;
     }
 
     TrackOverlay getLastTrackOverlay() {

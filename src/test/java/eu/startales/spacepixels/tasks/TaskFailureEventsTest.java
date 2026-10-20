@@ -12,6 +12,7 @@ import eu.startales.spacepixels.events.SolveFinishedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.util.AutoTunerRunner;
 import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
@@ -69,6 +70,18 @@ public class TaskFailureEventsTest {
                 BlinkFinishedEvent.class);
         assertFalse(blink.isSuccess());
         assertNotNull(blink.getErrorMessage());
+    }
+
+    @Test
+    public void aFailedPlateSolveCarriesItsReasonWithoutOpeningADialog() throws Exception {
+        try (ImageProcessing processing = ImageProcessing.getInstance(folder.newFolder("session"))) {
+            // In memory only: the saved application config is not touched.
+            processing.getAppConfig().astapExecutablePath = new File(folder.getRoot(), "missing-astap.exe").getAbsolutePath();
+            SolveFinishedEvent solved = last(run(new PlateSolveTask(bus(), processing, missingFrame().getFilePath(), 0, true, false)),
+                    SolveFinishedEvent.class);
+            assertNull(solved.getResult());
+            assertTrue(solved.getFailureMessage(), solved.getFailureMessage().startsWith("ASTAP executable path is not correct"));
+        }
     }
 
     @Test

@@ -51,10 +51,10 @@ public class PlateSolveTask implements Runnable {
             eventBus.post(new SolveFinishedEvent(rowIndex, result));
 
         } catch (Throwable ex) {
-            TaskFailures.rethrowOutOfMemory(ex);
+            String message = TaskFailures.rethrowOutOfMemory(ex);
             ApplicationWindow.logger.log(Level.SEVERE, "Cannot solve image", ex);
             // Post a failure event
-            eventBus.post(new SolveFinishedEvent(rowIndex, null));
+            eventBus.post(new SolveFinishedEvent(rowIndex, null, message));
         }
     }
 }

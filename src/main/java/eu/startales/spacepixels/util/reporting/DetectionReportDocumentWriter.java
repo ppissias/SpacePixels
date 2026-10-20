@@ -200,7 +200,8 @@ final class DetectionReportDocumentWriter {
             "tr:hover { background-color: #3a3a3a; } ",
             "a { color: #4da6ff; text-decoration: none; font-weight: bold; }",
             "a:hover { text-decoration: underline; }",
-            ".highlight { color: #44ff44; font-weight: bold; }"
+            ".highlight { color: #44ff44; font-weight: bold; }",
+            ".alert { color: #ff6b6b; font-weight: bold; }"
     };
 
     private DetectionReportDocumentWriter() {

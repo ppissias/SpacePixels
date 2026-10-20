@@ -86,12 +86,19 @@ public class DetectionReportGenerator {
         public String folderName;
         public int trackCount;
         public int anomalyCount;
+        /** Why this pass has no report, or null when its report was written. */
+        public String reportFailure;
 
         public IterationSummary(int frameCount, String folderName, int trackCount, int anomalyCount) {
+            this(frameCount, folderName, trackCount, anomalyCount, null);
+        }
+
+        public IterationSummary(int frameCount, String folderName, int trackCount, int anomalyCount, String reportFailure) {
             this.frameCount = frameCount;
             this.folderName = folderName;
             this.trackCount = trackCount;
             this.anomalyCount = anomalyCount;
+            this.reportFailure = reportFailure;
         }
     }
 
@@ -1471,8 +1478,12 @@ public class DetectionReportGenerator {
                 report.println("<td>" + trackStr + "</td>");
                 String anomalyStr = summary.anomalyCount > 0 ? "<span style='color:#ff9933;'>" + summary.anomalyCount + "</span>" : "0";
                 report.println("<td>" + anomalyStr + "</td>");
-                String reportLink = summary.folderName + "/" + detectionReportName;
-                report.println("<td><a href='" + reportLink + "'>View Detailed Report &rarr;</a></td>");
+                if (summary.reportFailure != null) {
+                    report.println("<td class='alert'>Report not written: " + escapeHtml(summary.reportFailure) + "</td>");
+                } else {
+                    String reportLink = summary.folderName + "/" + detectionReportName;
+                    report.println("<td><a href='" + reportLink + "'>View Detailed Report &rarr;</a></td>");
+                }
                 report.println("</tr>");
             }
             report.println("</table></div>");

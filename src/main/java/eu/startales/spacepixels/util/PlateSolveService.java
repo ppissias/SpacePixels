@@ -23,8 +23,6 @@ import nom.tam.fits.HeaderCard;
 import nom.tam.fits.HeaderCardException;
 import nom.tam.util.Cursor;
 
-import javax.swing.JFrame;
-import javax.swing.JOptionPane;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -113,15 +111,15 @@ final class PlateSolveService {
                         .withRadius(10f)
                         .build();
                 return astrometryNetInterface.customSolve(new File(fitsFileFullPath), typicalParamsRequest);
-            } catch (IOException | InterruptedException e) {
-                JOptionPane.showMessageDialog(
-                        new JFrame(),
-                        "Could not solve image with astrometry.net :" + e.getMessage(),
-                        "Error",
-                        JOptionPane.ERROR_MESSAGE);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Astrometry.net was interrupted.", e);
+            } catch (IOException e) {
+                // The caller reports the failure; this runs on the solve worker, which must not open a dialog.
+                throw new IOException("Astrometry.net could not solve the image: " + e.getMessage(), e);
             }
         }
-        return null;
+        throw new IOException("No plate solver was chosen.");
     }
 
     public void applyWCSHeader(String wcsHeaderFile, File[] fitsFileInformation, FitsWriteHandler writeHandler)
