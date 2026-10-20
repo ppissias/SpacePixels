@@ -118,6 +118,36 @@ final class SessionCatalogue {
         return nearest;
     }
 
+    /** A positional catalogue identification; it says nothing about whether the star is a known variable. */
+    record StarIdentity(String name, String source, double separationArcsec) { }
+
+    /** Prefer an associated proper name; otherwise use the nearest Gaia star's designation, when recorded. */
+    StarIdentity starIdentityNear(double ra, double dec, double radiusArcsec) {
+        if (catalogue == null || !Double.isFinite(ra) || !Double.isFinite(dec)
+                || !Double.isFinite(radiusArcsec) || radiusArcsec <= 0) return null;
+        SkyCatalogue.Star gaia = gaiaStarNear(ra, dec, radiusArcsec);
+        StarIdentity named = null;
+        double closest = radiusArcsec;
+        for (SkyCatalogue.NamedStar star : catalogue.namedStars) {
+            if (star.name == null || star.name.isBlank()) continue;
+            double separation = separationArcsec(ra, dec, star.ra, star.dec);
+            // A nearby named neighbour must not lend its name to a different, closer Gaia star.
+            if (separation <= closest && (gaia == null || gaiaStarNear(star.ra, star.dec, radiusArcsec) == gaia)) {
+                named = new StarIdentity(star.name.trim(), "SIMBAD", separation);
+                closest = separation;
+            }
+        }
+        if (named != null) return named;
+        if (gaia == null || gaia.sourceId == null || !gaia.sourceId.matches("[0-9]+")) return null;
+        double years = timestampMillis > 0 ? (timestampMillis - SkyCatalogue.GAIA_EPOCH_MILLIS) / MILLIS_PER_YEAR : 0;
+        double starRa = gaia.ra, starDec = gaia.dec;
+        if (years != 0 && gaia.pmra != null && gaia.pmdec != null) {
+            starDec += gaia.pmdec * years / 3.6e6;
+            starRa += gaia.pmra * years / 3.6e6 / Math.max(1e-6, Math.cos(Math.toRadians(gaia.dec)));
+        }
+        return new StarIdentity("Gaia DR3 " + gaia.sourceId, "Gaia DR3", separationArcsec(ra, dec, starRa, starDec));
+    }
+
     static double separationArcsec(double ra1, double dec1, double ra2, double dec2) {
         double d1 = Math.toRadians(dec1);
         double d2 = Math.toRadians(dec2);

@@ -5,8 +5,10 @@ const vm = require('node:vm');
 const source = fs.readFileSync('src/main/resources/eu/startales/spacepixels/util/reporting/report-lookups.js', 'utf8');
 const {matchesMarker} = require('../../main/resources/eu/startales/spacepixels/util/reporting/report-interactions.js');
 
-function client(responses, count = 1) {
+function client(responses, count = 1, catalogueStar = '') {
   const slot = {innerHTML: ''}, status = {textContent: ''}, requests = [], buttons = [];
+  const knownAs = {innerHTML: '', getAttribute: key => key === 'data-catalogue-star' ? catalogueStar : null,
+    querySelector: () => null};
   for (let i = 0; i < count; i++) {
     const attributes = {'data-provider': 'vsx', 'data-target': 'target-' + i, 'data-slot-id': 'slot', 'data-sidecar-file': 'v' + i + '.json'};
     buttons.push({textContent: 'Look up', getAttribute: key => attributes[key], setAttribute: (key, value) => attributes[key] = value});
@@ -15,7 +17,8 @@ function client(responses, count = 1) {
     getElementById: id => id === 'slot' ? slot : null, addEventListener() {},
     querySelector: () => status,
     querySelectorAll: query => query === '.render-live-link' || query === "button[data-identify-all='1']" ? buttons
-      : query === '[data-known-as-sidecar] strong' ? Array(9).fill({}) : []
+      : query === '[data-known-as-sidecar] strong' ? Array(9).fill({})
+      : query === "[data-known-as-sidecar='v0.json']" ? [knownAs] : []
   };
   const sandbox = {document, window: {location: {href: 'file:///C:/scratch/detection_report.html'}},
     __SPACEPIXELS_PROXY_URL__: 'http://127.0.0.1:47831', __SPACEPIXELS_CACHE_ID__: 'cache',
@@ -28,10 +31,30 @@ function client(responses, count = 1) {
       return {json: async () => response};
     }};
   vm.createContext(sandbox); vm.runInContext(source, sandbox);
-  return {api: sandbox.module.exports, buttons, slot, status, requests};
+  return {api: sandbox.module.exports, buttons, slot, status, requests, knownAs};
 }
 const success = matches => ({ok: true, provider: 'vsx', persisted: true, normalized: {matches}, payload: {}});
 const hit = {name: 'Example', type: 'EA', periodDays: 1, separationArcsec: 1};
+
+test('catalogue star remains without a VSX match and a positive VSX result takes precedence', async () => {
+  const fallback = 'Catalogue star: <strong>Gaia DR3 3131123006665005568</strong>';
+  const c = client([success([]), success([hit]), success([])], 1, fallback);
+  await c.api.loadLiveLookup(c.buttons[0]);
+  assert.match(c.knownAs.innerHTML, /3131123006665005568/);
+  assert.match(c.knownAs.innerHTML, /not in VSX/);
+  await c.api.loadLiveLookup(c.buttons[0], true);
+  assert.match(c.knownAs.innerHTML, /Example/);
+  assert.doesNotMatch(c.knownAs.innerHTML, /3131123006665005568/);
+  await c.api.loadLiveLookup(c.buttons[0], true);
+  assert.match(c.knownAs.innerHTML, /3131123006665005568/);
+});
+
+test('a failed VSX lookup retains the catalogue star name', async () => {
+  const c = client([new Error('Connection refused')], 1, 'Catalogue star: <strong>Named star</strong>');
+  await c.api.loadLiveLookup(c.buttons[0]);
+  assert.match(c.knownAs.innerHTML, /Named star/);
+  assert.match(c.knownAs.innerHTML, /lookup unavailable/);
+});
 
 test('failed responses are retryable and successful responses are reused', async () => {
   const c = client([{ok: false, message: 'Temporary error'}, success([hit])]);

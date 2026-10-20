@@ -242,13 +242,13 @@ public final class SkyCatalogueClient {
     }
 
     static String vizierStarQuery(SkyField field, double magnitudeLimit) {
-        return "SELECT RA_ICRS, DE_ICRS, pmRA, pmDE, Gmag, \"BP-RP\" FROM \"I/355/gaiadr3\" "
+        return "SELECT Source, RA_ICRS, DE_ICRS, pmRA, pmDE, Gmag, \"BP-RP\" FROM \"I/355/gaiadr3\" "
                 + "WHERE 1=CONTAINS(POINT('ICRS', RA_ICRS, DE_ICRS), " + field.adqlPolygon() + ") "
                 + String.format(Locale.US, "AND Gmag <= %.2f", magnitudeLimit);
     }
 
     static String esaStarQuery(SkyField field, double magnitudeLimit) {
-        return "SELECT ra, dec, pmra, pmdec, phot_g_mean_mag, bp_rp FROM gaiadr3.gaia_source "
+        return "SELECT source_id, ra, dec, pmra, pmdec, phot_g_mean_mag, bp_rp FROM gaiadr3.gaia_source "
                 + "WHERE 1=CONTAINS(POINT('ICRS', ra, dec), " + field.adqlPolygon() + ") "
                 + String.format(Locale.US, "AND phot_g_mean_mag <= %.2f", magnitudeLimit);
     }
@@ -318,6 +318,8 @@ public final class SkyCatalogueClient {
                 continue;
             }
             SkyCatalogue.Star star = new SkyCatalogue.Star();
+            String sourceId = table.text(row, table.hasColumn("Source") ? "Source" : "source_id");
+            star.sourceId = sourceId != null && sourceId.matches("[0-9]+") ? sourceId : null;
             star.ra = starRa;
             star.dec = starDec;
             star.g = magnitude;

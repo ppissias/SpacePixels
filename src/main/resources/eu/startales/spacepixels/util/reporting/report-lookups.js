@@ -118,6 +118,7 @@
       return;
     }
     let html;
+    let hasVsxMatch = false;
     if (entry.kind === 'loading') {
       html = "<span style='color:#9aa4ad;'>checking...</span>";
     } else if (entry.kind === 'unavailable') {
@@ -129,6 +130,7 @@
       if (!matches.length) {
         html = "<span style='color:#c9a227;'>not in VSX</span>";
       } else {
+        hasVsxMatch = true;
         const match = matches[0];
         const name = escapeHtml(match.name || '?');
         const link = match.vsxUrl ? "<a class='live-link-inline' href='" + escapeHtml(match.vsxUrl) + "' target='_blank' rel='noopener noreferrer'>" + name + "</a>" : name;
@@ -139,7 +141,8 @@
     }
     cells.forEach(function (cell) {
       const hidden = cell.querySelector('button');
-      cell.innerHTML = html;
+      const fallback = cell.getAttribute('data-catalogue-star') || '';
+      cell.innerHTML = (!hasVsxMatch && fallback ? fallback + '<br>' : '') + html;
       if (hidden) {
         cell.appendChild(hidden);
       }

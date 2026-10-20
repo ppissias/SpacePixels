@@ -49,6 +49,22 @@ public class SkyCatalogueClientTest {
         assertEquals(11.210193, esa.get(0).g, 1e-9);
     }
 
+    @Test
+    public void keepsEveryDigitOfGaiaIdentifiersFromBothProviders() throws IOException {
+        String id = "3131123006665005568";
+        for (String column : List.of("Source", "source_id")) {
+            var stars = SkyCatalogueClient.parseStars(CsvTable.parse(column + ",ra,dec,g\n" + id + ",150,20,13\n"),
+                    "ra", "dec", "pmra", "pmdec", "g", "bp_rp");
+            assertEquals(id, stars.get(0).sourceId);
+        }
+        var legacy = SkyCatalogueClient.parseStars(CsvTable.parse("ra,dec,g\n150,20,13\n"),
+                "ra", "dec", "pmra", "pmdec", "g", "bp_rp");
+        assertNull(legacy.get(0).sourceId);
+        SkyField field = SkyField.of(WcsCoordinateTransformer.fromHeader(header()), 9544, 6361);
+        assertTrue(SkyCatalogueClient.vizierStarQuery(field, 15).startsWith("SELECT Source,"));
+        assertTrue(SkyCatalogueClient.esaStarQuery(field, 15).startsWith("SELECT source_id,"));
+    }
+
     @Test(expected = IOException.class)
     public void anAnswerWithOtherColumnsIsAnError() throws IOException {
         SkyCatalogueClient.parseStars(CsvTable.parse("x,y\n1,2\n"), "ra", "dec", "pmra", "pmdec", "g", "bp_rp");

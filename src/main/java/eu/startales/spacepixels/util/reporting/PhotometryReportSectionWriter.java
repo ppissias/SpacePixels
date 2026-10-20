@@ -855,8 +855,8 @@ final class PhotometryReportSectionWriter {
 
     /**
      * Compact table of every high-confidence and possible candidate. The "Known as" column is filled at once for
-     * candidates matched with the VSX stars of the session's sky catalogue; the "Identify in VSX" button looks the
-     * others up in the full VSX through the lookup proxy (results are saved into the report).
+     * candidates matched with the VSX stars of the session's sky catalogue, with ordinary catalogue-star identities
+     * as a fallback. The "Identify in VSX" button still looks up those without a VSX match through the lookup proxy.
      */
     private static void writeCandidateTable(PrintWriter report, DetectionReportContext context, VariableStarAnalysis analysis,
                                             List<StarLightCurve> candidates, SessionCatalogue sessionCatalogue) {
@@ -899,7 +899,7 @@ final class PhotometryReportSectionWriter {
                 + th("Time Span", "Time between the first and last usable measurements.")
                 + th("Change", "The rough shape of the light curve: a steady fade, a steady rise, a dip, a peak, or up and down.")
                 + th("Failed Check", "The one check a possible candidate failed. High-confidence candidates have none.")
-                + (sky ? th("Known As (VSX)", "Name in the AAVSO VSX variable-star catalogue, when this session's sky catalogue has a match.") : "")
+                + (sky ? th("Known As", "VSX variable-star identification when matched; otherwise a proper name or Gaia DR3 designation from the session catalogue. A catalogue-star match does not establish known variability.") : "")
                 + "</tr></thead><tbody>");
         int number = 0;
         for (StarLightCurve star : candidates) {
@@ -924,11 +924,14 @@ final class PhotometryReportSectionWriter {
                         + CatalogueComparisonWriter.key(number) + "'>" + knownAsHtml(matches) + "</span>"
                         + CatalogueComparisonWriter.slot(number, true, true) + "</td>");
             } else if (target != null) {
+                String fallback = catalogueStarHtml(sessionCatalogue, target);
                 String sidecar = "photometry_v" + number + "_vsx.json";
                 String hidden = DetectionReportAstrometry.buildLiveRenderButtonHtml("vsx", vsxTapUrl(target), "photometry-v" + number + "-vsx-row",
                         "VSX", sidecar, String.format(Locale.US, "AAVSO VSX within %.0f arcsec of V%d", target.radiusArcsec, number))
                         .replace("<button ", "<button style='display:none' data-identify-all='1' ");
-                report.print("<td><span data-known-as-sidecar='" + sidecar + "'><span style='color:#777;'>not checked</span>" + hidden
+                report.print("<td><span data-known-as-sidecar='" + sidecar + "' data-catalogue-star='"
+                        + DetectionReportGenerator.escapeHtml(fallback) + "'>" + (fallback.isEmpty() ? "" : fallback + "<br>")
+                        + "<span style='color:#777;'>VSX: not checked</span>" + hidden
                         + "</span>" + CatalogueComparisonWriter.slot(number, true, false) + "</td>");
             } else if (sky) {
                 report.print("<td>&ndash;</td>");
@@ -950,6 +953,16 @@ final class PhotometryReportSectionWriter {
                 + (matches.size() > 1 ? " <span style='color:#888;'>(+" + (matches.size() - 1) + " more)</span>" : "");
     }
 
+    /** Ordinary catalogue identity, distinct from a VSX match or variability classification. */
+    static String catalogueStarHtml(SessionCatalogue catalogue, SkyTarget target) {
+        SessionCatalogue.StarIdentity identity = target == null ? null
+                : catalogue.starIdentityNear(target.raDegrees, target.decDegrees, Math.min(target.radiusArcsec, 5.0));
+        if (identity == null) return "";
+        return "Catalogue star: <strong>" + DetectionReportGenerator.escapeHtml(identity.name()) + "</strong>"
+                + " <span style='color:#888;'>(" + DetectionReportGenerator.escapeHtml(identity.source()) + ", "
+                + String.format(Locale.US, "%.1f", identity.separationArcsec()) + "&Prime; away)</span>";
+    }
+
     /**
      * What the session's sky catalogue says about a candidate: its VSX entry, explained, with how much of the
      * period the session covers, and its Gaia magnitude and colour. Catalogue values, not measurements. Empty
@@ -963,6 +976,8 @@ final class PhotometryReportSectionWriter {
         StringBuilder html = new StringBuilder("<div class='astro-note' style='margin: 0 0 10px 0; line-height:1.6;'>");
         List<SessionCatalogue.VariableMatch> matches = sessionCatalogue.variablesNear(target.raDegrees, target.decDegrees, target.radiusArcsec);
         if (matches.isEmpty()) {
+            String fallback = catalogueStarHtml(sessionCatalogue, target);
+            if (!fallback.isEmpty()) html.append(fallback).append(".<br>");
             html.append("Not among the AAVSO VSX variables of the session's sky catalogue (down to magnitude ")
                     .append(String.format(Locale.US, "%.1f", sessionCatalogue.catalogue.starMagnitudeLimit + 1))
                     .append("). <strong>Check VSX Here</strong> searches the full VSX, which also has fainter variables.");

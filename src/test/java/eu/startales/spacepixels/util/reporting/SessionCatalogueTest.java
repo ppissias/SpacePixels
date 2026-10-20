@@ -41,6 +41,57 @@ public class SessionCatalogueTest {
     }
 
     @Test
+    public void catalogueNameFallsBackFromProperNameToGaiaDesignationAndEscapesHtml() throws Exception {
+        SkyCatalogue catalogue = new SkyCatalogue();
+        SkyCatalogue.Star gaia = new SkyCatalogue.Star();
+        gaia.ra = 150; gaia.dec = 20; gaia.sourceId = "3131123006665005568";
+        catalogue.stars.add(gaia);
+        var session = session(catalogue);
+        var target = new PhotometryReportSectionWriter.SkyTarget(150, 20, 5);
+        assertEquals("Gaia DR3 3131123006665005568", session.starIdentityNear(150, 20, 5).name());
+        assertTrue(PhotometryReportSectionWriter.catalogueStarHtml(session, target).contains("Catalogue star:"));
+        SkyCatalogue.NamedStar named = new SkyCatalogue.NamedStar();
+        named.ra = 150; named.dec = 20; named.name = "Example <star> & name";
+        catalogue.namedStars.add(named);
+        String html = PhotometryReportSectionWriter.catalogueStarHtml(session, target);
+        assertTrue(html.contains("Example &lt;star&gt; &amp; name"));
+        assertTrue(html.contains("SIMBAD"));
+        assertNull(session.starIdentityNear(151, 20, 5));
+        catalogue.namedStars.clear(); gaia.sourceId = null;
+        assertNull(session.starIdentityNear(150, 20, 5));
+        assertEquals("", PhotometryReportSectionWriter.catalogueStarHtml(session, target));
+    }
+
+    @Test
+    public void gaiaDesignationUsesTheSameProperMotionAsTheMagnitudeMatch() throws Exception {
+        SkyCatalogue catalogue = new SkyCatalogue();
+        SkyCatalogue.Star gaia = new SkyCatalogue.Star();
+        gaia.ra = 150; gaia.dec = 0; gaia.pmra = 1000.0; gaia.pmdec = 0.0; gaia.sourceId = "1234567890123456789";
+        catalogue.stars.add(gaia);
+        Constructor<SessionCatalogue> constructor = SessionCatalogue.class.getDeclaredConstructor(SkyCatalogue.class, long.class);
+        constructor.setAccessible(true);
+        SessionCatalogue session = constructor.newInstance(catalogue, SkyCatalogue.GAIA_EPOCH_MILLIS + (long) (10 * 365.25 * 86400000));
+        assertNull(session.starIdentityNear(150, 0, 1));
+        var match = session.starIdentityNear(150 + 10.0 / 3600, 0, 1);
+        assertEquals("Gaia DR3 1234567890123456789", match.name());
+        assertEquals(0, match.separationArcsec(), 1e-6);
+    }
+
+    @Test
+    public void aDifferentNearbyNamedStarDoesNotReplaceTheNearestGaiaIdentification() throws Exception {
+        SkyCatalogue catalogue = new SkyCatalogue();
+        SkyCatalogue.Star target = new SkyCatalogue.Star();
+        target.ra = 150; target.dec = 20; target.sourceId = "1234567890123456789";
+        SkyCatalogue.Star neighbour = new SkyCatalogue.Star();
+        neighbour.ra = 150; neighbour.dec = 20 + 3.0 / 3600; neighbour.sourceId = "1234567890123456790";
+        catalogue.stars.addAll(List.of(target, neighbour));
+        SkyCatalogue.NamedStar name = new SkyCatalogue.NamedStar();
+        name.ra = neighbour.ra; name.dec = neighbour.dec; name.name = "Neighbour";
+        catalogue.namedStars.add(name);
+        assertEquals("Gaia DR3 " + target.sourceId, session(catalogue).starIdentityNear(150, 20, 5).name());
+    }
+
+    @Test
     public void explainsTheCatalogueEntry() {
         assertEquals("EW (W UMa-type eclipsing binary)", SessionCatalogue.describeVsxType("EW"));
         assertEquals("DSCT|GDOR|SXPHE (delta Scuti variable)", SessionCatalogue.describeVsxType("DSCT|GDOR|SXPHE"));

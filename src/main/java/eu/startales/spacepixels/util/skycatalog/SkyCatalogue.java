@@ -44,6 +44,8 @@ public final class SkyCatalogue {
 
     /** A Gaia DR3 star at epoch J2016.0. */
     public static final class Star {
+        /** Gaia DR3 source identifier, kept as text to preserve all digits; absent in older saved catalogues. */
+        public String sourceId;
         public double ra;
         public double dec;
         /** Proper motion in mas/yr; in RA it includes the cos(Dec) factor, as Gaia gives it. Null when unknown. */
