@@ -51,7 +51,7 @@ This was a source and architecture review, with primary documentation checked fo
 | D04 | High | In progress (S1, S11, typed outcomes, Cancel, report progress, Copy details, last report, 2026-10-20; open: engine waits, viewer check) | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
 | D05 | High | Implemented (Preview Frame follows the edits, 2026-10-20) | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
 | D06 | Medium | Proposed | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
-| D07 | Medium | In progress (S4 slice 1, 2026-10-20) | Shared actions and derived availability | Button, shortcut and context menu execute the same command under the same conditions. |
+| D07 | Medium | Implemented (S4, 2026-10-20) | Shared actions and derived availability | Button, shortcut and context menu execute the same command under the same conditions. |
 | D08 | Medium | In progress (WCS write, 2026-10-20) | Keep slow work off the EDT | Accepting a WCS write does not perform the file rewrite on the UI thread. |
 | D09 | Medium | Proposed | Complete the analysis/report separation | Display changes reuse prepared diagnostics and stable finding identities. |
 | D10 | Medium | Proposed | Typed settings metadata and engine integration | A setting's identity and rules are not maintained in several unrelated lists. |
@@ -224,17 +224,24 @@ Pass the session or an immutable session snapshot to viewers/services. Treat lar
 
 ### D07. Derive availability from state and use real command actions
 
-**Status (2026-10-20): slice 1 of S4 done.**
-- **What changed:** `gui.CommandAvailability` holds the rules, and `gui.CommandAction` is a shared Swing `Action`. They cover the five commands with several entry points: Detect Moving Targets, Auto-Tune, Preview Frame, Blink Selected and Plate Solve Selected. Button, shortcut, table menu, the Overview's buttons and the settings tab's Ctrl+D use the same action. No entry point calls `doClick()`, copies another control's enabled state, or follows the Overview's Run button any more.
+**Implemented (2026-10-20), as S4 in two slices.**
+- **Commands:** `gui.CommandAvailability` holds the rules, and `gui.CommandAction` is a shared Swing `Action`. Every workflow button of the Main tab is now a command:
+  - Import, Convert to Mono, Batch Stretch;
+  - Plate Solve, Fetch Sky Catalogue;
+  - Blink, Preview Frame, Manual Transient Inspection;
+  - Auto-Tune, Detect Moving Targets, Detect Iteratively.
+- **Shared entry points:** button, shortcut, table menu, the Overview's buttons, the settings tab's Ctrl+D and a dropped folder use the same command. No entry point calls `doClick()`, copies another control's enabled state, or follows the Overview's Run button any more.
+- **The lock** no longer saves and restores enabled states. While a job runs it disables the panel's other controls and closes the session tabs. Afterwards it enables them again and opens the tabs only with a session. Two locks released once now leave nothing disabled; the saved-state map restored the second lock's disabled states.
+- **Tabs** are addressed by their panel, not their position.
 - **The policy is unchanged,** except for two places that did not follow it:
   - Plate Solve stayed enabled after the selection was cleared;
   - the Overview's Preview Frame opened on a colour session.
 
   Also, Ctrl+B now stops a blink, as Stop Blinking does.
 - **Checked by:**
-  - `CommandAvailabilityTest`;
-  - a window harness with real key events and a real right-click: 31 checks before an import, on mono and colour sessions, through selection changes, a blink and a job.
-- **Next (slice 2):** the single-entry buttons, the lock without the saved-state map, and tabs by identity.
+  - `CommandAvailabilityTest` (8 cases);
+  - a window harness with real key events and a real right-click: 46 checks before an import, on mono and colour sessions, through selection changes, the batch-stretch switch, a blink, a job and a double lock.
+- **Not done:** the row-sorter constraint below still applies when sorting is added.
 
 **Evidence.** [MainApplicationPanel](src/main/java/eu/startales/spacepixels/gui/MainApplicationPanel.java) keeps enable rules in `lockUI`/`unlockUI`, selection listeners, workflow refresh, import handlers and helper methods. A saved component-state map records what happened to be enabled rather than why. The main Auto-Tune button follows another button's enabled property. Shortcuts call `button.doClick()`, and the table menu copies button checks. These controls are partly synchronised already, but the button hierarchy is serving as the application model.
 
@@ -404,7 +411,7 @@ The coverage limits and the deliberate exceptions are listed in the [review summ
 | S1 | A | **Done 2026-10-20 (`01d983e`).** Every job ends with a finished event or the out-of-memory exit; before, some failures left the UI locked. | D04 (new evidence) |
 | S2 | B | **Done for every job, 2026-10-20** (`54e32b6` to `23acc9b`). A job coordinator: admission before the worker starts, and job and session identity. Session identity is a placeholder until S7 | D02 |
 | S3 | B | **Done 2026-10-20**, with S2: every job returns a `JobOutcome` (completed, declined or failed; cancelled since D04's Cancel, 2026-10-20). Typed outcomes per job kind | D04 |
-| S4 | B | Shared actions and availability: one Detect action; tabs and solve results addressed by identity. Solve results are matched by file since the plate-solve slice (2026-10-20). **Slice 1 done (2026-10-20):** `CommandAvailability` and one `CommandAction` each for Detect, Auto-Tune, Preview Frame, Blink and Plate Solve, shared by button, shortcut, table menu and Overview. Slice 2 (the single-entry buttons, the lock, tabs by identity) is next | D07 |
+| S4 | B | Shared actions and availability: one Detect action; tabs and solve results addressed by identity. Solve results are matched by file since the plate-solve slice (2026-10-20). **Done (2026-10-20):** `CommandAvailability` and one `CommandAction` per workflow command, shared by button, shortcut, table menu, Overview and folder drop; the lock without saved states; tabs by panel | D07 |
 | S5 | B | **Done 2026-10-20 (`01d983e`, with S1).** Use `BatchStretchTask` instead of its inline copy | — |
 | S6 | B–C | **Done 2026-10-20.** No GUI in `tasks`: their own logger and out-of-memory policy, and results returned instead of windows and dialogs opened. `DependencyRulesTest` keeps `tasks` and `jobs` free of `gui` and Swing | new |
 | S7 | C | A session object, and the application config loaded once | D06, D11 |
@@ -602,7 +609,7 @@ The localhost lookup proxy's lifecycle can remain application-scoped. Give it an
 |---|---|---|
 | Architecture review | Done 2026-10-20: steps S1–S16 above, mapped to the stages below. The EventBus question was decided the same day: retire it gradually | Makes the remaining scope explicit before the architecture work grows. Focused correctness fixes need not wait. |
 | A: focused correctness | **Done (2026-10-19).** D01 file publication; D03 preview identity; D05 invalid-editor feedback | Small, concrete failure modes; do not wait for a broad architecture migration. |
-| B: workflow foundation | **Mostly done (2026-10-20).** D02 ownership/admission and D04 outcomes/cleanup, for every job rather than only the detection, inspection and star-mask jobs. Open: the rest of D04 (see its status) and D07 actions (S4) | Makes lifecycle explicit before replacing UI locking. |
+| B: workflow foundation | **Mostly done (2026-10-20).** D02 ownership/admission and D04 outcomes/cleanup, for every job rather than only the detection, inspection and star-mask jobs. D07 actions done with S4. Open: the rest of D04 (see its status) | Makes lifecycle explicit before replacing UI locking. |
 | C: session boundary | D06 application preferences/session handover; D08 background WCS write and metadata restoration | Reduces UI/service coupling and protects session transitions. |
 | D: presentation and polish | D09 prepared report data; D10 one page of typed settings bindings; D11 results/readiness; D12/D13 layout and access | Builds on explicit state; accessibility fixes that are independent can start earlier. |
 

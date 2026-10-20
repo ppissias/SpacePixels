@@ -288,13 +288,21 @@ Owns:
 
 Launches most GUI background tasks.
 
-**Shared commands.** Detect Moving Targets, Auto-Tune, Preview Frame, Blink Selected and Plate Solve Selected each have several entry points: the button, a shortcut (Ctrl+D, Ctrl+T, Ctrl+P, Ctrl+B), the table's right-click menu, and the Overview's buttons and Ctrl+D on the Detection Settings tab.
+**Commands.** Every workflow button of the Main tab is a command: Import, Convert to Mono, Batch Stretch, Plate Solve, Fetch Sky Catalogue, Blink, Preview Frame, Manual Transient Inspection, Auto-Tune, Detect Moving Targets and Detect Iteratively. Several have more than one entry point: a shortcut (Ctrl+D, Ctrl+T, Ctrl+P, Ctrl+B), the table's right-click menu, the Overview's buttons, Ctrl+D on the Detection Settings tab, or a folder dropped on the window.
 - **One action per command.** Each command is one `CommandAction` (a Swing `Action`) that all its entry points use, so they show the same caption and tooltip, are enabled together, and run the same code.
-- **One rule set.** `CommandAvailability` decides from facts (frames, monochrome, selection, the selected frame's solution, a job or blink holding the window), never from other controls. It gives a reason for each unavailable command, which the tooltip shows.
-- **Refreshing.** `refreshCommands()` runs with every workflow refresh (import, selection, table changes) and when the window locks or unlocks.
-- **Running.** An action checks availability again when it runs, so a late shortcut does nothing.
-- **Blink.** While a blink loads or plays, the Blink command reads **Stop Blinking** and stays available to stop it.
-- **The lock.** `lockUI` leaves these buttons to their actions; it still saves and disables the other controls.
+- **One rule set.** `CommandAvailability` decides from facts, never from other controls:
+  - the frames, whether they are monochrome, and how many are solved;
+  - the selection, and the selected frame's solution;
+  - the batch-stretch switch;
+  - a job or blink holding the window;
+  - a sky fetch running.
+
+  It gives a reason for each unavailable command, which the tooltip shows.
+- **Refreshing.** `refreshCommands()` runs with every workflow refresh (import, selection, table changes, sky fetch), when the window locks or unlocks, and when the batch-stretch switch changes.
+- **Running.** An action checks availability again when it runs, so a late shortcut or drop does nothing.
+- **Commands that stop their own work.** While a blink loads or plays, Blink reads **Stop Blinking** and stays available to stop it. While the sky catalogue is fetched, its command reads **Cancel Sky Catalogue**.
+- **The lock.** While a job runs or a blink plays, `lockUI` disables the panel's other controls (the table, the solver choice) and closes the session tabs. `unlockUI` enables them again and opens the session tabs only when there is a session. Nothing is saved and restored, so a second lock cannot leave controls disabled.
+- **Tabs by panel.** Tabs are addressed by their panel (`ApplicationWindow.setSessionTabsEnabled`, `setSelectedComponent`), not by position.
 
 ### `DetectionConfigurationPanel`
 
