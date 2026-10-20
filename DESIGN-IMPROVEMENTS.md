@@ -364,7 +364,7 @@ The coverage limits and the deliberate exceptions are listed in the [review summ
 | S6 | B–C | No GUI in `tasks`: their own logger and out-of-memory policy, and results returned instead of windows and dialogs opened | new |
 | S7 | C | A session object, and the application config loaded once | D06, D11 |
 | S8 | C | The WCS write and session-folder I/O off the EDT | D08 |
-| S9 | B–C | Retire the event bus as S2, S3 and S7 replace its events | EventBus question |
+| S9 | B–C | Retire the event bus as S2, S3 and S7 replace its events (accepted 2026-10-20) | EventBus decision |
 | S10 | C | Split `ImageProcessing`: its session part into the session object, with batch operations and import as their own services. Keep it as a facade, and remove its dead methods | D06 |
 | S11 | A–B | Report failures as failures. Today a report-export failure says "aborted by user due to high track count", a failed iterative pass is still listed, and an Astrometry.net failure shows two dialogs | D04 (new evidence) |
 | S12 | C | One preparation flow for the GUI and the API, with the GUI's questions asked on the EDT and typed import outcomes. Today declining a conversion closes the current session | D08, D06, F07 |
@@ -388,9 +388,17 @@ S1 and S11 are small correctness fixes that need nothing else first. They are di
 - Preserve the public API, the settings formats, the detection measurements and the current viewer and report behaviour, unless a separately agreed feature changes them.
 - Once a boundary is extracted, protect it with a dependency rule that tests can check, such as "application services do not depend on Swing or `gui`".
 
-### Guava EventBus: keep or replace? (open question)
+### Guava EventBus: keep or replace?
 
-The maintainer asked whether SpacePixels should keep Guava's `EventBus` or move to something else. The architecture review should answer this; nothing is decided yet.
+**Accepted (2026-10-20): option 2, retire it gradually.** The maintainer chose it after the architecture review. In practice this means:
+- no separate migration project;
+- no new events on the bus;
+- each event is removed when its workflow gets a typed job handle or a session notification (S9);
+- Guava is removed with the last event.
+
+The question and the evidence follow.
+
+The maintainer asked whether SpacePixels should keep Guava's `EventBus` or move to something else.
 
 **Current use (2026-10-20).**
 - **The bus:** `ApplicationWindow` owns one synchronous bus.
@@ -432,7 +440,7 @@ This supports option 2. See [the review](docs/architecture-review.md#the-event-b
 2. **Retire it gradually.** When D02/D04 give a workflow a typed job handle, its progress and outcome go through that handle, and its events are removed. Guava goes when the last event does.
 3. **Replace it with another event-bus library.** This keeps the same hidden coupling, so it gains little.
 
-**Suggestion (not a decision).** Option 2:
+**Suggestion made before the decision.** Option 2:
 - no separate migration project;
 - no new events on the bus in the meantime;
 - plain Java (listener interfaces, `SwingWorker`, `PropertyChangeSupport`) covers what remains, so no new library is needed.
@@ -469,7 +477,7 @@ The localhost lookup proxy's lifecycle can remain application-scoped. Give it an
 
 | Stage | Work | Why this order |
 |---|---|---|
-| Architecture review | Done 2026-10-20: steps S1–S16 above, mapped to the stages below. The EventBus question awaits the maintainer's decision | Makes the remaining scope explicit before the architecture work grows. Focused correctness fixes need not wait. |
+| Architecture review | Done 2026-10-20: steps S1–S16 above, mapped to the stages below. The EventBus question was decided the same day: retire it gradually | Makes the remaining scope explicit before the architecture work grows. Focused correctness fixes need not wait. |
 | A: focused correctness | D01 file publication; D03 preview identity; D05 invalid-editor feedback | Small, concrete failure modes; do not wait for a broad architecture migration. |
 | B: workflow foundation | D02 ownership/admission and D04 outcomes/cleanup for detection, inspection and star-mask jobs; then D07 actions | Makes lifecycle explicit before replacing UI locking. |
 | C: session boundary | D06 application preferences/session handover; D08 background WCS write and metadata restoration | Reduces UI/service coupling and protects session transitions. |

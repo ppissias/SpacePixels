@@ -191,7 +191,7 @@ Each kind has a natural replacement in the target:
 - **Tuning state:** job state.
 - **Blink window closed:** a listener on `BlinkFrame`.
 
-This supports option 2 (retire the bus gradually) in DESIGN-IMPROVEMENTS. The decision stays with the maintainer.
+This supports option 2 (retire the bus gradually) in DESIGN-IMPROVEMENTS, which the maintainer accepted on 2026-10-20.
 
 ### Class inventory: `tasks` and `events`
 
@@ -269,7 +269,7 @@ Most of the change concentrates in four places:
 | S6 | B–C | Take the GUI out of `tasks`: their own logger, an out-of-memory policy the application supplies, results returned instead of windows opened, the iterative frame-limit question asked before the job starts, a stretch model instead of the `StretchPanel` | P1-7, P1-8 | Same behaviour for the user | A dependency rule test: `tasks` imports nothing from `gui` |
 | S7 | C | A session object that owns the nine pieces of P1-4; the application config loaded once for the application | D06, D11, P1-4, P1-5 | Settings formats unchanged | Two sessions in a test do not affect each other; an import keeps unsaved Astrometry Config edits |
 | S8 | C | Move the WCS header write and the session-folder reads and writes off the EDT | D08, P1-9 | — | A slow file store does not stop repainting |
-| S9 | B–C | Retire the event bus as S2, S3 and S7 replace each event; then remove Guava | EventBus question | — | No `@Subscribe` left; the build has no Guava |
+| S9 | B–C | Retire the event bus as S2, S3 and S7 replace each event; then remove Guava | EventBus decision (option 2, accepted 2026-10-20) | — | No `@Subscribe` left; the build has no Guava |
 
 S1 is a correctness fix that can come first. Per the maintainer's rules it is discussed before it is implemented.
 
