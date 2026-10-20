@@ -395,7 +395,7 @@ Select three or more frames in the table and click **Blink Selected** to play th
 
 - **Play / Pause** (Space) and **◀ ▶** (arrow keys) to step one frame at a time. Stepping back and forth between two frames is the surest way to confirm a faint mover.
 - **Speed**: from 50 ms to 2 s per frame, also with the ↑ and ↓ keys. SpacePixels remembers it.
-- **Stretch**: the same algorithm and sliders as the Image Stretch tab, and changes apply at once while blinking. The two places always show the same stretch.
+- **Stretch display**: untick for a linear view, or tick to use the algorithm and sliders shared with the Image Stretch tab. Changes apply at once while blinking and in the other viewers. Turning it off keeps your settings for when you turn it on again.
 - **Zoom**: Fit, 100 %, 200 % and 400 %, or scroll to zoom around the cursor and drag to pan. Double-click switches between fit and 100 %. The view stays on the same spot while the frames change.
 - **The frame list** on the left shows every frame with its time since the first one; the frame on screen is highlighted. Click a frame to pause and show it. While paused, untick a frame, or press S or tick **Skip this frame**, to leave a cloudy or trailed frame out of the loop; stepping by hand still shows it. While playing, the ticks are greyed out: pause first, so you change the frame you meant. At least two frames stay in the loop.
 - **Show tracks** (T) draws the tracks of the last **Detect Moving Targets** run on this session, named as in the report (T1, T2… for moving objects, ST1… for streak tracks), with a ring where the object is in the frame shown.
@@ -464,6 +464,10 @@ When a field has few bright stars, SpacePixels fetches fainter Gaia stars for th
 ![Image Stretch](docs/images/manual/ui-stretch.png)
 
 Sets how frames look in Blink, Preview Frame, Manual Transient Inspection and **Show full size**; their windows show the same stretch controls, and a change in any of them shows everywhere. The detection always uses the original linear data, so the stretch does not change what is found. The report images have their own stretch (Detection Settings → Report Visualization). Optional **Batch Stretch** and **Convert to Mono** write new copies of the frames.
+
+**Stretch display** switches between the selected stretch and a linear view. Unticking it disables the algorithm and sliders without resetting their values; ticking it restores the same stretch. The choice is shared by the tab and all viewers and remembered between sessions. Minimum slider values still apply the selected algorithm; the checkbox provides the linear view, which will often look very dark. With stretch off, both tab previews show the linear image.
+
+**Enable batch stretch** makes the **Batch Stretch** button available on the main screen for an imported dataset. Hover over the checkbox for guidance. It also lets **Convert to Mono** write stretched copies in `_mono_stretched`. These file operations use the selected algorithm and slider values independently of **Stretch display** and keep the original linear files.
 
 The preview on the tab shows the selected frame with the current stretch. While it is being drawn, the line above it ends in *rendering…*; it always shows the last frame and stretch you chose, however quickly you change them.
 
