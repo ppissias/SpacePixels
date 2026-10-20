@@ -54,7 +54,7 @@ final class TargetVisualizationSectionWriter {
         }
 
         if (!context.anomalies.isEmpty()) {
-            writeAnomalies(report, context);
+            AnomalySectionWriter.writeSection(report, context);
         }
     }
 
@@ -343,118 +343,6 @@ final class TargetVisualizationSectionWriter {
         }
     }
 
-    private static void writeAnomalies(PrintWriter report,
-                                       DetectionReportContext context) throws IOException {
-        report.println("<h3 id='anomalies' style='color: #ff3333; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single-Frame Anomalies (Optical Flashes)</h3>");
-        report.println("<div class='astro-note' style='margin-bottom: 15px;'>Ordered by source frame index. If multiple anomalies land on the same frame, peak-sigma rescues are shown before integrated-sigma rescues."
-                + " Pieces on a streak's path, such as a streak crossing a star or a satellite's flash, are shown with that streak.</div>");
-        int counter = 1;
-        for (TrackLinker.AnomalyDetection anomaly : context.anomalies) {
-            SourceExtractor.DetectedObject point = anomaly.object;
-            TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(point, context.settings.getTrackCropPadding());
-            int frameIndex = point.sourceFrameIndex;
-
-            report.println("<div class='detection-card streak-title' id='finding-a" + counter + "' style='border-left-color: #ff3333; color: #ff3333;'>");
-            report.println("<div class='detection-title' style='color: #ff3333;'>Anomaly Event A" + counter + " <span style='background: #7a1f50; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>" + DetectionReportGenerator.escapeHtml(formatAnomalyTypeLabel(anomaly.type).replace("Rescue Type: ", "")) + "</span></div>");
-
-            BufferedImage detectionImage = TrackVisualizationRenderer.createCroppedDisplayImage(
-                    context.rawFrames.get(frameIndex),
-                    cropBounds.fixedCenterX,
-                    cropBounds.fixedCenterY,
-                    cropBounds.trackBoxWidth,
-                    cropBounds.trackBoxHeight,
-                    context.settings);
-            String detectionFileName = "anomaly_" + counter + "_detection.png";
-            TrackVisualizationRenderer.saveLosslessPng(detectionImage, new File(context.exportDir, detectionFileName));
-
-            String shapeFileName = "anomaly_" + counter + "_shape.png";
-            BufferedImage shapeImage = TrackVisualizationRenderer.createSingleStreakShapeImage(
-                    Collections.singletonList(point),
-                    cropBounds.trackBoxWidth,
-                    cropBounds.trackBoxHeight,
-                    cropBounds.startX,
-                    cropBounds.startY,
-                    false);
-            TrackVisualizationRenderer.saveLosslessPng(shapeImage, new File(context.exportDir, shapeFileName));
-
-            String maskFileName = null;
-            DetectionReportGenerator.MaskOverlapStats maskOverlapStats = new DetectionReportGenerator.MaskOverlapStats(0, 0);
-            if (context.masterStackData != null && context.masterVetoMask != null) {
-                BufferedImage maskOverlayImage = DetectionReportGenerator.createCroppedMaskOverlay(
-                        context.masterStackData,
-                        context.masterVetoMask,
-                        cropBounds.fixedCenterX,
-                        cropBounds.fixedCenterY,
-                        cropBounds.trackBoxWidth,
-                        cropBounds.trackBoxHeight,
-                        point,
-                        new Color(255, 32, 32),
-                        context.settings);
-                maskFileName = "anomaly_" + counter + "_master_mask.png";
-                TrackVisualizationRenderer.saveLosslessPng(maskOverlayImage, new File(context.exportDir, maskFileName));
-                maskOverlapStats = DetectionReportGenerator.computeMaskOverlapStats(
-                        point,
-                        context.masterVetoMask,
-                        context.masterStackData[0].length,
-                        context.masterStackData.length);
-            }
-
-            String contextGifFileName = "anomaly_" + counter + "_context.gif";
-            List<BufferedImage> contextFrames = new ArrayList<>();
-            List<Integer> frameSequence = context.data != null ? context.data.neighbours(frameIndex)
-                    : java.util.Arrays.asList(frameIndex - 1, frameIndex, frameIndex + 1);
-            short[][] eventCrop = TrackVisualizationRenderer.robustEdgeAwareCrop(context.rawFrames.get(frameIndex),
-                    cropBounds.fixedCenterX, cropBounds.fixedCenterY, cropBounds.trackBoxWidth, cropBounds.trackBoxHeight);
-            double[] sharedLevels = eu.startales.spacepixels.util.DisplayImageRenderer.displayLevels(eventCrop,
-                    context.settings.getAutoStretchBlackSigma(), context.settings.getAutoStretchWhiteSigma());
-            for (int index : frameSequence) {
-                if (index >= 0 && index < context.rawFrames.size() && (context.data == null || !context.data.rejectedFrames.contains(index))) {
-                    contextFrames.add(TrackVisualizationRenderer.createStarCentricHighlightedFrame(
-                            context.rawFrames.get(index),
-                            cropBounds,
-                            point,
-                            context.settings,
-                            Color.WHITE,
-                            null,
-                            TrackVisualizationRenderer.frameLabel(context, index) + (index == frameIndex ? " · event" : index < frameIndex ? " · before" : " · after"),
-                            false, sharedLevels));
-                }
-            }
-            TrackVisualizationRenderer.saveAnimatedGif(contextFrames, new File(context.exportDir, contextGifFileName), context.settings);
-
-            report.println("<div class='image-container'>");
-            report.println("<div><a href='" + detectionFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + detectionFileName + "' alt='Detection Image' /></a><br/><center><small>Detection Image</small></center></div>");
-            report.println("<div><a href='" + shapeFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + shapeFileName + "' alt='Shape Footprint' /></a><br/><center><small>Shape Footprint Map</small></center></div>");
-            if (maskFileName != null) {
-                report.println("<div><a href='" + maskFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + maskFileName + "' alt='Master Veto Mask' /></a><br/><center><small>Master Veto Mask</small></center></div>");
-            }
-            report.println("<div><a href='" + contextGifFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + contextGifFileName + "' alt='Anomaly Context' /></a><br/><center><small>Context (before / event / after; rejected frames skipped)</small></center></div>");
-            report.println("</div>");
-
-            String metricsText = buildAnomalyMetricsText(anomaly);
-            String overlapColor = "#aaaaaa";
-            String overlapAssessment = "n/a";
-            if (maskOverlapStats.totalPixels > 0) {
-                if (maskOverlapStats.fraction > context.config.maxMaskOverlapFraction) {
-                    overlapColor = "#ff6b6b";
-                    overlapAssessment = "above configured limit";
-                } else if (maskOverlapStats.fraction > context.config.maxMaskOverlapFraction * 0.8) {
-                    overlapColor = "#ffcc66";
-                    overlapAssessment = "near configured limit";
-                } else {
-                    overlapColor = "#66d9a3";
-                    overlapAssessment = "comfortably below limit";
-                }
-            }
-            report.println("<strong>Detection Coordinate:</strong><ul class='source-list'>" + DetectionReportAstrometry.buildSourceCoordinateListEntry(point.sourceFilename, context.astrometryContext, point.x, point.y, metricsText) + "</ul>");
-            if (maskOverlapStats.totalPixels > 0) {
-                report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>Veto-mask overlap: <span style='color:" + overlapColor + "; font-weight: bold;'>" + String.format(Locale.US, "%.1f%%", maskOverlapStats.fraction * 100.0) + "</span> (" + maskOverlapStats.overlappingPixels + " / " + maskOverlapStats.totalPixels + " detection pixels) | Limit: " + String.format(Locale.US, "%.1f%%", context.config.maxMaskOverlapFraction * 100.0) + " <span style='color:" + overlapColor + ";'>[" + overlapAssessment + "]</span></div>");
-            }
-            report.println("</div>");
-            counter++;
-        }
-    }
-
     private static String buildStreakMetricsText(SourceExtractor.DetectedObject detection) {
         return String.format(
                 Locale.US,
@@ -476,33 +364,6 @@ final class TargetVisualizationSectionWriter {
                 detection.fwhm,
                 detection.peakSigma,
                 formatUtcTimestamp(detection.timestamp));
-    }
-
-    private static String buildAnomalyMetricsText(TrackLinker.AnomalyDetection anomaly) {
-        SourceExtractor.DetectedObject detection = anomaly.object;
-        return String.format(
-                Locale.US,
-                "%s, Peak Sigma: %.2f, Integrated Sigma: %.2f, Flux: %.1f, Pixels: %d, Elongation: %.2f",
-                formatAnomalyTypeLabel(anomaly.type),
-                detection.peakSigma,
-                detection.integratedSigma,
-                detection.totalFlux,
-                (int) detection.pixelArea,
-                detection.elongation);
-    }
-
-    private static String formatAnomalyTypeLabel(TrackLinker.AnomalyType type) {
-        if (type == null) {
-            return "Rescue Type: Unknown";
-        }
-        switch (type) {
-            case PEAK_SIGMA:
-                return "Rescue Type: Peak-Sigma";
-            case INTEGRATED_SIGMA:
-                return "Rescue Type: Integrated-Sigma";
-            default:
-                return "Rescue Type: " + type.name();
-        }
     }
 
     private static String buildConfirmedStreakFrameFragmentSummaryHtml(TrackLinker.Track track,

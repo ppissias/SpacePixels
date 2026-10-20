@@ -1,6 +1,7 @@
 package eu.startales.spacepixels.util.reporting;
 
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
+import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.core.TrackLinker;
 
 import java.util.Locale;
@@ -298,6 +299,42 @@ final class AstrometryIdentificationHtmlBuilder {
         }
         html.append("</div>");
         return html.toString();
+    }
+
+    static String buildAnomalySatCheckerHtml(DetectionReportAstrometry.Context context,
+                                             SourceExtractor.DetectedObject point,
+                                             String slotId,
+                                             String sidecarFileName) {
+        String unavailable = null;
+        if (context == null || !context.hasAstrometricSolution()) {
+            unavailable = "plate-solve the session to locate the event on the sky";
+        } else if (context.getObserverSite() == null) {
+            unavailable = "add the observing location in Astrometry Config or the FITS headers";
+        }
+        SatCheckerQueryTarget target = unavailable == null
+                ? SatCheckerQueryTargetFactory.buildAnomalySatCheckerQueryTarget(context, point) : null;
+        if (unavailable == null && target == null) {
+            unavailable = "a valid exposure start, exposure length and sky position are required";
+        }
+        String url = target == null ? null : DetectionReportAstrometry.buildSatCheckerFovUrl(
+                context.getObserverSite(),
+                SatCheckerQueryTargetFactory.resolveTimeWindowMidpointTimestamp(target.startTimestampMillis, target.endTimestampMillis),
+                target.durationSeconds, target.raDegrees, target.decDegrees, target.fovRadiusDegrees, false);
+        if (unavailable == null && url == null) unavailable = "check the observing location and exposure metadata";
+        if (unavailable != null) {
+            return "<div class='astro-note'>Satellite check unavailable: " + unavailable + ".</div>";
+        }
+        return "<div class='anomaly-identification'><div class='id-links'>"
+                + DetectionReportAstrometry.buildLiveRenderButtonHtml("satchecker", url, slotId,
+                        "Check satellites", sidecarFileName, "Possible satellite associations")
+                + "<a class='id-link' href='" + DetectionReportAstrometry.escapeHtml(url)
+                + "' target='_blank' rel='noopener noreferrer'>Open SatChecker response</a></div>"
+                + "<p class='astro-note'>Checks for predicted satellite passages within "
+                + String.format(Locale.US, "%.2f&deg;", target.fovRadiusDegrees)
+                + " of this position over the whole exposure. The flash time within the exposure is unknown. "
+                + "Keep SpacePixels running to show and save results here. "
+                + "A possible association does not confirm a satellite flash; no match does not rule one out.</p>"
+                + DetectionReportAstrometry.buildLiveRenderContainerHtml(slotId) + "</div>";
     }
 
     private static String buildJplUnavailableReason(DetectionReportAstrometry.Context astrometryContext) {

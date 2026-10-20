@@ -18,6 +18,25 @@ final class SatCheckerQueryTargetFactory {
     private SatCheckerQueryTargetFactory() {
     }
 
+    /** A flash can occur anywhere in its exposure; never shorten this window as for a streak lookup. */
+    static SatCheckerQueryTarget buildAnomalySatCheckerQueryTarget(DetectionReportAstrometry.Context context,
+                                                                   SourceExtractor.DetectedObject point) {
+        if (context == null || !context.hasAstrometricSolution() || context.getObserverSite() == null
+                || point == null || !Double.isFinite(point.x) || !Double.isFinite(point.y)) {
+            return null;
+        }
+        long start = resolveTrackPointStartTimestamp(context, point);
+        long exposure = resolveTrackPointExposureMillis(point);
+        if (exposure <= 0L) exposure = context.getFrameExposureMillis(point.sourceFrameIndex);
+        if (start <= 0L || exposure <= 0L || start > Long.MAX_VALUE - exposure) return null;
+
+        WcsCoordinateTransformer.SkyCoordinate sky = context.getTransformer().pixelToSky(point.x, point.y);
+        if (sky == null || !Double.isFinite(sky.getRaDegrees()) || !Double.isFinite(sky.getDecDegrees())) return null;
+        return new SatCheckerQueryTarget(sky.getRaDegrees(), sky.getDecDegrees(), MIN_FOV_RADIUS_DEGREES,
+                start, start + exposure, (long) Math.ceil(exposure / 1000.0d),
+                "Search centered on the event position over the whole exposure");
+    }
+
     static SatCheckerQueryTarget buildTrackSatCheckerQueryTarget(DetectionReportAstrometry.Context astrometryContext,
                                                                  TrackLinker.Track track) {
         if (astrometryContext == null || !astrometryContext.hasAstrometricSolution()
