@@ -14,7 +14,9 @@ public enum JobKind {
     DETECTION("Detect Moving Targets"),
     ITERATIVE_DETECTION("Detect Iteratively"),
     TRANSIENT_INSPECTION("Manual Transient Inspection"),
-    STAR_MASK_STACK("Test Star Mask");
+    STAR_MASK_STACK("Test Star Mask"),
+    CONVERT_TO_MONO("Convert to Mono"),
+    BATCH_STRETCH("Batch Stretch");
 
     private final String title;
 

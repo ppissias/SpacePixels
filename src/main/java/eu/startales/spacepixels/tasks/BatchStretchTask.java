@@ -10,28 +10,21 @@
 
 package eu.startales.spacepixels.tasks;
 
-import eu.startales.spacepixels.jobs.JobFailures;
-import com.google.common.eventbus.EventBus;
-import eu.startales.spacepixels.events.BatchStretchFinishedEvent;
-import eu.startales.spacepixels.events.BatchStretchStartedEvent;
-import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
-import eu.startales.spacepixels.gui.ApplicationWindow;
+import eu.startales.spacepixels.jobs.Job;
+import eu.startales.spacepixels.jobs.JobContext;
+import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
-import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 
-import java.util.logging.Level;
-
-public class BatchStretchTask implements Runnable {
-    private final EventBus eventBus;
+/** Writes stretched copies of all frames of the session, colour or mono, into a new folder. */
+public class BatchStretchTask implements Job<Void> {
     private final ImageProcessing preProcessing;
     private final int stretchFactor;
     private final int iterations;
     private final StretchAlgorithm algo;
 
-    public BatchStretchTask(EventBus eventBus, ImageProcessing preProcessing,
+    public BatchStretchTask(ImageProcessing preProcessing,
                             int stretchFactor, int iterations, StretchAlgorithm algo) {
-        this.eventBus = eventBus;
         this.preProcessing = preProcessing;
         this.stretchFactor = stretchFactor;
         this.iterations = iterations;
@@ -39,28 +32,8 @@ public class BatchStretchTask implements Runnable {
     }
 
     @Override
-    public void run() {
-        // 1. Tell the UI we are starting
-        eventBus.post(new BatchStretchStartedEvent());
-
-        try {
-            ApplicationWindow.logger.info("Will stretch all images (color or mono)");
-
-            TransientEngineProgressListener progressListener = (percentage, message) -> {
-                eventBus.post(new EngineProgressUpdateEvent(percentage, message));
-            };
-
-            // 2. Perform the heavy lifting
-            preProcessing.batchStretch(stretchFactor, iterations, algo, progressListener);
-
-            // 3. Report Success
-            eventBus.post(new BatchStretchFinishedEvent(true, null));
-        } catch (Throwable ex) {
-            String message = JobFailures.rethrowOutOfMemory(ex);
-            ApplicationWindow.logger.log(Level.SEVERE, "Cannot stretch images", ex);
-
-            // 3. Report Failure
-            eventBus.post(new BatchStretchFinishedEvent(false, message));
-        }
+    public JobOutcome<Void> run(JobContext context) throws Exception {
+        preProcessing.batchStretch(stretchFactor, iterations, algo, context::progress);
+        return JobOutcome.completed(null);
     }
 }

@@ -3,8 +3,6 @@ package eu.startales.spacepixels.tasks;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import eu.startales.spacepixels.events.AutoTuneFinishedEvent;
-import eu.startales.spacepixels.events.BatchConvertFinishedEvent;
-import eu.startales.spacepixels.events.BatchStretchFinishedEvent;
 import eu.startales.spacepixels.events.BlinkFinishedEvent;
 import eu.startales.spacepixels.events.SolveFinishedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
@@ -45,16 +43,7 @@ public class TaskFailureEventsTest {
 
     @Test
     public void failingTasksPostTheirFinishedEventWithTheReason() throws Exception {
-        StretchAlgorithm algorithm = StretchAlgorithm.values()[0];
         FitsFileInformation missing = missingFrame();
-
-        BatchStretchFinishedEvent stretch = last(run(new BatchStretchTask(bus(), null, 1, 1, algorithm)), BatchStretchFinishedEvent.class);
-        assertFalse(stretch.isSuccess());
-        assertNotNull(stretch.getErrorMessage());
-
-        BatchConvertFinishedEvent convert = last(run(new BatchConvertMonoTask(bus(), null, false, 1, 1, algorithm)), BatchConvertFinishedEvent.class);
-        assertFalse(convert.isSuccess());
-        assertNotNull(convert.getErrorMessage());
 
         assertNull(last(run(new PlateSolveTask(bus(), null, missing.getFilePath(), 0, true, false)), SolveFinishedEvent.class).getResult());
 
@@ -83,6 +72,9 @@ public class TaskFailureEventsTest {
 
     @Test
     public void failingJobsEndAsFailedWithTheReason() {
+        StretchAlgorithm algorithm = StretchAlgorithm.values()[0];
+        assertFailed(outcomeOf(new BatchStretchTask(null, 1, 1, algorithm)));
+        assertFailed(outcomeOf(new BatchConvertMonoTask(null, false, 1, 1, algorithm)));
         assertFailed(outcomeOf(new DetectionTask(null, new DetectionConfig())));
         assertFailed(outcomeOf(new IterativeDetectionTask(null, new DetectionConfig(), 0)));
         assertFailed(outcomeOf(new ManualTransientInspectionTask(null, new DetectionConfig())));

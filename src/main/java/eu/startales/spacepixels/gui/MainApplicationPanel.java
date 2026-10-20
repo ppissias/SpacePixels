@@ -136,10 +136,11 @@ public class MainApplicationPanel extends JPanel {
         mainAppWindow.getJobCoordinator().setListener(new JobCoordinator.Listener() {
             @Override
             public void jobStarted(JobHandle handle) {
+                JobTexts texts = JobTexts.of(handle.kind());
                 setProgressBarWorking();
                 disableControlsProcessing();
-                statusLabel.setText("Object detection started...");
-                progressDialog.updateProgress(0, "Initializing object detection...");
+                statusLabel.setText(texts.started());
+                progressDialog.updateProgress(0, texts.initializing());
                 // Shown after this call returns: the dialog is modal and would hold the click until the job ends.
                 EventQueue.invokeLater(() -> {
                     if (mainAppWindow.getJobCoordinator().current() == handle) {
@@ -160,7 +161,7 @@ public class MainApplicationPanel extends JPanel {
                 progressDialog.setVisible(false);
                 setProgressBarIdle();
                 enableControlsProcessingFinished();
-                statusLabel.setText("Object detection completed");
+                statusLabel.setText(JobTexts.of(handle.kind()).ended());
             }
         });
 
@@ -278,14 +279,9 @@ public class MainApplicationPanel extends JPanel {
             boolean stretchEnabled = mainAppWindow.getStretchPanel().isStretchEnabled();
             StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-            BatchConvertMonoTask task = new BatchConvertMonoTask(
-                    mainAppWindow.getEventBus(),
-                    mainAppWindow.getImageProcessing(),
-                    stretchEnabled,
-                    stretchFactor,
-                    iterations,
-                    algo);
-            new Thread(task).start();
+            ImageProcessing session = mainAppWindow.getImageProcessing();
+            startJob(JobKind.CONVERT_TO_MONO, session,
+                    new BatchConvertMonoTask(session, stretchEnabled, stretchFactor, iterations, algo), this::showConversionOutcome);
         });
 
         stretchButton.addActionListener(e -> {
@@ -293,12 +289,9 @@ public class MainApplicationPanel extends JPanel {
             int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
             StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-            new Thread(new BatchStretchTask(
-                    mainAppWindow.getEventBus(),
-                    mainAppWindow.getImageProcessing(),
-                    stretchFactor,
-                    iterations,
-                    algo)).start();
+            ImageProcessing session = mainAppWindow.getImageProcessing();
+            startJob(JobKind.BATCH_STRETCH, session, new BatchStretchTask(session, stretchFactor, iterations, algo),
+                    this::showStretchOutcome);
         });
 
         blinkButton.addActionListener(e -> {
@@ -1764,90 +1757,62 @@ public class MainApplicationPanel extends JPanel {
         });
     }
 
-    @Subscribe
-    public void onBatchConvertStarted(BatchConvertStartedEvent event) {
-        EventQueue.invokeLater(() -> {
-            setProgressBarWorking();
-            disableControlsProcessing();
-            statusLabel.setText("Batch conversion started");
-            
-            progressDialog.updateProgress(0, "Initializing batch conversion...");
-            progressDialog.setVisible(true);
-        });
-    }
-
-    @Subscribe
-    public void onBatchConvertFinished(BatchConvertFinishedEvent event) {
-        EventQueue.invokeLater(() -> {
-            progressDialog.setVisible(false);
-            setProgressBarIdle();
-            enableControlsProcessingFinished();
-
-            if (event.isSuccess()) {
-                File generatedMonoDirectory = event.getGeneratedMonoDirectory();
-                if (generatedMonoDirectory != null) {
-                    int choice = JOptionPane.showConfirmDialog(
-                            this,
-                            "Batch conversion to mono completed successfully.\n\n" +
-                                    "Import the newly created mono directory now?\n" +
-                                    generatedMonoDirectory.getAbsolutePath(),
-                            "Conversion Complete",
-                            JOptionPane.YES_NO_OPTION,
-                            JOptionPane.QUESTION_MESSAGE);
-                    if (choice == JOptionPane.YES_OPTION) {
-                        statusLabel.setText("Importing converted mono directory");
-                        new Thread(new FitsImportTask(mainAppWindow.getEventBus(), generatedMonoDirectory)).start();
-                        return;
-                    }
-                } else {
-                    JOptionPane.showMessageDialog(this,
-                            "Batch conversion to mono completed successfully.",
-                            "Conversion Complete",
-                            JOptionPane.INFORMATION_MESSAGE);
+    /** The end of Convert to Mono: offers to import the new mono folder, or says what went wrong. */
+    private void showConversionOutcome(JobHandle handle, JobOutcome<File> outcome) {
+        if (outcome instanceof JobOutcome.Completed<File> completed) {
+            File generatedMonoDirectory = completed.result();
+            if (generatedMonoDirectory != null) {
+                int choice = JOptionPane.showConfirmDialog(
+                        this,
+                        "Batch conversion to mono completed successfully.\n\n" +
+                                "Import the newly created mono directory now?\n" +
+                                generatedMonoDirectory.getAbsolutePath(),
+                        "Conversion Complete",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.QUESTION_MESSAGE);
+                if (choice == JOptionPane.YES_OPTION) {
+                    statusLabel.setText("Importing converted mono directory");
+                    mainAppWindow.importFolder(generatedMonoDirectory);
                 }
             } else {
                 JOptionPane.showMessageDialog(this,
-                        "Cannot convert images: " + event.getErrorMessage(),
-                        "Error",
-                        JOptionPane.ERROR_MESSAGE);
-            }
-            statusLabel.setText("Batch conversion finished");
-        });
-    }
-
-    @Subscribe
-    public void onBatchStretchStarted(BatchStretchStartedEvent event) {
-        EventQueue.invokeLater(() -> {
-            setProgressBarWorking();
-            disableControlsProcessing();
-            statusLabel.setText("Batch stretch started");
-            
-            progressDialog.updateProgress(0, "Initializing batch stretch...");
-            progressDialog.setVisible(true);
-        });
-    }
-
-    @Subscribe
-    public void onBatchStretchFinished(BatchStretchFinishedEvent event) {
-        EventQueue.invokeLater(() -> {
-            progressDialog.setVisible(false);
-            setProgressBarIdle();
-            enableControlsProcessingFinished();
-
-            if (event.isSuccess()) {
-                JOptionPane.showMessageDialog(this,
-                        "Batch stretch completed successfully.\n" +
-                                "If you wish to work with these new images, please import the newly created directory.",
-                        "Stretch Complete",
+                        "Batch conversion to mono completed successfully.",
+                        "Conversion Complete",
                         JOptionPane.INFORMATION_MESSAGE);
-            } else {
-                JOptionPane.showMessageDialog(this,
-                        "Cannot stretch images: " + event.getErrorMessage(),
-                        "Error",
-                        JOptionPane.ERROR_MESSAGE);
             }
-            statusLabel.setText("Batch stretch finished");
-        });
+        } else if (outcome instanceof JobOutcome.Failed<File> failed) {
+            JOptionPane.showMessageDialog(this,
+                    "Cannot convert images: " + failed.reason(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /** The end of Batch Stretch: says where the stretched copies are, or what went wrong. */
+    private void showStretchOutcome(JobHandle handle, JobOutcome<Void> outcome) {
+        if (outcome instanceof JobOutcome.Completed<Void>) {
+            JOptionPane.showMessageDialog(this,
+                    "Batch stretch completed successfully.\n" +
+                            "If you wish to work with these new images, please import the newly created directory.",
+                    "Stretch Complete",
+                    JOptionPane.INFORMATION_MESSAGE);
+        } else if (outcome instanceof JobOutcome.Failed<Void> failed) {
+            JOptionPane.showMessageDialog(this,
+                    "Cannot stretch images: " + failed.reason(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /** What the status bar and the progress dialog say while a job of this kind runs, and after it. */
+    private record JobTexts(String started, String initializing, String ended) {
+        static JobTexts of(JobKind kind) {
+            return switch (kind) {
+                case CONVERT_TO_MONO -> new JobTexts("Batch conversion started", "Initializing batch conversion...", "Batch conversion finished");
+                case BATCH_STRETCH -> new JobTexts("Batch stretch started", "Initializing batch stretch...", "Batch stretch finished");
+                default -> new JobTexts("Object detection started...", "Initializing object detection...", "Object detection completed");
+            };
+        }
     }
 
     private void promptUserToOpenReport(File reportFile) {
