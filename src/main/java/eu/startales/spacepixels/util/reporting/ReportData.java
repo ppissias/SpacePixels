@@ -35,7 +35,7 @@ final class ReportData {
         tracks(output, context, "S", "Single-frame streak", context.singleStreaks);
         for (int i = 0; i < context.anomalies.size(); i++) {
             var a = context.anomalies.get(i);
-            if (a != null && a.object != null) add(output, context, "A" + (i + 1), "Single-frame anomaly", a.object.x, a.object.y, List.of(a.object), null, a.lowConfidence ? "Low confidence" : null);
+            if (a != null && a.object != null) add(output, context, "A" + (i + 1), "Single-frame anomaly", a.object.x, a.object.y, List.of(a.object), null, null);
         }
         for (int i = 0; i < context.slowMoverCandidates.size(); i++) {
             var a = context.slowMoverCandidates.get(i);

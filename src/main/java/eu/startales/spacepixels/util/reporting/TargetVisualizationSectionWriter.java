@@ -346,19 +346,8 @@ final class TargetVisualizationSectionWriter {
     private static void writeAnomalies(PrintWriter report,
                                        DetectionReportContext context) throws IOException {
         report.println("<h3 id='anomalies' style='color: #ff3333; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single-Frame Anomalies (Optical Flashes)</h3>");
-        int lowConfidence = 0;
-        for (TrackLinker.AnomalyDetection anomaly : context.anomalies) {
-            if (anomaly != null && anomaly.lowConfidence) {
-                lowConfidence++;
-            }
-        }
         report.println("<div class='astro-note' style='margin-bottom: 15px;'>Ordered by source frame index. If multiple anomalies land on the same frame, peak-sigma rescues are shown before integrated-sigma rescues."
-                + (lowConfidence > 0
-                ? " " + lowConfidence + (lowConfidence == 1 ? " is" : " are")
-                + " marked low confidence because " + (lowConfidence == 1 ? "it sits" : "they sit")
-                + " on a streak in the same frame. A faint streak through a star can change the star's shape and look like a flash."
-                : "")
-                + "</div>");
+                + " Pieces on a streak's path, such as a streak crossing a star or a satellite's flash, are shown with that streak.</div>");
         int counter = 1;
         for (TrackLinker.AnomalyDetection anomaly : context.anomalies) {
             SourceExtractor.DetectedObject point = anomaly.object;
@@ -366,10 +355,7 @@ final class TargetVisualizationSectionWriter {
             int frameIndex = point.sourceFrameIndex;
 
             report.println("<div class='detection-card streak-title' id='finding-a" + counter + "' style='border-left-color: #ff3333; color: #ff3333;'>");
-            String lowConfidenceBadge = anomaly.lowConfidence
-                    ? " <span style='background: #6b4a20; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;' title='On a streak in this frame'>Low confidence</span>"
-                    : "";
-            report.println("<div class='detection-title' style='color: #ff3333;'>Anomaly Event A" + counter + " <span style='background: #7a1f50; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>" + DetectionReportGenerator.escapeHtml(formatAnomalyTypeLabel(anomaly.type).replace("Rescue Type: ", "")) + "</span>" + lowConfidenceBadge + "</div>");
+            report.println("<div class='detection-title' style='color: #ff3333;'>Anomaly Event A" + counter + " <span style='background: #7a1f50; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>" + DetectionReportGenerator.escapeHtml(formatAnomalyTypeLabel(anomaly.type).replace("Rescue Type: ", "")) + "</span></div>");
 
             BufferedImage detectionImage = TrackVisualizationRenderer.createCroppedDisplayImage(
                     context.rawFrames.get(frameIndex),
@@ -502,8 +488,7 @@ final class TargetVisualizationSectionWriter {
                 detection.integratedSigma,
                 detection.totalFlux,
                 (int) detection.pixelArea,
-                detection.elongation)
-                + (anomaly.lowConfidence ? ", Low confidence: on a streak in this frame" : "");
+                detection.elongation);
     }
 
     private static String formatAnomalyTypeLabel(TrackLinker.AnomalyType type) {

@@ -82,8 +82,6 @@ public class ImageProcessing implements AutoCloseable {
         public final int cameraFixedGroups;
         /** Leftover detections. Shown in the summary, and not added to {@link #totalDetections}. */
         public final int unclassifiedDetections;
-        /** Anomalies that lie on a confirmed streak in the same frame. Already included in {@link #anomalies}. */
-        public final int lowConfidenceAnomalies;
         /** Photometry verdict ("READY", "LIMITED", "NOT_READY") or null when variable-star detection did not run. */
         public final String photometryVerdict;
         public final int variableStarCandidates;
@@ -104,7 +102,6 @@ public class ImageProcessing implements AutoCloseable {
                          int possibleVariableStars,
                          int commonMotionGroups,
                          int unclassifiedDetections,
-                         int lowConfidenceAnomalies,
                          int cameraFixedGroups) {
             this.totalDetections = totalDetections;
             this.singleStreaks = singleStreaks;
@@ -119,7 +116,6 @@ public class ImageProcessing implements AutoCloseable {
             this.possibleVariableStars = possibleVariableStars;
             this.commonMotionGroups = commonMotionGroups;
             this.unclassifiedDetections = unclassifiedDetections;
-            this.lowConfidenceAnomalies = lowConfidenceAnomalies;
             this.cameraFixedGroups = cameraFixedGroups;
         }
 
@@ -184,14 +180,11 @@ public class ImageProcessing implements AutoCloseable {
             } else {
                 photometry = variableStarCandidates + " candidates, " + possibleVariableStars + " possible";
             }
-            String anomalyCount = lowConfidenceAnomalies > 0
-                    ? anomalies + " (" + lowConfidenceAnomalies + " low confidence)"
-                    : Integer.toString(anomalies);
             return "The engine found " + totalDetections + " detections, more than the usual " + limit + ".\n\n"
                     + "Moving-object tracks: " + movingTargets + "\n"
                     + "Streak tracks (multi-frame): " + streakTracks + "\n"
                     + "Single streaks: " + singleStreaks + "\n"
-                    + "Single-frame anomalies: " + anomalyCount + "\n"
+                    + "Single-frame anomalies: " + anomalies + "\n"
                     + "Slow-mover candidates (maximum stack): " + slowMoverCandidates + "\n"
                     + "Local rescue candidates: " + localRescueCandidates + "\n"
                     + "Local activity clusters: " + localActivityClusters + "\n"
@@ -222,9 +215,6 @@ public class ImageProcessing implements AutoCloseable {
             JPanel grid = new JPanel(new GridBagLayout());
             grid.setOpaque(false);
             grid.setAlignmentX(Component.LEFT_ALIGNMENT);
-            String anomalyValue = lowConfidenceAnomalies > 0
-                    ? anomalies + "  (" + lowConfidenceAnomalies + " low confidence)"
-                    : Integer.toString(anomalies);
             boolean anomaliesOn = config == null || config.enableAnomalyRescue;
             boolean slowMoversOn = config == null || config.enableSlowMoverDetection;
             boolean residualOn = config == null || config.enableResidualTransientAnalysis;
@@ -238,7 +228,7 @@ public class ImageProcessing implements AutoCloseable {
                     OptionalRow.always("Moving-object tracks", Integer.toString(movingTargets), movingTargets),
                     OptionalRow.always("Streak tracks", Integer.toString(streakTracks), streakTracks),
                     OptionalRow.always("Single streaks", Integer.toString(singleStreaks), singleStreaks),
-                    OptionalRow.when(anomaliesOn, "Single-frame anomalies", anomalyValue, anomalies),
+                    OptionalRow.when(anomaliesOn, "Single-frame anomalies", Integer.toString(anomalies), anomalies),
                     OptionalRow.when(slowMoversOn, "Slow-mover candidates", Integer.toString(slowMoverCandidates), slowMoverCandidates),
                     OptionalRow.when(localRescueOn, "Local rescue candidates", Integer.toString(localRescueCandidates), localRescueCandidates),
                     OptionalRow.when(localActivityOn, "Local activity clusters", Integer.toString(localActivityClusters), localActivityClusters),

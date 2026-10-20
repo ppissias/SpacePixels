@@ -874,7 +874,7 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        panel.add(createTabIntro("Anomalies are either transient high energy events or transient larger but fainter events. Here are the controls for single-frame anomaly rescue. A faint streak through a star can change the star's shape and produce an anomaly; when that anomaly sits on a known streak in the same frame, the report marks it low confidence."));
+        panel.add(createTabIntro("Anomalies are either transient high energy events or transient larger but fainter events. Here are the controls for single-frame anomaly rescue. A faint streak through a star can change the star's shape and produce an anomaly; when that anomaly lies on a known streak's path, it becomes part of that streak."));
 
         panel.add(createSectionHeader("Common Settings"));
         chkEnableAnomalyRescue = addCheckboxRow(panel, "Enable Anomaly Rescue", "Keeps single-frame anomaly rescue active for flashes and fragments that do not become full multi-frame tracks.", jTransientConfig.enableAnomalyRescue);

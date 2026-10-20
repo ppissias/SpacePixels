@@ -127,12 +127,6 @@ final class DetectionPipelineSupport {
         int localRescueCandidates = residualAnalysis.localRescueCandidates.size();
         int localActivityClusters = residualAnalysis.localActivityClusters.size();
         int anomalyCount = anomalies.size();
-        int lowConfidenceAnomalies = 0;
-        for (TrackLinker.AnomalyDetection anomaly : anomalies) {
-            if (anomaly != null && anomaly.lowConfidence) {
-                lowConfidenceAnomalies++;
-            }
-        }
         int unclassifiedDetections = 0;
         if (result.unclassifiedTransients != null) {
             for (List<SourceExtractor.DetectedObject> frame : result.unclassifiedTransients) {
@@ -159,7 +153,6 @@ final class DetectionPipelineSupport {
                 photometry != null ? photometry.possible : 0,
                 residualAnalysis.commonMotionGroups.size(),
                 unclassifiedDetections,
-                lowConfidenceAnomalies,
                 result.cameraFixedGroups.size());
     }
 

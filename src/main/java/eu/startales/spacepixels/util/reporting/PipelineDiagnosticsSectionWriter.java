@@ -263,19 +263,11 @@ final class PipelineDiagnosticsSectionWriter {
                 + plural(summary.singleStreakCount, "single-frame streak") + ", "
                 + plural(summary.confirmedLinkedTrackCount, "multi-frame track") + ".</div>");
         if (!reportContext.anomalies.isEmpty()) {
-            int lowConfidence = 0;
-            for (TrackLinker.AnomalyDetection anomaly : reportContext.anomalies) {
-                if (anomaly != null && anomaly.lowConfidence) {
-                    lowConfidence++;
-                }
-            }
             String split = summary.peakSigmaAnomalyCount + " found by their peak brightness, "
                     + summary.integratedSigmaAnomalyCount + " by their integrated brightness"
                     + (summary.otherAnomalyCount > 0 ? ", " + summary.otherAnomalyCount + " other" : "");
-            String lowNote = lowConfidence > 0
-                    ? " " + lowConfidence + " sit on a streak in the same frame and are marked low confidence."
-                    : "";
-            report.println("<div class='astro-note'>Anomalies: " + split + " (the order used on the anomaly cards and the A# map labels)." + lowNote + "</div>");
+            report.println("<div class='astro-note'>Anomalies: " + split + " (the order used on the anomaly cards and the A# map labels)."
+                    + " Pieces on a streak's path, such as a streak crossing a star or a satellite's flash, are part of that streak.</div>");
         }
         if (reportContext.config.enableSlowMoverDetection) {
             report.println("<div class='astro-note'>Local rescue candidates are short motions found among the detections the tracker left over. "
