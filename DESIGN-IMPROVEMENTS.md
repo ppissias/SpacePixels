@@ -447,6 +447,75 @@ This supports option 2. See [the review](docs/architecture-review.md#the-event-b
 
 To ground the decision, the review should list every publisher, subscriber and registration, including inline workers.
 
+### S2 and S3, first slice: a job coordinator for the detection jobs
+
+**Accepted (2026-10-20).** The maintainer accepted the design and checks the four buttons in the GUI.
+
+**Scope.** The four jobs that share the detection lock, progress dialog and finished event today:
+- Detect Moving Targets;
+- Detect Iteratively;
+- Manual Transient Inspection;
+- the star-mask stack behind Test Star Mask.
+
+The other jobs (import, plate solve, Blink, Auto-Tune, Convert to Mono, Batch Stretch) stay on the bus for now and move one at a time later.
+
+**New types**, in a new package `eu.startales.spacepixels.jobs` with no Swing or `gui` dependency:
+
+| Type | Role |
+|---|---|
+| `Job<R>` | The work. `run(JobContext)` runs on the worker and returns a `JobOutcome<R>` |
+| `JobContext` | What a running job may use: `progress(percent, message)` and its `JobHandle` |
+| `JobOutcome<R>` | A sealed type: `Completed(R result)`, `Declined(String reason)` (the user said no, such as the report-size question) or `Failed(String reason, Throwable cause)` |
+| `JobHandle` | The job's identity: a number, its `JobKind` and the session it was started for. Until S7 brings a session object, the session is the `ImageProcessing` instance |
+| `JobKind` | `DETECTION`, `ITERATIVE_DETECTION`, `TRANSIENT_INSPECTION`, `STAR_MASK_STACK`; more kinds later |
+| `JobCoordinator` | Admits, starts and finishes jobs. It is called on the UI thread and given two executors: one for the worker, one for the UI thread (`EventQueue::invokeLater` in the application, a direct executor in tests) |
+
+**How a job runs:**
+1. **Admission,** on the EDT, before any thread starts. The coordinator refuses the job, with a reason, when another coordinated job is running or when the window is locked by a job still on the bus. This is today's policy; only the timing changes.
+2. **Locking:** an admitted job tells its busy listener at once. `MainApplicationPanel` implements that listener: it locks the window and shows the progress dialog. Today this waits for the worker's start event.
+3. **Progress:** reaches the dialog on the EDT, and only while that job is the current one.
+4. **Ending:** the coordinator turns the job's outcome into one call of the job's outcome handler, on the EDT. It then releases the lock. A thrown exception or `Error` becomes `Failed` with the reason. Running out of memory is thrown on the worker thread, as S1 established.
+
+| Job | Its outcome handler, at the place that started it |
+|---|---|
+| Detection | `Completed(report file)` asks whether to open the report. `Declined` and `Failed` show today's messages |
+| Iterative | Same, with the results folder. The frame-limit question moves from the worker to the button, before admission |
+| Inspection | The job returns its frames and transients; the handler opens `TransientInspectionFrame`. The task no longer opens windows or takes the `StretchPanel` (part of S6) |
+| Star-mask stack | The handler fills the master-stack cache and opens the explorer, as the callback does today |
+
+**What is removed:**
+- `DetectionStartedEvent` and `DetectionFinishedEvent`, with their bus subscribers. Only these four jobs use them, and this is the first retirement under S9.
+- The four unused fields of the finished event go with it.
+
+`EngineProgressUpdateEvent` stays for the jobs still on the bus.
+
+**Ownership:**
+- `ApplicationWindow` creates the coordinator.
+- `MainApplicationPanel` and `DetectionConfigurationPanel` reach it through the window, as they reach each other today. S4 and S7 change that later.
+
+**Compatibility.** Nothing visible changes, apart from the admission timing:
+- the same progress dialog, questions, messages, report prompt and windows;
+- the same detection output;
+- the API and CLI are unaffected.
+
+**Verification:**
+- **Coordinator tests,** with a controllable worker executor and a direct UI executor:
+  - a second job is refused while the first runs;
+  - the lock is taken before the worker starts;
+  - each outcome is delivered once, on the UI executor;
+  - progress arriving after the outcome is ignored;
+  - an exception and an `Error` both become `Failed`;
+  - out of memory leaves the worker thread.
+- **Job tests:** the four jobs adapted from `TaskFailureEventsTest`, asserting outcomes instead of events.
+- **Full test suite,** and klangwolke-1 with identical `report-data.json`.
+- **A GUI check** of the four buttons on a small dataset.
+
+**Delivery, in four commits:**
+1. The `jobs` package and its tests, with no users yet.
+2. The star-mask stack and inspection on the coordinator.
+3. Detection and iterative detection on the coordinator.
+4. Remove the two events, and update the architecture and plan documents.
+
 ### Common patterns that fit this codebase
 
 | Pattern | Concrete use here | Limit |
