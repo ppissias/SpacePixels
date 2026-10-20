@@ -5,7 +5,7 @@ This is the working record of the [architecture adoption review](../DESIGN-IMPRO
 | Part | Packages | Status |
 |---|---|---|
 | 1. Workflow core | `gui`, `tasks`, `events` | Done 2026-10-20, against `9a87c74` |
-| 2. Services and boundaries | `util` (outside reporting and sky catalogue), `api`, `tools`, `config` | To do |
+| 2. Services and boundaries | `util` (outside reporting and sky catalogue), `api`, `tools`, `config` | Done 2026-10-20, against `b52d64d` |
 | 3. Presentation | `util.reporting`, `util.skycatalog` | To do |
 
 **Classifications**, as defined in DESIGN-IMPROVEMENTS:
@@ -15,7 +15,7 @@ This is the working record of the [architecture adoption review](../DESIGN-IMPRO
 - **adapt boundary:** the class stays, but how it is called or what it returns changes.
 - **investigate:** not enough is known yet.
 
-Step numbers (S1, S2…) refer to [Steps from part 1](#steps-from-part-1).
+Step numbers refer to [Steps from part 1](#steps-from-part-1) (S1–S9) and [Steps from part 2](#steps-from-part-2) (S10–S14).
 
 ## Part 1: workflow core
 
@@ -267,3 +267,201 @@ Most of the change concentrates in four places:
 | S9 | B–C | Retire the event bus as S2, S3 and S7 replace each event; then remove Guava | EventBus question | — | No `@Subscribe` left; the build has no Guava |
 
 S1 is a correctness fix that can come first. Per the maintainer's rules it is discussed before it is implemented.
+
+## Part 2: services and boundaries
+
+**Scope and method.**
+- **Read in full:**
+  - the public API: `DefaultSpacePixelsPipelineApi` and the other `api` types;
+  - `BatchDetectionCli`;
+  - the standard and iterative pipeline services;
+  - the import, preparation and plate-solve parts of `ImageProcessing` and `PlateSolveService`;
+  - `AutoTunerRunner` and `AppConfig`.
+- **Read for responsibilities, dependencies, threads, static state and console use:** the other classes of `util` (outside reporting and the sky catalogue), `config` and `tools`.
+- **How:** no code was changed or run.
+
+**Size:** 49 classes, about 10,500 lines:
+- `util`: 30 classes, 8,726 lines;
+- `api`: 9 classes, 784 lines;
+- `tools`: 2 classes, 518 lines;
+- `config`: 8 classes, 515 lines.
+
+### Paths followed
+
+- **Interactive import, the service half.**
+  - `ImageProcessing.getFitsfileInformation`, on the import worker, checks the sequence. It then asks about compression, 16-bit scaling, 32-bit data, negative values and mixed exposures, and offers to load converted folders.
+  - Each question is a `JOptionPane` opened directly from the worker. Conversions show a `gui.ProcessingProgressDialog` that is built on the worker and updated with `invokeLater`.
+  - A redirect to a converted folder is an exception (`RedirectImportException`). Most other endings are an empty array.
+- **API run** (`DefaultSpacePixelsPipelineApi.run`):
+  1. `DetectionInputPreparation` prepares the folder by the request's policy.
+  2. `ImageProcessing.getFitsfileInformationHeadless` checks it again, strictly: 16-bit mono only.
+  3. Optional Auto-Tune.
+  4. `runDetectionPipeline`.
+  5. Optional report.
+
+  The `ImageProcessing` built for the run also loads the user's application config from the home folder.
+- **CLI** (`BatchDetectionCli`):
+  1. Reads the profile.
+  2. Sets two process-wide values: the Auto-Tune frame limit, and the rendering preferences read from the home folder.
+  3. Calls the API, with preparation set to "fail if not ready".
+- **GUI detection** (`StandardDetectionPipelineService.detectObjects`):
+  1. Loads every frame and runs the engine.
+  2. Keeps the run's track and variable-star overlays for the viewers.
+  3. Asks the report-size question.
+  4. Exports the report.
+- **Iterative detection.** One master stack from time-spaced frames, then passes of 5, 10, 15… frames, each with its own report, and an index page.
+- **Plate solve.**
+  - ASTAP or Astrometry.net returns a `Future`; the task waits for it.
+  - The WCS write (`updateFitsHeaderWithWCS`) stages the new file (D01). It can download the WCS from the solver's reference.
+- **Batch convert and stretch.** File loops in `ImageProcessing` that report progress through a listener.
+
+### Findings
+
+**P2-1. `ImageProcessing` is five classes in one (move responsibility).** Its 1,909 lines hold:
+1. **The session processor:**
+   - the folder and its imported files (the same objects the table shows);
+   - a thread pool;
+   - the application config;
+   - the three services.
+2. **The interactive import,** with its dialogs and progress windows.
+3. **The headless import check.**
+4. **The batch conversions and preview rendering.**
+5. **The report-size question:** about 450 lines of Swing panel code in `DetectionSummary` (`confirmReport`, `warningPanel`), next to `PipelineExecutionData`.
+
+Two public methods have no callers: `applyWCSHeader` and `onlyStretch`. Their two private writers, and `PlateSolveService.applyWCSHeader`, which only they call, are unused too.
+
+**P2-2. Swing is used from worker threads (confirms and widens D08).**
+- 12 of the 13 dialogs in `ImageProcessing` are opened straight from the import worker. Only the report-size question uses `invokeAndWait`.
+- `PlateSolveService` opens its Astrometry.net error dialog on the solve worker, with a new `JFrame` as its parent. That frame is never disposed.
+
+**P2-3. An empty file list means several different things (new; extends D06).** `getFitsfileInformation` returns an empty array, after showing its own message, when:
+- a conversion is declined;
+- the first file cannot be read;
+- the files are inconsistent;
+- the format is unsupported.
+
+`FitsImportTask` turns that into a *successful* import with no files, and the window then closes the current session. So declining to convert folder B discards session A. D06 named only the exposure-group case.
+
+**P2-4. Some failures are reported as something else (new; D04).**
+- `StandardDetectionPipelineService.detectObjects` prints a report-export failure to the console and returns null. `DetectionTask` reads null as "aborted by the user", and shows: *"Report generation aborted by user due to high track count. Try raising your thresholds."* A full disk, for example, looks like a settings problem.
+- In iterative detection, a pass whose report fails is printed to the console, but its row is still added to the index page, linking to a report that does not exist.
+- An Astrometry.net failure shows its own dialog and returns null. `PlateSolveTask` then calls `get()` on that null, and a second dialog says "Internal Error".
+
+**P2-5. There are three import and preparation flows (confirms D08 and F07).**
+
+| Flow | Used by | What it does |
+|---|---|---|
+| Interactive (`getFitsfileInformation`, `batchDecompress`, `batchStandardizeTo16Bit`) | the GUI | Asks questions; also writes 16-bit colour copies; decompression is a separate step |
+| `DetectionInputPreparation` | the API | Follows the request's policy; mono output; decompresses as it converts |
+| `getFitsfileInformationHeadless` | the API and CLI, after preparation | A strict check: compressed or non-16-bit data is refused |
+
+They share the conversion and validation code: `FitsPixelConverter`, `FitsSequenceValidator` and `XisfImageConverter`. Each has its own decision flow, and they behave differently.
+
+**P2-6. The API and CLI depend on hidden process state (new; D09/D10).**
+- **Application config:** the API reads the user's config from the home folder through `ImageProcessing`. It sets the observing site and observatory code used by the report's lookups, and the request cannot supply it.
+- **Rendering preferences:** these are static fields in `DisplayImageRenderer`, `RawImageAnnotator` and `DetectionReportGenerator`. `applyToRuntime` sets them; the GUI and the CLI load them from the home folder. An API caller gets whatever the process holds.
+- **Auto-Tune frame limit:** loading any detection profile sets a static "active Auto-Tune frame limit", and the report's diagnostics print it. So the report shows the value of the profile loaded last, which need not be the run's.
+- **Engine statics:** `DebugOutput.applyToEngine` sets the engine's static debug switch. `AutoTunerRunner` changes a JTransient static during a legacy tune (D10, known).
+
+Two runs in one process are therefore not independent. The API documents a concurrency restriction, but the report's site and look also depend on the process.
+
+**P2-7. `util` depends on `gui` (new; pairs with P1-7).**
+- `ImageProcessing` uses the `gui` logger, `ProcessingProgressDialog` and Swing dialogs.
+- `PlateSolveService` uses the logger and `JOptionPane`.
+- `XisfImageConverter` uses the logger.
+
+So the public API loads `gui` classes, and headless use relies on those paths not being reached.
+
+**P2-8. Session state lives inside services (confirms D06).**
+- `StandardDetectionPipelineService` keeps the last run's overlays, which Blink and Preview Frame read.
+- `ImageProcessing` keeps the imported `FitsFileInformation` objects. The WCS write updates their headers in place, deliberately, so the table, the session and later runs all see the solution.
+
+**P2-9. The application config is shared and mutable (low).** `AppConfig` has public fields:
+- the Astrometry Config tab edits them on the EDT;
+- the solve worker reads the ASTAP path from them;
+- the report export reads the site from them.
+
+No run takes a copy. Capturing it when a run starts would fit D09's "resolved context at a documented point".
+
+**P2-10. Good patterns to keep.**
+- **The `api` package:** an immutable request with defensive copies, and a result, exception and progress interface. The CLI is a thin client of it.
+- **The `config` I/O classes:** small and tested, with staged writes (D01).
+- **The data helpers have no UI or global state:**
+  - the WCS classes;
+  - `FitsPixelConverter`, `FitsSequenceValidator` and `ExposureGroup`;
+  - `DisplayStretch`;
+  - `AutoTuneCandidatePoolBuilder` and `DetectionPipelineSupport`.
+- **Tests:** 19 in `util`, 5 in `config`, the API, the CLI and real-data integration tests.
+- **Console output:** it follows the console rule. Diagnostics go through `DebugOutput`, and the few console prints report problems. P2-4 covers the prints that hide failures from the GUI.
+
+### Class inventory: `util`
+
+| Class | Lines | Role now | Classification | Step |
+|---|---|---|---|---|
+| `AutoTuneCandidatePoolBuilder` | 316 | Frame pool for Auto-Tune | retain | — |
+| `AutoTuneSessionStore` | 204 | Auto-Tune results in the session folder | retain | S8 (called off the EDT) |
+| `AutoTunerRunner` | 80 | Runs either tuner; changes a JTransient static for the legacy one | retain | D10 |
+| `BlinkSequence` | 201 | Blink frames and their histograms | retain | — |
+| `DebugOutput` | 68 | Console policy; sets the engine's debug switch | retain | — |
+| `DetectionInputPreparation` | 288 | Headless preparation for the API | adapt boundary (becomes the shared flow) | S12 |
+| `DetectionPipelineSupport` | 204 | Helpers shared by both pipelines | retain | — |
+| `DisplayImageRenderer` | 118 | Grey display rendering; stretch limits in static fields | adapt boundary | S14 |
+| `DisplayStretch` | 185 | Stretch lookup tables | retain | — |
+| `ExposureGroup` | 149 | Exposure grouping | retain | — |
+| `FitsFileInformation` | 438 | Mutable per-file metadata, shared on purpose | retain | — |
+| `FitsFormatChecker` | 60 | Format probe | retain | — |
+| `FitsPixelConverter` | 341 | 16-bit conversions | retain | — |
+| `FitsSequenceValidator` | 156 | Sequence checks and sorting | retain | — |
+| `FitsVisualizationRenderer` | 562 | Previews and stretch of kernels | retain | — |
+| `ImageProcessing` | 1909 | Session processor, interactive and headless import, batch operations, report-size dialog | move responsibility | S10, S12, S13 |
+| `IterativeDetectionPipelineService` | 305 | Iterative passes and index | adapt boundary | S11 |
+| `MixedExposureException` | 87 | Mixed exposures with their groups | retain | S12 (an outcome rather than an exception) |
+| `PlateSolutionCorrection` | 210 | Fitted plate-solution correction | retain | — |
+| `PlateSolveService` | 544 | Solving, WCS write, artifact cleanup; a Swing dialog; one dead method | adapt boundary | S10, S11, S13 |
+| `RawImageAnnotator` | 151 | Overlay drawing; sizes in static fields | adapt boundary | S14 |
+| `ReportInclusion` | 47 | Report group choice | retain | — |
+| `StagedFile` | 137 | Safe file replacement | retain | — |
+| `StandardDetectionPipelineService` | 174 | Standard run and report; keeps the last overlays | adapt boundary | S7, S11 |
+| `StretchAlgorithm` | 88 | Stretch presets | retain | — |
+| `TrackOverlay` | 124 | Track overlay data | retain | — |
+| `VariableStarOverlay` | 126 | Variable-star overlay data | retain | — |
+| `WcsCoordinateTransformer` | 381 | WCS transforms | retain | — |
+| `WcsSolutionResolver` | 133 | Session WCS choice | retain | — |
+| `XisfImageConverter` | 940 | XISF to FITS | retain (drop the `gui` logger) | S13 |
+
+### Class inventory: `api`, `tools` and `config`
+
+| Class | Lines | Role now | Classification | Step |
+|---|---|---|---|---|
+| `api.DefaultSpacePixelsPipelineApi` | 181 | The pipeline API; builds an `ImageProcessing` per run | adapt boundary | S10, S14 |
+| `api.SpacePixelsPipelineRequest` | 257 | Immutable request | retain (optional new fields in S14) | S14 |
+| `api.SpacePixelsPipelineResult` | 176 | Result | retain | — |
+| `api.SpacePixelsPipelineApi`, `SpacePixelsPipelineException`, `SpacePixelsProgressListener`, `InputPreparationMode`, `NegativeValueHandling`, `package-info` | 170 | Interface, exception, listener, options, package docs | retain | — |
+| `tools.BatchDetectionCli` | 251 | CLI over the API; sets process-wide preferences | retain | S14 (pass preferences with the run) |
+| `tools.ArtificialStarInjector` | 267 | Test-data tool | retain | — |
+| `config.AppConfig` | 26 | Application config with public fields | retain | S7 (application scope), S14 (copied per run) |
+| `config.DetectionSettingsRules` | 103 | Cross-field rules | retain | — |
+| `config.SpacePixelsAppConfigIO` | 59 | Application config I/O | retain | — |
+| `config.SpacePixelsDetectionProfile` | 42 | Profile wrapper | retain | — |
+| `config.SpacePixelsDetectionProfileIO` | 151 | Profile I/O; loading sets a static frame limit | adapt boundary | S14 |
+| `config.SpacePixelsSettingsFiles` | 50 | Saves the two settings files together | retain | — |
+| `config.SpacePixelsVisualizationPreferences` | 44 | Rendering preferences; `applyToRuntime` writes statics | adapt boundary | S14 |
+| `config.SpacePixelsVisualizationPreferencesIO` | 40 | Their I/O | retain | — |
+
+Of the 49 classes:
+- 39 are retained (a few with small follow-ups);
+- 10 change.
+
+The main work is splitting `ImageProcessing`, and making the run's context explicit.
+
+### Steps from part 2
+
+| Step | Stage | Work | Links | Compatibility | Verification |
+|---|---|---|---|---|---|
+| S10 | C | Split `ImageProcessing`: the session part goes into the session object (S7); batch operations and import become their own services. Keep `ImageProcessing` as a compatibility facade. Remove the dead WCS and stretch methods | D06, P2-1, P2-8 | Public API and output folders unchanged | Existing `ImageProcessingTest` and API tests; same outputs on a real dataset |
+| S11 | A–B | Report failures as failures: a report-export failure, a failed iterative pass and an Astrometry.net failure each reach the user with the real reason. The first fix can be just the message (stage A); typed outcomes follow with S3 | D04, P2-4 | Successful runs unchanged | A forced export failure says so, not "aborted by user"; a failed pass is marked in the index; one dialog per solve failure |
+| S12 | C | One preparation flow with two decision policies: the GUI's questions move into a decision adapter asked on the EDT and reuse `DetectionInputPreparation`. Import outcomes become typed (ready, prepared, declined, failed) instead of empty arrays and exceptions. Folds in F07 | D08, D06, F07, P2-2, P2-3, P2-5 | Same converted pixels and headers; the headless refusal stays | Conversion outputs compared with today's; declining a conversion keeps the current session |
+| S13 | B–C | No `gui` in `util`: a logger of its own, progress through listeners, the report-size dialog moved to `gui`, no Swing in `PlateSolveService` | P2-7, P1-7 | — | A dependency rule test: `util` imports nothing from `gui` and no Swing |
+| S14 | D | An explicit run context: the application config (site), rendering options and the Auto-Tune frame limit go with the run, captured when it starts, instead of being read from the home folder and static fields | D09, D10, P2-6, P2-9 | New request fields are optional; their defaults keep today's behaviour | Two API runs in one process with different sites write different reports; the report's frame limit is the run's |
+
+S11's message fix is the second small correctness fix, after S1. Like S1, it is discussed before it is implemented.

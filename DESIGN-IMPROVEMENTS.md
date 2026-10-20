@@ -342,10 +342,10 @@ Record what the review did not cover and any deliberate exceptions. The review i
 | Part | Packages | Status |
 |---|---|---|
 | 1. Workflow core | `gui`, `tasks`, `events` | Done 2026-10-20 |
-| 2. Services and boundaries | `util`, `api`, `tools`, `config` | To do |
+| 2. Services and boundaries | `util`, `api`, `tools`, `config` | Done 2026-10-20 |
 | 3. Presentation | `util.reporting`, `util.skycatalog` | To do |
 
-**Steps found so far.** These come from part 1, and the review has the details. They are proposals; none is accepted yet.
+**Steps found so far.** These come from parts 1 and 2, and the review has the details. They are proposals; none is accepted yet.
 
 | Step | Stage | Work | Covers |
 |---|---|---|---|
@@ -358,6 +358,11 @@ Record what the review did not cover and any deliberate exceptions. The review i
 | S7 | C | A session object, and the application config loaded once | D06, D11 |
 | S8 | C | The WCS write and session-folder I/O off the EDT | D08 |
 | S9 | B–C | Retire the event bus as S2, S3 and S7 replace its events | EventBus question |
+| S10 | C | Split `ImageProcessing`: its session part into the session object, with batch operations and import as their own services. Keep it as a facade, and remove its dead methods | D06 |
+| S11 | A–B | Report failures as failures. Today a report-export failure says "aborted by user due to high track count", a failed iterative pass is still listed, and an Astrometry.net failure shows two dialogs | D04 (new evidence) |
+| S12 | C | One preparation flow for the GUI and the API, with the GUI's questions asked on the EDT and typed import outcomes. Today declining a conversion closes the current session | D08, D06, F07 |
+| S13 | B–C | No `gui` and no Swing in `util` | new |
+| S14 | D | An explicit run context: the site, rendering options and Auto-Tune frame limit go with the run, instead of coming from the home folder and static fields | D09, D10 |
 
 **Known starting points.**
 - `ApplicationWindow` owns the shared event bus.
