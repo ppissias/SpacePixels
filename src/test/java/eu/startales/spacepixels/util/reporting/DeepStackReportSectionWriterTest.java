@@ -5,6 +5,8 @@ import io.github.ppissias.jtransient.core.MasterMapGenerator;
 import io.github.ppissias.jtransient.core.PixelEncoding;
 import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
 import io.github.ppissias.jtransient.core.SlowMoverAnalyzer;
+import io.github.ppissias.jtransient.core.SourceExtractor;
+import io.github.ppissias.jtransient.core.TrackLinker;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import org.junit.Rule;
 import org.junit.Test;
@@ -80,7 +82,35 @@ public class DeepStackReportSectionWriterTest {
         assertFalse(oneFrameCard.contains("Frame Support: 100.0%"));
     }
 
+    @Test
+    public void candidateOnAReportedTrackIsMarkedAndLinkedToThatTrack() throws Exception {
+        DetectionConfig config = new DetectionConfig();
+        config.masterSlowMoverMinPixels = 10;
+        config.masterSlowMoverSigmaMultiplier = 4.0;
+        config.masterSlowMoverGrowSigmaMultiplier = 3.5;
+        config.slowMoverMedianSupportMaxOverlapFraction = 1.0;
+        SlowMoverAnalysis analysis = SlowMoverAnalyzer.analyze(
+                MasterMapGenerator.createMaximumMasterStack(createFrames()), MasterMapGenerator.createMedianMasterStack(createFrames()), config);
+        assertEquals(1, analysis.candidates.size());
+        assertFalse(render(analysis, config).contains("track-link"));
+
+        TrackLinker.Track track = new TrackLinker.Track();
+        for (int frame = 0; frame < 3; frame++) {
+            SourceExtractor.DetectedObject point = new SourceExtractor.DetectedObject(59 + frame, 48, 1000, 9);
+            point.sourceFrameIndex = frame;
+            track.points.add(point);
+        }
+        String html = render(analysis, config, List.of(track));
+        assertTrue(html.contains("<a class='track-link-badge' href='#finding-t1'>Already tracked: T1</a>"));
+        assertTrue(html.contains("<div class='track-link-note'><strong>Already reported as track <a href='#finding-t1'>T1</a>.</strong>"));
+        assertTrue(html.contains("T1 (moving object track) has 3 detections on this smear"));
+    }
+
     private String render(SlowMoverAnalysis analysis, DetectionConfig config) throws Exception {
+        return render(analysis, config, Collections.emptyList());
+    }
+
+    private String render(SlowMoverAnalysis analysis, DetectionConfig config, List<TrackLinker.Track> movingTargets) throws Exception {
         DetectionReportContext context = new DetectionReportContext(
                 new ExportVisualizationSettings(3.0, 10.0, 100, 10, 100, false, 12, 1.0f),
                 temporaryFolder.newFolder(),
@@ -101,7 +131,7 @@ public class DeepStackReportSectionWriterTest {
                 Collections.emptyList(),
                 Collections.emptyList(),
                 Collections.emptyList(),
-                Collections.emptyList());
+                movingTargets);
         StringWriter output = new StringWriter();
         DeepStackReportSectionWriter.writeSection(new PrintWriter(output), context);
         return output.toString();

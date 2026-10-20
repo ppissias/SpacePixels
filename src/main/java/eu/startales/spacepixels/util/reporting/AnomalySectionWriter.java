@@ -2,6 +2,7 @@ package eu.startales.spacepixels.util.reporting;
 
 import eu.startales.spacepixels.util.DisplayImageRenderer;
 import eu.startales.spacepixels.util.FitsFileInformation;
+import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.core.TrackLinker;
 
@@ -17,6 +18,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -30,7 +32,9 @@ final class AnomalySectionWriter {
         report.println("<h3 id='anomalies'>Single-Frame Anomalies</h3>");
         report.println("<p class='astro-note'>These candidates were detected in one exposure; their cause is unconfirmed. "
                 + "They may be flashes, satellite glints or image artifacts. Cards are ordered by frame. "
-                + "Events associated with a confirmed streak are shown with that streak.</p>");
+                + "Events associated with a confirmed streak are shown with that streak. "
+                + "An event where a moving-object track predicts its object, in a frame that track has no detection, "
+                + "is marked as likely part of that track.</p>");
         int number = 1;
         for (TrackLinker.AnomalyDetection anomaly : context.anomalies) {
             writeCard(report, context, anomaly, number++);
@@ -42,9 +46,18 @@ final class AnomalySectionWriter {
         SourceExtractor.DetectedObject point = anomaly.object;
         var bounds = new TrackCropGeometry.CropBounds(point, context.settings.getTrackCropPadding());
         String prefix = "anomaly_" + number;
+        TrackMatch track = likelyTrack(context, point);
         report.println("<div class='detection-card anomaly-card' id='finding-a" + number + "'>");
-        report.println("<div class='detection-title'>Anomaly A" + number + "</div>"
+        report.println("<div class='detection-title'>Anomaly A" + number
+                + (track != null ? ReportPresentation.trackBadge("Likely part of " + track.label, track.label) : "") + "</div>"
                 + "<div class='anomaly-subtitle'>Single-frame event</div>");
+        if (track != null) {
+            report.println(String.format(Locale.US, "<div class='track-link-note'><strong>High probability: part of moving-object track %s.</strong> "
+                    + "%s has no detection in frame %d. This event lies %.1f px from where %s's motion puts its object at this frame's time "
+                    + "(limit %.1f px), and its size and brightness match %s's nearest detection.</div>",
+                    ReportPresentation.findingLink(track.label), track.label, point.sourceFrameIndex + 1, track.distance,
+                    track.label, track.tolerance, track.label));
+        }
         writeSummary(report, context, point);
         report.println("<p class='anomaly-reason'><strong>Why it was retained:</strong> <span title='"
                 + reasonExplanation(anomaly.type) + "'>" + reasonLabel(anomaly.type) + "</span></p>");
@@ -80,6 +93,69 @@ final class AnomalySectionWriter {
                 "anomaly-" + number + "-satchecker", prefix + "_satchecker_results.json"));
         writeDetails(report, context, anomaly, bounds, prefix);
         report.println("</div>");
+    }
+
+    /** A moving-object track whose motion puts its object at the event, with the distance from that position. */
+    private record TrackMatch(String label, double distance, double tolerance) { }
+
+    /**
+     * The closest moving-object track that has no detection in the event's frame, predicts its object within the
+     * linker's prediction tolerance of the event, and has a nearest detection of matching profile (the linker's FWHM
+     * and surface-brightness limits). Only frames the track skipped and the frame just before or after it qualify.
+     */
+    private static TrackMatch likelyTrack(DetectionReportContext context, SourceExtractor.DetectedObject event) {
+        DetectionConfig config = context.config != null ? context.config : new DetectionConfig();
+        TrackMatch best = null;
+        for (int i = 0; i < context.movingTargets.size(); i++) {
+            double distance = predictionDistance(context.movingTargets.get(i), event, config);
+            if (distance <= config.predictionTolerance && (best == null || distance < best.distance)) {
+                best = new TrackMatch("T" + (i + 1), distance, config.predictionTolerance);
+            }
+        }
+        return best;
+    }
+
+    /** Distance from the track's predicted position at the event's time, or infinity when the track does not apply. */
+    private static double predictionDistance(TrackLinker.Track track, SourceExtractor.DetectedObject event, DetectionConfig config) {
+        if (track == null || track.points == null || track.points.size() < 2) return Double.POSITIVE_INFINITY;
+        List<SourceExtractor.DetectedObject> points = new ArrayList<>(track.points);
+        points.sort(Comparator.comparingInt(p -> p.sourceFrameIndex));
+        int frame = event.sourceFrameIndex;
+        if (frame < points.get(0).sourceFrameIndex - 1 || frame > points.get(points.size() - 1).sourceFrameIndex + 1) {
+            return Double.POSITIVE_INFINITY;
+        }
+        int next = 0;
+        while (next < points.size() && points.get(next).sourceFrameIndex < frame) next++;
+        if (next < points.size() && points.get(next).sourceFrameIndex == frame) return Double.POSITIVE_INFINITY;
+        // The neighbours on both sides, or the two end points next to an event just outside the track.
+        int index = Math.max(1, Math.min(points.size() - 1, next));
+        SourceExtractor.DetectedObject a = points.get(index - 1), b = points.get(index);
+        boolean timed = event.timestamp > 0 && a.timestamp > 0 && b.timestamp > 0;
+        double ta = timed ? midExposure(a) : a.sourceFrameIndex;
+        double tb = timed ? midExposure(b) : b.sourceFrameIndex;
+        double t = timed ? midExposure(event) : frame;
+        if (tb == ta) return Double.POSITIVE_INFINITY;
+        SourceExtractor.DetectedObject nearest = Math.abs(frame - a.sourceFrameIndex) <= Math.abs(b.sourceFrameIndex - frame) ? a : b;
+        if (!profileMatches(event, nearest, config)) return Double.POSITIVE_INFINITY;
+        double f = (t - ta) / (tb - ta);
+        return Math.hypot(event.x - (a.x + f * (b.x - a.x)), event.y - (a.y + f * (b.y - a.y)));
+    }
+
+    private static double midExposure(SourceExtractor.DetectedObject point) {
+        return point.timestamp + Math.max(0, point.exposureDuration) / 2.0;
+    }
+
+    /** The linker's profile check: FWHM and surface-brightness ratios within the configured limits. */
+    private static boolean profileMatches(SourceExtractor.DetectedObject a, SourceExtractor.DetectedObject b, DetectionConfig config) {
+        if (config.maxFwhmRatio > 0) {
+            double fa = Math.max(a.fwhm, 0.1), fb = Math.max(b.fwhm, 0.1);
+            if (Math.max(fa, fb) / Math.min(fa, fb) > config.maxFwhmRatio) return false;
+        }
+        if (config.maxSurfaceBrightnessRatio > 0) {
+            double sa = a.totalFlux / Math.max(a.pixelArea, 1), sb = b.totalFlux / Math.max(b.pixelArea, 1);
+            if (sa <= 0 || sb <= 0 || Math.max(sa, sb) / Math.min(sa, sb) > config.maxSurfaceBrightnessRatio) return false;
+        }
+        return true;
     }
 
     private static void writeSummary(PrintWriter report, DetectionReportContext context, SourceExtractor.DetectedObject point) {

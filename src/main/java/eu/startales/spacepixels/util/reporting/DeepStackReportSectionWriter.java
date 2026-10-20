@@ -201,12 +201,14 @@ final class DeepStackReportSectionWriter {
         }
 
         report.println("<div class='detection-card' id='finding-ds" + candidateNumber + "' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");
-        report.println("<div class='detection-title' style='color: #ff66ff; font-size: 1.1em; margin-bottom: 10px;'>Slow-Mover Candidate DS" + candidateNumber + "</div>");
+        String trackBadge = matchedTracks.isEmpty() ? "" : ReportPresentation.trackBadge("Already tracked: " + matchedTracks.get(0).label
+                + (matchedTracks.size() > 1 ? " +" + (matchedTracks.size() - 1) : ""), matchedTracks.get(0).label);
+        report.println("<div class='detection-title' style='color: #ff66ff; font-size: 1.1em; margin-bottom: 10px;'>Slow-Mover Candidate DS" + candidateNumber + trackBadge + "</div>");
         if (!matchedTracks.isEmpty()) {
-            report.println("<div class='astro-note' style='margin-top: 0; margin-bottom: 12px; border-left: 3px solid #66d9a3;'>"
-                    + "<strong>Also identified as reported track"
-                    + (matchedTracks.size() == 1 ? "" : "s")
-                    + ":</strong> "
+            report.println("<div class='track-link-note'><strong>Already reported as track"
+                    + (matchedTracks.size() == 1 ? " " : "s ")
+                    + buildSlowMoverTrackLinksHtml(matchedTracks)
+                    + ".</strong> "
                     + buildSlowMoverTrackMatchSummaryHtml(matchedTracks)
                     + "</div>");
         }
@@ -377,29 +379,41 @@ final class DeepStackReportSectionWriter {
         return Math.hypot(point.x - detection.x, point.y - detection.y);
     }
 
+    private static String buildSlowMoverTrackLinksHtml(List<SlowMoverTrackMatch> matches) {
+        StringBuilder html = new StringBuilder();
+        for (int i = 0; i < matches.size(); i++) {
+            if (i > 0) {
+                html.append(", ");
+            }
+            html.append(ReportPresentation.findingLink(matches.get(i).label));
+        }
+        return html.toString();
+    }
+
     private static String buildSlowMoverTrackMatchSummaryHtml(List<SlowMoverTrackMatch> matches) {
         StringBuilder html = new StringBuilder();
         int displayedMatches = Math.min(matches.size(), 3);
         for (int i = 0; i < displayedMatches; i++) {
             SlowMoverTrackMatch match = matches.get(i);
             if (i > 0) {
-                html.append(", ");
+                html.append(" ");
             }
-            html.append("<span style='color:#fff;'>")
-                    .append(DetectionReportGenerator.escapeHtml(match.label))
-                    .append("</span> <span style='color:#888;'>(")
+            html.append(DetectionReportGenerator.escapeHtml(match.label))
+                    .append(" (")
                     .append(DetectionReportGenerator.escapeHtml(match.categoryLabel))
-                    .append(", ")
+                    .append(") has ")
                     .append(match.overlappingTrackPoints)
-                    .append(match.overlappingTrackPoints == 1 ? " point" : " points")
-                    .append(", best ")
+                    .append(match.overlappingTrackPoints == 1 ? " detection" : " detections")
+                    .append(" on this smear, the closest ")
                     .append(String.format(Locale.US, "%.1f px", match.bestDistancePixels))
-                    .append(")</span>");
+                    .append(" from it.");
         }
         if (matches.size() > displayedMatches) {
-            html.append(" <span style='color:#777;'>+")
+            html.append(" ")
                     .append(matches.size() - displayedMatches)
-                    .append(" more</span>");
+                    .append(" more ")
+                    .append(matches.size() - displayedMatches == 1 ? "track overlaps" : "tracks overlap")
+                    .append(" it.");
         }
         return html.toString();
     }

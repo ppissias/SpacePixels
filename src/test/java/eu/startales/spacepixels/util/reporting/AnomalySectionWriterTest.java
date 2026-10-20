@@ -133,6 +133,22 @@ public class AnomalySectionWriterTest {
         assertTrue(html.contains("id='finding-a1'"));
     }
 
+    @Test public void eventWhereATrackPredictsItsObjectIsMarkedAndLinkedToThatTrack() throws Exception {
+        String html = render(context(5, 2, TrackLinker.AnomalyType.PEAK_SIGMA, List.of(0, 1, 3, 4), 0, 3));
+        assertTrue(html.contains("<a class='track-link-badge' href='#finding-t1'>Likely part of T1</a>"));
+        assertTrue(html.contains("High probability: part of moving-object track <a href='#finding-t1'>T1</a>."));
+        assertTrue(html.contains("T1 has no detection in frame 3. This event lies 0.0 px"));
+        // The frame just after the track still qualifies; the prediction extends its last step.
+        assertTrue(render(context(5, 4, TrackLinker.AnomalyType.PEAK_SIGMA, List.of(0, 1, 2, 3), 0, 3)).contains("Likely part of T1"));
+    }
+
+    @Test public void eventIsNotMarkedWhenTheTrackHasThatFrameOrThePositionOrShapeDiffers() throws Exception {
+        assertFalse(render(context(5, 2, TrackLinker.AnomalyType.PEAK_SIGMA, List.of(0, 1, 2, 3, 4), 0, 3)).contains("track-link"));
+        assertFalse(render(context(5, 2, TrackLinker.AnomalyType.PEAK_SIGMA, List.of(0, 1, 3, 4), 4, 3)).contains("track-link"));
+        assertFalse(render(context(5, 2, TrackLinker.AnomalyType.PEAK_SIGMA, List.of(0, 1, 3, 4), 0, 7)).contains("track-link"));
+        assertFalse(render(context(7, 6, TrackLinker.AnomalyType.PEAK_SIGMA, List.of(0, 1, 2, 3), 0, 3)).contains("track-link"));
+    }
+
     private String lookupUrl(String html) {
         var matcher = Pattern.compile("data-target='([^']+)'").matcher(html);
         assertTrue(matcher.find());
@@ -146,6 +162,15 @@ public class AnomalySectionWriterTest {
     }
 
     private DetectionReportContext context(int count, int event, TrackLinker.AnomalyType type) throws Exception {
+        return context(count, event, type, List.of(), 0, 3);
+    }
+
+    /**
+     * A moving-object track crossing the event position at one pixel per frame in the given frames,
+     * offset from the event by {@code offset} pixels, with detections of the given FWHM (the event's is 3).
+     */
+    private DetectionReportContext context(int count, int event, TrackLinker.AnomalyType type,
+                                           List<Integer> trackFrames, double offset, double trackFwhm) throws Exception {
         FitsFileInformation[] files = new FitsFileInformation[count];
         List<short[][]> frames = new ArrayList<>();
         for (int i = 0; i < count; i++) {
@@ -163,16 +188,27 @@ public class AnomalySectionWriterTest {
         var point = new SourceExtractor.DetectedObject(80, 60, 10000, 9);
         point.sourceFrameIndex = event; point.sourceFilename = files[event].getFileName();
         point.timestamp = files[event].getObservationTimestamp(); point.exposureDuration = 120_000;
-        point.pixelArea = 9; point.peakSigma = 25; point.integratedSigma = 40; point.elongation = 1.2;
+        point.pixelArea = 9; point.peakSigma = 25; point.integratedSigma = 40; point.elongation = 1.2; point.fwhm = 3;
         point.rawPixels = List.of(new SourceExtractor.Pixel(80, 60, 12000));
         JsonObject json = new JsonObject(); json.add("object", new Gson().toJsonTree(point));
         if (type != null) json.addProperty("type", type.name());
         var anomaly = new Gson().fromJson(json, TrackLinker.AnomalyDetection.class);
+        List<TrackLinker.Track> tracks = new ArrayList<>();
+        if (!trackFrames.isEmpty()) {
+            var track = new TrackLinker.Track();
+            for (int frame : trackFrames) {
+                var p = new SourceExtractor.DetectedObject(80 + (frame - event), 60 + offset, 10000, 9);
+                p.sourceFrameIndex = frame; p.timestamp = files[frame].getObservationTimestamp(); p.exposureDuration = 120_000;
+                p.pixelArea = 9; p.fwhm = trackFwhm;
+                track.points.add(p);
+            }
+            tracks.add(track);
+        }
         var astrometry = new DetectionReportAstrometry.Context(files, WcsSolutionResolver.resolveUncorrected(null, files),
                 new DetectionReportAstrometry.ObserverSite(0, 0, 0, "Test location"), null, null, START);
         return new DetectionReportContext(new ExportVisualizationSettings(3, 10, 300, 90, 100, false, 12, 1),
                 temporary.newFolder(), frames, files, new DetectionConfig(), astrometry, frames.get(0), null,
                 new boolean[120][160], null, null, List.of(), List.of(), null, List.of(), List.of(),
-                List.of(anomaly), List.of(), List.of(), List.of());
+                List.of(anomaly), List.of(), List.of(), tracks);
     }
 }

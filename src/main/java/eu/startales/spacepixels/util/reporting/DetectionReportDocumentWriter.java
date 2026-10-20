@@ -134,6 +134,12 @@ final class DetectionReportDocumentWriter {
             // Links, navigation and section anchors
             "a { color: #7fc2ff; }",
             "a:visited { color: #a9c9ff; }",
+            // Findings that belong to a reported track
+            ".track-link-note { margin: 0 0 14px; padding: 10px 14px; background: #20362b; border: 1px solid #3e7a5a; border-left: 4px solid #66d9a3; border-radius: 6px; color: #d5efe1; font-size: 14px; line-height: 1.5; }",
+            ".track-link-note strong { color: #ffffff; }",
+            ".track-link-note a, .track-link-note a:visited { color: #8ff0bd; font-weight: bold; }",
+            "a.track-link-badge, a.track-link-badge:visited { display: inline-block; background: #2f8a5f; color: #ffffff; font-size: 0.7em; font-weight: bold; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle; text-decoration: none; }",
+            "a.track-link-badge:hover { background: #3aa673; }",
             "[id] { scroll-margin-top: calc(var(--report-toolbar-height, 120px) + 12px); }",
             ".report-toolbar { position: sticky; top: 0; z-index: 50; margin: -10px -30px 24px; padding: 10px 30px; background: rgba(32, 34, 36, 0.98); border-bottom: 1px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.35); }",
             ".report-nav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }",
