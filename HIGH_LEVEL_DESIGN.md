@@ -288,6 +288,14 @@ Owns:
 
 Launches most GUI background tasks.
 
+**Shared commands.** Detect Moving Targets, Auto-Tune, Preview Frame, Blink Selected and Plate Solve Selected each have several entry points: the button, a shortcut (Ctrl+D, Ctrl+T, Ctrl+P, Ctrl+B), the table's right-click menu, and the Overview's buttons and Ctrl+D on the Detection Settings tab.
+- **One action per command.** Each command is one `CommandAction` (a Swing `Action`) that all its entry points use, so they show the same caption and tooltip, are enabled together, and run the same code.
+- **One rule set.** `CommandAvailability` decides from facts (frames, monochrome, selection, the selected frame's solution, a job or blink holding the window), never from other controls. It gives a reason for each unavailable command, which the tooltip shows.
+- **Refreshing.** `refreshCommands()` runs with every workflow refresh (import, selection, table changes) and when the window locks or unlocks.
+- **Running.** An action checks availability again when it runs, so a late shortcut does nothing.
+- **Blink.** While a blink loads or plays, the Blink command reads **Stop Blinking** and stays available to stop it.
+- **The lock.** `lockUI` leaves these buttons to their actions; it still saves and disables the other controls.
+
 ### `DetectionConfigurationPanel`
 
 Detection settings, Auto-Tune, preview, and persistence facade.

@@ -138,6 +138,7 @@ The report never changes the engine's results. The report's live lookups (SatChe
 | Pattern | Where |
 |---|---|
 | Command with a coordinator | `Job` and `JobCoordinator`: one admission rule, one outcome per job |
+| Shared command (Swing `Action`) | `CommandAction`, enabled by `CommandAvailability`: one action for a command's button, shortcut, menu item and Overview button |
 | Typed outcome | `JobOutcome` (completed, declined, cancelled, failed) |
 | Observer, with explicit listeners | `SessionListener`, `JobCoordinator.Listener`, `SkyCatalogueModel` |
 | Facade | `ImageProcessing`, in front of the import, pipeline and plate-solve services |
