@@ -38,6 +38,7 @@ import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -130,6 +131,8 @@ public class DetectionConfigurationPanel extends JPanel {
     private final List<SettingRow> settingRows = new ArrayList<>();
     // The title of each number setting, in page order, for the messages about its field.
     private final Map<JSpinner, String> inputTitles = new LinkedHashMap<>();
+    // The description of each core setting, as the Overview shows it.
+    private final Map<JSpinner, String> coreDescriptions = new HashMap<>();
     // The spinners of each pair of settings kept in order: the first, then the second.
     private final Map<DetectionSettingsRules.Pair, JSpinner[]> pairedSpinners = new EnumMap<>(DetectionSettingsRules.Pair.class);
     private final JLabel footerStateLabel = new JLabel(" ");
@@ -277,6 +280,23 @@ public class DetectionConfigurationPanel extends JPanel {
                                 JSpinner spinner, boolean setByLegacyTuner) {
         overview.addCoreSetting(group, title, description, spinner, setByLegacyTuner);
         inputTitles.put(spinner, title);
+        coreDescriptions.put(spinner, description);
+    }
+
+    /** A setting that another window edits together with this tab: its spinner there shares the model. */
+    record SharedSetting(String title, String description, SpinnerNumberModel model) {
+    }
+
+    /**
+     * The per-frame detection thresholds, for Preview Frame: Detection Sigma, Grow Sigma and Min Detection Pixels.
+     * A spinner on one of their models edits the setting itself, so its edits are ordinary edits of this tab.
+     */
+    List<SharedSetting> perFrameDetectionSettings() {
+        List<SharedSetting> settings = new ArrayList<>();
+        for (JSpinner spinner : new JSpinner[]{spinDetectionSigma, spinGrowSigma, spinMinPixels}) {
+            settings.add(new SharedSetting(inputTitles.get(spinner), coreDescriptions.get(spinner), (SpinnerNumberModel) spinner.getModel()));
+        }
+        return settings;
     }
 
     /** The analyses of a run, each switched on the Overview and in step with the checkbox on its detailed tab. */
@@ -731,6 +751,15 @@ public class DetectionConfigurationPanel extends JPanel {
         if (!adjustments.isEmpty()) {
             showFooterNote(String.join(" · ", adjustments));
         }
+        return jTransientConfig.clone();
+    }
+
+    /**
+     * A copy of the settings in use, for a window that follows the edits (Preview Frame). Unlike
+     * {@link #checkedSettings} it changes nothing on this tab: every edit is applied as it is made, keeping the pairs
+     * in order, and a field with invalid text keeps its last value.
+     */
+    DetectionConfig settingsInUse() {
         return jTransientConfig.clone();
     }
 

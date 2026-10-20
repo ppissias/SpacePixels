@@ -65,6 +65,7 @@ abstract class SequenceViewerFrame extends JFrame {
     private final JCheckBox detectionsBox = new JCheckBox("Show detections", true);
     private final JCheckBox variablesBox = new JCheckBox("Show variable stars", true);
     private final JPanel stretchRow = new JPanel(new BorderLayout());
+    private final JPanel controlRows = new JPanel();
     private final JLabel frameLabel = new JLabel(" ");
     private final JLabel cursorLabel = new JLabel(" ");
     private final ViewerSupport.CursorReadout cursorReadout = new ViewerSupport.CursorReadout();
@@ -81,6 +82,8 @@ abstract class SequenceViewerFrame extends JFrame {
     private int shownIndex = -1;
     private Result shown;
     private SwingWorker<Result, Void> worker;
+    /** Counts the refreshes asked for, so a frame prepared before the last one is prepared again. */
+    private int refreshes;
     private Point cursorPixel;
 
     /**
@@ -168,6 +171,10 @@ abstract class SequenceViewerFrame extends JFrame {
     /** Prepares a frame for display; runs in the background. */
     protected abstract Result prepare(int index) throws Exception;
 
+    /** Called on the Swing thread just before a frame is prepared, to take what {@link #prepare} needs. */
+    protected void preparing() {
+    }
+
     /** Called when the window closes, to let go of what the subclass holds. */
     protected void released() {
     }
@@ -187,6 +194,28 @@ abstract class SequenceViewerFrame extends JFrame {
     // ==========================================
     // OPEN AND CLOSE
     // ==========================================
+
+    /** Adds a row of controls under the first one. Its fields can take the keyboard focus, unlike the other controls. */
+    protected void addControlRow(JComponent row) {
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        controlRows.add(row, 1);
+        controlRows.revalidate();
+    }
+
+    /** Gives the keyboard focus back to the frame, so the window's keys work again. */
+    protected void focusFrame() {
+        view.requestFocusInWindow();
+    }
+
+    /** Prepares the frame on show again, for example with changed settings; it stays on show until the new one is ready. */
+    protected void refresh() {
+        if (!open) {
+            return;
+        }
+        refreshes++;
+        frameLabel.setText(frameText(current, null) + " · " + busyText);
+        prepareCurrent();
+    }
 
     /** Shows the window at this frame. {@code files} are the frames of the session, which can share a plate solution. */
     protected void openAt(int index, StretchPanel stretchPanel, FitsFileInformation[] files) {
@@ -288,13 +317,12 @@ abstract class SequenceViewerFrame extends JFrame {
             row.add(skyControl);
         }
 
-        JPanel controls = new JPanel();
-        controls.setLayout(new BoxLayout(controls, BoxLayout.Y_AXIS));
+        controlRows.setLayout(new BoxLayout(controlRows, BoxLayout.Y_AXIS));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         stretchRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        controls.add(row);
-        controls.add(stretchRow);
-        return controls;
+        controlRows.add(row);
+        controlRows.add(stretchRow);
+        return controlRows;
     }
 
     // ==========================================
@@ -321,13 +349,15 @@ abstract class SequenceViewerFrame extends JFrame {
 
     /**
      * Prepares the frame asked for. One frame is prepared at a time: keys pressed meanwhile only move the target,
-     * and the frame then asked for is prepared next.
+     * and the frame then asked for is prepared next. So is the frame on show after a refresh.
      */
     private void prepareCurrent() {
         if (worker != null) {
             return;
         }
         int index = current;
+        int refresh = refreshes;
+        preparing();
         worker = new SwingWorker<Result, Void>() {
             @Override
             protected Result doInBackground() throws Exception {
@@ -343,7 +373,7 @@ abstract class SequenceViewerFrame extends JFrame {
                 if (!open) {
                     return;
                 }
-                if (index != current) {
+                if (index != current || refresh != refreshes) {
                     prepareCurrent();
                     return;
                 }

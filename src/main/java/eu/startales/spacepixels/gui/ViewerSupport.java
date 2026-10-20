@@ -16,6 +16,7 @@ import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
 
 import javax.swing.*;
+import javax.swing.text.JTextComponent;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.util.ArrayList;
@@ -67,12 +68,18 @@ final class ViewerSupport {
         bind(rootPane, "1", "actualSize", () -> view.zoomToScale(1.0));
     }
 
+    /** Binds a key of the window. While a text field has the focus, the key goes to the field: "1" typed there does not zoom. */
     static void bind(JRootPane rootPane, String key, String name, Runnable action) {
         rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(key), name);
         rootPane.getActionMap().put(name, new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 action.run();
+            }
+
+            @Override
+            public boolean isEnabled() {
+                return !(KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() instanceof JTextComponent);
             }
         });
     }

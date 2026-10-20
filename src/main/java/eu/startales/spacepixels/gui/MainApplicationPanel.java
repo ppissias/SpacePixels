@@ -1387,6 +1387,9 @@ public class MainApplicationPanel extends JPanel {
         savedComponentStates.clear();
         uiLocked = false;
         refreshWorkflowStatus();
+        if (detectionSequenceFrame != null) {
+            detectionSequenceFrame.setSettingsEditable(true);
+        }
 
         mainAppWindow.setMenuState(true);
         mainAppWindow.getTabbedPane().setEnabledAt(1, true);
@@ -1398,6 +1401,10 @@ public class MainApplicationPanel extends JPanel {
         uiLocked = true;
         savedComponentStates.clear();
         saveAndDisableRecursive(this);
+        // The settings do not change while a job runs: the Detection Settings tab is locked, and so is Preview Frame.
+        if (detectionSequenceFrame != null) {
+            detectionSequenceFrame.setSettingsEditable(false);
+        }
 
         mainAppWindow.setMenuState(false);
         mainAppWindow.getTabbedPane().setEnabledAt(1, false);
@@ -1491,8 +1498,8 @@ public class MainApplicationPanel extends JPanel {
     private void enableControlsProcessingBlinkingFinished() { unlockUI(); }
 
     /**
-     * Opens Preview Frame on the selected frame, with the detection settings as they are now; later edits apply
-     * when Preview Frame is opened again. The Detection Settings button uses this same window.
+     * Opens Preview Frame on the selected frame. It detects each frame with the settings in use at that moment, and
+     * changes its per-frame thresholds itself. The Detection Settings button uses this same window.
      */
     void previewSelectedFrame() {
         FitsFileTableModel model = (FitsFileTableModel) table.getModel();
@@ -1510,20 +1517,16 @@ public class MainApplicationPanel extends JPanel {
             startIndex = 0;
         }
 
-        DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Preview Frame did not open.");
-        if (settings == null) {
+        // Invalid text in a settings field is shown there first, as for a run.
+        if (mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Preview Frame did not open.") == null) {
             return;
         }
         if (detectionSequenceFrame == null) {
             detectionSequenceFrame = new DetectionSequenceFrame(mainAppWindow);
+            detectionSequenceFrame.setSettingsEditable(!uiLocked);
         }
 
-        detectionSequenceFrame.openSequence(
-                allFiles,
-                startIndex,
-                settings,
-                mainAppWindow.getStretchPanel()
-        );
+        detectionSequenceFrame.openSequence(allFiles, startIndex, mainAppWindow.getStretchPanel());
     }
 
     public void setDetectionButtonsEnabled() {
