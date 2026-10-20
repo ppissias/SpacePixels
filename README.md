@@ -10,6 +10,7 @@ More resources:
 - [SpacePixels Website](https://startales.eu/SpacePixels/)
 - [User Manual](MANUAL.md)
 - [Java API Guide](API.md)
+- [Developer overview](DEVELOPER.md)
 - [SpacePixels Wiki](https://github.com/ppissias/SpacePixels/wiki) 
 
 Download the latest packaged release from:

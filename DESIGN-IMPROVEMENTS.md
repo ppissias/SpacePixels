@@ -361,7 +361,7 @@ The coverage limits and the deliberate exceptions are listed in the [review summ
 | S3 | B | **Done 2026-10-20**, with S2: every job returns a `JobOutcome` (completed, declined or failed). Typed outcomes per job kind | D04 |
 | S4 | B | Shared actions and availability: one Detect action; tabs and solve results addressed by identity. Solve results are matched by file since the plate-solve slice (2026-10-20) | D07 |
 | S5 | B | **Done 2026-10-20 (`01d983e`, with S1).** Use `BatchStretchTask` instead of its inline copy | — |
-| S6 | B–C | No GUI in `tasks`: their own logger and out-of-memory policy, and results returned instead of windows and dialogs opened | new |
+| S6 | B–C | **Done 2026-10-20.** No GUI in `tasks`: their own logger and out-of-memory policy, and results returned instead of windows and dialogs opened. `DependencyRulesTest` keeps `tasks` and `jobs` free of `gui` and Swing | new |
 | S7 | C | A session object, and the application config loaded once | D06, D11 |
 | S8 | C | The WCS write and session-folder I/O off the EDT. **The WCS write is done (2026-10-20)**: it runs as a job. The session-folder reads and writes (sky catalogue and correction on import, Auto-Tune results, the correction switch) are still on the EDT | D08 |
 | S9 | B–C | **Done 2026-10-20 (`23acc9b`)**: all 18 events, the bus and the Guava dependency are removed. Jobs report through the coordinator; a new session reaches the panels through the window's session listeners | EventBus decision |

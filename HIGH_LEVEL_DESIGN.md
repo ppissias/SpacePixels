@@ -10,6 +10,7 @@ Purpose:
 Related documents:
 - User workflows and operational behavior: [MANUAL.md](MANUAL.md)
 - Public embedding surface: [API.md](API.md)
+- A two-page summary of the design, its patterns and principles: [DEVELOPER.md](DEVELOPER.md)
 - Improvement status, sequencing and acceptance criteria: [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md)
 - JTransient algorithm, pipeline, config, and Auto-Tune details live in the JTransient project docs.
 
@@ -98,7 +99,7 @@ The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker
 - **The window's lock:** its listener, in `MainApplicationPanel`, locks the window and shows the progress dialog on admission, and unlocks the window when the job ends.
 - **Progress:** it reaches the window only while the job is current.
 - **Outcome:** it is delivered exactly once, on the UI thread, after the unlock.
-- **Failures:** an exception or `Error` becomes a failure. Running out of memory leaves the worker for the application's uncaught-exception handler (`JobFailures`).
+- **Failures:** an exception or `Error` becomes a failure. Running out of memory leaves the worker for the application's uncaught-exception handler. The handler marks it in `JobFailures`, and every other running job then stops at its next progress report while SpacePixels closes.
 
 Each `JobHandle` carries the session the job was started for. Until there is a session object, that is the `ImageProcessing` instance.
 
@@ -785,6 +786,7 @@ JTransient:
 - Prefer focused services behind `ImageProcessing` for new backend capabilities.
 - Keep detection config and visualization preferences separate.
 - Keep GUI-only prompting out of headless/API paths.
+- Keep `jobs` and `tasks` free of Swing and the `gui` package; `DependencyRulesTest` checks this.
 - Replace files through `StagedFile`; never delete a user's file before its replacement is complete.
 - Start every GUI run and save from `DetectionConfigurationPanel.checkedSettings(...)`; never hand a task the panel's live `DetectionConfig`.
 - Do not add concurrent Auto-Tune API execution without removing the shared JTransient sample-size mutation.
@@ -797,7 +799,6 @@ Accepted current debt:
 - `DetectionConfigurationPanel` and `MainApplicationPanel` still combine Swing view logic and workflow control.
 - `DetectionReportGenerator` still contains substantial static rendering/helper behavior even though major sections have been split into writers.
 - Some visualization settings are static runtime values captured at report-export time.
-- Some jobs still read the GUI's logger and its out-of-memory flag from `ApplicationWindow` (DESIGN-IMPROVEMENTS S6).
 
 Preferred refactor direction:
 
