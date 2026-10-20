@@ -329,13 +329,35 @@ The pattern is close to a modest **model–view–presenter** arrangement: a sta
   - who owns its state and resources, and which thread it runs on.
 - **Per class:** **retain**, **move responsibility**, **adapt boundary** or **investigate**, with the reason. Propose a change only where the code conflicts with the target.
 
-**Result.** The review produces a list of steps, kept in this document. Each step has:
+**Result.** The class inventory, the traced paths and the evidence are kept in [docs/architecture-review.md](docs/architecture-review.md). The steps they lead to are listed below. Each step has:
 - a delivery stage;
 - what must stay compatible;
 - how the step will be verified;
 - a link to D01–D13 where those already cover the work.
 
 Record what the review did not cover and any deliberate exceptions. The review is complete when every production class and every entry path is accounted for.
+
+**Progress.**
+
+| Part | Packages | Status |
+|---|---|---|
+| 1. Workflow core | `gui`, `tasks`, `events` | Done 2026-10-20 |
+| 2. Services and boundaries | `util`, `api`, `tools`, `config` | To do |
+| 3. Presentation | `util.reporting`, `util.skycatalog` | To do |
+
+**Steps found so far.** These come from part 1, and the review has the details. They are proposals; none is accepted yet.
+
+| Step | Stage | Work | Covers |
+|---|---|---|---|
+| S1 | A | Every job ends with a finished event or the out-of-memory exit. Today some failures leave the UI locked. | D04 (new evidence) |
+| S2 | B | A job coordinator: admission before the worker starts, and job and session identity | D02 |
+| S3 | B | Typed outcomes per job kind, instead of the shared detection-finished event | D04 |
+| S4 | B | Shared actions and availability: one Detect action; tabs and solve results addressed by identity | D07 |
+| S5 | B | Use `BatchStretchTask` instead of its inline copy | — |
+| S6 | B–C | No GUI in `tasks`: their own logger and out-of-memory policy, and results returned instead of windows and dialogs opened | new |
+| S7 | C | A session object, and the application config loaded once | D06, D11 |
+| S8 | C | The WCS write and session-folder I/O off the EDT | D08 |
+| S9 | B–C | Retire the event bus as S2, S3 and S7 replace its events | EventBus question |
 
 **Known starting points.**
 - `ApplicationWindow` owns the shared event bus.
@@ -360,6 +382,18 @@ The maintainer asked whether SpacePixels should keep Guava's `EventBus` or move 
 - **Publishers:** 13 classes post these events: the task classes, `BlinkFrame`, `MainApplicationPanel` and `DetectionConfigurationPanel`.
 - **Subscribers:** 24 `@Subscribe` methods in four GUI classes receive them: `ApplicationWindow`, `MainApplicationPanel`, `DetectionConfigurationPanel` and `StretchPanel`. All four are registered for the window's lifetime, and each method moves its work to the EDT itself.
 - **The dependency:** Guava is used for nothing else, so retiring the bus would also remove the dependency.
+
+**Evidence from part 1 of the review (2026-10-20).**
+- 14 of the 18 events have a single subscriber, `MainApplicationPanel`. They carry one job's start, progress and end.
+- Only two kinds of message have several listeners:
+  - "the session changed" (import, 4 subscribers);
+  - "tuning started or ended" (2 subscribers).
+- Each use has a natural replacement in the target design:
+  - the job messages: a job handle (D02/D04);
+  - the session change: a notification from the session model (D06);
+  - the tuning state: job state.
+
+This supports option 2. See [the review](docs/architecture-review.md#the-event-bus-in-part-1).
 
 **For keeping it.**
 - It works, and it is small and contained.
