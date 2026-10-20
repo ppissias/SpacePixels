@@ -10,6 +10,8 @@ The note shows usable point count, first-to-last usable time span, largest gap, 
 
 There is no green “verified” result. A numerical match does not establish the physical origin of the variability.
 
+Without a VSX match, the candidate table and cards can show an ordinary catalogue-star identity: an available SIMBAD proper name, or the nearest Gaia DR3 star's designation. Matches use at most 5 arcsec and the existing Gaia proper-motion correction; the source and separation are shown. These identities do not count as VSX matches or trigger variable-period/amplitude comparisons. VSX lookups remain available, keep this fallback on empty or failed results, and give a positive VSX identification precedence in the table. New catalogue fetches retain Gaia source IDs as strings; older saved catalogues remain supported without inventing missing identifiers.
+
 ## Review rule and limitations
 
 An amplitude review prompt requires finite observed variation R, positive catalogue amplitude A, a finite nonnegative empirical expected scatter s, one known session filter, a known amplitude passband, an unambiguous catalogue match, and usable catalogue values without limit/uncertainty flags or an identified source discrepancy.

@@ -363,7 +363,7 @@ The same 61-megapixel session with photometry switched on:
 
 The verdict **Ready** means the data passed the linearity checks. SpacePixels measured 53,869 stars, scored 43,859 of them and reported 45 high-confidence and 22 possible variable stars. A **Limited** or **Not ready** verdict says in plain words why, and for Not ready what could help (for example unstretched frames or a longer sequence).
 
-The candidates are first listed in a table: tier, position, observed variation in this session, the shape of the change (faded, brightened, dipped and recovered…) and any failed check. When the sky catalogue was fetched before the detection, the **Known As** column is filled as the report is written, for every candidate the catalogue contains. **Look up the N others in VSX** looks up only the rest; this needs SpacePixels running, and the results are saved into the report. In this session, 52 of the 67 candidates were already in the catalogue, so the button reads **Look up the 15 others in VSX**:
+The candidates are first listed in a table: tier, position, observed variation in this session, the shape of the change (faded, brightened, dipped and recovered…) and any failed check. When the sky catalogue was fetched before the detection, the **Known As** column shows a matched VSX variable name. Without a VSX match, it shows a nearby catalogue star's proper name or Gaia DR3 designation when available, with the source and angular separation. This identifies a catalogue star without claiming it is a known variable. **Look up the N others in VSX** still includes these candidates; this needs SpacePixels running, and the results are saved into the report. A positive VSX result takes precedence; an empty or failed lookup keeps the catalogue star's name. In this session, 52 of the 67 candidates were already in VSX in the saved catalogue, so the button reads **Look up the 15 others in VSX**:
 
 **Observed variation in this session** is the 95th minus the 5th percentile of the usable differential magnitudes over the measured time span. It is not a full-cycle amplitude. **Catalogue range** and **Catalogue amplitude** refer to the listed catalogue passbands; filter, phase and time coverage can make them differ from the session measurement. A small fraction of an orbital period can still contain a substantial eclipse.
 
@@ -374,6 +374,8 @@ An amber **review amplitude** note is a conservative screening prompt: the obser
 **Review source metadata** identifies a source-verified catalogue discrepancy. The original VSX values remain visible alongside the publication and any unit conversion. Older saved catalogues still load; their shared passband and missing uncertainty metadata are identified as provisional. Fetching the sky catalogue again supplies the additional metadata when the service is available.
 
 ![The candidate table. Known As comes from the sky catalogue; V2 was not in it](docs/images/manual/variable-stars-table.png)
+
+The same catalogue-star fallback appears on detailed candidate cards. Older saved sky catalogues remain usable; fetch the catalogue again to add Gaia identifiers, which older versions did not retain. No catalogue lookup is performed automatically during report generation, and the names do not alter measured variation or confidence.
 
 Each candidate then has a card with a one-line summary and its light curve, drawn above three constant stars of similar brightness for comparison; **Statistics** opens the detailed measures:
 
