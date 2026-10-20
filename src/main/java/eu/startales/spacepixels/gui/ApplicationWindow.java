@@ -284,7 +284,9 @@ public class ApplicationWindow {
             return;
         }
         if (outcome instanceof JobOutcome.Declined<FitsImportTask.Result>) {
-            clearImportedDataset();
+            // Nothing was imported, for example because a conversion was declined: the open session stays.
+            mainApplicationPanel.showStatus(imagePreProcessing != null
+                    ? "Nothing imported; the open session is unchanged." : "No files loaded");
         } else if (outcome instanceof JobOutcome.Failed<FitsImportTask.Result> failed) {
             mainApplicationPanel.showStatus("Import failed");
             JOptionPane.showMessageDialog(frmIpodImage,
@@ -350,16 +352,6 @@ public class ApplicationWindow {
     }
 
     // --- HELPER METHODS ---
-
-    private void clearImportedDataset() {
-        if (this.imagePreProcessing != null) {
-            this.imagePreProcessing.close();
-        }
-        this.imagePreProcessing = null;
-        mainApplicationPanel.setTableModel(new FitsFileTableModel(new FitsFileInformation[0]));
-        setSessionTabsEnabled(false);
-        fireSessionChanged(new FitsFileInformation[0]);
-    }
 
     /** The tabs that need a session: Astrometry Config, Image Stretch and Detection Settings. */
     private void setSessionTabsEnabled(boolean state) {
