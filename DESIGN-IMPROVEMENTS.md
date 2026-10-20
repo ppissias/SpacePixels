@@ -356,24 +356,24 @@ The coverage limits and the deliberate exceptions are listed in the [review summ
 
 | Step | Stage | Work | Covers |
 |---|---|---|---|
-| S1 | A | Every job ends with a finished event or the out-of-memory exit. Today some failures leave the UI locked. | D04 (new evidence) |
+| S1 | A | **Done 2026-10-20 (`01d983e`).** Every job ends with a finished event or the out-of-memory exit; before, some failures left the UI locked. | D04 (new evidence) |
 | S2 | B | A job coordinator: admission before the worker starts, and job and session identity | D02 |
 | S3 | B | Typed outcomes per job kind, instead of the shared detection-finished event | D04 |
 | S4 | B | Shared actions and availability: one Detect action; tabs and solve results addressed by identity | D07 |
-| S5 | B | Use `BatchStretchTask` instead of its inline copy | — |
+| S5 | B | **Done 2026-10-20 (`01d983e`, with S1).** Use `BatchStretchTask` instead of its inline copy | — |
 | S6 | B–C | No GUI in `tasks`: their own logger and out-of-memory policy, and results returned instead of windows and dialogs opened | new |
 | S7 | C | A session object, and the application config loaded once | D06, D11 |
 | S8 | C | The WCS write and session-folder I/O off the EDT | D08 |
 | S9 | B–C | Retire the event bus as S2, S3 and S7 replace its events (accepted 2026-10-20) | EventBus decision |
 | S10 | C | Split `ImageProcessing`: its session part into the session object, with batch operations and import as their own services. Keep it as a facade, and remove its dead methods | D06 |
-| S11 | A–B | Report failures as failures. Today a report-export failure says "aborted by user due to high track count", a failed iterative pass is still listed, and an Astrometry.net failure shows two dialogs | D04 (new evidence) |
+| S11 | A–B | **Done 2026-10-20 (`d255b68`), the message fix.** Report failures as failures. Before, a report-export failure said "aborted by user due to high track count", a failed iterative pass was still listed, and an Astrometry.net failure showed two dialogs. Typed outcomes follow with S3 | D04 (new evidence) |
 | S12 | C | One preparation flow for the GUI and the API, with the GUI's questions asked on the EDT and typed import outcomes. Today declining a conversion closes the current session | D08, D06, F07 |
 | S13 | B–C | No `gui` and no Swing in `util` | new |
 | S14 | D | An explicit run context: the site, rendering options and Auto-Tune frame limit go with the run, instead of coming from the home folder and static fields | D09, D10 |
 | S15 | D | One source of finding labels and categories. Today T1, ST1, A1… are computed in seven places that agree only by walking the tracks in the same order | D09 |
 | S16 | D | Prepared diagnostics with explicit states (*measured*, *unavailable*, *failed*), and one failure policy for optional report sections. Today a failed field-depth measurement reads as "not measured", and other section failures abort the report | D09 |
 
-S1 and S11 are small correctness fixes that need nothing else first. They are discussed before they are implemented.
+S1 and S11 were the small correctness fixes that needed nothing else first; both are done.
 
 **Known starting points.**
 - `ApplicationWindow` owns the shared event bus.
