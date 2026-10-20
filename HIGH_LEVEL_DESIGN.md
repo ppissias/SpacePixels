@@ -95,7 +95,7 @@ The detection profile wraps JTransient `DetectionConfig` plus SpacePixels' Auto-
 
 Small EventBus message types for GUI/task coordination.
 
-These events carry progress, lifecycle, and result notifications across background tasks and Swing panels. They are not part of the public API. Jobs that move to the job coordinator lose their events. Only import and Blink still use events.
+These events carry progress, lifecycle, and result notifications across background tasks and Swing panels. They are not part of the public API. Jobs that move to the job coordinator lose their events. Only import still uses events.
 
 ### `eu.startales.spacepixels.jobs`
 
@@ -140,7 +140,7 @@ The GUI layer currently combines view and controller behavior in several panels.
 Background runnables launched by the GUI.
 
 Tasks are the boundary between Swing actions and longer-running work. They run in one of two ways:
-- **Jobs under the `JobCoordinator`:** `DetectionTask`, `IterativeDetectionTask`, `ManualTransientInspectionTask`, `StarMaskStackTask`, `BatchConvertMonoTask`, `BatchStretchTask`, `PlateSolveTask` and `AutoTuneTask`. They return their result, and the window opens what follows (the report question, the inspection view, the Star Mask Explorer, the offer to import the mono folder, the offer to write the WCS solution, the tuned settings on the Overview).
+- **Jobs under the `JobCoordinator`:** `DetectionTask`, `IterativeDetectionTask`, `ManualTransientInspectionTask`, `StarMaskStackTask`, `BatchConvertMonoTask`, `BatchStretchTask`, `PlateSolveTask`, `AutoTuneTask` and `BlinkImagesTask`. They return their result, and the window opens what follows (the report question, the inspection view, the Star Mask Explorer, the offer to import the mono folder, the offer to write the WCS solution, the tuned settings on the Overview, the blink window). While a blink plays, the blink window holds the main window's lock until it closes.
 - **Through the Guava `EventBus`:** the others post lifecycle and progress events to the GUI.
 
 Main tasks:
@@ -755,7 +755,7 @@ Replacing files:
 
 Desktop:
 
-- **All long jobs except import and Blink** run under `JobCoordinator`:
+- **All long jobs except import** run under `JobCoordinator`:
   - admission and locking happen on the EDT before the worker starts;
   - progress and the single outcome come back on the EDT.
 - **Other long work** runs in explicit background `Thread`s around task `Runnable`s that post EventBus messages. Their subscribers move Swing updates onto the EDT.
