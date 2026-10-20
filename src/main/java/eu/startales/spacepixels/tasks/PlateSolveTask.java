@@ -10,6 +10,7 @@
 
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.jobs.JobFailures;
 import com.google.common.eventbus.EventBus;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import eu.startales.spacepixels.gui.ApplicationWindow;
@@ -51,7 +52,7 @@ public class PlateSolveTask implements Runnable {
             eventBus.post(new SolveFinishedEvent(rowIndex, result));
 
         } catch (Throwable ex) {
-            String message = TaskFailures.rethrowOutOfMemory(ex);
+            String message = JobFailures.rethrowOutOfMemory(ex);
             ApplicationWindow.logger.log(Level.SEVERE, "Cannot solve image", ex);
             // Post a failure event
             eventBus.post(new SolveFinishedEvent(rowIndex, null, message));

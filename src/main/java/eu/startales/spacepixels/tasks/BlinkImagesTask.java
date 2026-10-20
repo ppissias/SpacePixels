@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.jobs.JobFailures;
 import com.google.common.eventbus.EventBus;
 import eu.startales.spacepixels.events.BlinkFinishedEvent;
 import eu.startales.spacepixels.events.BlinkLoadProgressEvent;
@@ -52,9 +53,9 @@ public class BlinkImagesTask implements Runnable {
             eventBus.post(new BlinkSequenceLoadedEvent(new BlinkSequence(frames), files));
         } catch (Throwable t) {
             // Running out of memory here is recoverable: the frames read so far are released with the task.
-            eventBus.post(new BlinkFinishedEvent(false, TaskFailures.isOutOfMemory(t)
+            eventBus.post(new BlinkFinishedEvent(false, JobFailures.isOutOfMemory(t)
                     ? "Not enough memory to hold " + files.length + " frames. Blink fewer frames, or start SpacePixels with more memory."
-                    : TaskFailures.message(t)));
+                    : JobFailures.message(t)));
         }
     }
 }

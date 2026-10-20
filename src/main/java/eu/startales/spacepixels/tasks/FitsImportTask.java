@@ -10,6 +10,7 @@
 
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.jobs.JobFailures;
 import com.google.common.eventbus.EventBus;
 import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
 import eu.startales.spacepixels.events.FitsImportFinishedEvent;
@@ -87,7 +88,7 @@ public class FitsImportTask implements Runnable {
     }
 
     private void postFailure(Throwable failure) {
-        String message = TaskFailures.rethrowOutOfMemory(failure);
+        String message = JobFailures.rethrowOutOfMemory(failure);
         ApplicationWindow.logger.log(Level.SEVERE, "Error loading FITS files", failure);
         eventBus.post(new FitsImportFinishedEvent(false, message, null, null));
     }

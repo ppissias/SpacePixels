@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.jobs.JobFailures;
 import com.google.common.eventbus.EventBus;
 import eu.startales.spacepixels.events.DetectionFinishedEvent;
 import eu.startales.spacepixels.events.DetectionStartedEvent;
@@ -69,7 +70,7 @@ public class ManualTransientInspectionTask implements Runnable {
 
         } catch (Throwable t) {
             // Out of memory leaves the thread for the application's handler, which closes SpacePixels with a message.
-            String message = TaskFailures.rethrowOutOfMemory(t);
+            String message = JobFailures.rethrowOutOfMemory(t);
             ApplicationWindow.logger.log(Level.SEVERE, "Transient Inspection failed", t);
             eventBus.post(new DetectionFinishedEvent(null, false, false, message, null, 0, 0, null));
         } finally {

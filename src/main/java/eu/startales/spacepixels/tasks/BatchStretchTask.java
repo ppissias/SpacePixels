@@ -10,6 +10,7 @@
 
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.jobs.JobFailures;
 import com.google.common.eventbus.EventBus;
 import eu.startales.spacepixels.events.BatchStretchFinishedEvent;
 import eu.startales.spacepixels.events.BatchStretchStartedEvent;
@@ -55,7 +56,7 @@ public class BatchStretchTask implements Runnable {
             // 3. Report Success
             eventBus.post(new BatchStretchFinishedEvent(true, null));
         } catch (Throwable ex) {
-            String message = TaskFailures.rethrowOutOfMemory(ex);
+            String message = JobFailures.rethrowOutOfMemory(ex);
             ApplicationWindow.logger.log(Level.SEVERE, "Cannot stretch images", ex);
 
             // 3. Report Failure

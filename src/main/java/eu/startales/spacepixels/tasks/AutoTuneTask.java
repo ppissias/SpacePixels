@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.jobs.JobFailures;
 import com.google.common.eventbus.EventBus;
 import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
@@ -82,7 +83,7 @@ public class AutoTuneTask implements Runnable {
             eventBus.post(new AutoTuneFinishedEvent(true, "Auto-Tuning completed successfully.", result));
 
         } catch (Throwable ex) {
-            String message = TaskFailures.rethrowOutOfMemory(ex);
+            String message = JobFailures.rethrowOutOfMemory(ex);
             ApplicationWindow.logger.log(Level.SEVERE, "Auto-Tuning failed", ex);
             eventBus.post(new AutoTuneFinishedEvent(false, message, null));
         }

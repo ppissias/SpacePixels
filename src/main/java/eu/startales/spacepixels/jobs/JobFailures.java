@@ -7,23 +7,23 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-package eu.startales.spacepixels.tasks;
+package eu.startales.spacepixels.jobs;
 
 /**
- * How a task ends after an error, so that no failure leaves the window locked: running out of memory goes to the
+ * How a job ends after an error, so that no failure leaves the window locked: running out of memory goes to the
  * application's uncaught-exception handler, which closes SpacePixels with a message; any other error, an
- * {@link Error} included, becomes the task's failure event.
+ * {@link Error} included, becomes the job's failure.
  */
-final class TaskFailures {
+public final class JobFailures {
 
     /** Deep enough for any real cause chain; stops a chain that loops. */
     private static final int MAX_CAUSE_DEPTH = 32;
 
-    private TaskFailures() {
+    private JobFailures() {
     }
 
     /** Whether {@code failure} or one of its causes is an {@link OutOfMemoryError}. */
-    static boolean isOutOfMemory(Throwable failure) {
+    public static boolean isOutOfMemory(Throwable failure) {
         Throwable cause = failure;
         for (int depth = 0; cause != null && depth < MAX_CAUSE_DEPTH; depth++) {
             if (cause instanceof OutOfMemoryError) {
@@ -35,10 +35,10 @@ final class TaskFailures {
     }
 
     /**
-     * Throws {@code failure} again when it is an out-of-memory error, wrapped or not, so that it leaves the task's
-     * thread and reaches the uncaught-exception handler; otherwise returns the message for the failure event.
+     * Throws {@code failure} again when it is an out-of-memory error, wrapped or not, so that it leaves the job's
+     * thread and reaches the uncaught-exception handler; otherwise returns the message for the failure.
      */
-    static String rethrowOutOfMemory(Throwable failure) {
+    public static String rethrowOutOfMemory(Throwable failure) {
         if (isOutOfMemory(failure)) {
             if (failure instanceof Error) {
                 throw (Error) failure;
@@ -52,7 +52,7 @@ final class TaskFailures {
     }
 
     /** The failure's message, or its type when it has none. */
-    static String message(Throwable failure) {
+    public static String message(Throwable failure) {
         String message = failure.getMessage();
         return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
     }

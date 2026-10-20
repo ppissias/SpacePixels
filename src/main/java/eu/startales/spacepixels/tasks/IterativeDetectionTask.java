@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.jobs.JobFailures;
 import com.google.common.eventbus.EventBus;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 
@@ -109,7 +110,7 @@ public class IterativeDetectionTask implements Runnable {
             }
 
         } catch (Throwable ex) {
-            String message = TaskFailures.rethrowOutOfMemory(ex);
+            String message = JobFailures.rethrowOutOfMemory(ex);
             ApplicationWindow.logger.log(Level.SEVERE, "Iterative Detection failed", ex);
             eventBus.post(new DetectionFinishedEvent(null, false, false, message, null, 0, 0, null));
         }
