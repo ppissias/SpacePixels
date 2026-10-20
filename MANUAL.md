@@ -146,13 +146,17 @@ Click **Detect Moving Targets**, on the Overview or on the Main tab (or press **
 - **What can't be cancelled:**
   - Plate solving waits for the solver.
   - Writing the plate solution into a frame must finish, so the file is not left half written.
-- **What a cancelled run leaves:** files it has already written stay. These are the finished passes of an iterative run, and the frames converted or stretched so far.
+- **How fast it stops:** within a second while the report is written, which reports each section and item. Some detection steps report less often, so a run can take up to about half a minute to stop there; reading the frames of a 61-megapixel session is the slowest case.
+- **What a cancelled run leaves:**
+  - A cancelled detection removes the report folder it was writing.
+  - A cancelled iterative run keeps the passes it finished, with an index page that says the run was cancelled, and removes the pass it was writing.
+  - Convert to Mono and Batch Stretch keep the frames converted or stretched so far.
 
 SpacePixels checks the quality of every frame (blank, blurred or failed frames are left out), builds a star mask from the median of the frames, finds everything that is not a star in each frame, links the detections into tracks, and writes the report with crops and animations of every object. When it finishes, it offers to open the report:
 
 ![Detection finished](docs/images/manual/ui-complete.png)
 
-The report is a folder named `detections_<date>_<time>` next to your frames; open `detection_report.html` in it with any browser.
+The report is a folder named `detections_<date>_<time>` next to your frames; open `detection_report.html` in it with any browser. **Open last report**, under the settings in the Detect group of the Main tab, opens the newest report of the session at any time, also after you restart SpacePixels and import the folder again.
 
 If a run finds a very large number of objects, a summary first lists them by kind and asks whether to generate the report. Moving-object tracks, streak tracks and single streaks are always included. Each other group that this run measured, and that found something, has an **In report** box, ticked to start with. Untick a group to leave it out of this report: its section, crops and animations are not written, and the line under the list says how many of these detections the report will still include. A group you had switched off before the run is not listed. The detection settings are not changed, so the next run still measures those groups. Many tracks or anomalies usually mean the settings are too sensitive for this session: try a lower profile.
 
@@ -540,6 +544,8 @@ In most sessions you only need Auto-Tune and the profile. Change single settings
 **Frames were left out.** Quality control rejects blank frames, failed registrations, a frame shifted so far from the others that keeping it would cost every frame 5 % of the sky, and frames much worse than the rest (clouds, wind, focus). The sky and the stars of each frame are measured where every frame has image data, so a frame with a wider black registration border is compared fairly. The report lists every rejected frame and the reason.
 
 **No identification buttons.** Plate-solve one frame (section [3, step 2](#step-2-optional-plate-solve-one-frame)). The buttons that show results **Here** need SpacePixels to be running.
+
+**Something failed.** The error message has a **Copy details** button. It copies the message, the SpacePixels, JTransient and Java versions, and the full error, ready to paste into a bug report. Check the copied text before you share it: an error message can contain the path of your files.
 
 **Out of memory.** Close other programs. If Auto-Tune runs out of memory, lower **Frames Used by Auto-Tune** (Detection Settings → Quality Control, an expert setting). For moving-object detection, use **Detect Iteratively** and set a smaller maximum frame count; leaving the limit blank or zero still loads all frames for the master stack.
 

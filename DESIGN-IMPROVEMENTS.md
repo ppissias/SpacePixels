@@ -48,7 +48,7 @@ This was a source and architecture review, with primary documentation checked fo
 | D01 | High | Implemented | Safe publication of FITS files and settings | A failed replacement preserves the previous file; a failed save remains visibly unsaved. |
 | D02 | High | In progress (every job admitted by the coordinator, 2026-10-20) | Job ownership and resource admission | A command acquires its job slot before the worker starts; only that job can finish it. |
 | D03 | High | Implemented | Preview results belong to a request | A previous frame or stretch cannot overwrite the current preview. |
-| D04 | High | In progress (S1, S11, typed outcomes, Cancel for long jobs, 2026-10-20) | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
+| D04 | High | In progress (S1, S11, typed outcomes, Cancel, report progress, Copy details, last report, 2026-10-20; open: engine waits, viewer check) | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
 | D05 | High | Implemented (Preview Frame follows the edits, 2026-10-20) | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
 | D06 | Medium | Proposed | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
 | D07 | Medium | Proposed | Shared actions and derived availability | Button, shortcut and context menu execute the same command under the same conditions. |
@@ -152,11 +152,14 @@ The original review follows.
   - **Real reasons (S11).** Failures are reported with their real reason.
   - **Typed outcomes (S3):** completed, declined, cancelled and failed. A declined report is not a failure, and a declined or cancelled import keeps the open session.
   - **One out-of-memory policy (`JobFailures`).**
-  - **Cancel in the progress dialog.** It shows a stopping state, and the job stops at its next progress report; the job's own clean-up runs as it leaves. Closing the dialog cancels instead of exiting. Plate solving, the WCS write and Blink cannot be cancelled.
+  - **Cancel in the progress dialog.** It shows a stopping state, and the job stops at its next progress report; the job's own clean-up runs as it leaves. Closing the dialog cancels instead of exiting. Plate solving, the WCS write and Blink cannot be cancelled, and their dialog shows no Cancel.
+  - **The report reports its progress (2026-10-20).** Measured on klangwolke-2 (33 frames of 61 MPix), the report reported once, at 90 %, and then nothing for 107–118 s, so a cancel there waited up to two minutes. Profiling put two thirds of that time in Unclassified Transients (35 %) and Likely Artifacts (30 %). `ReportProgress` now reports each step and each item of the slow steps. A cancel during the report then stopped in 0.10–0.16 s. The report output is unchanged (klangwolke-1: the same `report-data.json` and files).
+  - **Clean-up after a cancel.** A cancelled detection removes the report folder it was writing; a cancelled iterative run keeps its finished passes with an index that says so. Every run gets a folder of its own (`OutputFolders`).
+  - **Auto-Tune cancel fixed.** The calibrated tuner catches a cancel in its workers and returned a result anyway, so a cancel during tuning ended as "completed" or "no usable settings". A cancel made while the tuner runs now ends as cancelled.
+  - **Copy details** in the failure messages (`FailureDialog`): the message, the versions and the stack trace.
+  - **Open last report** in the Detect group: the newest report beside the frames, found on import and after each run.
 - **Open:**
-  - **How long a cancel takes.** Some engine stages report no progress while they run, for example the median master stack, residual analysis and the start of photometry. A cancel waits for the end of such a stage. To measure on real data; finer cancellation inside JTransient would be a separate engine discussion.
-  - **A "Details / Copy error" path** in the failure messages.
-  - **A lasting link to the last result.**
+  - **Engine waits.** Measured on klangwolke-2, a cancel during frame extraction took 26 s: the engine's worker threads finish their frames before the cancel takes effect. Other engine stages waited up to 6–29 s between reports (photometry's ensemble solution the longest), Auto-Tune up to 12.6 s. Shorter waits need a cancellation contract in JTransient; a separate engine discussion.
   - **The viewer check:** closing a viewer while it prepares a frame.
 
 **Evidence.** [ProcessingProgressDialog](src/main/java/eu/startales/spacepixels/gui/ProcessingProgressDialog.java) is modal, fixed-size, and its close action exits the application after confirmation. Blink and sky fetching have separate cancellation mechanisms. Declining report generation after detection is represented as failure in [DetectionTask](src/main/java/eu/startales/spacepixels/tasks/DetectionTask.java), even though detection completed.

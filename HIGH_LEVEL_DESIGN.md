@@ -102,8 +102,13 @@ The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker
 - **Cancel:** the progress dialog's Cancel (or closing it) calls `cancel()`.
   - The job's next progress report throws `JobCancelledException`; the job's own clean-up runs as it leaves; the outcome is `Cancelled`, also when the job wrapped the exception.
   - Progress at 100% never throws, so finished work is kept.
-  - Plate solving, the WCS write and Blink cannot be cancelled (`JobKind.cancellable()`).
+  - Plate solving, the WCS write and Blink cannot be cancelled (`JobKind.cancellable()`); their dialog shows no Cancel.
   - The dialog offers to exit SpacePixels if a cancelled job has not stopped after 15 seconds.
+  - `JobCancelledException` is a `java.util.concurrent.CancellationException`, so services in `util` recognise a cancel with `util.Cancellation.isCancellation(...)` (which looks through wrapping exceptions, as when the engine's worker threads carry it) without depending on `jobs`.
+  - A cancelled detection removes the `detections_` folder it was writing. A cancelled iterative run removes the pass it was writing and writes the index of the finished passes with a note, or removes its folder when none finished. `util.OutputFolders` creates every run's folder new (a number is added when two runs start in the same second), so only the run's own output is removed.
+  - Auto-Tune ends as cancelled when a cancel was made while the tuner ran: the calibrated tuner catches the cancel in its workers and returns a result that may rest on cut-short measurements.
+- **Failure messages:** a failed job's dialog (`gui.FailureDialog`) has Copy details, which copies the message, the versions (`util.BuildInfo`) and the stack trace.
+- **The last report:** `util.SessionReports.latest(...)` finds the newest finished report beside the frames when a session is imported (in the import job); a completed detection replaces it. The Main tab's Detect group offers it as **Open last report**.
 - **Failures:** an exception or `Error` becomes a failure. Running out of memory leaves the worker for the application's uncaught-exception handler. The handler marks it in `JobFailures`, and every other running job then stops at its next progress report while SpacePixels closes.
 
 Each `JobHandle` carries the session the job was started for. Until there is a session object, that is the `ImageProcessing` instance.
@@ -768,9 +773,10 @@ Headless/API:
 Progress ranges:
 
 - JTransient `runPipeline(...)` reports 0-100%: extraction up to 40%, frame rejection 42%, master stack 45-49%, track linking 50-90%, common-motion filtering and optional residual analysis 92%, photometry 93-99%
-- the standard pipeline shows frame loading at 0-20% and the engine at 20-100% of the detection run; the GUI shows the detection run as 0-90% and report export as 90-100%
+- the standard pipeline shows frame loading at 0-20% and the engine at 20-100% of the detection run; the GUI shows the detection run as 0-90% and report export as 90-99%, then 100% when done
+- the report reports each step and each item of its slow steps (`ReportProgress`: tracks and anomalies, unclassified-transient cutouts, likely-artifact cards); the shares follow the time each step took on a 33-frame 61-megapixel session
 - the API shows input preparation up to 15%, Auto-Tune 15-35%, the detection run up to 90% and report export 90-100%
-- the iterative pipeline gives each pass an equal share; within a pass the engine takes 0-90% and report generation 95%
+- the iterative pipeline gives each pass an equal share; within a pass the engine takes 0-90% and report generation 95-98%
 
 JTransient:
 
