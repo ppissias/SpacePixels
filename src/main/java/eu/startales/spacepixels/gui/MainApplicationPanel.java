@@ -15,6 +15,7 @@ import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
+import eu.startales.spacepixels.util.SessionReports;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
 import eu.startales.spacepixels.util.skycatalog.PlateCorrectionFitter;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
@@ -71,6 +72,9 @@ public class MainApplicationPanel extends JPanel {
     private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
     private final JButton detectBatchButton = new JButton("Detect Moving Targets");
     private final JButton detectIterativelyButton = new JButton("Detect Iteratively (large datasets)");
+    // The newest report of the session, under the Detect buttons; hidden when there is none.
+    private final JButton lastReportButton = new JButton();
+    private File lastReport;
     private static final String AUTO_TUNE_TOOLTIP = "<html>Open the Detection Settings and run Auto-Tune on your frames, with the tuner and profile chosen there "
             + "(Ctrl+T).<br>It measures the noise and the faintest stars it can find, and sets the detection settings to match.</html>";
 
@@ -268,6 +272,17 @@ public class MainApplicationPanel extends JPanel {
         detectColumn.add(detectIterativelyButton);
         detectColumn.add(Box.createVerticalStrut(6));
         detectColumn.add(settingsCard);
+        // A button, so the keyboard reaches it, drawn like the Edit settings… link.
+        lastReportButton.putClientProperty("JButton.buttonType", "borderless");
+        lastReportButton.setForeground(LINK_COLOR);
+        lastReportButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        lastReportButton.setHorizontalAlignment(SwingConstants.LEFT);
+        lastReportButton.setMargin(new Insets(2, 2, 2, 2));
+        lastReportButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+        lastReportButton.setVisible(false);
+        lastReportButton.addActionListener(e -> openLastReport());
+        detectColumn.add(Box.createVerticalStrut(2));
+        detectColumn.add(lastReportButton);
         JPanel detectBody = new JPanel();
         detectBody.setLayout(new BoxLayout(detectBody, BoxLayout.X_AXIS));
         detectBody.setOpaque(false);
@@ -1472,6 +1487,9 @@ public class MainApplicationPanel extends JPanel {
     /** The end of Detect Moving Targets and Detect Iteratively: offers the report, or says what went wrong. */
     private void showDetectionOutcome(JobHandle handle, JobOutcome<File> outcome) {
         if (outcome instanceof JobOutcome.Completed<File> completed) {
+            if (handle.session() == mainAppWindow.getImageProcessing()) {
+                showLastReport(completed.result());
+            }
             promptUserToOpenReport(completed.result());
         } else {
             showDetectionProblem(outcome);
@@ -1485,10 +1503,10 @@ public class MainApplicationPanel extends JPanel {
 
     /** Tells the user that a detection job was declined or failed, as the detection jobs always have. */
     void showDetectionProblem(JobOutcome<?> outcome) {
-        String reason = outcome instanceof JobOutcome.Declined<?> declined ? declined.reason()
-                : outcome instanceof JobOutcome.Failed<?> failed ? failed.reason() : null;
-        if (reason != null) {
-            JOptionPane.showMessageDialog(this, "Detection failed: " + reason, "Error", JOptionPane.ERROR_MESSAGE);
+        if (outcome instanceof JobOutcome.Failed<?> failed) {
+            FailureDialog.show(this, "Error", "Detection failed: " + failed.reason(), failed.cause());
+        } else if (outcome instanceof JobOutcome.Declined<?> declined) {
+            JOptionPane.showMessageDialog(this, "Detection failed: " + declined.reason(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -1550,6 +1568,39 @@ public class MainApplicationPanel extends JPanel {
     /** A new session, or none: the status line says how many frames it has. */
     void sessionChanged(FitsFileInformation[] files) {
         statusLabel.setText(files.length == 0 ? "No files loaded" : "Imported " + files.length + " file(s)");
+        // The import names the new session's last report, if it has one.
+        showLastReport(null);
+    }
+
+    /**
+     * Offers the newest report of the session under the Detect buttons, so it can be opened again after the question
+     * at the end of a run, or after a restart. Null hides the link.
+     */
+    void showLastReport(File report) {
+        lastReport = report;
+        if (report == null) {
+            lastReportButton.setVisible(false);
+            return;
+        }
+        java.time.LocalDateTime written = java.time.LocalDateTime.ofInstant(
+                java.time.Instant.ofEpochMilli(report.lastModified()), java.time.ZoneId.systemDefault());
+        String pattern = written.getYear() == java.time.LocalDate.now().getYear() ? "d MMM HH:mm" : "d MMM yyyy";
+        lastReportButton.setText("<html><u>Open last report</u> · " + written.format(java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH))
+                + (SessionReports.isIterative(report) ? " (iterative)" : "") + "</html>");
+        lastReportButton.setToolTipText(report.getAbsolutePath());
+        lastReportButton.setVisible(true);
+    }
+
+    private void openLastReport() {
+        if (lastReport == null) {
+            return;
+        }
+        if (!lastReport.isFile()) {
+            statusLabel.setText("The last report was moved or deleted.");
+            showLastReport(null);
+            return;
+        }
+        openHtmlReport(lastReport);
     }
 
     /**
@@ -1594,9 +1645,7 @@ public class MainApplicationPanel extends JPanel {
         blinkButton.setText("Blink Selected");
         statusLabel.setText("Blinking stopped.");
         if (outcome instanceof JobOutcome.Failed<BlinkSequence> failed) {
-            JOptionPane.showMessageDialog(this,
-                    "Blink process failed: " + failed.reason(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            FailureDialog.show(this, "Error", "Blink process failed: " + failed.reason(), failed.cause());
         }
     }
 
@@ -1646,7 +1695,8 @@ public class MainApplicationPanel extends JPanel {
                     : outcome instanceof JobOutcome.Failed<PlateSolveResult> failed ? failed.reason() : "Internal Error";
             mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
             statusLabel.setText("Plate solve failed");
-            JOptionPane.showMessageDialog(this, "Image was not plate-solved successfully: " + errorMsg, "Error", JOptionPane.ERROR_MESSAGE);
+            FailureDialog.show(this, "Error", "Image was not plate-solved successfully: " + errorMsg,
+                    outcome instanceof JobOutcome.Failed<PlateSolveResult> failed ? failed.cause() : null);
         }
         refreshSolveButton();
     }
@@ -1662,7 +1712,7 @@ public class MainApplicationPanel extends JPanel {
             JOptionPane.showMessageDialog(this, "FITS header successfully updated.", "Success", JOptionPane.INFORMATION_MESSAGE);
         } else if (outcome instanceof JobOutcome.Failed<Map<String, String>> failed) {
             statusLabel.setText("Failed to update FITS header");
-            JOptionPane.showMessageDialog(this, "Failed to update FITS header: " + failed.reason(), "Error", JOptionPane.ERROR_MESSAGE);
+            FailureDialog.show(this, "Error", "Failed to update FITS header: " + failed.reason(), failed.cause());
         }
         refreshSolveButton();
     }
@@ -1703,10 +1753,7 @@ public class MainApplicationPanel extends JPanel {
                         JOptionPane.INFORMATION_MESSAGE);
             }
         } else if (outcome instanceof JobOutcome.Failed<File> failed) {
-            JOptionPane.showMessageDialog(this,
-                    "Cannot convert images: " + failed.reason(),
-                    "Error",
-                    JOptionPane.ERROR_MESSAGE);
+            FailureDialog.show(this, "Error", "Cannot convert images: " + failed.reason(), failed.cause());
         }
     }
 
@@ -1719,10 +1766,7 @@ public class MainApplicationPanel extends JPanel {
                     "Stretch Complete",
                     JOptionPane.INFORMATION_MESSAGE);
         } else if (outcome instanceof JobOutcome.Failed<Void> failed) {
-            JOptionPane.showMessageDialog(this,
-                    "Cannot stretch images: " + failed.reason(),
-                    "Error",
-                    JOptionPane.ERROR_MESSAGE);
+            FailureDialog.show(this, "Error", "Cannot stretch images: " + failed.reason(), failed.cause());
         }
     }
 

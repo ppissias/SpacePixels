@@ -1575,6 +1575,9 @@ public class DetectionConfigurationPanel extends JPanel {
         if (mainPanel != null) {
             mainPanel.showStatus(completed ? "Auto-Tuning completed successfully." : "Auto-Tuning failed or aborted.");
         }
+        if (outcome instanceof JobOutcome.Failed<JTransientAutoTuner.AutoTunerResult> failed) {
+            FailureDialog.show(this, "Auto-Tune Failed", "Auto-Tune failed: " + failed.reason(), failed.cause());
+        }
     }
 
     /**

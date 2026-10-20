@@ -16,6 +16,7 @@ import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.MixedExposureException;
+import eu.startales.spacepixels.util.SessionReports;
 import eu.startales.spacepixels.util.XisfImageConverter;
 
 import java.io.File;
@@ -28,8 +29,8 @@ import java.util.logging.Logger;
  */
 public class FitsImportTask implements Job<FitsImportTask.Result> {
 
-    /** The imported session: its processor and its frames. */
-    public record Result(ImageProcessing processing, FitsFileInformation[] files) {
+    /** The imported session: its processor, its frames, and the newest report beside them (or null). */
+    public record Result(ImageProcessing processing, FitsFileInformation[] files, File lastReport) {
     }
 
     private static final Logger LOGGER = Logger.getLogger(FitsImportTask.class.getName());
@@ -59,8 +60,9 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
                 if (filesInfo.length == 0) {
                     return JobOutcome.declined("No frames were imported.");
                 }
+                File lastReport = SessionReports.latest(new File(filesInfo[0].getFilePath()).getParentFile());
                 ownershipTransferred = true;
-                return JobOutcome.completed(new Result(imgProcessing, filesInfo));
+                return JobOutcome.completed(new Result(imgProcessing, filesInfo, lastReport));
 
             } catch (ImageProcessing.RedirectImportException e) {
                 // The user opted to automatically load the newly converted directory!

@@ -7,13 +7,7 @@ import java.util.*;
 
 /** Shared navigation and presentation helpers for the static report. */
 final class ReportPresentation {
-    private static final Properties BUILD = new Properties();
-    static {
-        try (InputStream in = ReportPresentation.class.getResourceAsStream("/spacepixels-build.properties")) {
-            if (in != null) BUILD.load(in);
-        } catch (IOException ignored) { }
-    }
-    static String version(String component) { return BUILD.getProperty(component, "development"); }
+    static String version(String component) { return eu.startales.spacepixels.util.BuildInfo.version(component); }
     static String anchor(String id) { return id.startsWith("V") ? "variable-v" + id.substring(1) : "finding-" + id.toLowerCase(Locale.ROOT); }
     static String findingLink(String id) { return "<a href='#" + anchor(id) + "'>" + id + "</a>"; }
     /** A title badge that links a finding to the track card it belongs to. */

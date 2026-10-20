@@ -271,6 +271,7 @@ public class ApplicationWindow {
     private void importFinished(JobOutcome<FitsImportTask.Result> outcome) {
         if (outcome instanceof JobOutcome.Completed<FitsImportTask.Result> completed) {
             installSession(completed.result().processing(), completed.result().files());
+            mainApplicationPanel.showLastReport(completed.result().lastReport());
             return;
         }
         if (outcome instanceof JobOutcome.Declined<FitsImportTask.Result>) {
@@ -279,9 +280,7 @@ public class ApplicationWindow {
                     ? "Nothing imported; the open session is unchanged." : "No files loaded");
         } else if (outcome instanceof JobOutcome.Failed<FitsImportTask.Result> failed) {
             mainApplicationPanel.showStatus("Import failed");
-            JOptionPane.showMessageDialog(frmIpodImage,
-                    "Error loading files: " + failed.reason(),
-                    "Import Error", JOptionPane.ERROR_MESSAGE);
+            FailureDialog.show(frmIpodImage, "Import Error", "Error loading files: " + failed.reason(), failed.cause());
         }
         // Unlocking after the import enabled every tab; without a session they stay closed.
         setSessionTabsEnabled(imagePreProcessing != null);
