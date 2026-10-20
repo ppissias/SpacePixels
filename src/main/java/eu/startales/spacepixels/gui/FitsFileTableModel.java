@@ -59,6 +59,16 @@ public class FitsFileTableModel extends AbstractTableModel {
         return columns[col];
     }
 
+    /** The row that shows this file object, or -1 when the table shows other files. */
+    public int rowOf(FitsFileInformation file) {
+        for (int row = 0; row < fitsfiles.length; row++) {
+            if (fitsfiles[row] == file) {
+                return row;
+            }
+        }
+        return -1;
+    }
+
     public void refreshRow(int rowIndex) {
         if (rowIndex >= 0 && rowIndex < fitsfiles.length) {
             fireTableRowsUpdated(rowIndex, rowIndex);

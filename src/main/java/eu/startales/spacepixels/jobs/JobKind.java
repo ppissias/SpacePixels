@@ -16,7 +16,8 @@ public enum JobKind {
     TRANSIENT_INSPECTION("Manual Transient Inspection"),
     STAR_MASK_STACK("Test Star Mask"),
     CONVERT_TO_MONO("Convert to Mono"),
-    BATCH_STRETCH("Batch Stretch");
+    BATCH_STRETCH("Batch Stretch"),
+    PLATE_SOLVE("Plate Solve");
 
     private final String title;
 

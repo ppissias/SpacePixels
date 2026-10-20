@@ -140,7 +140,11 @@ public class MainApplicationPanel extends JPanel {
                 setProgressBarWorking();
                 disableControlsProcessing();
                 statusLabel.setText(texts.started());
-                progressDialog.updateProgress(0, texts.initializing());
+                if (texts.indeterminate()) {
+                    progressDialog.showIndeterminateProgress(texts.initializing());
+                } else {
+                    progressDialog.updateProgress(0, texts.initializing());
+                }
                 // Shown after this call returns: the dialog is modal and would hold the click until the job ends.
                 EventQueue.invokeLater(() -> {
                     if (mainAppWindow.getJobCoordinator().current() == handle) {
@@ -424,20 +428,14 @@ public class MainApplicationPanel extends JPanel {
 
         solveButton.addActionListener(e -> {
             ApplicationWindow.logger.info("Will try to solve image");
-            int row = table.getSelectedRow();
-            if (row < 0) return;
-
             FitsFileInformation selectedFile = getSelectedFileInformation();
             if (selectedFile == null) return;
 
-            new Thread(new PlateSolveTask(
-                    mainAppWindow.getEventBus(),
-                    mainAppWindow.getImageProcessing(),
-                    selectedFile.getFilePath(),
-                    row,
-                    astapSolveRadio.isSelected(),
-                    astrometryNetSolveRadio.isSelected()
-            )).start();
+            // The result belongs to this file, wherever its row is when the solve ends.
+            ImageProcessing session = mainAppWindow.getImageProcessing();
+            startJob(JobKind.PLATE_SOLVE, session, new PlateSolveTask(session, selectedFile.getFilePath(),
+                            astapSolveRadio.isSelected(), astrometryNetSolveRadio.isSelected()),
+                    (handle, outcome) -> showSolveOutcome(selectedFile, outcome));
         });
     }
 
@@ -1465,8 +1463,6 @@ public class MainApplicationPanel extends JPanel {
         }
     }
 
-    private void disableControlsSolving() { lockUI(); }
-    private void enableControlsSolvingFinished() { unlockUI(); }
     private void disableControlsProcessing() { lockUI(); }
     private void enableControlsProcessingFinished() { unlockUI(); }
     private void disableControlsBlinking() { lockUI(); }
@@ -1682,79 +1678,64 @@ public class MainApplicationPanel extends JPanel {
         statusLabel.setText(status);
     }
 
-    @Subscribe
-    public void onSolveStarted(SolveStartedEvent event) {
-        EventQueue.invokeLater(() -> {
-            setProgressBarWorking();
-            disableControlsSolving();
-            statusLabel.setText("Plate solving image...");
-            progressDialog.showIndeterminateProgress("Plate solving selected image...");
-            progressDialog.setVisible(true);
-        });
-    }
+    /**
+     * The end of Plate Solve: offers to write the solution into the frame's FITS header, or says why the frame was
+     * not solved. The solver's temporary files are removed either way.
+     */
+    private void showSolveOutcome(FitsFileInformation fileInfo, JobOutcome<PlateSolveResult> outcome) {
+        FitsFileTableModel model = (FitsFileTableModel) table.getModel();
+        PlateSolveResult result = outcome instanceof JobOutcome.Completed<PlateSolveResult> completed ? completed.result() : null;
+        if (result != null && result.isSuccess()) {
+            ApplicationWindow.logger.info(result.toString());
+            statusLabel.setText("Image was successfully plate-solved");
 
-    @Subscribe
-    public void onSolveFinished(SolveFinishedEvent event) {
-        EventQueue.invokeLater(() -> {
-            progressDialog.setVisible(false);
-            PlateSolveResult result = event.getResult();
-            FitsFileTableModel model = (FitsFileTableModel) table.getModel();
-            FitsFileInformation fileInfo = model.getFitsFileAt(event.getRowIndex());
+            int choice = JOptionPane.showConfirmDialog(this,
+                    "Image was successfully plate-solved.\n\nWould you like to write the WCS coordinate solution directly into the FITS header?\n(This permanently modifies the file)",
+                    "Update FITS Header",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
 
-            if (result != null && result.isSuccess()) {
-                ApplicationWindow.logger.info(result.toString());
-                statusLabel.setText("Image was successfully plate-solved");
-
-                int choice = JOptionPane.showConfirmDialog(this,
-                        "Image was successfully plate-solved.\n\nWould you like to write the WCS coordinate solution directly into the FITS header?\n(This permanently modifies the file)",
-                        "Update FITS Header",
-                        JOptionPane.YES_NO_OPTION,
-                        JOptionPane.QUESTION_MESSAGE);
-
-                if (choice == JOptionPane.YES_OPTION && fileInfo != null) {
-                    try {
-                        Map<String, String> updatedHeader = mainAppWindow.getImageProcessing()
-                                .updateFitsHeaderWithWCS(fileInfo.getFilePath(), result.getSolveInformation());
-                        fileInfo.getFitsHeader().clear();
-                        fileInfo.getFitsHeader().putAll(updatedHeader);
-                        model.refreshRow(event.getRowIndex());
-                        statusLabel.setText("FITS header updated with WCS solution");
-                        JOptionPane.showMessageDialog(this, "FITS header successfully updated.", "Success", JOptionPane.INFORMATION_MESSAGE);
-                    } catch (Exception ex) {
-                        statusLabel.setText("Failed to update FITS header");
-                        JOptionPane.showMessageDialog(this, "Failed to update FITS header: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                    } finally {
-                        if (fileInfo != null) {
-                            mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
-                        }
-                    }
-                } else {
+            if (choice == JOptionPane.YES_OPTION && fileInfo != null) {
+                try {
+                    Map<String, String> updatedHeader = mainAppWindow.getImageProcessing()
+                            .updateFitsHeaderWithWCS(fileInfo.getFilePath(), result.getSolveInformation());
+                    fileInfo.getFitsHeader().clear();
+                    fileInfo.getFitsHeader().putAll(updatedHeader);
+                    model.refreshRow(model.rowOf(fileInfo));
+                    statusLabel.setText("FITS header updated with WCS solution");
+                    JOptionPane.showMessageDialog(this, "FITS header successfully updated.", "Success", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    statusLabel.setText("Failed to update FITS header");
+                    JOptionPane.showMessageDialog(this, "Failed to update FITS header: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                } finally {
                     if (fileInfo != null) {
                         mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
                     }
-                    statusLabel.setText("Plate solve completed; WCS was not written to the FITS header");
                 }
             } else {
-                String errorMsg = result != null ? result.getFailureReason() + " " + result.getWarning()
-                        : event.getFailureMessage() != null ? event.getFailureMessage() : "Internal Error";
                 if (fileInfo != null) {
                     mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
                 }
-                JOptionPane.showMessageDialog(this, "Image was not plate-solved successfully: " + errorMsg, "Error", JOptionPane.ERROR_MESSAGE);
+                statusLabel.setText("Plate solve completed; WCS was not written to the FITS header");
             }
-
-            setProgressBarIdle();
-            enableControlsSolvingFinished();
-
-            int selectedRow = table.getSelectedRow();
-            if (selectedRow >= 0) {
-                FitsFileInformation selectedFileInfo = getSelectedFileInformation();
-                if (selectedFileInfo != null) {
-                    boolean isSolved = "Yes".equalsIgnoreCase(String.valueOf(table.getValueAt(selectedRow, FitsFileTableModel.COL_SOLVED)));
-                    solveButton.setEnabled(!isSolved);
-                }
+        } else {
+            String errorMsg = result != null ? result.getFailureReason() + " " + result.getWarning()
+                    : outcome instanceof JobOutcome.Failed<PlateSolveResult> failed ? failed.reason() : "Internal Error";
+            if (fileInfo != null) {
+                mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
             }
-        });
+            statusLabel.setText("Plate solve failed");
+            JOptionPane.showMessageDialog(this, "Image was not plate-solved successfully: " + errorMsg, "Error", JOptionPane.ERROR_MESSAGE);
+        }
+
+        int selectedRow = table.getSelectedRow();
+        if (selectedRow >= 0) {
+            FitsFileInformation selectedFileInfo = getSelectedFileInformation();
+            if (selectedFileInfo != null) {
+                boolean isSolved = "Yes".equalsIgnoreCase(String.valueOf(table.getValueAt(selectedRow, FitsFileTableModel.COL_SOLVED)));
+                solveButton.setEnabled(!isSolved);
+            }
+        }
     }
 
     /** The end of Convert to Mono: offers to import the new mono folder, or says what went wrong. */
@@ -1804,13 +1785,17 @@ public class MainApplicationPanel extends JPanel {
         }
     }
 
-    /** What the status bar and the progress dialog say while a job of this kind runs, and after it. */
-    private record JobTexts(String started, String initializing, String ended) {
+    /**
+     * What the status bar and the progress dialog say while a job of this kind runs, and after it; an indeterminate
+     * job reports no percentage.
+     */
+    private record JobTexts(String started, String initializing, boolean indeterminate, String ended) {
         static JobTexts of(JobKind kind) {
             return switch (kind) {
-                case CONVERT_TO_MONO -> new JobTexts("Batch conversion started", "Initializing batch conversion...", "Batch conversion finished");
-                case BATCH_STRETCH -> new JobTexts("Batch stretch started", "Initializing batch stretch...", "Batch stretch finished");
-                default -> new JobTexts("Object detection started...", "Initializing object detection...", "Object detection completed");
+                case CONVERT_TO_MONO -> new JobTexts("Batch conversion started", "Initializing batch conversion...", false, "Batch conversion finished");
+                case BATCH_STRETCH -> new JobTexts("Batch stretch started", "Initializing batch stretch...", false, "Batch stretch finished");
+                case PLATE_SOLVE -> new JobTexts("Plate solving image...", "Plate solving selected image...", true, "Plate solve finished");
+                default -> new JobTexts("Object detection started...", "Initializing object detection...", false, "Object detection completed");
             };
         }
     }

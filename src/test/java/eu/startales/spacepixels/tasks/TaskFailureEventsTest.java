@@ -4,7 +4,6 @@ import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import eu.startales.spacepixels.events.AutoTuneFinishedEvent;
 import eu.startales.spacepixels.events.BlinkFinishedEvent;
-import eu.startales.spacepixels.events.SolveFinishedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobCoordinator;
@@ -28,7 +27,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -44,8 +42,6 @@ public class TaskFailureEventsTest {
     @Test
     public void failingTasksPostTheirFinishedEventWithTheReason() throws Exception {
         FitsFileInformation missing = missingFrame();
-
-        assertNull(last(run(new PlateSolveTask(bus(), null, missing.getFilePath(), 0, true, false)), SolveFinishedEvent.class).getResult());
 
         AutoTuneFinishedEvent tune = last(run(new AutoTuneTask(bus(), null, new DetectionConfig(), 10,
                 JTransientAutoTuner.AutoTuneProfile.values()[0], AutoTunerRunner.Algorithm.CALIBRATED)), AutoTuneFinishedEvent.class);
@@ -63,10 +59,9 @@ public class TaskFailureEventsTest {
         try (ImageProcessing processing = ImageProcessing.getInstance(folder.newFolder("session"))) {
             // In memory only: the saved application config is not touched.
             processing.getAppConfig().astapExecutablePath = new File(folder.getRoot(), "missing-astap.exe").getAbsolutePath();
-            SolveFinishedEvent solved = last(run(new PlateSolveTask(bus(), processing, missingFrame().getFilePath(), 0, true, false)),
-                    SolveFinishedEvent.class);
-            assertNull(solved.getResult());
-            assertTrue(solved.getFailureMessage(), solved.getFailureMessage().startsWith("ASTAP executable path is not correct"));
+            JobOutcome<?> solved = outcomeOf(new PlateSolveTask(processing, missingFrame().getFilePath(), true, false));
+            assertTrue(String.valueOf(solved), solved instanceof JobOutcome.Failed<?> failed
+                    && failed.reason().startsWith("ASTAP executable path is not correct"));
         }
     }
 
@@ -75,6 +70,7 @@ public class TaskFailureEventsTest {
         StretchAlgorithm algorithm = StretchAlgorithm.values()[0];
         assertFailed(outcomeOf(new BatchStretchTask(null, 1, 1, algorithm)));
         assertFailed(outcomeOf(new BatchConvertMonoTask(null, false, 1, 1, algorithm)));
+        assertFailed(outcomeOf(new PlateSolveTask(null, missingFrame().getFilePath(), true, false)));
         assertFailed(outcomeOf(new DetectionTask(null, new DetectionConfig())));
         assertFailed(outcomeOf(new IterativeDetectionTask(null, new DetectionConfig(), 0)));
         assertFailed(outcomeOf(new ManualTransientInspectionTask(null, new DetectionConfig())));

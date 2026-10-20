@@ -10,52 +10,45 @@
 
 package eu.startales.spacepixels.tasks;
 
-import eu.startales.spacepixels.jobs.JobFailures;
-import com.google.common.eventbus.EventBus;
-import io.github.ppissias.jplatesolve.PlateSolveResult;
-import eu.startales.spacepixels.gui.ApplicationWindow;
+import eu.startales.spacepixels.jobs.Job;
+import eu.startales.spacepixels.jobs.JobContext;
+import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.ImageProcessing;
-import eu.startales.spacepixels.events.SolveStartedEvent;
-import eu.startales.spacepixels.events.SolveFinishedEvent;
+import io.github.ppissias.jplatesolve.PlateSolveResult;
 
-import java.util.concurrent.Future;
-import java.util.logging.Level;
+import java.util.concurrent.ExecutionException;
 
-public class PlateSolveTask implements Runnable {
-    private final EventBus eventBus;
+/**
+ * Solves one frame with ASTAP or Astrometry.net. The result is the solver's answer, which says itself whether the
+ * frame was solved; an error before the solver answers fails the job with its reason.
+ */
+public class PlateSolveTask implements Job<PlateSolveResult> {
     private final ImageProcessing preProcessing;
     private final String filePath;
-    private final int rowIndex;
     private final boolean useAstap;
     private final boolean useAstrometryNet;
 
-    public PlateSolveTask(EventBus eventBus, ImageProcessing preProcessing, String filePath, int rowIndex, boolean useAstap, boolean useAstrometryNet) {
-        this.eventBus = eventBus;
+    public PlateSolveTask(ImageProcessing preProcessing, String filePath, boolean useAstap, boolean useAstrometryNet) {
         this.preProcessing = preProcessing;
         this.filePath = filePath;
-        this.rowIndex = rowIndex;
         this.useAstap = useAstap;
         this.useAstrometryNet = useAstrometryNet;
     }
 
     @Override
-    public void run() {
-        // 1. Tell the UI we are starting
-        eventBus.post(new SolveStartedEvent(rowIndex));
-
+    public JobOutcome<PlateSolveResult> run(JobContext context) throws Exception {
         try {
-            // 2. Do the heavy lifting (this blocks the background thread, which is fine)
-            Future<PlateSolveResult> solveResultFuture = preProcessing.solve(filePath, useAstap, useAstrometryNet);
-            PlateSolveResult result = solveResultFuture.get();
-
-            // 3. Tell the UI we are done and pass the result
-            eventBus.post(new SolveFinishedEvent(rowIndex, result));
-
-        } catch (Throwable ex) {
-            String message = JobFailures.rethrowOutOfMemory(ex);
-            ApplicationWindow.logger.log(Level.SEVERE, "Cannot solve image", ex);
-            // Post a failure event
-            eventBus.post(new SolveFinishedEvent(rowIndex, null, message));
+            // Waits on this worker thread for the solver.
+            return JobOutcome.completed(preProcessing.solve(filePath, useAstap, useAstrometryNet).get());
+        } catch (ExecutionException e) {
+            // The solver's own error explains the failure better than its wrapper.
+            if (e.getCause() instanceof Exception cause) {
+                throw cause;
+            }
+            if (e.getCause() instanceof Error cause) {
+                throw cause;
+            }
+            throw e;
         }
     }
 }
