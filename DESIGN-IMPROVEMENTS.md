@@ -364,7 +364,7 @@ The coverage limits and the deliberate exceptions are listed in the [review summ
 | S6 | B–C | No GUI in `tasks`: their own logger and out-of-memory policy, and results returned instead of windows and dialogs opened | new |
 | S7 | C | A session object, and the application config loaded once | D06, D11 |
 | S8 | C | The WCS write and session-folder I/O off the EDT | D08 |
-| S9 | B–C | Retire the event bus as S2, S3 and S7 replace its events (accepted 2026-10-20). 2 of 18 events removed (`953f3cf`) | EventBus decision |
+| S9 | B–C | Retire the event bus as S2, S3 and S7 replace its events (accepted 2026-10-20). 6 of 18 events removed: the detection jobs, Convert to Mono and Batch Stretch | EventBus decision |
 | S10 | C | Split `ImageProcessing`: its session part into the session object, with batch operations and import as their own services. Keep it as a facade, and remove its dead methods | D06 |
 | S11 | A–B | **Done 2026-10-20 (`d255b68`), the message fix.** Report failures as failures. Before, a report-export failure said "aborted by user due to high track count", a failed iterative pass was still listed, and an Astrometry.net failure showed two dialogs. Typed outcomes follow with S3 | D04 (new evidence) |
 | S12 | C | One preparation flow for the GUI and the API, with the GUI's questions asked on the EDT and typed import outcomes. Today declining a conversion closes the current session | D08, D06, F07 |
@@ -449,7 +449,7 @@ To ground the decision, the review should list every publisher, subscriber and r
 
 ### S2 and S3, first slice: a job coordinator for the detection jobs
 
-**Implemented (2026-10-20), in `54e32b6`, `f945ad8`, `281246f` and `953f3cf`.** The maintainer accepted the design and checks the four buttons in the GUI. The remaining jobs (import, plate solve, Blink, Auto-Tune, Convert to Mono, Batch Stretch) move in later slices.
+**Implemented (2026-10-20), in `54e32b6`, `f945ad8`, `281246f` and `953f3cf`.** The maintainer accepted the design and checks the four buttons in the GUI. A second slice moved Convert to Mono and Batch Stretch (2026-10-20). Import, plate solve, Blink and Auto-Tune move in later slices.
 
 **Scope.** The four jobs that share the detection lock, progress dialog and finished event today:
 - Detect Moving Targets;

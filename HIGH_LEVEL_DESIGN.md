@@ -95,7 +95,7 @@ The detection profile wraps JTransient `DetectionConfig` plus SpacePixels' Auto-
 
 Small EventBus message types for GUI/task coordination.
 
-These events carry progress, lifecycle, and result notifications across background tasks and Swing panels. They are not part of the public API. Jobs that move to the job coordinator lose their events; the detection jobs already have.
+These events carry progress, lifecycle, and result notifications across background tasks and Swing panels. They are not part of the public API. Jobs that move to the job coordinator lose their events. The detection jobs, Convert to Mono and Batch Stretch already have.
 
 ### `eu.startales.spacepixels.jobs`
 
@@ -140,7 +140,7 @@ The GUI layer currently combines view and controller behavior in several panels.
 Background runnables launched by the GUI.
 
 Tasks are the boundary between Swing actions and longer-running work. They run in one of two ways:
-- **Jobs under the `JobCoordinator`:** `DetectionTask`, `IterativeDetectionTask`, `ManualTransientInspectionTask` and `StarMaskStackTask`. They return their result, and the window opens what follows (the report question, the inspection view, the Star Mask Explorer).
+- **Jobs under the `JobCoordinator`:** `DetectionTask`, `IterativeDetectionTask`, `ManualTransientInspectionTask`, `StarMaskStackTask`, `BatchConvertMonoTask` and `BatchStretchTask`. They return their result, and the window opens what follows (the report question, the inspection view, the Star Mask Explorer, the offer to import the mono folder).
 - **Through the Guava `EventBus`:** the others post lifecycle and progress events to the GUI.
 
 Main tasks:
@@ -753,7 +753,7 @@ Replacing files:
 
 Desktop:
 
-- **The detection jobs** run under `JobCoordinator`:
+- **The detection jobs, Convert to Mono and Batch Stretch** run under `JobCoordinator`:
   - admission and locking happen on the EDT before the worker starts;
   - progress and the single outcome come back on the EDT.
 - **Other long work** runs in explicit background `Thread`s around task `Runnable`s that post EventBus messages. Their subscribers move Swing updates onto the EDT.
@@ -796,7 +796,7 @@ Accepted current debt:
 - `DetectionConfigurationPanel` and `MainApplicationPanel` still combine Swing view logic and workflow control.
 - `DetectionReportGenerator` still contains substantial static rendering/helper behavior even though major sections have been split into writers.
 - Some visualization settings are static runtime values captured at report-export time.
-- GUI tasks still on the event bus launch raw threads; only the detection jobs run under the job coordinator so far.
+- GUI tasks still on the event bus launch raw threads; only the detection jobs, Convert to Mono and Batch Stretch run under the job coordinator so far.
 
 Preferred refactor direction:
 
