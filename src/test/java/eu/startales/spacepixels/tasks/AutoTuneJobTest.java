@@ -41,9 +41,9 @@ public class AutoTuneJobTest {
     }
 
     /**
-     * The calibrated tuner catches a cancel in its workers and returns a result anyway (on these small frames it
-     * reports no progress at all, so the cancel is still pending when it returns). A cancel made while it runs ends
-     * the job as cancelled, and its result is not used.
+     * The calibrated tuner catches the cancel from its progress report and returns a failed result instead (on these
+     * small frames it reports no progress at all, so the cancel is still pending when it returns). A cancel made while
+     * it runs ends the job as cancelled, and its result is not used.
      */
     @Test
     public void aCancelWhileTheTunerRunsEndsAsCancelled() throws Exception {
