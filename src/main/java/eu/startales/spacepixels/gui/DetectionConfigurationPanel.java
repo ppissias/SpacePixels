@@ -175,8 +175,8 @@ public class DetectionConfigurationPanel extends JPanel {
         buildAnalyses(overviewPanel);
         MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
         if (mainPanel != null) {
-            overviewPanel.bindDetectButton(mainPanel.getDetectButton(), mainPanel::runDetection);
-            mainPanel.bindAutoTuneButton(overviewPanel.getRunButton(), this::openOverviewAndRunAutoTune);
+            overviewPanel.bindCommands(mainPanel.detectAction(), mainPanel.previewAction());
+            mainPanel.setAutoTuneCommand(this::openOverviewAndRunAutoTune);
         }
 
         setupPairs();
@@ -189,17 +189,11 @@ public class DetectionConfigurationPanel extends JPanel {
         showOnlyWhen(chkEnableBrightStarEccentricityFilter, spinBrightStarEccentricitySigma);
         navigator.setExtraChangedCount("Overview", () -> overviewPanel.unsavedCoreCount());
         navigator.finishBuilding();
-        // Ctrl+D runs Detect Moving Targets here too, as in the main window.
-        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ctrl D"), "detectMovingTargets");
-        getActionMap().put("detectMovingTargets", new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent e) {
-                MainApplicationPanel main = mainAppWindow.getMainApplicationPanel();
-                if (main != null) {
-                    main.runDetection();
-                }
-            }
-        });
+        // Ctrl+D runs Detect Moving Targets here too: the main window's command, with its enabled state.
+        if (mainPanel != null) {
+            getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ctrl D"), "detectMovingTargets");
+            getActionMap().put("detectMovingTargets", mainPanel.detectAction());
+        }
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("ctrl F"), "searchSettings");
         getActionMap().put("searchSettings", new AbstractAction() {
             @Override
@@ -412,14 +406,6 @@ public class DetectionConfigurationPanel extends JPanel {
         public DetectionConfig currentConfig() {
             applySettingsToMemory();
             return jTransientConfig.clone();
-        }
-
-        @Override
-        public void showPreview() {
-            MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
-            if (mainPanel != null) {
-                mainPanel.previewSelectedFrame();
-            }
         }
 
         @Override

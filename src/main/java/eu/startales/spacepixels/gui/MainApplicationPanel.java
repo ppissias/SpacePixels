@@ -9,7 +9,6 @@
  */
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
@@ -65,7 +64,8 @@ public class MainApplicationPanel extends JPanel {
     private final JButton importButton = new JButton("Import Aligned Frames…");
     private final JButton convertMonoButton = new JButton("Convert to Mono");
     private final JButton stretchButton = new JButton("Batch Stretch");
-    private final JButton blinkButton = new JButton("Blink Selected");
+    private static final String BLINK_SELECTED = "Blink Selected";
+    private final JButton blinkButton = new JButton(BLINK_SELECTED);
     private final JButton solveButton = new JButton("Plate Solve Selected");
     private final JButton skyCatalogueButton = new JButton(FETCH_SKY_CATALOGUE);
     private final JButton detectSingleButton = new JButton("Preview Frame");
@@ -79,8 +79,30 @@ public class MainApplicationPanel extends JPanel {
             + "(Ctrl+T).<br>It measures the noise and the faintest stars it can find, and sets the detection settings to match.</html>";
 
     private final JButton autoTuneButton = new JButton("Auto-Tune Settings", new AutoTuneIcon(20));
-    /** The Run Auto-Tune button of the Detection Settings Overview, whose enabling the Auto-Tune button follows. */
-    private JButton overviewRunAutoTuneButton;
+    /** Shows the Detection Settings Overview and starts Auto-Tune there; set by the settings panel. */
+    private Runnable openOverviewAndRunAutoTune;
+
+    // The commands with several entry points (button, shortcut, table menu, the Overview): one action each, enabled
+    // from CommandAvailability.
+    private final CommandAction detectAction = new CommandAction("Detect Moving Targets",
+            "Run the full pipeline: detect, link and report moving objects across the whole sequence (Ctrl+D).",
+            CommandAvailability.Command.DETECT, this::commandFacts, this::startDetection);
+    private final CommandAction autoTuneAction = new CommandAction("Auto-Tune Settings", AUTO_TUNE_TOOLTIP,
+            CommandAvailability.Command.AUTO_TUNE, this::commandFacts, () -> {
+                if (openOverviewAndRunAutoTune != null) {
+                    openOverviewAndRunAutoTune.run();
+                }
+            });
+    private final CommandAction previewAction = new CommandAction("Preview Frame",
+            "Run the extraction engine on the selected frame to preview detected sources and streaks with the current settings (Ctrl+P).",
+            CommandAvailability.Command.PREVIEW, this::commandFacts, this::previewSelectedFrame);
+    private final CommandAction blinkAction = new CommandAction(BLINK_SELECTED,
+            "Animate the selected frames in a new window for manual visual inspection (Ctrl+B).",
+            CommandAvailability.Command.BLINK, this::commandFacts, this::startOrStopBlink);
+    private final CommandAction solveAction = new CommandAction("Plate Solve Selected",
+            "Calculate the celestial coordinates (WCS) for the selected frame.",
+            CommandAvailability.Command.PLATE_SOLVE, this::commandFacts, this::solveSelectedFrame);
+    private final List<CommandAction> commandActions = List.of(detectAction, autoTuneAction, previewAction, blinkAction, solveAction);
     private final JRadioButton astapSolveRadio = new JRadioButton("ASTAP");
     private final JRadioButton astrometryNetSolveRadio = new JRadioButton("Astrometry.net (online)");
 
@@ -147,9 +169,7 @@ public class MainApplicationPanel extends JPanel {
                 disableControlsProcessing();
                 statusLabel.setText(texts.started());
                 if (texts.initializing() == null) {
-                    // Blink shows its loading in its own window; its button stays available to stop it.
-                    blinkButton.setEnabled(true);
-                    blinkButton.setText("Stop Blinking");
+                    // Blink shows its loading in its own window; its command, now Stop Blinking, stays available.
                     return;
                 }
                 setProgressBarWorking();
@@ -198,21 +218,23 @@ public class MainApplicationPanel extends JPanel {
         importButton.addActionListener(e -> mainAppWindow.chooseAndImportFolder());
         setActionTooltip(convertMonoButton, "Extract luminance and convert all loaded FITS files to 16-bit monochrome. Applies stretch if enabled.");
         setActionTooltip(stretchButton, "Apply the current non-linear stretch settings to all imported FITS files and save as new files.");
-        setActionTooltip(solveButton, "Calculate the celestial coordinates (WCS) for the selected frame.");
         setActionTooltip(skyCatalogueButton, "<html>Download the stars (Gaia), galaxies, nebulae and clusters (SIMBAD) and variable stars "
                 + "(AAVSO VSX)<br>in the field of the plate-solved frames, for the Annotate switch (A) of the viewers. "
                 + "Runs in the background;<br>the star depth is set in the Astrometry Config tab.</html>");
-        setActionTooltip(blinkButton, "Animate the selected frames in a new window for manual visual inspection (Ctrl+B).");
-        setActionTooltip(detectSingleButton, "Run the extraction engine on the selected frame to preview detected sources and streaks with the current settings (Ctrl+P).");
         setActionTooltip(manualTransientInspectionButton, "Extract purified transients from all frames against the master background and navigate through them using arrow keys.");
-        setActionTooltip(detectBatchButton, "Run the full pipeline: detect, link and report moving objects across the whole sequence (Ctrl+D).");
         setActionTooltip(detectIterativelyButton, "For datasets too large for the standard run: multiple temporally spaced passes across the sequence.");
-        setActionTooltip(autoTuneButton, AUTO_TUNE_TOOLTIP);
         for (JButton button : actionTooltips.keySet()) {
             button.setEnabled(false);
         }
         // Importing is the one action available before any frames are loaded.
         importButton.setEnabled(true);
+        // The commands with several entry points take their caption, tooltip and enabled state from their action.
+        solveButton.setAction(solveAction);
+        blinkButton.setAction(blinkAction);
+        detectSingleButton.setAction(previewAction);
+        detectBatchButton.setAction(detectAction);
+        autoTuneAction.putValue(Action.SMALL_ICON, new AutoTuneIcon(20));
+        autoTuneButton.setAction(autoTuneAction);
 
         astapSolveRadio.setToolTipText("Solve with ASTAP (configured in the Astrometry Config tab).");
         astrometryNetSolveRadio.setToolTipText("Solve with the online nova.astrometry.net web service.");
@@ -327,33 +349,6 @@ public class MainApplicationPanel extends JPanel {
                     this::showStretchOutcome);
         });
 
-        blinkButton.addActionListener(e -> {
-            JobHandle running = mainAppWindow.getJobCoordinator().current();
-            if (blinkPlaying || (running != null && running.kind() == JobKind.BLINK)) {
-                // Stop: closing the window ends the blink, or the loading, which then stops at the next frame.
-                mainAppWindow.getBlinkFrame().close();
-                return;
-            }
-            FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
-            if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0 || !confirmBlinkMemory(selectedFitsFilesInfo)) {
-                return;
-            }
-            AtomicBoolean stop = new AtomicBoolean();
-            BlinkFrame blinkFrame = mainAppWindow.getBlinkFrame();
-            BlinkImagesTask task = new BlinkImagesTask(selectedFitsFilesInfo, stop,
-                    (read, total) -> EventQueue.invokeLater(() -> blinkFrame.showLoadProgress(read, total)));
-            JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.BLINK,
-                    mainAppWindow.getImageProcessing(), task, (handle, outcome) -> blinkLoaded(selectedFitsFilesInfo, outcome));
-            if (!admission.admitted()) {
-                statusLabel.setText(admission.refusal());
-                return;
-            }
-            blinkStop = stop;
-            blinkFrame.showLoading(selectedFitsFilesInfo);
-        });
-
-        detectSingleButton.addActionListener(e -> previewSelectedFrame());
-
         // Each run gets the detection settings as they are at the click, or does not start while a setting is invalid.
         manualTransientInspectionButton.addActionListener(e -> {
             DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Manual Transient Inspection did not start.");
@@ -374,15 +369,6 @@ public class MainApplicationPanel extends JPanel {
                     showDetectionProblem(outcome);
                 }
             });
-        });
-
-        detectBatchButton.addActionListener(e -> {
-            DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Detect Moving Targets did not start.");
-            if (settings == null) {
-                return;
-            }
-            ImageProcessing session = mainAppWindow.getImageProcessing();
-            startJob(JobKind.DETECTION, session, new DetectionTask(session, settings), this::showDetectionOutcome);
         });
 
         detectIterativelyButton.addActionListener(e -> {
@@ -430,27 +416,9 @@ public class MainApplicationPanel extends JPanel {
         installTableContextMenu();
         installShortcuts();
 
+        // Plate Solve and Blink follow the selection through refreshWorkflowStatus.
         table.getSelectionModel().addListSelectionListener(event -> {
-            int selectedRow = table.getSelectedRow();
-            if (selectedRow >= 0 && table.getValueAt(selectedRow, FitsFileTableModel.COL_FILENAME) != null) {
-
-                FitsFileInformation fileInfo = getSelectedFileInformation();
-                if (fileInfo != null) {
-                    boolean isSolved = "Yes".equalsIgnoreCase(String.valueOf(table.getValueAt(selectedRow, FitsFileTableModel.COL_SOLVED)));
-                    solveButton.setEnabled(!isSolved);
-                }
-
-                mainAppWindow.getStretchPanel().onFrameSelectionChanged();
-            } else {
-                mainAppWindow.getStretchPanel().onFrameSelectionChanged();
-            }
-
-            FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
-            if (selectedFitsFilesInfo != null && selectedFitsFilesInfo.length >= 3) {
-                blinkButton.setEnabled(true);
-            } else {
-                blinkButton.setEnabled(false);
-            }
+            mainAppWindow.getStretchPanel().onFrameSelectionChanged();
             refreshWorkflowStatus();
         });
 
@@ -458,17 +426,90 @@ public class MainApplicationPanel extends JPanel {
         // A viewer switches the correction on or off; the Astrometry status follows.
         SkyCatalogueModel.shared().addCorrectionListener(this::refreshWorkflowStatus);
 
-        solveButton.addActionListener(e -> {
-            ApplicationWindow.logger.info("Will try to solve image");
-            FitsFileInformation selectedFile = getSelectedFileInformation();
-            if (selectedFile == null) return;
+    }
 
-            // The result belongs to this file, wherever its row is when the solve ends.
-            ImageProcessing session = mainAppWindow.getImageProcessing();
-            startJob(JobKind.PLATE_SOLVE, session, new PlateSolveTask(session, selectedFile.getFilePath(),
-                            astapSolveRadio.isSelected(), astrometryNetSolveRadio.isSelected()),
-                    (handle, outcome) -> showSolveOutcome(selectedFile, outcome));
-        });
+    // ==========================================
+    // THE SHARED COMMANDS
+    // ==========================================
+
+    /** The facts the shared commands are enabled from, as they are now. */
+    private CommandAvailability.Facts commandFacts() {
+        int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
+        int selectedRow = table == null ? -1 : table.getSelectedRow();
+        boolean selectedSolved = selectedRow >= 0
+                && "Yes".equalsIgnoreCase(String.valueOf(table.getValueAt(selectedRow, FitsFileTableModel.COL_SOLVED)));
+        JobCoordinator coordinator = mainAppWindow.getJobCoordinator();
+        JobHandle running = coordinator == null ? null : coordinator.current();
+        boolean blinking = blinkPlaying || (running != null && running.kind() == JobKind.BLINK);
+        return new CommandAvailability.Facts(frames, !containsColorImages,
+                table == null ? 0 : table.getSelectedRowCount(), selectedSolved, uiLocked, blinking);
+    }
+
+    /** Enables the shared commands from the facts as they are now; while a blink loads or plays, Blink stops it. */
+    private void refreshCommands() {
+        for (CommandAction action : commandActions) {
+            action.refresh();
+        }
+        blinkAction.putValue(Action.NAME, commandFacts().blinking() ? "Stop Blinking" : BLINK_SELECTED);
+    }
+
+    /** The Detect Moving Targets command, for the Overview's button and the Ctrl+D of the settings tab. */
+    Action detectAction() {
+        return detectAction;
+    }
+
+    /** The Preview Frame command, for the Overview's button. */
+    Action previewAction() {
+        return previewAction;
+    }
+
+    /** Detect Moving Targets, with the detection settings as they are now; a setting with invalid text stops it. */
+    private void startDetection() {
+        DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Detect Moving Targets did not start.");
+        if (settings == null) {
+            return;
+        }
+        ImageProcessing session = mainAppWindow.getImageProcessing();
+        startJob(JobKind.DETECTION, session, new DetectionTask(session, settings), this::showDetectionOutcome);
+    }
+
+    /** Blinks the selected frames, or stops the blink that is loading or playing. */
+    private void startOrStopBlink() {
+        JobHandle running = mainAppWindow.getJobCoordinator().current();
+        if (blinkPlaying || (running != null && running.kind() == JobKind.BLINK)) {
+            // Stop: closing the window ends the blink, or the loading, which then stops at the next frame.
+            mainAppWindow.getBlinkFrame().close();
+            return;
+        }
+        FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
+        if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0 || !confirmBlinkMemory(selectedFitsFilesInfo)) {
+            return;
+        }
+        AtomicBoolean stop = new AtomicBoolean();
+        BlinkFrame blinkFrame = mainAppWindow.getBlinkFrame();
+        BlinkImagesTask task = new BlinkImagesTask(selectedFitsFilesInfo, stop,
+                (read, total) -> EventQueue.invokeLater(() -> blinkFrame.showLoadProgress(read, total)));
+        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.BLINK,
+                mainAppWindow.getImageProcessing(), task, (handle, outcome) -> blinkLoaded(selectedFitsFilesInfo, outcome));
+        if (!admission.admitted()) {
+            statusLabel.setText(admission.refusal());
+            return;
+        }
+        blinkStop = stop;
+        blinkFrame.showLoading(selectedFitsFilesInfo);
+    }
+
+    /** Plate-solves the selected frame; the result belongs to that file, wherever its row is when the solve ends. */
+    private void solveSelectedFrame() {
+        ApplicationWindow.logger.info("Will try to solve image");
+        FitsFileInformation selectedFile = getSelectedFileInformation();
+        if (selectedFile == null) {
+            return;
+        }
+        ImageProcessing session = mainAppWindow.getImageProcessing();
+        startJob(JobKind.PLATE_SOLVE, session, new PlateSolveTask(session, selectedFile.getFilePath(),
+                        astapSolveRadio.isSelected(), astrometryNetSolveRadio.isSelected()),
+                (handle, outcome) -> showSolveOutcome(selectedFile, outcome));
     }
 
     private void resizeTableColumns(JTable table) {
@@ -535,8 +576,6 @@ public class MainApplicationPanel extends JPanel {
 
     private void clearLoadedControls() {
         containsColorImages = false;
-        solveButton.setEnabled(false);
-        blinkButton.setEnabled(false);
         convertMonoButton.setEnabled(false);
         stretchButton.setEnabled(false);
         setDetectionButtonsDisabled();
@@ -621,22 +660,11 @@ public class MainApplicationPanel extends JPanel {
         if (button == stretchButton) {
             return "tick \"Enable batch stretch\" in the Image Stretch tab first.";
         }
-        if (button == solveButton) {
-            return table.getSelectedRow() < 0 ? "select one frame in the table." : "the selected frame is already solved.";
-        }
-        if (button == blinkButton) {
-            return "select at least 3 frames in the table.";
-        }
         if (button == skyCatalogueButton) {
             return "plate solve at least one frame first, and write the solution to its FITS header.";
         }
         if (containsColorImages) {
             return "convert the frames to monochrome first (1 Prepare).";
-        }
-        if (button == autoTuneButton) {
-            return frames < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES
-                    ? "Auto-Tune needs at least " + SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES + " frames."
-                    : "Auto-Tune is already running.";
         }
         return null;
     }
@@ -685,11 +713,11 @@ public class MainApplicationPanel extends JPanel {
         boolean fetching = skyFetchThread != null;
         skyCatalogueButton.setText(fetching ? "Cancel Sky Catalogue" : FETCH_SKY_CATALOGUE);
         skyCatalogueButton.setEnabled(!uiLocked && (fetching || hasSolvedFrame));
-        updateAutoTuneButton();
         updateAutoTuneTooltip();
         for (JButton button : actionTooltips.keySet()) {
             updateActionTooltip(button);
         }
+        refreshCommands();
     }
 
     /**
@@ -800,24 +828,18 @@ public class MainApplicationPanel extends JPanel {
     private void updateAutoTuneTooltip() {
         int frames = table == null ? 0 : table.getRowCount();
         String saved = frames == 0 ? null : savedAutoTuneLine();
-        String tooltip = saved == null ? AUTO_TUNE_TOOLTIP
-                : AUTO_TUNE_TOOLTIP.replace("</html>", "<br>" + saved + ". A click measures the frames again.</html>");
-        actionTooltips.put(autoTuneButton, tooltip);
-        updateActionTooltip(autoTuneButton);
+        autoTuneAction.setDescription(saved == null ? AUTO_TUNE_TOOLTIP
+                : AUTO_TUNE_TOOLTIP.replace("</html>", "<br>" + saved + ". A click measures the frames again.</html>"));
     }
 
     /** Right-click menu on the frame table for the actions on selected frames. */
     private void installTableContextMenu() {
+        // The same actions as the buttons: the items are enabled with them, and the selection made by the right-click
+        // below refreshes them before the menu shows.
         JPopupMenu menu = new JPopupMenu();
-        JMenuItem blinkItem = new JMenuItem("Blink Selected");
-        JMenuItem previewItem = new JMenuItem("Preview Frame");
-        JMenuItem solveItem = new JMenuItem("Plate Solve Selected");
-        blinkItem.addActionListener(e -> blinkButton.doClick());
-        previewItem.addActionListener(e -> detectSingleButton.doClick());
-        solveItem.addActionListener(e -> solveButton.doClick());
-        menu.add(blinkItem);
-        menu.add(previewItem);
-        menu.add(solveItem);
+        menu.add(new JMenuItem(blinkAction));
+        menu.add(new JMenuItem(previewAction));
+        menu.add(new JMenuItem(solveAction));
         table.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -837,32 +859,22 @@ public class MainApplicationPanel extends JPanel {
                 if (row >= 0 && !table.isRowSelected(row)) {
                     table.setRowSelectionInterval(row, row);
                 }
-                blinkItem.setEnabled(blinkButton.isEnabled());
-                previewItem.setEnabled(detectSingleButton.isEnabled());
-                solveItem.setEnabled(solveButton.isEnabled());
                 menu.show(table, e.getX(), e.getY());
             }
         });
     }
 
-    /** Ctrl+D detect, Ctrl+B blink, Ctrl+P preview, Ctrl+T Auto-Tune. */
+    /** Ctrl+D detect, Ctrl+B blink, Ctrl+P preview, Ctrl+T Auto-Tune: the same actions as the buttons. */
     private void installShortcuts() {
-        bindShortcut("detect", KeyStroke.getKeyStroke("ctrl D"), detectBatchButton);
-        bindShortcut("blink", KeyStroke.getKeyStroke("ctrl B"), blinkButton);
-        bindShortcut("preview", KeyStroke.getKeyStroke("ctrl P"), detectSingleButton);
-        bindShortcut("autoTune", KeyStroke.getKeyStroke("ctrl T"), autoTuneButton);
+        bindShortcut("detect", KeyStroke.getKeyStroke("ctrl D"), detectAction);
+        bindShortcut("blink", KeyStroke.getKeyStroke("ctrl B"), blinkAction);
+        bindShortcut("preview", KeyStroke.getKeyStroke("ctrl P"), previewAction);
+        bindShortcut("autoTune", KeyStroke.getKeyStroke("ctrl T"), autoTuneAction);
     }
 
-    private void bindShortcut(String name, KeyStroke key, JButton button) {
+    private void bindShortcut(String name, KeyStroke key, Action action) {
         getInputMap(WHEN_IN_FOCUSED_WINDOW).put(key, name);
-        getActionMap().put(name, new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent e) {
-                if (button.isEnabled() && !uiLocked) {
-                    button.doClick();
-                }
-            }
-        });
+        getActionMap().put(name, action);
     }
 
     private void configureTableRenderers() {
@@ -1350,31 +1362,9 @@ public class MainApplicationPanel extends JPanel {
         setTransferHandler(handler);
     }
 
-    /** The Detect Moving Targets button, so other views can offer the same action with the same enabling. */
-    JButton getDetectButton() {
-        return detectBatchButton;
-    }
-
-    /**
-     * Connects the Auto-Tune button to the Overview's Run Auto-Tune button: it is enabled with it (frames ready, no tune
-     * running), and a click runs {@code openAndRun}, which shows the Overview and starts Auto-Tune there.
-     */
-    void bindAutoTuneButton(JButton runButton, Runnable openAndRun) {
-        overviewRunAutoTuneButton = runButton;
-        autoTuneButton.addActionListener(e -> openAndRun.run());
-        runButton.addPropertyChangeListener("enabled", e -> updateAutoTuneButton());
-        updateAutoTuneButton();
-    }
-
-    private void updateAutoTuneButton() {
-        autoTuneButton.setEnabled(!uiLocked && overviewRunAutoTuneButton != null && overviewRunAutoTuneButton.isEnabled());
-    }
-
-    /** Runs Detect Moving Targets exactly as its button does (ignored while disabled or busy). */
-    void runDetection() {
-        if (detectBatchButton.isEnabled() && !uiLocked) {
-            detectBatchButton.doClick();
-        }
+    /** What the Auto-Tune command runs: show the Overview and start Auto-Tune there with its tuner and profile. */
+    void setAutoTuneCommand(Runnable openOverviewAndRunAutoTune) {
+        this.openOverviewAndRunAutoTune = openOverviewAndRunAutoTune;
     }
 
     public void selectFirstFileIfNoneSelected() {
@@ -1416,6 +1406,7 @@ public class MainApplicationPanel extends JPanel {
         uiLocked = true;
         savedComponentStates.clear();
         saveAndDisableRecursive(this);
+        refreshCommands();
         // The settings do not change while a job runs: the Detection Settings tab is locked, and so is Preview Frame.
         if (detectionSequenceFrame != null) {
             detectionSequenceFrame.setSettingsEditable(false);
@@ -1427,8 +1418,12 @@ public class MainApplicationPanel extends JPanel {
         mainAppWindow.getTabbedPane().setEnabledAt(3, false);
     }
 
+    /** Disables every control, remembering its state; the shared commands are left to their actions. */
     private void saveAndDisableRecursive(Container container) {
         for (Component c : container.getComponents()) {
+            if (c instanceof AbstractButton button && button.getAction() instanceof CommandAction) {
+                continue;
+            }
             savedComponentStates.put(c, c.isEnabled());
             c.setEnabled(false);
 
@@ -1547,17 +1542,14 @@ public class MainApplicationPanel extends JPanel {
         detectionSequenceFrame.openSequence(allFiles, startIndex, mainAppWindow.getStretchPanel());
     }
 
+    /** The detection buttons without a shared command; Detect Moving Targets and Preview Frame follow their actions. */
     public void setDetectionButtonsEnabled() {
-        this.detectSingleButton.setEnabled(true);
         this.manualTransientInspectionButton.setEnabled(true);
-        this.detectBatchButton.setEnabled(true);
         this.detectIterativelyButton.setEnabled(true);
     }
 
     public void setDetectionButtonsDisabled() {
-        this.detectSingleButton.setEnabled(false);
         this.manualTransientInspectionButton.setEnabled(false);
-        this.detectBatchButton.setEnabled(false);
         this.detectIterativelyButton.setEnabled(false);
     }
 
@@ -1629,10 +1621,9 @@ public class MainApplicationPanel extends JPanel {
     private void blinkLoaded(FitsFileInformation[] files, JobOutcome<BlinkSequence> outcome) {
         BlinkFrame blinkFrame = mainAppWindow.getBlinkFrame();
         if (outcome instanceof JobOutcome.Completed<BlinkSequence> completed && !blinkStop.get()) {
-            disableControlsBlinking();
-            blinkButton.setEnabled(true);
-            blinkButton.setText("Stop Blinking");
+            // Playing first, so the lock leaves Blink available as Stop Blinking.
             blinkPlaying = true;
+            disableControlsBlinking();
             statusLabel.setText("Blinking " + completed.result().getFrames().size()
                     + " frames. Close the blink window or click Stop Blinking to end.");
             blinkFrame.open(completed.result(), files, getImportedFiles(), mainAppWindow.getStretchPanel(),
@@ -1642,7 +1633,7 @@ public class MainApplicationPanel extends JPanel {
         }
         // Stopped, or failed: hides the window if it still shows the loading progress.
         blinkFrame.close();
-        blinkButton.setText("Blink Selected");
+        refreshCommands();
         statusLabel.setText("Blinking stopped.");
         if (outcome instanceof JobOutcome.Failed<BlinkSequence> failed) {
             FailureDialog.show(this, "Error", "Blink process failed: " + failed.reason(), failed.cause());
@@ -1654,7 +1645,6 @@ public class MainApplicationPanel extends JPanel {
         blinkStop.set(true);
         if (blinkPlaying) {
             blinkPlaying = false;
-            blinkButton.setText("Blink Selected");
             enableControlsProcessingBlinkingFinished();
             statusLabel.setText("Blinking stopped.");
         }
@@ -1698,7 +1688,7 @@ public class MainApplicationPanel extends JPanel {
             FailureDialog.show(this, "Error", "Image was not plate-solved successfully: " + errorMsg,
                     outcome instanceof JobOutcome.Failed<PlateSolveResult> failed ? failed.cause() : null);
         }
-        refreshSolveButton();
+        refreshCommands();
     }
 
     /** The end of writing the WCS solution: the frame's row shows its new header, or the error says why it is unchanged. */
@@ -1714,19 +1704,7 @@ public class MainApplicationPanel extends JPanel {
             statusLabel.setText("Failed to update FITS header");
             FailureDialog.show(this, "Error", "Failed to update FITS header: " + failed.reason(), failed.cause());
         }
-        refreshSolveButton();
-    }
-
-    /** Plate Solve is available for the selected frame while it is not solved. */
-    private void refreshSolveButton() {
-        int selectedRow = table.getSelectedRow();
-        if (selectedRow >= 0) {
-            FitsFileInformation selectedFileInfo = getSelectedFileInformation();
-            if (selectedFileInfo != null) {
-                boolean isSolved = "Yes".equalsIgnoreCase(String.valueOf(table.getValueAt(selectedRow, FitsFileTableModel.COL_SOLVED)));
-                solveButton.setEnabled(!isSolved);
-            }
-        }
+        refreshCommands();
     }
 
     /** The end of Convert to Mono: offers to import the new mono folder, or says what went wrong. */

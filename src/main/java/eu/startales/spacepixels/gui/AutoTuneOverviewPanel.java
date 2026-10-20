@@ -52,8 +52,6 @@ public class AutoTuneOverviewPanel extends JPanel {
         /** The current settings, used as the base for a tuned configuration. */
         DetectionConfig currentConfig();
 
-        void showPreview();
-
         void showReport(String reportText);
 
         /** Called when the applied profile or the tuned markers change. */
@@ -296,8 +294,6 @@ public class AutoTuneOverviewPanel extends JPanel {
         chartButton.setToolTipText("<html>Show why the calibrated tuner chose these settings: stars found against false detections,<br>"
                 + "and how faint the chosen setting still recovers a test star.</html>");
         chartButton.addActionListener(e -> showAutoTuneChart());
-        previewButton.setToolTipText("Run the extraction engine on the frame selected in the Main tab and show what it finds, with the current settings.");
-        previewButton.addActionListener(e -> host.showPreview());
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         actions.setBorder(new EmptyBorder(8, 0, 0, 0));
         actions.add(useProfileButton);
@@ -314,25 +310,13 @@ public class AutoTuneOverviewPanel extends JPanel {
 
     /** Adds a core setting row; the spinner stays owned by the settings panel. */
     /**
-     * Makes the Detect Moving Targets button here the same as the main window's: same look, same action, and the
-     * same enabled state and tooltip (including the reason when it is not available).
+     * Gives Detect Moving Targets and Preview Frame here the main window's commands: the same action, enabled state
+     * and tooltip (including the reason when it is not available).
      */
-    void bindDetectButton(JButton mainButton, Runnable runDetection) {
-        detectButton.setText(mainButton.getText());
+    void bindCommands(Action detect, Action preview) {
+        detectButton.setAction(detect);
         detectButton.putClientProperty("FlatLaf.style", MainApplicationPanel.PRIMARY_BUTTON_STYLE);
-        detectButton.addActionListener(e -> runDetection.run());
-        Runnable mirror = () -> {
-            detectButton.setEnabled(mainButton.isEnabled());
-            detectButton.setToolTipText(mainButton.getToolTipText());
-        };
-        mainButton.addPropertyChangeListener("enabled", e -> mirror.run());
-        mainButton.addPropertyChangeListener("ToolTipText", e -> mirror.run());
-        mirror.run();
-    }
-
-    /** The Run Auto-Tune button, enabled while frames are ready and no tune is running. */
-    JButton getRunButton() {
-        return runButton;
+        previewButton.setAction(preview);
     }
 
     /** Runs Auto-Tune as the Run Auto-Tune button does (ignored while it is disabled). */
@@ -958,10 +942,11 @@ public class AutoTuneOverviewPanel extends JPanel {
         algorithmCombo.setEnabled(canTune);
         profileCombo.setEnabled(!tuning);
         for (JButton action : coreActions) {
-            action.setEnabled(sessionReady && !tuning);
+            // Preview Frame follows its command (see bindCommands).
+            if (!(action.getAction() instanceof CommandAction)) {
+                action.setEnabled(sessionReady && !tuning);
+            }
         }
-        // Preview remains available for imported frames even when Auto-Tune cannot run on the session.
-        previewButton.setEnabled(sessionFrames > 0 && !tuning);
         reportButton.setEnabled(lastResult != null && !tuning);
         chartButton.setEnabled(!tuning && chartAvailable(lastResult));
         useProfileButton.setEnabled(lastResult != null && !tuning && profileTable.getSelectedRow() >= 0);
