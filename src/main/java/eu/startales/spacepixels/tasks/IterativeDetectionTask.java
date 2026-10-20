@@ -9,110 +9,46 @@
  */
 package eu.startales.spacepixels.tasks;
 
-import eu.startales.spacepixels.jobs.JobFailures;
-import com.google.common.eventbus.EventBus;
-import io.github.ppissias.jtransient.config.DetectionConfig;
-
-// --- NEW IMPORTS ---
-import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
-import io.github.ppissias.jtransient.engine.TransientEngineProgressListener; // Update to match your actual package
-
-import eu.startales.spacepixels.events.DetectionFinishedEvent;
-import eu.startales.spacepixels.events.DetectionStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
+import eu.startales.spacepixels.jobs.Job;
+import eu.startales.spacepixels.jobs.JobContext;
+import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.ImageProcessing;
+import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 
-import javax.swing.*;
 import java.io.File;
-import java.util.logging.Level;
 
-public class IterativeDetectionTask implements Runnable {
-    private final EventBus eventBus;
+/** Runs the iterative passes and writes their reports; the result is the index page of the passes. */
+public class IterativeDetectionTask implements Job<File> {
     private final ImageProcessing preProcessing;
     private final DetectionConfig config;
+    private final int maxFrames;
 
-    public IterativeDetectionTask(EventBus eventBus, ImageProcessing preProcessing, DetectionConfig config) {
-        this.eventBus = eventBus;
+    /** @param maxFrames the most frames a pass uses, or 0 for all the frames of the session */
+    public IterativeDetectionTask(ImageProcessing preProcessing, DetectionConfig config, int maxFrames) {
         this.preProcessing = preProcessing;
         this.config = config;
+        this.maxFrames = maxFrames;
     }
 
     @Override
-    public void run() {
-        // --- NEW: Prompt user for maximum frames before starting ---
-        final int[] maxFrames = {0};
-        final boolean[] cancelled = {false};
-        
-        try {
-            SwingUtilities.invokeAndWait(() -> {
-                JPanel panel = new JPanel(new java.awt.BorderLayout(5, 5));
-                panel.add(new JLabel("<html>Enter the maximum number of frames to use for the iterative passes<br>(Leave empty or enter 0 to go up to the total number of frames):</html>"), java.awt.BorderLayout.NORTH);
-                
-                JTextField inputField = new JTextField(10);
-                JPanel fieldPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
-                fieldPanel.add(inputField);
-                panel.add(fieldPanel, java.awt.BorderLayout.CENTER);
+    public JobOutcome<File> run(JobContext context) throws Exception {
+        // The limit is higher than a single pass because an iterative run aggregates detections.
+        ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) ->
+                summary.confirmReport(preProcessing.hasPlateSolvedFrame(), 100, "Iterative pass", config);
 
-                int result = JOptionPane.showConfirmDialog(
-                        null,
-                        panel,
-                        "Limit Iterative Passes",
-                        JOptionPane.OK_CANCEL_OPTION,
-                        JOptionPane.QUESTION_MESSAGE
-                );
-                if (result != JOptionPane.OK_OPTION) {
-                    cancelled[0] = true;
-                } else {
-                    String input = inputField.getText();
-                    if (input != null && !input.trim().isEmpty()) {
-                        try {
-                            maxFrames[0] = Integer.parseInt(input.trim());
-                        } catch (NumberFormatException ignored) {}
-                    }
-                }
-            });
-        } catch (Exception e) {
-            ApplicationWindow.logger.log(Level.WARNING, "Failed to show max frames dialog", e);
-        }
-        
-        if (cancelled[0]) {
-            return; // Exit silently if user clicked cancel
-        }
-
-        // 1. Trigger the Progress Dialog NOW
-        eventBus.post(new DetectionStartedEvent());
-
-        try {
-            // Define the Safety Valve Callback
-            // The limit is higher than a single pass because an iterative run aggregates detections.
-            ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) ->
-                    summary.confirmReport(preProcessing.hasPlateSolvedFrame(), 100, "Iterative pass", config);
-
-            // --- NEW: Define the Progress Callback Bridge ---
-            TransientEngineProgressListener progressListener = (percentage, message) -> {
-                if (ApplicationWindow.OOM_FLAG) {
-                    throw new OutOfMemoryError("Global OOM triggered");
-                }
-                // Instantly bridge the pure Java call to the Guava EventBus
-                eventBus.post(new EngineProgressUpdateEvent(percentage, message));
-            };
-
-            // --- CALL THE NEW ITERATIVE METHOD WITH THE MAX LIMIT ---
-            File masterDir = preProcessing.detectSlowObjectsIterative(config, safetyPrompt, progressListener, maxFrames[0]);
-
-            if (masterDir == null) {
-                eventBus.post(new DetectionFinishedEvent(null, false, false, "Iterative run aborted by user.", null, 0, 0, null));
-            } else {
-                // We pass the masterDir.
-                // The MainApplicationPanel will call Desktop.getDesktop().browse(masterDir.toURI())
-                // which automatically opens the folder in Windows Explorer / macOS Finder!
-                eventBus.post(new DetectionFinishedEvent(masterDir, true, false, null, null, 0, 0, null));
+        TransientEngineProgressListener progressListener = (percentage, message) -> {
+            if (ApplicationWindow.OOM_FLAG) {
+                throw new OutOfMemoryError("Global OOM triggered");
             }
+            context.progress(percentage, message);
+        };
 
-        } catch (Throwable ex) {
-            String message = JobFailures.rethrowOutOfMemory(ex);
-            ApplicationWindow.logger.log(Level.SEVERE, "Iterative Detection failed", ex);
-            eventBus.post(new DetectionFinishedEvent(null, false, false, message, null, 0, 0, null));
+        File masterDir = preProcessing.detectSlowObjectsIterative(config, safetyPrompt, progressListener, maxFrames);
+        if (masterDir == null) {
+            return JobOutcome.declined("Iterative run aborted by user.");
         }
+        return JobOutcome.completed(masterDir);
     }
 }

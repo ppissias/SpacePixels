@@ -352,24 +352,22 @@ public class MainApplicationPanel extends JPanel {
             if (settings == null) {
                 return;
             }
-            new Thread(new DetectionTask(
-                    mainAppWindow.getEventBus(),
-                    mainAppWindow.getImageProcessing(),
-                    settings
-            )).start();
+            ImageProcessing session = mainAppWindow.getImageProcessing();
+            startJob(JobKind.DETECTION, session, new DetectionTask(session, settings), this::showDetectionOutcome);
         });
 
-        // Wire up the new button to the new task
         detectIterativelyButton.addActionListener(e -> {
             DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Detect Iteratively did not start.");
             if (settings == null) {
                 return;
             }
-            new Thread(new IterativeDetectionTask(
-                    mainAppWindow.getEventBus(),
-                    mainAppWindow.getImageProcessing(),
-                    settings
-            )).start();
+            Integer maxFrames = askIterativeFrameLimit();
+            if (maxFrames == null) {
+                return;
+            }
+            ImageProcessing session = mainAppWindow.getImageProcessing();
+            startJob(JobKind.ITERATIVE_DETECTION, session, new IterativeDetectionTask(session, settings, maxFrames),
+                    this::showDetectionOutcome);
         });
 
         // ==========================================
@@ -1420,6 +1418,48 @@ public class MainApplicationPanel extends JPanel {
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(kind, session, job, handler);
         if (!admission.admitted()) {
             statusLabel.setText(admission.refusal());
+        }
+    }
+
+    /**
+     * Asks for the most frames the iterative passes may use: 0 (or an empty field) for all the frames of the session,
+     * or null when the user cancels.
+     */
+    private Integer askIterativeFrameLimit() {
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.add(new JLabel("<html>Enter the maximum number of frames to use for the iterative passes<br>(Leave empty or enter 0 to go up to the total number of frames):</html>"), BorderLayout.NORTH);
+
+        JTextField inputField = new JTextField(10);
+        JPanel fieldPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        fieldPanel.add(inputField);
+        panel.add(fieldPanel, BorderLayout.CENTER);
+
+        int result = JOptionPane.showConfirmDialog(
+                null,
+                panel,
+                "Limit Iterative Passes",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.QUESTION_MESSAGE
+        );
+        if (result != JOptionPane.OK_OPTION) {
+            return null;
+        }
+        String input = inputField.getText();
+        if (input != null && !input.trim().isEmpty()) {
+            try {
+                return Integer.parseInt(input.trim());
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return 0;
+    }
+
+    /** The end of Detect Moving Targets and Detect Iteratively: offers the report, or says what went wrong. */
+    private void showDetectionOutcome(JobHandle handle, JobOutcome<File> outcome) {
+        if (outcome instanceof JobOutcome.Completed<File> completed) {
+            promptUserToOpenReport(completed.result());
+        } else {
+            showDetectionProblem(outcome);
         }
     }
 

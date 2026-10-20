@@ -6,7 +6,6 @@ import eu.startales.spacepixels.events.AutoTuneFinishedEvent;
 import eu.startales.spacepixels.events.BatchConvertFinishedEvent;
 import eu.startales.spacepixels.events.BatchStretchFinishedEvent;
 import eu.startales.spacepixels.events.BlinkFinishedEvent;
-import eu.startales.spacepixels.events.DetectionFinishedEvent;
 import eu.startales.spacepixels.events.SolveFinishedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.jobs.Job;
@@ -64,8 +63,6 @@ public class TaskFailureEventsTest {
         assertFalse(tune.isSuccess());
         assertNotNull(tune.getMessage());
 
-        assertFailed(last(run(new DetectionTask(bus(), null, new DetectionConfig())), DetectionFinishedEvent.class));
-
         BlinkFinishedEvent blink = last(run(new BlinkImagesTask(bus(), new FitsFileInformation[]{missing}, new AtomicBoolean(true))),
                 BlinkFinishedEvent.class);
         assertFalse(blink.isSuccess());
@@ -86,6 +83,8 @@ public class TaskFailureEventsTest {
 
     @Test
     public void failingJobsEndAsFailedWithTheReason() {
+        assertFailed(outcomeOf(new DetectionTask(null, new DetectionConfig())));
+        assertFailed(outcomeOf(new IterativeDetectionTask(null, new DetectionConfig(), 0)));
         assertFailed(outcomeOf(new ManualTransientInspectionTask(null, new DetectionConfig())));
         assertFailed(outcomeOf(new StarMaskStackTask(new FitsFileInformation[]{missingFrame()}, new DetectionConfig())));
     }
@@ -120,11 +119,6 @@ public class TaskFailureEventsTest {
     private FitsFileInformation missingFrame() {
         File file = new File(folder.getRoot(), "missing.fit");
         return new FitsFileInformation(file.getAbsolutePath(), file.getName(), true, 6, 4);
-    }
-
-    private static void assertFailed(DetectionFinishedEvent event) {
-        assertFalse(event.isSuccess());
-        assertNotNull(event.getErrorMessage());
     }
 
     private Recorder recorder;
