@@ -1528,6 +1528,11 @@ public class DetectionConfigurationPanel extends JPanel {
     /** The end of Auto-Tune: the Overview shows the result or the problem, and the status bar says how it ended. */
     private void autoTuneFinished(JobOutcome<JTransientAutoTuner.AutoTunerResult> outcome) {
         setCursor(Cursor.getDefaultCursor());
+        if (outcome instanceof JobOutcome.Cancelled<?>) {
+            // The status bar already says that Auto-Tune was cancelled.
+            overviewPanel.tuneCancelled();
+            return;
+        }
         boolean completed = outcome instanceof JobOutcome.Completed<?>;
         JTransientAutoTuner.AutoTunerResult result =
                 outcome instanceof JobOutcome.Completed<JTransientAutoTuner.AutoTunerResult> done ? done.result() : null;

@@ -39,7 +39,7 @@ public class JobCoordinatorTest {
             }
 
             @Override
-            public void jobEnded(JobHandle handle) {
+            public void jobEnded(JobHandle handle, JobOutcome<?> outcome) {
                 calls.add("ended " + handle.id());
             }
         });
@@ -148,6 +148,57 @@ public class JobCoordinatorTest {
         assertEquals(List.of("started 1", "ended 1", "outcome 1 Failed[reason=The job ended without a result., cause=null]"), calls);
         assertEquals(List.of("The job could not start: no threads left"), rejected);
         assertNull(rejecting.current());
+    }
+
+    @Test
+    public void aCancelledJobStopsAtItsNextProgressAndEndsAsCancelled() {
+        assertFalse("Nothing runs yet", coordinator.cancel());
+        List<Boolean> seen = new ArrayList<>();
+        coordinator.start(JobKind.DETECTION, null, context -> {
+            seen.add(context.isCancelled());
+            context.progress(10, "Loading frame 1 of 5...");
+            return JobOutcome.completed("report");
+        }, record());
+        assertTrue(coordinator.cancel());
+        workers.remove(0).run();
+        assertEquals(List.of(true), seen);
+        assertEquals(List.of("started 1", "ended 1", "outcome 1 Cancelled[]"), calls);
+        assertNull(coordinator.current());
+
+        // A job that wraps the cancellation in its own exception is still cancelled, not failed.
+        coordinator.<String>start(JobKind.DETECTION, null, context -> {
+            try {
+                context.progress(10, "Loading frame 1 of 5...");
+            } catch (RuntimeException e) {
+                throw new IOException("Loading failed", e);
+            }
+            return JobOutcome.completed("report");
+        }, record());
+        coordinator.cancel();
+        workers.remove(0).run();
+        assertEquals("outcome 2 Cancelled[]", calls.get(calls.size() - 1));
+    }
+
+    @Test
+    public void aCancelAfterTheWorkIsDoneKeepsTheResult() {
+        coordinator.start(JobKind.DETECTION, null, context -> {
+            context.progress(100, "Batch detection complete!");
+            return JobOutcome.completed("report");
+        }, record());
+        coordinator.cancel();
+        workers.remove(0).run();
+        assertEquals("outcome 1 Completed[result=report]", calls.get(calls.size() - 1));
+    }
+
+    @Test
+    public void aJobThatCannotBeCancelledRunsToItsEnd() {
+        coordinator.start(JobKind.PLATE_SOLVE, null, context -> {
+            context.progress(50, "Solving...");
+            return JobOutcome.completed("solved");
+        }, record());
+        assertFalse(coordinator.cancel());
+        workers.remove(0).run();
+        assertEquals(List.of("started 1", "progress 1 50 Solving...", "ended 1", "outcome 1 Completed[result=solved]"), calls);
     }
 
     private JobCoordinator.OutcomeHandler<String> record() {

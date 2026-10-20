@@ -31,7 +31,8 @@ public final class JobCoordinator {
 
         void jobProgress(JobHandle handle, int percent, String message);
 
-        void jobEnded(JobHandle handle);
+        /** The job has ended with {@code outcome}; its handler is told next. */
+        void jobEnded(JobHandle handle, JobOutcome<?> outcome);
     }
 
     /** Receives the outcome of one job, on the UI thread, after {@link Listener#jobEnded}. */
@@ -54,12 +55,14 @@ public final class JobCoordinator {
     private final BooleanSupplier otherWorkRunning;
     private volatile Listener listener;
     private volatile JobHandle current;
+    /** The job the user has cancelled, if it is still running. */
+    private volatile JobHandle cancelled;
     private long nextId = 1;
 
     /**
      * @param workers          runs each job's work on a thread of its own
      * @param ui               runs code on the UI thread
-     * @param otherWorkRunning whether work outside the coordinator holds the window, such as a job still on the event bus
+     * @param otherWorkRunning whether work outside the coordinator holds the window, such as a blink while it plays
      */
     public JobCoordinator(Executor workers, Executor ui, BooleanSupplier otherWorkRunning) {
         this.workers = Objects.requireNonNull(workers, "workers");
@@ -74,6 +77,19 @@ public final class JobCoordinator {
     /** The job that is running, or null. */
     public JobHandle current() {
         return current;
+    }
+
+    /**
+     * Cancels the running job: it stops at its next progress report and ends as {@link JobOutcome.Cancelled}. Returns
+     * false when no job runs or its kind cannot be cancelled. A job whose work is already done still completes.
+     */
+    public boolean cancel() {
+        JobHandle running = current;
+        if (running == null || !running.kind().cancellable()) {
+            return false;
+        }
+        cancelled = running;
+        return true;
     }
 
     /**
@@ -117,8 +133,12 @@ public final class JobCoordinator {
         } catch (Throwable t) {
             // Out of memory leaves the thread for the application's handler, which closes SpacePixels with a message.
             String reason = JobFailures.rethrowOutOfMemory(t);
-            LOGGER.log(Level.SEVERE, handle.kind().title() + " failed", t);
-            outcome = JobOutcome.failed(reason, t);
+            if (cancelled == handle && JobFailures.isCancellation(t)) {
+                outcome = JobOutcome.cancelled();
+            } else {
+                LOGGER.log(Level.SEVERE, handle.kind().title() + " failed", t);
+                outcome = JobOutcome.failed(reason, t);
+            }
         }
         JobOutcome<R> ended = outcome;
         ui.execute(() -> end(handle, ended, handler));
@@ -129,9 +149,12 @@ public final class JobCoordinator {
             return;
         }
         current = null;
+        if (cancelled == handle) {
+            cancelled = null;
+        }
         try {
             if (listener != null) {
-                listener.jobEnded(handle);
+                listener.jobEnded(handle, outcome);
             }
         } finally {
             handler.handle(handle, outcome);
@@ -151,10 +174,19 @@ public final class JobCoordinator {
         }
 
         @Override
+        public boolean isCancelled() {
+            return cancelled == handle;
+        }
+
+        @Override
         public void progress(int percent, String message) {
             if (JobFailures.isApplicationOutOfMemory()) {
                 // Another job ran out of memory and SpacePixels is closing: this one stops here.
                 throw new OutOfMemoryError("SpacePixels ran out of memory in another job.");
+            }
+            // A report of 100% means the work is done, so a late cancel does not throw its result away.
+            if (percent < 100 && cancelled == handle) {
+                throw new JobCancelledException();
             }
             ui.execute(() -> {
                 Listener target = listener;

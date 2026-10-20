@@ -78,6 +78,37 @@ public class TaskOutcomesTest {
         }
     }
 
+    @Test
+    public void aDetectionCancelledWhileItRunsStopsBeforeWritingAReport() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 5);
+        try (ImageProcessing processing = ImageProcessing.getInstance(sequence.toFile())) {
+            processing.getFitsfileInformationHeadless();
+            List<JobOutcome<File>> outcomes = new ArrayList<>();
+            JobCoordinator coordinator = new JobCoordinator(Runnable::run, Runnable::run, () -> false);
+            // The user cancels as soon as the first progress appears.
+            coordinator.setListener(new JobCoordinator.Listener() {
+                @Override
+                public void jobStarted(eu.startales.spacepixels.jobs.JobHandle handle) {
+                }
+
+                @Override
+                public void jobProgress(eu.startales.spacepixels.jobs.JobHandle handle, int percent, String message) {
+                    coordinator.cancel();
+                }
+
+                @Override
+                public void jobEnded(eu.startales.spacepixels.jobs.JobHandle handle, JobOutcome<?> outcome) {
+                }
+            });
+            coordinator.start(JobKind.DETECTION, processing, new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig()),
+                    (handle, outcome) -> outcomes.add(outcome));
+            assertEquals(1, outcomes.size());
+            assertTrue(String.valueOf(outcomes.get(0)), outcomes.get(0) instanceof JobOutcome.Cancelled<?>);
+            File[] reports = sequence.toFile().listFiles(file -> file.getName().startsWith("detections_"));
+            assertEquals(0, reports == null ? 0 : reports.length);
+        }
+    }
+
     /** Runs the job under a coordinator that works on the calling thread, and returns its one outcome. */
     private static <R> JobOutcome<R> outcomeOf(Job<R> job) {
         List<JobOutcome<R>> outcomes = new ArrayList<>();

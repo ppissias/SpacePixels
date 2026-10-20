@@ -14,9 +14,14 @@ public interface JobContext {
 
     JobHandle handle();
 
+    /** Whether the user has cancelled this job; a job that reports no progress for a while can stop here itself. */
+    boolean isCancelled();
+
     /**
-     * Reports progress; it reaches the window only while this job is the current one. Once the application has run
-     * out of memory, it throws {@link OutOfMemoryError} instead, so that the job stops while SpacePixels closes.
+     * Reports progress; it reaches the window only while this job is the current one. Once the user has cancelled the
+     * job, it throws {@link JobCancelledException} instead, unless {@code percent} is 100, which means the work is
+     * done. Once the application has run out of memory, it throws {@link OutOfMemoryError}, so that the job stops
+     * while SpacePixels closes.
      */
     void progress(int percent, String message);
 }

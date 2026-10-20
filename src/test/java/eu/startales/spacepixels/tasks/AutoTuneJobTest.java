@@ -49,7 +49,7 @@ public class AutoTuneJobTest {
                 }
 
                 @Override
-                public void jobEnded(JobHandle handle) {
+                public void jobEnded(JobHandle handle, JobOutcome<?> outcome) {
                 }
             });
             coordinator.start(JobKind.AUTO_TUNE, processing, new AutoTuneTask(files, SyntheticDatasetFactory.createSyntheticDetectionConfig(),

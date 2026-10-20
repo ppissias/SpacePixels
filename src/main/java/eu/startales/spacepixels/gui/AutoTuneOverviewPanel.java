@@ -496,6 +496,14 @@ public class AutoTuneOverviewPanel extends JPanel {
         refreshControls();
     }
 
+    /** The user cancelled the tune: nothing was measured, and the settings are unchanged. */
+    void tuneCancelled() {
+        tuning = false;
+        statusLabel.setForeground(UIManager.getColor("Label.foreground"));
+        statusLabel.setText("Auto-Tune was cancelled. Your current settings are unchanged.");
+        refreshControls();
+    }
+
     void tuneFinished(boolean success, String message, JTransientAutoTuner.AutoTunerResult result) {
         tuning = false;
         if (!success || result == null) {

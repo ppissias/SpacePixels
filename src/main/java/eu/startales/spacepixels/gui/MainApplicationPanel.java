@@ -149,6 +149,7 @@ public class MainApplicationPanel extends JPanel {
                     return;
                 }
                 setProgressBarWorking();
+                progressDialog.offerCancel(handle.kind().cancellable() ? () -> mainAppWindow.getJobCoordinator().cancel() : null);
                 if (texts.indeterminate()) {
                     progressDialog.showIndeterminateProgress(texts.initializing());
                 } else {
@@ -172,11 +173,13 @@ public class MainApplicationPanel extends JPanel {
             }
 
             @Override
-            public void jobEnded(JobHandle handle) {
+            public void jobEnded(JobHandle handle, JobOutcome<?> outcome) {
                 progressDialog.setVisible(false);
                 setProgressBarIdle();
                 enableControlsProcessingFinished();
-                statusLabel.setText(JobTexts.of(handle.kind()).ended());
+                statusLabel.setText(outcome instanceof JobOutcome.Cancelled<?>
+                        ? handle.kind().title() + " cancelled."
+                        : JobTexts.of(handle.kind()).ended());
             }
         });
 

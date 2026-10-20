@@ -47,9 +47,18 @@ public final class JobFailures {
 
     /** Whether {@code failure} or one of its causes is an {@link OutOfMemoryError}. */
     public static boolean isOutOfMemory(Throwable failure) {
+        return hasCause(failure, OutOfMemoryError.class);
+    }
+
+    /** Whether {@code failure} or one of its causes is a cancellation of the job. */
+    static boolean isCancellation(Throwable failure) {
+        return hasCause(failure, JobCancelledException.class);
+    }
+
+    private static boolean hasCause(Throwable failure, Class<? extends Throwable> type) {
         Throwable cause = failure;
         for (int depth = 0; cause != null && depth < MAX_CAUSE_DEPTH; depth++) {
-            if (cause instanceof OutOfMemoryError) {
+            if (type.isInstance(cause)) {
                 return true;
             }
             cause = cause.getCause();
