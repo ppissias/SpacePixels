@@ -46,9 +46,9 @@ This was a source and architecture review, with primary documentation checked fo
 | ID | Priority | Status | Improvement | First useful result |
 |---|---|---|---|---|
 | D01 | High | Implemented | Safe publication of FITS files and settings | A failed replacement preserves the previous file; a failed save remains visibly unsaved. |
-| D02 | High | In progress (detection jobs, 2026-10-20) | Job ownership and resource admission | A command acquires its job slot before the worker starts; only that job can finish it. |
+| D02 | High | In progress (every job admitted by the coordinator, 2026-10-20) | Job ownership and resource admission | A command acquires its job slot before the worker starts; only that job can finish it. |
 | D03 | High | Implemented | Preview results belong to a request | A previous frame or stretch cannot overwrite the current preview. |
-| D04 | High | In progress (S1, S11, detection-job outcomes) | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
+| D04 | High | In progress (S1, S11, typed outcomes for every job) | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
 | D05 | High | Implemented; Preview Frame question open | Validate settings and capture run snapshots | Invalid editor text cannot silently run with an older value. |
 | D06 | Medium | Proposed | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
 | D07 | Medium | Proposed | Shared actions and derived availability | Button, shortcut and context menu execute the same command under the same conditions. |
@@ -357,17 +357,17 @@ The coverage limits and the deliberate exceptions are listed in the [review summ
 | Step | Stage | Work | Covers |
 |---|---|---|---|
 | S1 | A | **Done 2026-10-20 (`01d983e`).** Every job ends with a finished event or the out-of-memory exit; before, some failures left the UI locked. | D04 (new evidence) |
-| S2 | B | **First slice done 2026-10-20 (`54e32b6`–`953f3cf`)**: the four detection jobs. A job coordinator: admission before the worker starts, and job and session identity | D02 |
-| S3 | B | **First slice done 2026-10-20**, with S2: `JobOutcome` replaces the shared detection-finished event. Typed outcomes per job kind | D04 |
+| S2 | B | **Done for every job, 2026-10-20** (`54e32b6` to `23acc9b`). A job coordinator: admission before the worker starts, and job and session identity. Session identity is a placeholder until S7 | D02 |
+| S3 | B | **Done 2026-10-20**, with S2: every job returns a `JobOutcome` (completed, declined or failed). Typed outcomes per job kind | D04 |
 | S4 | B | Shared actions and availability: one Detect action; tabs and solve results addressed by identity. Solve results are matched by file since the plate-solve slice (2026-10-20) | D07 |
 | S5 | B | **Done 2026-10-20 (`01d983e`, with S1).** Use `BatchStretchTask` instead of its inline copy | — |
 | S6 | B–C | No GUI in `tasks`: their own logger and out-of-memory policy, and results returned instead of windows and dialogs opened | new |
 | S7 | C | A session object, and the application config loaded once | D06, D11 |
 | S8 | C | The WCS write and session-folder I/O off the EDT | D08 |
-| S9 | B–C | Retire the event bus as S2, S3 and S7 replace its events (accepted 2026-10-20). 15 of 18 events removed: all jobs except import | EventBus decision |
+| S9 | B–C | **Done 2026-10-20 (`23acc9b`)**: all 18 events, the bus and the Guava dependency are removed. Jobs report through the coordinator; a new session reaches the panels through the window's session listeners | EventBus decision |
 | S10 | C | Split `ImageProcessing`: its session part into the session object, with batch operations and import as their own services. Keep it as a facade, and remove its dead methods | D06 |
 | S11 | A–B | **Done 2026-10-20 (`d255b68`), the message fix.** Report failures as failures. Before, a report-export failure said "aborted by user due to high track count", a failed iterative pass was still listed, and an Astrometry.net failure showed two dialogs. Typed outcomes follow with S3 | D04 (new evidence) |
-| S12 | C | One preparation flow for the GUI and the API, with the GUI's questions asked on the EDT and typed import outcomes. Today declining a conversion closes the current session | D08, D06, F07 |
+| S12 | C | One preparation flow for the GUI and the API, with the GUI's questions asked on the EDT. Typed import outcomes are done: since `74bbded` a declined import keeps the open session. The questions are still asked from the import worker | D08, D06, F07 |
 | S13 | B–C | No `gui` and no Swing in `util` | new |
 | S14 | D | An explicit run context: the site, rendering options and Auto-Tune frame limit go with the run, instead of coming from the home folder and static fields | D09, D10 |
 | S15 | D | One source of finding labels and categories. Today T1, ST1, A1… are computed in seven places that agree only by walking the tracks in the same order | D09 |
@@ -390,7 +390,9 @@ S1 and S11 were the small correctness fixes that needed nothing else first; both
 
 ### Guava EventBus: keep or replace?
 
-**Accepted (2026-10-20): option 2, retire it gradually.** The maintainer chose it after the architecture review. In practice this means:
+**Implemented (2026-10-20).** The maintainer chose option 2 after the architecture review. The bus and Guava were removed the same day, in `23acc9b`, when the last job moved to the coordinator.
+
+**Accepted (2026-10-20): option 2, retire it gradually.** In practice this meant:
 - no separate migration project;
 - no new events on the bus;
 - each event is removed when its workflow gets a typed job handle or a session notification (S9);
@@ -449,7 +451,14 @@ To ground the decision, the review should list every publisher, subscriber and r
 
 ### S2 and S3, first slice: a job coordinator for the detection jobs
 
-**Implemented (2026-10-20), in `54e32b6`, `f945ad8`, `281246f` and `953f3cf`.** The maintainer accepted the design and checks the four buttons in the GUI. Later slices moved Convert to Mono and Batch Stretch, then Plate Solve, Auto-Tune and Blink (2026-10-20). Import remains.
+**Implemented (2026-10-20), in `54e32b6`, `f945ad8`, `281246f` and `953f3cf`.** The maintainer accepted the design and checks the four buttons in the GUI. Later slices moved the other jobs, all on 2026-10-20:
+- Convert to Mono and Batch Stretch;
+- Plate Solve;
+- Auto-Tune;
+- Blink;
+- Import.
+
+Every job now runs under the coordinator.
 
 **Scope.** The four jobs that share the detection lock, progress dialog and finished event today:
 - Detect Moving Targets;

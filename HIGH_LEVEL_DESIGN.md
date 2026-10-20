@@ -48,8 +48,6 @@ Primary runtime dependencies:
   - ASTAP and Astrometry.net solving integration
 - `gov.nasa.gsfc.heasarc:nom-tam-fits`
   - FITS read/write and compressed FITS support
-- `com.google.guava:guava`
-  - GUI event bus, being retired job by job (DESIGN-IMPROVEMENTS S9)
 - `com.google.code.gson:gson`
   - JSON configuration and report lookup payloads
 - `com.formdev:flatlaf`
@@ -91,18 +89,12 @@ Owns:
 
 The detection profile wraps JTransient `DetectionConfig` plus SpacePixels' Auto-Tune candidate-frame limit. Visualization preferences are intentionally separate because they do not affect detection results.
 
-### `eu.startales.spacepixels.events`
-
-Small EventBus message types for GUI/task coordination.
-
-These events carry progress, lifecycle, and result notifications across background tasks and Swing panels. They are not part of the public API. Jobs that move to the job coordinator lose their events. Only import still uses events.
-
 ### `eu.startales.spacepixels.jobs`
 
 The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker and returns a `JobOutcome`: completed with its result, declined by the user, or failed with a reason.
 
 `JobCoordinator` behaves as follows:
-- **Admission:** it admits one job at a time, on the UI thread, before the worker starts. It refuses a job while another runs, or while a task still on the event bus holds the window.
+- **Admission:** it admits one job at a time, on the UI thread, before the worker starts. It refuses a job while another runs, or while other work holds the window (the blink window, while a blink plays).
 - **The window's lock:** its listener, in `MainApplicationPanel`, locks the window and shows the progress dialog on admission, and unlocks the window when the job ends.
 - **Progress:** it reaches the window only while the job is current.
 - **Outcome:** it is delivered exactly once, on the UI thread, after the unlock.
@@ -130,8 +122,8 @@ Main classes:
 - `StarMaskExplorerFrame`
 - `DetectionSequenceFrame`
 - `TransientInspectionFrame`
-- `TuningPreviewManager`
 - `ProcessingProgressDialog`
+- `SessionListener` (how `ApplicationWindow` tells the main panel, Image Stretch and Detection Settings that a new session was imported)
 
 The GUI layer currently combines view and controller behavior in several panels. That is an accepted current state and a refactor boundary.
 
@@ -139,9 +131,10 @@ The GUI layer currently combines view and controller behavior in several panels.
 
 Background runnables launched by the GUI.
 
-Tasks are the boundary between Swing actions and longer-running work. They run in one of two ways:
-- **Jobs under the `JobCoordinator`:** `DetectionTask`, `IterativeDetectionTask`, `ManualTransientInspectionTask`, `StarMaskStackTask`, `BatchConvertMonoTask`, `BatchStretchTask`, `PlateSolveTask`, `AutoTuneTask` and `BlinkImagesTask`. They return their result, and the window opens what follows (the report question, the inspection view, the Star Mask Explorer, the offer to import the mono folder, the offer to write the WCS solution, the tuned settings on the Overview, the blink window). While a blink plays, the blink window holds the main window's lock until it closes.
-- **Through the Guava `EventBus`:** the others post lifecycle and progress events to the GUI.
+Tasks are the boundary between Swing actions and longer-running work. Each is a job under the `JobCoordinator`:
+- **What a job returns:** its result. The window then opens what follows: the imported session, the report question, the inspection view, the Star Mask Explorer, the offer to import the mono folder, the offer to write the WCS solution, the tuned settings on the Overview, or the blink window.
+- **Blink:** while a blink plays, the blink window holds the main window's lock until it closes.
+- **Import:** an import that loads no frames, for example because a conversion was declined, keeps the open session.
 
 Main tasks:
 
@@ -252,7 +245,7 @@ Owns:
 - `StretchPanel`
 - `DetectionConfigurationPanel`
 - `BlinkFrame`
-- Guava `EventBus`
+- the `JobCoordinator` and the session listeners
 - current `ImageProcessing` instance after import
 - `ReportLookupProxyServer` lifecycle
 
@@ -755,10 +748,11 @@ Replacing files:
 
 Desktop:
 
-- **All long jobs except import** run under `JobCoordinator`:
+- **Every long job** runs under `JobCoordinator`:
   - admission and locking happen on the EDT before the worker starts;
   - progress and the single outcome come back on the EDT.
-- **Other long work** runs in explicit background `Thread`s around task `Runnable`s that post EventBus messages. Their subscribers move Swing updates onto the EDT.
+- **Previews:** the frame viewers and the Image Stretch previews render on `SwingWorker`s; the newest request wins.
+- **Sky catalogue:** the fetch and the plate-solution check run on their own thread. Their results are dropped when another session has been imported meanwhile.
 
 Headless/API:
 
@@ -798,7 +792,7 @@ Accepted current debt:
 - `DetectionConfigurationPanel` and `MainApplicationPanel` still combine Swing view logic and workflow control.
 - `DetectionReportGenerator` still contains substantial static rendering/helper behavior even though major sections have been split into writers.
 - Some visualization settings are static runtime values captured at report-export time.
-- GUI tasks still on the event bus launch raw threads; all other long jobs run under the job coordinator.
+- Some jobs still read the GUI's logger and its out-of-memory flag from `ApplicationWindow` (DESIGN-IMPROVEMENTS S6).
 
 Preferred refactor direction:
 
