@@ -43,6 +43,7 @@ public class ManualTransientInspectionTask implements Runnable {
     public void run() {
         eventBus.post(new DetectionStartedEvent());
 
+        JTransientEngine engine = new JTransientEngine();
         try {
             FitsFileInformation[] filesInfo = preProcessing.getImportedFiles();
             List<ImageFrame> framesForLibrary = SessionFrameLoader.loadAll(filesInfo,
@@ -53,9 +54,7 @@ public class ManualTransientInspectionTask implements Runnable {
                 eventBus.post(new EngineProgressUpdateEvent(20 + (int)(percentage * 0.8), message));
             };
 
-            JTransientEngine engine = new JTransientEngine();
             List<FrameTransients> cleanTransients = engine.detectTransients(framesForLibrary, config, progressListener);
-            engine.shutdown();
 
             SwingUtilities.invokeLater(() -> {
                 TransientInspectionFrame frame = new TransientInspectionFrame(framesForLibrary, cleanTransients, filesInfo, stretchPanel);
@@ -69,13 +68,12 @@ public class ManualTransientInspectionTask implements Runnable {
             eventBus.post(new DetectionFinishedEvent(null, true, true, null, null, 0, 0, null));
 
         } catch (Throwable t) {
-            if (t instanceof OutOfMemoryError || (t.getCause() != null && t.getCause() instanceof OutOfMemoryError)) {
-                ApplicationWindow.logger.log(Level.SEVERE, "OOM during transient inspection", t);
-                // Let the global handler catch the OOM
-            } else {
-                ApplicationWindow.logger.log(Level.SEVERE, "Transient Inspection failed", t);
-                eventBus.post(new DetectionFinishedEvent(null, false, false, t.getMessage(), null, 0, 0, null));
-            }
+            // Out of memory leaves the thread for the application's handler, which closes SpacePixels with a message.
+            String message = TaskFailures.rethrowOutOfMemory(t);
+            ApplicationWindow.logger.log(Level.SEVERE, "Transient Inspection failed", t);
+            eventBus.post(new DetectionFinishedEvent(null, false, false, message, null, 0, 0, null));
+        } finally {
+            engine.shutdown();
         }
     }
 }

@@ -54,11 +54,12 @@ public class BatchStretchTask implements Runnable {
 
             // 3. Report Success
             eventBus.post(new BatchStretchFinishedEvent(true, null));
-        } catch (Exception ex) {
+        } catch (Throwable ex) {
+            String message = TaskFailures.rethrowOutOfMemory(ex);
             ApplicationWindow.logger.log(Level.SEVERE, "Cannot stretch images", ex);
 
             // 3. Report Failure
-            eventBus.post(new BatchStretchFinishedEvent(false, ex.getMessage()));
+            eventBus.post(new BatchStretchFinishedEvent(false, message));
         }
     }
 }

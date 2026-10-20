@@ -50,7 +50,8 @@ public class PlateSolveTask implements Runnable {
             // 3. Tell the UI we are done and pass the result
             eventBus.post(new SolveFinishedEvent(rowIndex, result));
 
-        } catch (Exception ex) {
+        } catch (Throwable ex) {
+            TaskFailures.rethrowOutOfMemory(ex);
             ApplicationWindow.logger.log(Level.SEVERE, "Cannot solve image", ex);
             // Post a failure event
             eventBus.post(new SolveFinishedEvent(rowIndex, null));

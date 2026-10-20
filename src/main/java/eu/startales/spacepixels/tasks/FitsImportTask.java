@@ -74,11 +74,11 @@ public class FitsImportTask implements Runnable {
                     ApplicationWindow.logger.info("Redirecting import to the images of one exposure time: " + largestGroup.getAbsolutePath());
                     new FitsImportTask(eventBus, largestGroup).run();
                 }
-            } catch (Exception copyFailure) {
+            } catch (Throwable copyFailure) {
                 postFailure(copyFailure);
             }
-        } catch (Exception e) {
-            postFailure(e);
+        } catch (Throwable t) {
+            postFailure(t);
         } finally {
             if (!ownershipTransferred && imgProcessing != null) {
                 imgProcessing.close();
@@ -86,8 +86,9 @@ public class FitsImportTask implements Runnable {
         }
     }
 
-    private void postFailure(Exception e) {
-        ApplicationWindow.logger.log(Level.SEVERE, "Error loading FITS files", e);
-        eventBus.post(new FitsImportFinishedEvent(false, e.getMessage(), null, null));
+    private void postFailure(Throwable failure) {
+        String message = TaskFailures.rethrowOutOfMemory(failure);
+        ApplicationWindow.logger.log(Level.SEVERE, "Error loading FITS files", failure);
+        eventBus.post(new FitsImportFinishedEvent(false, message, null, null));
     }
 }

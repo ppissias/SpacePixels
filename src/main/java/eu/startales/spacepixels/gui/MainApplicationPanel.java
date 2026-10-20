@@ -261,19 +261,12 @@ public class MainApplicationPanel extends JPanel {
             int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
             StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-            new Thread(() -> {
-                mainAppWindow.getEventBus().post(new BatchStretchStartedEvent());
-                try {
-                    io.github.ppissias.jtransient.engine.TransientEngineProgressListener progressListener = (percentage, message) -> {
-                        mainAppWindow.getEventBus().post(new EngineProgressUpdateEvent(percentage, message));
-                    };
-                    mainAppWindow.getImageProcessing().batchStretch(stretchFactor, iterations, algo, progressListener);
-                    mainAppWindow.getEventBus().post(new BatchStretchFinishedEvent(true, null));
-                } catch (Exception ex) {
-                    ApplicationWindow.logger.log(java.util.logging.Level.SEVERE, "Batch stretch failed", ex);
-                    mainAppWindow.getEventBus().post(new BatchStretchFinishedEvent(false, ex.getMessage()));
-                }
-            }).start();
+            new Thread(new BatchStretchTask(
+                    mainAppWindow.getEventBus(),
+                    mainAppWindow.getImageProcessing(),
+                    stretchFactor,
+                    iterations,
+                    algo)).start();
         });
 
         blinkButton.addActionListener(e -> {

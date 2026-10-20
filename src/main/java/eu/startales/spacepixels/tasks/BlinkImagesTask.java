@@ -50,11 +50,11 @@ public class BlinkImagesTask implements Runnable {
                 return;
             }
             eventBus.post(new BlinkSequenceLoadedEvent(new BlinkSequence(frames), files));
-        } catch (OutOfMemoryError e) {
-            eventBus.post(new BlinkFinishedEvent(false, "Not enough memory to hold " + files.length
-                    + " frames. Blink fewer frames, or start SpacePixels with more memory."));
-        } catch (Exception ex) {
-            eventBus.post(new BlinkFinishedEvent(false, ex.getMessage()));
+        } catch (Throwable t) {
+            // Running out of memory here is recoverable: the frames read so far are released with the task.
+            eventBus.post(new BlinkFinishedEvent(false, TaskFailures.isOutOfMemory(t)
+                    ? "Not enough memory to hold " + files.length + " frames. Blink fewer frames, or start SpacePixels with more memory."
+                    : TaskFailures.message(t)));
         }
     }
 }

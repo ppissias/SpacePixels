@@ -81,9 +81,10 @@ public class AutoTuneTask implements Runnable {
             eventBus.post(new EngineProgressUpdateEvent(100, "Auto-Tuning complete!"));
             eventBus.post(new AutoTuneFinishedEvent(true, "Auto-Tuning completed successfully.", result));
 
-        } catch (Exception ex) {
+        } catch (Throwable ex) {
+            String message = TaskFailures.rethrowOutOfMemory(ex);
             ApplicationWindow.logger.log(Level.SEVERE, "Auto-Tuning failed", ex);
-            eventBus.post(new AutoTuneFinishedEvent(false, ex.getMessage(), null));
+            eventBus.post(new AutoTuneFinishedEvent(false, message, null));
         }
     }
 }

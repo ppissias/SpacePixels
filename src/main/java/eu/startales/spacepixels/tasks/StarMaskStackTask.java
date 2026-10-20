@@ -61,12 +61,10 @@ public class StarMaskStackTask implements Runnable {
             eventBus.post(new DetectionFinishedEvent(null, true, true, null, null, 0, 0, null));
             SwingUtilities.invokeLater(() -> onReady.accept(result));
         } catch (Throwable t) {
-            if (t instanceof OutOfMemoryError || (t.getCause() instanceof OutOfMemoryError)) {
-                ApplicationWindow.logger.log(Level.SEVERE, "OOM while building the master stack", t);
-            } else {
-                ApplicationWindow.logger.log(Level.SEVERE, "Building the master stack failed", t);
-                eventBus.post(new DetectionFinishedEvent(null, false, false, t.getMessage(), null, 0, 0, null));
-            }
+            // Out of memory leaves the thread for the application's handler, which closes SpacePixels with a message.
+            String message = TaskFailures.rethrowOutOfMemory(t);
+            ApplicationWindow.logger.log(Level.SEVERE, "Building the master stack failed", t);
+            eventBus.post(new DetectionFinishedEvent(null, false, false, message, null, 0, 0, null));
         } finally {
             engine.shutdown();
         }

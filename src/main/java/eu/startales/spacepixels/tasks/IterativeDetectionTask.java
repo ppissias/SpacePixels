@@ -89,6 +89,9 @@ public class IterativeDetectionTask implements Runnable {
 
             // --- NEW: Define the Progress Callback Bridge ---
             TransientEngineProgressListener progressListener = (percentage, message) -> {
+                if (ApplicationWindow.OOM_FLAG) {
+                    throw new OutOfMemoryError("Global OOM triggered");
+                }
                 // Instantly bridge the pure Java call to the Guava EventBus
                 eventBus.post(new EngineProgressUpdateEvent(percentage, message));
             };
@@ -105,9 +108,10 @@ public class IterativeDetectionTask implements Runnable {
                 eventBus.post(new DetectionFinishedEvent(masterDir, true, false, null, null, 0, 0, null));
             }
 
-        } catch (Exception ex) {
+        } catch (Throwable ex) {
+            String message = TaskFailures.rethrowOutOfMemory(ex);
             ApplicationWindow.logger.log(Level.SEVERE, "Iterative Detection failed", ex);
-            eventBus.post(new DetectionFinishedEvent(null, false, false, ex.getMessage(), null, 0, 0, null));
+            eventBus.post(new DetectionFinishedEvent(null, false, false, message, null, 0, 0, null));
         }
     }
 }

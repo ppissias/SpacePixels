@@ -22,8 +22,6 @@ import eu.startales.spacepixels.events.DetectionStartedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.util.ImageProcessing;
 
-import javax.swing.JOptionPane;
-import javax.swing.SwingUtilities;
 import java.io.File;
 import java.util.logging.Level;
 
@@ -72,44 +70,10 @@ public class DetectionTask implements Runnable {
                 eventBus.post(new DetectionFinishedEvent(exportDir, true, false, null, null, 0, 0, null));
             }
         } catch (Throwable t) {
-            Throwable rootCause = t;
-            while (rootCause != null && !(rootCause instanceof OutOfMemoryError)) {
-                if (rootCause == rootCause.getCause()) break;
-                rootCause = rootCause.getCause();
-            }
-
-            if (rootCause instanceof OutOfMemoryError) {
-                if (!ApplicationWindow.OOM_FLAG) {
-                    ApplicationWindow.OOM_FLAG = true;
-                    ApplicationWindow.logger.log(Level.SEVERE, "Out of memory during detection task", rootCause);
-                    
-                    Thread doomThread = new Thread(() -> {
-                        try { Thread.sleep(10000); } catch (Exception ignore) {}
-                        System.exit(1);
-                    });
-                    doomThread.setDaemon(true);
-                    doomThread.start();
-
-                    SwingUtilities.invokeLater(() -> {
-                        try {
-                            JOptionPane.showMessageDialog(null,
-                                    "SpacePixels has run out of memory and must close.\n" +
-                                    "Please process fewer images or increase the Java heap space (e.g., allocate more memory via -Xmx).",
-                                    "Fatal Error: Out of Memory",
-                                    JOptionPane.ERROR_MESSAGE);
-                        } catch (Throwable ignored) {
-                        } finally {
-                            System.exit(1);
-                        }
-                    });
-                }
-            } else if (t instanceof Exception) {
-                Exception ex = (Exception) t;
-                ApplicationWindow.logger.log(Level.SEVERE, "Detection failed", ex);
-                eventBus.post(new DetectionFinishedEvent(null, false, false, ex.getMessage(), null, 0, 0, null));
-            } else {
-                ApplicationWindow.logger.log(Level.SEVERE, "Fatal error during detection task", t);
-            }
+            // Out of memory leaves the thread for the application's handler, which closes SpacePixels with a message.
+            String message = TaskFailures.rethrowOutOfMemory(t);
+            ApplicationWindow.logger.log(Level.SEVERE, "Detection failed", t);
+            eventBus.post(new DetectionFinishedEvent(null, false, false, message, null, 0, 0, null));
         }
     }
 }
