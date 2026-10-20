@@ -7,9 +7,12 @@ import eu.startales.spacepixels.events.BatchConvertFinishedEvent;
 import eu.startales.spacepixels.events.BatchStretchFinishedEvent;
 import eu.startales.spacepixels.events.BlinkFinishedEvent;
 import eu.startales.spacepixels.events.DetectionFinishedEvent;
-import eu.startales.spacepixels.events.DetectionStartedEvent;
 import eu.startales.spacepixels.events.SolveFinishedEvent;
 import eu.startales.spacepixels.gui.ApplicationWindow;
+import eu.startales.spacepixels.jobs.Job;
+import eu.startales.spacepixels.jobs.JobCoordinator;
+import eu.startales.spacepixels.jobs.JobKind;
+import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.AutoTunerRunner;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
@@ -62,9 +65,6 @@ public class TaskFailureEventsTest {
         assertNotNull(tune.getMessage());
 
         assertFailed(last(run(new DetectionTask(bus(), null, new DetectionConfig())), DetectionFinishedEvent.class));
-        assertFailed(last(run(new ManualTransientInspectionTask(bus(), null, new DetectionConfig(), null)), DetectionFinishedEvent.class));
-        assertFailed(last(run(new StarMaskStackTask(bus(), new FitsFileInformation[]{missing}, new DetectionConfig(), result -> { })),
-                DetectionFinishedEvent.class));
 
         BlinkFinishedEvent blink = last(run(new BlinkImagesTask(bus(), new FitsFileInformation[]{missing}, new AtomicBoolean(true))),
                 BlinkFinishedEvent.class);
@@ -85,20 +85,36 @@ public class TaskFailureEventsTest {
     }
 
     @Test
-    public void outOfMemoryLeavesTheTaskInsteadOfBeingSwallowed() throws Exception {
-        // The flag is how the application stops the other tasks once one has run out of memory.
+    public void failingJobsEndAsFailedWithTheReason() {
+        assertFailed(outcomeOf(new ManualTransientInspectionTask(null, new DetectionConfig())));
+        assertFailed(outcomeOf(new StarMaskStackTask(new FitsFileInformation[]{missingFrame()}, new DetectionConfig())));
+    }
+
+    @Test
+    public void outOfMemoryLeavesTheJobInsteadOfBeingSwallowed() {
+        // The flag is how the application stops the other jobs once one has run out of memory.
         ApplicationWindow.OOM_FLAG = true;
         try {
-            Recorder recorder = new Recorder();
-            EventBus bus = new EventBus();
-            bus.register(recorder);
-            StarMaskStackTask task = new StarMaskStackTask(bus, new FitsFileInformation[]{missingFrame()}, new DetectionConfig(), result -> { });
-            assertThrows(OutOfMemoryError.class, task::run);
-            assertEquals(1, recorder.events.size());
-            assertTrue(recorder.events.get(0) instanceof DetectionStartedEvent);
+            List<JobOutcome<?>> outcomes = new ArrayList<>();
+            JobCoordinator coordinator = new JobCoordinator(Runnable::run, Runnable::run, () -> false);
+            assertThrows(OutOfMemoryError.class, () -> coordinator.start(JobKind.STAR_MASK_STACK, null,
+                    new StarMaskStackTask(new FitsFileInformation[]{missingFrame()}, new DetectionConfig()), (handle, outcome) -> outcomes.add(outcome)));
+            assertTrue(outcomes.isEmpty());
         } finally {
             ApplicationWindow.OOM_FLAG = false;
         }
+    }
+
+    /** Runs the job under a coordinator that works on the calling thread, and returns its one outcome. */
+    private static <R> JobOutcome<R> outcomeOf(Job<R> job) {
+        List<JobOutcome<R>> outcomes = new ArrayList<>();
+        new JobCoordinator(Runnable::run, Runnable::run, () -> false).start(JobKind.DETECTION, null, job, (handle, outcome) -> outcomes.add(outcome));
+        assertEquals(1, outcomes.size());
+        return outcomes.get(0);
+    }
+
+    private static void assertFailed(JobOutcome<?> outcome) {
+        assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Failed<?> failed && failed.reason() != null);
     }
 
     private FitsFileInformation missingFrame() {

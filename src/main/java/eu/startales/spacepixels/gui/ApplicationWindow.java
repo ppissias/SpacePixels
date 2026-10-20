@@ -16,6 +16,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import eu.startales.spacepixels.events.FitsImportFinishedEvent;
 import eu.startales.spacepixels.events.FitsImportStartedEvent;
+import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.tasks.FitsImportTask;
 import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.util.FitsFileInformation;
@@ -72,6 +73,12 @@ public class ApplicationWindow {
     private volatile ConfigurationPanel configurationApplicationPanel;
     private volatile StretchPanel stretchPanel;
     private volatile DetectionConfigurationPanel detectionConfigurationPanel;
+
+    /** Runs the jobs that have moved off the event bus; the others still lock the window through their own events. */
+    private final JobCoordinator jobCoordinator = new JobCoordinator(
+            work -> new Thread(work, "SpacePixels-job").start(),
+            EventQueue::invokeLater,
+            () -> mainApplicationPanel != null && mainApplicationPanel.isUiLocked());
 
     public static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
 
@@ -369,6 +376,10 @@ public class ApplicationWindow {
 
     public EventBus getEventBus() {
         return eventBus;
+    }
+
+    public JobCoordinator getJobCoordinator() {
+        return jobCoordinator;
     }
 
     public void setMenuState(boolean state) {

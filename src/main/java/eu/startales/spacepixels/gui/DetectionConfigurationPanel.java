@@ -11,7 +11,6 @@
 package eu.startales.spacepixels.gui;
 
 import com.google.common.eventbus.Subscribe;
-import eu.startales.spacepixels.events.DetectionStartedEvent;
 import eu.startales.spacepixels.events.EngineProgressUpdateEvent;
 import eu.startales.spacepixels.events.AutoTuneFinishedEvent;
 import eu.startales.spacepixels.events.AutoTuneStartedEvent;
@@ -22,6 +21,9 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.config.SpacePixelsSettingsFiles;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
+import eu.startales.spacepixels.jobs.JobCoordinator;
+import eu.startales.spacepixels.jobs.JobKind;
+import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.tasks.AutoTuneTask;
 import eu.startales.spacepixels.tasks.StarMaskStackTask;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -323,12 +325,25 @@ public class DetectionConfigurationPanel extends JPanel {
             showStarMaskExplorer(files, config);
             return;
         }
-        new Thread(new StarMaskStackTask(mainAppWindow.getEventBus(), files, config.clone(), result -> {
-            cachedMasterStack = result;
-            cachedStackFiles = files;
-            cachedStackKey = stackKey;
-            showStarMaskExplorer(files, config);
-        })).start();
+        ImageProcessing session = mainAppWindow.getImageProcessing();
+        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.STAR_MASK_STACK, session,
+                new StarMaskStackTask(files, config.clone()), (handle, outcome) -> {
+                    if (!(outcome instanceof JobOutcome.Completed<JTransientEngine.MasterStackResult> completed)) {
+                        MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
+                        if (mainPanel != null) {
+                            mainPanel.showDetectionProblem(outcome);
+                        }
+                    } else if (handle.session() == mainAppWindow.getImageProcessing()) {
+                        // Kept only for the session it was built for.
+                        cachedMasterStack = completed.result();
+                        cachedStackFiles = files;
+                        cachedStackKey = stackKey;
+                        showStarMaskExplorer(files, config);
+                    }
+                });
+        if (!admission.admitted()) {
+            showFooterNote(admission.refusal(), true);
+        }
     }
 
     /** Opens the explorer on the settings taken when Test Star Mask was clicked. */

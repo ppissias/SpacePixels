@@ -12,6 +12,7 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
@@ -23,6 +24,7 @@ import eu.startales.spacepixels.util.skycatalog.SkyField;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import eu.startales.spacepixels.events.*;
+import eu.startales.spacepixels.jobs.*;
 import eu.startales.spacepixels.tasks.*;
 
 import javax.swing.*;
@@ -131,6 +133,36 @@ public class MainApplicationPanel extends JPanel {
         // --- NEW: PROGRESS DIALOG INITIALIZATION ---
         // Pass the main app frame so the dialog knows who to lock and where to center itself
         this.progressDialog = new ProcessingProgressDialog((JFrame) mainAppWindow.getFrame());
+        mainAppWindow.getJobCoordinator().setListener(new JobCoordinator.Listener() {
+            @Override
+            public void jobStarted(JobHandle handle) {
+                setProgressBarWorking();
+                disableControlsProcessing();
+                statusLabel.setText("Object detection started...");
+                progressDialog.updateProgress(0, "Initializing object detection...");
+                // Shown after this call returns: the dialog is modal and would hold the click until the job ends.
+                EventQueue.invokeLater(() -> {
+                    if (mainAppWindow.getJobCoordinator().current() == handle) {
+                        progressDialog.setVisible(true);
+                    }
+                });
+            }
+
+            @Override
+            public void jobProgress(JobHandle handle, int percent, String message) {
+                if (progressDialog.isVisible()) {
+                    progressDialog.updateProgress(percent, message);
+                }
+            }
+
+            @Override
+            public void jobEnded(JobHandle handle) {
+                progressDialog.setVisible(false);
+                setProgressBarIdle();
+                enableControlsProcessingFinished();
+                statusLabel.setText("Object detection completed");
+            }
+        });
 
         setLayout(new BorderLayout(0, 0));
 
@@ -299,12 +331,20 @@ public class MainApplicationPanel extends JPanel {
             if (settings == null) {
                 return;
             }
-            new Thread(new ManualTransientInspectionTask(
-                    mainAppWindow.getEventBus(),
-                    mainAppWindow.getImageProcessing(),
-                    settings,
-                    mainAppWindow.getStretchPanel()
-            )).start();
+            ImageProcessing session = mainAppWindow.getImageProcessing();
+            startJob(JobKind.TRANSIENT_INSPECTION, session, new ManualTransientInspectionTask(session, settings), (handle, outcome) -> {
+                if (outcome instanceof JobOutcome.Completed<ManualTransientInspectionTask.Result> completed) {
+                    ManualTransientInspectionTask.Result result = completed.result();
+                    TransientInspectionFrame frame = new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
+                            mainAppWindow.getStretchPanel());
+                    if (!frame.open()) {
+                        JOptionPane.showMessageDialog(null, "The detection kept no frames to inspect.",
+                                "Manual Transient Inspection", JOptionPane.INFORMATION_MESSAGE);
+                    }
+                } else {
+                    showDetectionProblem(outcome);
+                }
+            });
         });
 
         detectBatchButton.addActionListener(e -> {
@@ -1367,6 +1407,28 @@ public class MainApplicationPanel extends JPanel {
             if (c instanceof Container) {
                 saveAndDisableRecursive((Container) c);
             }
+        }
+    }
+
+    /** Whether a task holds the window, so another must wait. */
+    boolean isUiLocked() {
+        return uiLocked;
+    }
+
+    /** Starts a job under the coordinator; when it cannot start now, the status bar says why. */
+    <R> void startJob(JobKind kind, Object session, Job<R> job, JobCoordinator.OutcomeHandler<R> handler) {
+        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(kind, session, job, handler);
+        if (!admission.admitted()) {
+            statusLabel.setText(admission.refusal());
+        }
+    }
+
+    /** Tells the user that a detection job was declined or failed, as the detection jobs always have. */
+    void showDetectionProblem(JobOutcome<?> outcome) {
+        String reason = outcome instanceof JobOutcome.Declined<?> declined ? declined.reason()
+                : outcome instanceof JobOutcome.Failed<?> failed ? failed.reason() : null;
+        if (reason != null) {
+            JOptionPane.showMessageDialog(this, "Detection failed: " + reason, "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
