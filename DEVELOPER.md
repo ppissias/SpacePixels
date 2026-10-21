@@ -149,7 +149,7 @@ The report never changes the engine's results. The report's live lookups (SatChe
 
 ## What comes next
 
-The steps from the architecture review, in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md#architecture-adoption-review):
+The open steps from the architecture review, in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md#open-steps-from-the-architecture-review):
 - **S7:** a session object.
 - **S10:** split `ImageProcessing`.
 - **S12:** ask the import questions on the EDT.

@@ -1,6 +1,6 @@
 # Architecture review: inventory and path traces
 
-This is the working record of the [architecture adoption review](../DESIGN-IMPROVEMENTS.md#architecture-adoption-review). It holds the class inventory, the traced paths and the evidence. The steps the review leads to, and the decisions about them, live in [DESIGN-IMPROVEMENTS.md](../DESIGN-IMPROVEMENTS.md).
+This is the working record of the [architecture adoption review](archive/design-improvements-completed-2026-10.md#architecture-adoption-review). It holds the class inventory, the traced paths and the evidence. The open steps the review leads to are in [DESIGN-IMPROVEMENTS.md](../DESIGN-IMPROVEMENTS.md#open-steps-from-the-architecture-review); the finished ones, and the review itself, are archived.
 
 | Part | Packages | Status |
 |---|---|---|
