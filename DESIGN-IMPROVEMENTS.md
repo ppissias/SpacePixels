@@ -141,6 +141,8 @@ If supporting several engine versions is a real requirement, isolate capability/
 - a rule identifier;
 - the field identifiers.
 
+**Additional rule proposals.** The [field and dependency review](docs/detection-settings-rule-review.md) covers all 107 `DetectionConfig` fields and the panel's application settings. Consider quality grow/seed consistency, geometric jitter/jump conflicts, photometry cap/readiness conflicts, consistent effective aperture/annulus geometry and the limited-readiness amplitude policy. Keep cross-image sigma thresholds independent, distinguish redundancy and dataset readiness from invalid configurations, and review the scope of the existing rhythm/jump pair. These are proposals for JA-01/D10, with compatibility decisions and validation required before changing any rule.
+
 **Acceptance.** Moving a setting between existing sections does not require editing unrelated string/index lists. UI and API validation use the intended shared rules, hidden values survive, unsupported settings are not falsely shown as applied, and release builds test the dependency pair they distribute.
 
 ### D11. Make the main window a clear analysis workspace
