@@ -264,7 +264,7 @@ Everything that was detected but did not become a result is shown here, coloured
 
 Candidate light curves have **Zoom in**, **Zoom out** and **Reset** controls; drag a zoomed chart to pan. Error bars show the engine's estimated sky-noise uncertainty, which is a lower bound rather than total uncertainty. Brightest/faintest cutouts use a common stretch but show raw frames; clouds, exposure and seeing can affect their appearance even when the differential light curve is corrected for transparency.
 
-The **Variable candidates across the field** picture circles every reported candidate on the median stack: blue for high confidence, orange for possible. Labels prefer a VSX name, then a proper name or Gaia DR3 designation from the general star catalogue, with the V number as fallback. Hover for the V number to find its table row or card. Click the picture to open a full-size image with compact differential light curves beside the stars. The curves have a lightly translucent background, no axes, tick labels or grid, and just one **Δmag** number: the observed variation in mag, as in the table. Brighter is up. Each curve has its own magnitude scale, so compare the numbers rather than their visual heights. Flagged or missing measurements leave gaps. The image works offline and includes candidates beyond the first 40 detailed cards.
+The **Variable candidates across the field** picture circles every reported candidate on the median stack: blue for high confidence, orange for possible. Labels prefer a VSX name, then a proper name or Gaia DR3 designation from the general star catalogue, with the V number as fallback. Hover for the V number to find its table row or card. Click the picture to open a full-size image with compact differential light curves beside the stars. The curves have a lightly translucent background, no axes, tick labels or grid, and just one **Δmag** number: the observed variation in mag, as in the table. Brighter is up. Each curve has its own magnitude scale, so compare the numbers rather than their visual heights. Flagged or missing measurements leave gaps. The image works offline and includes candidates beyond the configured detailed-card limit.
 
 The stars CSV includes the V label, sky coordinates, VSX matches and nearest-match separation. Candidate light curves also include the V label. CSVs and the HTML are published only after their writes finish successfully.
 
@@ -398,6 +398,23 @@ When the sky catalogue of the session was fetched before the detection (see [Ann
 
 Candidate V1 is already named from the catalogue: the high-amplitude δ Scuti star ASASSN-V J063632.76+064632.3, 0.2″ away, with a period of 2.5 hours. The light curve shows it rising and falling by 0.43 magnitudes within the 75 minutes of the session. **Check VSX Here** searches the full VSX for that position, using saved lookup results when available. A candidate without a VSX match may be a new variable, or a false one: check its light curve, the comparison stars and the cutouts before reporting it.
 
+
+### Candidate card limit and presentation order
+
+Under **Detection Settings → Variable Stars → Report Presentation**, **Maximum Detailed Candidate Cards** controls how many candidates get full cards with charts and cutouts. The default is **40**; set **60** for a longer report. Values from 1 to 1,000 are allowed. Every candidate remains in the table, field maps and CSVs. This setting changes presentation, not how many stars are measured or classified.
+
+**Candidate Presentation Order** always groups high-confidence stars before possible stars, then uses your choice:
+
+| Order | Within each confidence tier |
+|---|---|
+| **Observed changes first** (default) | Up-and-down curves, dips and peaks first, then larger observed Δmag |
+| **Shortest known period first** | Positive periods from saved VSX matches, shortest first; unknown periods follow known ones |
+| **Largest observed variation first** | Larger observed Δmag first |
+| **Variability significance** | How strongly the variability stands out, as in the earlier reports |
+
+SpacePixels does not estimate a period from the session. Curve shape is a description of observed changes, not proof of periodicity. Missing catalogue periods do not lower confidence. The chosen order selects which candidates receive detailed cards. V numbers stay fixed across tables, cards, field maps, CSVs, saved lookup results and viewer overlays, so the first card need not be V1. The report states its order and card limit.
+
+Changes apply to the next report. **Save** keeps these choices in the SpacePixels detection profile, **Revert** restores saved values, and **Load Defaults** restores 40 cards and Observed changes first. Older profiles load with those defaults; the usual backed-up migration offer adds the two presentation fields.
 
 ### Following up an unmatched candidate
 

@@ -254,3 +254,24 @@ try {
 - The API prints nothing to the console; problems are thrown or logged as `java.util.logging` warnings. Each run sets JTransient's `JTransientEngine.DEBUG` and `JTransientAutoTuner.DEBUG` from the `spacepixels.debug` system property, so start the JVM with `-Dspacepixels.debug=true` for the per-frame diagnostics on standard output. The Auto-Tune telemetry is in the result (`getAutoTuneTelemetryReport()`), not printed.
 - The public artifact currently contains GUI code as well, but GUI classes are not part of the supported API contract.
 - Do not run multiple API calls with the legacy auto-tuner concurrently in the same JVM. It temporarily adjusts shared JTransient Auto-Tune state while a tuning run is active. The calibrated tuner (the default) does not use shared state.
+
+
+### Variable-star report presentation
+
+`SpacePixelsPipelineRequest.Builder.variableStarReportOptions(...)` accepts immutable SpacePixels presentation choices, independently of `DetectionConfig`:
+
+```java
+.variableStarReportOptions(new eu.startales.spacepixels.config.VariableStarReportOptions(
+        60, eu.startales.spacepixels.config.VariableStarReportOptions.SortOrder.SHORTEST_PERIOD))
+```
+
+The default is 40 detailed cards and `OBSERVED_CHANGES`. Other orders are `LARGEST_VARIATION` and `SIGNIFICANCE`; high confidence always comes before possible. The valid card range is 1–1,000. Known periods come from the saved session catalogue; this does not enable period estimation. IDs and measured CSV values are independent of presentation order, and every candidate remains in the table/maps/CSV exports.
+
+The batch CLI reads `variableStarMaxCandidateCards` and `variableStarSortOrder` from the flat SpacePixels detection profile. Older profiles use the defaults. These are application fields, not JTransient detection settings. For example:
+
+```json
+{
+  "variableStarMaxCandidateCards": 60,
+  "variableStarSortOrder": "SHORTEST_PERIOD"
+}
+```
