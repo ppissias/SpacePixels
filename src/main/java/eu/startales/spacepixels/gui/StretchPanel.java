@@ -406,6 +406,10 @@ public class StretchPanel extends JPanel {
 
     /** The previews belong to the session they were rendered for: another session removes them. */
     void sessionChanged(FitsFileInformation[] files) {
+        if (sequenceFrame != null) {
+            sequenceFrame.closeForSessionChange();
+            sequenceFrame = null;
+        }
         clearPreviews("Select a frame to preview it");
         triggerPreviewUpdate();
     }

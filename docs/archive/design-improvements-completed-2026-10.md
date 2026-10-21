@@ -142,6 +142,26 @@ A Cancel control should request cancellation, show a stopping state and retain r
 
 **Acceptance.** Fail each ordinary stage, decline export, request cancellation, and close a viewer while it prepares data. Verify one terminal outcome, resource release and a correct command state. Test fatal-policy routing through an injected policy rather than exhausting real memory. Keep a “Details / Copy error” path for diagnostics and a persistent result link after success.
 
+## D04 engine cancellation and viewer lifecycle (2026-10-21)
+
+The maintainer authorized developing the engine and application together through the sibling JTransient composite build. Engine tasks now bind the job's cancellation flag through `CancellationScope`. JTransient checks computation and worker waits, stops queued work, requests running siblings to stop, and joins their task bodies and cleanup before returning. Interruption remains set; a worker `OutOfMemoryError` takes precedence over cancellation. Calibrated tuning propagates `CancellationException` directly, and `AutoTuneTask` no longer needs its failed-result cancellation workaround. `JobFailures` recognizes the JDK cancellation type through wrapping exceptions.
+
+Closing Preview Frame, Manual Transient Inspection or Show full size invalidates pending preparation and cancels its computation scope. Both disposed and reusable hidden viewers detach catalogue and stretch listeners and clear displayed data; reusable viewers bind fresh stretch controls when reopened. Blink detaches its shared stretch listeners on close. Star Mask Explorer cancels obsolete generations and pending work, stops its debounce timer and clears its stack, image and overlay buffers when disposed.
+
+Validation uses JDK 21.0.10 and the local composite build. Both projects' unit suites pass. Focused engine tests cover extraction, stack rows, tracking, tuning, ensemble photometry, worker/listener failure, interruption, cleanup waits, queued-work suppression, reuse, overlap, close during a run, cause preservation and JSON compatibility. Four viewer mechanics cases pass, including controlled delayed frame/mask preparation, duplicate close, listener cleanup, obsolete-result rejection and restored detection command availability. The existing AssertJ timer monitor emits JDK reflective-access warnings; the mechanics assertions pass.
+
+The read-only `EngineCancellationRealDataIT` comparison uses klangwolke-2 (33 prepared monochrome frames, approximately 61 MPix each), the same default configuration with variable-star detection enabled, and a 12 GiB heap. Tuning uses 15 evenly spaced input frames. Baseline is JTransient `6c3f34d`; comparison is the local working tree. Extraction cancellation is requested at frame 5's progress event. Photometry and tuning cancellation are requested 100 ms after their ensemble/grid progress event. The baseline throws at the next progress callback; the new implementation reads the cancellation flag independently of progress.
+
+| Stage | Baseline cancellation wait | Cooperative cancellation wait |
+|---|---:|---:|
+| Extraction | 9.963 s | below 0.01 s |
+| Photometry ensemble | 6.039 s | below 0.01 s |
+| Calibrated tuning | 11.374 s, returned an unsuccessful result | below 0.01 s, `CancellationException` |
+
+These are controlled measurements on this machine, not universal latency guarantees. Full baseline and changed pipeline runs also produce byte-identical scientific-output snapshots: settings, result objects and numerical telemetry, excluding execution timings, plus SHA-256 hashes of stack and veto-mask pixel arrays. Snapshot SHA-256: `f5372525a32cac31e9524277f334819f5bab7e56f22923ee3ab4066dbedc9ea8`. The snapshot mode is `EngineCancellationRealDataIT.main`, with the destination path as its sole argument and `SPACEPIXELS_CANCELLATION_DATASET` naming the prepared input folder. Dataset files and user settings remain unchanged.
+
+Current behavior is documented in the manual, developer overview and architecture document; JTransient's `PIPELINE.md` defines the library contract. No engine release was published. Distribution still requires publishing and validating the supported dependency pair; active development uses the companion local JTransient changes. Stage C session ownership (S7) is next.
+
 ## D05. Build a validated settings snapshot instead of reading a mutable panel
 
 **Implemented (2026-10-19), in the settings tab.**
@@ -492,3 +512,32 @@ Validation: a 65-candidate export fixture exercises 40 and 60 cards, confidence 
 The separate saved-results viewing idea remains **proposed** under D11 in DESIGN-IMPROVEMENTS.md; this work does not implement reopening saved detections in viewers.
 
 Final normal Java validation for this change: 313 passed, 3 headless GUI skips, no failures or errors. The additional GUI persistence/layout checks described above ran separately with isolated settings.
+
+## D04 follow-up: cancellable plate solving with JPlateSolve 1.0.1
+
+Implemented on 2026-10-21 in the local sibling JPlateSolve repository and adopted here. Plate Solve now offers Cancel, reports solver phases and elapsed seconds, and joins the solver's cleanup-aware completion before releasing coordinator admission. Interrupted waiters also request cancellation and join cleanup. Cancellation stops ASTAP and local cloud requests/polling; a remote Astrometry.net job may continue. The existing budgets remain ASTAP 2 minutes and Astrometry.net 15 minutes.
+
+JPlateSolve owns process termination and rollback of unsuccessful local sidecars, preserving pre-existing outputs. SpacePixels no longer deletes those restored files on failed/cancelled solves. Successful header import/cleanup stays in SpacePixels; WCS writing remains non-cancellable. The session's ImageProcessing now closes its cloud client. The build dependency is 1.0.1 and local composite flags remain enabled for development; nothing was published.
+
+Validation: 31 JPlateSolve tests pass. SpacePixels passes 322 normal tests (318 passed, 4 skipped), including admission held through cancellation cleanup, interrupt restoration and cleanup failure reporting. Both composite and isolated jar/POM dependency arrangements pass on Java 21. A representative Java stand-in measured Cancel to confirmed child exit/completion at 24.956 ms; loopback login/upload/polling measured 0.448/11.681/1.376 ms (32 MiB upload). These are synthetic contract timings, not real ASTAP/large-frame measurements; no observer data was uploaded or live solver used. See the [library completion record](../../../JPlateSolve/docs/archive/design-improvements-completed-2026-10.md) for contracts, test scope and remaining request/key improvements. This supersedes the earlier D04 note that plate solving cannot be cancelled.
+
+## S7: explicit session ownership and application preferences (2026-10-21)
+
+**Decision.** Complete S7 and the remaining D02 session-identity work in SpacePixels, without changing solver/detection algorithms, settings formats or the public processing facade. D06's remaining facade/service extraction stays S10; session-folder I/O, preparation questions and explicit per-run context remain S8/S12/S14.
+
+**Application scope.** ApplicationSettings loads the app-level JSON once for the window, before a dataset is imported. Each imported processor receives that same preferences object, including after conversion redirects. Astrometry Config is available before import. Save/Revert still use the existing file format; handover refreshes validation without replacing edited text or saved-value markers. Standalone ImageProcessing/FitsImportTask entry points retain their preference-loading compatibility paths.
+
+**Session scope.** SessionOwner guards replacement and callback admission without Swing. Each ProcessingSession has a UUID, frame metadata references and selection, its own catalogue/correction model, tuning measurements and candidate limit, master-stack cache, last-report reference and owned processing facade. Metadata arrays are protected; large frame/stack buffers are shared by ownership, not deep-copied. The facade still owns its underlying FITS cache and pipeline/overlay services pending S10. The profile/report writer's legacy static candidate-limit fallback remains S14.
+
+Only a successful import can transfer the candidate processor into the current session. Failed, declined or cancelled imports leave it unchanged; stale successful imports close their candidates rather than attaching to a later session. Replacing/closing a session interrupts its owned sky worker and releases the processor, stack cache, selection and tuning results. Closing the window also prevents a late initial import from installing itself.
+
+**Jobs and views.** Handles carry the explicit session. UI completion handlers and progress updates reject the wrong session, in addition to the coordinator's existing job-identity checks. Sky completion keeps both worker and session guards. Star Mask Explorer Apply callbacks also keep their owner. Catalogues are no longer process-wide: viewer annotations bind to a supplied model. Reusable Preview Frame and Full Size windows close and release their old-session data on handover; Blink resets. An independent inspection viewer may keep its old model/buffers deliberately and never adopts the replacement's catalogue. Existing field/solution checks remain in place.
+
+**Validation.**
+- JDK 21 normal suite: **331 tests, 327 passed and 4 skipped**, no failures. New tests cover shared unsaved preferences without reloading, independent catalogues/corrections/tuning/selection, defensive metadata containers, stable identity, stale import disposal, delayed progress/result rejection, worker interruption and closure. DependencyRulesTest enforces no Swing or gui references in the new session package.
+- Three focused GUI checks pass with isolated home/preferences: application settings are available before import; a real document edit survives two imports without being saved; replacing a solved session with an unsolved one closes the old Preview and removes its catalogue listeners without adopting its catalogue. The idle-startup command/tab availability check also passes. Session lifecycle checks call public application operations on the EDT rather than simulating native input.
+- A broader native-input mechanics run was attempted but aborted after desktop automation failed to deliver clicks: the fixture recorded selectedTabIndex=0 (Main) after selecting Astrometry Config, and import chooser lookup timed out. Retrying with a temporary Java module-open/UI-scale override did not fix native input. These failures are not evidence of a production handover defect; the full native-input suite is not claimed as validated here.
+- IDE debugging was attempted with non-suspending logpoints. The temporary Gradle debug session ended before useful events/values were captured (empty event buffer and zero-byte run log), so the fallback evidence is the GUI fixture hierarchy plus passing direct-EDT lifecycle checks. Agent breakpoints were removed; user breakpoints were left unchanged.
+- Validation uses ignored temporary init scripts to avoid replacing dependency jars held by the running SpacePixels application. Local composite flags stay enabled. No user settings or observer datasets were modified by validation.
+
+**Next.** S8 moves session catalogue/correction and Auto-Tune persistence off the EDT. S10 extracts facade responsibilities. S12 moves import questions onto an explicit EDT adapter. S14 removes the remaining static report/run-context defaults. No multi-window UI was added.

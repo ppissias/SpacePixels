@@ -11,6 +11,7 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.config.DetectionSettingsRules;
+import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
@@ -129,10 +130,6 @@ public class DetectionConfigurationPanel extends JPanel {
     private AutoTuneOverviewPanel overviewPanel;
     private SettingsNavigator navigator;
 
-    // Master stack of the Star Mask Explorer, kept for the session.
-    private JTransientEngine.MasterStackResult cachedMasterStack;
-    private FitsFileInformation[] cachedStackFiles;
-    private String cachedStackKey;
     private final List<SettingRow> settingRows = new ArrayList<>();
     // The title of each number setting, in page order, for the messages about its field.
     private final Map<JSpinner, String> inputTitles = new LinkedHashMap<>();
@@ -335,26 +332,24 @@ public class DetectionConfigurationPanel extends JPanel {
             return;
         }
         String stackKey = masterStackKey(config);
-        if (cachedMasterStack != null && cachedStackFiles == files && stackKey.equals(cachedStackKey)) {
+        ProcessingSession owner = mainAppWindow.getSession();
+        if (owner != null && owner.getMasterStack(stackKey) != null) {
             showStarMaskExplorer(files, config);
             return;
         }
-        ImageProcessing session = mainAppWindow.getImageProcessing();
-        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.STAR_MASK_STACK, session,
-                new StarMaskStackTask(files, config.clone()), (handle, outcome) -> {
+        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.STAR_MASK_STACK, owner,
+                new StarMaskStackTask(files, config.clone()), mainAppWindow.forCurrentSession((handle, outcome) -> {
                     if (!(outcome instanceof JobOutcome.Completed<JTransientEngine.MasterStackResult> completed)) {
                         MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
                         if (mainPanel != null) {
                             mainPanel.showDetectionProblem(outcome);
                         }
-                    } else if (handle.session() == mainAppWindow.getImageProcessing()) {
+                    } else if (mainAppWindow.isCurrentSession(handle.session())) {
                         // Kept only for the session it was built for.
-                        cachedMasterStack = completed.result();
-                        cachedStackFiles = files;
-                        cachedStackKey = stackKey;
+                        owner.setMasterStack(stackKey, completed.result());
                         showStarMaskExplorer(files, config);
                     }
-                });
+                }));
         if (!admission.admitted()) {
             showFooterNote(admission.refusal(), true);
         }
@@ -366,8 +361,11 @@ public class DetectionConfigurationPanel extends JPanel {
         String sessionName = first.getParentFile() != null ? first.getParentFile().getName() : first.getName();
         StarMaskExplorerFrame.Settings current = new StarMaskExplorerFrame.Settings(
                 config.masterSigmaMultiplier, config.masterGrowSigmaMultiplier, config.masterMinDetectionPixels, config.maxStarJitter);
-        new StarMaskExplorerFrame(mainAppWindow.getFrame(), sessionName, cachedMasterStack, config, current,
-                this::applyStarMaskSettings).setVisible(true);
+        ProcessingSession owner = mainAppWindow.getSession();
+        new StarMaskExplorerFrame(mainAppWindow.getFrame(), sessionName, owner.getMasterStack(masterStackKey(config)), config, current,
+                settings -> {
+                    if (mainAppWindow.isCurrentSession(owner)) applyStarMaskSettings(settings);
+                }).setVisible(true);
     }
 
     /** Writes the explorer's values into the settings (they then count as manual changes). */
@@ -610,7 +608,8 @@ public class DetectionConfigurationPanel extends JPanel {
                 selectedProfile,
                 algorithm);
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.AUTO_TUNE,
-                mainAppWindow.getImageProcessing(), tuneTask, (handle, outcome) -> autoTuneFinished(outcome));
+                mainAppWindow.getSession(), tuneTask,
+                mainAppWindow.forCurrentSession((handle, outcome) -> autoTuneFinished(outcome)));
         if (!admission.admitted()) {
             showFooterNote(admission.refusal(), true);
             return;
@@ -1429,6 +1428,9 @@ public class DetectionConfigurationPanel extends JPanel {
 
             autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
             SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
+            if (mainAppWindow.getSession() != null) {
+                mainAppWindow.getSession().getAutoTune().setMaxCandidateFrames(autoTuneMaxCandidateFrames);
+            }
             variableStarReportOptions = new VariableStarReportOptions(((Number) spinVariableMaxCandidateCards.getValue()).intValue(),
                     (VariableStarReportOptions.SortOrder) cmbVariableStarSortOrder.getSelectedItem());
             if (mainAppWindow.getImageProcessing() != null)
@@ -1545,10 +1547,11 @@ public class DetectionConfigurationPanel extends JPanel {
     void sessionChanged(FitsFileInformation[] filesInfo) {
         if (mainAppWindow.getImageProcessing() != null)
             mainAppWindow.getImageProcessing().getAppConfig().variableStarReportOptions = variableStarReportOptions;
-        cachedMasterStack = null;
-        cachedStackFiles = null;
+        if (mainAppWindow.getSession() != null) {
+            mainAppWindow.getSession().getAutoTune().setMaxCandidateFrames(autoTuneMaxCandidateFrames);
+        }
         if (filesInfo.length == 0) {
-            overviewPanel.setSession(null, 0, 0, 0, false, null, new ArrayList<>());
+            overviewPanel.setSession(mainAppWindow.getSession(), null, 0, 0, 0, false, null, new ArrayList<>());
             return;
         }
         boolean existsColor = false;
@@ -1565,7 +1568,7 @@ public class DetectionConfigurationPanel extends JPanel {
             fileNames.add(new File(file.getFilePath()).getName());
         }
         boolean readyForTuning = !existsColor && filesInfo.length >= SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
-        overviewPanel.setSession(sessionName, filesInfo.length, filesInfo[0].getSizeWidth(), filesInfo[0].getSizeHeight(),
+        overviewPanel.setSession(mainAppWindow.getSession(), sessionName, filesInfo.length, filesInfo[0].getSizeWidth(), filesInfo[0].getSizeHeight(),
                 readyForTuning, firstFile.getParentFile(), fileNames);
     }
 

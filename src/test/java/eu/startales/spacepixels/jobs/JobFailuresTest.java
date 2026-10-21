@@ -35,6 +35,13 @@ public class JobFailuresTest {
     }
 
     @Test
+    public void engineCancellationIsRecognizedThroughWrappers() {
+        assertTrue(JobFailures.isCancellation(new java.util.concurrent.CancellationException("engine cancelled")));
+        assertTrue(JobFailures.isCancellation(new ExecutionException(new java.util.concurrent.CancellationException())));
+        assertFalse(JobFailures.isCancellation(new IOException("worker failed")));
+    }
+
+    @Test
     public void aCauseChainThatLoopsEnds() {
         Exception first = new Exception("first");
         Exception second = new Exception("second", first);

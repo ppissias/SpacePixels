@@ -156,6 +156,10 @@ public class BlinkFrame extends JFrame {
      * frame among them gives sky coordinates and labels to the frames blinked, also when none of those is solved.
      * {@code overlay} holds the tracks of the last detection run on this session, or is null.
      */
+    void setSkyCatalogueModel(eu.startales.spacepixels.session.SkyCatalogueModel model) {
+        sky.bind(model);
+    }
+
     void open(BlinkSequence sequence, FitsFileInformation[] files, FitsFileInformation[] sessionFiles,
               StretchPanel stretchPanel, TrackOverlay overlay, VariableStarOverlay variables) {
         bindStretch(stretchPanel);
@@ -244,6 +248,10 @@ public class BlinkFrame extends JFrame {
     void close() {
         boolean active = open || loading;
         release();
+        if (stretch != null) {
+            stretch.detach();
+            stretch = null;
+        }
         setVisible(false);
         if (active) {
             onClose.run();

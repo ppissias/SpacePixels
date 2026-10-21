@@ -14,6 +14,40 @@ import static org.junit.Assert.assertTrue;
 
 public class SkyAnnotationsTest {
 
+    @Test
+    public void viewersListenOnlyToTheirOwnSessionAndDetachIndependently() throws Exception {
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+            var firstModel = new eu.startales.spacepixels.session.SkyCatalogueModel();
+            var secondModel = new eu.startales.spacepixels.session.SkyCatalogueModel();
+            SkyAnnotations first = new SkyAnnotations(new FrameView());
+            SkyAnnotations second = new SkyAnnotations(new FrameView());
+            var firstChanges = new java.util.concurrent.atomic.AtomicInteger();
+            var secondChanges = new java.util.concurrent.atomic.AtomicInteger();
+            first.setOnSolutionChanged(firstChanges::incrementAndGet);
+            second.setOnSolutionChanged(secondChanges::incrementAndGet);
+            first.bind(firstModel);
+            second.bind(secondModel);
+            first.attach(null);
+            second.attach(null);
+            try {
+                assertEquals(2, firstModel.listenerCount());
+                assertEquals(2, secondModel.listenerCount());
+                firstModel.setCorrection(null);
+                assertEquals(1, firstChanges.get());
+                assertEquals(0, secondChanges.get());
+                first.detach();
+                assertEquals(0, firstModel.listenerCount());
+                assertEquals(2, secondModel.listenerCount());
+                secondModel.setCorrection(null);
+                assertEquals(1, secondChanges.get());
+            } finally {
+                first.detach();
+                second.detach();
+            }
+            assertEquals(0, secondModel.listenerCount());
+        });
+    }
+
     /** 1.5″ per pixel, north up and east left, centre at pixel (999.5, 799.5) of a 2000 × 1600 frame. */
     private static final double SCALE_DEG = 1.5 / 3600;
     private static final WcsCoordinateTransformer TRANSFORMER = WcsCoordinateTransformer.fromHeader(header());

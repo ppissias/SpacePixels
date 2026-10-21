@@ -14,6 +14,7 @@ import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.VariableStarOverlay;
 import io.github.ppissias.jtransient.core.SourceExtractor;
+import io.github.ppissias.jtransient.execution.CancellationScope;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -218,6 +219,15 @@ abstract class SequenceViewerFrame extends JFrame {
     }
 
     /** Shows the window at this frame. {@code files} are the frames of the session, which can share a plate solution. */
+    public void setSkyCatalogueModel(eu.startales.spacepixels.session.SkyCatalogueModel model) {
+        sky.bind(model);
+    }
+
+    void closeForSessionChange() {
+        close();
+        dispose();
+    }
+
     protected void openAt(int index, StretchPanel stretchPanel, FitsFileInformation[] files) {
         bindStretch(stretchPanel);
         cursorReadout.reset(files);
@@ -238,6 +248,9 @@ abstract class SequenceViewerFrame extends JFrame {
     }
 
     private void close() {
+        if (!open) {
+            return;
+        }
         open = false;
         if (worker != null) {
             worker.cancel(false);
@@ -250,14 +263,11 @@ abstract class SequenceViewerFrame extends JFrame {
         sky.detach();
         view.clear();
         if (stretch != null) {
-            stretch.clearTables();
+            stretch.detach();
+            stretch = null;
         }
         released();
         if (disposeOnClose) {
-            if (stretch != null) {
-                stretch.detach();
-                stretch = null;
-            }
             dispose();
         } else {
             setVisible(false);
@@ -361,7 +371,12 @@ abstract class SequenceViewerFrame extends JFrame {
         worker = new SwingWorker<Result, Void>() {
             @Override
             protected Result doInBackground() throws Exception {
-                return prepare(index);
+                try (CancellationScope cancellation = CancellationScope.open(this::isCancelled)) {
+                    CancellationScope.check();
+                    Result result = prepare(index);
+                    CancellationScope.check();
+                    return result;
+                }
             }
 
             @Override

@@ -10,6 +10,7 @@
 package eu.startales.spacepixels.jobs;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CancellationException;
 
 /**
  * How a job ends after an error, so that no failure leaves the window locked: running out of memory goes to the
@@ -52,7 +53,7 @@ public final class JobFailures {
 
     /** Whether {@code failure} or one of its causes is a cancellation of the job. */
     static boolean isCancellation(Throwable failure) {
-        return hasCause(failure, JobCancelledException.class);
+        return hasCause(failure, CancellationException.class);
     }
 
     private static boolean hasCause(Throwable failure, Class<? extends Throwable> type) {

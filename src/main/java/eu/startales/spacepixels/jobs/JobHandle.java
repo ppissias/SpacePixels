@@ -10,8 +10,8 @@
 package eu.startales.spacepixels.jobs;
 
 /**
- * The identity of one job: its number, its kind and the session it was started for. Until the application has a
- * session object, the session is whatever the caller uses for it (the window passes its {@code ImageProcessing}).
+ * The identity of one job: its number, kind and owning session. The window passes its ProcessingSession;
+ * Object is retained for compatibility with non-window callers.
  */
 public record JobHandle(long id, JobKind kind, Object session) {
 }

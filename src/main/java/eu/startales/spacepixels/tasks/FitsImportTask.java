@@ -10,6 +10,8 @@
 
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.config.ApplicationSettings;
+
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
@@ -36,13 +38,20 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
     private static final Logger LOGGER = Logger.getLogger(FitsImportTask.class.getName());
 
     private final File directory;
+    private final ApplicationSettings settings;
 
     public FitsImportTask(File directory) {
+        this(directory, null);
+    }
+
+    public FitsImportTask(File directory, ApplicationSettings settings) {
         this.directory = directory;
+        this.settings = settings;
     }
 
     @Override
     public JobOutcome<Result> run(JobContext context) throws Exception {
+        ApplicationSettings preferences = settings == null ? ApplicationSettings.loadDefault() : settings;
         File folder = directory;
         while (true) {
             ImageProcessing imgProcessing = null;
@@ -54,7 +63,7 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
                     context.progress(90, "Loading generated FITS metadata...");
                 }
 
-                imgProcessing = ImageProcessing.getInstance(importDirectory);
+                imgProcessing = ImageProcessing.getInstance(importDirectory, preferences);
                 FitsFileInformation[] filesInfo = imgProcessing.getFitsfileInformation();
                 context.progress(100, "Import complete.");
                 if (filesInfo.length == 0) {

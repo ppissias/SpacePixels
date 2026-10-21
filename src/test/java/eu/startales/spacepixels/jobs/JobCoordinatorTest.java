@@ -192,7 +192,7 @@ public class JobCoordinatorTest {
 
     @Test
     public void aJobThatCannotBeCancelledRunsToItsEnd() {
-        coordinator.start(JobKind.PLATE_SOLVE, null, context -> {
+        coordinator.start(JobKind.WRITE_WCS, null, context -> {
             context.progress(50, "Solving...");
             return JobOutcome.completed("solved");
         }, record());

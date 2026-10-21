@@ -13,6 +13,9 @@ import com.formdev.flatlaf.FlatDarkLaf;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import eu.startales.spacepixels.jobs.JobCoordinator;
+import eu.startales.spacepixels.config.ApplicationSettings;
+import eu.startales.spacepixels.session.ProcessingSession;
+import eu.startales.spacepixels.session.SessionOwner;
 import eu.startales.spacepixels.jobs.JobFailures;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
@@ -63,7 +66,8 @@ public class ApplicationWindow {
     private JFrame frmIpodImage;
     private final String version = "2026.10-04";
 
-    private volatile ImageProcessing imagePreProcessing;
+    private final ApplicationSettings applicationSettings = ApplicationSettings.loadDefault();
+    private final SessionOwner sessions = new SessionOwner();
 
     private volatile MainApplicationPanel mainApplicationPanel;
     private volatile ConfigurationPanel configurationApplicationPanel;
@@ -165,10 +169,17 @@ public class ApplicationWindow {
         frmIpodImage.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                if (imagePreProcessing != null) {
-                    imagePreProcessing.close();
-                }
+                jobCoordinator.cancel();
+                if (mainApplicationPanel != null) mainApplicationPanel.closeSessionViews();
+                sessions.close();
                 ReportLookupProxyServer.getInstance().stop();
+            }
+
+            @Override
+            public void windowClosed(WindowEvent e) {
+                jobCoordinator.cancel();
+                if (mainApplicationPanel != null) mainApplicationPanel.closeSessionViews();
+                sessions.close();
             }
         });
         frmIpodImage.getContentPane().setLayout(new BorderLayout(0, 0));
@@ -186,6 +197,7 @@ public class ApplicationWindow {
 
         // In the order the panels used to hear of a new session.
         addSessionListener(mainApplicationPanel::sessionChanged);
+        addSessionListener(files -> configurationApplicationPanel.sessionChanged());
         addSessionListener(stretchPanel::sessionChanged);
         addSessionListener(detectionConfigurationPanel::sessionChanged);
 
@@ -194,7 +206,8 @@ public class ApplicationWindow {
         tabbedPane.addTab("Image Stretch", stretchPanel);
         tabbedPane.addTab("Detection Settings", detectionConfigurationPanel);
 
-        setTabEnabled(configurationApplicationPanel, false);
+        configurationApplicationPanel.refreshComponents();
+        setTabEnabled(configurationApplicationPanel, true);
         setTabEnabled(stretchPanel, false);
         setTabEnabled(detectionConfigurationPanel, false);
         installManualLink();
@@ -248,8 +261,8 @@ public class ApplicationWindow {
     /** Imports a folder of aligned frames in the background. */
     public void importFolder(File folder) {
         if (folder != null && folder.isDirectory()) {
-            JobCoordinator.Admission admission = jobCoordinator.start(JobKind.IMPORT, imagePreProcessing,
-                    new FitsImportTask(folder), (handle, outcome) -> importFinished(outcome));
+            JobCoordinator.Admission admission = jobCoordinator.start(JobKind.IMPORT, sessions.current(),
+                    new FitsImportTask(folder, applicationSettings), (handle, outcome) -> importFinished(handle.session(), outcome));
             if (!admission.admitted()) {
                 mainApplicationPanel.showStatus(admission.refusal());
             }
@@ -268,15 +281,20 @@ public class ApplicationWindow {
     }
 
     /** The end of an import: installs the imported session, or says why there is none. */
-    private void importFinished(JobOutcome<FitsImportTask.Result> outcome) {
+    private void importFinished(Object expectedSession, JobOutcome<FitsImportTask.Result> outcome) {
         if (outcome instanceof JobOutcome.Completed<FitsImportTask.Result> completed) {
-            installSession(completed.result().processing(), completed.result().files());
-            mainApplicationPanel.showLastReport(completed.result().lastReport());
+            ProcessingSession imported = new ProcessingSession(completed.result().processing(),
+                    completed.result().files(), completed.result().lastReport());
+            if (sessions.replace(expectedSession, imported)) {
+                installSession(imported);
+                mainApplicationPanel.showLastReport(imported.getLastReport());
+            }
             return;
         }
+        if (!sessions.isCurrent(expectedSession)) return;
         if (outcome instanceof JobOutcome.Declined<FitsImportTask.Result>) {
             // Nothing was imported, for example because a conversion was declined: the open session stays.
-            mainApplicationPanel.showStatus(imagePreProcessing != null
+            mainApplicationPanel.showStatus(sessions.current() != null
                     ? "Nothing imported; the open session is unchanged." : "No files loaded");
         } else if (outcome instanceof JobOutcome.Failed<FitsImportTask.Result> failed) {
             mainApplicationPanel.showStatus("Import failed");
@@ -286,11 +304,8 @@ public class ApplicationWindow {
     }
 
     /** Makes the imported folder the window's session, in place of the one before it. */
-    private void installSession(ImageProcessing processing, FitsFileInformation[] filesInfo) {
-        if (this.imagePreProcessing != null && this.imagePreProcessing != processing) {
-            this.imagePreProcessing.close();
-        }
-        this.imagePreProcessing = processing;
+    private void installSession(ProcessingSession session) {
+        FitsFileInformation[] filesInfo = session.getFiles();
 
         // Update UI components
         AbstractTableModel tableModel = new FitsFileTableModel(filesInfo);
@@ -298,7 +313,6 @@ public class ApplicationWindow {
 
         setSessionTabsEnabled(true);
 
-        configurationApplicationPanel.refreshComponents();
         fireSessionChanged(filesInfo);
 
         int unusableTimestampCount = 0;
@@ -346,7 +360,7 @@ public class ApplicationWindow {
      * panel, not by their position.
      */
     void setSessionTabsEnabled(boolean state) {
-        setTabEnabled(configurationApplicationPanel, state);
+        setTabEnabled(configurationApplicationPanel, state || sessions.current() == null && jobCoordinator.current() == null);
         setTabEnabled(stretchPanel, state);
         setTabEnabled(detectionConfigurationPanel, state);
     }
@@ -368,8 +382,19 @@ public class ApplicationWindow {
         return blinkFrame;
     }
 
+    public ApplicationSettings getApplicationSettings() { return applicationSettings; }
+
+    public ProcessingSession getSession() { return sessions.current(); }
+
+    public boolean isCurrentSession(Object session) { return sessions.isCurrent(session); }
+
+    public <R> JobCoordinator.OutcomeHandler<R> forCurrentSession(JobCoordinator.OutcomeHandler<R> handler) {
+        return (handle, outcome) -> sessions.applyIfCurrent(handle.session(), () -> handler.handle(handle, outcome));
+    }
+
     public ImageProcessing getImageProcessing() {
-        return imagePreProcessing;
+        ProcessingSession session = sessions.current();
+        return session == null ? null : session.getProcessing();
     }
 
     public FitsFileInformation getSelectedFile() {

@@ -9,8 +9,8 @@ The single active plan for SpacePixels application design, GUI improvements and 
 - **The work queue** is the findings table, the open architecture steps, the [engine changes that need SpacePixels work](#engine-changes-that-need-spacepixels-work) and the feature table below. Add new proposals there; do not keep a separate TODO or refactor list.
 - **When an item is done,** describe its behaviour in the manual, API or architecture documents, and move its record (decision, evidence and validation) to the archive. Do not bring completed items back into this plan.
 - **Completed work:** [design work completed in October 2026](docs/archive/design-improvements-completed-2026-10.md) holds:
-  - D01, D03, D05 and D07, and the done parts of D02 and D04;
-  - the architecture review with its finished steps;
+  - D01, D02, D03, D04, D05 and D07;
+  - the architecture review with its finished steps, including S7;
   - the EventBus decision.
 
   Older sources: [GUI review](docs/archive/gui-enhancements-2026-10.md), [refactor snapshot](docs/archive/refactor-2026-09.md), [completed task list](docs/archive/completed-tasks-2026-10.md) and [maintenance notes and regression evidence](docs/archive/maintenance-notes-2026-10-19.md). Their old priorities do not override this plan.
@@ -34,9 +34,7 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 
 | ID | Priority | Status | Improvement | First useful result |
 |---|---|---|---|---|
-| D02 | High | In progress; open: session identity (S7) | Job ownership and resource admission | A late result from one session cannot be applied to the next. |
-| D04 | High | In progress; open: engine cancellation waits, the viewer check | Explicit cancellation, outcomes and cleanup | Cancelling does not mean exiting; every ordinary terminal path releases its resources. |
-| D06 | Medium | Proposed | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
+| D06 | Medium | In progress; open: facade/service split (S10) | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
 | D08 | Medium | In progress; open: session-folder I/O and import questions (S8, S12) | Keep slow work off the EDT | Importing a session does not read its catalogue, correction and Auto-Tune files on the UI thread. |
 | D09 | Medium | Proposed | Complete the analysis/report separation | Display changes reuse prepared diagnostics and stable finding identities. |
 | D10 | Medium | Proposed | Typed settings metadata and engine integration | A setting's identity and rules are not maintained in several unrelated lists. |
@@ -46,54 +44,13 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 
 “High” means to address before expanding the affected workflow. It does not mean undertaking all high-priority items in one change.
 
-### D02. Give every background job an owner and an identity
-
-**In progress.** Every long job runs under `JobCoordinator`:
-- it is admitted on the EDT before its worker starts;
-- it has a handle with its id, kind and session;
-- it ends with one typed outcome.
-
-The sky-catalogue fetch stays outside the coordinator by decision. See the [archived record](docs/archive/design-improvements-completed-2026-10.md#d02-give-every-background-job-an-owner-and-an-identity).
-
-**Open: session identity.** A job handle names its session by the `ImageProcessing` of the import, a placeholder until the session object (S7).
-
-**Acceptance.** A late progress or finish event from job A cannot unlock job B, change B's status or apply A's result to a new session. Tests should assert this without constructing the entire main window.
-
-### D04. Make cancellation, failure and resource cleanup explicit
-
-**In progress.** Done:
-- one ending per job, typed outcomes and one out-of-memory policy;
-- Cancel in the progress dialog, and clean-up after a cancel;
-- progress while the report is written;
-- Copy details in failure messages;
-- the last-report link.
-
-See the [archived record](docs/archive/design-improvements-completed-2026-10.md#d04-make-cancellation-failure-and-resource-cleanup-explicit).
-
-**Open:**
-- **Engine waits.** A cancel takes effect at the engine's next progress report. Measured on klangwolke-2 (33 frames of 61 MPix):
-  - during frame extraction it took 26 s, because the engine's worker threads finish their frames first;
-  - the other engine stages waited up to 6–29 s between reports, photometry's ensemble solution the longest;
-  - calibrated Auto-Tune waited up to 12.6 s.
-
-  Shorter waits need a cancellation contract in JTransient (its JA-03), discussed there first; SpacePixels then uses it.
-- **The viewer check.** Close a viewer while it prepares a frame: its worker's result is dropped and its frames are released.
-
-**Acceptance.**
-- Cancel during extraction, photometry and calibrated tuning on real data, and report the measured waits before and after the engine change.
-- Close each viewer while it prepares a frame, and verify one terminal outcome, released resources and a correct command state.
-
 ### D06. Separate application preferences, the session and individual viewers
 
-**Evidence.** [ApplicationWindow](src/main/java/eu/startales/spacepixels/gui/ApplicationWindow.java) owns an `ImageProcessing` for the current folder. [SkyCatalogueModel](src/main/java/eu/startales/spacepixels/gui/SkyCatalogueModel.java) is process-wide. `MainApplicationPanel` owns selection, sky jobs and a preview window; `DetectionConfigurationPanel` owns a master-stack cache; viewers own other frames and listeners. [ImageProcessing](src/main/java/eu/startales/spacepixels/util/ImageProcessing.java) reloads the user-level `AppConfig` for each instance. `SpacePixelsDetectionProfileIO` also retains an active Auto-Tune frame limit in static state.
+**In progress.** S7 is complete: application preferences load once per window through `ApplicationSettings`; `ProcessingSession` owns an explicit UUID, frame metadata references, selection, catalogue/correction, tuning measurements/preferences, master-stack cache, last report and the session's processing facade. Jobs and sky workers are bound to that session. A successful import alone replaces it; old result callbacks cannot update the replacement. See the [S7 completion record](docs/archive/design-improvements-completed-2026-10.md#s7-explicit-session-ownership-and-application-preferences-2026-10-21).
 
-Existing session guards deserve credit: sky completion checks worker identity; restore checks the saved field and correction key; overlays check coverage; viewer cleanup detaches listeners. Do not describe these as absent or assume every import currently mixes catalogues. The remaining concern is scattered ownership and dependence on a single process-wide current session, especially for tests or future multiple windows.
+**Open: S10.** The compatibility `ImageProcessing` facade still contains its FITS cache and owns the pipeline services that retain overlays. Extract batch/import responsibilities and delegate the remaining session storage without changing public APIs or deep-copying large buffers. Per-run context and the legacy static Auto-Tune/report fallback remain S14, not a new multi-window feature.
 
-**Proposal.** Load application preferences once, independently of importing a folder. Give the window a current session containing an ID, metadata references, selection model, catalogue/correction state, last-result references and session-scoped caches. Replace it only after a successful import handover. Imports already end with a typed outcome, and a declined, cancelled or failed import keeps the open session.
-
-Pass the session or an immutable session snapshot to viewers/services. Treat large frame buffers as owned resources, not data to deep-copy into every snapshot. An old viewer may keep its old session intentionally, but must not silently adopt the new session's catalogue. Retain field/solution guards after removing the singleton.
-
-**Acceptance.** Open A, begin background work, import B, then let A finish: B stays unchanged. Failed or cancelled import preserves the agreed previous-session behaviour. Closing a viewer releases listeners and owned buffers. Two test sessions cannot change each other's catalogue or tuning preferences. Do not add multi-window UI merely to justify this refactor.
+**Acceptance.** Preserve session isolation and handover tests while extracting the remaining facade responsibilities. Keep settings formats, detection measurements, viewer coverage checks and saved catalogue/correction field guards unchanged.
 
 ### D08. Keep UI access on the EDT and slow work off it
 
@@ -229,7 +186,6 @@ The [architecture adoption review](docs/archive/design-improvements-completed-20
 
 | Step | Stage | Work | Covers |
 |---|---|---|---|
-| S7 | C | A session object, and the application config loaded once | D06, D11 |
 | S8 | C | The WCS write and session-folder I/O off the EDT. **The WCS write is done (2026-10-20)**: it runs as a job. The session-folder reads and writes (sky catalogue and correction on import, Auto-Tune results, the correction switch) are still on the EDT | D08 |
 | S10 | C | Split `ImageProcessing`: its session part into the session object, with batch operations and import as their own services. Keep it as a facade, and remove its dead methods | D06 |
 | S12 | C | One preparation flow for the GUI and the API, with the GUI's questions asked on the EDT. Typed import outcomes are done: since `74bbded` a declined import keeps the open session. The questions are still asked from the import worker | D08, D06, F07 |
@@ -244,16 +200,15 @@ The [architecture adoption review](docs/archive/design-improvements-completed-20
 
 ## Engine changes that need SpacePixels work
 
-Items of the [JTransient plan](../JTransient/DESIGN-IMPROVEMENTS.md) that SpacePixels must follow with its own change. All are Proposed there, apart from the agreed direction of JA-01.
-- **Order.** The engine change comes first, in a published JTransient release. SpacePixels builds against the published jar by default.
-- **Compatibility.** SpacePixels keeps its current code until it moves to that release, and keeps working against the version before.
+Pending items of the [JTransient plan](../JTransient/DESIGN-IMPROVEMENTS.md) that SpacePixels must follow with its own change. The agreed JA-01 direction and partially implemented JA-02/JA-03 are distinguished there. The completed local cancellation integration is recorded in the [D04 archive](docs/archive/design-improvements-completed-2026-10.md#d04-engine-cancellation-and-viewer-lifecycle-2026-10-21).
+- **Order.** Develop engine changes first against the local sibling checkout, as configured in `gradle.properties` and documented in `AGENTS.md`. Before distribution, publish and declare the supported JTransient release and validate the published-dependency build. The new cancellation API currently requires the companion local JTransient changes.
+- **Compatibility.** Preserve existing engine entry points and saved data formats. New application integrations must name the engine release that supplies them before distribution; local composite validation is not published-pair validation.
 - **Checking.** Every engine slice is checked on the reference datasets on both sides, comparing base and change with the same profile.
 
 | JTransient item | SpacePixels work | Belongs to |
 |---|---|---|
 | JA-01 shared validation and alignment rules (direction agreed 2026-10-20) | Replace `config.DetectionSettingsRules` with the engine's validate and align. The settings tab's auto-apply (`normalizeDependentSpinners`), `checkedSettings` and Preview Frame apply the returned adjustments and keep their own titles and sentences. Apply the same validation to profile loading and the API, which D05 left open | D10 |
-| JA-02 execution and resource ownership | SpacePixels creates an engine per run and shuts it down when the call returns; follow the agreed contract of one operation per engine. Process-wide admission stays the job coordinator's (D02). If `shutdown()` comes to wait for its workers, the tasks' clean-up follows | D02, D04 |
-| JA-03 cancellation contract | Hand the engine the job's cancellation, instead of relying on the progress listener throwing, then measure the waits again (26 s during extraction today). Remove `AutoTuneTask`'s workaround for the calibrated tuner, which turns a cancel into a failed result. If the engine adopts `CancellationException` (an open decision there), `JobCancelledException` already is one | D04 |
+| JA-02 execution and resource ownership | SpacePixels creates an engine per run and shuts it down when the call returns; follow the agreed contract of one operation per engine. Process-wide admission stays the job coordinator's (D02). | D02, D04 |
 | JA-04 tuning options and diagnostics per operation | `AutoTunerRunner` stops changing the static `JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE`. Remove the API's rule against concurrent legacy auto-tunes in one JVM ([API.md](API.md)) only once both sides support it. `DebugOutput.applyToEngine` moves from the engine's static debug switches to a per-run diagnostic sink | D10, S14 |
 | JA-05 frame identity | The report reads the engine's `frameIndex` in several places: `CatalogueComparisonWriter`, `ClaudePerspectiveSectionWriter`, and the rejected frames in `StarMaskExplorerFrame`. When the engine names the retained position and the original sequence index separately, update each reader and compare the reports | D09 |
 | JA-06 tracking responsibilities | No API change intended; SpacePixels runs the real-data regression on each slice | — |
@@ -294,12 +249,11 @@ The localhost lookup proxy's lifecycle can remain application-scoped. Give it an
 
 ## Delivery plan
 
-Stages A (focused correctness) and B (workflow foundation) are done, apart from the open parts of D04; see the [archived delivery plan](docs/archive/design-improvements-completed-2026-10.md#delivery-plan-as-of-2026-10-20).
+Stages A (focused correctness) and B (workflow foundation), including D04 engine cancellation and viewer cleanup, are done. See the [D04 implementation record](docs/archive/design-improvements-completed-2026-10.md#d04-engine-cancellation-and-viewer-lifecycle-2026-10-21) and the [earlier delivery plan](docs/archive/design-improvements-completed-2026-10.md#delivery-plan-as-of-2026-10-20). Stage C is in progress; S7's application preferences and explicit session handover are complete.
 
 | Stage | Work | Why this order |
 |---|---|---|
-| B, rest | D04: engine cancellation waits (with JTransient JA-03); the viewer check | Completes the job lifecycle the later stages rely on. |
-| C: session boundary | D06 application preferences and session handover (S7, S10); D08 session-folder I/O and import questions off the worker (S8, S12); no GUI in `util` (S13) | Reduces UI/service coupling and protects session transitions. |
+| C: session boundary | D06 remaining facade/service split (S10); D08 session-folder I/O and import questions off the worker (S8, S12); no GUI in `util` (S13) | Reduces UI/service coupling and protects session transitions. |
 | D: presentation and polish | D09 prepared report data (S14–S16); D10 typed settings bindings; D11 results and readiness; D12/D13 layout and access | Builds on explicit state; accessibility fixes that are independent can start earlier. |
 
 Add one adapter or command at a time, and keep the public API and file formats compatible.
@@ -331,7 +285,7 @@ For behavioural changes, follow the maintainer's real-data comparison method. An
 
 **Where it lives.** The tests and their support are in `src/test/java/eu/startales/spacepixels/gui/mechanics/`. `build.gradle` holds the test dependency and the `guiMechanicsTest` task. Run `./gradlew guiMechanicsTest`. That task is not part of `./gradlew test`: it needs a desktop, it moves the mouse, and it runs one test at a time. `./gradlew test` excludes this package and opens no window. The mechanics task runs again even when the classes have not changed, prints each case name, and brings the window to the front of the main display.
 
-**Isolation.** Each test sets `user.home` to a scratch folder before the window is created, and restores it afterwards. Java preferences are not in that folder. The test exports `/eu/startales/spacepixels` (the window placement, the stretch, the blink speed, the auto-tune profile and `showExpertSettings`) and restores that node after the window is gone. The frame's close operation is set to dispose, so closing it does not exit the JVM. Since D04's Cancel, the modal **Processing...** dialog's close box cancels a job that can be cancelled. For plate solving, the WCS write and Blink it still asks to exit SpacePixels, so the suite must not click it there.
+**Isolation.** Each test sets `user.home` to a scratch folder before the window is created, and restores it afterwards. Java preferences are not in that folder. The test exports `/eu/startales/spacepixels` (the window placement, the stretch, the blink speed, the auto-tune profile and `showExpertSettings`) and restores that node after the window is gone. The frame's close operation is set to dispose, so closing it does not exit the JVM. Since D04's Cancel, the modal **Processing...** dialog's close box cancels a job that can be cancelled. Plate solving now joins JPlateSolve's cancellable operation. For the WCS write and Blink it still asks to exit SpacePixels, so the suite must not click it there.
 
 **Data.** Synthetic frames from `SyntheticDatasetFactory`. The reference datasets are not opened. The folder chooser is the real one: the test clicks **Import Aligned Frames…**, selects the synthetic folder and approves the chooser. The approve button's own caption follows the operating-system language, so the test uses the chooser's approve action rather than that caption.
 
@@ -383,7 +337,7 @@ For behavioural changes, follow the maintainer's real-data comparison method. An
 | F07 | Proposed | Prepare compressed 32-bit FITS (`.fz`) directly as uncompressed unsigned 16-bit FITS in one import operation, avoiding an intermediate uncompressed 32-bit directory and a second conversion/import step. See [combined FITS preparation](#combined-fits-preparation-f07). |
 | F09 | Proposed; frame-selection policy to confirm | Make Detect Iteratively choose a directory and orchestrate ordinary pipeline runs with identical settings and different input subsets, followed by an index of the reports. See [directory-based iterative detection](#directory-based-iterative-detection-f09). |
 
-Results summaries/run history and stage-aware progress are covered by D11 and D04. Their detailed information should live there rather than become competing feature entries. The old drift-grown void-band concern is Dropped: those settings and the old border mechanism were replaced by session data areas.
+Results summaries/run history are covered by D11. The completed cancellation work is archived under D04; future stage-aware engine progress belongs to JA-09 and its SpacePixels integration. Their detailed information should live there rather than become competing feature entries. The old drift-grown void-band concern is Dropped: those settings and the old border mechanism were replaced by session data areas.
 
 ### MCP agent services (F04)
 

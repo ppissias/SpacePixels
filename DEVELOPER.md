@@ -35,6 +35,7 @@ SpacePixels prepares the frames, runs the work, and presents the results. Detect
 | `util.reporting` | The HTML report | [DetectionReportGenerator](src/main/java/eu/startales/spacepixels/util/reporting/DetectionReportGenerator.java), `ReportData`, the `…SectionWriter` classes |
 | `util.skycatalog` | Fetching and storing the sky catalogue, and the plate-solution correction | `SkyCatalogueClient`, `SkyCatalogueStore`, `PlateCorrectionFitter` |
 | `api`, `tools` | The public Java API and the command line | [DefaultSpacePixelsPipelineApi](src/main/java/eu/startales/spacepixels/api/DefaultSpacePixelsPipelineApi.java), `BatchDetectionCli` |
+| `session` | Session identity, owned state and guarded handover (no Swing/`gui` dependencies) | `ProcessingSession`, `SessionOwner`, `SkyCatalogueModel`, `AutoTuneState` |
 | `config` | The settings files and their reading and writing | `AppConfig`, `SpacePixelsDetectionProfileIO`, `SpacePixelsSettingsFiles` |
 
 The dependencies point one way:
@@ -49,6 +50,8 @@ Two exceptions are not fixed yet:
 
 Every long operation is a **job**. One pattern serves all eleven: import, Convert to Mono, Batch Stretch, plate solve, writing the WCS header, Blink, Auto-Tune, Detect, Detect Iteratively, Manual Transient Inspection, and the Test Star Mask stack.
 
+Plate solve uses JPlateSolve **1.0.1**, resolved from the local sibling during development. `PlateSolveService.startSolve` returns a cleanup-aware `PlateSolveOperation`. `PlateSolveTask` forwards cancellation, reports phase/elapsed text, and joins its completion even when interrupted; it never releases the job slot just because a legacy future was cancelled. Budgets are the library defaults (ASTAP 2 minutes, Astrometry.net 15 minutes). Remote cancellation is local-only: an accepted server job may continue. Failed solves already own their cleanup, so the GUI must not delete sidecars restored by JPlateSolve. Successful solution cleanup after WCS import stays in SpacePixels. `ImageProcessing.close()` closes the cloud client with its session.
+
 1. **The click, on the Swing thread (EDT).** A button listener captures everything the job needs:
    - a validated copy of the settings, from `DetectionConfigurationPanel.checkedSettings(...)`;
    - the selected files;
@@ -62,7 +65,7 @@ Every long operation is a **job**. One pattern serves all eleven: import, Conver
    - `Failed`, with a reason.
 
    An exception or `Error` becomes `Failed`.
-   - **Cancel:** `JobCoordinator.cancel()` makes the job's next progress report throw `JobCancelledException`, and the coordinator turns that into `Cancelled`. Progress at 100% never throws, so a finished result is kept. Each `JobKind` says whether it can be cancelled. The exception is a `CancellationException`, so the services in `util` recognise it with `Cancellation.isCancellation(...)` and remove their unfinished output.
+   - **Cancel:** `JobCoordinator.cancel()` makes the job's next progress report throw `JobCancelledException`. Engine tasks also bind the job's cancellation flag through JTransient's `CancellationScope`, which reaches its computation and worker waits between progress messages. The engine joins running work before propagating cancellation; the coordinator recognises any wrapped `CancellationException` and returns `Cancelled`. Final job progress at 100% never throws. Each `JobKind` says whether it can be cancelled, and services remove their unfinished output through `Cancellation.isCancellation(...)`.
    - **Out of memory:** goes to the application's handler, which closes SpacePixels; the other jobs stop at their next progress report.
 4. **The outcome, back on the EDT.** It arrives exactly once, after the window is unlocked. The handler that was passed in at the click shows what follows: the report question, the inspection window, the imported session, or an error message (`FailureDialog`, with Copy details).
 
@@ -77,25 +80,21 @@ Every long operation is a **job**. One pattern serves all eleven: import, Conver
 
 ## The session
 
-`ApplicationWindow` owns the current session: the [ImageProcessing](src/main/java/eu/startales/spacepixels/util/ImageProcessing.java) of the imported folder. It holds:
-- the frames' `FitsFileInformation`;
-- the application config;
-- the pipeline services;
-- the overlays of the last detection run.
+`ApplicationWindow` loads `ApplicationSettings` once, before import. Its `AppConfig` is shared with each imported processor; importing never reloads it or discards unsaved Astrometry Config edits. The tab is available before import. The existing `ImageProcessing.getInstance(File)` entry point still loads standalone preferences for API/CLI callers; desktop import injects the window's settings explicitly.
 
-The frame table, `FitsFileTableModel`, shows the same frame objects.
+`session.SessionOwner` owns the current `ProcessingSession`. Each session has a UUID, shared frame metadata references, a protected selection, its own `SkyCatalogueModel` (catalogue/correction), `AutoTuneState`, master-stack cache and last-report reference. The processing facade and its pipeline/overlay services belong to that session; their further extraction is S10. Arrays of metadata are copied defensively, not image buffers.
 
-**Import:**
-1. `FitsImportTask` returns the new session.
-2. `ApplicationWindow.installSession(...)` swaps it in.
-3. The window tells the panels through a [SessionListener](src/main/java/eu/startales/spacepixels/gui/SessionListener.java): `MainApplicationPanel`, `StretchPanel` and `DetectionConfigurationPanel`.
+**Import and handover:**
+1. `FitsImportTask` prepares a processor and frames, using the application's settings even across conversion redirects.
+2. Only a completed import can transfer them into a new session. `SessionOwner.replace(expected, candidate)` rejects stale imports and closes their processors; failed, declined or cancelled imports preserve the existing session.
+3. The window refreshes the table and notifies its panels. Configuration validation refreshes without replacing edited text or saved-value markers.
+4. Replacing/closing a session interrupts its owned sky worker, closes its processor and releases the stack cache, selection and tuning results. Closing the window also rejects later import completion.
 
-An import that is declined or fails keeps the open session.
+**Asynchronous work:** job handles now carry `ProcessingSession`, not a processor standing in for identity. Outcome handlers use `forCurrentSession`; sky completion also checks worker identity and session. Old work cannot change the replacement's status, catalogue, tuning result or cache. `JobCoordinator` retains its current-job checks, so old progress/end events cannot unlock another job.
 
-Some session state still lives elsewhere, and a session object will collect it (step S7):
-- the sky catalogue and its correction, in `SkyCatalogueModel.shared()`;
-- the Test Star Mask cache;
-- the Auto-Tune results on the Overview.
+**Viewers:** annotations bind to an explicit session catalogue. Reusable Preview Frame/Full Size viewers are closed and cleared on import; Blink is reset. An independent inspection viewer can retain its old session's model and buffers deliberately, but never adopts the new catalogue. Old Star Mask Explorer Apply callbacks cannot edit a replacement session. Viewer buffers/listeners remain viewer-owned, not deep-copied into the session.
+
+The profile IO/report writer's legacy static candidate-limit fallback is unchanged; replacing legacy run-context defaults remains S14. Session tuning measurements and the GUI's session limit are separately owned already.
 
 ## Settings
 
@@ -107,7 +106,7 @@ Some session state still lives elsewhere, and a session object will collect it (
   Each setting is core, basic, expert or hidden.
 - **When edits apply.** Edits change the session's `DetectionConfig` at once. Save writes the profile and the visualization preferences together, through `SpacePixelsSettingsFiles`.
 - **Runs use a copy.** Every run takes its own validated copy, so later edits never change a running job. Preview Frame takes a fresh copy for each frame it detects, and edits the per-frame thresholds on the tab's own spinner models.
-- **The astrometry settings** (ASTAP path, observing site) are an `AppConfig`, edited in `ConfigurationPanel`.
+- **The astrometry settings** (ASTAP path, observing site) belong to application-scoped `ApplicationSettings`, edited in `ConfigurationPanel` before or after import. Save/Revert and the JSON format are unchanged.
 
 ## Frame viewers
 
@@ -117,7 +116,7 @@ Some session state still lives elsewhere, and a session object will collect it (
   - `StretchControls`: shares the stretch with the Image Stretch tab;
   - `ViewerSupport`: keys and the status bar;
   - `SkyAnnotations`: catalogue labels.
-- **Closing a viewer** detaches its listeners and releases its frames.
+- **Closing a viewer** cancels pending preparation, drops its result, detaches catalogue and shared stretch listeners, and releases its frames. Reusable hidden viewers bind fresh stretch controls when reopened. Closing Star Mask Explorer also stops its debounce timer, cancels obsolete mask work and clears its stack and image buffers.
 
 ## The report
 
@@ -170,7 +169,7 @@ The report never changes the engine's results. The report's live lookups (SatChe
 ## What comes next
 
 The open steps from the architecture review, in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md#open-steps-from-the-architecture-review):
-- **S7:** a session object.
+- **S8:** session-folder I/O off the EDT.
 - **S10:** split `ImageProcessing`.
 - **S12:** ask the import questions on the EDT.
 - **S13 to S16:** no GUI in `util`, an explicit run context, one source of finding labels, and prepared report diagnostics.

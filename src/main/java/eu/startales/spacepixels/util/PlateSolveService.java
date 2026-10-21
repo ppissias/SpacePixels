@@ -12,6 +12,8 @@ package eu.startales.spacepixels.util;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
+import io.github.ppissias.jplatesolve.PlateSolveOperation;
+import java.util.function.Consumer;
 import io.github.ppissias.jplatesolve.astap.ASTAPInterface;
 import io.github.ppissias.jplatesolve.astrometrydotnet.AstrometryDotNet;
 import io.github.ppissias.jplatesolve.astrometrydotnet.SubmitFileRequest;
@@ -48,7 +50,7 @@ import java.util.concurrent.Future;
 /**
  * Handles plate-solving execution together with WCS header import and solve-artifact cleanup.
  */
-final class PlateSolveService {
+final class PlateSolveService implements AutoCloseable {
 
     @FunctionalInterface
     interface FitsWriteHandler {
@@ -91,41 +93,36 @@ final class PlateSolveService {
         this.astrometryNetInterface = astrometryNetInterface;
     }
 
-    public Future<PlateSolveResult> solve(String fitsFileFullPath, boolean astap, boolean astrometry)
-            throws FitsException, IOException {
-        ApplicationWindow.logger.info("trying to solve image astap=" + astap + " astrometry=" + astrometry);
+    public Future<PlateSolveResult> solve(String path, boolean astap, boolean astrometry) throws FitsException, IOException {
+        return startSolve(path, astap, astrometry, null).asFuture(!astap && astrometry);
+    }
 
+    public PlateSolveOperation startSolve(String path, boolean astap, boolean astrometry,
+                                          Consumer<PlateSolveOperation.Progress> progress) throws IOException {
         if (astap) {
-            String astapPath = appConfig.astapExecutablePath;
-            if (astapPath != null && (!"".equals(astapPath))) {
-                File astapPathFile = new File(astapPath);
-                if (astapPathFile.exists()) {
-                    return ASTAPInterface.solveImage(astapPathFile, fitsFileFullPath);
-                }
+            String executable = appConfig.astapExecutablePath;
+            if (executable == null || executable.isBlank() || !new File(executable).isFile()) {
+                throw new IOException("ASTAP executable path is not correct:" + executable);
             }
-            throw new IOException("ASTAP executable path is not correct:" + astapPath);
-        } else if (astrometry) {
-            try {
-                astrometryNetInterface.login();
-                SubmitFileRequest typicalParamsRequest = SubmitFileRequest.builder()
-                        // Private: the image is not shown in the public Astrometry.net gallery.
-                        .withPublicly_visible("n")
-                        .withScale_units("degwidth")
-                        .withScale_lower(0.1f)
-                        .withScale_upper(180.0f)
-                        .withDownsample_factor(2f)
-                        .withRadius(10f)
-                        .build();
-                return astrometryNetInterface.customSolve(new File(fitsFileFullPath), typicalParamsRequest);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IOException("Astrometry.net was interrupted.", e);
-            } catch (IOException e) {
-                // The caller reports the failure; this runs on the solve worker, which must not open a dialog.
-                throw new IOException(astrometryNetFailure(e), e);
-            }
+            return ASTAPInterface.startSolve(new File(executable), path, null, progress);
+        }
+        if (astrometry) {
+            SubmitFileRequest parameters = SubmitFileRequest.builder()
+                    .withPublicly_visible("n")
+                    .withScale_units("degwidth")
+                    .withScale_lower(0.1f)
+                    .withScale_upper(180.0f)
+                    .withDownsample_factor(2f)
+                    .withRadius(10f)
+                    .build();
+            return astrometryNetInterface.startCustomSolve(new File(path), parameters, progress);
         }
         throw new IOException("No plate solver was chosen.");
+    }
+
+    @Override
+    public void close() {
+        astrometryNetInterface.close();
     }
 
     /**

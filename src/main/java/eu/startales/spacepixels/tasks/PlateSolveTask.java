@@ -16,7 +16,12 @@ import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.ImageProcessing;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 
+import io.github.ppissias.jplatesolve.PlateSolveOperation;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Solves one frame with ASTAP or Astrometry.net. The result is the solver's answer, which says itself whether the
@@ -37,18 +42,71 @@ public class PlateSolveTask implements Job<PlateSolveResult> {
 
     @Override
     public JobOutcome<PlateSolveResult> run(JobContext context) throws Exception {
+        if (context.isCancelled()) return JobOutcome.cancelled();
+        AtomicReference<PlateSolveOperation.Progress> progress = new AtomicReference<>();
+        PlateSolveOperation operation = preProcessing.startSolve(filePath, useAstap, useAstrometryNet, progress::set);
+        return awaitSolve(operation, context, progress);
+    }
+
+    static JobOutcome<PlateSolveResult> awaitSolve(PlateSolveOperation operation, JobContext context,
+                                                  AtomicReference<PlateSolveOperation.Progress> progress) throws Exception {
+        var completion = operation.completion().toCompletableFuture();
+        boolean interrupted = false;
+        Throwable waitingFailure = null;
+        long started = System.nanoTime();
+        long lastProgress = 0;
         try {
-            // Waits on this worker thread for the solver.
-            return JobOutcome.completed(preProcessing.solve(filePath, useAstap, useAstrometryNet).get());
-        } catch (ExecutionException e) {
-            // The solver's own error explains the failure better than its wrapper.
-            if (e.getCause() instanceof Exception cause) {
-                throw cause;
+            while (!completion.isDone() && waitingFailure == null && !interrupted) {
+                try {
+                    if (context.isCancelled()) operation.cancel();
+                    long elapsed = System.nanoTime() - started;
+                    if (elapsed - lastProgress >= TimeUnit.MILLISECONDS.toNanos(500)) {
+                        PlateSolveOperation.Progress latest = progress.get();
+                        String phase = latest == null ? "Preparing plate solve" : latest.message();
+                        context.progress(0, phase + " (" + TimeUnit.NANOSECONDS.toSeconds(elapsed) + " s)");
+                        lastProgress = elapsed;
+                    }
+                    completion.get(100, TimeUnit.MILLISECONDS);
+                } catch (TimeoutException polling) {
+                } catch (InterruptedException interruption) {
+                    interrupted = true;
+                    operation.cancel();
+                } catch (Throwable failure) {
+                    waitingFailure = failure;
+                    operation.cancel();
+                }
             }
-            if (e.getCause() instanceof Error cause) {
-                throw cause;
+            PlateSolveOperation.Outcome outcome;
+            while (true) {
+                try {
+                    outcome = completion.get();
+                    break;
+                } catch (InterruptedException interruption) {
+                    interrupted = true;
+                    operation.cancel();
+                } catch (ExecutionException failure) {
+                    throw new IllegalStateException("Solve completion failed without an outcome.", failure.getCause());
+                }
             }
-            throw e;
+            if (waitingFailure instanceof Error error) throw error;
+            if (outcome.status() == PlateSolveOperation.Status.FAILED
+                    || outcome.status() == PlateSolveOperation.Status.TIMED_OUT) {
+                Throwable cause = outcome.cause();
+                if (cause instanceof Error error) throw error;
+                if (cause instanceof Exception exception) throw exception;
+                throw new IllegalStateException("Plate solve failed.", cause);
+            }
+            if (waitingFailure != null && !(waitingFailure instanceof CancellationException)) {
+                if (waitingFailure instanceof Exception exception) throw exception;
+                throw new IllegalStateException(waitingFailure);
+            }
+            return switch (outcome.status()) {
+                case SUCCEEDED, REJECTED -> JobOutcome.completed(outcome.result());
+                case CANCELLED -> JobOutcome.cancelled();
+                default -> throw new IllegalStateException("Unexpected solve outcome: " + outcome.status());
+            };
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt();
         }
     }
 }

@@ -166,12 +166,14 @@ abstract class MechanicsTestCase extends AssertJSwingJUnitTestCase {
 
     /** Imports this folder through the folder chooser and waits until the prepare line names the frames. */
     final void importFolder(Path sequence) {
+        var previous = GuiActionRunner.execute(() -> application.getSession());
         window.button(VisibleText.button("Import Aligned Frames…")).click();
         JFileChooserFixture chooser = JFileChooserFinder.findFileChooser().withTimeout(15_000).using(robot());
         chooser.selectFile(sequence.toFile());
         chooser.approve();
         String frames = SyntheticDatasetFactory.DEFAULT_FRAME_COUNT + " frames";
         waitFor("the prepare line names the imported frames",
-                () -> showingLabel("Monochrome").contains(frames));
+                () -> GuiActionRunner.execute(() -> application.getSession() != null && application.getSession() != previous)
+                        && showingLabel("Monochrome").contains(frames));
     }
 }

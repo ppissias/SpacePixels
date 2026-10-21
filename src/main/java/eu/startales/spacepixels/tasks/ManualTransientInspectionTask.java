@@ -1,5 +1,7 @@
 package eu.startales.spacepixels.tasks;
 
+import io.github.ppissias.jtransient.execution.CancellationScope;
+
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
@@ -34,6 +36,13 @@ public class ManualTransientInspectionTask implements Job<ManualTransientInspect
 
     @Override
     public JobOutcome<Result> run(JobContext context) throws Exception {
+        try (CancellationScope cancellation = CancellationScope.open(context::isCancelled)) {
+            CancellationScope.check();
+            return runCancellable(context);
+        }
+    }
+
+    private JobOutcome<Result> runCancellable(JobContext context) throws Exception {
         JTransientEngine engine = new JTransientEngine();
         try {
             FitsFileInformation[] filesInfo = preProcessing.getImportedFiles();

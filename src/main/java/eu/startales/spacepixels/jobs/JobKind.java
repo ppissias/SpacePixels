@@ -11,8 +11,8 @@ package eu.startales.spacepixels.jobs;
 
 /**
  * The kinds of long operation that run under the {@link JobCoordinator}. A cancellable job stops at its next progress
- * report once cancelled. Plate solving waits on an external solver, writing the WCS header replaces a file that must
- * be written completely, and Blink has its own Stop, so those three cannot be cancelled.
+ * report once cancelled. Plate solving joins external solver cleanup before ending. Writing the WCS header replaces
+ * a file that must be written completely, and Blink has its own Stop, so those two cannot be cancelled.
  */
 public enum JobKind {
     DETECTION("Detect Moving Targets", true),
@@ -21,7 +21,7 @@ public enum JobKind {
     STAR_MASK_STACK("Test Star Mask", true),
     CONVERT_TO_MONO("Convert to Mono", true),
     BATCH_STRETCH("Batch Stretch", true),
-    PLATE_SOLVE("Plate Solve", false),
+    PLATE_SOLVE("Plate Solve", true),
     AUTO_TUNE("Auto-Tune", true),
     BLINK("Blink", false),
     IMPORT("Import", true),

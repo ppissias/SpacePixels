@@ -189,9 +189,6 @@ public class ConfigurationPanel extends JPanel {
     }
 
     public void refreshComponents() {
-        if (mainAppWindow.getImageProcessing() == null) {
-            return;
-        }
         AppConfig config = config();
         String astap = config.astapExecutablePath;
         astapPathLabel.setText(astap == null || astap.isEmpty() ? "Not set" : astap);
@@ -237,7 +234,7 @@ public class ConfigurationPanel extends JPanel {
 
             private void changed() {
                 String problem = validator.apply(field.getText().trim());
-                if (!loading && problem == null && mainAppWindow.getImageProcessing() != null) {
+                if (!loading && problem == null && mainAppWindow.getApplicationSettings() != null) {
                     apply.accept(field.getText().trim());
                     footerMessageLabel.setText(" ");
                 }
@@ -378,11 +375,8 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private void saveSite() {
-        if (mainAppWindow.getImageProcessing() == null) {
-            return;
-        }
         try {
-            mainAppWindow.getImageProcessing().saveAppConfig();
+            mainAppWindow.getApplicationSettings().save();
             savedObservatoryCode = nullToEmpty(config().observatoryCode);
             savedLat = nullToEmpty(config().siteLat);
             savedLong = nullToEmpty(config().siteLong);
@@ -401,10 +395,6 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private void updateSavedState() {
-        if (mainAppWindow.getImageProcessing() == null) {
-            footerStateLabel.setText(" ");
-            return;
-        }
         boolean fieldsMatchConfig = observatoryCodeTextField.getText().trim().equals(nullToEmpty(config().observatoryCode))
                 && latTextField.getText().trim().equals(nullToEmpty(config().siteLat))
                 && longTextField.getText().trim().equals(nullToEmpty(config().siteLong));
@@ -416,7 +406,7 @@ public class ConfigurationPanel extends JPanel {
             footerStateLabel.setText("● Fix the marked field; the last valid value stays in use");
         } else if (unsaved) {
             footerStateLabel.setForeground(warningColor());
-            footerStateLabel.setText("● Unsaved changes (in use for this session)");
+            footerStateLabel.setText("● Unsaved application defaults (in use)");
         } else {
             footerStateLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
             footerStateLabel.setText("✓ Saved settings in use");
@@ -425,12 +415,12 @@ public class ConfigurationPanel extends JPanel {
 
     /** Keeps the new star depth at once, like the ASTAP path. */
     private void starDepthChanged() {
-        if (loading || mainAppWindow.getImageProcessing() == null) {
+        if (loading) {
             return;
         }
         config().skyCatalogueStarMagnitude = ((Number) starDepthSpinner.getValue()).doubleValue();
         try {
-            mainAppWindow.getImageProcessing().saveAppConfig();
+            mainAppWindow.getApplicationSettings().save();
             starDepthStatus.setForeground(UIManager.getColor("Label.disabledForeground"));
             starDepthStatus.setText("✓ Saved · used by the next Fetch Sky Catalogue");
         } catch (IOException ex) {
@@ -454,7 +444,7 @@ public class ConfigurationPanel extends JPanel {
         try {
             Runtime.getRuntime().exec(new String[]{astapExecutable.getAbsolutePath(), "-h"}, null, astapExecutable.getParentFile());
             config().astapExecutablePath = astapExecutable.getAbsolutePath();
-            mainAppWindow.getImageProcessing().saveAppConfig();
+            mainAppWindow.getApplicationSettings().save();
             astapPathLabel.setText(astapExecutable.getAbsolutePath());
             checkAstap();
         } catch (IOException ex) {
@@ -464,7 +454,7 @@ public class ConfigurationPanel extends JPanel {
 
     /** Shows whether ASTAP is present and which star databases are installed next to it. */
     private void checkAstap() {
-        String path = mainAppWindow.getImageProcessing() == null ? null : config().astapExecutablePath;
+        String path = config().astapExecutablePath;
         if (path == null || path.isEmpty()) {
             showAstapStatus(false, "ASTAP is not set. Download ASTAP and a star database (D50), then choose astap.exe.");
             return;
@@ -522,7 +512,12 @@ public class ConfigurationPanel extends JPanel {
     // ==========================================
 
     private AppConfig config() {
-        return mainAppWindow.getImageProcessing().getAppConfig();
+        return mainAppWindow.getApplicationSettings().getConfig();
+    }
+
+    void sessionChanged() {
+        validateAll();
+        updateSavedState();
     }
 
     private FitsFileInformation[] importedFiles() {

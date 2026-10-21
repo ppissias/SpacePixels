@@ -40,11 +40,7 @@ public class AutoTuneJobTest {
         assertEquals(100, (int) progress.get(progress.size() - 1));
     }
 
-    /**
-     * The calibrated tuner catches the cancel from its progress report and returns a failed result instead (on these
-     * small frames it reports no progress at all, so the cancel is still pending when it returns). A cancel made while
-     * it runs ends the job as cancelled, and its result is not used.
-     */
+    /** A cancel requested at the tuning handover reaches JTransient before calibration starts. */
     @Test
     public void aCancelWhileTheTunerRunsEndsAsCancelled() throws Exception {
         List<Integer> progress = new ArrayList<>();

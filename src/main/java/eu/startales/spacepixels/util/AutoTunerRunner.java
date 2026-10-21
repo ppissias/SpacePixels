@@ -9,6 +9,8 @@
  */
 package eu.startales.spacepixels.util;
 
+import io.github.ppissias.jtransient.execution.CancellationScope;
+
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.CalibratedAutoTuner;
 import io.github.ppissias.jtransient.engine.ImageFrame;
@@ -70,11 +72,11 @@ public final class AutoTunerRunner {
             int originalSampleSize = JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE;
             JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = Math.min(originalSampleSize, candidateFrames.size());
             try {
-                return JTransientAutoTuner.tune(candidateFrames, baseConfig, profile, listener);
+                return JTransientAutoTuner.tune(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
             } finally {
                 JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = originalSampleSize;
             }
         }
-        return CalibratedAutoTuner.tune(candidateFrames, baseConfig, profile, listener);
+        return CalibratedAutoTuner.tune(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
     }
 }

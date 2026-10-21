@@ -40,7 +40,7 @@ public class WindowMechanicsTest extends MechanicsTestCase {
         requireButton("Detect Moving Targets", false);
         requireButton("Detect Iteratively (large datasets)", false);
         assertTrue(showingLabel("No frames imported").contains("No frames imported"));
-        assertFalse(tabEnabled("Astrometry Config"));
+        assertTrue(tabEnabled("Astrometry Config"));
         assertFalse(tabEnabled("Image Stretch"));
         assertFalse(tabEnabled("Detection Settings"));
     }

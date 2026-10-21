@@ -72,7 +72,7 @@ The window has four tabs:
 | **Image Stretch** | how frames are displayed in the viewers |
 | **Detection Settings** | Auto-Tune and every detection setting |
 
-The other tabs open once frames are imported. A colour dataset shows a persistent information notice: you can blink, stretch, convert to mono and use astrometry. **Preview Frame**, **Manual Transient Inspection**, **Auto-Tune** and detection (including variable-star photometry) require monochrome frames. Use **Convert to Mono**, then import the new mono folder. **1 Prepare**, **2 Astrometry** and **3 Inspect** each have a status line underneath that tells you what is ready and what is missing; when a button is greyed out, its tooltip says why.
+**Astrometry Config** is available before import, so you can choose ASTAP and enter your observing site first. Unsaved valid defaults stay in use when another folder is imported; importing does not save or discard them. **Image Stretch** and **Detection Settings** open once frames are imported. A colour dataset shows a persistent information notice: you can blink, stretch, convert to mono and use astrometry. **Preview Frame**, **Manual Transient Inspection**, **Auto-Tune** and detection (including variable-star photometry) require monochrome frames. Use **Convert to Mono**, then import the new mono folder. **1 Prepare**, **2 Astrometry** and **3 Inspect** each have a status line underneath that tells you what is ready and what is missing; when a button is greyed out, its tooltip says why.
 
 **Detect** is split in two. On the left, **Auto-Tune Settings** has a short note under it: which settings are in use, and, after this folder has a saved auto-tune, when that auto-tune was run. On the right are **Detect Moving Targets**, **Detect Iteratively**, and a small box with the detection settings now in use: detection and star-mask sigma, grow and minimum pixels, the mask overlap, and the star jitter. **Edit settings…** at the bottom of that box opens Detection Settings.
 
@@ -141,12 +141,12 @@ The **Legacy** tuner sets only the per-frame detection settings, the mask overla
 
 Click **Detect Moving Targets**, on the Overview or on the Main tab (or press **Ctrl+D**). A progress window shows each stage.
 
-**Cancel** in the progress window (or closing it) stops the run at its next step; the status bar then says it was cancelled, and nothing changes. This works for the detection runs, Manual Transient Inspection, Test Star Mask, Auto-Tune, import, Convert to Mono and Batch Stretch.
+**Cancel** in the progress window (or closing it) requests that the run stop; the status bar says it was cancelled after its workers finish cleanup. This works for the detection runs, Manual Transient Inspection, Test Star Mask, Auto-Tune, import, Convert to Mono, Batch Stretch and Plate Solve.
 - **A run that doesn't stop.** If it hasn't stopped after a while, the button offers to exit SpacePixels instead.
 - **What can't be cancelled:**
-  - Plate solving waits for the solver.
   - Writing the plate solution into a frame must finish, so the file is not left half written.
-- **How fast it stops:** within a second while the report is written, which reports each section and item. Some detection steps report less often, so a run can take up to about half a minute to stop there; reading the frames of a 61-megapixel session is the slowest case.
+- **Plate Solve:** progress shows the solver phase and elapsed seconds. Cancel stops the local ASTAP process, or interrupts the local Astrometry.net request and stops polling. A remote job already accepted by Astrometry.net may continue on its server. The total solve budgets are 2 minutes for ASTAP and 15 minutes for Astrometry.net, followed by cleanup. Failed or cancelled ASTAP runs restore pre-existing solver sidecars; the source FITS file is unchanged.
+- **How fast it stops:** detection and Auto-Tune check cancellation inside their computation, without waiting for the next progress message. Report writing checks between sections and items. Reading an individual large FITS file or another operation already in progress can still delay stopping; resources remain owned until that work and its cleanup finish.
 - **What a cancelled run leaves:**
   - A cancelled detection removes the report folder it was writing.
   - A cancelled iterative run keeps the passes it finished, with an index page that says the run was cancelled, and removes the pass it was writing.

@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.gui;
 
+import eu.startales.spacepixels.session.SkyCatalogueModel;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
@@ -62,6 +63,7 @@ final class SkyAnnotations {
     private FitsFileInformation shownInfo;
     private SkyCatalogue catalogue;
     private boolean attached;
+    private SkyCatalogueModel model = new SkyCatalogueModel();
 
     SkyAnnotations(FrameView view) {
         this.view = view;
@@ -94,14 +96,21 @@ final class SkyAnnotations {
     }
 
     /** Starts following the session's catalogue; {@code files} are the frames, which can share a plate solution. */
+    void bind(SkyCatalogueModel catalogueModel) {
+        if (model == catalogueModel) return;
+        detach();
+        model = java.util.Objects.requireNonNull(catalogueModel);
+        updateEnabled();
+    }
+
     void attach(FitsFileInformation[] files) {
         this.files = files;
         if (!attached) {
-            SkyCatalogueModel.shared().addListener(catalogueListener);
-            SkyCatalogueModel.shared().addCorrectionListener(correctionListener);
+            model.addListener(catalogueListener);
+            model.addCorrectionListener(correctionListener);
             attached = true;
         }
-        catalogue = SkyCatalogueModel.shared().get();
+        catalogue = model.get();
         marksBySolution.clear();
         notice.setText(" ");
         updateEnabled();
@@ -110,8 +119,8 @@ final class SkyAnnotations {
 
     /** Stops following the catalogue and lets go of the marks, when the viewer closes. */
     void detach() {
-        SkyCatalogueModel.shared().removeListener(catalogueListener);
-        SkyCatalogueModel.shared().removeCorrectionListener(correctionListener);
+        model.removeListener(catalogueListener);
+        model.removeCorrectionListener(correctionListener);
         attached = false;
         files = null;
         shownInfo = null;
@@ -139,17 +148,17 @@ final class SkyAnnotations {
     /** Key C. */
     void toggleCorrection() {
         if (correctBox.isEnabled()) {
-            setCorrection(!SkyCatalogueModel.shared().isCorrectionEnabled());
+            setCorrection(!model.isCorrectionEnabled());
         }
     }
 
     private void setCorrection(boolean enabled) {
         try {
-            SkyCatalogueModel.shared().setCorrectionEnabled(enabled);
+            model.setCorrectionEnabled(enabled);
         } catch (java.io.IOException e) {
             notice.setText("Cannot save the setting: " + e.getMessage());
         }
-        correctBox.setSelected(SkyCatalogueModel.shared().isCorrectionEnabled());
+        correctBox.setSelected(model.isCorrectionEnabled());
     }
 
     /** "  · NGC 2264 · open cluster" for the object under the cursor while Annotate is on, else "". */
@@ -176,7 +185,7 @@ final class SkyAnnotations {
     }
 
     private void catalogueChanged() {
-        catalogue = SkyCatalogueModel.shared().get();
+        catalogue = model.get();
         marksBySolution.clear();
         if (catalogue == null) {
             annotateBox.setSelected(false);
@@ -198,12 +207,12 @@ final class SkyAnnotations {
         if (!wasAvailable && correctBox.isEnabled() && !correctBox.isSelected()) {
             notice.setText("Plate solution check ready · C corrects it");
         } else if (!wasAvailable && correctBox.isSelected()) {
-            notice.setText("Plate solution corrected · " + SkyCatalogueModel.shared().getCorrection().improvementText() + " · C switches it off");
+            notice.setText("Plate solution corrected · " + model.getCorrection().improvementText() + " · C switches it off");
         }
     }
 
     private void updateEnabled() {
-        eu.startales.spacepixels.util.PlateSolutionCorrection correction = SkyCatalogueModel.shared().getCorrection();
+        eu.startales.spacepixels.util.PlateSolutionCorrection correction = model.getCorrection();
         correctBox.setEnabled(correction != null && correction.isNeeded());
         correctBox.setSelected(correction != null && correction.enabled);
         if (correction == null) {

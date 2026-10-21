@@ -7,7 +7,7 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-package eu.startales.spacepixels.gui;
+package eu.startales.spacepixels.session;
 
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
@@ -23,9 +23,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * A viewer that is open when either arrives is told, and offers it without changing what it shows. Used on the Swing
  * thread only.
  */
-final class SkyCatalogueModel {
+public final class SkyCatalogueModel {
 
-    private static final SkyCatalogueModel SHARED = new SkyCatalogueModel();
 
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
     private final List<Runnable> correctionListeners = new CopyOnWriteArrayList<>();
@@ -33,16 +32,13 @@ final class SkyCatalogueModel {
     private PlateSolutionCorrection correction;
     private File sessionFolder;
 
-    static SkyCatalogueModel shared() {
-        return SHARED;
-    }
 
     /** The catalogue of the session, or null. */
-    SkyCatalogue get() {
+    public SkyCatalogue get() {
         return catalogue;
     }
 
-    void set(SkyCatalogue catalogue) {
+    public void set(SkyCatalogue catalogue) {
         this.catalogue = catalogue;
         for (Runnable listener : listeners) {
             listener.run();
@@ -50,20 +46,20 @@ final class SkyCatalogueModel {
     }
 
     /** The folder of the session, where the correction is kept. */
-    void setSessionFolder(File folder) {
+    public void setSessionFolder(File folder) {
         this.sessionFolder = folder;
     }
 
     /** The plate-solution correction fitted for the session, whether in use or not; null when there is none. */
-    PlateSolutionCorrection getCorrection() {
+    public PlateSolutionCorrection getCorrection() {
         return correction;
     }
 
-    boolean isCorrectionEnabled() {
+    public boolean isCorrectionEnabled() {
         return correction != null && correction.enabled;
     }
 
-    void setCorrection(PlateSolutionCorrection correction) {
+    public void setCorrection(PlateSolutionCorrection correction) {
         this.correction = correction;
         PlateSolutionCorrection.forget(sessionFolder);
         fireCorrectionChanged();
@@ -73,7 +69,7 @@ final class SkyCatalogueModel {
      * Switches the correction on or off for the whole session. It is saved at once, so everything that resolves the
      * plate solution, including a detection run, uses the new setting.
      */
-    void setCorrectionEnabled(boolean enabled) throws IOException {
+    public void setCorrectionEnabled(boolean enabled) throws IOException {
         if (correction == null || !correction.isNeeded()) {
             return;
         }
@@ -99,23 +95,23 @@ final class SkyCatalogueModel {
         }
     }
 
-    void addListener(Runnable listener) {
+    public void addListener(Runnable listener) {
         listeners.add(listener);
     }
 
-    void removeListener(Runnable listener) {
+    public void removeListener(Runnable listener) {
         listeners.remove(listener);
     }
 
-    void addCorrectionListener(Runnable listener) {
+    public void addCorrectionListener(Runnable listener) {
         correctionListeners.add(listener);
     }
 
-    void removeCorrectionListener(Runnable listener) {
+    public void removeCorrectionListener(Runnable listener) {
         correctionListeners.remove(listener);
     }
 
-    int listenerCount() {
+    public int listenerCount() {
         return listeners.size() + correctionListeners.size();
     }
 }

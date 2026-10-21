@@ -15,6 +15,7 @@ import io.github.ppissias.jtransient.core.MasterReferenceAnalyzer;
 import io.github.ppissias.jtransient.core.MasterVetoMask;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
+import io.github.ppissias.jtransient.execution.CancellationScope;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 
 import javax.swing.*;
@@ -34,6 +35,11 @@ import java.util.function.Consumer;
  * mask settings, with coverage statistics. The mask is built by the same JTransient code as in the pipeline.
  */
 final class StarMaskExplorerFrame extends JFrame {
+
+    @FunctionalInterface
+    interface ComputeMask {
+        Object[] compute(short[][] stack, DetectionConfig config, Settings settings);
+    }
 
     /** The star mask values the explorer varies. */
     static final class Settings {
@@ -65,10 +71,11 @@ final class StarMaskExplorerFrame extends JFrame {
 
     private static final Color MASK_COLOR = new Color(255, 140, 0, 125);
 
-    private final short[][] stack;
+    private short[][] stack;
     private final DetectionConfig baseConfig;
     private final Settings initial;
     private final Consumer<Settings> apply;
+    private final ComputeMask computeMask;
 
     private final ZoomableImageView view = new ZoomableImageView(new ZoomableImageView.ViewState());
     private final JSpinner sigmaSpinner;
@@ -83,15 +90,23 @@ final class StarMaskExplorerFrame extends JFrame {
     private final Timer debounce;
     private final AtomicInteger generation = new AtomicInteger();
     private MaskStatistics initialStatistics;
+    private SwingWorker<Object[], Void> worker;
+    private boolean closed;
 
     StarMaskExplorerFrame(Window owner, String sessionName, JTransientEngine.MasterStackResult stackResult,
                           DetectionConfig baseConfig, Settings initial, Consumer<Settings> apply) {
+        this(owner, sessionName, stackResult, baseConfig, initial, apply, StarMaskExplorerFrame::computeMask);
+    }
+
+    StarMaskExplorerFrame(Window owner, String sessionName, JTransientEngine.MasterStackResult stackResult,
+                          DetectionConfig baseConfig, Settings initial, Consumer<Settings> apply, ComputeMask computeMask) {
         super("Star Mask Explorer · " + sessionName);
         AppIcon.apply(this);
         this.stack = stackResult.masterStack;
         this.baseConfig = baseConfig.clone();
         this.initial = initial;
         this.apply = apply;
+        this.computeMask = computeMask;
 
         sigmaSpinner = spinner(new SpinnerNumberModel(initial.masterSigma, 0.5, 15.0, 0.1));
         growSpinner = spinner(new SpinnerNumberModel(initial.masterGrowSigma, 0.0, 15.0, 0.1));
@@ -242,23 +257,34 @@ final class StarMaskExplorerFrame extends JFrame {
 
     /** Builds the mask for the current values in the background; a newer request makes older results obsolete. */
     private void recompute() {
+        if (closed) {
+            return;
+        }
         Settings settings = currentSettings();
         int request = generation.incrementAndGet();
+        short[][] requestedStack = stack;
+        if (worker != null) {
+            worker.cancel(false);
+        }
         statusLabel.setText("Computing the mask…");
-        new SwingWorker<Object[], Void>() {
+        worker = new SwingWorker<Object[], Void>() {
             @Override
             protected Object[] doInBackground() {
-                DetectionConfig config = configFor(baseConfig, settings);
-                List<SourceExtractor.DetectedObject> stars = MasterReferenceAnalyzer.analyzeFromMasterStack(stack, config).masterStars;
-                boolean[][] mask = MasterVetoMask.build(stars, stack[0].length, stack.length, settings.starJitter);
-                return new Object[]{statistics(stars, mask), overlayLevels(mask, MASK_COLOR)};
+                try (CancellationScope cancellation = CancellationScope.open(() -> isCancelled() || request != generation.get())) {
+                    CancellationScope.check();
+                    DetectionConfig config = configFor(baseConfig, settings);
+                    Object[] result = computeMask.compute(requestedStack, config, settings);
+                    CancellationScope.check();
+                    return result;
+                }
             }
 
             @Override
             protected void done() {
-                if (request != generation.get()) {
+                if (closed || request != generation.get() || worker != this) {
                     return;
                 }
+                worker = null;
                 try {
                     Object[] result = get();
                     MaskStatistics statistics = (MaskStatistics) result[0];
@@ -274,7 +300,32 @@ final class StarMaskExplorerFrame extends JFrame {
                     statusLabel.setText("The mask could not be computed: " + e.getMessage());
                 }
             }
-        }.execute();
+        };
+        worker.execute();
+    }
+
+    private static Object[] computeMask(short[][] stack, DetectionConfig config, Settings settings) {
+        List<SourceExtractor.DetectedObject> stars = MasterReferenceAnalyzer.analyzeFromMasterStack(stack, config).masterStars;
+        boolean[][] mask = MasterVetoMask.build(stars, stack[0].length, stack.length, settings.starJitter);
+        return new Object[]{statistics(stars, mask), overlayLevels(mask, MASK_COLOR)};
+    }
+
+    @Override
+    public void dispose() {
+        if (!closed) {
+            closed = true;
+            generation.incrementAndGet();
+            debounce.stop();
+            if (worker != null) {
+                worker.cancel(false);
+                worker = null;
+            }
+            stack = null;
+            initialStatistics = null;
+            view.setImage(null);
+            view.setOverlayLevels(java.util.Collections.emptyList());
+        }
+        super.dispose();
     }
 
     private void showStatistics(MaskStatistics s) {
@@ -318,6 +369,7 @@ final class StarMaskExplorerFrame extends JFrame {
         byte[] bits = ((DataBufferByte) image.getRaster().getDataBuffer()).getData();
         int rowBytes = (width + 7) / 8;
         for (int y = 0; y < mask.length; y++) {
+            CancellationScope.check();
             boolean[] row = mask[y];
             int outRow = (y / step) * rowBytes;
             for (int x = 0; x < row.length; x++) {

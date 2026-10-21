@@ -10,6 +10,8 @@
 
 package eu.startales.spacepixels.tasks;
 
+import io.github.ppissias.jtransient.execution.CancellationScope;
+
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
@@ -32,6 +34,13 @@ public class DetectionTask implements Job<File> {
 
     @Override
     public JobOutcome<File> run(JobContext context) throws Exception {
+        try (CancellationScope cancellation = CancellationScope.open(context::isCancelled)) {
+            CancellationScope.check();
+            return runCancellable(context);
+        }
+    }
+
+    private JobOutcome<File> runCancellable(JobContext context) throws Exception {
         // Asks before writing a report for very many detections.
         ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) ->
                 summary.confirmReport(preProcessing.hasPlateSolvedFrame(), 50, null, config);

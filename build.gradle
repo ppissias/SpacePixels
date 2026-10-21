@@ -67,7 +67,7 @@ dependencies {
     implementation 'gov.nasa.gsfc.heasarc:nom-tam-fits:1.21.2'
     implementation 'com.google.code.gson:gson:2.13.2'
     implementation 'com.formdev:flatlaf:3.4'
-    implementation 'io.github.ppissias.jplatesolve:jplatesolve:1.0.0'
+    implementation 'io.github.ppissias.jplatesolve:jplatesolve:1.0.1'
     api 'io.github.ppissias.jtransient:jtransient:1.0.5'
     // Use JUnit test framework
     testImplementation 'junit:junit:4.13.2'

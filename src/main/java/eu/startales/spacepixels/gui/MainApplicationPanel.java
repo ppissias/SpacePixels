@@ -10,6 +10,8 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.util.BlinkSequence;
+import eu.startales.spacepixels.session.ProcessingSession;
+import eu.startales.spacepixels.session.SkyCatalogueModel;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
@@ -73,7 +75,9 @@ public class MainApplicationPanel extends JPanel {
     private final JButton detectIterativelyButton = new JButton("Detect Iteratively (large datasets)");
     // The newest report of the session, under the Detect buttons; hidden when there is none.
     private final JButton lastReportButton = new JButton();
-    private File lastReport;
+    private final SkyCatalogueModel emptySkyCatalogue = new SkyCatalogueModel();
+    private SkyCatalogueModel subscribedSkyCatalogue;
+    private final Runnable correctionChanged = this::refreshWorkflowStatus;
     private static final String AUTO_TUNE_TOOLTIP = "<html>Open the Detection Settings and run Auto-Tune on your frames, with the tuner and profile chosen there "
             + "(Ctrl+T).<br>It measures the noise and the faintest stars it can find, and sets the detection settings to match.</html>";
 
@@ -162,6 +166,7 @@ public class MainApplicationPanel extends JPanel {
     private final javax.swing.Timer skyFetchTimer = new javax.swing.Timer(1000, e -> updateSkyFetchText());
     /** The fetch running, or null. */
     private Thread skyFetchThread;
+    private ProcessingSession skyFetchSession;
     private String skyFetchStage = "";
     private long skyFetchStageStart;
     /** Why the last fetch failed or is incomplete, or null. */
@@ -210,6 +215,7 @@ public class MainApplicationPanel extends JPanel {
 
             @Override
             public void jobProgress(JobHandle handle, int percent, String message) {
+                if (!mainAppWindow.isCurrentSession(handle.session())) return;
                 if (JobTexts.of(handle.kind()).initializing() == null) {
                     statusLabel.setText(message);
                 } else if (progressDialog.isVisible()) {
@@ -222,6 +228,7 @@ public class MainApplicationPanel extends JPanel {
                 progressDialog.setVisible(false);
                 setProgressBarIdle();
                 enableControlsProcessingFinished();
+                if (!mainAppWindow.isCurrentSession(handle.session())) return;
                 statusLabel.setText(outcome instanceof JobOutcome.Cancelled<?>
                         ? handle.kind().title() + " cancelled."
                         : JobTexts.of(handle.kind()).ended());
@@ -377,12 +384,13 @@ public class MainApplicationPanel extends JPanel {
 
         // Plate Solve and Blink follow the selection through refreshWorkflowStatus.
         table.getSelectionModel().addListSelectionListener(event -> {
+            if (mainAppWindow.getSession() != null) mainAppWindow.getSession().setSelection(getSelectedFilesInformation());
             mainAppWindow.getStretchPanel().onFrameSelectionChanged();
             refreshWorkflowStatus();
         });
 
         // A viewer switches the correction on or off; the Astrometry status follows.
-        SkyCatalogueModel.shared().addCorrectionListener(this::refreshWorkflowStatus);
+
 
     }
 
@@ -469,7 +477,8 @@ public class MainApplicationPanel extends JPanel {
         BlinkImagesTask task = new BlinkImagesTask(selectedFitsFilesInfo, stop,
                 (read, total) -> EventQueue.invokeLater(() -> blinkFrame.showLoadProgress(read, total)));
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.BLINK,
-                mainAppWindow.getImageProcessing(), task, (handle, outcome) -> blinkLoaded(selectedFitsFilesInfo, outcome));
+                mainAppWindow.getSession(), task,
+                mainAppWindow.forCurrentSession((handle, outcome) -> blinkLoaded(selectedFitsFilesInfo, outcome)));
         if (!admission.admitted()) {
             statusLabel.setText(admission.refusal());
             return;
@@ -517,6 +526,7 @@ public class MainApplicationPanel extends JPanel {
                 ManualTransientInspectionTask.Result result = completed.result();
                 TransientInspectionFrame frame = new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
                         mainAppWindow.getStretchPanel());
+                frame.setSkyCatalogueModel(skyCatalogue());
                 if (!frame.open()) {
                     JOptionPane.showMessageDialog(null, "The detection kept no frames to inspect.",
                             "Manual Transient Inspection", JOptionPane.INFORMATION_MESSAGE);
@@ -587,6 +597,9 @@ public class MainApplicationPanel extends JPanel {
         resizeTableColumns(table);
         containsColorImages = false;
         FitsFileTableModel model = (FitsFileTableModel) tableModel;
+        if (subscribedSkyCatalogue != null) subscribedSkyCatalogue.removeCorrectionListener(correctionChanged);
+        subscribedSkyCatalogue = skyCatalogue();
+        subscribedSkyCatalogue.addCorrectionListener(correctionChanged);
         restoreSkyCatalogue();
 
         if (model.getRowCount() == 0) {
@@ -1000,6 +1013,7 @@ public class MainApplicationPanel extends JPanel {
      * plate-solution correction to its stars and hands that over too. Interrupting the thread cancels what is left.
      */
     private void startSkyJob(FitsFileInformation[] files, File folder, SkyField field, double depth, SkyCatalogue existing) {
+        skyFetchSession = mainAppWindow.getSession();
         Thread[] thread = new Thread[1];
         thread[0] = new Thread(() -> {
             SkyCatalogueClient client = new SkyCatalogueClient();
@@ -1046,6 +1060,7 @@ public class MainApplicationPanel extends JPanel {
         }, "sky-catalogue");
         thread[0].setDaemon(true);
         skyFetchThread = thread[0];
+        skyFetchSession.ownSkyCatalogueWorker(thread[0]);
         showSkyFetchStage(thread[0], existing == null ? "Sky catalogue: starting" : "Checking the plate solution: starting");
         skyFetchIndicator.setVisible(true);
         skyFetchTimer.start();
@@ -1054,7 +1069,7 @@ public class MainApplicationPanel extends JPanel {
     }
 
     private void showSkyFetchStage(Thread job, String stage) {
-        if (job != skyFetchThread) {
+        if (job != skyFetchThread || !mainAppWindow.isCurrentSession(skyFetchSession)) {
             return;
         }
         if (!stage.equals(skyFetchStage)) {
@@ -1073,7 +1088,7 @@ public class MainApplicationPanel extends JPanel {
     }
 
     private void skyFetchFinished(Thread job, File folder, SkyCatalogue result, String failure, boolean cancelled, boolean fitFollows) {
-        if (job != skyFetchThread) {
+        if (job != skyFetchThread || !mainAppWindow.isCurrentSession(skyFetchSession)) {
             return; // cancelled by a new import: the result belongs to the previous session
         }
         if (!fitFollows) {
@@ -1096,7 +1111,7 @@ public class MainApplicationPanel extends JPanel {
                 skyFetchProblem = (skyFetchProblem == null ? "" : skyFetchProblem + "\n")
                         + "It could not be saved in the session folder (" + e.getMessage() + "), so it lasts until SpacePixels closes.";
             }
-            SkyCatalogueModel.shared().set(result);
+            skyCatalogue().set(result);
             statusLabel.setText("Sky catalogue: " + result.summary() + (result.problems.isEmpty() ? "" : " (incomplete)"));
         }
         refreshWorkflowStatus();
@@ -1107,7 +1122,7 @@ public class MainApplicationPanel extends JPanel {
      * across refits of the same solution.
      */
     private void correctionFinished(Thread job, File folder, PlateSolutionCorrection correction, String failure, boolean cancelled) {
-        if (job != skyFetchThread) {
+        if (job != skyFetchThread || !mainAppWindow.isCurrentSession(skyFetchSession)) {
             return;
         }
         stopSkyFetchIndicator();
@@ -1118,14 +1133,14 @@ public class MainApplicationPanel extends JPanel {
             statusLabel.setText("Plate solution check failed");
         } else {
             correctionProblem = null;
-            PlateSolutionCorrection previous = SkyCatalogueModel.shared().getCorrection();
+            PlateSolutionCorrection previous = skyCatalogue().getCorrection();
             correction.initializeEnabled(previous);
             try {
                 PlateSolutionCorrection.save(folder, correction);
             } catch (IOException e) {
                 correctionProblem = "It could not be saved in the session folder (" + e.getMessage() + ").";
             }
-            SkyCatalogueModel.shared().setCorrection(correction);
+            skyCatalogue().setCorrection(correction);
             statusLabel.setText(!correction.isNeeded()
                     ? String.format(Locale.US, "Plate solution checked: the FITS header already matches the stars (%.2f px)", correction.beforeMedianPx)
                     : "Plate solution checked: " + correction.improvementText()
@@ -1137,7 +1152,9 @@ public class MainApplicationPanel extends JPanel {
     }
 
     private void stopSkyFetchIndicator() {
+        if (skyFetchSession != null) skyFetchSession.releaseSkyCatalogueWorker(skyFetchThread);
         skyFetchThread = null;
+        skyFetchSession = null;
         skyFetchTimer.stop();
         skyFetchIndicator.setVisible(false);
     }
@@ -1146,6 +1163,11 @@ public class MainApplicationPanel extends JPanel {
      * On import: stops the work for the previous session and offers the catalogue and correction saved with this
      * one, if any. When there is a catalogue but no correction for the frames' solution, the check is started.
      */
+    private SkyCatalogueModel skyCatalogue() {
+        ProcessingSession session = mainAppWindow.getSession();
+        return session == null ? emptySkyCatalogue : session.getSkyCatalogue();
+    }
+
     private void restoreSkyCatalogue() {
         if (skyFetchThread != null) {
             skyFetchThread.interrupt();
@@ -1155,7 +1177,7 @@ public class MainApplicationPanel extends JPanel {
         correctionProblem = null;
         FitsFileInformation[] files = getImportedFiles();
         File folder = files == null ? null : sessionFolder(files);
-        SkyCatalogueModel.shared().setSessionFolder(folder);
+        skyCatalogue().setSessionFolder(folder);
         SkyCatalogue saved = folder == null ? null : SkyCatalogueStore.load(folder);
         WcsSolutionResolver.ResolvedWcsSolution solution = files == null ? null : WcsSolutionResolver.resolveUncorrected(null, files);
         SkyField current = solution == null ? null
@@ -1167,8 +1189,8 @@ public class MainApplicationPanel extends JPanel {
         if (correction != null && (solution == null || !solution.getTransformer().solutionKey().equals(correction.solutionKey))) {
             correction = null; // fitted to another solution
         }
-        SkyCatalogueModel.shared().set(saved);
-        SkyCatalogueModel.shared().setCorrection(correction);
+        skyCatalogue().set(saved);
+        skyCatalogue().setCorrection(correction);
         if (saved != null && correction == null && !saved.stars.isEmpty() && current != null) {
             startSkyJob(files, folder, current, saved.starMagnitudeLimit, saved);
         }
@@ -1182,7 +1204,7 @@ public class MainApplicationPanel extends JPanel {
     /** The second line of the Astrometry status, and a third for the plate-solution correction. */
     private String skyCatalogueStatusText() {
         String catalogueText = catalogueStatusText();
-        PlateSolutionCorrection correction = SkyCatalogueModel.shared().getCorrection();
+        PlateSolutionCorrection correction = skyCatalogue().getCorrection();
         if (correction != null) {
             return catalogueText + "<br>" + (!correction.isNeeded()
                     ? "✓ Plate solution checked · " + String.format(Locale.US, "%.2f px", correction.beforeMedianPx)
@@ -1200,7 +1222,7 @@ public class MainApplicationPanel extends JPanel {
         if (skyFetchThread != null) {
             return skyFetchStage.startsWith("Checking") ? "Checking the plate solution…" : "Fetching sky catalogue…";
         }
-        SkyCatalogue catalogue = SkyCatalogueModel.shared().get();
+        SkyCatalogue catalogue = skyCatalogue().get();
         if (catalogue == null) {
             return skyFetchProblem != null ? "⚠ Sky catalogue not fetched" : "No sky catalogue yet";
         }
@@ -1211,7 +1233,7 @@ public class MainApplicationPanel extends JPanel {
     private String skyCatalogueTooltip() {
         StringBuilder text = new StringBuilder("<html>The report has sky coordinates: moving objects are identified with JPL and SkyBoT,<br>"
                 + "and variable-star candidates are matched against AAVSO VSX.");
-        SkyCatalogue catalogue = SkyCatalogueModel.shared().get();
+        SkyCatalogue catalogue = skyCatalogue().get();
         if (catalogue != null) {
             text.append("<br><br>Sky catalogue for the Annotate switch: ").append(catalogue.summary())
                     .append(String.format(Locale.US, "<br>Stars to Gaia G %.1f", catalogue.starMagnitudeLimit))
@@ -1233,7 +1255,7 @@ public class MainApplicationPanel extends JPanel {
             text.append("<br><br><b>").append(catalogue == null ? "Not fetched:" : "Incomplete:").append("</b> ")
                     .append(escapeHtml(skyFetchProblem).replace("\n", "<br>"));
         }
-        PlateSolutionCorrection correction = SkyCatalogueModel.shared().getCorrection();
+        PlateSolutionCorrection correction = skyCatalogue().getCorrection();
         if (correction != null && !correction.isNeeded()) {
             text.append(String.format(Locale.US, "<br><br>Plate solution checked against the Gaia stars: %,d stars per frame in %d frames.<br>"
                             + "Distance from the catalogue stars to the stars found in the frames: %.2f px (90 %%: %.2f px).<br>"
@@ -1276,23 +1298,10 @@ public class MainApplicationPanel extends JPanel {
     // ==========================================
 
     public FitsFileInformation[] getImportedFiles() {
-        if (table == null || table.getModel() == null) {
-            return null;
-        }
-
-        FitsFileTableModel model = (FitsFileTableModel) table.getModel();
-        int rowCount = model.getRowCount();
-
-        if (rowCount == 0) {
-            return null;
-        }
-
-        FitsFileInformation[] allFiles = new FitsFileInformation[rowCount];
-        for (int i = 0; i < rowCount; i++) {
-            allFiles[i] = model.getFitsFileAt(i);
-        }
-
-        return allFiles;
+        ProcessingSession session = mainAppWindow.getSession();
+        if (session == null) return null;
+        FitsFileInformation[] files = session.getFiles();
+        return files.length == 0 ? null : files;
     }
 
     public FitsFileInformation[] getSelectedFilesInformation() {
@@ -1411,7 +1420,10 @@ public class MainApplicationPanel extends JPanel {
 
     /** Starts a job under the coordinator; when it cannot start now, the status bar says why. */
     <R> void startJob(JobKind kind, Object session, Job<R> job, JobCoordinator.OutcomeHandler<R> handler) {
-        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(kind, session, job, handler);
+        ProcessingSession owner = mainAppWindow.getSession();
+        if (owner == null || owner.getProcessing() != session) return;
+        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(kind, owner, job,
+                mainAppWindow.forCurrentSession(handler));
         if (!admission.admitted()) {
             statusLabel.setText(admission.refusal());
         }
@@ -1453,7 +1465,7 @@ public class MainApplicationPanel extends JPanel {
     /** The end of Detect Moving Targets and Detect Iteratively: offers the report, or says what went wrong. */
     private void showDetectionOutcome(JobHandle handle, JobOutcome<File> outcome) {
         if (outcome instanceof JobOutcome.Completed<File> completed) {
-            if (handle.session() == mainAppWindow.getImageProcessing()) {
+            if (mainAppWindow.isCurrentSession(handle.session())) {
                 showLastReport(completed.result());
             }
             promptUserToOpenReport(completed.result());
@@ -1519,9 +1531,26 @@ public class MainApplicationPanel extends JPanel {
 
     /** A new session, or none: the status line says how many frames it has. */
     void sessionChanged(FitsFileInformation[] files) {
+        if (detectionSequenceFrame != null) {
+            detectionSequenceFrame.closeForSessionChange();
+            detectionSequenceFrame = null;
+        }
+        mainAppWindow.getBlinkFrame().close();
         statusLabel.setText(files.length == 0 ? "No files loaded" : "Imported " + files.length + " file(s)");
         // The import names the new session's last report, if it has one.
-        showLastReport(null);
+        showLastReport(mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getLastReport());
+    }
+
+    void closeSessionViews() {
+        if (skyFetchThread != null) skyFetchThread.interrupt();
+        stopSkyFetchIndicator();
+        if (subscribedSkyCatalogue != null) subscribedSkyCatalogue.removeCorrectionListener(correctionChanged);
+        subscribedSkyCatalogue = null;
+        if (detectionSequenceFrame != null) {
+            detectionSequenceFrame.closeForSessionChange();
+            detectionSequenceFrame = null;
+        }
+        mainAppWindow.getBlinkFrame().close();
     }
 
     /**
@@ -1529,7 +1558,7 @@ public class MainApplicationPanel extends JPanel {
      * at the end of a run, or after a restart. Null hides the link.
      */
     void showLastReport(File report) {
-        lastReport = report;
+        if (mainAppWindow.getSession() != null) mainAppWindow.getSession().setLastReport(report);
         if (report == null) {
             lastReportButton.setVisible(false);
             return;
@@ -1544,6 +1573,7 @@ public class MainApplicationPanel extends JPanel {
     }
 
     private void openLastReport() {
+        File lastReport = mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getLastReport();
         if (lastReport == null) {
             return;
         }
@@ -1586,9 +1616,10 @@ public class MainApplicationPanel extends JPanel {
             disableControlsBlinking();
             statusLabel.setText("Blinking " + completed.result().getFrames().size()
                     + " frames. Close the blink window or click Stop Blinking to end.");
+            blinkFrame.setSkyCatalogueModel(skyCatalogue());
             blinkFrame.open(completed.result(), files, getImportedFiles(), mainAppWindow.getStretchPanel(),
-                    mainAppWindow.getImageProcessing() == null ? null : mainAppWindow.getImageProcessing().getLastTrackOverlay(),
-                    mainAppWindow.getImageProcessing() == null ? null : mainAppWindow.getImageProcessing().getLastVariableStarOverlay());
+                    mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getTrackOverlay(),
+                    mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getVariableStarOverlay());
             return;
         }
         // Stopped, or failed: hides the window if it still shows the loading progress.
@@ -1612,9 +1643,14 @@ public class MainApplicationPanel extends JPanel {
 
     /**
      * The end of Plate Solve: offers to write the solution into the frame's FITS header, or says why the frame was
-     * not solved. The solver's temporary files are removed either way.
+     * not solved. Failed or cancelled solves have already cleaned up their own temporary files.
      */
     private void showSolveOutcome(FitsFileInformation fileInfo, JobOutcome<PlateSolveResult> outcome) {
+        if (outcome instanceof JobOutcome.Cancelled<?>) {
+            statusLabel.setText("Plate solve cancelled; local solver work has stopped");
+            refreshCommands();
+            return;
+        }
         PlateSolveResult result = outcome instanceof JobOutcome.Completed<PlateSolveResult> completed ? completed.result() : null;
         if (result != null && result.isSuccess()) {
             ApplicationWindow.logger.info(result.toString());
@@ -1629,9 +1665,9 @@ public class MainApplicationPanel extends JPanel {
             if (choice == JOptionPane.YES_OPTION) {
                 // Writing rewrites the whole frame, which takes a while for a large one: it is a job, off this thread.
                 ImageProcessing session = mainAppWindow.getImageProcessing();
-                JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.WRITE_WCS, session,
+                JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.WRITE_WCS, mainAppWindow.getSession(),
                         new WriteWcsTask(session, fileInfo.getFilePath(), result),
-                        (handle, written) -> showWcsWriteOutcome(fileInfo, written));
+                        mainAppWindow.forCurrentSession((handle, written) -> showWcsWriteOutcome(fileInfo, written)));
                 if (admission.admitted()) {
                     return;
                 }
@@ -1643,7 +1679,6 @@ public class MainApplicationPanel extends JPanel {
         } else {
             String errorMsg = result != null ? result.getFailureReason() + " " + result.getWarning()
                     : outcome instanceof JobOutcome.Failed<PlateSolveResult> failed ? failed.reason() : "Internal Error";
-            mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
             statusLabel.setText("Plate solve failed");
             FailureDialog.show(this, "Error", "Image was not plate-solved successfully: " + errorMsg,
                     outcome instanceof JobOutcome.Failed<PlateSolveResult> failed ? failed.cause() : null);

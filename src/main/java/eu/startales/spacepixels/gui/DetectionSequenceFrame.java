@@ -61,9 +61,10 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
     /** Shows the frames of the session from {@code startIndex}. */
     public void openSequence(FitsFileInformation[] files, int startIndex, StretchPanel stretchPanel) {
         this.files = files;
+        if (mainAppWindow.getSession() != null) setSkyCatalogueModel(mainAppWindow.getSession().getSkyCatalogue());
         openAt(startIndex, stretchPanel, files);
-        setVariableStarOverlay(mainAppWindow.getImageProcessing() == null ? null
-                : mainAppWindow.getImageProcessing().getLastVariableStarOverlay(), files);
+        setVariableStarOverlay(mainAppWindow.getSession() == null ? null
+                : mainAppWindow.getSession().getVariableStarOverlay(), files);
     }
 
     /** Whether the thresholds can be changed here: not while a job runs, as on the Detection Settings tab. */

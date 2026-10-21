@@ -10,13 +10,14 @@
 package eu.startales.spacepixels.util;
 
 import io.github.ppissias.jplatesolve.PlateSolveResult;
+import io.github.ppissias.jplatesolve.PlateSolveOperation;
 
 import nom.tam.fits.*;
 import nom.tam.util.Cursor;
 import nom.tam.image.compression.hdu.CompressedImageHDU;
 
 import eu.startales.spacepixels.config.AppConfig;
-import eu.startales.spacepixels.config.SpacePixelsAppConfigIO;
+import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -44,6 +45,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.function.Consumer;
 
 /**
  * High-level FITS processing facade for SpacePixels.
@@ -660,7 +662,7 @@ public class ImageProcessing implements AutoCloseable {
             Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors())));
 
     private final AppConfig appConfig;
-    private final File appConfigFile;
+    private final ApplicationSettings applicationSettings;
     private final PlateSolveService plateSolveService;
     private final StandardDetectionPipelineService standardDetectionPipelineService;
     private final IterativeDetectionPipelineService iterativeDetectionPipelineService;
@@ -672,33 +674,26 @@ public class ImageProcessing implements AutoCloseable {
      * Creates a processing facade bound to a specific aligned FITS directory.
      */
     public static synchronized ImageProcessing getInstance(File alignedFitsFolderFullPath) throws IOException, FitsException {
-        return new ImageProcessing(alignedFitsFolderFullPath);
+        return getInstance(alignedFitsFolderFullPath, ApplicationSettings.loadDefault());
+    }
+
+    public static ImageProcessing getInstance(File folder, ApplicationSettings settings) throws IOException, FitsException {
+        return new ImageProcessing(folder, settings);
     }
 
     @Override
     public void close() {
         executor.shutdown();
+        plateSolveService.close();
     }
 
     /**
      * Initializes the processor and loads persisted app-level preferences if they exist.
      */
-    private ImageProcessing(File alignedFitsFolderFullPath) throws IOException, FitsException {
+    private ImageProcessing(File alignedFitsFolderFullPath, ApplicationSettings settings) throws IOException, FitsException {
         this.alignedFitsFolderFullPath = alignedFitsFolderFullPath;
-
-        String userhome = System.getProperty("user.home");
-        if (userhome == null) userhome = "";
-        this.appConfigFile = new File(userhome, SpacePixelsAppConfigIO.DEFAULT_FILENAME);
-
-        AppConfig loadedConfig = null;
-        if (this.appConfigFile.exists()) {
-            try {
-                loadedConfig = SpacePixelsAppConfigIO.load(this.appConfigFile);
-            } catch (Exception e) {
-                ApplicationWindow.logger.warning("Failed to load JSON app config: " + e.getMessage());
-            }
-        }
-        this.appConfig = (loadedConfig != null) ? loadedConfig : new AppConfig();
+        this.applicationSettings = Objects.requireNonNull(settings);
+        this.appConfig = settings.getConfig();
         this.plateSolveService = new PlateSolveService(this.appConfig);
         this.standardDetectionPipelineService = new StandardDetectionPipelineService(this.appConfig);
         this.iterativeDetectionPipelineService = new IterativeDetectionPipelineService(this.appConfig, this.standardDetectionPipelineService);
@@ -1400,6 +1395,11 @@ public class ImageProcessing implements AutoCloseable {
         return plateSolveService.solve(fitsFileFullPath, astap, astrometry);
     }
 
+    public PlateSolveOperation startSolve(String path, boolean astap, boolean astrometry,
+            Consumer<PlateSolveOperation.Progress> progress) throws IOException {
+        return plateSolveService.startSolve(path, astap, astrometry, progress);
+    }
+
     /**
      * Copies WCS keywords from a reference FITS file into every file in the active directory and
      * optionally emits stretched derivatives alongside the solved outputs.
@@ -1447,7 +1447,7 @@ public class ImageProcessing implements AutoCloseable {
      * Writes the current application preferences back to the user's config file.
      */
     public void saveAppConfig() throws IOException {
-        SpacePixelsAppConfigIO.write(appConfigFile, appConfig);
+        applicationSettings.save();
     }
 
     /**

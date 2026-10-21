@@ -33,6 +33,11 @@ public class DependencyRulesTest {
         assertNoReferences("tasks", "eu.startales.spacepixels.gui.", "javax.swing.");
     }
 
+    @Test
+    public void sessionStateDoesNotDependOnSwingOrTheWindow() throws IOException {
+        assertNoReferences("session", "eu.startales.spacepixels.gui.", "javax.swing.", "java.awt.");
+    }
+
     private static void assertNoReferences(String packageName, String... forbidden) throws IOException {
         Path directory = SOURCES.resolve(packageName);
         assertTrue("Run from the project folder: " + directory.toAbsolutePath(), Files.isDirectory(directory));

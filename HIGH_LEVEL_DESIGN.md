@@ -100,18 +100,18 @@ The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker
 - **Progress:** it reaches the window only while the job is current.
 - **Outcome:** it is delivered exactly once, on the UI thread, after the unlock.
 - **Cancel:** the progress dialog's Cancel (or closing it) calls `cancel()`.
-  - The job's next progress report throws `JobCancelledException`; the job's own clean-up runs as it leaves; the outcome is `Cancelled`, also when the job wrapped the exception.
+  - The job's next progress report throws `JobCancelledException`. Detection, iterative detection, Auto-Tune, Manual Transient Inspection and the Test Star Mask task also bind `context.isCancelled()` to JTransient's `CancellationScope`, so computation can stop between progress reports. The job's own cleanup runs as it leaves; the outcome is `Cancelled`, also when an engine `CancellationException` is wrapped.
   - Progress at 100% never throws, so finished work is kept.
-  - Plate solving, the WCS write and Blink cannot be cancelled (`JobKind.cancellable()`); their dialog shows no Cancel.
+  - Plate solving uses JPlateSolve 1.0.1's `PlateSolveOperation`: Cancel requests a stop, and `PlateSolveTask` joins completion after process/HTTP and sidecar cleanup before releasing coordinator admission. Phase text and elapsed seconds are shown with indeterminate progress. The WCS write and Blink cannot be cancelled (`JobKind.cancellable()`); their dialog shows no Cancel.
   - The dialog offers to exit SpacePixels if a cancelled job has not stopped after 15 seconds.
   - `JobCancelledException` is a `java.util.concurrent.CancellationException`, so services in `util` recognise a cancel with `util.Cancellation.isCancellation(...)` (which looks through wrapping exceptions, as when the engine's worker threads carry it) without depending on `jobs`.
   - A cancelled detection removes the `detections_` folder it was writing. A cancelled iterative run removes the pass it was writing and writes the index of the finished passes with a note, or removes its folder when none finished. `util.OutputFolders` creates every run's folder new (a number is added when two runs start in the same second), so only the run's own output is removed.
-  - Auto-Tune ends as cancelled when a cancel was made while the tuner ran. The calibrated tuner reports its progress inside a `try` that catches every exception, so the cancel comes back as a failed result rather than an exception.
+  - JTransient stops queued work and waits for running task bodies and cleanup before propagating cancellation or worker failure. Engines are closed after the operation returns. Calibrated Auto-Tune now propagates cancellation directly; `AutoTuneTask` no longer needs to infer cancellation from a failed tuning result.
 - **Failure messages:** a failed job's dialog (`gui.FailureDialog`) has Copy details, which copies the message, the versions (`util.BuildInfo`) and the stack trace.
 - **The last report:** `util.SessionReports.latest(...)` finds the newest finished report beside the frames when a session is imported (in the import job); a completed detection replaces it. The Main tab's Detect group offers it as **Open last report**.
 - **Failures:** an exception or `Error` becomes a failure. Running out of memory leaves the worker for the application's uncaught-exception handler. The handler marks it in `JobFailures`, and every other running job then stops at its next progress report while SpacePixels closes.
 
-Each `JobHandle` carries the session the job was started for. Until there is a session object, that is the `ImageProcessing` instance.
+Each `JobHandle` carries its explicit `ProcessingSession`, which has a UUID and owns frame metadata references, selection, catalogue/correction, tuning state, the master-stack cache, last report and processing facade. `SessionOwner` guards handover and callback admission independently of Swing. Only a successful import replaces the current session; stale callbacks and stale imports cannot modify its replacement. The window loads `ApplicationSettings` once and injects it into each processor, preserving unsaved preferences across imports. Further extraction of facade storage/services remains S10.
 
 ### `eu.startales.spacepixels.gui`
 
@@ -493,7 +493,7 @@ The report remains a static disk artifact; this server only supports live enrich
 ApplicationWindow
 -> FitsImportTask
 -> XisfImageConverter.prepareDirectoryForFitsImport(...)
--> ImageProcessing.getInstance(importDirectory)
+-> ImageProcessing.getInstance(importDirectory, applicationSettings)
 -> ImageProcessing.getFitsfileInformation()
 -> JobOutcome (Completed with the session, Declined, Cancelled or Failed)
 -> ApplicationWindow.installSession(...) and the SessionListeners
@@ -671,7 +671,7 @@ Common-motion filtering has its own switch and runs before local rescue and acti
 ### Sky catalogue and plate correction
 
 - `SkyCatalogueClient` queries SIMBAD, VSX and Gaia for the solved field. `SkyCatalogueStore` persists results in `sky_catalogue.json`; restore requires a matching field. Catalogue errors are retained as problems, and fetching runs off the EDT with its own cancellation/progress UI.
-- `SkyCatalogueModel.shared()` currently shares catalogue/correction state between viewers. `SkyAnnotations` controls annotations and layers without fetching data. `FrameView` clips and thins marks to manage density.
+- Each session owns its own `session.SkyCatalogueModel`; `SkyAnnotations` binds to that model explicitly. Reusable preview/full-size viewers close on handover; independent inspection viewers can retain their old model without adopting the replacement's catalogue. Existing field/solution guards remain. `FrameView` clips and thins marks to manage density.
 - `WcsCoordinateTransformer` handles TAN-SIP distortion. `PlateCorrectionFitter` matches isolated Gaia/extracted stars, fits a global displacement of order 1–3 plus per-frame terms, and uses held-out frames to choose the lowest order within 3% of the best. It skips already-good header solutions (90% within 0.5 px) or solutions already within 3% of the best fit.
 - A correction is saved in `plate_correction.json`. A new fit starts enabled when median error falls by more than 1 px and the 90th-percentile error also falls. The main status shows the improvement. An optional `userEnabled` records an explicit viewer choice and preserves it across compatible refits; import restores the saved state. `WcsSolutionResolver.resolve` applies only a compatible correction with the same header-solution identity and dimensions. A concrete frame uses its per-frame correction; report-wide resolution uses the global part.
 - `SessionCatalogue` supplies field-matched report context. Saved and live VSX matches enrich reports without changing engine confidence. Unmatched candidates may show a SIMBAD proper name or Gaia DR3 designation from the session catalogue within at most 5 arcsec, including source and separation, without counting as VSX identifications. Gaia matches retain the existing proper-motion correction. Gaia source IDs are stored as optional strings to preserve all digits; older catalogues without them remain readable and prompt a re-fetch for names. `VariableStarMapWriter` uses the same VSX-first/general-star naming policy for its field maps, preserving V IDs in metadata and hover text. Full-size curves are compact translucent sparklines with observed delta magnitude, no axes, and gaps for unusable measurements. The table keeps this fallback during unsuccessful VSX lookups and gives positive VSX results precedence. The detailed comparison rules, provenance exceptions and validation are in [catalogue comparison](docs/features/catalogue-comparison.md).

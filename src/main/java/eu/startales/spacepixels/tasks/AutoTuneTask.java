@@ -9,6 +9,8 @@
  */
 package eu.startales.spacepixels.tasks;
 
+import io.github.ppissias.jtransient.execution.CancellationScope;
+
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
@@ -52,6 +54,13 @@ public class AutoTuneTask implements Job<JTransientAutoTuner.AutoTunerResult> {
 
     @Override
     public JobOutcome<JTransientAutoTuner.AutoTunerResult> run(JobContext context) throws Exception {
+        try (CancellationScope cancellation = CancellationScope.open(context::isCancelled)) {
+            CancellationScope.check();
+            return runCancellable(context);
+        }
+    }
+
+    private JobOutcome<JTransientAutoTuner.AutoTunerResult> runCancellable(JobContext context) throws Exception {
         if (filesInfo == null || filesInfo.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
             throw new IllegalStateException("Not enough frames to run Auto-Tuning.");
         }
@@ -76,12 +85,6 @@ public class AutoTuneTask implements Job<JTransientAutoTuner.AutoTunerResult> {
         LOGGER.info("Auto-Tuner algorithm: " + algorithm + ", profile: " + profile);
         JTransientAutoTuner.AutoTunerResult result =
                 AutoTunerRunner.run(candidateFrames, baseConfig, profile, algorithm, autoTuneListener);
-        // The calibrated tuner catches every exception, the cancel from its progress report too, and returns a failed
-        // result instead of stopping with it. A cancel made while the tuner ran ends the job as cancelled.
-        if (context.isCancelled()) {
-            return JobOutcome.cancelled();
-        }
-
         context.progress(100, "Auto-Tuning complete!");
         return JobOutcome.completed(result);
     }
