@@ -72,7 +72,7 @@ The window has four tabs:
 | **Image Stretch** | how frames are displayed in the viewers |
 | **Detection Settings** | Auto-Tune and every detection setting |
 
-The other tabs open once frames are imported. **1 Prepare**, **2 Astrometry** and **3 Inspect** each have a status line underneath that tells you what is ready and what is missing; when a button is greyed out, its tooltip says why.
+The other tabs open once frames are imported. A colour dataset shows a persistent information notice: you can blink, stretch, convert to mono and use astrometry. **Preview Frame**, **Manual Transient Inspection**, **Auto-Tune** and detection (including variable-star photometry) require monochrome frames. Use **Convert to Mono**, then import the new mono folder. **1 Prepare**, **2 Astrometry** and **3 Inspect** each have a status line underneath that tells you what is ready and what is missing; when a button is greyed out, its tooltip says why.
 
 **Detect** is split in two. On the left, **Auto-Tune Settings** has a short note under it: which settings are in use, and, after this folder has a saved auto-tune, when that auto-tune was run. On the right are **Detect Moving Targets**, **Detect Iteratively**, and a small box with the detection settings now in use: detection and star-mask sigma, grow and minimum pixels, the mask overlap, and the star jitter. **Edit settings…** at the bottom of that box opens Detection Settings.
 
@@ -161,6 +161,8 @@ The report is a folder named `detections_<date>_<time>` next to your frames; ope
 If a run finds a very large number of objects, a summary first lists them by kind and asks whether to generate the report. Moving-object tracks, streak tracks and single streaks are always included. Each other group that this run measured, and that found something, has an **In report** box, ticked to start with. Untick a group to leave it out of this report: its section, crops and animations are not written, and the line under the list says how many of these detections the report will still include. A group you had switched off before the run is not listed. The detection settings are not changed, so the next run still measures those groups. Many tracks or anomalies usually mean the settings are too sensitive for this session: try a lower profile.
 
 ---
+
+After detection, return to **Blink Selected** to check the findings against the actual frame pixels: **Show tracks** (T) overlays the last run’s moving-object tracks, and **Show variable stars** (V) overlays its measured variable candidates. In **Preview Frame**, **Show detections** (D) overlays point sources and streaks extracted with the current per-frame settings, and **Show variable stars** (V) adds the last full run’s variable candidates. Preview does not show the linked moving-object tracks. Zoom to 100 % or more to inspect the detected pixels; use the switches to compare with the unmarked image. These last-run overlays are available in the current session after a run; importing a folder again does not reconstruct them from its saved report.
 
 ## 4. Reading the report
 
@@ -262,7 +264,7 @@ Everything that was detected but did not become a result is shown here, coloured
 
 Candidate light curves have **Zoom in**, **Zoom out** and **Reset** controls; drag a zoomed chart to pan. Error bars show the engine's estimated sky-noise uncertainty, which is a lower bound rather than total uncertainty. Brightest/faintest cutouts use a common stretch but show raw frames; clouds, exposure and seeing can affect their appearance even when the differential light curve is corrected for transparency.
 
-The **Variable candidates across the field** picture circles every reported candidate on the median stack, using the same V labels as the table: blue for high confidence, orange for possible. Click it to open a full-size image in a new tab, with a small differential light curve beside each candidate. Each curve has its own labelled magnitude scale, with brighter values upward; flagged measurements are omitted and break the line. The image works offline, and includes candidates beyond the first 40 detailed cards.
+The **Variable candidates across the field** picture circles every reported candidate on the median stack: blue for high confidence, orange for possible. Labels prefer a VSX name, then a proper name or Gaia DR3 designation from the general star catalogue, with the V number as fallback. Hover for the V number to find its table row or card. Click the picture to open a full-size image with compact differential light curves beside the stars. The curves have a lightly translucent background, no axes, tick labels or grid, and just one **Δmag** number: the observed variation in mag, as in the table. Brighter is up. Each curve has its own magnitude scale, so compare the numbers rather than their visual heights. Flagged or missing measurements leave gaps. The image works offline and includes candidates beyond the first 40 detailed cards.
 
 The stars CSV includes the V label, sky coordinates, VSX matches and nearest-match separation. Candidate light curves also include the V label. CSVs and the HTML are published only after their writes finish successfully.
 
@@ -386,7 +388,7 @@ An amber **review amplitude** note is a conservative screening prompt: the obser
 
 ![The candidate table. Known As comes from the sky catalogue; V2 was not in it](docs/images/manual/variable-stars-table.png)
 
-The same catalogue-star fallback appears on detailed candidate cards. Older saved sky catalogues remain usable; fetch the catalogue again to add Gaia identifiers, which older versions did not retain. No catalogue lookup is performed automatically during report generation, and the names do not alter measured variation or confidence.
+The same catalogue-star fallback appears on detailed candidate cards. Older saved sky catalogues remain usable; fetch the catalogue again to add Gaia identifiers, which older versions did not retain. The report and Astrometry tooltip explain when those identifiers are missing. General-star matches use the nearest star within 5 arcseconds, moved to the session date; candidates fainter than the fetched Gaia **Star Depth** may need a deeper catalogue. Fetch before detection and regenerate the report; an existing report does not update its static catalogue names. No catalogue lookup is performed automatically during report generation, and the names do not alter measured variation or confidence.
 
 Each candidate then has a card with a one-line summary and its light curve, drawn above three constant stars of similar brightness for comparison; **Statistics** opens the detailed measures:
 
@@ -395,6 +397,21 @@ Each candidate then has a card with a one-line summary and its light curve, draw
 When the sky catalogue of the session was fetched before the detection (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)), the **Known As** column is filled when the report is written, for every candidate that is among the catalogue's VSX stars, with no button and no SpacePixels needed. The button then reads **Look up the N others in VSX** and looks up only the rest: the catalogue has the variables down to one magnitude fainter than its star depth, and the full VSX also has the fainter ones. Each candidate card then starts with what the catalogues say: its VSX name, the type in words (for example *EW, W UMa-type eclipsing binary*), the catalogued range and period, how much of the period the session covers (*This session spans 5.0 h, 77.2% of the catalogued period*), and the star's Gaia G magnitude and colour. These are catalogue values. SpacePixels measures instrumental differential magnitudes, without calibrating them to a catalogue passband.
 
 Candidate V1 is already named from the catalogue: the high-amplitude δ Scuti star ASASSN-V J063632.76+064632.3, 0.2″ away, with a period of 2.5 hours. The light curve shows it rising and falling by 0.43 magnitudes within the 75 minutes of the session. **Check VSX Here** searches the full VSX for that position, using saved lookup results when available. A candidate without a VSX match may be a new variable, or a false one: check its light curve, the comparison stars and the cutouts before reporting it.
+
+
+### Following up an unmatched candidate
+
+Every plate-solved candidate card has **Research this star**, with the search radius around its measured position:
+
+- **Gaia DR3** searches the general star catalogue for identifiers and available brightness, colour, parallax and proper-motion information. It uses the coordinates, without the downloaded catalogue's magnitude limit.
+- **Other catalogues — VizieR** searches published catalogues around the position, without restricting the search to VSX. A variable may already have been published elsewhere.
+- **SIMBAD** searches names, object information and references to scientific papers.
+
+These links open online in your browser, even if the session has no downloaded catalogue, and work with SpacePixels closed. They do not fill **Known As** or save external results into the report; **Check VSX Here** retains that separate role. Without a plate solution, the card explains that one is needed for coordinate searches.
+
+Confirm that a result is the same star using separation, brightness and images. Nearby entries are possible associations; catalogue epochs and proper motion can affect their positions. **High confidence** means the candidate passed SpacePixels' checks, and an empty VSX result does not establish a new discovery.
+
+The report's expandable **Following up an unmatched candidate** note describes the next steps: inspect measurements, uncertainties, comparison stars and image defects; seek additional nights and independent survey light curves (for example ASAS-SN or ZTF where available); and retain identifiers, coordinates/epoch, timing, filter and comparison-star details. A missing Gaia variability flag does not establish constancy. Before submitting a possible new variable, follow the [AAVSO VSX submission guidance](https://vsx.aavso.org/index.php?view=about.notice), including literature and archival-data checks. SpacePixels' exported instrumental/differential magnitudes are not automatically calibrated submission data.
 
 ---
 
@@ -467,7 +484,7 @@ Stars are moved from the Gaia epoch (2016) to the date of each frame. Only the s
 
 A plate solution in the FITS headers is rarely perfect: in the corners of wide fields the catalogue stars can land several pixels from the real stars, as on the left above. After the catalogue arrives, SpacePixels checks the solution in the background: in every frame it finds the stars, matches them with the Gaia stars, and works out a correction for the whole session (including the distortion of the optics) and a small one for each frame. On the reference sessions this brought the stars from 0.3–4.9 px down to 0.07–0.3 px (median); it takes from a few seconds to about half a minute for large sessions.
 
-The check changes nothing by itself. The **2 Astrometry** status line says *Correction available · 4.85 → 0.10 px*, and **Correct plate solution** (C) next to Annotate switches it on, as on the right above. It is one setting for the session: it applies in all viewers at once, to the cursor RA and Dec, and to the report of the next **Detect Moving Targets**, so the positions, the JPL, SkyBoT and SatChecker lookups and the VSX matches of variable stars use the corrected coordinates (in tests, VSX matches moved from about 3″ to under 1″). A report written before keeps its coordinates until you run the detection again. The correction is kept next to the frames as `plate_correction.json`, with the setting; your FITS files are never changed. Switch it off again with C.
+A new fit is **applied automatically** when it reduces the median position error by **more than 1 pixel** and also improves the 90th-percentile error. The **2 Astrometry** status line shows the before/after values, for example *Plate solution corrected · 4.85 → 0.10 px*, and the completion message says it was applied automatically. Smaller improvements remain available through **Correct plate solution** (C) next to Annotate. You can switch it off or on at any time; an explicit choice is saved and kept when refetching/refitting the same solution. Import restores the saved choice. It is one setting for the session: it applies in all viewers at once, to the cursor RA and Dec, and to the report of the next **Detect Moving Targets**, so the positions, the JPL, SkyBoT and SatChecker lookups and the VSX matches of variable stars use the corrected coordinates (in tests, VSX matches moved from about 3″ to under 1″). A report written before keeps its coordinates until you run the detection again. The correction is kept next to the frames as `plate_correction.json`, with the setting; your FITS files are never changed. Switch it off again with C.
 
 When a field has few bright stars, SpacePixels fetches fainter Gaia stars for the check. If too few stars can be matched (clouds, very few stars), the status line says so and the solution in the headers stays in use.
 
