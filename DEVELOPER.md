@@ -2,6 +2,26 @@
 
 A two-page map of how SpacePixels is built: the packages, the patterns and the rules the code follows. The detailed architecture is in [HIGH_LEVEL_DESIGN.md](HIGH_LEVEL_DESIGN.md), and the planned work in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md). Current as of 2026-10-20.
 
+## Local library development
+
+By default, Gradle uses the published JTransient and JPlateSolve versions in `build.gradle`. Each library can independently use a sibling checkout through the existing composite-build flags in `settings.gradle`:
+
+| Gradle property | Local checkout | Alternative environment variable |
+|---|---|---|
+| `useLocalJTransientBuild=true` | `../JTransient` | `USE_LOCAL_JTRANSIENT_BUILD=true` |
+| `useLocalJPlateSolveBuild=true` | `../JPlateSolve` | `USE_LOCAL_JPLATE_SOLVE_BUILD=true` |
+
+For example, on Windows:
+
+```powershell
+.\gradlew.bat run -PuseLocalJPlateSolveBuild=true
+.\gradlew.bat run -PuseLocalJTransientBuild=true -PuseLocalJPlateSolveBuild=true
+```
+
+Gradle builds the enabled library from its checkout and substitutes it for the published dependency, so changes are available without publishing a jar. The enabled checkout must exist. For persistent local choices, copy [gradle.properties.example](gradle.properties.example) to `gradle.properties` and set the flags you need to `true`; that local file is ignored by Git. Reload the Gradle project in IntelliJ after changing the flags.
+
+An explicit Gradle property takes precedence over its alternative environment variable. Use `-PuseLocalJTransientBuild=false -PuseLocalJPlateSolveBuild=false` to select both published dependencies even when local flags are enabled. Validate that combination separately before a release.
+
 ## The packages
 
 SpacePixels prepares the frames, runs the work, and presents the results. Detection itself is the **JTransient** library, a separate project. All packages are under `eu.startales.spacepixels`.
