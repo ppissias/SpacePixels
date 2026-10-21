@@ -16,7 +16,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
@@ -38,38 +37,51 @@ final class VariableStarMapWriter {
             return;
         }
         int width = stack[0].length, height = stack.length;
+        List<String> names = candidates.stream().map(star -> candidateName(context, star)).toList();
         BufferedImage display = TrackVisualizationRenderer.createDisplayImage(stack, context.settings);
-        writeMap(new File(context.exportDir, FULL_SIZE_FILE), display, width, height, analysis, candidates, true);
+        writeMap(new File(context.exportDir, FULL_SIZE_FILE), display, width, height, analysis, candidates, names, true);
         double scale = Math.min(1.0, 1800.0 / width);
         BufferedImage preview = SessionPictureSectionWriter.downscale(display,
                 Math.max(1, (int) Math.round(width * scale)), Math.max(1, (int) Math.round(height * scale)));
-        writeMap(new File(context.exportDir, PREVIEW_FILE), preview, width, height, analysis, candidates, false);
+        writeMap(new File(context.exportDir, PREVIEW_FILE), preview, width, height, analysis, candidates, names, false);
 
         report.println("<div class='variable-candidate-map' style='margin:16px 0;'>");
         report.println("<h3>Variable candidates across the field</h3>");
         report.println("<p class='compact-note'>The median stack with all " + candidates.size()
-                + " reported candidates circled and labelled as in the table. "
+                + " reported candidates circled. Labels prefer a VSX name, then a catalogue star name or Gaia DR3 designation; otherwise they use the table's V number. "
                 + "<span style='color:" + PhotometrySvgChart.SERIES_BLUE + ";'>Blue: high confidence.</span> "
                 + "<span style='color:" + PhotometrySvgChart.SERIES_ORANGE + ";'>Orange: possible.</span> "
                 + "Click the picture to open the full-size image in a new tab, with a small light curve beside each candidate.</p>");
         report.println("<a href='" + FULL_SIZE_FILE + "' target='_blank' rel='noopener'><img loading='lazy' decoding='async' src='"
                 + PREVIEW_FILE + "' width='" + width + "' height='" + height
                 + "' style='display:block;max-width:100%;height:auto;border-radius:6px;' "
-                + "alt='Median stack with variable-star candidates circled and labelled V1 onwards' /></a>");
+                + "alt='Median stack with variable-star candidates circled and labelled by catalogue name or V number' /></a>");
         report.println("<p class='compact-note'><a href='" + FULL_SIZE_FILE + "' target='_blank' rel='noopener'>Open full-size candidate map and light curves</a>. "
-                + "Each mini curve has its own labelled magnitude scale; brighter is up. Only unflagged measurements are plotted, with gaps left open. "
+                + "The transparent mini curves show only the curve and observed Δmag in mag, without axes. Brighter is up; each curve has its own scale. "
+                + "Only unflagged measurements are plotted, with gaps left open. Hover for the V number and catalogue name. "
                 + "Use the candidate cards for error bars and comparison stars.</p></div>");
     }
 
+    private static String candidateName(DetectionReportContext context, StarLightCurve star) {
+        var target = PhotometryReportSectionWriter.skyTarget(context, star.x, star.y);
+        if (target == null) return null;
+        SessionCatalogue catalogue = context.catalogue();
+        var variables = catalogue.variablesNear(target.raDegrees, target.decDegrees, target.radiusArcsec);
+        if (!variables.isEmpty() && variables.get(0).star.name != null && !variables.get(0).star.name.isBlank())
+            return variables.get(0).star.name;
+        var identity = catalogue.starIdentityNear(target.raDegrees, target.decDegrees, Math.min(target.radiusArcsec, 5.0));
+        return identity == null ? null : identity.name();
+    }
+
     private static void writeMap(File file, BufferedImage image, int width, int height, VariableStarAnalysis analysis,
-                                 List<StarLightCurve> candidates, boolean curves) throws IOException {
+                                 List<StarLightCurve> candidates, List<String> names, boolean curves) throws IOException {
         try (AtomicReportFile artifact = new AtomicReportFile(file)) {
             PrintWriter out = artifact.writer();
             int header = curves ? HEADER_HEIGHT : 0;
             out.println("<svg xmlns='http://www.w3.org/2000/svg' width='" + width + "' height='" + (height + header)
                     + "' viewBox='0 0 " + width + " " + (height + header) + "' role='img' font-family='Segoe UI, sans-serif'>");
             out.println("<title>Variable-star candidate map" + (curves ? " with light curves" : "") + "</title>");
-            out.println("<desc>Median stack at its original orientation. V labels match the report. Blue means high confidence; orange means possible. "
+            out.println("<desc>Median stack at its original orientation. Catalogue names identify stars, not known variability; V numbers match the report. Blue means high confidence; orange means possible. "
                     + (curves ? "Light curves show differential magnitudes, brighter upward, with individual scales and a common session time axis." : "") + "</desc>");
             out.println("<rect width='100%' height='100%' fill='#191919'/>");
             if (curves) {
@@ -97,7 +109,7 @@ final class VariableStarMapWriter {
                 int boxIndex = 0;
                 for (int i = 0; i < candidates.size(); i++) {
                     StarLightCurve star = candidates.get(i);
-                    if (onImage(star, width, height)) writeCurve(out, analysis, star, i + 1, occupied.get(boxIndex++));
+                    if (onImage(star, width, height)) writeCurve(out, analysis, star, i + 1, names.get(i), occupied.get(boxIndex++));
                 }
             }
             List<Rectangle2D.Double> labels = new ArrayList<>();
@@ -106,16 +118,18 @@ final class VariableStarMapWriter {
                 if (!onImage(star, width, height)) continue;
                 double radius = curves ? Math.max(6, Math.min(14, width / 500.0)) : Math.max(6, width / 140.0);
                 double font = curves ? 16 : Math.max(12, width / 90.0);
-                out.printf(Locale.US, "<g class='variable-map-marker' data-candidate='V%d'><title>V%d · star #%d · %s</title>"
+                String labelText = names.get(i) == null ? "V" + (i + 1) : names.get(i);
+                font = Math.min(font, Math.max(9, width / (3.0 * .65 * labelText.length())));
+                out.printf(Locale.US, "<g class='variable-map-marker' data-candidate='V%d'><title>V%d · %s · star #%d · %s</title>"
                                 + "<circle cx='%.2f' cy='%.2f' r='%.2f' fill='none' stroke='#000' stroke-width='%s'/>"
                                 + "<circle cx='%.2f' cy='%.2f' r='%.2f' fill='none' stroke='%s' stroke-width='%s'/>",
-                        i + 1, i + 1, star.id, star.tier == VariabilityTier.HIGH_CONFIDENCE ? "High confidence" : "Possible",
+                        i + 1, i + 1, DetectionReportGenerator.escapeHtml(labelText), star.id, star.tier == VariabilityTier.HIGH_CONFIDENCE ? "High confidence" : "Possible",
                         star.x + .5, star.y + .5, radius, curves ? "4" : Math.max(3, width / 450.0),
                         star.x + .5, star.y + .5, radius, color(star), curves ? "2" : Math.max(2, width / 1000.0));
-                Rectangle2D.Double label = placeLabel(star, "V" + (i + 1), radius, font, width, height, occupied, labels);
+                Rectangle2D.Double label = placeLabel(star, labelText, radius, font, width, height, occupied, labels);
                 labels.add(label);
-                out.printf(Locale.US, "<text x='%.2f' y='%.2f' fill='%s' font-size='%.2f' stroke='#000' stroke-width='3' paint-order='stroke'>V%d</text></g>%n",
-                        label.x, label.y + font, color(star), font, i + 1);
+                out.printf(Locale.US, "<text x='%.2f' y='%.2f' fill='%s' font-size='%.2f' stroke='#000' stroke-width='3' paint-order='stroke'>%s</text></g>%n",
+                        label.x, label.y + font, color(star), font, DetectionReportGenerator.escapeHtml(labelText));
             }
             out.println("</g></svg>");
             artifact.commit();
@@ -126,7 +140,7 @@ final class VariableStarMapWriter {
     private static Rectangle2D.Double place(StarLightCurve star, List<StarLightCurve> stars,
                                              List<Rectangle2D.Double> occupied, int width, int height) {
         double inset = Math.min(6, Math.min(width, height) / 10.0);
-        double w = Math.min(260, width - 2 * inset), h = Math.min(174, height - 2 * inset);
+        double w = Math.min(190, width - 2 * inset), h = Math.min(84, height - 2 * inset);
         Rectangle2D.Double best = null;
         double bestScore = Double.POSITIVE_INFINITY;
         for (int ring = 0; ring < 5; ring++) {
@@ -174,46 +188,55 @@ final class VariableStarMapWriter {
     }
 
     private static void writeCurve(PrintWriter out, VariableStarAnalysis analysis, StarLightCurve star, int number,
-                                    Rectangle2D.Double box) {
+                                    String name, Rectangle2D.Double box) {
         out.printf(Locale.US, "<g class='variable-map-curve' data-candidate='V%d' data-star-id='%d' transform='translate(%.2f %.2f)'>%n",
                 number, star.id, box.x, box.y);
-        out.printf(Locale.US, "<rect width='%.2f' height='%.2f' rx='6' fill='%s' stroke='%s'/>%n",
-                box.width, box.height, PhotometrySvgChart.SURFACE, color(star));
-        text(out, 8, 19, "V" + number + (Double.isFinite(star.amplitude)
-                ? String.format(Locale.US, " · %.3f mag observed", star.amplitude) : " · observed variation"), color(star), 14);
-        if (box.width < 120 || box.height < 110) {
-            text(out, 8, 40, "See candidate light curve", "#eeeeee", 10);
-            out.println("</g>");
-            return;
-        }
+        out.println("<title>V" + number + (name == null ? "" : " · " + DetectionReportGenerator.escapeHtml(name))
+                + " · observed variation (95th–5th percentile); brighter up; individual magnitude scale</title>");
+        out.printf(Locale.US, "<rect width='%.2f' height='%.2f' rx='4' fill='#000' fill-opacity='0.18'/>%n",
+                box.width, box.height);
+        out.printf(Locale.US, "<text x='6' y='15' fill='%s' font-size='12' stroke='#000' stroke-width='2' paint-order='stroke'>%s</text>%n",
+                color(star), Double.isFinite(star.amplitude)
+                        ? String.format(Locale.US, "Δmag %.3f mag", star.amplitude) : "Δmag unavailable");
         int n = analysis.frames.size();
         boolean timeAxis = n > 1 && analysis.frames.stream().allMatch(f -> Double.isFinite(f.julianDate))
                 && analysis.frames.get(n - 1).julianDate > analysis.frames.get(0).julianDate;
         double firstJd = n == 0 ? 0 : analysis.frames.get(0).julianDate;
         double[] x = new double[n], y = new double[n];
-        String[] tips = new String[n];
-        Arrays.fill(y, Double.NaN);
+        java.util.Arrays.fill(y, Double.NaN);
         int usable = 0;
+        double min = Double.POSITIVE_INFINITY, max = Double.NEGATIVE_INFINITY;
         for (int j = 0; j < n; j++) {
             var frame = analysis.frames.get(j);
             x[j] = timeAxis ? (frame.julianDate - firstJd) * 1440 : frame.frameIndex + 1;
             if (star.flags != null && j < star.flags.length && star.flags[j] == 0
                     && star.deltaMag != null && j < star.deltaMag.length && Double.isFinite(star.deltaMag[j])) {
                 y[j] = star.deltaMag[j];
-                tips[j] = String.format(Locale.US, "V%d · frame %d · Δmag %.4f", number, frame.frameIndex + 1, y[j]);
+                min = Math.min(min, y[j]);
+                max = Math.max(max, y[j]);
                 usable++;
             }
         }
         if (usable == 0) {
-            text(out, 12, 60, "No usable measurements", "#cccccc", 13);
+            text(out, 6, 36, "No usable measurements", "#cccccc", 11);
         } else {
-            PhotometrySvgChart chart = new PhotometrySvgChart((int) box.width - 12, (int) box.height - 30,
-                    "V" + number + " differential light curve", timeAxis ? "Minutes since first frame" : "Frame",
-                    "Δmag (brighter up)").invertY();
-            if (n > 1) chart.xRange(x[0], x[n - 1]);
-            chart.line(x, y, color(star), 1.5, false, null);
-            chart.points(x, y, color(star), 2, PhotometrySvgChart.Marker.CIRCLE, tips);
-            out.println("<g transform='translate(6 25)'>" + chart.render() + "</g>");
+            double span = Math.max(0.02, max - min), centre = (max + min) / 2;
+            double low = centre - span * .6, range = span * 1.2;
+            double xSpan = n > 1 ? x[n - 1] - x[0] : 0;
+            double plotWidth = Math.max(1, box.width - 12), plotHeight = Math.max(1, box.height - 26);
+            StringBuilder path = new StringBuilder();
+            boolean connected = false;
+            for (int j = 0; j < n; j++) {
+                if (!Double.isFinite(y[j])) { connected = false; continue; }
+                double px = 6 + (xSpan > 0 ? (x[j] - x[0]) / xSpan : .5) * plotWidth;
+                double py = 21 + (y[j] - low) / range * plotHeight;
+                path.append(String.format(Locale.US, "%s%.2f %.2f", connected ? "L" : "M", px, py));
+                connected = true;
+                out.printf(Locale.US, "<circle cx='%.2f' cy='%.2f' r='1.5' fill='%s'><title>V%d · frame %d · Δmag %.4f</title></circle>%n",
+                        px, py, color(star), number, analysis.frames.get(j).frameIndex + 1, y[j]);
+            }
+            out.printf(Locale.US, "<path class='variable-map-sparkline' d='%s' stroke='%s' stroke-width='1.5' fill='none'/>%n",
+                    path, color(star));
         }
         out.println("</g>");
     }

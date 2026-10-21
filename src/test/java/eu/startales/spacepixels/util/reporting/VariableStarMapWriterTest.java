@@ -74,8 +74,14 @@ public class VariableStarMapWriterTest {
         render(dir, stack(700, 400), analysis, analysis.candidates);
         Document full = svg(dir, VariableStarMapWriter.FULL_SIZE_FILE);
         Element curve = groups(full, "variable-map-curve").get(0);
-        assertTrue(curve.getTextContent().contains("Frame"));
+        assertFalse(curve.getTextContent().contains("Frame"));
         assertFalse(curve.getTextContent().contains("Minutes since first frame"));
+        assertTrue(curve.getTextContent().contains("Δmag 0.400 mag"));
+        Element background = (Element) curve.getElementsByTagNameNS(SVG, "rect").item(0);
+        assertEquals("0.18", background.getAttribute("fill-opacity"));
+        assertEquals(1, curve.getElementsByTagNameNS(SVG, "rect").getLength());
+        assertEquals(0, curve.getElementsByTagNameNS(SVG, "line").getLength());
+        assertEquals(1, curve.getElementsByTagNameNS(SVG, "text").getLength());
         String path = ((Element) curve.getElementsByTagNameNS(SVG, "path").item(0)).getAttribute("d");
         assertEquals(2, path.chars().filter(c -> c == 'M').count());
         assertFalse("A flagged point must break the line", path.contains("L"));

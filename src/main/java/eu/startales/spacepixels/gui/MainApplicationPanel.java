@@ -130,6 +130,9 @@ public class MainApplicationPanel extends JPanel {
 
     // Workflow-strip status lines, built only from what is already known (headers, selection, solved flags)
     private final JLabel prepareStatus = new JLabel();
+    private final JLabel colourNotice = new JLabel("<html><b>Colour dataset · limited analysis</b><br>"
+            + "Blink and stretch in colour; convert to mono<br>for Preview, Auto-Tune and detection.</html>",
+            UIManager.getIcon("OptionPane.informationIcon"), SwingConstants.LEFT);
     private final JLabel astrometryStatus = new JLabel();
     private final JLabel inspectStatus = new JLabel();
     private final JLabel detectStatus = new JLabel();
@@ -330,7 +333,15 @@ public class MainApplicationPanel extends JPanel {
         workflowStrip.add(astrometryGroup);
         workflowStrip.add(inspectGroup);
         workflowStrip.add(detectGroup);
-        add(workflowStrip, BorderLayout.NORTH);
+        colourNotice.setBorder(BorderFactory.createEmptyBorder(2, 12, 8, 12));
+        colourNotice.setVisible(false);
+        colourNotice.setToolTipText("<html>Colour frames support Blink Selected, Image Stretch and Batch Stretch, and Convert to Mono."
+                + "<br>Astrometry remains available. Preview Frame, Manual Transient Inspection, Auto-Tune and all detection"
+                + "<br>(including variable-star photometry) need monochrome frames. Import the converted mono folder to use them.</html>");
+        JPanel topArea = new JPanel(new BorderLayout());
+        topArea.add(workflowStrip, BorderLayout.CENTER);
+        topArea.add(colourNotice, BorderLayout.SOUTH);
+        add(topArea, BorderLayout.NORTH);
         refreshWorkflowStatus();
 
         // ==========================================
@@ -653,6 +664,7 @@ public class MainApplicationPanel extends JPanel {
     /** Updates the status line of every group, and the commands with their disabled-button reasons. */
     void refreshWorkflowStatus() {
         int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
+        colourNotice.setVisible(frames > 0 && containsColorImages);
         // The import button is the primary action until frames are loaded, then an ordinary button for another dataset.
         importButton.putClientProperty("FlatLaf.style", frames == 0 ? PRIMARY_BUTTON_STYLE : null);
         if (frames == 0) {
@@ -1091,8 +1103,8 @@ public class MainApplicationPanel extends JPanel {
     }
 
     /**
-     * The fitted correction arrives. It replaces the one there was and keeps its on/off setting; a new session's
-     * first correction starts switched off, so nothing changes until it is switched on in a viewer.
+     * The fitted correction arrives. Significant improvements start in use; an explicit viewer choice is kept
+     * across refits of the same solution.
      */
     private void correctionFinished(Thread job, File folder, PlateSolutionCorrection correction, String failure, boolean cancelled) {
         if (job != skyFetchThread) {
@@ -1107,8 +1119,7 @@ public class MainApplicationPanel extends JPanel {
         } else {
             correctionProblem = null;
             PlateSolutionCorrection previous = SkyCatalogueModel.shared().getCorrection();
-            correction.enabled = correction.isNeeded() && previous != null && previous.enabled
-                    && correction.solutionKey.equals(previous.solutionKey);
+            correction.initializeEnabled(previous);
             try {
                 PlateSolutionCorrection.save(folder, correction);
             } catch (IOException e) {
@@ -1118,7 +1129,9 @@ public class MainApplicationPanel extends JPanel {
             statusLabel.setText(!correction.isNeeded()
                     ? String.format(Locale.US, "Plate solution checked: the FITS header already matches the stars (%.2f px)", correction.beforeMedianPx)
                     : "Plate solution checked: " + correction.improvementText()
-                    + (correction.enabled ? ", correction in use" : "; switch the correction on in a viewer (C)"));
+                    + (correction.enabled ? correction.userEnabled == null && correction.hasSignificantImprovement()
+                    ? ", applied automatically (C switches it off)" : ", correction in use"
+                    : "; switch the correction on in a viewer (C)"));
         }
         refreshWorkflowStatus();
     }
@@ -1174,7 +1187,7 @@ public class MainApplicationPanel extends JPanel {
             return catalogueText + "<br>" + (!correction.isNeeded()
                     ? "✓ Plate solution checked · " + String.format(Locale.US, "%.2f px", correction.beforeMedianPx)
                     : correction.enabled
-                    ? "✓ Plate solution corrected · " + String.format(Locale.US, "%.2f px", correction.afterMedianPx)
+                    ? "✓ Plate solution corrected · " + correction.improvementText()
                     : "Correction available · " + correction.improvementText());
         }
         if (correctionProblem != null) {
@@ -1209,6 +1222,9 @@ public class MainApplicationPanel extends JPanel {
             if (Math.abs(depth - catalogue.starMagnitudeLimit) > 0.01) {
                 text.append(String.format(Locale.US, "<br><i>The star depth is now set to %.1f: fetch again to use it.</i>", depth));
             }
+            if (!catalogue.hasStarIdentifiers()) {
+                text.append("<br><b>This saved catalogue has no Gaia identifiers.</b> Fetch it again to name unmatched variable candidates.");
+            }
         } else {
             text.append("<br><br>").append(FETCH_SKY_CATALOGUE).append(" downloads the stars, deep-sky objects and variables of the field<br>"
                     + "for the Annotate switch (A) of the viewers.");
@@ -1232,6 +1248,8 @@ public class MainApplicationPanel extends JPanel {
             text.append(correction.enabled
                     ? "<br>The correction is <b>in use</b>: in the viewers, the cursor RA/Dec and the report of the next Detect Moving Targets."
                     : "<br>The correction is <b>not in use</b>. Switch it on in a viewer (Correct plate solution, C).");
+            text.append("<br>New fits are applied automatically when median accuracy improves by more than 1 px"
+                    + "<br>and the 90th-percentile error also improves. A manual on/off choice is kept when refitting.");
             text.append("<br>The FITS files are not changed.");
         } else if (correctionProblem != null) {
             text.append("<br><br><b>Plate solution not checked:</b> ").append(escapeHtml(correctionProblem));

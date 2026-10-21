@@ -197,6 +197,8 @@ final class SkyAnnotations {
         onSolutionChanged.run();
         if (!wasAvailable && correctBox.isEnabled() && !correctBox.isSelected()) {
             notice.setText("Plate solution check ready · C corrects it");
+        } else if (!wasAvailable && correctBox.isSelected()) {
+            notice.setText("Plate solution corrected · " + SkyCatalogueModel.shared().getCorrection().improvementText() + " · C switches it off");
         }
     }
 

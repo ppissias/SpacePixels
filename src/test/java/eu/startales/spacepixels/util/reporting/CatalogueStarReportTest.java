@@ -19,9 +19,12 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
+import java.net.URI;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 import static org.junit.Assert.*;
 
@@ -68,7 +71,7 @@ public class CatalogueStarReportTest {
         var config = new DetectionConfig(); config.enableVariableStarDetection = true; config.enableSlowMoverDetection = false;
         Gson gson = new GsonBuilder().serializeSpecialFloatingPointValues().create();
         String measurements = gson.toJson(analysis);
-        for (String mode : List.of("named", "gaia", "vsx", "legacy")) {
+        for (String mode : List.of("named", "gaia", "vsx", "legacy", "no-catalogue", "unsolved")) {
             if (mode.equals("gaia")) catalogue.namedStars.clear();
             if (mode.equals("vsx")) {
                 catalogue.namedStars.add(named);
@@ -78,9 +81,24 @@ public class CatalogueStarReportTest {
             }
             if (mode.equals("legacy")) { catalogue.namedStars.clear(); catalogue.variables.clear(); gaia.sourceId = null; }
             SkyCatalogueStore.save(input, catalogue);
+            if (mode.equals("no-catalogue")) Files.delete(new File(input, SkyCatalogue.FILE_NAME).toPath());
+            if (mode.equals("unsolved")) for (var file : files) file.getFitsHeader().remove("CRVAL1");
             File output = temporary.newFolder(mode);
             DetectionReportGenerator.exportTrackVisualizations(result, frames, files, output, config, new AppConfig());
             String html = Files.readString(new File(output, "detection_report.html").toPath());
+            String map = Files.readString(new File(output, VariableStarMapWriter.FULL_SIZE_FILE).toPath());
+            String preview = Files.readString(new File(output, VariableStarMapWriter.PREVIEW_FILE).toPath());
+            String expected = switch (mode) {
+                case "named" -> "Named &lt;star&gt;";
+                case "gaia" -> "Gaia DR3 3131123006665005568";
+                case "vsx" -> "Known variable";
+                default -> "V1";
+            };
+            assertTrue(map.contains(">" + expected + "</text>"));
+            assertTrue(preview.contains(">" + expected + "</text>"));
+            assertTrue(map.contains("data-candidate='V1'"));
+            assertTrue(map.contains("Δmag 0.600 mag"));
+            assertEquals(mode.equals("legacy"), html.contains("This saved sky catalogue has no Gaia star identifiers"));
             if (mode.equals("named")) {
                 assertTrue(html.contains("<strong>Named &lt;star&gt;</strong>"));
                 assertTrue(html.contains("data-catalogue-star='Catalogue star:"));
@@ -90,9 +108,38 @@ public class CatalogueStarReportTest {
                 assertTrue(html.contains("Known variable"));
                 assertFalse(html.contains("Catalogue star:"));
             } else assertFalse(html.contains("Catalogue star:"));
-            assertTrue(html.contains(mode.equals("vsx") ? "1 of 1 candidates were matched" : "0 of 1 candidates were matched"));
+            if (!mode.equals("no-catalogue") && !mode.equals("unsolved"))
+                assertTrue(html.contains(mode.equals("vsx") ? "1 of 1 candidates were matched" : "0 of 1 candidates were matched"));
+            assertTrue(html.contains("id='variable-follow-up'"));
+            assertTrue(html.contains("not automatically a calibrated submission"));
+            if (mode.equals("unsolved")) {
+                assertFalse(html.contains("class='star-research'"));
+                assertTrue(html.contains("Plate-solve the session to search variable-star and general star catalogues"));
+            } else {
+                assertTrue(html.contains("<strong>Research this star</strong>"));
+                String coords = String.format(Locale.US, "%.6f %+.6f", sky.getRaDegrees(), sky.getDecDegrees());
+                var gaiaLink = link(html, "Gaia DR3");
+                assertEquals("vizier.cds.unistra.fr", gaiaLink.getHost());
+                assertTrue(gaiaLink.getQuery().contains("-source=I/355/gaiadr3"));
+                assertTrue(gaiaLink.getQuery().contains("-c=" + coords));
+                assertTrue(gaiaLink.getQuery().contains("-c.rs=10"));
+                assertFalse("General-star research must not inherit the downloaded magnitude limit", gaiaLink.getQuery().contains("Gmag"));
+                var otherLink = link(html, "Other catalogues — VizieR");
+                assertEquals("/viz-bin/VizieR", otherLink.getPath());
+                assertTrue(otherLink.getQuery().contains("-c=" + coords));
+                assertFalse("Other catalogues must not be restricted to VSX or Gaia", otherLink.getQuery().contains("-source"));
+                assertEquals("simbad.cds.unistra.fr", link(html, "SIMBAD").getHost());
+                assertEquals("/viz-bin/VizieR-4", link(html, "VSX in VizieR").getPath());
+                assertTrue(html.contains("href='#variable-follow-up'"));
+            }
             assertTrue(html.contains("id='variable-v1'"));
             assertEquals(measurements, gson.toJson(analysis));
         }
+    }
+
+    private static URI link(String html, String label) {
+        var matcher = Pattern.compile("<a\\b[^>]*href='([^']*)'[^>]*>" + Pattern.quote(label) + "</a>").matcher(html);
+        assertTrue("Missing research link: " + label, matcher.find());
+        return URI.create(matcher.group(1).replace("&amp;", "&"));
     }
 }

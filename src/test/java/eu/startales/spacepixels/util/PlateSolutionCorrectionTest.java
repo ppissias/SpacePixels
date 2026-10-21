@@ -81,6 +81,46 @@ public class PlateSolutionCorrectionTest {
     }
 
     @Test
+    public void newFitsApplyOnlySignificantImprovementsAndKeepExplicitChoices() throws Exception {
+        var header = WcsCoordinateTransformer.fromHeader(header());
+        PlateSolutionCorrection first = correction(header);
+        first.beforeMedianPx = 2.0; first.afterMedianPx = .2;
+        first.beforeP90Px = 3.0; first.afterP90Px = .4;
+        first.initializeEnabled(null);
+        assertTrue(first.enabled);
+        assertNull(first.userEnabled);
+
+        first.beforeMedianPx = 1.2; // Exactly 1 px gained is below the automatic threshold.
+        first.initializeEnabled(null);
+        assertFalse(first.enabled);
+        first.beforeMedianPx = 2.0; first.afterP90Px = 3.5;
+        first.initializeEnabled(null);
+        assertFalse(first.enabled); // A worse outer residual must not be enabled automatically.
+        first.afterP90Px = .4;
+        first.userEnabled = false;
+        File session = folder.newFolder();
+        PlateSolutionCorrection.save(session, first);
+        PlateSolutionCorrection next = correction(header);
+        next.beforeMedianPx = 5; next.afterMedianPx = .1;
+        next.beforeP90Px = 6; next.afterP90Px = .3;
+        next.initializeEnabled(PlateSolutionCorrection.load(session));
+        assertFalse(next.enabled);
+        assertEquals(Boolean.FALSE, next.userEnabled);
+
+        first.userEnabled = true;
+        next.initializeEnabled(first);
+        assertTrue(next.enabled);
+        next.global = null;
+        next.initializeEnabled(first);
+        assertFalse(next.enabled); // A good header has no correction to enable.
+        next = correction(header);
+        next.solutionKey = "different";
+        next.initializeEnabled(first);
+        assertFalse(next.enabled);
+        assertNull(next.userEnabled);
+    }
+
+    @Test
     public void savesAndLoadsAndIgnoresDamagedFiles() throws Exception {
         File session = folder.newFolder("session");
         assertNull(PlateSolutionCorrection.load(session));

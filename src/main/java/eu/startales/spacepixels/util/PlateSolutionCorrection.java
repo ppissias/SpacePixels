@@ -44,6 +44,8 @@ public final class PlateSolutionCorrection {
     public int version = CURRENT_VERSION;
     /** Whether the correction is used. */
     public boolean enabled;
+    /** Explicit viewer choice, or null until the user chooses; kept across fits of the same solution. */
+    public Boolean userEnabled;
     public String fittedAtUtc;
     /** The header solution it corrects (see {@link WcsCoordinateTransformer#solutionKey()}). */
     public String solutionKey;
@@ -128,6 +130,22 @@ public final class PlateSolutionCorrection {
     /** Whether the check found a correction that matches the stars better than the header solution. */
     public boolean isNeeded() {
         return global != null;
+    }
+
+    /** Select the initial state of a new fit without overriding a saved, explicit viewer choice. */
+    public void initializeEnabled(PlateSolutionCorrection previous) {
+        boolean sameSolution = previous != null && solutionKey != null && solutionKey.equals(previous.solutionKey)
+                && width == previous.width && height == previous.height;
+        userEnabled = sameSolution ? previous.userEnabled : null;
+        enabled = isNeeded() && (userEnabled != null ? userEnabled
+                : (sameSolution && previous.enabled) || hasSignificantImprovement());
+    }
+
+    /** More than one pixel gained in median accuracy, with the outer residuals also improving. */
+    public boolean hasSignificantImprovement() {
+        return isNeeded() && Double.isFinite(beforeMedianPx) && Double.isFinite(afterMedianPx)
+                && beforeMedianPx - afterMedianPx > 1.0
+                && Double.isFinite(beforeP90Px) && Double.isFinite(afterP90Px) && afterP90Px < beforeP90Px;
     }
 
     /** "4.86 → 0.11 px". */

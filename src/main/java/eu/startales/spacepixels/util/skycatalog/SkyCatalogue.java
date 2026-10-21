@@ -42,6 +42,11 @@ public final class SkyCatalogue {
     /** One line per source that could not be fetched; empty when all answered. */
     public List<String> problems = new ArrayList<>();
 
+    /** Older saved catalogues have positions and magnitudes but no Gaia source identifiers. */
+    public boolean hasStarIdentifiers() {
+        return stars.stream().anyMatch(star -> star.sourceId != null && star.sourceId.matches("[0-9]+"));
+    }
+
     /** A Gaia DR3 star at epoch J2016.0. */
     public static final class Star {
         /** Gaia DR3 source identifier, kept as text to preserve all digits; absent in older saved catalogues. */

@@ -74,14 +74,18 @@ final class SkyCatalogueModel {
      * plate solution, including a detection run, uses the new setting.
      */
     void setCorrectionEnabled(boolean enabled) throws IOException {
-        if (correction == null || !correction.isNeeded() || correction.enabled == enabled) {
+        if (correction == null || !correction.isNeeded()) {
             return;
         }
+        boolean previousEnabled = correction.enabled;
+        Boolean previousChoice = correction.userEnabled;
         correction.enabled = enabled;
+        correction.userEnabled = enabled;
         try {
             PlateSolutionCorrection.save(sessionFolder, correction);
         } catch (IOException e) {
-            correction.enabled = !enabled;
+            correction.enabled = previousEnabled;
+            correction.userEnabled = previousChoice;
             throw e;
         } finally {
             PlateSolutionCorrection.forget(sessionFolder);

@@ -738,6 +738,7 @@ final class PhotometryReportSectionWriter {
             SessionCatalogue sessionCatalogue = SessionCatalogue.of(context);
             writeCandidateTable(report, context, analysis, cards, sessionCatalogue);
             CatalogueComparisonWriter.writeData(report, context, analysis, cards, sessionCatalogue);
+            writeFollowUpGuidance(report);
             int shown = 0;
             for (StarLightCurve star : cards) {
                 if (shown++ >= MAX_CANDIDATE_CARDS) break;
@@ -760,7 +761,7 @@ final class PhotometryReportSectionWriter {
                 + th("Scatter z", "Standardised score indicating how unusual the scatter is relative to stars of similar brightness.")
                 + th("Stetson J z", "Standardised Stetson J score indicating how unusual the coherence between successive measurements is relative to stars of similar brightness.")
                 + th("Failed Gates", "The checks this star failed. Two or more, and it is listed here instead of as a candidate.")
-                + th("Look Up", "Opens the same sky position in a variable-star catalogue.")
+                + th("Look Up", "Searches the same sky position in VSX or SIMBAD.")
                 + "</tr></thead><tbody>");
             for (StarLightCurve star : rejected) {
                 report.println("<tr><td>#" + star.id + "</td><td>" + DetectionReportGenerator.escapeHtml(
@@ -889,6 +890,12 @@ final class PhotometryReportSectionWriter {
             report.println("<span class='astro-note' style='margin:0;'>Plate-solve the session to identify the candidates in variable-star catalogues.</span>");
         }
         report.println("</div>");
+        if (sky && sessionCatalogue.isAvailable() && !sessionCatalogue.catalogue.stars.isEmpty()
+                && !sessionCatalogue.catalogue.hasStarIdentifiers()) {
+            report.println("<p class='compact-note'>This saved sky catalogue has no Gaia star identifiers. "
+                    + "Use <strong>Fetch Sky Catalogue</strong> again, then regenerate the report to name candidates "
+                    + "without a VSX match. A star must be within the fetched Gaia magnitude limit and matching radius.</p>");
+        }
         report.println("<div class='scroll-box compact-table-box' style='max-height: 420px;'>");
         report.println("<table><thead><tr>"
                 + th("#", "Candidate number. The first ones also have a card below.")
@@ -1165,12 +1172,12 @@ final class PhotometryReportSectionWriter {
 
     /**
      * Identification helpers for a candidate with a sky position: a live VSX lookup rendered inside the
-     * report (through the SpacePixels lookup proxy, cached into the report) plus browser links.
+     * report (through the SpacePixels lookup proxy, cached into the report) plus general-star research links.
      */
     private static String catalogueCrossCheckHtml(DetectionReportContext context, StarLightCurve star, int number) {
         SkyTarget target = skyTarget(context, star.x, star.y);
         if (target == null) {
-            return "<div class='astro-note'>Plate-solve the session to cross-check this star against variable-star catalogues.</div>";
+            return "<div class='astro-note'>Plate-solve the session to search variable-star and general star catalogues for this position.</div>";
         }
         String slotId = "photometry-v" + number + "-vsx";
         String sidecar = "photometry_v" + number + "_vsx.json";
@@ -1179,9 +1186,10 @@ final class PhotometryReportSectionWriter {
         html.append(DetectionReportAstrometry.buildLiveRenderButtonHtml("vsx", vsxTapUrl(target), slotId,
                 "Check VSX Here", sidecar,
                 String.format(Locale.US, "AAVSO VSX within %.0f arcsec of V%d", target.radiusArcsec, number)));
-        html.append(browserLinks(target));
+        html.append(vsxBrowserLink(target));
         html.append("</div>");
         html.append(DetectionReportAstrometry.buildLiveRenderContainerHtml(slotId));
+        html.append(researchLinksHtml(target));
         return html.toString();
     }
 
@@ -1192,12 +1200,69 @@ final class PhotometryReportSectionWriter {
     }
 
     private static String browserLinks(SkyTarget target) {
+        return vsxBrowserLink(target) + simbadLink(target);
+    }
+
+    private static String vsxBrowserLink(SkyTarget target) {
+        return externalCatalogueLink(vizierUrl(target, "B/vsx/vsx"), "VSX in VizieR",
+                "Search the VSX variable-star catalogue around this measured position.");
+    }
+
+    private static String vizierUrl(SkyTarget target, String catalogue) {
         String coords = String.format(Locale.US, "%.6f %+.6f", target.raDegrees, target.decDegrees);
         String radius = String.format(Locale.US, "%.0f", target.radiusArcsec);
-        String vizier = "https://vizier.cds.unistra.fr/viz-bin/VizieR-4?-source=B/vsx/vsx&-c=" + urlEncode(coords) + "&-c.rs=" + radius;
+        return "https://vizier.cds.unistra.fr/viz-bin/" + (catalogue == null ? "VizieR?" : "VizieR-4?-source=" + urlEncode(catalogue) + "&")
+                + "-c=" + urlEncode(coords) + "&-c.rs=" + radius
+                + (catalogue == null ? "" : "&-out.add=_r&-sort=_r");
+    }
+
+    private static String simbadLink(SkyTarget target) {
+        String coords = String.format(Locale.US, "%.6f %+.6f", target.raDegrees, target.decDegrees);
+        String radius = String.format(Locale.US, "%.0f", target.radiusArcsec);
         String simbad = "https://simbad.cds.unistra.fr/simbad/sim-coo?Coord=" + urlEncode(coords) + "&Radius=" + radius + "&Radius.unit=arcsec";
-        return "<a class='id-link' href='" + DetectionReportGenerator.escapeHtml(vizier) + "' target='_blank' rel='noopener noreferrer'>VSX in VizieR</a>"
-                + "<a class='id-link' href='" + DetectionReportGenerator.escapeHtml(simbad) + "' target='_blank' rel='noopener noreferrer'>SIMBAD</a>";
+        return externalCatalogueLink(simbad, "SIMBAD", "Search for names, object information and published papers around this position.");
+    }
+
+    private static String externalCatalogueLink(String url, String label, String description) {
+        return "<a class='id-link' href='" + DetectionReportGenerator.escapeHtml(url)
+                + "' target='_blank' rel='noopener noreferrer' title='" + DetectionReportGenerator.escapeHtml(description)
+                + "'>" + DetectionReportGenerator.escapeHtml(label) + "</a>";
+    }
+
+    /** Coordinate searches work even when the downloaded catalogue contains no entry for the star. */
+    static String researchLinksHtml(SkyTarget target) {
+        if (target == null) return "";
+        return "<div class='star-research' style='margin:10px 0;'>"
+                + "<p class='compact-note' style='margin:0 0 4px;'><strong>Research this star</strong> &middot; "
+                + String.format(Locale.US, "search within %.0f&Prime; of the measured position", target.radiusArcsec) + "</p>"
+                + "<div class='id-links'>"
+                + externalCatalogueLink(vizierUrl(target, "I/355/gaiadr3"), "Gaia DR3",
+                "Search the general Gaia star catalogue, without the downloaded catalogue's magnitude limit; entries may include brightness, colour, parallax and proper motion.")
+                + externalCatalogueLink(vizierUrl(target, null), "Other catalogues — VizieR",
+                "Search published catalogues around this position, without restricting the search to VSX.")
+                + simbadLink(target) + "</div>"
+                + "<p class='compact-note' style='margin:4px 0 0;'>Opens online in your browser; no downloaded catalogue or running SpacePixels is needed. "
+                + "Nearby entries are possible associations: confirm the same star using separation, brightness and images. "
+                + "<a href='#variable-follow-up'>Following up an unmatched candidate</a>.</p></div>";
+    }
+
+    private static void writeFollowUpGuidance(PrintWriter report) {
+        report.println("<details class='foldable-streak-details' id='variable-follow-up'><summary>Following up an unmatched candidate</summary>"
+                + "<div class='foldable-streak-body'><p>High confidence means the candidate passed the SpacePixels checks; "
+                + "it does not establish a new variable-star discovery. No VSX match means only that the search found none within its radius.</p>"
+                + "<ol><li><strong>Identify the star.</strong> Use the coordinate links on its card to search Gaia DR3, other VizieR catalogues and SIMBAD. "
+                + "Check the images, neighbouring stars, angular separation and brightness; catalogue epochs and proper motion can affect positions.</li>"
+                + "<li><strong>Check the variability.</strong> Inspect the light curve, uncertainties, comparison stars, flags and raw cutouts. "
+                + "Look for blends, saturation, changing seeing, tracking or background effects. More nights and independent survey light curves "
+                + "(such as ASAS-SN or ZTF, where available) can strengthen or challenge the finding. "
+                + "A missing Gaia variability flag does not establish that the star is constant.</li>"
+                + "<li><strong>Prepare evidence before reporting.</strong> Keep the catalogue identifier, coordinates and their epoch, "
+                + "observation times, filter, measurements, uncertainties and comparison-star information. The exported instrumental/differential magnitudes "
+                + "are not automatically a calibrated submission. Read the "
+                + "<a href='https://vsx.aavso.org/index.php?view=about.notice' target='_blank' rel='noopener noreferrer'>AAVSO VSX submission guidance</a> "
+                + "and check the literature and relevant survey data before submitting a possible new variable.</li></ol>"
+                + "<p>Gaia and SIMBAD identify general objects as well as variables. These research links do not change this candidate's confidence, "
+                + "photometry or saved VSX identification.</p></div></details>");
     }
 
     /**
