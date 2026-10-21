@@ -6,7 +6,7 @@ The single active plan for SpacePixels application design, GUI improvements and 
 
 **Proposed** means an idea awaiting a decision; **Accepted** records an explicit implementation decision; **In progress** means implementation has started; **Deferred** records a deliberate postponement; **Dropped** retires a superseded proposal. Priority is separate from authorization.
 
-- **The work queue** is the findings table, the open architecture steps and the feature table below. Add new proposals there; do not keep a separate TODO or refactor list.
+- **The work queue** is the findings table, the open architecture steps, the [engine changes that need SpacePixels work](#engine-changes-that-need-spacepixels-work) and the feature table below. Add new proposals there; do not keep a separate TODO or refactor list.
 - **When an item is done,** describe its behaviour in the manual, API or architecture documents, and move its record (decision, evidence and validation) to the archive. Do not bring completed items back into this plan.
 - **Completed work:** [design work completed in October 2026](docs/archive/design-improvements-completed-2026-10.md) holds:
   - D01, D03, D05 and D07, and the done parts of D02 and D04;
@@ -226,6 +226,30 @@ The [architecture adoption review](docs/archive/design-improvements-completed-20
 **Constraints.**
 - Preserve the public API, the settings formats, the detection measurements and the current viewer and report behaviour, unless a separately agreed feature changes them.
 - Once a boundary is extracted, protect it with a dependency rule that tests can check, such as "application services do not depend on Swing or `gui`".
+
+## Engine changes that need SpacePixels work
+
+Items of the [JTransient plan](../JTransient/DESIGN-IMPROVEMENTS.md) that SpacePixels must follow with its own change. All are Proposed there, apart from the agreed direction of JA-01.
+- **Order.** The engine change comes first, in a published JTransient release. SpacePixels builds against the published jar by default.
+- **Compatibility.** SpacePixels keeps its current code until it moves to that release, and keeps working against the version before.
+- **Checking.** Every engine slice is checked on the reference datasets on both sides, comparing base and change with the same profile.
+
+| JTransient item | SpacePixels work | Belongs to |
+|---|---|---|
+| JA-01 shared validation and alignment rules (direction agreed 2026-10-20) | Replace `config.DetectionSettingsRules` with the engine's validate and align. The settings tab's auto-apply (`normalizeDependentSpinners`), `checkedSettings` and Preview Frame apply the returned adjustments and keep their own titles and sentences. Apply the same validation to profile loading and the API, which D05 left open | D10 |
+| JA-02 execution and resource ownership | SpacePixels creates an engine per run and shuts it down when the call returns; follow the agreed contract of one operation per engine. Process-wide admission stays the job coordinator's (D02). If `shutdown()` comes to wait for its workers, the tasks' clean-up follows | D02, D04 |
+| JA-03 cancellation contract | Hand the engine the job's cancellation, instead of relying on the progress listener throwing, then measure the waits again (26 s during extraction today). Remove `AutoTuneTask`'s workaround for the calibrated tuner, which turns a cancel into a failed result. If the engine adopts `CancellationException` (an open decision there), `JobCancelledException` already is one | D04 |
+| JA-04 tuning options and diagnostics per operation | `AutoTunerRunner` stops changing the static `JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE`. Remove the API's rule against concurrent legacy auto-tunes in one JVM ([API.md](API.md)) only once both sides support it. `DebugOutput.applyToEngine` moves from the engine's static debug switches to a per-run diagnostic sink | D10, S14 |
+| JA-05 frame identity | The report reads the engine's `frameIndex` in several places: `CatalogueComparisonWriter`, `ClaudePerspectiveSectionWriter`, and the rejected frames in `StarMaskExplorerFrame`. When the engine names the retained position and the original sequence index separately, update each reader and compare the reports | D09 |
+| JA-06 tracking responsibilities | No API change intended; SpacePixels runs the real-data regression on each slice | — |
+| JA-07 public models and shared buffers | 30 files use the nested `SourceExtractor.DetectedObject` and 20 use `TrackLinker.Track`. The compatibility names stay, and moving to the new `model` types is a SpacePixels change per boundary, keeping object identity. The report export reuses the very `short[][]` arrays it passes to the engine (`rawFramesForExport`). The engine's ownership contract must keep them read-only, or SpacePixels must copy them | D09 |
+| JA-08 tuning measurement, policy and presentation | The Overview, `AutoTuneChartDialog` and `AutoTuneSessionStore` read `AutoTunerResult`, `Calibration` and `AutoTuneProfile` (10 files use the profile). Follow the moved types through adapters, and keep the saved `auto_tune.json` files readable | D10 |
+| JA-09 progress and stage outcomes | SpacePixels maps the engine's percentages (standard, iterative and report ranges) and reads `PipelineTelemetry` in 15 files, including the slow-mover legacy telemetry. Move progress to stage events, and the report's diagnostics to the explicit stage outcomes | D04, D09 (S16) |
+| JA-10 reference provenance | The iterative run and the Test Star Mask stack pass a bare `short[][]` master stack. Adopt the prepared-reference value, or retire that path with F09 (directory-based iterative detection); decide which comes first | F09 |
+| JA-11 release contract | Declare the supported SpacePixels/JTransient pair and Java baseline. Bump `build.gradle` to the release that brings each slice above | releases |
+| SM-2 (deferred) | F01, the slow-mover sigma following the tuned per-frame sigma, waits for the empirical maximum-stack comparison | F01 |
+
+Algorithm items that only change detection results (for example XC-3, PT-5 or the VS items) need no SpacePixels code; their engine change is checked on the SpacePixels reference datasets.
 
 ## Common patterns that fit this codebase
 
