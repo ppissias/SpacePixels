@@ -603,6 +603,8 @@ MainApplicationPanel
 -> WCS-aware viewers and reports
 ```
 
+An online solve logs in with the account chosen on the Astrometry Config tab. `PlateSolveService` keeps one Astrometry.net client for the account in use, made at the first online solve. It replaces (and closes) the client when the key changes, and `ImageProcessing.close` closes it with the session. **Check** (`AstrometryNetAccount.checkLogin`) needs no imported session: it logs in with a short-lived client on a `SwingWorker`, uploads nothing, is cancelled when the panel closes, and ignores its answer if the account changed meanwhile. `PlateSolveTask` words a failed online solve through `AstrometryNetAccount.failureMessage`: a lost connection, a time-out and a refused login for the account in use.
+
 Writing a solution into a frame changes the user's own file:
 - **Safe replacement:** `PlateSolveService` writes the updated frame to a temporary file beside it. It reads the copy back to check the image size and that all of its data is present, and only then replaces the original in one step. A failure leaves the original unchanged.
 - **Off the Swing thread:** the write rewrites the whole frame, so it runs as a job (`WriteWcsTask`), with the window locked and an indeterminate progress dialog. The solver's temporary files are removed after it either way.
@@ -759,6 +761,7 @@ User-level JSON files under `user.home`:
 
 - `spacepixels_app.json`
   - ASTAP path and observer/astrometry metadata
+  - the Astrometry.net account: anonymous (JPlateSolve's guest key) or the observer's own API key, stored in plain text and kept while Anonymous is chosen
 - `spacepixels_detection_profile.json`
   - JTransient `DetectionConfig` plus `autoTuneMaxCandidateFrames`
 - `spacepixels_jtransient.json`

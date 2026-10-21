@@ -99,6 +99,7 @@ If **Solved** says `No`, select one frame and click **Plate Solve Selected** in 
 ![Astrometry Config](docs/images/manual/ui-astrometry.png)
 
 - **ASTAP Executable Path**: choose `astap.exe` (or the ASTAP program on Linux and macOS) and click **Check**. Or pick **Astrometry.net (online)** under the Plate Solve button, which needs nothing installed.
+- **Astrometry.net Account**: **Anonymous** (the default) needs no account. To solve with your own account, choose **My API key** and paste your key: sign in at [nova.astrometry.net](https://nova.astrometry.net) and find it in the **My Profile** section of the dashboard. Your uploads then also show up on your Astrometry.net profile. **Check** logs in without uploading anything. The choice and the key are saved at once, the key in plain text in `spacepixels_app.json` in your home folder. Either way, images are submitted as private.
 - **Observing Site**: your latitude and longitude, or your IAU observatory code, make the object identification exact for your location. When the FITS headers contain the site (as here), SpacePixels uses them; **Fill Site from FITS Header** copies them into the fields.
 - **Sky Catalogue (Annotate)**: how faint the stars are that **Fetch Sky Catalogue** downloads (**Star Depth**, see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
 

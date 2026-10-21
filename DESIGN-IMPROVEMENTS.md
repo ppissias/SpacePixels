@@ -286,6 +286,7 @@ The accepted scope remains interaction mechanics, not detection-result correctne
 | `SettingsIoMechanicsTest` | Delayed/failed writes, correct dirty baselines/retry and close draining without freezing |
 | `ViewerLifecycleMechanicsTest`, `IterativeDetectionMechanicsTest` | Closed/hidden viewer cancellation/listener release; independent directory planning and preserving an open session/unsaved settings |
 | `ReportPromptMechanicsTest` | Extracted report dialog acceptance/refusal and report-only checkboxes; real float-import conversion refusal preserves the open session |
+| `AstrometryAccountMechanicsTest` | Astrometry.net account before any import: Anonymous/My API key, the key saved in the background and kept across reopening and while Anonymous is chosen. **Check** is not clicked, so nothing reaches Astrometry.net; the tab has two **Check** buttons (ASTAP and the account) |
 
 This is a source inventory, not a claim that every case was rerun during this documentation review. Prior executed results live in the completion records. The original draft/testing review is [archived](docs/archive/design-improvements-completed-2026-10.md#gui-mechanics-planning-snapshot-2026-10-22).
 
