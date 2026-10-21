@@ -49,6 +49,12 @@ final class DetectionReportContext {
     /** Where the slow sections report their items; set after construction. */
     ReportProgress progress = ReportProgress.NONE;
     private SessionCatalogue catalogue;
+    private VariableStarPresentation variablePresentation;
+
+    VariableStarPresentation variablePresentation(io.github.ppissias.jtransient.photometry.VariableStarAnalysis analysis) {
+        if (variablePresentation == null) variablePresentation = new VariableStarPresentation(this, analysis);
+        return variablePresentation;
+    }
 
     SessionCatalogue catalogue() {
         if (catalogue == null) catalogue = SessionCatalogue.load(this);

@@ -19,6 +19,7 @@ import java.util.function.BooleanSupplier;
  * the saved configuration shows its title in the accent colour and a button that returns it to the saved value.
  */
 final class SettingRow {
+    static final String PRESET_CHOOSER = "spacepixels.presetChooser";
 
     final JPanel parent;
     final JPanel row;
@@ -74,8 +75,8 @@ final class SettingRow {
             return ((JSpinner) input).getValue();
         }
         if (input instanceof JComboBox) {
-            // A preset chooser only sets other rows, and those rows carry the changes.
-            return null;
+            // A preset only sets other rows; an ordinary choice has its own saved value.
+            return Boolean.TRUE.equals(input.getClientProperty(PRESET_CHOOSER)) ? null : ((JComboBox<?>) input).getSelectedItem();
         }
         return ((AbstractButton) input).isSelected();
     }
@@ -108,6 +109,8 @@ final class SettingRow {
         }
         if (input instanceof JSpinner) {
             ((JSpinner) input).setValue(savedValue);
+        } else if (input instanceof JComboBox) {
+            ((JComboBox<?>) input).setSelectedItem(savedValue);
         } else {
             ((AbstractButton) input).setSelected((Boolean) savedValue);
         }

@@ -39,7 +39,6 @@ import java.util.Map;
 final class PhotometryReportSectionWriter {
 
     /** Most candidate cards rendered with charts and cutouts; the rest are listed in the table. */
-    private static final int MAX_CANDIDATE_CARDS = 40;
     private static final int COMPARISON_STARS = 3;
     private static final double COMPARISON_MAG_WINDOW = 0.5;
     private static final int CUTOUT_DISPLAY_SIZE = 150;
@@ -708,13 +707,12 @@ final class PhotometryReportSectionWriter {
     // =================================================================
 
     private static void writeCandidates(PrintWriter report, DetectionReportContext context, VariableStarAnalysis analysis) throws IOException {
-        List<StarLightCurve> cards = new ArrayList<>();
+        VariableStarPresentation presentation = context.variablePresentation(analysis);
+        List<StarLightCurve> cards = presentation.ordered;
         List<StarLightCurve> rejected = new ArrayList<>();
         for (StarLightCurve star : analysis.candidates) {
             if (star.tier == VariabilityTier.REJECTED) {
                 rejected.add(star);
-            } else {
-                cards.add(star);
             }
         }
 
@@ -734,18 +732,24 @@ final class PhotometryReportSectionWriter {
             report.println("<p class='compact-note'><strong>Observed variation in this session</strong> is the 95th minus the 5th percentile of the usable differential magnitudes. "
                     + "It describes the observed time span, rather than a full-cycle amplitude. Catalogue ranges and amplitudes use the listed passbands; "
                     + "differences in filter, time coverage and phase limit direct comparisons.</p>");
-            VariableStarMapWriter.write(report, context, analysis, cards);
+            report.println("<p class='compact-note'>Presentation: high confidence first; "
+                    + DetectionReportGenerator.escapeHtml(context.settings.getVariableStarReportOptions().sortOrder().toString())
+                    + ". V numbers stay fixed across the table, maps, CSVs and viewers. Showing " + presentation.cards.size()
+                    + " of " + cards.size() + " detailed cards (limit "
+                    + context.settings.getVariableStarReportOptions().maxCandidateCards()
+                    + ", set under Variable Stars in Detection Settings). All candidates remain in the table, maps and CSVs. "
+                    + (context.settings.getVariableStarReportOptions().sortOrder() == eu.startales.spacepixels.config.VariableStarReportOptions.SortOrder.SHORTEST_PERIOD
+                    ? "Periods come from the nearest saved VSX match; unknown periods follow known periods within each confidence tier." : "") + "</p>");
+            VariableStarMapWriter.write(report, context, analysis, presentation.identities);
             SessionCatalogue sessionCatalogue = SessionCatalogue.of(context);
             writeCandidateTable(report, context, analysis, cards, sessionCatalogue);
-            CatalogueComparisonWriter.writeData(report, context, analysis, cards, sessionCatalogue);
+            CatalogueComparisonWriter.writeData(report, context, analysis, presentation.identities, sessionCatalogue);
             writeFollowUpGuidance(report);
-            int shown = 0;
-            for (StarLightCurve star : cards) {
-                if (shown++ >= MAX_CANDIDATE_CARDS) break;
-                writeCandidateCard(report, context, analysis, star, shown, sessionCatalogue);
+            for (StarLightCurve star : presentation.cards) {
+                writeCandidateCard(report, context, analysis, star, presentation.number(star), sessionCatalogue);
             }
-            if (cards.size() > MAX_CANDIDATE_CARDS) {
-                report.println("<p class='compact-note'>" + (cards.size() - MAX_CANDIDATE_CARDS) + " more candidates are listed in photometry_stars.csv.</p>");
+            if (cards.size() > presentation.cards.size()) {
+                report.println("<p class='compact-note'>" + (cards.size() - presentation.cards.size()) + " more candidates are listed in the table, maps and photometry_stars.csv.</p>");
             }
         }
 
@@ -898,7 +902,7 @@ final class PhotometryReportSectionWriter {
         }
         report.println("<div class='scroll-box compact-table-box' style='max-height: 420px;'>");
         report.println("<table><thead><tr>"
-                + th("#", "Candidate number. The first ones also have a card below.")
+                + th("#", "Stable candidate number, shared with maps, CSVs and viewers. A linked number has a detailed card below.")
                 + th("Tier", "High confidence passed every check. Possible failed exactly one.")
                 + th("Position", "Where the star is, in pixels and on the sky when the field is solved.")
                 + th("Mean Inst. Mag", "Mean instrumental magnitude. Larger values indicate fainter stars; this is not a calibrated catalogue magnitude.")
@@ -908,11 +912,11 @@ final class PhotometryReportSectionWriter {
                 + th("Failed Check", "The one check a possible candidate failed. High-confidence candidates have none.")
                 + (sky ? th("Known As", "VSX variable-star identification when matched; otherwise a proper name or Gaia DR3 designation from the session catalogue. A catalogue-star match does not establish known variability.") : "")
                 + "</tr></thead><tbody>");
-        int number = 0;
+        VariableStarPresentation presentation = context.variablePresentation(analysis);
         for (StarLightCurve star : candidates) {
-            number++;
+            int number = presentation.number(star);
             String label = "V" + number;
-            String name = number <= MAX_CANDIDATE_CARDS ? "<a href='#variable-v" + number + "'>" + label + "</a>" : label;
+            String name = presentation.hasCard(star) ? "<a href='#variable-v" + number + "'>" + label + "</a>" : label;
             boolean high = star.tier == VariabilityTier.HIGH_CONFIDENCE;
             report.print("<tr><td><strong>" + name + "</strong></td>"
                     + "<td style='color:" + (high ? PhotometrySvgChart.SERIES_BLUE : PhotometrySvgChart.SERIES_ORANGE) + ";'>" + tierLabel(star.tier) + "</td>"

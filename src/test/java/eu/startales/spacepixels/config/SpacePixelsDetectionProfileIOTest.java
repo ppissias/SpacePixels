@@ -22,6 +22,25 @@ import static org.junit.Assert.assertTrue;
  */
 public class SpacePixelsDetectionProfileIOTest {
 
+    @Test public void presentationOptionsDefaultAndRoundTripWithoutChangingDetectionFields() throws Exception {
+        var old = SpacePixelsDetectionProfileIO.load(new StringReader("{\"detectionSigmaMultiplier\":6.5}"));
+        assertEquals(VariableStarReportOptions.DEFAULT, old.getVariableStarReportOptions());
+        for (var order : VariableStarReportOptions.SortOrder.values()) {
+            var options = new VariableStarReportOptions(60, order);
+            StringWriter out = new StringWriter();
+            SpacePixelsDetectionProfileIO.write(out, new SpacePixelsDetectionProfile(old.getDetectionConfig(), 30, options));
+            var loaded = SpacePixelsDetectionProfileIO.load(new StringReader(out.toString()));
+            assertEquals(options, loaded.getVariableStarReportOptions());
+            assertEquals(6.5, loaded.getDetectionConfig().detectionSigmaMultiplier, 0);
+            assertFalse(SpacePixelsDetectionProfileIO.needsMigration(new StringReader(out.toString())));
+        }
+        for (String invalid : new String[]{"{\"variableStarMaxCandidateCards\":0}", "{\"variableStarMaxCandidateCards\":1001}",
+                "{\"variableStarMaxCandidateCards\":60.5}", "{\"variableStarSortOrder\":\"UNKNOWN\"}"}) {
+            try { SpacePixelsDetectionProfileIO.load(new StringReader(invalid)); org.junit.Assert.fail("Invalid presentation accepted"); }
+            catch (java.io.IOException expected) { }
+        }
+    }
+
     @Rule
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
 

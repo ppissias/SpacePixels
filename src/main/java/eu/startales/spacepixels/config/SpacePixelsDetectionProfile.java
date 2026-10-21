@@ -13,7 +13,7 @@ import java.util.Objects;
 
 /**
  * SpacePixels-owned detection profile wrapper around JTransient's {@link DetectionConfig}.
- * The extra field tracked here is the caller-side auto-tuner candidate-pool limit.
+ * Application choices include the auto-tuner candidate-pool limit and variable-star report presentation.
  */
 public final class SpacePixelsDetectionProfile {
 
@@ -22,11 +22,20 @@ public final class SpacePixelsDetectionProfile {
 
     private final DetectionConfig detectionConfig;
     private final int autoTuneMaxCandidateFrames;
+    private final VariableStarReportOptions variableStarReportOptions;
 
     public SpacePixelsDetectionProfile(DetectionConfig detectionConfig, int autoTuneMaxCandidateFrames) {
+        this(detectionConfig, autoTuneMaxCandidateFrames, VariableStarReportOptions.DEFAULT);
+    }
+
+    public SpacePixelsDetectionProfile(DetectionConfig detectionConfig, int autoTuneMaxCandidateFrames,
+                                       VariableStarReportOptions variableStarReportOptions) {
         this.detectionConfig = Objects.requireNonNull(detectionConfig, "detectionConfig");
         this.autoTuneMaxCandidateFrames = normalizeAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
+        this.variableStarReportOptions = Objects.requireNonNull(variableStarReportOptions, "variableStarReportOptions");
     }
+
+    public VariableStarReportOptions getVariableStarReportOptions() { return variableStarReportOptions; }
 
     public DetectionConfig getDetectionConfig() {
         return detectionConfig;

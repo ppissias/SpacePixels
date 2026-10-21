@@ -1,6 +1,8 @@
 package eu.startales.spacepixels.config;
 
 public class AppConfig {
+    /** Supplied by the detection profile/request; excluded from the separate astrometry configuration file. */
+    public transient VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
     public String astapExecutablePath = "";
     public String observatoryCode = "";
     public String imageRA = "";

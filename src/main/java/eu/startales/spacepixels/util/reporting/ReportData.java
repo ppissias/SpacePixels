@@ -20,11 +20,13 @@ final class ReportData {
     final ReportInclusion inclusion;
     final String generatedAtUtc = Instant.now().toString();
     private final int totalFrames;
+    private final eu.startales.spacepixels.config.VariableStarReportOptions variableStarOptions;
     private final Map<Integer, Finding> variablesByStar;
 
     private ReportData(DetectionReportContext context, PipelineTelemetry telemetry, VariableStarAnalysis variables,
                        List<ResidualTransientAnalysis.CommonMotionGroup> groups, ReportInclusion inclusion) {
         this.inclusion = inclusion;
+        variableStarOptions = context.settings.getVariableStarReportOptions();
         totalFrames = context.rawFrames.size();
         Set<Integer> rejected = new HashSet<>(UnclassifiedTransientSectionWriter.rejectedFrameIndices(telemetry));
         if (telemetry != null) for (var frame : telemetry.frameQualityStats) if (frame.rejected) rejected.add(frame.frameIndex);
@@ -51,16 +53,18 @@ final class ReportData {
         }
         List<StarLightCurve> candidates = new ArrayList<>();
         if (inclusion.variableStars && variables != null && variables.readiness != null && variables.readiness.allowsScoring()) {
-            for (StarLightCurve star : variables.candidates) {
+            var presentation = context.variablePresentation(variables);
+            candidates.addAll(presentation.identities);
+            for (StarLightCurve star : presentation.ordered) {
                 if (star.tier == VariabilityTier.HIGH_CONFIDENCE || star.tier == VariabilityTier.POSSIBLE) {
-                    candidates.add(star);
+                    int number = presentation.number(star);
                     List<Integer> frames = new ArrayList<>();
                     for (int j = 0; j < variables.frames.size() && j < star.flags.length; j++) {
                         if (star.flags[j] == 0 && Double.isFinite(star.deltaMag[j])) frames.add(variables.frames.get(j).frameIndex + 1);
                     }
-                    add(output, context, "V" + candidates.size(), "Variable-star candidate", star.x, star.y, List.of(), star.id, star.tier.name());
+                    add(output, context, "V" + number, "Variable-star candidate", star.x, star.y, List.of(), star.id, star.tier.name());
                     Finding f = output.remove(output.size() - 1);
-                    output.add(new Finding(f.id, f.category, candidates.size() <= 40 ? "variable-v" + candidates.size() : "variable-candidates",
+                    output.add(new Finding(f.id, f.category, presentation.hasCard(star) ? "variable-v" + number : "variable-candidates",
                             f.x, f.y, f.raDegrees, f.decDegrees, List.copyOf(frames), star.id, f.tier));
                 }
             }
@@ -135,6 +139,7 @@ final class ReportData {
         data.put("frameNumbering", "one-based; empty frames on stack candidates means per-frame evidence is unavailable");
         data.put("rejectedFrames", rejectedFrames.stream().sorted().map(i -> i + 1).toList());
         data.put("includedGroups", inclusion); data.put("findings", findings);
+        data.put("variableStarPresentation", variableStarOptions);
         try (var file = new AtomicReportFile(new File(directory, "report-data.json"))) {
             new GsonBuilder().setPrettyPrinting().create().toJson(data, file.writer()); file.commit();
         }

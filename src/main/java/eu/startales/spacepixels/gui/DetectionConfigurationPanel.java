@@ -13,6 +13,7 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.config.DetectionSettingsRules;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
+import eu.startales.spacepixels.config.VariableStarReportOptions;
 import eu.startales.spacepixels.config.SpacePixelsSettingsFiles;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
@@ -50,6 +51,8 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private volatile DetectionConfig jTransientConfig;
     private volatile int autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
+    private VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
+    private VariableStarReportOptions savedVariableStarReportOptions;
     private final File detectionProfileFile = new File(System.getProperty("user.home"), SpacePixelsDetectionProfileIO.DEFAULT_FILENAME);
     private final File legacyDetectionProfileFile = new File(System.getProperty("user.home"), SpacePixelsDetectionProfileIO.LEGACY_FILENAME);
     private final File visualizationPreferencesFile = new File(System.getProperty("user.home"), SpacePixelsVisualizationPreferencesIO.DEFAULT_FILENAME);
@@ -93,6 +96,8 @@ public class DetectionConfigurationPanel extends JPanel {
 
     // --- Variable-star photometry ---
     private JCheckBox chkEnableVariableStarDetection;
+    private JSpinner spinVariableMaxCandidateCards;
+    private JComboBox<VariableStarReportOptions.SortOrder> cmbVariableStarSortOrder;
     private JSpinner spinPhotometryMaxStars, spinPhotometryMinSnr;
     private JSpinner spinLinearityMaxConcentrationDrift, spinLinearityMinRangeMag;
     private JSpinner spinLinearityMaxFrameSlope;
@@ -455,6 +460,8 @@ public class DetectionConfigurationPanel extends JPanel {
                 ((JSpinner) c).addChangeListener(e -> onSettingEdited());
             } else if (c instanceof JCheckBox) {
                 ((JCheckBox) c).addItemListener(e -> onSettingEdited());
+            } else if (c instanceof JComboBox && c != cmbFrameRejection) {
+                ((JComboBox<?>) c).addActionListener(e -> onSettingEdited());
             } else if (c instanceof Container) {
                 installAutoApply((Container) c);
             }
@@ -495,6 +502,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private void rememberSavedState() {
         savedConfig = jTransientConfig.clone();
         savedAutoTuneMaxCandidateFrames = autoTuneMaxCandidateFrames;
+        savedVariableStarReportOptions = variableStarReportOptions;
         savedVisualization = SpacePixelsVisualizationPreferences.captureCurrent();
         savedSnapshot = currentSnapshot();
         // The saved configuration is what changes are marked against (not the built-in starting values).
@@ -504,7 +512,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private String currentSnapshot() {
         StringWriter writer = new StringWriter();
-        SpacePixelsDetectionProfileIO.write(writer, jTransientConfig, autoTuneMaxCandidateFrames);
+        SpacePixelsDetectionProfileIO.write(writer, jTransientConfig, autoTuneMaxCandidateFrames, variableStarReportOptions);
         SpacePixelsVisualizationPreferencesIO.write(writer, SpacePixelsVisualizationPreferences.captureCurrent());
         return writer.toString();
     }
@@ -533,6 +541,7 @@ public class DetectionConfigurationPanel extends JPanel {
             return;
         }
         jTransientConfig = savedConfig.clone();
+        variableStarReportOptions = savedVariableStarReportOptions;
         updateSpinnersFromConfig(jTransientConfig);
         savedVisualization.applyToRuntime();
         updateVisualizationSpinnersFromRuntime();
@@ -622,6 +631,7 @@ public class DetectionConfigurationPanel extends JPanel {
                 SpacePixelsDetectionProfile detectionProfile = SpacePixelsDetectionProfileIO.load(reader);
                 jTransientConfig = detectionProfile.getDetectionConfig();
                 autoTuneMaxCandidateFrames = detectionProfile.getAutoTuneMaxCandidateFrames();
+                variableStarReportOptions = detectionProfile.getVariableStarReportOptions();
                 try (FileReader migrationReader = new FileReader(profileToLoad)) {
                     if (SpacePixelsDetectionProfileIO.needsMigration(migrationReader)) {
                         SwingUtilities.invokeLater(() -> offerDetectionProfileMigration(profileToLoad, detectionProfile));
@@ -636,6 +646,7 @@ public class DetectionConfigurationPanel extends JPanel {
         }
         jTransientConfig = new DetectionConfig();
         autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
+        variableStarReportOptions = VariableStarReportOptions.DEFAULT;
         SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
     }
 
@@ -688,7 +699,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
         try {
             SpacePixelsSettingsFiles.save(
-                    detectionProfileFile, new SpacePixelsDetectionProfile(settings, autoTuneMaxCandidateFrames),
+                    detectionProfileFile, new SpacePixelsDetectionProfile(settings, autoTuneMaxCandidateFrames, variableStarReportOptions),
                     visualizationPreferencesFile, SpacePixelsVisualizationPreferences.captureCurrent());
         } catch (IOException e) {
             // Nothing is marked as saved, so the changes keep showing as unsaved.
@@ -706,6 +717,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private void loadDetectionDefaults() {
         jTransientConfig = new DetectionConfig();
+        variableStarReportOptions = VariableStarReportOptions.DEFAULT;
         updateSpinnersFromConfig(jTransientConfig);
         overviewPanel.forgetTunedValues();
         updateSavedState();
@@ -980,6 +992,16 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Common Settings"));
         chkEnableVariableStarDetection = addCheckboxRow(panel, "Enable Variable-Star Detection", "Run stationary-star photometry and variable-star detection after moving-object tracking.<br>Adds processing time proportional to stars x frames.", jTransientConfig.enableVariableStarDetection);
 
+        panel.add(createSectionHeader("Report Presentation"));
+        spinVariableMaxCandidateCards = addRow(panel, "Maximum Detailed Candidate Cards",
+                "Maximum variable-star cards with full light curves and cutouts in the report (default 40).<br>Set 60 for a longer report. The table, field maps and CSVs still include every candidate.",
+                intSpinnerModel(variableStarReportOptions.maxCandidateCards(), 1, VariableStarReportOptions.MAX_CANDIDATE_CARDS, 1));
+        cmbVariableStarSortOrder = new JComboBox<>(VariableStarReportOptions.SortOrder.values());
+        cmbVariableStarSortOrder.setSelectedItem(variableStarReportOptions.sortOrder());
+        addSettingRow(panel, "Candidate Presentation Order",
+                "High confidence first; V numbers stay fixed.<br>Observed changes: up-and-down, dips and peaks, then larger Δmag.<br>Known periods: saved VSX matches; unknown periods last in each tier.",
+                cmbVariableStarSortOrder);
+
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Candidate Thresholds"));
         spinVariableScoreSigma = addRow(panel, "Variability Score Sigma", "How far above same-brightness stars both the scatter score and the Stetson J score must be for a star to become a candidate.<br>Higher values give fewer, safer candidates.", doubleSpinnerModel(jTransientConfig.variableScoreSigma, 1.0, 50.0, 0.5));
@@ -1019,6 +1041,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
         panel.add(createSectionHeader("Frame Rejection"));
         cmbFrameRejection = new JComboBox<>(new DefaultComboBoxModel<>(FRAME_REJECTION_PRESETS));
+        cmbFrameRejection.putClientProperty(SettingRow.PRESET_CHOOSER, true);
         cmbFrameRejection.setPreferredSize(new Dimension(110, 26));
         addSettingRow(panel, "Strictness", "How readily frames that differ from the rest of the session are left out. Normal uses the default limits; Lenient keeps more frames, Strict leaves out more.<br>The individual limits are expert settings; changing one shows Custom.", cmbFrameRejection);
 
@@ -1406,6 +1429,10 @@ public class DetectionConfigurationPanel extends JPanel {
 
             autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
             SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
+            variableStarReportOptions = new VariableStarReportOptions(((Number) spinVariableMaxCandidateCards.getValue()).intValue(),
+                    (VariableStarReportOptions.SortOrder) cmbVariableStarSortOrder.getSelectedItem());
+            if (mainAppWindow.getImageProcessing() != null)
+                mainAppWindow.getImageProcessing().getAppConfig().variableStarReportOptions = variableStarReportOptions;
 
             jTransientConfig.starCountSigmaDeviation = ((Number) spinStarCountSigma.getValue()).doubleValue();
             jTransientConfig.fwhmSigmaDeviation = ((Number) spinFwhmSigma.getValue()).doubleValue();
@@ -1516,6 +1543,8 @@ public class DetectionConfigurationPanel extends JPanel {
 
     /** A new session, or none: the Overview shows it, and the master stack of the last one is dropped. */
     void sessionChanged(FitsFileInformation[] filesInfo) {
+        if (mainAppWindow.getImageProcessing() != null)
+            mainAppWindow.getImageProcessing().getAppConfig().variableStarReportOptions = variableStarReportOptions;
         cachedMasterStack = null;
         cachedStackFiles = null;
         if (filesInfo.length == 0) {
@@ -1583,6 +1612,8 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void setSpinnersFromConfig(DetectionConfig config) {
+        setSpinnerValueClamped(spinVariableMaxCandidateCards, variableStarReportOptions.maxCandidateCards());
+        cmbVariableStarSortOrder.setSelectedItem(variableStarReportOptions.sortOrder());
         setSpinnerValueClamped(spinMasterSigma, config.masterSigmaMultiplier);
         setSpinnerValueClamped(spinDetectionSigma, config.detectionSigmaMultiplier);
         setSpinnerValueClamped(spinGrowSigma, config.growSigmaMultiplier);

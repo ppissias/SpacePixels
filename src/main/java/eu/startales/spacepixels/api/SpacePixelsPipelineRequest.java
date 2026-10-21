@@ -8,6 +8,7 @@
 package eu.startales.spacepixels.api;
 
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
+import eu.startales.spacepixels.config.VariableStarReportOptions;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import eu.startales.spacepixels.util.AutoTunerRunner;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
@@ -31,6 +32,7 @@ public final class SpacePixelsPipelineRequest {
     private final InputPreparationMode inputPreparationMode;
     private final NegativeValueHandling negativeValueHandling;
     private final boolean generateReport;
+    private final VariableStarReportOptions variableStarReportOptions;
     private final SpacePixelsProgressListener progressListener;
 
     private SpacePixelsPipelineRequest(Builder builder) {
@@ -42,6 +44,7 @@ public final class SpacePixelsPipelineRequest {
         this.inputPreparationMode = builder.inputPreparationMode;
         this.negativeValueHandling = builder.negativeValueHandling;
         this.generateReport = builder.generateReport;
+        this.variableStarReportOptions = builder.variableStarReportOptions;
         this.progressListener = builder.progressListener;
     }
 
@@ -128,6 +131,9 @@ public final class SpacePixelsPipelineRequest {
         return generateReport;
     }
 
+    /** Presentation-only choices for variable-star cards; never applied to the engine. */
+    public VariableStarReportOptions getVariableStarReportOptions() { return variableStarReportOptions; }
+
     /**
      * Returns the optional progress listener.
      *
@@ -149,10 +155,17 @@ public final class SpacePixelsPipelineRequest {
         private InputPreparationMode inputPreparationMode = InputPreparationMode.FAIL_IF_NOT_READY;
         private NegativeValueHandling negativeValueHandling = NegativeValueHandling.ADD_OFFSET;
         private boolean generateReport = true;
+        private VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
         private SpacePixelsProgressListener progressListener;
 
         private Builder(File inputDirectory) {
             this.inputDirectory = Objects.requireNonNull(inputDirectory, "inputDirectory");
+        }
+
+        /** Sets the card limit and display order, retaining fixed report candidate identities. */
+        public Builder variableStarReportOptions(VariableStarReportOptions options) {
+            this.variableStarReportOptions = Objects.requireNonNull(options, "options");
+            return this;
         }
 
         /**

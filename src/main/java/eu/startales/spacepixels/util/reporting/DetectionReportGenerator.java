@@ -1252,7 +1252,9 @@ public class DetectionReportGenerator {
                                                   ReportInclusion inclusion,
                                                   ReportProgress progress) throws IOException {
         progress.step(0, 2, "preparing");
-        ExportVisualizationSettings settings = snapshotCurrentExportVisualizationSettings();
+        ExportVisualizationSettings settings = snapshotCurrentExportVisualizationSettings().withVariableStarReportOptions(
+                appConfig != null && appConfig.variableStarReportOptions != null ? appConfig.variableStarReportOptions
+                        : eu.startales.spacepixels.config.VariableStarReportOptions.DEFAULT);
 
         // Extract variables from the PipelineResult and normalize newer track categories for rendering.
         List<TrackLinker.Track> tracks = result.tracks != null ? result.tracks : new ArrayList<>();

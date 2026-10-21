@@ -34,6 +34,8 @@ public final class SpacePixelsDetectionProfileIO {
     public static final String LEGACY_FILENAME = "spacepixels_jtransient.json";
 
     private static final String AUTO_TUNE_MAX_CANDIDATE_FRAMES_FIELD = "autoTuneMaxCandidateFrames";
+    private static final String VARIABLE_CARD_LIMIT_FIELD = "variableStarMaxCandidateCards";
+    private static final String VARIABLE_SORT_ORDER_FIELD = "variableStarSortOrder";
     private static final String QUALITY_GROW_SIGMA_MULTIPLIER_FIELD = "qualityGrowSigmaMultiplier";
     private static final String QUALITY_MAX_ELONGATION_FOR_FWHM_FIELD = "qualityMaxElongationForFwhm";
     private static final String LEGACY_GROW_SIGMA_MULTIPLIER_FIELD = "growSigmaMultiplier";
@@ -64,14 +66,27 @@ public final class SpacePixelsDetectionProfileIO {
             }
         }
 
+        VariableStarReportOptions options;
+        try {
+            int limit = root.has(VARIABLE_CARD_LIMIT_FIELD) ? root.get(VARIABLE_CARD_LIMIT_FIELD).getAsBigDecimal().intValueExact()
+                    : VariableStarReportOptions.DEFAULT_MAX_CANDIDATE_CARDS;
+            var order = root.has(VARIABLE_SORT_ORDER_FIELD)
+                    ? VariableStarReportOptions.SortOrder.valueOf(root.get(VARIABLE_SORT_ORDER_FIELD).getAsString())
+                    : VariableStarReportOptions.DEFAULT.sortOrder();
+            options = new VariableStarReportOptions(limit, order);
+        } catch (RuntimeException e) {
+            throw new IOException("Invalid variable-star report presentation settings.", e);
+        }
         setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
-        return new SpacePixelsDetectionProfile(detectionConfig, autoTuneMaxCandidateFrames);
+        return new SpacePixelsDetectionProfile(detectionConfig, autoTuneMaxCandidateFrames, options);
     }
 
     public static boolean needsMigration(Reader reader) throws IOException {
         JsonObject saved = readRoot(reader);
         JsonObject current = GSON.toJsonTree(new DetectionConfig()).getAsJsonObject();
         current.addProperty(AUTO_TUNE_MAX_CANDIDATE_FRAMES_FIELD, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES);
+        current.addProperty(VARIABLE_CARD_LIMIT_FIELD, VariableStarReportOptions.DEFAULT_MAX_CANDIDATE_CARDS);
+        current.addProperty(VARIABLE_SORT_ORDER_FIELD, VariableStarReportOptions.DEFAULT.sortOrder().name());
         return !saved.keySet().equals(current.keySet());
     }
 
@@ -105,14 +120,22 @@ public final class SpacePixelsDetectionProfileIO {
     }
 
     public static void write(Writer writer, SpacePixelsDetectionProfile detectionProfile) {
-        write(writer, detectionProfile.getDetectionConfig(), detectionProfile.getAutoTuneMaxCandidateFrames());
+        write(writer, detectionProfile.getDetectionConfig(), detectionProfile.getAutoTuneMaxCandidateFrames(),
+                detectionProfile.getVariableStarReportOptions());
     }
 
     public static void write(Writer writer, DetectionConfig detectionConfig, int autoTuneMaxCandidateFrames) {
+        write(writer, detectionConfig, autoTuneMaxCandidateFrames, VariableStarReportOptions.DEFAULT);
+    }
+
+    public static void write(Writer writer, DetectionConfig detectionConfig, int autoTuneMaxCandidateFrames,
+                             VariableStarReportOptions options) {
         JsonObject root = GSON.toJsonTree(detectionConfig).getAsJsonObject();
         root.addProperty(
                 AUTO_TUNE_MAX_CANDIDATE_FRAMES_FIELD,
                 SpacePixelsDetectionProfile.normalizeAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames));
+        root.addProperty(VARIABLE_CARD_LIMIT_FIELD, options.maxCandidateCards());
+        root.addProperty(VARIABLE_SORT_ORDER_FIELD, options.sortOrder().name());
         GSON.toJson(root, writer);
     }
 

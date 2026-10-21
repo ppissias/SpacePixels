@@ -112,6 +112,7 @@ public class BatchDetectionCli {
                 .autoTuneProfile(cliArguments.autoTuneProfile)
                 .autoTuneAlgorithm(cliArguments.autoTuneAlgorithm)
                 .autoTuneMaxCandidateFrames(detectionProfile.getAutoTuneMaxCandidateFrames())
+                .variableStarReportOptions(detectionProfile.getVariableStarReportOptions())
                 .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
                 .generateReport(true)
                 .progressListener(DebugOutput.isEnabled() ? createConsoleProgressListener("Pipeline", out) : null)
@@ -236,7 +237,7 @@ public class BatchDetectionCli {
         out.println();
         out.println("Notes:");
         out.println("  - The input directory must contain only uncompressed unsigned 16-bit (BZERO 32768) monochrome FITS files with identical dimensions.");
-        out.println("  - The configuration JSON should be a SpacePixels detection profile JSON (flat DetectionConfig fields plus autoTuneMaxCandidateFrames).");
+        out.println("  - The configuration JSON should be a SpacePixels detection profile (flat DetectionConfig fields, autoTuneMaxCandidateFrames and variable-star report presentation).");
         out.println("  - Packaged distributions include config/default_detection_profile.json as a starting point.");
         out.println("  - When Auto-Tune is enabled, the tuned configuration is used for the pipeline run and exported with the report.");
         out.println("  - Only the report path and problems are printed; add -D" + DebugOutput.PROPERTY + "=true to the JVM options for progress and diagnostics.");

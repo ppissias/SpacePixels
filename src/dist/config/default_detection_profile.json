@@ -106,5 +106,7 @@
   "variableSystematicsResponseFactor": 2.0,
   "variableLocalRadiusPixels": 100.0,
   "variableMaxLocalCorrelation": 0.3,
-  "autoTuneMaxCandidateFrames": 30
+  "autoTuneMaxCandidateFrames": 30,
+  "variableStarMaxCandidateCards": 40,
+  "variableStarSortOrder": "OBSERVED_CHANGES"
 }
