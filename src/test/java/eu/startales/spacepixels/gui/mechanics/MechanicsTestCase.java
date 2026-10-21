@@ -2,7 +2,10 @@ package eu.startales.spacepixels.gui.mechanics;
 
 import com.formdev.flatlaf.FlatDarkLaf;
 import eu.startales.spacepixels.gui.ApplicationWindow;
+import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.reporting.ReportLookupProxyServer;
+import org.assertj.swing.finder.JFileChooserFinder;
+import org.assertj.swing.fixture.JFileChooserFixture;
 import org.assertj.swing.edt.GuiActionRunner;
 import org.assertj.swing.fixture.FrameFixture;
 import org.assertj.swing.junit.testcase.AssertJSwingJUnitTestCase;
@@ -35,6 +38,7 @@ abstract class MechanicsTestCase extends AssertJSwingJUnitTestCase {
     private PreferenceSnapshot preferences;
     private ApplicationWindow application;
     private FrameFixture window;
+    private int sequenceCount;
 
     @Override
     protected void onSetUp() throws Exception {
@@ -150,5 +154,24 @@ abstract class MechanicsTestCase extends AssertJSwingJUnitTestCase {
 
     final String showingLabel(String text) {
         return window.label(VisibleText.labelContaining(text)).target().getText();
+    }
+
+    /** Imports a fresh synthetic monochrome sequence through the folder chooser and returns its folder. */
+    final Path importSyntheticSequence() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(
+                folder.newFolder("data-" + sequenceCount++).toPath(), "session", SyntheticDatasetFactory.DEFAULT_FRAME_COUNT);
+        importFolder(sequence);
+        return sequence;
+    }
+
+    /** Imports this folder through the folder chooser and waits until the prepare line names the frames. */
+    final void importFolder(Path sequence) {
+        window.button(VisibleText.button("Import Aligned Frames…")).click();
+        JFileChooserFixture chooser = JFileChooserFinder.findFileChooser().withTimeout(15_000).using(robot());
+        chooser.selectFile(sequence.toFile());
+        chooser.approve();
+        String frames = SyntheticDatasetFactory.DEFAULT_FRAME_COUNT + " frames";
+        waitFor("the prepare line names the imported frames",
+                () -> showingLabel("Monochrome").contains(frames));
     }
 }

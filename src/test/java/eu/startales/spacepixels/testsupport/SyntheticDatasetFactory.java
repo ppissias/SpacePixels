@@ -47,6 +47,29 @@ public final class SyntheticDatasetFactory {
         return sequenceDirectory;
     }
 
+    /**
+     * The same frames as {@link #createMono16FitsSequence}, with a TAN plate solution so the file table says Solved.
+     * The reference pixel is the centre of the {@link #DEFAULT_WIDTH} by {@link #DEFAULT_HEIGHT} frame.
+     */
+    public static Path createSolvedMono16FitsSequence(Path rootDirectory, String directoryName, int frameCount) throws Exception {
+        Path sequenceDirectory = Files.createDirectories(rootDirectory.resolve(directoryName));
+        for (int i = 0; i < frameCount; i++) {
+            Map<String, Object> headers = standardHeaderValues(i);
+            headers.put("CTYPE1", "RA---TAN");
+            headers.put("CTYPE2", "DEC--TAN");
+            headers.put("CRPIX1", (DEFAULT_WIDTH + 1) / 2.0d);
+            headers.put("CRPIX2", (DEFAULT_HEIGHT + 1) / 2.0d);
+            headers.put("CRVAL1", 56.0d);
+            headers.put("CRVAL2", 24.0d);
+            headers.put("CD1_1", -0.001d);
+            headers.put("CD1_2", 0.0d);
+            headers.put("CD2_1", 0.0d);
+            headers.put("CD2_2", 0.001d);
+            writeFits(sequenceDirectory.resolve(frameFilename(i)), createMono16Frame(), headers);
+        }
+        return sequenceDirectory;
+    }
+
     public static Path createMono32FloatFitsSequence(Path rootDirectory, String directoryName, int frameCount) throws Exception {
         Path sequenceDirectory = Files.createDirectories(rootDirectory.resolve(directoryName));
         for (int i = 0; i < frameCount; i++) {

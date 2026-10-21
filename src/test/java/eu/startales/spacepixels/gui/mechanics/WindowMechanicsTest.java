@@ -107,20 +107,6 @@ public class WindowMechanicsTest extends MechanicsTestCase {
         requireButton("Blink Selected", true);
     }
 
-    private int sequenceCount;
-
-    private void importSyntheticSequence() throws Exception {
-        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(
-                folder.newFolder("data-" + sequenceCount++).toPath(), "session", SyntheticDatasetFactory.DEFAULT_FRAME_COUNT);
-        window().button(VisibleText.button("Import Aligned Frames…")).click();
-        JFileChooserFixture chooser = JFileChooserFinder.findFileChooser().withTimeout(15_000).using(robot());
-        chooser.selectFile(sequence.toFile());
-        chooser.approve();
-        String frames = SyntheticDatasetFactory.DEFAULT_FRAME_COUNT + " frames";
-        waitFor("the prepare line names the imported frames",
-                () -> showingLabel("Monochrome").contains(frames));
-    }
-
     /**
      * Stops the blink from the control that is on screen. A fast load is already playing, and its window covers
      * Stop Blinking, so that window is moved down first.

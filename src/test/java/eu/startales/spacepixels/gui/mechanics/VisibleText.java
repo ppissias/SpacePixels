@@ -3,7 +3,9 @@ package eu.startales.spacepixels.gui.mechanics;
 import org.assertj.swing.core.GenericTypeMatcher;
 
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JLabel;
+import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import java.awt.Component;
 import java.awt.Container;
@@ -24,6 +26,21 @@ final class VisibleText {
                 return text.equals(component.getText());
             }
         };
+    }
+
+    static GenericTypeMatcher<JCheckBox> checkBox(String text) {
+        return new GenericTypeMatcher<>(JCheckBox.class, true) {
+            @Override
+            protected boolean isMatching(JCheckBox component) {
+                return text.equals(component.getText());
+            }
+        };
+    }
+
+    static List<JSlider> showingSliders(Component root) {
+        List<JSlider> sliders = new ArrayList<>();
+        collectSliders(root, sliders);
+        return sliders;
     }
 
     static GenericTypeMatcher<JLabel> labelContaining(String text) {
@@ -80,6 +97,17 @@ final class VisibleText {
             }
         }
         return null;
+    }
+
+    private static void collectSliders(Component component, List<JSlider> sliders) {
+        if (component instanceof JSlider slider && slider.isShowing()) {
+            sliders.add(slider);
+        }
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                collectSliders(child, sliders);
+            }
+        }
     }
 
     private static void collectSpinners(Component component, List<JSpinner> spinners) {
