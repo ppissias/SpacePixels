@@ -1,0 +1,91 @@
+plugins {
+    id 'java'
+}
+
+def metadataMode = providers.gradleProperty('consumerMetadata').orElse('gradle').get()
+if (!(metadataMode in ['gradle', 'pom'])) throw new GradleException('consumerMetadata must be gradle or pom.')
+def stagedGroups = providers.gradleProperty('stagedLibraryGroups').orElse('').get().split(',').findAll { it }
+
+repositories {
+    maven {
+        url = providers.gradleProperty('consumerRepository').get()
+        content {
+            includeGroup 'eu.startales.spacepixels'
+            stagedGroups.each { includeGroup it }
+        }
+        if (metadataMode == 'pom') {
+            metadataSources {
+                mavenPom()
+                ignoreGradleMetadataRedirection()
+            }
+        }
+    }
+    mavenCentral {
+        if (metadataMode == 'pom') {
+            metadataSources {
+                mavenPom()
+                ignoreGradleMetadataRedirection()
+            }
+        }
+    }
+}
+
+configurations.configureEach {
+    resolutionStrategy.useGlobalDependencySubstitutionRules = false
+}
+
+dependencies {
+    testImplementation "eu.startales.spacepixels:spacepixels-core:${providers.gradleProperty('spacepixelsVersion').get()}"
+    testImplementation 'junit:junit:4.13.2'
+}
+
+sourceSets {
+    fixtures {
+        java {
+            srcDirs = ['fixtures', '../test/java']
+            include 'eu/startales/spacepixels/testsupport/SyntheticDatasetFactory.java'
+            include 'eu/startales/spacepixels/consumer/ConsumerDatasetFactory.java'
+        }
+        compileClasspath = configurations.testRuntimeClasspath
+    }
+    test {
+        java.srcDirs = ['java']
+        compileClasspath += sourceSets.fixtures.output
+        runtimeClasspath += sourceSets.fixtures.output
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+tasks.register('verifyRuntime') {
+    doLast {
+        def resolution = configurations.testRuntimeClasspath.incoming.resolutionResult
+        def unexpectedProjects = resolution.allComponents.findAll { component ->
+            component.id instanceof org.gradle.api.artifacts.component.ProjectComponentIdentifier && component.id != resolution.root.id
+        }
+        def modules = resolution.allComponents.findAll { it.moduleVersion != null }*.moduleVersion
+        if (unexpectedProjects || modules.any { it.group == 'com.formdev' ||
+                (it.group == 'eu.startales.spacepixels' && it.name != 'spacepixels-core') }) {
+            throw new GradleException('Consumer resolved a project/composite or desktop dependency instead of the headless artifact.')
+        }
+        if (!modules.any { it.group == 'eu.startales.spacepixels' && it.name == 'spacepixels-core' }) {
+            throw new GradleException('Consumer did not resolve the core module from Maven metadata.')
+        }
+        if (configurations.testRuntimeClasspath.files.any { !it.name.endsWith('.jar') }) {
+            throw new GradleException('The consumer dependency classpath must contain packaged JARs only.')
+        }
+    }
+}
+
+tasks.named('test') {
+    dependsOn tasks.named('verifyRuntime')
+    inputs.property('consumerMetadata', metadataMode)
+    systemProperty 'java.awt.headless', 'true'
+    systemProperty 'spacepixels.expectedVersion', providers.gradleProperty('spacepixelsVersion').get()
+    systemProperty 'user.home', layout.buildDirectory.dir('test-home').get().asFile.absolutePath
+    doFirst { layout.buildDirectory.dir('test-home').get().asFile.mkdirs() }
+    testLogging { events 'passed', 'failed' }
+}

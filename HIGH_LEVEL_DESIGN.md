@@ -16,7 +16,7 @@ Related documents:
 
 ## 1. System Summary
 
-SpacePixels is a single Gradle Java application with three entry surfaces:
+SpacePixels has a headless Gradle `:core` Java-library module and a root desktop/tool module, with three entry surfaces:
 
 - Swing desktop application: `eu.startales.spacepixels.gui.ApplicationWindow`
 - Public Java embedding API: `eu.startales.spacepixels.api`
@@ -205,6 +205,8 @@ Important classes:
 `ImageProcessing` remains the public compatibility facade. All `util` sources, including reporting/catalogue helpers, have no Swing/GUI dependencies; headless AWT image rendering remains permitted. Shared HDU discovery and directory listing are separate helpers. Import owns its bounded pool, closed by the facade. Solver/converter services own their loggers rather than loading the application window. The deprecated `applyWCSHeader` and `onlyStretch` signatures delegate to the batch service, preserving existing outputs.
 
 The window explicitly injects `gui.GuiFitsImportInteraction` through `FitsImportTask` into the facade's interaction-taking factory and exposure-group decisions. Factories without interaction validate strictly and never create dialogs. `MainApplicationPanel` injects `gui.GuiDetectionReportPrompt` callbacks into normal/iterative jobs; only this GUI adapter builds the report-size question on the EDT. The threshold remains 50, and iterative callbacks use each pass's subset/WCS and effective config. Accepted choices replace only the summary's `ReportInclusion`, consumed by export, not the measurements/config. Default task constructors and the retained deprecated summary confirmation method are noninteractive threshold guards; explicit null report callbacks permit export without asking. A declined import preserves the current session. These S13 boundaries are protected by recursive dependency tests and dialog/job tests; they do not implement D09/S14 run-wide context or category unification.
+
+F11 gives the headless implementation its own `eu.startales.spacepixels:spacepixels-core` publication, including API/config/session/util sources and reporting resources. Root owns GUI/jobs/tasks/tools and GUI icons and depends on core, so the existing desktop coordinate and distributions retain access to the same implementation without duplicate classes. Package names and source paths stay stable through complementary source sets. Binary/source/Javadoc and dependency-metadata checks plus an isolated Maven-resolved consumer protect this boundary. Headless graphics still require `java.desktop`; no scientific or S14 run-context behavior changes are part of this build split. See [developer build modules](DEVELOPER.md#build-modules-and-artifacts) and [publishing](PUBLISHING.md).
 
 ### `eu.startales.spacepixels.util.reporting`
 

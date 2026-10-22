@@ -60,6 +60,15 @@ public class DependencyRulesTest {
         assertNoReferences("util", "eu.startales.spacepixels.gui.", "javax.swing.");
     }
 
+    /** Keeps every core package independent of desktop workflows as well as Swing. */
+    @Test
+    public void corePackagesDoNotDependOnDesktopCode() throws IOException {
+        for (String packageName : List.of("api", "config", "session", "util")) {
+            assertNoReferences(packageName, "eu.startales.spacepixels.gui.", "eu.startales.spacepixels.tasks.",
+                    "eu.startales.spacepixels.jobs.", "eu.startales.spacepixels.tools.", "javax.swing.");
+        }
+    }
+
     /** Scans Java sources recursively for imports and qualified references across the selected boundary. */
     private static void assertNoReferences(String packageName, String... forbidden) throws IOException {
         Path directory = SOURCES.resolve(packageName);

@@ -10,7 +10,7 @@ Document new Java types (including nested types and tests) with their responsibi
 
 Read any applicable `AGENTS.md` before changing code. Local tool paths, sibling-build requirements and test-data locations can differ between machines. On Windows, consult the machine's `setpaths.bat` as directed there; it changes the working directory, so return to this repository before running project commands.
 
-Use **Java 21** for development and the checked-in Gradle wrapper (`gradlew.bat` on Windows, `./gradlew` on Linux/macOS). SpacePixels is one Gradle Java module containing the desktop application, public API and command-line tools. Configure the sibling libraries below before building.
+Use **Java 21** for development and the checked-in Gradle wrapper (`gradlew.bat` on Windows, `./gradlew` on Linux/macOS). SpacePixels has a headless `:core` Java-library module and the root desktop/tool module. Both compile for Java 21. Configure the sibling libraries below before building.
 
 | Read | For |
 |---|---|
@@ -48,6 +48,19 @@ For example, on Windows:
 Gradle builds the enabled library from its checkout and substitutes it for the published dependency, so changes are available without publishing a jar. The enabled checkout must exist. For a fresh checkout without `gradle.properties`, copy [gradle.properties.example](gradle.properties.example) and change both flags from `false` to `true`. Preserve any existing local configuration. Reload the Gradle project in IntelliJ after changing the flags.
 
 An explicit Gradle property takes precedence over its alternative environment variable. Use `-PuseLocalJTransientBuild=false -PuseLocalJPlateSolveBuild=false` to select both published dependencies even when local flags are enabled. Validate that combination separately before a release.
+
+## Build modules and artifacts
+
+| Module / coordinate | Owned sources and resources |
+|---|---|
+| `:core` / `eu.startales.spacepixels:spacepixels-core` | `api`, `config`, `session`, `util` (including reporting/catalogues), report JS/JSON and expanded `spacepixels-build.properties`; no GUI, jobs/tasks, tools, icons or FlatLaf |
+| Root / `eu.startales.spacepixels:spacepixels` | `gui`, `jobs`, `tasks`, `tools`, GUI icons and desktop/CLI distributions; re-exports `:core` through an `api` project dependency |
+
+Sources keep their existing `src/main/java` and `src/main/resources` paths. Explicit, complementary package/resource source sets compile each class/resource in exactly one module; do not copy core classes into the desktop JAR. The root test suite also keeps its paths and command/filter compatibility, testing against the compiled core dependency. Core's own `check` verifies binary/sources/Javadoc contents and POM/Gradle metadata. Application/tool tasks and `installDist` remain root commands and include both JARs automatically.
+
+`gradlew.bat check` additionally runs `coreConsumerTest`: a separate build under `src/consumerTest`, with project/composite substitution disabled, depending only on staged core coordinates plus JUnit. Fixture writers compile against the resolved runtime graph, not added production dependencies. Tests cover strict/automatic FITS/XISF preparation, calibrated Auto-Tune, engine DTOs, report resources and headless PNG output, and reject desktop classes/FlatLaf. For local siblings, `stageCoreConsumerDependencies` copies their resolved binaries and real generated publication POMs into the ignored `build/repos/consumer-test` repository. It does not publish them to Central or Maven Local. Published-pair/Java release certification remains JA-11; local staged-source success is not that certification. The nested build and verification scripts do not claim configuration-cache support.
+
+Each module has binary/sources/Javadoc publication and local signed bundle tasks, sharing `gradle/publishing.gradle`. Use `:core:mavenCentralBundle` for the core-only ZIP; the existing root `mavenCentralBundle` includes the desktop and core publications. Signing/developer validation is required only for Central staging, not the isolated consumer check. See [PUBLISHING.md](PUBLISHING.md) for paths and release gates.
 
 ## The packages
 
@@ -227,9 +240,7 @@ The report never changes the engine's results. The report's live lookups (SatChe
 
 The API is synchronous and closes its processor in `finally`; it does not drive desktop commands or install a GUI session. `FAIL_IF_NOT_READY` rejects inputs needing preparation; `AUTO_PREPARE_TO_16BIT_MONO` creates detection-ready output according to the request's negative-value policy. `BatchDetectionCli` is a thin client of the API; Gradle exposes it as `batchDetect` with `-PbatchArgs=...` (examples in [README.md](README.md)).
 
-The supported embedding surface is `eu.startales.spacepixels.api`, with the request/result types it exposes as documented in [API.md](API.md). The distributed JAR also contains GUI and internal services; their presence does not make them supported embedding contracts.
-
-S13 makes API execution Swing/GUI-independent, not its publication API-only: `build.gradle` still publishes the entire Java component with desktop code and the FlatLaf dependency. [F11](DESIGN-IMPROVEMENTS.md#headless-apicore-maven-central-artifact-f11) proposes a minimal headless API/core publication with a complete supporting-code/resource closure and separate dependency metadata. Headless AWT rendering remains necessary; do not simply package `api` alone or remove `java.desktop`.
+The supported embedding surface is `eu.startales.spacepixels.api`, with the request/result types it exposes as documented in [API.md](API.md). Prefer `spacepixels-core`; the desktop coordinate re-exports it transitively for compatibility. Core's supporting packages are still internal implementation details, not an expanded supported API. S13's Swing-independent execution and F11's separate publication are distinct guarantees. Headless AWT rendering remains necessary; do not simply package `api` alone or remove `java.desktop`.
 
 ## Persistence and outputs
 
@@ -252,6 +263,7 @@ Use the Gradle wrapper from the repository root. Tests use **JUnit 4**. The ordi
 
 ```powershell
 .\gradlew.bat test --tests "eu.startales.spacepixels.session.*" --tests "eu.startales.spacepixels.jobs.*"
+.\gradlew.bat coreConsumerTest
 .\gradlew.bat guiMechanicsTest
 .\gradlew.bat realDataTest -PrealDataRoot="C:/path/to/test-data"
 ```
@@ -264,7 +276,7 @@ Use the Gradle wrapper from the repository root. Tests use **JUnit 4**. The ordi
 - **GUI mechanics:** `guiMechanicsTest` requires an interactive desktop and uses the mouse for native-input cases. Its fixtures use a scratch `user.home` and restore Java preferences; changing `user.home` alone does not isolate Java preferences. Direct-EDT lifecycle checks and native-input wiring checks cover different behavior.
 - **Real data:** `realDataTest` runs the preparation/API/CLI integration harness on dataset subdirectories of `realDataRoot`. Use disposable copies: preparation and CLI export can create working directories and reports beside the data. The checked-in default path belongs to another environment; verify local paths through `AGENTS.md`. Other diagnostics under `src/test/java/.../tools` have their own opt-in settings.
 
-`-PtestMaxHeap=6g` increases the heap for Gradle `Test` tasks; it does not configure the `realDataTest` JavaExec task. Application and tool launchers normally allow up to 80% of host RAM; `batchDetect` also supports `-PbatchMaxHeap=8g`.
+`-PtestMaxHeap=6g` increases the heap for root Gradle `Test` tasks; it does not configure the nested consumer build or the `realDataTest` JavaExec task. Application and tool launchers normally allow up to 80% of host RAM; `batchDetect` also supports `-PbatchMaxHeap=8g`.
 
 For console diagnostics, use `.\gradlew.bat run -PspacepixelsDebug` or set `-Dspacepixels.debug=true` on the application JVM. `DebugOutput` controls per-frame details, timings and engine debug flags; normal application logging shows warnings and errors. `FailureDialog` offers Copy details with versions and the error.
 

@@ -17,20 +17,7 @@ def mainLauncherName = 'SpacePixels'
 def publicLauncherName = "Start${mainLauncherName}"
 def sharedJvmArgs = ["-XX:MaxRAMPercentage=80.0", "-XX:+UseG1GC"]
 def batchDetectJvmArgs = sharedJvmArgs + ["-Djava.awt.headless=true"]
-def githubRepoUrl = 'https://github.com/ppissias/SpacePixels'
-def githubRepoScmUrl = 'https://github.com/ppissias/SpacePixels.git'
 def centralArtifactId = 'spacepixels'
-def centralStagingRepository = layout.buildDirectory.dir('repos/central-staging')
-
-def inMemorySigningKey = providers.gradleProperty('signingKey')
-        .map { it.replace("\\n", "\n") }
-        .orNull
-def inMemorySigningPassword = providers.gradleProperty('signingPassword').orNull
-def hasInMemorySigning = inMemorySigningKey != null && inMemorySigningPassword != null
-def hasLegacySigning = findProperty('signing.keyId') != null &&
-        findProperty('signing.password') != null &&
-        findProperty('signing.secretKeyRingFile') != null
-def signingConfigured = hasInMemorySigning || hasLegacySigning
 repositories {
     mavenCentral()
 }
@@ -45,6 +32,7 @@ base {
 
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
+    options.release = 21
 }
 
 java {
@@ -63,24 +51,22 @@ javadoc {
     }
 }
 
+sourceSets.main {
+    java.exclude 'eu/startales/spacepixels/api/**', 'eu/startales/spacepixels/config/**',
+            'eu/startales/spacepixels/session/**', 'eu/startales/spacepixels/util/**'
+    resources.exclude 'spacepixels-build.properties', 'eu/startales/spacepixels/util/**'
+}
+
 dependencies {
+    api project(':core')
     implementation 'gov.nasa.gsfc.heasarc:nom-tam-fits:1.21.2'
     implementation 'com.google.code.gson:gson:2.13.2'
     implementation 'com.formdev:flatlaf:3.4'
     implementation 'io.github.ppissias.jplatesolve:jplatesolve:1.0.1'
-    api 'io.github.ppissias.jtransient:jtransient:1.0.5'
     // Use JUnit test framework
     testImplementation 'junit:junit:4.13.2'
     // GUI mechanics tests (DESIGN-IMPROVEMENTS.md, "GUI mechanics tests"). Not part of the normal test task.
     testImplementation 'tokyo.northside:assertj-swing-junit:4.0.0-beta-3'
-}
-
-tasks.named('processResources') {
-    filesMatching('spacepixels-build.properties') {
-        expand(appVersion: project.version,
-                engineVersion: configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts
-                        .find { it.moduleVersion.id.group == 'io.github.ppissias.jtransient' }?.moduleVersion?.id?.version ?: 'local')
-    }
 }
 
 application {
@@ -229,123 +215,26 @@ tasks.register('realDataTest', JavaExec) {
     shouldRunAfter tasks.named('test')
 }
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-            artifactId = centralArtifactId
+ext.publicationArtifactId = centralArtifactId
+ext.publicationDisplayName = 'SpacePixels'
+apply from: 'gradle/publishing.gradle'
+apply from: 'gradle/core-consumer.gradle'
 
-            versionMapping {
-                usage('java-api') {
-                    fromResolutionOf('runtimeClasspath')
-                }
-                usage('java-runtime') {
-                    fromResolutionResult()
-                }
-            }
-
-            pom {
-                name = 'SpacePixels'
-                description = project.description
-                url = githubRepoUrl
-
-                licenses {
-                    license {
-                        name = 'BSD 2-Clause License'
-                        url = 'https://opensource.org/license/bsd-2-clause/'
-                        distribution = 'repo'
-                    }
-                }
-
-                developers {
-                    developer {
-                        id = providers.gradleProperty('pomDeveloperId')
-                        name = providers.gradleProperty('pomDeveloperName')
-                        email = providers.gradleProperty('pomDeveloperEmail')
-                        organization = providers.gradleProperty('pomDeveloperOrganization')
-                        organizationUrl = providers.gradleProperty('pomDeveloperOrganizationUrl')
-                    }
-                }
-
-                scm {
-                    connection = "scm:git:${githubRepoScmUrl}"
-                    developerConnection = 'scm:git:ssh://git@github.com/ppissias/SpacePixels.git'
-                    url = githubRepoUrl
-                }
-            }
-        }
-    }
-
-    repositories {
-        maven {
-            name = 'centralStaging'
-            url = centralStagingRepository
-        }
-    }
-}
-
-tasks.register('validateCentralReleaseConfiguration') {
-    group = 'publishing'
-    description = 'Checks that signing credentials are configured for Maven Central bundle generation.'
-
-    doLast {
-        if (!signingConfigured) {
-            throw new GradleException(
-                    'Central bundle generation requires signing credentials. ' +
-                            'Set ORG_GRADLE_PROJECT_signingKey and ORG_GRADLE_PROJECT_signingPassword, ' +
-                            'or configure signing.keyId/signing.password/signing.secretKeyRingFile.')
-        }
-        
-        def checkNotBlank = { String propName ->
-            def prop = providers.gradleProperty(propName).orNull
-            if (prop == null || prop.trim().isEmpty()) {
-                throw new GradleException("Missing required Gradle property for publication: '${propName}'.")
-            }
-        }
-        checkNotBlank('pomDeveloperId')
-        checkNotBlank('pomDeveloperName')
-        checkNotBlank('pomDeveloperEmail')
-        checkNotBlank('pomDeveloperOrganization')
-        checkNotBlank('pomDeveloperOrganizationUrl')
-    }
-}
-
-signing {
-    if (hasInMemorySigning) {
-        useInMemoryPgpKeys(inMemorySigningKey, inMemorySigningPassword)
-    }
-
-    if (signingConfigured) {
-        sign publishing.publications.mavenJava
-    }
-}
-
-tasks.withType(Sign).configureEach {
-    onlyIf('Central staging publication requested') {
-        gradle.taskGraph.allTasks.any { task ->
-            task.name == 'publishMavenJavaPublicationToCentralStagingRepository' ||
-                    task.name == 'publishAllPublicationsToCentralStagingRepository' ||
-                    task.name == 'bundleCentralPortal'
-        }
-    }
+tasks.named('check') {
+    dependsOn ':core:check', tasks.named('coreConsumerTest')
 }
 
 tasks.named('publishMavenJavaPublicationToCentralStagingRepository') {
-    dependsOn tasks.named('validateCentralReleaseConfiguration')
+    dependsOn ':core:publishMavenJavaPublicationToCentralStagingRepository'
 }
 
-tasks.register('bundleCentralPortal', Zip) {
-    description = 'Builds a Maven Central Portal upload bundle from the signed staged Maven repository.'
-    group = 'publishing'
-    dependsOn tasks.named('check')
-    dependsOn tasks.named('publishMavenJavaPublicationToCentralStagingRepository')
-    from centralStagingRepository
-    destinationDirectory = layout.buildDirectory.dir('distributions')
-    archiveFileName = "${centralArtifactId}-${project.version}-central-bundle.zip"
+tasks.named('publishMavenJavaPublicationToMavenLocal') {
+    dependsOn ':core:publishMavenJavaPublicationToMavenLocal'
 }
 
-tasks.register('mavenCentralBundle') {
-    description = 'Standard alias for bundleCentralPortal to keep release commands consistent across repositories.'
-    group = 'publishing'
-    dependsOn tasks.named('bundleCentralPortal')
+tasks.named('bundleCentralPortal', Zip) {
+    dependsOn tasks.named('coreConsumerTest')
+    from(layout.buildDirectory.dir('repos/central-staging')) {
+        include "${project.group.toString().replace('.', '/')}/spacepixels-core/${project.version}/**"
+    }
 }

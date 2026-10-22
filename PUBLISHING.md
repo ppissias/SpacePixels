@@ -1,8 +1,13 @@
 # Publishing SpacePixels
 
-This document covers publishing the current single-module SpacePixels artifact to Maven Central.
+This document covers preparing the headless core and desktop SpacePixels publications for Maven Central. Bundle tasks stage/sign locally; they never upload.
 
-The current publication includes desktop classes and declares the FlatLaf dependency even though API execution is headless. [F11: headless API/core artifact](DESIGN-IMPROVEMENTS.md#headless-apicore-maven-central-artifact-f11) proposes a separate minimal library publication with its own dependencies, sources/Javadocs and Central bundle. That split is not implemented; the commands and coordinates here still describe the desktop-inclusive artifact.
+| Coordinate | Contents |
+|---|---|
+| `eu.startales.spacepixels:spacepixels-core:<version>` | Headless API and supporting implementation/report resources; no desktop GUI/FlatLaf dependency |
+| `eu.startales.spacepixels:spacepixels:<version>` | Desktop/tools and icons, with a transitive API dependency on core; existing Maven/Gradle consumers retain API access |
+
+Both compile for Java 21 and provide binary, sources and Javadoc artifacts, POM and Gradle module metadata. Source package names are unchanged; the desktop JAR no longer duplicates core classes. Installed distributions include both JARs; manual classpaths must do the same. Core still uses headless AWT/`java.desktop` for images/reports.
 
 ## Maven Central publishing
 
@@ -54,29 +59,44 @@ export ORG_GRADLE_PROJECT_signingPassword="..."
 
 ## Build the Central bundle
 
-Run:
+First validate the packaging without signing or release credentials:
+
+```powershell
+.\gradlew.bat check coreConsumerTest
+.\gradlew.bat coreConsumerTest -PcoreConsumerMetadata=pom
+```
+
+`check` includes the core binary/sources/Javadoc/POM/Gradle-metadata checks, desktop/core ownership checks, ordinary tests and an isolated headless consumer build. Core is published unsigned to `build/repos/consumer-test`. With local composites enabled, the test also stages the local engine/solver binaries and their actual generated POMs there, without altering sibling publications or Maven Local. The consumer has no composite builds, disables global project substitution, and checks preparation, detection, calibrated Auto-Tune, reporting/assets and absence of GUI/FlatLaf. This proves packaging of the tested source pair, not that those dependencies are released to Central.
+
+The second command repeats the consumer checks using only Maven POM metadata, ignoring Gradle-module redirection; the default mode tests Gradle metadata. When a sibling flag is disabled, its group is excluded from the consumer's local staging repository, so stale staged source binaries cannot stand in for the selected published dependency.
+
+**Release gate (JA-11):** before distributing, publish/declare the engine/solver versions supplying the required APIs and validate the real supported published pair and Java baseline without local substitutions. Preserve the active-development flags; use explicit `-PuseLocalJTransientBuild=false -PuseLocalJPlateSolveBuild=false` for the separate published-pair check. Do not claim that an existing `1.0.5` coordinate necessarily contains the required JA-01 API. Inspect final bundles/metadata and complete desktop/CLI checks before upload.
+
+Build only the headless core bundle:
 
 ```bash
-./gradlew clean mavenCentralBundle
+./gradlew :core:mavenCentralBundle
 ```
 
 On Windows:
 
 ```powershell
-.\gradlew.bat clean mavenCentralBundle
+.\gradlew.bat :core:mavenCentralBundle
 ```
 
 This will:
 
 - run the normal checks
-- stage the signed Maven publication into `build/repos/central-staging`
-- create the final upload bundle in `build/distributions`
+- stage the signed core publication into `build/repos/central-staging`
+- create a ZIP containing only core's current-version Maven repository subtree
 
 Generated bundle:
 
 ```text
-build/distributions/spacepixels-<version>-central-bundle.zip
+core/build/distributions/spacepixels-core-<version>-central-bundle.zip
 ```
+
+For the desktop plus its required core publication, the existing root command remains `gradlew.bat mavenCentralBundle` (or `./gradlew mavenCentralBundle`). It stages both publications and writes `build/distributions/spacepixels-<version>-central-bundle.zip`. Both bundle types include matching sources/Javadocs, metadata, signatures and checksums, and include only their current-version artifact subtrees rather than stale staging versions. An explicit root Maven Local publication also publishes core first. Shared publishing configuration lives in `gradle/publishing.gradle`; signing and developer metadata use the same local properties/environment variables for both modules.
 
 ## Upload to the Central Portal
 
@@ -88,9 +108,9 @@ The standardized Gradle entrypoints are:
 - `bundleCentralPortal`
 - `mavenCentralBundle`
 
-The generated Central publication uses:
+Each generated Central publication uses:
 
-- coordinates: `eu.startales.spacepixels:spacepixels:<version>`
+- coordinates from the table above (core and desktop are separate artifacts)
 - sources JAR: enabled
 - Javadoc JAR: enabled
 - POM metadata: license, developer, and SCM info included

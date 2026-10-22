@@ -1,0 +1,56 @@
+def buildVersion = project.version.toString()
+
+tasks.register('verifyCorePublication') {
+    group = 'verification'
+    description = 'Checks headless binary/source/Javadoc contents, resources and published dependency metadata.'
+    dependsOn tasks.named('jar'), tasks.named('sourcesJar'), tasks.named('javadocJar'),
+            tasks.named('generatePomFileForMavenJavaPublication'), tasks.named('generateMetadataFileForMavenJavaPublication')
+    doLast {
+        for (String taskName : ['jar', 'sourcesJar', 'javadocJar']) {
+            File archiveFile = tasks.named(taskName).get().archiveFile.get().asFile
+            new java.util.zip.ZipFile(archiveFile).withCloseable { archive ->
+                def names = archive.entries().collect { it.name }
+                def forbidden = names.findAll { name -> ['gui', 'tasks', 'jobs', 'tools'].any { part ->
+                    name.startsWith("eu/startales/spacepixels/${part}/")
+                } }
+                if (forbidden) throw new GradleException("Desktop entries in ${archiveFile.name}: ${forbidden}")
+                String suffix = taskName == 'jar' ? '.class' : taskName == 'sourcesJar' ? '.java' : '.html'
+                if (!names.contains("eu/startales/spacepixels/api/SpacePixelsPipelineApi${suffix}".toString())) {
+                    throw new GradleException("Missing public API in ${archiveFile.name}")
+                }
+                if (taskName == 'jar') {
+                    for (String resource : ['spacepixels-build.properties',
+                            'eu/startales/spacepixels/util/reporting/report-lookups.js',
+                            'eu/startales/spacepixels/util/reporting/report-interactions.js',
+                            'eu/startales/spacepixels/util/reporting/catalogue-comparison.js',
+                            'eu/startales/spacepixels/util/reporting/catalogue-source-notes.json']) {
+                        if (!names.contains(resource)) throw new GradleException("Missing core resource: ${resource}")
+                    }
+                    Properties versions = new Properties()
+                    archive.getInputStream(archive.getEntry('spacepixels-build.properties')).withCloseable { versions.load(it) }
+                    if (versions.getProperty('spacepixels') != buildVersion) {
+                        throw new GradleException('Core build version resource was not expanded.')
+                    }
+                }
+            }
+        }
+        def pom = new groovy.xml.XmlSlurper().parse(layout.buildDirectory.file('publications/mavenJava/pom-default.xml').get().asFile)
+        def dependencies = pom.dependencies.dependency
+        if (pom.artifactId.text() != 'spacepixels-core' || dependencies.any { it.groupId.text() == 'com.formdev' }) {
+            throw new GradleException('Core POM contains an incorrect coordinate or desktop dependency.')
+        }
+        if (!dependencies.any { it.artifactId.text() == 'jtransient' && it.scope.text() == 'compile' }) {
+            throw new GradleException('Exposed JTransient API types must be compile dependencies.')
+        }
+        for (String runtimeModule : ['nom-tam-fits', 'gson', 'jplatesolve']) {
+            if (!dependencies.any { it.artifactId.text() == runtimeModule && it.scope.text() == 'runtime' }) {
+                throw new GradleException("Missing runtime dependency: ${runtimeModule}")
+            }
+        }
+        def metadata = new groovy.json.JsonSlurper().parse(layout.buildDirectory.file('publications/mavenJava/module.json').get().asFile)
+        if (metadata.component.module != 'spacepixels-core' ||
+                metadata.variants.any { variant -> variant.dependencies?.any { it.group == 'com.formdev' } }) {
+            throw new GradleException('Core Gradle metadata contains a desktop dependency or incorrect coordinate.')
+        }
+    }
+}

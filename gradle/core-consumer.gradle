@@ -1,0 +1,76 @@
+def consumerRepository = layout.buildDirectory.dir('repos/consumer-test')
+def localLibraries = [JTransient: 'io.github.ppissias.jtransient', JPlateSolve: 'io.github.ppissias.jplatesolve']
+def libraryBuilds = gradle.includedBuilds.findAll { localLibraries.containsKey(it.name) }
+
+tasks.register('stageCoreConsumerDependencies') {
+    group = 'verification'
+    description = 'Stages local composite library binaries and their real generated POMs for isolated consumer validation.'
+    def runtimeClasspath = project(':core').configurations.runtimeClasspath
+    dependsOn runtimeClasspath
+    for (def library : libraryBuilds) {
+        dependsOn library.task(':generatePomFileForMavenJavaPublication')
+    }
+    doLast {
+        def artifacts = runtimeClasspath.resolvedConfiguration.resolvedArtifacts
+        for (def library : libraryBuilds) {
+            def artifact = artifacts.find { it.moduleVersion.id.group == localLibraries[library.name] }
+            if (artifact == null) throw new GradleException("Missing local runtime artifact for ${library.name}")
+            def coordinates = artifact.moduleVersion.id
+            File pomFile = new File(library.projectDir, 'build/publications/mavenJava/pom-default.xml')
+            def pom = new groovy.xml.XmlSlurper().parse(pomFile)
+            if (pom.groupId.text() != coordinates.group || !pom.artifactId.text().equalsIgnoreCase(coordinates.name) ||
+                    pom.version.text() != coordinates.version) {
+                throw new GradleException("Generated POM does not match the resolved ${library.name} binary.")
+            }
+            String publishedModule = pom.artifactId.text()
+            File destination = consumerRepository.get().dir("${coordinates.group.replace('.', '/')}/${publishedModule}/${coordinates.version}").asFile
+            java.nio.file.Files.createDirectories(destination.toPath())
+            java.nio.file.Files.copy(artifact.file.toPath(), new File(destination, "${publishedModule}-${coordinates.version}.jar").toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            java.nio.file.Files.copy(pomFile.toPath(), new File(destination, "${publishedModule}-${coordinates.version}.pom").toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+}
+
+tasks.register('coreConsumerTest', GradleBuild) {
+    group = 'verification'
+    description = 'Runs an independent headless Maven/Gradle consumer with project/composite substitution disabled.'
+    dependsOn ':core:publishMavenJavaPublicationToConsumerTestRepository', project.tasks.named('stageCoreConsumerDependencies')
+    dir = file('src/consumerTest')
+    tasks = ['check']
+    startParameter.projectProperties = [spacepixelsVersion: project.version.toString(),
+            consumerRepository: consumerRepository.get().asFile.absolutePath,
+            stagedLibraryGroups: libraryBuilds.collect { localLibraries[it.name] }.join(','),
+            consumerMetadata: providers.gradleProperty('coreConsumerMetadata').orElse('gradle').get()]
+}
+
+tasks.register('verifyDesktopPublication') {
+    group = 'verification'
+    description = 'Checks the legacy desktop coordinate depends on core without duplicating its classes/resources.'
+    dependsOn tasks.named('jar'), ':core:jar', tasks.named('generatePomFileForMavenJavaPublication')
+    def desktopJar = tasks.named('jar').flatMap { it.archiveFile }
+    def coreJar = project(':core').tasks.named('jar').flatMap { it.archiveFile }
+    doLast {
+        def entries = { File archiveFile ->
+            new java.util.zip.ZipFile(archiveFile).withCloseable { archive -> archive.entries().collect { it.name } }
+        }
+        def desktop = entries(desktopJar.get().asFile)
+        def core = entries(coreJar.get().asFile)
+        def duplicateClasses = desktop.findAll { it.endsWith('.class') && core.contains(it) }
+        if (duplicateClasses || !desktop.contains('eu/startales/spacepixels/gui/ApplicationWindow.class') ||
+                !desktop.contains('eu/startales/spacepixels/tools/BatchDetectionCli.class') ||
+                !desktop.contains('eu/startales/spacepixels/gui/icons/spacepixels-128.png') ||
+                desktop.contains('spacepixels-build.properties')) {
+            throw new GradleException("Incorrect desktop/core ownership; duplicate classes: ${duplicateClasses}")
+        }
+        def pom = new groovy.xml.XmlSlurper().parse(layout.buildDirectory.file('publications/mavenJava/pom-default.xml').get().asFile)
+        if (!pom.dependencies.dependency.any { it.artifactId.text() == 'spacepixels-core' && it.scope.text() == 'compile' }) {
+            throw new GradleException('The existing desktop coordinate must re-export its core API dependency.')
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyDesktopPublication')
+}

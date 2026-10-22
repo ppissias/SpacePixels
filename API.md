@@ -31,12 +31,14 @@ The internal `ImageProcessing` compatibility facade no longer creates Swing adap
 When the artifact is published to Maven Central, depend on it as:
 
 ```groovy
-implementation 'eu.startales.spacepixels:spacepixels:<version>'
+implementation 'eu.startales.spacepixels:spacepixels-core:<version>'
 ```
 
-The published artifact is the current single-module SpacePixels JAR, so it contains both the public API and the desktop application code. For library consumers, the supported surface is still only `eu.startales.spacepixels.api`.
+`spacepixels-core` contains the public API and its headless configuration, session, FITS/preparation, processing, catalogue and reporting implementation/resources. Its POM and Gradle metadata expose JTransient's public types and supply the required FITS, Gson and JPlateSolve runtime dependencies. It contains no SpacePixels GUI, jobs/tasks, CLI launchers, icons or FlatLaf dependency. Headless AWT image/report rendering still requires the JDK's `java.desktop` module; run servers with `-Djava.awt.headless=true` rather than removing that module. Java 21 is the compilation baseline.
 
-API execution and its processing services are Swing/GUI-independent after S13, but the current JAR and dependency metadata are not an API-only distribution. A separate minimal headless API/core artifact is proposed in [F11](DESIGN-IMPROVEMENTS.md#headless-apicore-maven-central-artifact-f11); it is not yet implemented and the dependency example above remains the current packaging contract. Required headless AWT image/report rendering will remain available.
+The existing `eu.startales.spacepixels:spacepixels:<version>` coordinate remains the desktop/tool artifact and re-exports `spacepixels-core` transitively, preserving Maven/Gradle API consumers and Java package/signature names. It is now a thin desktop JAR: manual classpaths must include both JARs and their dependencies; do not replace a complete installed distribution with that JAR alone. Prefer the core coordinate for new API consumers. Internal helpers remain unsupported embedding contracts even though they are packaged in core.
+
+F11 prepares these artifacts and local Central bundles; it does not assert that this source version or its JA-01-capable JTransient dependency has been released to Central. Before distribution, verify the actual published dependency pair under JA-11. `gradlew.bat coreConsumerTest` validates a separately resolved headless consumer against a local staging repository, without project/composite substitution; when using local siblings it stages their real binaries/generated POMs as test inputs, not a public-release certification. See [PUBLISHING.md](PUBLISHING.md).
 
 ## What the API does
 
