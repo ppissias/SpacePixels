@@ -16,8 +16,10 @@ public class AstrometryNetFailureTest {
 
     private static final String UNREACHABLE = "Could not reach Astrometry.net (nova.astrometry.net). Check the internet connection.";
     private static final String OWN_KEY_REJECTED = "Astrometry.net rejected the API key. Check the key on the Astrometry Config tab, or choose Anonymous.";
-    /** JPlateSolve 1.0.1 refuses a login with this message. */
+    /** JPlateSolve 1.0.1 first refused a login with this message, without a reason. */
     private static final String REFUSED_LOGIN = "Astrometry.net login failed.";
+    /** JPlateSolve passes on nova's reason since 2026-10-22, as received for an unknown key. */
+    private static final String UNKNOWN_KEY_LOGIN = "Astrometry.net login failed: bad apikey";
     /** JPlateSolve 1.0.0 passed on the server's answer to an unknown key, as received on 2026-10-21. */
     private static final String BAD_KEY_LOGIN_1_0_0 = "Astrometry.net login failed: {\"status\": \"error\", \"errormessage\": \"bad apikey\"}";
 
@@ -38,8 +40,15 @@ public class AstrometryNetFailureTest {
         assertEquals("Astrometry.net did not accept the anonymous login. Enter your own API key on the Astrometry Config tab.",
                 AstrometryNetAccount.failureMessage(new IOException(REFUSED_LOGIN), false));
         assertEquals(OWN_KEY_REJECTED, AstrometryNetAccount.failureMessage(new IOException(BAD_KEY_LOGIN_1_0_0), true));
+        assertEquals(OWN_KEY_REJECTED, AstrometryNetAccount.failureMessage(new IOException(UNKNOWN_KEY_LOGIN), true));
         assertEquals("found further down the cause chain too",
                 OWN_KEY_REJECTED, AstrometryNetAccount.failureMessage(new IOException("wrapped", new IOException(REFUSED_LOGIN)), true));
+    }
+
+    @Test
+    public void aLoginRefusedForAnotherReasonSaysWhyWithoutBlamingTheKey() {
+        assertEquals("Astrometry.net refused the login: service temporarily unavailable",
+                AstrometryNetAccount.failureMessage(new IOException("Astrometry.net login failed: service temporarily unavailable"), true));
     }
 
     @Test

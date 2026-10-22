@@ -27,8 +27,10 @@ import java.util.function.Function;
  */
 public final class AstrometryNetAccount {
 
-    /** JPlateSolve 1.0.1 refuses a login with this message; 1.0.0 passed on the server's {@code "bad apikey"}. */
-    private static final String[] REJECTED_LOGIN = {"Astrometry.net login failed", "bad apikey"};
+    /** Astrometry.net's reason for refusing an unknown key, which JPlateSolve passes on. */
+    private static final String UNKNOWN_KEY = "bad apikey";
+    /** How JPlateSolve reports a refused login; the server's reason follows after ": " when it gave one. */
+    private static final String REFUSED_LOGIN = "Astrometry.net login failed";
 
     private AstrometryNetAccount() {
     }
@@ -77,27 +79,20 @@ public final class AstrometryNetAccount {
             if (cause instanceof HttpTimeoutException || cause instanceof SocketTimeoutException) {
                 return "Astrometry.net did not answer in time. Try again later.";
             }
-            if (isRejectedLogin(cause.getMessage())) {
+            String text = cause.getMessage();
+            // An unknown key, or a refusal without a reason (as JPlateSolve 1.0.1 first reported it): the account.
+            if (text != null && (text.contains(UNKNOWN_KEY) || text.equals(REFUSED_LOGIN + "."))) {
                 return ownKey
                         ? "Astrometry.net rejected the API key. Check the key on the Astrometry Config tab, or choose Anonymous."
                         : "Astrometry.net did not accept the anonymous login. Enter your own API key on the Astrometry Config tab.";
+            }
+            if (text != null && text.startsWith(REFUSED_LOGIN + ": ")) {
+                return "Astrometry.net refused the login: " + text.substring(REFUSED_LOGIN.length() + 2);
             }
             if (message == null && cause.getMessage() != null && !cause.getMessage().isBlank()) {
                 message = cause.getMessage();
             }
         }
         return otherFailurePrefix + (message != null ? message : failure.getClass().getSimpleName());
-    }
-
-    private static boolean isRejectedLogin(String message) {
-        if (message == null) {
-            return false;
-        }
-        for (String rejected : REJECTED_LOGIN) {
-            if (message.contains(rejected)) {
-                return true;
-            }
-        }
-        return false;
     }
 }
