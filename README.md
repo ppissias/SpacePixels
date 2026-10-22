@@ -214,7 +214,9 @@ SpacePixels prints only problems to the console; the batch detector also prints 
 7. Run either:
    - `Detect Moving Targets` (the standard pipeline, Ctrl+D), optionally with variable-star photometry enabled, or
    - `Detect Iteratively (large datasets)` for large datasets where the standard full run may be too heavy.
-8. When the run finishes, SpacePixels prompts you to open the generated HTML report or, for iterative runs, the results folder containing the per-pass reports.
+8. When the run finishes, SpacePixels prompts you to open the generated HTML report or the iterative index linking the per-pass reports.
+
+**Detect Iteratively** can also start without importing a session. Choose a source folder and Start/Increase/Maximum frame counts, review the planned passes, and optionally Auto-Tune once before running. Each pass uses ordinary detection with its own master and the same settings; the open session stays unchanged. See [the manual](MANUAL.md#detect-iteratively-large-datasets) for preparation, manual tuning and result details.
 
 ## Report output
 

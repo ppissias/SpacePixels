@@ -61,7 +61,8 @@ final class CommandAvailability {
         if (facts.busy()) {
             return Availability.unavailable("wait until the current task has finished.");
         }
-        if (command == Command.IMPORT || (command == Command.SKY_CATALOGUE && facts.skyFetching())) {
+        if (command == Command.IMPORT || command == Command.DETECT_ITERATIVELY
+                || (command == Command.SKY_CATALOGUE && facts.skyFetching())) {
             return Availability.AVAILABLE;
         }
         if (facts.frames() == 0) {

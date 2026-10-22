@@ -306,7 +306,7 @@ public class DetectionConfigurationPanel extends JPanel {
         overview.addAnalysis("Residual analysis", "a last look at leftover detections for weak candidates and local activity",
                 chkEnableResidualTransientAnalysis.getModel(), "Residual Analysis");
         overview.addAnalysis("Variable-star photometry", "light curves of the field stars and variable-star candidates, matched against AAVSO VSX "
-                + "when a frame is plate-solved; skipped in iterative mode", chkEnableVariableStarDetection.getModel(), "Variable Stars");
+                + "when a frame is plate-solved; each run uses its normal readiness checks", chkEnableVariableStarDetection.getModel(), "Variable Stars");
     }
 
     // ==========================================
@@ -759,6 +759,8 @@ public class DetectionConfigurationPanel extends JPanel {
     DetectionConfig settingsInUse() {
         return jTransientConfig.clone();
     }
+
+    VariableStarReportOptions reportOptions() { return variableStarReportOptions; }
 
     // ==========================================
     // INVALID TEXT AND THE FOOTER MESSAGE

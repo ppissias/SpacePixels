@@ -65,6 +65,10 @@ public class DetectionReportGenerator {
 
     public static final String detectionReportName = "detection_report.html";
 
+    public static ExportVisualizationSettings captureExportSettings(eu.startales.spacepixels.config.VariableStarReportOptions options) {
+        return snapshotCurrentExportVisualizationSettings().withVariableStarReportOptions(options);
+    }
+
     private static ExportVisualizationSettings snapshotCurrentExportVisualizationSettings() {
         return new ExportVisualizationSettings(
                 DisplayImageRenderer.autoStretchBlackSigma,
@@ -1243,18 +1247,30 @@ public class DetectionReportGenerator {
                 inclusion == null ? ReportInclusion.all() : inclusion, new ReportProgress(progress));
     }
 
-    static void exportTrackVisualizationsInternal(PipelineResult result,
-                                                  List<short[][]> rawFrames,
-                                                  FitsFileInformation[] fitsFiles,
-                                                  File exportDir,
-                                                  DetectionConfig config,
-                                                  AppConfig appConfig,
-                                                  ReportInclusion inclusion,
+    public static void exportTrackVisualizations(PipelineResult result, List<short[][]> rawFrames,
+                                                 FitsFileInformation[] fitsFiles, File exportDir,
+                                                 DetectionConfig config, AppConfig appConfig, ReportInclusion inclusion,
+                                                 TransientEngineProgressListener progress, ExportVisualizationSettings settings) throws IOException {
+        exportTrackVisualizationsInternal(result, rawFrames, fitsFiles, exportDir, config, appConfig,
+                inclusion == null ? ReportInclusion.all() : inclusion, new ReportProgress(progress),
+                settings == null ? captureExportSettings(appConfig != null && appConfig.variableStarReportOptions != null
+                        ? appConfig.variableStarReportOptions : eu.startales.spacepixels.config.VariableStarReportOptions.DEFAULT) : settings);
+    }
+
+    static void exportTrackVisualizationsInternal(PipelineResult result, List<short[][]> rawFrames,
+                                                  FitsFileInformation[] fitsFiles, File exportDir,
+                                                  DetectionConfig config, AppConfig appConfig, ReportInclusion inclusion,
                                                   ReportProgress progress) throws IOException {
+        exportTrackVisualizationsInternal(result, rawFrames, fitsFiles, exportDir, config, appConfig, inclusion, progress,
+                captureExportSettings(appConfig != null && appConfig.variableStarReportOptions != null
+                        ? appConfig.variableStarReportOptions : eu.startales.spacepixels.config.VariableStarReportOptions.DEFAULT));
+    }
+
+    private static void exportTrackVisualizationsInternal(PipelineResult result, List<short[][]> rawFrames,
+                                                  FitsFileInformation[] fitsFiles, File exportDir,
+                                                  DetectionConfig config, AppConfig appConfig, ReportInclusion inclusion,
+                                                  ReportProgress progress, ExportVisualizationSettings settings) throws IOException {
         progress.step(0, 2, "preparing");
-        ExportVisualizationSettings settings = snapshotCurrentExportVisualizationSettings().withVariableStarReportOptions(
-                appConfig != null && appConfig.variableStarReportOptions != null ? appConfig.variableStarReportOptions
-                        : eu.startales.spacepixels.config.VariableStarReportOptions.DEFAULT);
 
         // Extract variables from the PipelineResult and normalize newer track categories for rendering.
         List<TrackLinker.Track> tracks = result.tracks != null ? result.tracks : new ArrayList<>();

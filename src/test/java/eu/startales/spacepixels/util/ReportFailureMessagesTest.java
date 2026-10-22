@@ -61,7 +61,7 @@ public class ReportFailureMessagesTest {
                 return true;
             }, null, 0);
             String html = Files.readString(index.toPath(), StandardCharsets.UTF_8);
-            assertTrue(html, html.contains("Report not written: "));
+            assertTrue(html, html.contains("Failed") && html.contains("report could not be written"));
             assertFalse(html, html.contains(FRAME_COUNT + "_frames/detection_report.html"));
         }
     }

@@ -15,10 +15,10 @@ public class CommandAvailabilityTest {
     private static final int ENOUGH = SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
 
     @Test
-    public void onlyImportBeforeASession() {
+    public void importAndDirectoryBasedIterationAreAvailableBeforeASession() {
         Facts none = session().frames(0).build();
         for (Command command : Command.values()) {
-            if (command == Command.IMPORT) {
+            if (command == Command.IMPORT || command == Command.DETECT_ITERATIVELY) {
                 assertTrue(enabled(command, none));
             } else {
                 assertEquals(command.name(), "import frames first (Import Aligned Frames…, or drop a folder on the window).",
@@ -42,12 +42,13 @@ public class CommandAvailabilityTest {
     @Test
     public void colourFramesAreConvertedFirstButCanBeBlinkedAndSolved() {
         Facts colour = session().colour().selected(3).build();
-        for (Command command : new Command[]{Command.DETECT, Command.DETECT_ITERATIVELY, Command.PREVIEW,
+        for (Command command : new Command[]{Command.DETECT, Command.PREVIEW,
                 Command.INSPECTION, Command.AUTO_TUNE}) {
             assertEquals(command.name(), "convert the frames to monochrome first (1 Prepare).",
                     CommandAvailability.of(command, colour).reason());
         }
         assertTrue(enabled(Command.CONVERT_TO_MONO, colour));
+        assertTrue(enabled(Command.DETECT_ITERATIVELY, colour));
         assertTrue(enabled(Command.BLINK, colour));
         assertTrue(enabled(Command.PLATE_SOLVE, colour));
     }

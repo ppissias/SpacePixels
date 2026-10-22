@@ -533,7 +533,22 @@ The preview on the tab shows the selected frame with the current stretch. While 
 
 ### Detect Iteratively (large datasets)
 
-Runs the detection in several passes over subsets of the frames, for sessions too large for one run, and for very slow objects. It writes one report per pass and a summary. To reduce memory use, enter a smaller maximum frame count when prompted: leaving the limit blank or zero still loads all frames to build the initial master stack. Variable-star photometry is skipped in iterative mode; use **Detect Moving Targets** for that analysis.
+Runs ordinary detection repeatedly on progressively larger subsets spread across a dataset. You can open it before importing anything. Choose a **Source directory** in the configuration window; the session already open in the main window stays unchanged.
+
+- **Start frames** defaults to 5 and cannot be lower.
+- **Increase by** controls how much each pass grows.
+- **Maximum frames** caps a pass at that many frames, or at the available count if smaller. Set 0 to include all available frames in the largest pass. The exact maximum is always included: Start 5, Increase 10, Maximum 32 gives passes of 5, 15, 25 and 32 frames.
+- **Planned passes** previews the sizes before starting. Each subset includes the first and last frames and prefers even timestamp spacing; otherwise it uses even sequence spacing. Larger subsets are selected afresh and need not contain every frame from smaller passes.
+
+With **Auto-Tune once before the passes** unchecked, the run uses the current Detection Settings, including unsaved edits. For manual tuning, import the dataset normally and use Detection Settings and Preview Frame to experiment, then run iteratively with Auto-Tune disabled. The configuration window includes this reminder.
+
+With Auto-Tune enabled, select its sensitivity and sample limit (at least 5). The calibrated tuner runs once on the chosen dataset; its candidate limit is capped at the largest pass size. Every pass then uses the resulting settings. Tuning does not change the settings editor or the open session. If tuning cannot produce usable settings, the run stops with its explanation before starting the passes.
+
+**Prepare non-ready inputs** creates detection-ready copies when conversion is needed, preserving the originals. **Keep negative pixel values by adding an offset** applies one sequence-wide offset; untick it to clip negative values to zero. With preparation disabled, the folder must already contain detection-ready images. Mixed or inconsistent sequences are rejected; import normally first if you need to choose one exposure group.
+
+Click **Run iterations**. Each pass builds its own master and uses the same analyses and readiness checks as Detect Moving Targets, including variable-star photometry when enabled and ready. Reports, frame counts, quality rejections and photometry refer only to that pass's selected inputs. Pixel buffers are released between passes; choose a maximum appropriate for the image dimensions and available memory.
+
+Results are written in an `iterative_detections_*` folder beside the source files. Its index links each completed report and the selected input list, with observing span, findings and pass outcome. Failed or declined passes are identified, and later passes can continue. Cancel stops further work and preserves completed reports and their index; if nothing finished, the unfinished run folder is removed. Counts are per pass: the same object may appear in several reports. Consolidating those findings into a combined report is a planned enhancement.
 
 ### Command line
 
@@ -583,7 +598,7 @@ In most sessions you only need Auto-Tune and the profile. Change single settings
 
 **Something failed.** The error message has a **Copy details** button. It copies the message, the SpacePixels, JTransient and Java versions, and the full error, ready to paste into a bug report. Check the copied text before you share it: an error message can contain the path of your files.
 
-**Out of memory.** Close other programs. If Auto-Tune runs out of memory, lower **Frames Used by Auto-Tune** (Detection Settings → Quality Control, an expert setting). For moving-object detection, use **Detect Iteratively** and set a smaller maximum frame count; leaving the limit blank or zero still loads all frames for the master stack.
+**Out of memory.** Close other programs. If Auto-Tune runs out of memory, lower **Frames Used by Auto-Tune** (Detection Settings → Quality Control, an expert setting). For moving-object detection, use **Detect Iteratively** and set a smaller maximum frame count. Its optional Auto-Tune has a separate sample limit. A Maximum of 0 includes a full-dataset pass and can still require substantial memory.
 
 **Colour frames.** Detection works on monochrome data; click **Convert to Mono** after importing.
 

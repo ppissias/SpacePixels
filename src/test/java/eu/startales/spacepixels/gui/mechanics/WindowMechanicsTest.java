@@ -38,7 +38,7 @@ public class WindowMechanicsTest extends MechanicsTestCase {
         requireButton("Manual Transient Inspection", false);
         requireButton("Auto-Tune Settings", false);
         requireButton("Detect Moving Targets", false);
-        requireButton("Detect Iteratively (large datasets)", false);
+        requireButton("Detect Iteratively (large datasets)", true);
         assertTrue(showingLabel("No frames imported").contains("No frames imported"));
         assertTrue(tabEnabled("Astrometry Config"));
         assertFalse(tabEnabled("Image Stretch"));

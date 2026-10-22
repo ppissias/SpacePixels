@@ -1,6 +1,21 @@
 package eu.startales.spacepixels.config;
 
 public class AppConfig {
+    public AppConfig copy() {
+        AppConfig copy = new AppConfig();
+        copy.variableStarReportOptions = variableStarReportOptions;
+        copy.astapExecutablePath = astapExecutablePath;
+        copy.observatoryCode = observatoryCode;
+        copy.imageRA = imageRA;
+        copy.imageDEC = imageDEC;
+        copy.siteLat = siteLat;
+        copy.siteLong = siteLong;
+        copy.pixelSize = pixelSize;
+        copy.focalLength = focalLength;
+        copy.skyCatalogueStarMagnitude = skyCatalogueStarMagnitude;
+        return copy;
+    }
+
     /** Supplied by the detection profile/request; excluded from the separate astrometry configuration file. */
     public transient VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
     public String astapExecutablePath = "";

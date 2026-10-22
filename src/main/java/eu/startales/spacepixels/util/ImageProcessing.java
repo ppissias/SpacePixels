@@ -620,7 +620,7 @@ public class ImageProcessing implements AutoCloseable {
         this.appConfig = settings.getConfig();
         this.plateSolveService = new PlateSolveService(this.appConfig);
         this.standardDetectionPipelineService = new StandardDetectionPipelineService(this.appConfig, sessionFrames);
-        this.iterativeDetectionPipelineService = new IterativeDetectionPipelineService(this.appConfig, this.standardDetectionPipelineService);
+        this.iterativeDetectionPipelineService = new IterativeDetectionPipelineService(this.appConfig);
         this.fitsVisualizationRenderer = new FitsVisualizationRenderer();
         this.batchService = new FitsBatchService(alignedFitsFolderFullPath, fitsVisualizationRenderer);
         this.importService = new FitsImportService(alignedFitsFolderFullPath, sessionFrames, batchService, new GuiFitsImportInteraction());
@@ -710,7 +710,7 @@ public class ImageProcessing implements AutoCloseable {
 
     /**
      * Re-runs detection on progressively larger time-spaced subsets so slow movers can be explored
-     * across several pass sizes while sharing a single global master stack.
+     * across several pass sizes, with an independent ordinary pipeline run for each subset.
      */
     public File detectSlowObjectsIterative(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener, int maxFramesLimit) throws Exception {
         if (sessionFrames.getFiles() == null) getFitsfileInformation();

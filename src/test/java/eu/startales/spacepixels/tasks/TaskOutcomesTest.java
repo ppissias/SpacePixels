@@ -111,13 +111,13 @@ public class TaskOutcomesTest {
         assertTrue(new File(runs[0], "5_frames/detection_report.html").isFile());
         assertFalse("the unfinished pass is removed", new File(runs[0], "10_frames").exists());
         String index = java.nio.file.Files.readString(new File(runs[0], "index.html").toPath());
-        assertTrue(index, index.contains("The run was cancelled after 1 pass."));
+        assertTrue(index, index.contains("Cancelled") && index.contains("Completed"));
     }
 
     @Test
     public void anIterativeRunCancelledBeforeAnyPassFinishedLeavesNoFolder() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 10);
-        JobOutcome<File> outcome = runCancelledAt(sequence, "Global Master Map", processing ->
+        JobOutcome<File> outcome = runCancelledAt(sequence, "Pass 5 frames: Loading", processing ->
                 new IterativeDetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig(), 0), new ArrayList<>());
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
         assertEquals(0, foldersStartingWith(sequence, "iterative_detections_").length);

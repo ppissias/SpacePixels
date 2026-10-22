@@ -10,6 +10,7 @@ package eu.startales.spacepixels.util;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.session.SessionFrames;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
+import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
@@ -39,10 +40,18 @@ final class StandardDetectionPipelineService {
         this.state = state;
     }
 
+    record RunResult(File report, ImageProcessing.DetectionSummary summary) {}
+
     File detectObjects(DetectionConfig config,
                        FitsFileInformation[] cachedFileInfo,
                        ImageProcessing.DetectionSafetyPrompt safetyPrompt,
                        TransientEngineProgressListener progressListener) throws Exception {
+        return run(config, cachedFileInfo, safetyPrompt, progressListener, null, null).report();
+    }
+
+    RunResult run(DetectionConfig config, FitsFileInformation[] cachedFileInfo,
+                  ImageProcessing.DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener,
+                  File outputDirectory, ExportVisualizationSettings visualization) throws Exception {
         // Detection takes 0-90% of the bar; exporting the report the rest.
         ImageProcessing.PipelineExecutionData executionData = runDetectionPipeline(config, cachedFileInfo,
                 progressListener == null ? null : (percent, message) -> progressListener.onProgressUpdate((int) (percent * 0.9), message));
@@ -50,11 +59,11 @@ final class StandardDetectionPipelineService {
                 VariableStarOverlay.from(executionData.getPipelineResult(), cachedFileInfo));
 
         ReportInclusion reportInclusion = ReportInclusion.all();
+        ImageProcessing.DetectionSummary detectionSummary = DetectionPipelineSupport.summarizeDetections(executionData.getPipelineResult());
         if (safetyPrompt != null) {
-            ImageProcessing.DetectionSummary detectionSummary = DetectionPipelineSupport.summarizeDetections(executionData.getPipelineResult());
             if (!safetyPrompt.shouldProceed(detectionSummary)) {
                 DebugOutput.println("Report generation aborted by UI callback. Detection count: " + detectionSummary.totalDetections);
-                return null;
+                return new RunResult(null, detectionSummary);
             }
             reportInclusion = detectionSummary.reportInclusion();
         }
@@ -69,7 +78,7 @@ final class StandardDetectionPipelineService {
         try {
             // Writing the report takes 90-99%.
             reportFile = exportDetectionReport(executionData, reportInclusion, progressListener == null ? null
-                    : (percent, message) -> progressListener.onProgressUpdate(90 + percent / 10, message));
+                    : (percent, message) -> progressListener.onProgressUpdate(90 + percent / 10, message), outputDirectory, visualization);
         } catch (IOException | RuntimeException e) {
             if (Cancellation.isCancellation(e)) {
                 throw e;
@@ -83,7 +92,7 @@ final class StandardDetectionPipelineService {
         if (progressListener != null) {
             progressListener.onProgressUpdate(100, "Finished!");
         }
-        return reportFile;
+        return new RunResult(reportFile, detectionSummary);
     }
 
     ImageProcessing.PipelineExecutionData runDetectionPipeline(DetectionConfig config,
@@ -159,6 +168,12 @@ final class StandardDetectionPipelineService {
      */
     File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData, ReportInclusion inclusion,
                                TransientEngineProgressListener progressListener) throws IOException {
+        return exportDetectionReport(executionData, inclusion, progressListener, null, null);
+    }
+
+    private File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData, ReportInclusion inclusion,
+                               TransientEngineProgressListener progressListener, File outputDirectory,
+                               ExportVisualizationSettings visualization) throws IOException {
         if (executionData == null) {
             throw new IllegalArgumentException("executionData must not be null");
         }
@@ -168,7 +183,9 @@ final class StandardDetectionPipelineService {
             return null;
         }
 
-        File exportDir = ImageProcessing.createDetectionsDirectory(new File(filesInformation[0].getFilePath()));
+        File exportDir = outputDirectory == null
+                ? ImageProcessing.createDetectionsDirectory(new File(filesInformation[0].getFilePath())) : outputDirectory;
+        java.nio.file.Files.createDirectories(exportDir.toPath());
         try {
             DetectionReportGenerator.exportTrackVisualizations(
                     executionData.getPipelineResult(),
@@ -178,7 +195,7 @@ final class StandardDetectionPipelineService {
                     executionData.getEffectiveConfig(),
                     appConfig,
                     inclusion,
-                    progressListener);
+                    progressListener, visualization);
         } catch (IOException | RuntimeException e) {
             if (Cancellation.isCancellation(e)) {
                 OutputFolders.deleteUnfinished(exportDir);

@@ -14,6 +14,9 @@ import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.SkyCatalogueModel;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.IterativeDetectionRequest;
+import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
+import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.SessionReports;
@@ -536,19 +539,44 @@ public class MainApplicationPanel extends JPanel {
         });
     }
 
-    /** Detect Iteratively, with the detection settings as they are now and the frame limit asked for. */
     private void startIterativeDetection() {
-        DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Detect Iteratively did not start.");
-        if (settings == null) {
-            return;
+        File initial = mainAppWindow.getSession() == null || mainAppWindow.getSession().getFiles().length == 0 ? null
+                : new File(mainAppWindow.getSession().getFiles()[0].getFilePath()).getParentFile();
+        IterativeDetectionDialog dialog = new IterativeDetectionDialog((Window) mainAppWindow.getFrame(), initial);
+        dialog.setVisible(true);
+        IterativeDetectionDialog.Selection selected = dialog.selection();
+        if (selected == null) return;
+        DetectionConfigurationPanel configuration = mainAppWindow.getDetectionConfigurationPanel();
+        DetectionConfig settings = configuration.checkedSettings("Detect Iteratively did not start.");
+        if (settings == null) return;
+        AppConfig application = mainAppWindow.getApplicationSettings().getConfig().copy();
+        application.variableStarReportOptions = configuration.reportOptions();
+        IterativeDetectionRequest request = new IterativeDetectionRequest(selected.directory(), settings, application,
+                DetectionReportGenerator.captureExportSettings(application.variableStarReportOptions), selected.plan(),
+                selected.autoTuneProfile(), selected.autoTuneFrames(), selected.autoPrepare(), selected.keepNegative(), selected.availableFrames());
+        IterativeDetectionTask task = new IterativeDetectionTask(request);
+        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.ITERATIVE_DETECTION,
+                mainAppWindow.getSession(), mainAppWindow.sessionJob(task),
+                mainAppWindow.forCurrentSession((handle, outcome) -> showIterativeOutcome(outcome, task)));
+        if (!admission.admitted()) statusLabel.setText(admission.refusal());
+    }
+
+    private void showIterativeOutcome(JobOutcome<File> outcome, IterativeDetectionTask task) {
+        if (outcome instanceof JobOutcome.Completed<File> completed) {
+            statusLabel.setText("Iterative results: " + completed.result().getParent());
+            promptUserToOpenReport(completed.result());
+        } else {
+            File index = task.getIndexFile();
+            if (index != null && index.isFile()) {
+                statusLabel.setText("Iterative run stopped; results: " + index.getParent());
+                int choice = JOptionPane.showConfirmDialog(this,
+                        "The iterative run stopped. Completed reports and pass outcomes are available at:\n"
+                                + index.getAbsolutePath() + "\n\nOpen the results index?",
+                        "Iterative results", JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE);
+                if (choice == JOptionPane.YES_OPTION) openHtmlReport(index);
+            }
+            showDetectionProblem(outcome);
         }
-        Integer maxFrames = askIterativeFrameLimit();
-        if (maxFrames == null) {
-            return;
-        }
-        ImageProcessing session = mainAppWindow.getImageProcessing();
-        startJob(JobKind.ITERATIVE_DETECTION, session, new IterativeDetectionTask(session, settings, maxFrames),
-                this::showDetectionOutcome);
     }
 
     /** Plate-solves the selected frame; the result belongs to that file, wherever its row is when the solve ends. */
@@ -1427,38 +1455,7 @@ public class MainApplicationPanel extends JPanel {
         }
     }
 
-    /**
-     * Asks for the most frames the iterative passes may use: 0 (or an empty field) for all the frames of the session,
-     * or null when the user cancels.
-     */
-    private Integer askIterativeFrameLimit() {
-        JPanel panel = new JPanel(new BorderLayout(5, 5));
-        panel.add(new JLabel("<html>Enter the maximum number of frames to use for the iterative passes<br>(Leave empty or enter 0 to go up to the total number of frames):</html>"), BorderLayout.NORTH);
 
-        JTextField inputField = new JTextField(10);
-        JPanel fieldPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        fieldPanel.add(inputField);
-        panel.add(fieldPanel, BorderLayout.CENTER);
-
-        int result = JOptionPane.showConfirmDialog(
-                null,
-                panel,
-                "Limit Iterative Passes",
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.QUESTION_MESSAGE
-        );
-        if (result != JOptionPane.OK_OPTION) {
-            return null;
-        }
-        String input = inputField.getText();
-        if (input != null && !input.trim().isEmpty()) {
-            try {
-                return Integer.parseInt(input.trim());
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        return 0;
-    }
 
     /** The end of Detect Moving Targets and Detect Iteratively: offers the report, or says what went wrong. */
     private void showDetectionOutcome(JobHandle handle, JobOutcome<File> outcome) {

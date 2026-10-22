@@ -1,341 +1,263 @@
-/*
- * SpacePixels
- *
- * Copyright (c)2020-2026, Petros Pissias.
- * See the LICENSE file included in this distribution.
- *
- */
 package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.DetectionSettingsRules;
+import eu.startales.spacepixels.session.SessionFrames;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
+import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
+import eu.startales.spacepixels.util.reporting.IterativeDetectionIndex;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
-import io.github.ppissias.jtransient.engine.JTransientEngine;
-import io.github.ppissias.jtransient.engine.PipelineResult;
+import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
-import nom.tam.fits.BasicHDU;
-import nom.tam.fits.Fits;
+import io.github.ppissias.jtransient.execution.CancellationScope;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.AbstractList;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-/**
- * Owns the iterative slow-mover detection workflow that re-runs the engine on progressively larger
- * time-spaced subsets while keeping a shared master stack.
- */
-final class IterativeDetectionPipelineService {
-
-    private final AppConfig appConfig;
-    private final StandardDetectionPipelineService standardDetectionPipelineService;
-
-    IterativeDetectionPipelineService(AppConfig appConfig,
-                                      StandardDetectionPipelineService standardDetectionPipelineService) {
-        this.appConfig = appConfig;
-        this.standardDetectionPipelineService = standardDetectionPipelineService;
+public final class IterativeDetectionPipelineService {
+    @FunctionalInterface
+    public interface ReportPrompt {
+        boolean confirm(ImageProcessing.DetectionSummary summary, FitsFileInformation[] files, DetectionConfig config);
     }
 
-    File detectSlowObjectsIterative(DetectionConfig config,
-                                    FitsFileInformation[] cachedFileInfo,
-                                    ImageProcessing.DetectionSafetyPrompt safetyPrompt,
-                                    TransientEngineProgressListener progressListener,
-                                    int maxFramesLimit) throws Exception {
-        long startTime = System.currentTimeMillis();
-        int numFrames = cachedFileInfo.length;
+    @FunctionalInterface
+    interface PassRunner {
+        StandardDetectionPipelineService.RunResult run(DetectionConfig config, FitsFileInformation[] files,
+                AppConfig appConfig, ImageProcessing.DetectionSafetyPrompt prompt,
+                TransientEngineProgressListener progress, File output, ExportVisualizationSettings visualization) throws Exception;
+    }
 
-        if (numFrames < 5) {
-            DebugOutput.println("Not enough frames for iterative detection. Falling back to standard pipeline.");
-            return standardDetectionPipelineService.detectObjects(config, cachedFileInfo, safetyPrompt, progressListener);
+    @FunctionalInterface
+    interface Tuner {
+        Tuned run(FitsFileInformation[] files, DetectionConfig config, int limit,
+                  JTransientAutoTuner.AutoTuneProfile profile, TransientEngineProgressListener progress) throws Exception;
+    }
+
+    private static final Logger LOGGER = Logger.getLogger(IterativeDetectionPipelineService.class.getName());
+    private final AppConfig legacyAppConfig;
+    private final PassRunner passRunner;
+    private final Tuner tuner;
+    private volatile File indexFile;
+
+    public IterativeDetectionPipelineService() { this(null, IterativeDetectionPipelineService::standardPass); }
+    IterativeDetectionPipelineService(AppConfig appConfig) { this(appConfig, IterativeDetectionPipelineService::standardPass); }
+    IterativeDetectionPipelineService(AppConfig appConfig, PassRunner passRunner) {
+        this(appConfig, passRunner, IterativeDetectionPipelineService::tune);
+    }
+    IterativeDetectionPipelineService(AppConfig appConfig, PassRunner passRunner, Tuner tuner) {
+        this.legacyAppConfig = appConfig;
+        this.passRunner = passRunner;
+        this.tuner = tuner;
+    }
+
+    public File getIndexFile() { return indexFile; }
+
+    public static int countInputFiles(File directory) throws IOException {
+        if (!directory.isDirectory()) throw new IOException("Choose an existing input directory.");
+        FitsSequenceValidator.validateDirectoryExtensions(directory);
+        File[] files = directory.listFiles(file -> file.isFile() && FitsSequenceValidator.imageExtension(file.getName()) != null);
+        if (files == null) throw new IOException("Could not list input directory: " + directory);
+        return files.length;
+    }
+
+    public File run(IterativeDetectionRequest request, ReportPrompt prompt,
+                    TransientEngineProgressListener progress) throws Exception {
+        indexFile = null;
+        emit(progress, 0, "Preparing iterative input...");
+        File prepared = DetectionInputPreparation.prepareInputDirectory(request.directory(), request.autoPrepare(),
+                request.keepNegativeValues(), (percent, message) -> emit(progress, percent / 10, message)).getPreparedInputDirectory();
+        FitsFileInformation[] files;
+        try (FitsImportService importer = new FitsImportService(prepared, new SessionFrames(), null, null)) {
+            files = importer.getFitsfileInformationHeadless();
         }
+        if (request.expectedFrameCount() > 0 && files.length != request.expectedFrameCount()) {
+            throw new IOException("The dataset frame count changed. Reopen the iterative configuration to review the passes.");
+        }
+        List<Integer> counts = request.plan().frameCounts(files.length);
+        DetectionConfig config = request.config();
+        String tuneReport = null;
+        int passStart = 10;
+        int tuneLimit = Math.min(request.autoTuneFrames(), counts.getLast());
+        if (request.autoTuneProfile() != null) {
+            Tuned tuned = tuner.run(files, config, tuneLimit, request.autoTuneProfile(), progress);
+            config = tuned.config();
+            tuneReport = tuned.telemetry();
+            passStart = 30;
+        }
+        List<String> problems = DetectionSettingsRules.problems(config);
+        if (!problems.isEmpty()) throw new IllegalArgumentException("Invalid iterative detection settings: " + problems.getFirst());
+        return runPasses(config, files, request.appConfig(), request.visualization(), request.plan(),
+                request.directory(), prepared, request.autoTuneProfile(), tuneLimit, tuneReport, prompt, progress, passStart);
+    }
 
-        DebugOutput.println("\n--- Starting ITERATIVE PIPELINE for " + numFrames + " FITS files (On-Demand Loading) ---");
+    File detectSlowObjectsIterative(DetectionConfig config, FitsFileInformation[] files,
+                                   ImageProcessing.DetectionSafetyPrompt prompt,
+                                   TransientEngineProgressListener progress, int maximumFrames) throws Exception {
+        indexFile = null;
+        AppConfig appConfig = legacyAppConfig.copy();
+        if (files.length < 5) {
+            return new StandardDetectionPipelineService(appConfig, new SessionFrames()).detectObjects(config, files, prompt, progress);
+        }
+        File directory = new File(files[0].getFilePath()).getParentFile();
+        IterativeDetectionPlan plan = new IterativeDetectionPlan(5, 5, maximumFrames > 0 ? Math.max(5, maximumFrames) : 0);
+        return runPasses(config.clone(), files, appConfig,
+                DetectionReportGenerator.captureExportSettings(appConfig.variableStarReportOptions), plan,
+                directory, directory, null, 0, null,
+                prompt == null ? null : (summary, subset, settings) -> prompt.shouldProceed(summary), progress, 0);
+    }
 
-        File masterDir = createIterativeOutputDirectory(cachedFileInfo);
-        List<DetectionReportGenerator.IterationSummary> summaries = new ArrayList<>();
-        try {
-            runPasses(config, cachedFileInfo, safetyPrompt, progressListener, maxFramesLimit, masterDir, summaries);
-        } catch (Exception e) {
-            if (Cancellation.isCancellation(e)) {
-                keepFinishedPasses(masterDir, summaries);
+    static List<Integer> sampleFrameIndices(long[] times, boolean timed, int availableFrames, int count) {
+        return IterativeDetectionPlan.sampleIndices(times, timed, availableFrames, count);
+    }
+
+    private File runPasses(DetectionConfig config, FitsFileInformation[] files, AppConfig appConfig,
+                           ExportVisualizationSettings visualization, IterativeDetectionPlan plan,
+                           File source, File prepared, JTransientAutoTuner.AutoTuneProfile tuneProfile,
+                           int tuneLimit, String tuneReport, ReportPrompt prompt,
+                           TransientEngineProgressListener progress, int passStart) throws Exception {
+        List<Integer> sizes = plan.frameCounts(files.length);
+        long[] timestamps = Arrays.stream(files).mapToLong(FitsFileInformation::getObservationTimestamp).toArray();
+        boolean timed = Arrays.stream(timestamps).allMatch(timestamp -> timestamp >= 0);
+        List<IterativeDetectionIndex.Pass> passes = new ArrayList<>();
+        for (int count : sizes) {
+            passes.add(new IterativeDetectionIndex.Pass(count, "NOT_RUN", null, null,
+                    frames(new FitsFileInformation[]{files[0], files[files.length - 1]}), Map.of(), null));
+        }
+        File root = OutputFolders.createNew(source, "iterative_detections_");
+        if (tuneReport != null) {
+            try (StagedFile staged = new StagedFile(new File(root, "auto_tune.txt"))) {
+                staged.writeString(tuneReport);
+                staged.publish();
             }
-            throw e;
         }
-
-        if (progressListener != null) {
-            progressListener.onProgressUpdate(100, "All iterative passes complete!");
+        publish(root, source, prepared, plan, tuneProfile, tuneLimit, config, visualization, "RUNNING", passes);
+        for (int passIndex = 0; passIndex < sizes.size(); passIndex++) {
+            int count = sizes.get(passIndex);
+            FitsFileInformation[] subset = sampleFrameIndices(timestamps, timed, files.length, count).stream()
+                    .map(index -> files[index]).toArray(FitsFileInformation[]::new);
+            File output = new File(root, subset.length + "_frames");
+            int base = passStart + (int) ((99L - passStart) * passIndex / sizes.size());
+            int end = passStart + (int) ((99L - passStart) * (passIndex + 1) / sizes.size());
+            TransientEngineProgressListener passProgress = (percent, message) -> {
+                if (percent < 100) emit(progress, base + (end - base) * percent / 100,
+                        "Pass " + subset.length + " frames: " + message);
+            };
+            String inputManifest = null;
+            try {
+                CancellationScope.check();
+                inputManifest = IterativeDetectionIndex.writeInputs(root, subset.length, frames(subset));
+                passes.set(passIndex, pass(subset, "RUNNING", null, inputManifest, Map.of(), null));
+                publish(root, source, prepared, plan, tuneProfile, tuneLimit, config, visualization, "RUNNING", passes);
+                DetectionConfig passConfig = config.clone();
+                StandardDetectionPipelineService.RunResult result = passRunner.run(passConfig, subset, appConfig,
+                        prompt == null ? null : summary -> prompt.confirm(summary, subset, passConfig), passProgress, output, visualization);
+                passes.set(passIndex, pass(subset, result.report() == null ? "REPORT_DECLINED" : "COMPLETED",
+                        result.report() == null ? null : subset.length + "_frames/" + result.report().getName(),
+                        inputManifest, counts(result.summary()), result.report() == null ? "Detection completed; report declined."
+                                : result.summary().photometryVerdict == null ? null : "Variable-star analysis: "
+                                        + result.summary().photometryVerdict.toLowerCase(java.util.Locale.ROOT).replace('_', ' ')));
+            } catch (Exception failure) {
+                if (Cancellation.isCancellation(failure)) {
+                    OutputFolders.deleteUnfinished(output);
+                    passes.set(passIndex, pass(subset, "CANCELLED", null, inputManifest, Map.of(), "The run was cancelled."));
+                    boolean finished = passes.stream().anyMatch(item -> List.of("COMPLETED", "REPORT_DECLINED", "FAILED").contains(item.outcome()));
+                    if (finished) publish(root, source, prepared, plan, tuneProfile, tuneLimit, config, visualization, "CANCELLED", passes);
+                    else {
+                        OutputFolders.deleteUnfinished(root);
+                        indexFile = null;
+                    }
+                    throw failure;
+                }
+                LOGGER.log(Level.WARNING, "Iterative pass " + subset.length + " failed", failure);
+                passes.set(passIndex, pass(subset, "FAILED", null, inputManifest, Map.of(),
+                        failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage()));
+            }
+            publish(root, source, prepared, plan, tuneProfile, tuneLimit, config, visualization, "RUNNING", passes);
         }
-
-        File indexFile = new File(masterDir, "index.html");
-        try {
-            DetectionReportGenerator.exportIterativeIndexReport(masterDir, summaries);
-        } catch (IOException | RuntimeException e) {
-            throw new IOException("The passes were written to " + masterDir.getAbsolutePath()
-                    + ", but their index page could not be written: "
-                    + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()), e);
-        }
-        DebugOutput.println("Total Iterative Pipeline Time: " + (System.currentTimeMillis() - startTime) + "ms");
+        String outcome = passes.stream().allMatch(item -> item.outcome().equals("COMPLETED")) ? "COMPLETED" : "FINISHED_WITH_ISSUES";
+        publish(root, source, prepared, plan, tuneProfile, tuneLimit, config, visualization, outcome, passes);
+        emit(progress, 100, "Iterative detection finished.");
         return indexFile;
     }
 
-    /**
-     * After a cancel: the passes that finished keep their reports, and the index lists them. With none finished,
-     * the run's folder is removed.
-     */
-    private static void keepFinishedPasses(File masterDir, List<DetectionReportGenerator.IterationSummary> summaries) {
-        if (summaries.isEmpty()) {
-            OutputFolders.deleteUnfinished(masterDir);
-            return;
-        }
-        try {
-            DetectionReportGenerator.exportIterativeIndexReport(masterDir, summaries, "The run was cancelled after "
-                    + summaries.size() + (summaries.size() == 1 ? " pass" : " passes") + ". The passes listed here are complete.");
-        } catch (IOException | RuntimeException e) {
-            System.err.println("Could not write the index of the finished passes in " + masterDir.getAbsolutePath() + ": " + e.getMessage());
-        }
+    private void publish(File root, File source, File prepared, IterativeDetectionPlan plan,
+                         JTransientAutoTuner.AutoTuneProfile tuneProfile, int tuneLimit, DetectionConfig config,
+                         ExportVisualizationSettings visualization, String outcome,
+                         List<IterativeDetectionIndex.Pass> passes) throws IOException {
+        IterativeDetectionIndex.write(root, new IterativeDetectionIndex.Run(1, source.getName(), prepared.getName(),
+                plan, tuneProfile == null ? null : tuneProfile.name(), tuneProfile == null ? 0 : tuneLimit,
+                config, visualization, outcome, List.copyOf(passes)));
+        indexFile = new File(root, "index.html");
     }
 
-    /** Builds the master map, then runs the passes; each finished pass adds its summary to {@code summaries}. */
-    private void runPasses(DetectionConfig config,
-                           FitsFileInformation[] cachedFileInfo,
-                           ImageProcessing.DetectionSafetyPrompt safetyPrompt,
-                           TransientEngineProgressListener progressListener,
-                           int maxFramesLimit,
-                           File masterDir,
-                           List<DetectionReportGenerator.IterationSummary> summaries) throws Exception {
-        int numFrames = cachedFileInfo.length;
-        int targetMaxLimit = resolveTargetMaxLimit(maxFramesLimit, numFrames);
+    private static IterativeDetectionIndex.Pass pass(FitsFileInformation[] files, String outcome,
+                                                      String report, String inputManifest, Map<String, Integer> counts, String detail) {
+        return new IterativeDetectionIndex.Pass(files.length, outcome, report, inputManifest,
+                frames(new FitsFileInformation[]{files[0], files[files.length - 1]}), counts, detail);
+    }
 
-        DebugOutput.println("\n--- Extracting Timestamps & Exposures for Temporal Spacing ---");
-        long[] frameTimestamps = new long[numFrames];
-        long[] frameExposures = new long[numFrames];
-        boolean hasValidTime = true;
-        for (int i = 0; i < numFrames; i++) {
-            frameTimestamps[i] = cachedFileInfo[i].getObservationTimestamp();
-            frameExposures[i] = cachedFileInfo[i].getExposureDurationMillis();
-            if (frameTimestamps[i] == -1) {
-                hasValidTime = false;
-            }
-        }
+    private static List<IterativeDetectionIndex.Frame> frames(FitsFileInformation[] files) {
+        return Arrays.stream(files).map(file -> new IterativeDetectionIndex.Frame(
+                file.getFileName(), file.getObservationTimestamp(), file.getExposureDurationMillis(),
+                file.getSizeWidth(), file.getSizeHeight())).toList();
+    }
 
-        DebugOutput.println("\n--- Generating Global Master Map from " + targetMaxLimit + " globally spaced frames ---");
-        TransientEngineProgressListener masterListener = (percent, msg) -> {
-            if (progressListener != null) {
-                progressListener.onProgressUpdate(percent / 5, "Global Master Map: " + msg);
-            }
-        };
+    private static Map<String, Integer> counts(ImageProcessing.DetectionSummary summary) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        counts.put("Moving targets", summary.movingTargets);
+        counts.put("Streak tracks", summary.streakTracks);
+        counts.put("Single streaks", summary.singleStreaks);
+        counts.put("Anomalies", summary.anomalies);
+        counts.put("Slow movers", summary.slowMoverCandidates);
+        counts.put("Local rescue candidates", summary.localRescueCandidates);
+        counts.put("Local activity clusters", summary.localActivityClusters);
+        counts.put("Common-motion groups", summary.commonMotionGroups);
+        counts.put("Camera-fixed groups", summary.cameraFixedGroups);
+        counts.put("Unclassified detections", summary.unclassifiedDetections);
+        counts.put("Variable-star candidates", summary.variableStarCandidates);
+        counts.put("Possible variables", summary.possibleVariableStars);
+        return counts;
+    }
 
-        short[][] providedMasterStack;
-        JTransientEngine globalEngine = new JTransientEngine();
+    private static StandardDetectionPipelineService.RunResult standardPass(DetectionConfig config,
+            FitsFileInformation[] files, AppConfig appConfig, ImageProcessing.DetectionSafetyPrompt prompt,
+            TransientEngineProgressListener progress, File output, ExportVisualizationSettings visualization) throws Exception {
+        SessionFrames state = new SessionFrames();
         try {
-            List<ImageFrame> masterFrames = loadFramesForIndices(
-                    cachedFileInfo,
-                    frameTimestamps,
-                    frameExposures,
-                    sampleFrameIndices(frameTimestamps, hasValidTime, numFrames, targetMaxLimit));
-            providedMasterStack = globalEngine.generateMasterStack(masterFrames, config, masterListener);
-            masterFrames.clear();
-            System.gc();
+            return new StandardDetectionPipelineService(appConfig, state).run(config, files, prompt, progress, output, visualization);
         } finally {
-            globalEngine.shutdown();
-        }
-
-        int totalIterations = (int) Math.ceil((targetMaxLimit - 4.0) / 5.0);
-        int currentIteration = 0;
-
-        for (int k = 5; k <= targetMaxLimit; k += 5) {
-            DebugOutput.println("\n>>> RUNNING ITERATION: " + k + " Frames (Time-Spaced)");
-
-            final int basePercent = 20 + (int) (((float) currentIteration / totalIterations) * 80);
-            final int nextBasePercent = 20 + (int) (((float) (currentIteration + 1) / totalIterations) * 80);
-            final int currentK = k;
-            TransientEngineProgressListener scaledListener = (enginePercent, message) -> {
-                if (progressListener != null) {
-                    int scaledPercent = basePercent + (int) ((enginePercent / 100.0f) * (nextBasePercent - basePercent));
-                    progressListener.onProgressUpdate(scaledPercent, "Pass " + currentK + " frames: " + message);
-                }
-            };
-
-            if (progressListener != null) {
-                scaledListener.onProgressUpdate(0, "Loading " + k + " frames for engine...");
-            }
-
-            List<ImageFrame> spacedSubset = loadFramesForIndices(
-                    cachedFileInfo,
-                    frameTimestamps,
-                    frameExposures,
-                    sampleFrameIndices(frameTimestamps, hasValidTime, numFrames, k));
-            DetectionPipelineSupport.logPipelineFrameTimingPayload("Iterative pass " + k, spacedSubset, cachedFileInfo);
-
-            DetectionConfig effectiveConfig = DetectionPipelineSupport.createEffectiveDetectionConfig(config, spacedSubset.size());
-            // Photometry needs the full session; time-spaced subsets would only repeat it on partial data.
-            effectiveConfig.enableVariableStarDetection = false;
-
-            PipelineResult result;
-            JTransientEngine engine = new JTransientEngine();
-            try {
-                // The engine takes 0-90% of the pass; generating its report follows at 95%.
-                TransientEngineProgressListener engineListener =
-                        (percent, message) -> scaledListener.onProgressUpdate((int) (percent * 0.9), message);
-                result = engine.runPipeline(spacedSubset, effectiveConfig, engineListener, providedMasterStack);
-            } finally {
-                engine.shutdown();
-            }
-
-            ImageProcessing.DetectionSummary detectionSummary = DetectionPipelineSupport.summarizeDetections(result);
-            if (safetyPrompt != null && !safetyPrompt.shouldProceed(detectionSummary)) {
-                DebugOutput.println("Iteration " + k + " aborted by UI callback due to high detection count. Stopping further iterations.");
-                break;
-            }
-
-            if (progressListener != null) {
-                scaledListener.onProgressUpdate(95, "Generating report (on-demand disk reads)...");
-            }
-
-            File iterationDir = new File(masterDir, k + "_frames");
-            iterationDir.mkdirs();
-
-            String reportFailure = null;
-            try {
-                // The pass's report takes 95-98% of the pass.
-                DetectionReportGenerator.exportTrackVisualizations(
-                        result,
-                        createOnDemandRawFramesForExport(cachedFileInfo),
-                        cachedFileInfo,
-                        iterationDir,
-                        effectiveConfig,
-                        appConfig,
-                        detectionSummary.reportInclusion(),
-                        (percent, message) -> scaledListener.onProgressUpdate(95 + percent / 25, message));
-            } catch (IOException | RuntimeException e) {
-                if (Cancellation.isCancellation(e)) {
-                    OutputFolders.deleteUnfinished(iterationDir);
-                    throw e;
-                }
-                // The other passes go on; the index says that this pass has no report, and why.
-                reportFailure = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                System.err.println("Failed to export visualization for iteration " + k + ": " + reportFailure);
-            }
-
-            int anomalyCount = result.anomalies == null ? 0 : result.anomalies.size();
-            summaries.add(new DetectionReportGenerator.IterationSummary(k, k + "_frames", result.tracks.size(), anomalyCount,
-                    reportFailure));
-
-            currentIteration++;
+            state.clear();
         }
     }
 
-    static List<Integer> sampleFrameIndices(long[] times, boolean hasValidTime, int maxLimit, int k) {
-        List<Integer> indices = new ArrayList<>();
+    record Tuned(DetectionConfig config, String telemetry) {}
 
-        if (hasValidTime && maxLimit > 1) {
-            long startTime = times[0];
-            long endTime = times[maxLimit - 1];
-            long duration = endTime - startTime;
-
-            if (duration > 0) {
-                indices.add(0);
-                for (int i = 1; i < k - 1; i++) {
-                    long targetTime = startTime + (long) (i * duration / (double) (k - 1));
-                    int bestIdx = 0;
-                    long minDiff = Long.MAX_VALUE;
-                    for (int j = 0; j < maxLimit; j++) {
-                        long diff = Math.abs(times[j] - targetTime);
-                        if (diff < minDiff) {
-                            minDiff = diff;
-                            bestIdx = j;
-                        }
-                    }
-                    if (!indices.contains(bestIdx)) {
-                        indices.add(bestIdx);
-                    }
-                }
-                if (!indices.contains(maxLimit - 1)) {
-                    indices.add(maxLimit - 1);
-                }
-                Collections.sort(indices);
-                if (indices.size() == k) {
-                    return indices;
-                }
+    private static Tuned tune(FitsFileInformation[] files, DetectionConfig config, int limit,
+                              JTransientAutoTuner.AutoTuneProfile profile, TransientEngineProgressListener progress) throws Exception {
+        List<ImageFrame> candidates = AutoTuneCandidatePoolBuilder.buildCandidatePool(files, config, limit,
+                (percent, message) -> emit(progress, 10 + percent / 10, "Auto-Tune: " + message));
+        try {
+            JTransientAutoTuner.AutoTunerResult result = AutoTunerRunner.run(candidates, config.clone(), profile,
+                    AutoTunerRunner.DEFAULT_ALGORITHM, (percent, message) -> emit(progress, 20 + percent / 10, "Auto-Tune: " + message));
+            if (result == null || !result.success || result.optimizedConfig == null) {
+                throw new IOException("Auto-Tune did not produce usable settings. Import the dataset normally to experiment with settings."
+                        + (result == null ? "" : "\n" + result.telemetryReport));
             }
-        }
-
-        indices.clear();
-        for (int i = 0; i < k; i++) {
-            int index = (int) Math.round(i * (maxLimit - 1) / (double) (k - 1));
-            indices.add(index);
-        }
-        return indices;
-    }
-
-    private static File createIterativeOutputDirectory(FitsFileInformation[] cachedFileInfo) {
-        File parentDir = new File(cachedFileInfo[0].getFilePath()).getParentFile();
-        if (parentDir == null) {
-            parentDir = new File(System.getProperty("user.dir"));
-        }
-        return OutputFolders.createNew(parentDir, "iterative_detections_");
-    }
-
-    private static int resolveTargetMaxLimit(int maxFramesLimit, int numFrames) {
-        int targetMaxLimit = (maxFramesLimit > 0 && maxFramesLimit < numFrames) ? maxFramesLimit : numFrames;
-        if (targetMaxLimit < 5) {
-            targetMaxLimit = 5;
-        }
-        return targetMaxLimit;
-    }
-
-    private static List<ImageFrame> loadFramesForIndices(FitsFileInformation[] cachedFileInfo,
-                                                         long[] frameTimestamps,
-                                                         long[] frameExposures,
-                                                         List<Integer> indices) throws Exception {
-        List<ImageFrame> frames = new ArrayList<>();
-        for (int index : indices) {
-            frames.add(loadFrame(cachedFileInfo, frameTimestamps, frameExposures, index));
-        }
-        return frames;
-    }
-
-    private static ImageFrame loadFrame(FitsFileInformation[] cachedFileInfo,
-                                        long[] frameTimestamps,
-                                        long[] frameExposures,
-                                        int index) throws Exception {
-        File currentFile = new File(cachedFileInfo[index].getFilePath());
-        try (Fits fitsFile = new Fits(currentFile)) {
-            BasicHDU<?> hdu = ImageProcessing.getImageHDU(fitsFile);
-            Object kernel = hdu.getKernel();
-            if (!(kernel instanceof short[][])) {
-                throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass() + " in file " + currentFile.getName());
-            }
-            return new ImageFrame(index, currentFile.getName(), (short[][]) kernel, frameTimestamps[index], frameExposures[index]);
+            return new Tuned(result.optimizedConfig.clone(), result.telemetryReport);
+        } finally {
+            candidates.clear();
         }
     }
 
-    private static List<short[][]> createOnDemandRawFramesForExport(FitsFileInformation[] cachedFileInfo) {
-        return new AbstractList<short[][]>() {
-            @Override
-            public short[][] get(int index) {
-                try {
-                    File currentFile = new File(cachedFileInfo[index].getFilePath());
-                    try (Fits fitsFile = new Fits(currentFile)) {
-                        BasicHDU<?> hdu = ImageProcessing.getImageHDU(fitsFile);
-                        Object kernel = hdu.getKernel();
-                        if (!(kernel instanceof short[][])) {
-                            throw new IOException("Cannot process: Expected short[][] but found " + kernel.getClass() + " in file " + currentFile.getName());
-                        }
-                        return (short[][]) kernel;
-                    }
-                } catch (Exception e) {
-                    throw new RuntimeException("Failed to read frame " + index + " on demand: " + e.getMessage(), e);
-                }
-            }
-
-            @Override
-            public int size() {
-                return cachedFileInfo.length;
-            }
-        };
+    private static void emit(TransientEngineProgressListener progress, int percent, String message) {
+        if (progress != null) progress.onProgressUpdate(percent, message);
     }
 }
