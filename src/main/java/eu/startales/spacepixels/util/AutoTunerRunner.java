@@ -68,14 +68,7 @@ public final class AutoTunerRunner {
                                                           Algorithm algorithm,
                                                           TransientEngineProgressListener listener) {
         if (algorithm == Algorithm.LEGACY) {
-            // The legacy tuner samples AUTO_TUNE_SAMPLE_SIZE frames; never ask for more than are available.
-            int originalSampleSize = JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE;
-            JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = Math.min(originalSampleSize, candidateFrames.size());
-            try {
-                return JTransientAutoTuner.tuneSnapshot(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
-            } finally {
-                JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = originalSampleSize;
-            }
+            return LegacyTunerSupport.available().run(candidateFrames, baseConfig, profile, listener);
         }
         return CalibratedAutoTuner.tuneSnapshot(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
     }

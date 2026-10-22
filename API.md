@@ -265,7 +265,7 @@ try {
 - The API returns a defensive copy for exposed configs and FITS metadata arrays.
 - The API prints nothing to the console; problems are thrown or logged as `java.util.logging` warnings. Each run sets JTransient's `JTransientEngine.DEBUG` and `JTransientAutoTuner.DEBUG` from the `spacepixels.debug` system property, so start the JVM with `-Dspacepixels.debug=true` for the per-frame diagnostics on standard output. The Auto-Tune telemetry is in the result (`getAutoTuneTelemetryReport()`), not printed.
 - The public artifact currently contains GUI code as well, but GUI classes are not part of the supported API contract.
-- Do not run multiple API calls with the legacy auto-tuner concurrently in the same JVM. It temporarily adjusts shared JTransient Auto-Tune state while a tuning run is active. The calibrated tuner (the default) does not use shared state.
+- With JTransient 1.0.6, both tuners capture independent per-operation options; legacy tuning no longer temporarily edits the shared sample size. Do not edit compatibility static knobs while their defaults are being captured. SpacePixels also supports JTransient 1.0.5: its legacy compatibility path serializes SpacePixels calls and restores the temporary sample-size change, but callers must not run other direct legacy-tuner calls concurrently in that older engine.
 
 
 ### Variable-star report presentation
