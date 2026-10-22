@@ -104,6 +104,8 @@ For the desktop application, use `gradlew.bat installDist` (or `./gradlew instal
 
 ## Upload to the Central Portal
 
+Before release, verify the intended JTransient pair using the [engine compatibility workflow](docs/engine-compatibility.md), then verify actual public artifact availability with composites and the validation-only repository disabled. Central staging rejects `engineCompatibilityRepository`; unsigned locally staged libraries cannot establish a publishable dependency pair.
+
 Upload the generated ZIP bundle manually in the Maven Central Portal after verifying that your namespace is ready there.
 
 The standardized Gradle entrypoints are:

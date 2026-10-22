@@ -1,0 +1,8 @@
+allprojects {
+    plugins.withId('maven-publish') {
+        publishing.repositories.maven {
+            name = 'engineCompatibility'
+            url = uri(providers.gradleProperty('engineCompatibilityRepository').get())
+        }
+    }
+}

@@ -41,6 +41,9 @@ tasks.register('apiConsumerTest', GradleBuild) {
     tasks = ['check']
     startParameter.projectProperties = [spacepixelsVersion: project.version.toString(),
             consumerRepository: consumerRepository.get().asFile.absolutePath,
+            engineCompatibilityRepository: providers.gradleProperty('engineCompatibilityRepository').orElse('').get(),
+            expectedJTransientVersion: providers.gradleProperty('engineCompatibilityRepository').isPresent()
+                    ? providers.gradleProperty('jTransientVersion').getOrElse('1.0.5') : '',
             stagedLibraryGroups: libraryBuilds.collect { localLibraries[it.name] }.join(','),
             consumerMetadata: providers.gradleProperty('apiConsumerMetadata').orElse('gradle').get()]
 }

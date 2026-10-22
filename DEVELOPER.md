@@ -12,6 +12,8 @@ Read any applicable `AGENTS.md` before changing code. Local tool paths, sibling-
 
 Use **Java 21** for development and the checked-in Gradle wrapper (`gradlew.bat` on Windows, `./gradlew` on Linux/macOS). SpacePixels is one Gradle project with headless `main` and application-only `desktop` source sets. Both compile for Java 21. Configure the sibling libraries below before building.
 
+For explicit previous/current engine source-built artifact checks, use the [engine compatibility matrix](docs/engine-compatibility.md). It disables composite substitution per invocation without changing ignored development flags, checks the actual resolved version, and exercises both Gradle/POM metadata. Local staged success is not proof that the same version is available from Maven Central.
+
 | Read | For |
 |---|---|
 | [MANUAL.md](MANUAL.md) | User workflow, input requirements, settings and report behavior |

@@ -1,0 +1,34 @@
+def compatibilityRepository = providers.gradleProperty('engineCompatibilityRepository')
+def expectedEngineVersion = providers.gradleProperty('jTransientVersion').getOrElse('1.0.5')
+
+if (compatibilityRepository.isPresent()) {
+    repositories.maven {
+        name = 'engineCompatibility'
+        url = uri(compatibilityRepository.get())
+        content {
+            includeGroup 'io.github.ppissias.jtransient'
+            includeGroup 'io.github.ppissias.jplatesolve'
+        }
+    }
+}
+
+tasks.register('verifyEngineArtifact') {
+    group = 'verification'
+    description = 'Verifies an explicit no-composite engine version for staged artifact compatibility checks.'
+    doLast {
+        if (gradle.includedBuilds.any { it.name in ['JTransient', 'JPlateSolve'] }) {
+            throw new GradleException('Artifact-pair verification requires both useLocalJTransientBuild and useLocalJPlateSolveBuild=false.')
+        }
+        def components = configurations.runtimeClasspath.incoming.resolutionResult.allComponents
+        def engine = components.find { it.moduleVersion?.group == 'io.github.ppissias.jtransient' }
+        if (engine == null || engine.id instanceof org.gradle.api.artifacts.component.ProjectComponentIdentifier ||
+                engine.moduleVersion.version != expectedEngineVersion) {
+            throw new GradleException("Expected packaged JTransient ${expectedEngineVersion}, resolved ${engine?.id}.")
+        }
+        logger.lifecycle("Verified packaged JTransient ${engine.moduleVersion.version}; no sibling library substitution.")
+    }
+}
+
+if (compatibilityRepository.isPresent()) {
+    tasks.named('check') { dependsOn tasks.named('verifyEngineArtifact') }
+}
