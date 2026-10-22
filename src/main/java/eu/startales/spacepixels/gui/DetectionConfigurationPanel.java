@@ -1083,7 +1083,7 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Frame Rejection"));
         cmbFrameRejection = new JComboBox<>(new DefaultComboBoxModel<>(FRAME_REJECTION_PRESETS));
         cmbFrameRejection.putClientProperty(SettingRow.PRESET_CHOOSER, true);
-        cmbFrameRejection.setPreferredSize(new Dimension(110, 26));
+        UiStyle.inputWidth(cmbFrameRejection, 110);
         addSettingRow(panel, "Strictness", "How readily frames that differ from the rest of the session are left out. Normal uses the default limits; Lenient keeps more frames, Strict leaves out more.<br>The individual limits are expert settings; changing one shows Custom.", cmbFrameRejection);
 
         panel.add(Box.createVerticalStrut(10));
@@ -1139,7 +1139,8 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private JLabel createTabIntro(String text) {
-        JLabel introLabel = new JLabel("<html><div style='color: #999999; font-size: 12px; padding-bottom: 10px; width: 450px;'>" + text + "</div></html>");
+        JLabel introLabel = new WrappingHelpLabel(text, 600);
+        introLabel.setBorder(new EmptyBorder(0, 0, UiStyle.space(10), 0));
         introLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         return introLabel;
     }
@@ -1222,7 +1223,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     static JLabel createSectionHeader(String title) {
         JLabel headerLabel = new JLabel(title);
-        headerLabel.setFont(headerLabel.getFont().deriveFont(Font.BOLD, 16f));
+        headerLabel.setFont(UiStyle.sectionFont());
         headerLabel.setForeground(accentColor());
         headerLabel.setBorder(new EmptyBorder(10, 0, 10, 0));
         headerLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1332,7 +1333,7 @@ public class DetectionConfigurationPanel extends JPanel {
             configureSpinnerEditor(spinner);
             spinner.addChangeListener(e -> configureSpinnerEditor(spinner));
         }
-        spinner.setPreferredSize(new Dimension(80, 26));
+        UiStyle.inputWidth(spinner, 80);
         return spinner;
     }
 
@@ -1345,54 +1346,20 @@ public class DetectionConfigurationPanel extends JPanel {
     private JCheckBox addCheckboxRow(JPanel parent, String title, String description, boolean defaultValue) {
         JCheckBox checkBox = new JCheckBox();
         checkBox.setSelected(defaultValue);
-        checkBox.setPreferredSize(new Dimension(80, 26));
+        UiStyle.inputWidth(checkBox, 80);
         addSettingRow(parent, title, description, checkBox);
         return checkBox;
     }
 
     /** Adds a setting row (title, description, input and reset button) and registers it with the navigator. */
     private void addSettingRow(JPanel parent, String title, String description, JComponent input) {
-        JPanel row = new JPanel();
-        row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
-        row.setBorder(new EmptyBorder(5, 0, 15, 0));
-
-        JPanel textPanel = new JPanel();
-        textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
-
         JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
-        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel descLabel = new JLabel("<html>" + description + "</html>");
-        descLabel.setFont(descLabel.getFont().deriveFont(Font.PLAIN, 12f));
-        descLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
-        descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        textPanel.add(titleLabel);
-        textPanel.add(Box.createVerticalStrut(3));
-        textPanel.add(descLabel);
-
-        // Increased height to 85px to safely accommodate multiple lines of description text
-        Dimension textDim = new Dimension(480, 85);
-        textPanel.setPreferredSize(textDim);
-        textPanel.setMinimumSize(textDim);
-        textPanel.setMaximumSize(textDim);
-
-        SettingRow setting = new SettingRow(parent, row, titleLabel, title, description, input);
-        JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(4), 0));
         inputWrapper.add(input);
+        JPanel row = new SettingsRowPanel(titleLabel, description, inputWrapper);
+        SettingRow setting = new SettingRow(parent, row, titleLabel, title, description, input);
         inputWrapper.add(setting.resetButton());
-
-        row.add(textPanel);
-        row.add(Box.createHorizontalStrut(20));
-        row.add(inputWrapper);
-        row.add(Box.createHorizontalGlue());
-
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
         parent.add(row);
-
-        // Keep the row at its own height, so rows do not stretch when a filter leaves only a few of them on a page.
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
         settingRows.add(setting);
         if (input instanceof JSpinner) {
             inputTitles.put((JSpinner) input, title);

@@ -45,7 +45,7 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 | D09 | Medium | Proposed | Prepared report diagnostics, one finding/category identity source and stable export context | S14–S16; supports D11 and F09 |
 | D10 | Medium | Proposed remaining scope | Typed application setting bindings and explicit engine capabilities/compatibility; JA-01 rules and persistence foundations are complete | S14 options; JA-04/JA-08/JA-11 dependencies where relevant |
 | D11 | Medium | Proposed; completed-run viewing direction agreed | Clear analysis scope, unified completed-result access and lightweight history/saved-result restoration | Extend existing session/overlays; reuse D09 identity/context; F02 remains deferred |
-| D12 | Medium | Proposed | Shared visual defaults and content-driven/scalable layout | Independent small slices; coordinate progress layout with F10 |
+| D12 | Medium | In progress; settings layout slice complete | Shared styles and content-driven settings forms implemented; finish main-window/viewer layout review and coordinated progress wrapping | Independent slices; leave F10's progress dialog to its parallel implementation |
 | F01 | Unranked | Proposed; experiment first | Compare slow-mover thresholds with tuned frame thresholds on real data before deciding any change | JTransient SM-2 is deferred; existing calibrated master tuning is not pending |
 | F02 | Unranked | Deferred | Richer header-derived session summary / multiple-night warning | Owned by D11; not a separate expensive pre-run quality table |
 | F04 | Unranked | Proposed; explore design | MCP access to the existing headless pipeline, then explicitly scoped inspection capabilities | Reuse API and completed S13 headless service boundary |
@@ -121,7 +121,9 @@ A useful larger idea is a small, persistent **session workspace** connecting fra
 
 ### D12. Use shared visual rules and content-driven layout
 
-**Current evidence.** [DetectionConfigurationPanel.addSettingRow](src/main/java/eu/startales/spacepixels/gui/DetectionConfigurationPanel.java) still fixes a description panel to `480 × 85` for preferred, minimum and maximum size. Several controls use explicit dimensions/font sizes, and enabled help often uses `Label.disabledForeground`. `ProcessingProgressDialog` chooses a stable width when first packed, with a 420 px minimum, and uses an unwrapped status label; long messages/larger fonts need layout verification rather than a claim that every dialog is exactly 420 px wide. The workflow already wraps and `WindowPlacement` is screen-aware. D12 remains applicable, but clipping/contrast/scaling claims require the acceptance checks below.
+**Implemented first slice (2026-10-22).** Detection/application settings now share `SettingsRowPanel`, measured HTML wrapping and `UiStyle` typography/spacing. The fixed `480 × 85` description and configuration text-column heights are removed. Inputs retain native font-dependent height; enabled descriptions, Overview guidance and viewer key hints use readable theme help colors. Layout tests cover narrow/wide forms, larger base fonts and FlatLaf 100/150/200% user scaling. See the [completion record](docs/archive/design-improvements-completed-2026-10.md#d12-settings-layout-and-shared-styles-first-slice-2026-10-22).
+
+**Remaining evidence/scope.** Some Overview status/table HTML and main-window/viewer controls retain local widths/font sizes. `ProcessingProgressDialog` still needs long-message/larger-font verification, coordinated with the maintainer's parallel F10 work; it is deliberately untouched in this implementation sequence. The workflow already wraps and `WindowPlacement` is screen-aware. A full empty/loaded desktop review across display scaling remains required; layout tests do not establish visual contrast compliance.
 
 **Proposal.** Define a small set of application UI defaults: body/help/section typography, spacing, content widths and semantic status colours. Use relative typography and scale custom dimensions with the supported FlatLaf/JDK mechanisms; prefer measured text and wrapping to fixed description heights. FlatLaf's [customisation guide](https://www.formdev.com/flatlaf/how-to-customize/) supports application-specific defaults, and its [scaling guidance](https://www.formdev.com/flatlaf/properties-files/#scaled-values) distinguishes scaled UI values. This is not a recommendation to use newer APIs unavailable in the pinned FlatLaf version.
 
@@ -317,6 +319,8 @@ Use headless application services, with the existing public API as the starting 
 
 Before implementation, decide the initial client/local-file workflow, supported settings and defaults, job/session lifetime, result/artifact access and how much lower-level inspection belongs in the first version. A first acceptance exercise would have an agent submit a folder/profile, follow the run and retrieve the same findings and report as an equivalent Java API call. Single-frame operations would need comparisons with the corresponding extraction and session-inspection paths.
 
+**Open implementation choice (2026-10-22).** Requested the initial transport/client preference: local stdio using local folders/profiles and full-analysis jobs/artifacts, or HTTP with remote artifact access. Other independent features proceed while this larger interface decision is pending.
+
 ### Native platform installers (F06)
 
 Explore a native installer for SpacePixels, starting on Windows. The goal is a normal install, launch, upgrade and uninstall experience. Other platforms can follow after the Windows approach is established.
@@ -326,6 +330,8 @@ Decide the Windows package format (for example, EXE or MSI), whether to bundle a
 Compare packaging options against the existing Gradle distribution and publishing workflow before selecting tooling. Validate a proposed installer on a clean Windows environment: install, launch, run a small analysis and open its report, upgrade from a previous version, and uninstall while preserving saved profiles and observing data. These are exploration criteria, not a claim that a native installer or bundled runtime already exists.
 
 **Related bootstrap idea:** investigate optional launcher guidance for installing a suitable OpenJDK through native package managers on Windows/macOS/Linux. Temurin 25 was suggested as a candidate, not adopted as the project baseline. Current development uses Java 21; verify package identifiers, platform support, licensing and runtime compatibility when this proposal is taken up. Do not install software silently or treat an unverified package-manager command as a shipped bootstrap feature.
+
+**Open implementation choice (2026-10-22).** Requested whether the per-user Windows installer should bundle Java 21 or require an existing Java 21 installation. Signing and clean-machine install/upgrade/uninstall verification remain release work; no runtime is downloaded or installed as part of the current feature sequence.
 
 ### Combined FITS preparation (F07)
 

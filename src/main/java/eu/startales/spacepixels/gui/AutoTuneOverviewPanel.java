@@ -157,12 +157,11 @@ public class AutoTuneOverviewPanel extends JPanel {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        JLabel intro = new JLabel("<html><div style='color: #999999; font-size: 12px; padding-bottom: 6px; width: 480px;'>"
-                + "<b>Start here:</b> click <b>Run Auto-Tune</b>. It tests your frames and prepares a ready-to-use set of settings for "
+        JLabel intro = new WrappingHelpLabel("<b>Start here:</b> click <b>Run Auto-Tune</b>. It tests your frames and prepares a ready-to-use set of settings for "
                 + "each sensitivity profile, from <b>Low</b> (fewest false candidates) to <b>Maximum</b> (faintest objects, many more "
                 + "candidates to review). Pick the profile that suits your session in the table (<b>High</b> is the default), then click "
-                + "<b>Detect Moving Targets</b>. The pages on the left hold every setting in detail."
-                + "</div></html>");
+                + "<b>Detect Moving Targets</b>. The pages on the left hold every setting in detail.", 600);
+        intro.setBorder(new EmptyBorder(0, 0, UiStyle.space(6), 0));
         add(left(intro));
 
         add(left(DetectionConfigurationPanel.createSectionHeader("Auto-Tune")));
@@ -411,8 +410,7 @@ public class AutoTuneOverviewPanel extends JPanel {
             check.setEnabled(false);
             check.setToolTipText("Always on.");
         }
-        JLabel descriptionLabel = new JLabel("<html><div style='width: 360px;'>" + description + "</div></html>");
-        descriptionLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        JLabel descriptionLabel = new WrappingHelpLabel(description, 360);
         JButton settingsLink = AccessibleControls.link("Settings ›", "Open " + tabTitle + " settings",
                 () -> host.showSettingsTab(tabTitle));
         settingsLink.setToolTipText("Open the " + tabTitle + " tab.");
@@ -1251,7 +1249,7 @@ public class AutoTuneOverviewPanel extends JPanel {
     }
 
     private static JLabel hint(String html) {
-        return new JLabel("<html><div style='color: #999999; font-size: 12px; width: 400px;'>" + html + "</div></html>");
+        return new WrappingHelpLabel(html, 400);
     }
 
     private static JComponent left(JComponent component) {

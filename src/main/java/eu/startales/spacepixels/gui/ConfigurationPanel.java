@@ -34,9 +34,7 @@ import java.util.function.Function;
  * Edits apply to the session as soon as they are valid; Save keeps them for the next start.
  */
 public class ConfigurationPanel extends JPanel {
-    private static final int CONFIG_TEXT_COLUMN_WIDTH = 680;
     private static final int CONFIG_TEXT_FIELD_WIDTH = 190;
-    private static final int CONFIG_TEXT_FIELD_HEIGHT = 26;
 
     /** ASTAP download page, offered when no star database is found. */
     static final String ASTAP_DOWNLOAD_URL = "https://www.hnsky.org/astap.htm";
@@ -99,11 +97,11 @@ public class ConfigurationPanel extends JPanel {
         // --- EXTERNAL TOOLS ---
         mainContent.add(createSectionHeader("Plate Solving"));
 
-        astapPathLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        astapPathLabel.setForeground(UiStyle.helpColor());
         JButton astapPathButton = new JButton("Browse...");
         astapCheckButton.setToolTipText("Check that ASTAP is there and that a star database is installed next to it.");
         astapCheckButton.addActionListener(e -> checkAstap());
-        astapStatusLabel.setFont(astapStatusLabel.getFont().deriveFont(12f));
+        astapStatusLabel.setFont(UiStyle.bodyFont());
         astapDownloadButton.setVisible(false);
 
         JPanel astapPathRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -127,8 +125,7 @@ public class ConfigurationPanel extends JPanel {
         astrometryAccount.add(astrometryOwnKeyButton);
         astrometryAnonymousButton.setSelected(true);
         astrometryKeyField.setEnabled(false);
-        astrometryKeyField.setPreferredSize(new Dimension(CONFIG_TEXT_FIELD_WIDTH, CONFIG_TEXT_FIELD_HEIGHT));
-        astrometryKeyField.setMaximumSize(new Dimension(CONFIG_TEXT_FIELD_WIDTH, CONFIG_TEXT_FIELD_HEIGHT));
+        UiStyle.inputWidth(astrometryKeyField, CONFIG_TEXT_FIELD_WIDTH);
         astrometryCheckButton.setToolTipText("Log in to Astrometry.net with this account. Nothing is uploaded.");
         JPanel astrometryChoiceRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         astrometryChoiceRow.add(astrometryAnonymousButton);
@@ -151,8 +148,7 @@ public class ConfigurationPanel extends JPanel {
         // --- SKY CATALOGUE ---
         mainContent.add(createSectionHeader("Sky Catalogue (Annotate)"));
         starDepthSpinner.setEditor(new JSpinner.NumberEditor(starDepthSpinner, "0.0"));
-        starDepthSpinner.setPreferredSize(new Dimension(80, CONFIG_TEXT_FIELD_HEIGHT));
-        starDepthSpinner.setMaximumSize(new Dimension(80, CONFIG_TEXT_FIELD_HEIGHT));
+        UiStyle.inputWidth(starDepthSpinner, 80);
         starDepthSpinner.addChangeListener(e -> starDepthChanged());
         mainContent.add(createConfigRow(
                 "Star Depth (Gaia G)",
@@ -711,7 +707,7 @@ public class ConfigurationPanel extends JPanel {
 
     private static JLabel statusLabel() {
         JLabel label = new JLabel(" ");
-        label.setFont(label.getFont().deriveFont(11.5f));
+        label.setFont(UiStyle.bodyFont());
         return label;
     }
 
@@ -726,8 +722,7 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private static JPanel fieldWithStatus(JTextField field, JLabel status) {
-        field.setPreferredSize(new Dimension(CONFIG_TEXT_FIELD_WIDTH, CONFIG_TEXT_FIELD_HEIGHT));
-        field.setMaximumSize(new Dimension(CONFIG_TEXT_FIELD_WIDTH, CONFIG_TEXT_FIELD_HEIGHT));
+        UiStyle.inputWidth(field, CONFIG_TEXT_FIELD_WIDTH);
         return verticalStack(field, status);
     }
 
@@ -747,7 +742,7 @@ public class ConfigurationPanel extends JPanel {
      */
     private JLabel createSectionHeader(String title) {
         JLabel headerLabel = new JLabel(title);
-        headerLabel.setFont(headerLabel.getFont().deriveFont(Font.BOLD, 16f));
+        headerLabel.setFont(UiStyle.sectionFont());
         headerLabel.setForeground(DetectionConfigurationPanel.accentColor());
         headerLabel.setBorder(new EmptyBorder(20, 0, 10, 0));
         headerLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -755,67 +750,10 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private JPanel createConfigRow(String title, String description, JComponent inputControl) {
-        JPanel row = new JPanel();
-        row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
-        row.setBorder(new EmptyBorder(5, 0, 15, 0));
-
-        // Left side: Text (Title + Description)
-        JPanel textPanel = new JPanel();
-        textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
-
         JLabel titleLabel = new JLabel(title);
         AccessibleControls.label(titleLabel, inputControl, description);
-        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
-        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel descLabel = createDescriptionPane(description);
-        descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        textPanel.add(titleLabel);
-        textPanel.add(Box.createVerticalStrut(3));
-        textPanel.add(descLabel);
-
-        // Keep a stable text column width but allow the row height to grow with wrapped content.
-        Dimension preferredTextSize = textPanel.getPreferredSize();
-        Dimension textDim = new Dimension(CONFIG_TEXT_COLUMN_WIDTH, preferredTextSize.height);
-        textPanel.setPreferredSize(textDim);
-        textPanel.setMinimumSize(textDim);
-        textPanel.setMaximumSize(new Dimension(CONFIG_TEXT_COLUMN_WIDTH, Integer.MAX_VALUE));
-
-        // Right side: Input Control
         JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         inputWrapper.add(inputControl);
-
-        row.add(textPanel);
-        row.add(Box.createHorizontalStrut(20));
-        row.add(inputWrapper);
-        row.add(Box.createHorizontalGlue());
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
-        // Rows keep their own height instead of stretching to fill the tab.
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
-        return row;
-    }
-
-    /**
-     * The wrapped description under a setting title. A label with a fixed HTML width measures its height
-     * correctly, also with display scaling (an editor pane over-estimated it and left large gaps).
-     */
-    private JLabel createDescriptionPane(String description) {
-        JLabel descriptionLabel = new JLabel(wrapDescriptionHtml(description));
-        descriptionLabel.setFont(descriptionLabel.getFont().deriveFont(Font.PLAIN, 12f));
-        return descriptionLabel;
-    }
-
-    private String wrapDescriptionHtml(String description) {
-        Color textColor = UIManager.getColor("Label.disabledForeground");
-        if (textColor == null) {
-            textColor = Color.GRAY;
-        }
-        return String.format(
-                "<html><div style='width: 520px; color: rgb(%d,%d,%d);'>%s</div></html>",
-                textColor.getRed(),
-                textColor.getGreen(),
-                textColor.getBlue(),
-                description);
+        return new SettingsRowPanel(titleLabel, description, inputWrapper);
     }
 }

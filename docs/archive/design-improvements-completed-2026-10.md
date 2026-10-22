@@ -749,6 +749,12 @@ Failed, report-declined, completed, cancelled and unstarted passes are distingui
 
 **Follow-up.** The [active F09 enhancement proposal](../../DESIGN-IMPROVEMENTS.md#directory-based-iterative-detection-f09) records the future “super report”: cross-pass association, per-measurement evidence selection, source links and confidence limitations, additional versioned evidence where needed, partial-run support and bounded memory. It is not implemented by this change. Other architecture steps and F07 remain separately tracked.
 
+## D12: settings layout and shared styles, first slice (2026-10-22)
+
+**Implementation.** Detection and application forms share content-sized rows. HTML descriptions are measured at available width instead of a fixed 85 px height; configuration rows no longer reserve a fixed text column. `UiStyle` derives body/heading fonts and enabled help colors from the look and feel and uses the pinned FlatLaf scaling utility for logical widths/spacing. Numeric/text controls keep native font-dependent height. Overview introduction/analysis guidance and viewer keyboard hints reuse these rules. The existing progress dialog is untouched because F10 is being implemented in parallel.
+
+**Validation.** Focused layout/configuration/accessibility/snapshot tests pass. `SettingsRowLayoutTest` passes at default, 150% and 200% FlatLaf scaling with 13/20/26 logical-pixel base fonts and narrow/wide form bounds, checking reflow, allocated description height and native input height. Both real-key desktop mechanics cases still pass with scratch settings and restored Java preferences. These are layout measurements and focused interaction checks, not a full visual/screen-reader/contrast audit. Main-window/viewer and Overview status/table polish plus coordinated progress wrapping remain under D12.
+
 ## D13: keyboard controls and viewer focus (2026-10-22)
 
 **Implementation.** Overview Settings links, main-window Edit settings, the manual/release notice, expert disclosure and ASTAP download use native focusable buttons with accessible names. Settings titles associate with inputs; nested numeric editors receive plain-language descriptions, and changed rows expose their saved value beyond color. Reset is keyboard-focusable and named for its setting. The custom frame now implements Accessible, with an image role, current filename/dimensions/zoom, overlay state and frame-change notification.
