@@ -2,6 +2,7 @@ package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.ReportInclusion;
+import eu.startales.spacepixels.util.reporting.FindingCategory;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 
 import javax.swing.*;
@@ -79,25 +80,23 @@ public final class GuiDetectionReportPrompt {
         JPanel grid = new JPanel(new GridBagLayout());
         grid.setOpaque(false);
         grid.setAlignmentX(Component.LEFT_ALIGNMENT);
-        boolean anomaliesOn = config == null || config.enableAnomalyRescue;
-        boolean slowMoversOn = config == null || config.enableSlowMoverDetection;
-        boolean residualOn = config == null || config.enableResidualTransientAnalysis;
-        boolean localRescueOn = residualOn && (config == null || config.enableLocalRescueCandidates);
-        boolean localActivityOn = residualOn && (config == null || config.enableLocalActivityClusters);
-        boolean commonMotionOn = config == null || config.enableCommonMotionRejection;
-        boolean cameraFixedOn = config == null || config.enableCameraFixedRejection;
-        boolean variableStarsOn = config != null && config.enableVariableStarDetection
-                && summary.photometryVerdict != null && !"NOT_RUN".equals(summary.photometryVerdict);
+        boolean anomaliesOn = FindingCategory.ANOMALY.computed(config, summary);
+        boolean slowMoversOn = FindingCategory.SLOW_MOVER.computed(config, summary);
+        boolean localRescueOn = FindingCategory.LOCAL_RESCUE.computed(config, summary);
+        boolean localActivityOn = FindingCategory.LOCAL_ACTIVITY.computed(config, summary);
+        boolean commonMotionOn = FindingCategory.COMMON_MOTION.computed(config, summary);
+        boolean cameraFixedOn = FindingCategory.CAMERA_FIXED.computed(config, summary);
+        boolean variableStarsOn = FindingCategory.VARIABLE_STAR.computed(config, summary);
         OptionalRow[] rows = {
-                OptionalRow.always("Moving-object tracks", Integer.toString(summary.movingTargets), summary.movingTargets),
-                OptionalRow.always("Streak tracks", Integer.toString(summary.streakTracks), summary.streakTracks),
-                OptionalRow.always("Single streaks", Integer.toString(summary.singleStreaks), summary.singleStreaks),
-                OptionalRow.when(anomaliesOn, "Single-frame anomalies", Integer.toString(summary.anomalies), summary.anomalies),
-                OptionalRow.when(slowMoversOn, "Slow-mover candidates", Integer.toString(summary.slowMoverCandidates), summary.slowMoverCandidates),
-                OptionalRow.when(localRescueOn, "Local rescue candidates", Integer.toString(summary.localRescueCandidates), summary.localRescueCandidates),
-                OptionalRow.when(localActivityOn, "Local activity clusters", Integer.toString(summary.localActivityClusters), summary.localActivityClusters),
-                OptionalRow.when(commonMotionOn, "Common-motion groups", Integer.toString(summary.commonMotionGroups), summary.commonMotionGroups),
-                OptionalRow.when(cameraFixedOn, "Camera-fixed groups", Integer.toString(summary.cameraFixedGroups), summary.cameraFixedGroups)
+                OptionalRow.category(FindingCategory.MOVING_TARGET, config, summary),
+                OptionalRow.category(FindingCategory.STREAK_TRACK, config, summary),
+                OptionalRow.category(FindingCategory.SINGLE_STREAK, config, summary),
+                OptionalRow.category(FindingCategory.ANOMALY, config, summary),
+                OptionalRow.category(FindingCategory.SLOW_MOVER, config, summary),
+                OptionalRow.category(FindingCategory.LOCAL_RESCUE, config, summary),
+                OptionalRow.category(FindingCategory.LOCAL_ACTIVITY, config, summary),
+                OptionalRow.category(FindingCategory.COMMON_MOTION, config, summary),
+                OptionalRow.category(FindingCategory.CAMERA_FIXED, config, summary)
         };
         JCheckBox anomaliesBox = null;
         JCheckBox slowMoversBox = null;
@@ -175,7 +174,7 @@ public final class GuiDetectionReportPrompt {
             name.gridy = row;
             value.gridy = row;
             choice.gridy = row;
-            grid.add(new JLabel("Variable stars"), name);
+            grid.add(new JLabel(FindingCategory.VARIABLE_STAR.summaryLabel()), name);
             grid.add(new JLabel(photometryLine(summary)), value);
             if (variableStarsBox != null) {
                 grid.add(variableStarsBox, choice);
@@ -216,24 +215,12 @@ public final class GuiDetectionReportPrompt {
 
     /** Counts classified results still selected for export; photometry is reported separately. */
     private static String includedLine(ImageProcessing.DetectionSummary summary, JCheckBox[] boxes) {
-        int included = summary.movingTargets + summary.streakTracks + summary.singleStreaks;
-        if (boxes[0] == null || boxes[0].isSelected()) {
-            included += summary.anomalies;
-        }
-        if (boxes[1] == null || boxes[1].isSelected()) {
-            included += summary.slowMoverCandidates;
-        }
-        if (boxes[2] == null || boxes[2].isSelected()) {
-            included += summary.localRescueCandidates;
-        }
-        if (boxes[3] == null || boxes[3].isSelected()) {
-            included += summary.localActivityClusters;
-        }
-        if (boxes[4] == null || boxes[4].isSelected()) {
-            included += summary.commonMotionGroups;
-        }
-        if (boxes[5] == null || boxes[5].isSelected()) {
-            included += summary.cameraFixedGroups;
+        int included = FindingCategory.MOVING_TARGET.count(summary) + FindingCategory.STREAK_TRACK.count(summary)
+                + FindingCategory.SINGLE_STREAK.count(summary);
+        FindingCategory[] optional = {FindingCategory.ANOMALY, FindingCategory.SLOW_MOVER, FindingCategory.LOCAL_RESCUE,
+                FindingCategory.LOCAL_ACTIVITY, FindingCategory.COMMON_MOTION, FindingCategory.CAMERA_FIXED};
+        for (int index = 0; index < optional.length; index++) {
+            if (boxes[index] == null || boxes[index].isSelected()) included += optional[index].count(summary);
         }
         return "The report will include " + included + " of these detections.";
     }
@@ -331,14 +318,10 @@ public final class GuiDetectionReportPrompt {
             this.count = count;
         }
 
-        /** Includes a core result category even when its count is zero. */
-        static OptionalRow always(String label, String value, int count) {
-            return new OptionalRow(label, value, count);
-        }
-
-        /** Omits categories disabled for this run. */
-        static OptionalRow when(boolean featureEnabled, String label, String value, int count) {
-            return featureEnabled ? new OptionalRow(label, value, count) : null;
+        /** Builds an enabled category row from the same count/label policy as the exported report. */
+        static OptionalRow category(FindingCategory category, DetectionConfig config, ImageProcessing.DetectionSummary summary) {
+            int count = category.count(summary);
+            return category.computed(config, summary) ? new OptionalRow(category.summaryLabel(), Integer.toString(count), count) : null;
         }
     }
 

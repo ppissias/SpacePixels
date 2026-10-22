@@ -11,8 +11,12 @@ import java.util.*;
 
 /** Shared report identities and frame selection; never mutates the engine result. */
 final class ReportData {
+    /** One export finding with stable compatibility IDs/text; category semantics resolve through its ID. */
     record Finding(String id, String category, String anchor, double x, double y,
-                   Double raDegrees, Double decDegrees, List<Integer> frames, Integer starId, String tier) { }
+                   Double raDegrees, Double decDegrees, List<Integer> frames, Integer starId, String tier) {
+        /** Resolves category behavior without parsing a display label or creating another identity. */
+        FindingCategory categoryDescriptor() { return FindingCategory.fromId(id); }
+    }
 
     final List<Finding> findings;
     final Set<Integer> rejectedFrames;
@@ -32,27 +36,27 @@ final class ReportData {
         if (telemetry != null) for (var frame : telemetry.frameQualityStats) if (frame.rejected) rejected.add(frame.frameIndex);
         rejectedFrames = Set.copyOf(rejected);
         List<Finding> output = new ArrayList<>();
-        tracks(output, context, "T", "Moving target", context.movingTargets);
-        tracks(output, context, "ST", "Streak track", context.streakTracks);
-        tracks(output, context, "S", "Single-frame streak", context.singleStreaks);
+        tracks(output, context, FindingCategory.MOVING_TARGET, context.movingTargets);
+        tracks(output, context, FindingCategory.STREAK_TRACK, context.streakTracks);
+        tracks(output, context, FindingCategory.SINGLE_STREAK, context.singleStreaks);
         for (int i = 0; i < context.anomalies.size(); i++) {
             var a = context.anomalies.get(i);
-            if (a != null && a.object != null) add(output, context, "A" + (i + 1), "Single-frame anomaly", a.object.x, a.object.y, List.of(a.object), null, null);
+            if (a != null && a.object != null) add(output, context, FindingCategory.ANOMALY.id(i + 1), a.object.x, a.object.y, List.of(a.object), null, null);
         }
         for (int i = 0; i < context.slowMoverCandidates.size(); i++) {
             var a = context.slowMoverCandidates.get(i);
-            add(output, context, "DS" + (i + 1), "Slow-mover candidate", a.x, a.y, List.of(), null, "Candidate");
+            add(output, context, FindingCategory.SLOW_MOVER.id(i + 1), a.x, a.y, List.of(), null, "Candidate");
         }
         for (int i = 0; i < context.localRescueCandidates.size(); i++) {
             var a = context.localRescueCandidates.get(i);
-            addPoints(output, context, "LR" + (i + 1), "Local rescue", a.points);
+            addPoints(output, context, FindingCategory.LOCAL_RESCUE.id(i + 1), a.points);
         }
         for (int i = 0; i < context.localActivityClusters.size(); i++) {
             var a = context.localActivityClusters.get(i);
-            addPoints(output, context, "LC" + (i + 1), "Local activity", a.points);
+            addPoints(output, context, FindingCategory.LOCAL_ACTIVITY.id(i + 1), a.points);
         }
         List<StarLightCurve> candidates = new ArrayList<>();
-        if (inclusion.variableStars && variables != null && variables.readiness != null && variables.readiness.allowsScoring()) {
+        if (FindingCategory.VARIABLE_STAR.included(inclusion) && variables != null && variables.readiness != null && variables.readiness.allowsScoring()) {
             var presentation = context.variablePresentation(variables);
             candidates.addAll(presentation.identities);
             for (StarLightCurve star : presentation.ordered) {
@@ -62,19 +66,19 @@ final class ReportData {
                     for (int j = 0; j < variables.frames.size() && j < star.flags.length; j++) {
                         if (star.flags[j] == 0 && Double.isFinite(star.deltaMag[j])) frames.add(variables.frames.get(j).frameIndex + 1);
                     }
-                    add(output, context, "V" + number, "Variable-star candidate", star.x, star.y, List.of(), star.id, star.tier.name());
+                    add(output, context, FindingCategory.VARIABLE_STAR.id(number), star.x, star.y, List.of(), star.id, star.tier.name());
                     Finding f = output.remove(output.size() - 1);
-                    output.add(new Finding(f.id, f.category, presentation.hasCard(star) ? "variable-v" + number : "variable-candidates",
+                    output.add(new Finding(f.id, f.category, presentation.hasCard(star) ? FindingCategory.VARIABLE_STAR.anchor(number) : "variable-candidates",
                             f.x, f.y, f.raDegrees, f.decDegrees, List.copyOf(frames), star.id, f.tier));
                 }
             }
         }
         // The likely artifacts come after the variable stars, in report order.
         for (int i = 0; i < context.cameraFixedGroups.size(); i++) {
-            addPoints(output, context, "FC" + (i + 1), "Camera-fixed", context.cameraFixedGroups.get(i).points);
+            addPoints(output, context, FindingCategory.CAMERA_FIXED.id(i + 1), context.cameraFixedGroups.get(i).points);
         }
         for (int i = 0; i < groups.size(); i++) {
-            addPoints(output, context, "CM" + (i + 1), "Common motion", groups.get(i).sources.stream().flatMap(List::stream).toList());
+            addPoints(output, context, FindingCategory.COMMON_MOTION.id(i + 1), groups.get(i).sources.stream().flatMap(List::stream).toList());
         }
         variableCandidates = List.copyOf(candidates);
         variablesByStar = new HashMap<>();
@@ -87,19 +91,22 @@ final class ReportData {
         return new ReportData(context, telemetry, variables, groups, inclusion);
     }
 
-    private static void tracks(List<Finding> out, DetectionReportContext c, String prefix, String category, List<TrackLinker.Track> tracks) {
-        for (int i = 0; i < tracks.size(); i++) addPoints(out, c, prefix + (i + 1), category, tracks.get(i).points);
+    /** Numbers track findings through the shared category contract without changing engine order. */
+    private static void tracks(List<Finding> out, DetectionReportContext context, FindingCategory category, List<TrackLinker.Track> tracks) {
+        for (int index = 0; index < tracks.size(); index++) addPoints(out, context, category.id(index + 1), tracks.get(index).points);
     }
 
-    private static void addPoints(List<Finding> out, DetectionReportContext c, String id, String category, List<SourceExtractor.DetectedObject> points) {
+    /** Chooses category-owned representative coordinates while keeping frame associations unchanged. */
+    private static void addPoints(List<Finding> out, DetectionReportContext c, String id, List<SourceExtractor.DetectedObject> points) {
         if (points == null || points.isEmpty()) return;
         double x = 0, y = 0;
         for (var p : points) { x += p.x; y += p.y; }
-        boolean centroid = category.equals("Local activity") || category.equals("Common motion") || category.equals("Camera-fixed");
-        add(out, c, id, category, centroid ? x / points.size() : points.get(0).x, centroid ? y / points.size() : points.get(0).y, points, null, null);
+        boolean centroid = FindingCategory.fromId(id).usesCentroid();
+        add(out, c, id, centroid ? x / points.size() : points.get(0).x, centroid ? y / points.size() : points.get(0).y, points, null, null);
     }
 
-    private static void add(List<Finding> out, DetectionReportContext c, String id, String category, double x, double y,
+    /** Adds one finding with category-owned labels/anchors and the export's resolved sky coordinates. */
+    private static void add(List<Finding> out, DetectionReportContext c, String id, double x, double y,
                             List<SourceExtractor.DetectedObject> points, Integer starId, String tier) {
         Double ra = null, dec = null;
         if (c.astrometryContext != null && c.astrometryContext.getTransformer() != null) {
@@ -109,7 +116,9 @@ final class ReportData {
             }
         }
         List<Integer> frames = points.stream().map(p -> p.sourceFrameIndex + 1).distinct().sorted().toList();
-        out.add(new Finding(id, category, "finding-" + id.toLowerCase(Locale.ROOT), x, y, ra, dec, frames, starId, tier));
+        FindingCategory category = FindingCategory.fromId(id);
+        out.add(new Finding(id, category.label(), category.anchor(Integer.parseInt(id.substring(category.prefix().length()))),
+                x, y, ra, dec, frames, starId, tier));
     }
 
     Finding variable(int starId) { return variablesByStar.get(starId); }

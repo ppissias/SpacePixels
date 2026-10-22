@@ -236,7 +236,7 @@ These APIs require the adjacent JA-01 JTransient source (declared `1.0.5`, still
 
 The report never changes the engine's results. The report's live lookups (SatChecker, JPL) go through a small localhost server, `ReportLookupProxyServer`.
 
-`report-data.json` is a versioned findings summary; its frame numbers are one-based and finding IDs are local to a report. It is not yet a complete replay record. Report category selection controls presentation independently of the analyses and filters that produced the measurements. Some diagnostics still measure frames during export, and category/label rules are not yet fully consolidated (D09, S15/S16).
+`report-data.json` is a versioned findings summary; its frame numbers are one-based and finding IDs are local to a report. It is not yet a complete replay record. `FindingCategory` owns prefixes, JSON category labels, card-anchor rules, map/legend colors, summary counts/visibility and report-only inclusion. `ReportData`, generator filtering, map legends/category controls and the GUI report prompt share those definitions; existing JSON text and IDs stay compatible. Variables retain the explicit table fallback when no detailed card exists, and artifact groups stay outside the combined detection map. Remaining individual section/CSV identity construction and prepared diagnostics/run context remain D09/S14–S16 work. Report-category selection never changes analyses or filters.
 
 ## Headless: the API and the command line
 

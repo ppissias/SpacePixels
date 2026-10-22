@@ -32,7 +32,7 @@ final class CatalogueMapPainter {
 
     static final Color DEEP_SKY_COLOR = new Color(255, 215, 70);
     static final Color NAMED_STAR_COLOR = new Color(235, 235, 255);
-    static final Color VARIABLE_COLOR = new Color(255, 90, 210);
+    static final Color VARIABLE_COLOR = FindingCategory.VARIABLE_STAR.color();
     /** Variable stars named on a map of the whole field, at most: the brightest with an old designation. */
     static final int MAX_VARIABLES = 15;
 

@@ -83,7 +83,8 @@ final class GlobalMapsSectionWriter {
         report.println("<div class='report-map'><div class='map-category-controls'>");
         java.util.Map<String, String> categories = new java.util.LinkedHashMap<>();
         if (reportContext.data != null) for (var finding : reportContext.data.findings) {
-            if (!finding.id().startsWith("CM") && !finding.id().startsWith("FC")) categories.putIfAbsent(finding.id().replaceAll("[0-9]+$", ""), finding.category());
+            FindingCategory category = finding.categoryDescriptor();
+            if (category.onDetectionMap()) categories.putIfAbsent(category.prefix(), category.label());
         }
         for (var entry : categories.entrySet()) report.println("<button class='id-link' type='button' data-report-category='" + entry.getKey() + "' aria-pressed='true'>" + entry.getValue() + "</button> ");
         String catalogueLayer = sessionCatalogue.catalogue != null && reportContext.astrometryContext != null && reportContext.astrometryContext.getTransformer() != null
@@ -183,10 +184,14 @@ final class GlobalMapsSectionWriter {
         return null;
     }
 
-    private static void appendGlobalTrajectoryLegendItem(StringBuilder html, String code, String label, Color color, int count, boolean interactive) {
+    /** Emits one legend item from the same descriptor used by finding IDs, markers and report choices. */
+    private static void appendGlobalTrajectoryLegendItem(StringBuilder html, FindingCategory category, int count, boolean interactive) {
         if (count <= 0) {
             return;
         }
+        String code = category.prefix();
+        String label = category.mapLabel();
+        Color color = category.color();
         html.append(interactive ? "<button type='button' class='legend-pill' data-report-category='" + code
                         + "' aria-pressed='true' title='Show or hide " + DetectionReportGenerator.escapeHtml(label) + "'>"
                         : "<div class='legend-pill'>")
@@ -212,14 +217,14 @@ final class GlobalMapsSectionWriter {
                                                           int variableCount, boolean interactive) {
         StringBuilder html = new StringBuilder();
         html.append("<div class='map-legend map-category-controls'>");
-        appendGlobalTrajectoryLegendItem(html, "T", "Moving object tracks", DetectionReportGenerator.GLOBAL_MAP_MOVING_TARGET_COLOR, movingTargetCount, interactive);
-        appendGlobalTrajectoryLegendItem(html, "ST", "Confirmed streak tracks", DetectionReportGenerator.GLOBAL_MAP_STREAK_TRACK_COLOR, streakTrackCount, interactive);
-        appendGlobalTrajectoryLegendItem(html, "LR", "Local rescue candidates", DetectionReportGenerator.GLOBAL_MAP_LOCAL_RESCUE_COLOR, localRescueCount, interactive);
-        appendGlobalTrajectoryLegendItem(html, "LC", "Local activity clusters", DetectionReportGenerator.GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, localActivityCount, interactive);
-        appendGlobalTrajectoryLegendItem(html, "DS", "Maximum-stack shape candidates", DetectionReportGenerator.GLOBAL_MAP_DEEP_STACK_COLOR, deepStackCount, interactive);
-        appendGlobalTrajectoryLegendItem(html, "A", "Single-frame anomalies", DetectionReportGenerator.GLOBAL_MAP_ANOMALY_COLOR, anomalyCount, interactive);
-        appendGlobalTrajectoryLegendItem(html, "S", "Single streaks", DetectionReportGenerator.GLOBAL_MAP_SINGLE_STREAK_COLOR, singleStreakCount, interactive);
-        appendGlobalTrajectoryLegendItem(html, "V", "Variable-star candidates", CatalogueMapPainter.VARIABLE_COLOR, variableCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, FindingCategory.MOVING_TARGET, movingTargetCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, FindingCategory.STREAK_TRACK, streakTrackCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, FindingCategory.LOCAL_RESCUE, localRescueCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, FindingCategory.LOCAL_ACTIVITY, localActivityCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, FindingCategory.SLOW_MOVER, deepStackCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, FindingCategory.ANOMALY, anomalyCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, FindingCategory.SINGLE_STREAK, singleStreakCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, FindingCategory.VARIABLE_STAR, variableCount, interactive);
         html.append("</div>");
         return html.toString();
     }

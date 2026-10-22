@@ -430,13 +430,13 @@ public class DetectionReportGenerator {
     }
 
     // --- REFACTORED: GLOBAL TRACK MAP RENDERER ---
-    static final Color GLOBAL_MAP_ANOMALY_COLOR = new Color(255, 51, 255);
-    static final Color GLOBAL_MAP_SINGLE_STREAK_COLOR = new Color(255, 153, 51);
-    static final Color GLOBAL_MAP_STREAK_TRACK_COLOR = new Color(255, 204, 51);
-    static final Color GLOBAL_MAP_MOVING_TARGET_COLOR = new Color(77, 166, 255);
-    static final Color GLOBAL_MAP_LOCAL_RESCUE_COLOR = new Color(64, 224, 208);
-    static final Color GLOBAL_MAP_LOCAL_ACTIVITY_COLOR = new Color(150, 120, 255);
-    static final Color GLOBAL_MAP_DEEP_STACK_COLOR = new Color(170, 255, 110);
+    static final Color GLOBAL_MAP_ANOMALY_COLOR = FindingCategory.ANOMALY.color();
+    static final Color GLOBAL_MAP_SINGLE_STREAK_COLOR = FindingCategory.SINGLE_STREAK.color();
+    static final Color GLOBAL_MAP_STREAK_TRACK_COLOR = FindingCategory.STREAK_TRACK.color();
+    static final Color GLOBAL_MAP_MOVING_TARGET_COLOR = FindingCategory.MOVING_TARGET.color();
+    static final Color GLOBAL_MAP_LOCAL_RESCUE_COLOR = FindingCategory.LOCAL_RESCUE.color();
+    static final Color GLOBAL_MAP_LOCAL_ACTIVITY_COLOR = FindingCategory.LOCAL_ACTIVITY.color();
+    static final Color GLOBAL_MAP_DEEP_STACK_COLOR = FindingCategory.SLOW_MOVER.color();
 
     static BufferedImage createGlobalTrackMap(short[][] backgroundData,
                                               List<TrackLinker.AnomalyDetection> anomalies,
@@ -1084,26 +1084,26 @@ public class DetectionReportGenerator {
                 + summary.anomalyCount;
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("moving-objects", "Moving objects & events",
                 String.valueOf(movingObjects), movingObjects == 0));
-        if (inclusion.slowMovers && context.config != null && context.config.enableSlowMoverDetection) {
+if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && context.config.enableSlowMoverDetection) {
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("slow-movers", "Slow movers",
                     String.valueOf(summary.slowMoverCandidateCount), summary.slowMoverCandidateCount == 0));
         }
         int residual = summary.localRescueCandidateCount + summary.localActivityClusterCount;
-        if ((inclusion.localRescue || inclusion.localActivity) && residual > 0) {
+        if ((FindingCategory.LOCAL_RESCUE.included(inclusion) || FindingCategory.LOCAL_ACTIVITY.included(inclusion)) && residual > 0) {
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("residual-review", "Local rescue", String.valueOf(residual), false));
         }
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("maps", "Maps", null, false));
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("inspector", "Unclassified", null, false));
         PipelineTelemetry.PhotometryTelemetry photometry = pipelineTelemetry != null ? pipelineTelemetry.photometryTelemetry : null;
-        if (inclusion.variableStars && context.config != null && context.config.enableVariableStarDetection && photometry != null) {
+        if (FindingCategory.VARIABLE_STAR.included(inclusion) && context.config != null && context.config.enableVariableStarDetection && photometry != null) {
             boolean notReady = "NOT_READY".equals(photometry.verdict);
             int candidates = photometry.highConfidence + photometry.possible;
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("variables", "Variable stars",
                     notReady ? "not ready" : String.valueOf(candidates), notReady || candidates == 0));
-        } else if (inclusion.variableStars) {
+        } else if (FindingCategory.VARIABLE_STAR.included(inclusion)) {
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("variables", "Variable stars", "off", true));
         }
-        int likelyArtifacts = (inclusion.commonMotion ? commonMotionGroupCount : 0) + context.cameraFixedGroups.size();
+        int likelyArtifacts = (FindingCategory.COMMON_MOTION.included(inclusion) ? commonMotionGroupCount : 0) + context.cameraFixedGroups.size();
         if (likelyArtifacts > 0) {
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("likely-artifacts", "Likely artifacts",
                     String.valueOf(likelyArtifacts), true));
@@ -1143,7 +1143,7 @@ public class DetectionReportGenerator {
                 ? pipelineTelemetry.totalMasterStarsIdentified
                 : (masterStars == null ? 0 : masterStars.size());
         int masterMapObjectCount = masterStars == null ? 0 : masterStars.size();
-        int anomalyCount = !inclusion.anomalies ? 0
+        int anomalyCount = !FindingCategory.ANOMALY.included(inclusion) ? 0
                 : pipelineTelemetry != null ? pipelineTelemetry.totalAnomaliesFound : anomalies.size();
         int peakSigmaAnomalyCount = countAnomaliesOfType(anomalies, TrackLinker.AnomalyType.PEAK_SIGMA);
         int integratedSigmaAnomalyCount = countAnomaliesOfType(anomalies, TrackLinker.AnomalyType.INTEGRATED_SIGMA);
@@ -1274,7 +1274,7 @@ public class DetectionReportGenerator {
 
         // Extract variables from the PipelineResult and normalize newer track categories for rendering.
         List<TrackLinker.Track> tracks = result.tracks != null ? result.tracks : new ArrayList<>();
-        List<TrackLinker.AnomalyDetection> anomalies = inclusion.anomalies
+        List<TrackLinker.AnomalyDetection> anomalies = FindingCategory.ANOMALY.included(inclusion)
                 ? sortAnomaliesForDisplay(result.anomalies)
                 : new ArrayList<>();
         PipelineTelemetry pipelineTelemetry = result.telemetry;
@@ -1292,22 +1292,22 @@ public class DetectionReportGenerator {
         boolean[][] slowMoverMedianVetoMask = slowMoverAnalysis.medianMask != null
                 ? slowMoverAnalysis.medianMask
                 : result.slowMoverMedianVetoMask;
-        List<SlowMoverCandidateResult> slowMoverCandidateResults = !inclusion.slowMovers
+        List<SlowMoverCandidateResult> slowMoverCandidateResults = !FindingCategory.SLOW_MOVER.included(inclusion)
                 ? java.util.Collections.emptyList()
                 : slowMoverAnalysis.candidates != null
                 ? slowMoverAnalysis.candidates
                 : java.util.Collections.emptyList();
         List<SourceExtractor.DetectedObject> slowMoverCandidates = new ArrayList<>();
-        if (inclusion.slowMovers && !slowMoverCandidateResults.isEmpty()) {
+        if (FindingCategory.SLOW_MOVER.included(inclusion) && !slowMoverCandidateResults.isEmpty()) {
             for (SlowMoverCandidateResult candidateResult : slowMoverCandidateResults) {
                 if (candidateResult != null && candidateResult.object != null) {
                     slowMoverCandidates.add(candidateResult.object);
                 }
             }
-        } else if (inclusion.slowMovers && result.slowMoverCandidates != null) {
+        } else if (FindingCategory.SLOW_MOVER.included(inclusion) && result.slowMoverCandidates != null) {
             slowMoverCandidates.addAll(result.slowMoverCandidates);
         }
-        SlowMoverSummaryTelemetry slowMoverTelemetry = !inclusion.slowMovers ? null
+        SlowMoverSummaryTelemetry slowMoverTelemetry = !FindingCategory.SLOW_MOVER.included(inclusion) ? null
                 : hasMeaningfulSlowMoverTelemetry(slowMoverAnalysis.telemetry)
                 ? slowMoverAnalysis.telemetry
                 : (pipelineTelemetry != null && pipelineTelemetry.slowMoverTelemetry != null
@@ -1318,13 +1318,13 @@ public class DetectionReportGenerator {
         ResidualTransientAnalysis residualTransientAnalysis = result.residualTransientAnalysis != null
                 ? result.residualTransientAnalysis
                 : ResidualTransientAnalysis.empty();
-        List<ResidualTransientAnalysis.LocalRescueCandidate> localRescueCandidates = inclusion.localRescue
+        List<ResidualTransientAnalysis.LocalRescueCandidate> localRescueCandidates = FindingCategory.LOCAL_RESCUE.included(inclusion)
                 ? residualTransientAnalysis.localRescueCandidates
                 : java.util.Collections.emptyList();
-        List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters = inclusion.localActivity
+        List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters = FindingCategory.LOCAL_ACTIVITY.included(inclusion)
                 ? residualTransientAnalysis.localActivityClusters
                 : java.util.Collections.emptyList();
-        List<ResidualTransientAnalysis.CommonMotionGroup> commonMotionGroups = inclusion.commonMotion
+        List<ResidualTransientAnalysis.CommonMotionGroup> commonMotionGroups = FindingCategory.COMMON_MOTION.included(inclusion)
                 ? residualTransientAnalysis.commonMotionGroups
                 : java.util.Collections.emptyList();
         DetectionReportAstrometry.Context astrometryContext = DetectionReportAstrometry.buildContext(fitsFiles, appConfig);
@@ -1389,7 +1389,7 @@ public class DetectionReportGenerator {
 
         reportContext.progress = progress;
         reportContext.dataArea = result.dataArea;
-        reportContext.cameraFixedGroups = inclusion.cameraFixed ? result.cameraFixedGroups : java.util.Collections.emptyList();
+        reportContext.cameraFixedGroups = FindingCategory.CAMERA_FIXED.included(inclusion) ? result.cameraFixedGroups : java.util.Collections.emptyList();
         reportContext.dataAreaText = DataAreaPresentation.describe(result.dataArea, pipelineTelemetry);
         reportContext.data = ReportData.create(reportContext, pipelineTelemetry, result.variableStarAnalysis, commonMotionGroups, inclusion);
         java.nio.file.Files.createDirectories(exportDir.toPath());
@@ -1425,14 +1425,14 @@ public class DetectionReportGenerator {
             TargetVisualizationSectionWriter.writeSection(report, reportContext);
             report.println("</section>");
 
-            if (inclusion.slowMovers) {
+            if (FindingCategory.SLOW_MOVER.included(inclusion)) {
                 progress.step(26, 27, "slow movers");
                 report.println("<section id='slow-movers'>");
                 DeepStackReportSectionWriter.writeSection(report, reportContext);
                 report.println("</section>");
             }
 
-            if (inclusion.localRescue || inclusion.localActivity) {
+            if (FindingCategory.LOCAL_RESCUE.included(inclusion) || FindingCategory.LOCAL_ACTIVITY.included(inclusion)) {
                 progress.step(27, 28, "residual review");
                 report.println("<section id='residual-review'>");
                 ResidualReviewSectionWriter.writeSection(report, reportContext);
@@ -1451,7 +1451,7 @@ public class DetectionReportGenerator {
                     residualTransientAnalysis, result.cameraFixedGroups, inclusion);
             report.println("</section>");
 
-            if (inclusion.variableStars) {
+            if (FindingCategory.VARIABLE_STAR.included(inclusion)) {
                 progress.step(66, 68, "variable stars");
                 report.println("<section id='variables'>");
                 PhotometryReportSectionWriter.writeSection(report, reportContext, result.variableStarAnalysis);
@@ -1488,7 +1488,7 @@ public class DetectionReportGenerator {
 
             if (settings.isIncludeAiCreativeReportSections()) {
                 ClaudePerspectiveSectionWriter.writeSection(report, reportContext, pipelineTelemetry, summary,
-                        inclusion.variableStars ? result.variableStarAnalysis : null);
+                        FindingCategory.VARIABLE_STAR.included(inclusion) ? result.variableStarAnalysis : null);
                 report.println("</section>");
             }
 
