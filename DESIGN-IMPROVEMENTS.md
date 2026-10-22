@@ -8,9 +8,10 @@ The single active plan for SpacePixels application design, GUI improvements and 
 
 - **The work queue** is the findings table, the open architecture steps, the [engine changes that need SpacePixels work](#engine-changes-that-need-spacepixels-work) and the feature table below. Add new proposals there; do not keep a separate TODO or refactor list.
 - **When an item is done,** describe its behaviour in the manual, API or architecture documents, and move its record (decision, evidence and validation) to the archive. Do not bring completed items back into this plan.
+- **After each feature implementation,** commit its implementation, tests and documentation, then push to the current branch's configured upstream. Add commit-body notes explaining the change, rationale and validation or remaining limitations; report the commit ID and any push failure. Preserve ignored local configuration and do not force-push.
 - **Completed work:** [design work completed in October 2026](docs/archive/design-improvements-completed-2026-10.md) holds:
-  - D01, D02, D03, D04, D05, D06 and D07;
-  - the architecture review with its finished steps, including S7, S8 and S10;
+  - D01, D02, D03, D04, D05, D06, D07 and D08;
+  - the architecture review with its finished steps, including S7, S8, S10 and S12;
   - the EventBus decision.
 
   Older sources: [GUI review](docs/archive/gui-enhancements-2026-10.md), [refactor snapshot](docs/archive/refactor-2026-09.md), [completed task list](docs/archive/completed-tasks-2026-10.md) and [maintenance notes and regression evidence](docs/archive/maintenance-notes-2026-10-19.md). Their old priorities do not override this plan.
@@ -34,7 +35,6 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 
 | ID | Priority | Status | Improvement | First useful result |
 |---|---|---|---|---|
-| D08 | Medium | In progress; open: shared preparation (S12) and preference I/O | Keep slow work off the EDT | Importing a session does not read its catalogue, correction and Auto-Tune files on the UI thread. |
 | D09 | Medium | Proposed | Complete the analysis/report separation | Display changes reuse prepared diagnostics and stable finding identities. |
 | D10 | Medium | Proposed | Typed settings metadata and engine integration | A setting's identity and rules are not maintained in several unrelated lists. |
 | D11 | Medium | Proposed | A clearer analysis workflow and persistent results | Users see what will run and can reopen its results without another detection. |
@@ -42,16 +42,6 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 | D13 | Medium | Proposed | Keyboard and assistive-technology access | Visible links, settings inputs and viewer controls are reachable and named. |
 
 “High” means to address before expanding the affected workflow. It does not mean undertaking all high-priority items in one change.
-
-### D08. Keep UI access on the EDT and slow work off it
-
-**In progress.** S8 completes session-folder metadata I/O off the EDT; WCS writes already run as jobs. The S10 import extraction also introduces an EDT decision/progress adapter for FITS conversion and exposure-group questions. See the [S8/S10 completion record](docs/archive/design-improvements-completed-2026-10.md#s8-and-s10-background-session-storage-and-fits-service-boundaries-2026-10-21).
-
-**Remaining.** Interactive FITS preparation and the policy-driven `DetectionInputPreparation` API path still have separate orchestration. S12 should share their discovery, validation and conversion facts, retaining headless refusal/automatic policies versus interactive decisions. Reuse `FitsImportInteraction` rather than introducing another dialog path. Combined compressed-32-bit preparation is F07, not part of the completed extraction.
-
-Config writes and ASTAP-directory scans still run from UI callbacks. Their duration is not bounded by the GUI code; move potentially slow preference operations behind explicit background completion when taking up that work.
-
-**Acceptance.** Preserve slow-store responsiveness, correct-session completion, field/solution guards and save-failure recovery. Import questions stay on the EDT; processing and file operations stay on workers. Validate GUI/API preparation equivalence across ready, compressed, signed/scaled, 32-bit and colour inputs without changing pixel or negative-value policy.
 
 ### D09. Complete the distinction between measurements and report presentation
 
@@ -166,11 +156,10 @@ The pattern is close to a modest **model–view–presenter** arrangement: a sta
 
 ## Open steps from the architecture review
 
-The [architecture adoption review](docs/archive/design-improvements-completed-2026-10.md#architecture-adoption-review) (2026-10-20) accounted for every production class; its working record is [docs/architecture-review.md](docs/architecture-review.md). Its finished steps (S1–S11) are archived. A step is accepted when the maintainer takes it up.
+The [architecture adoption review](docs/archive/design-improvements-completed-2026-10.md#architecture-adoption-review) (2026-10-20) accounted for every production class; its working record is [docs/architecture-review.md](docs/architecture-review.md). Its finished steps (S1–S12) are archived. A step is accepted when the maintainer takes it up.
 
 | Step | Stage | Work | Covers |
 |---|---|---|---|
-| S12 | C | Share GUI/API preparation facts and orchestration. Preserve typed import outcomes and the FITS decision/progress adapter introduced in S10; its dialogs already run on the EDT. Combined compressed-32-bit preparation remains F07 | D08, F07 |
 | S13 | B–C | No `gui` and no Swing in `util` | new |
 | S14 | D | An explicit run context: the site, rendering options and Auto-Tune frame limit go with the run, instead of coming from the home folder and static fields | D09, D10 |
 | S15 | D | One source of finding labels and categories. Today T1, ST1, A1… are computed in seven places that agree only by walking the tracks in the same order | D09 |
@@ -197,7 +186,7 @@ Pending items of the [JTransient plan](../JTransient/DESIGN-IMPROVEMENTS.md) tha
 | JA-07 public models and shared buffers | 30 files use the nested `SourceExtractor.DetectedObject` and 20 use `TrackLinker.Track`. The compatibility names stay, and moving to the new `model` types is a SpacePixels change per boundary, keeping object identity. The report export reuses the very `short[][]` arrays it passes to the engine (`rawFramesForExport`). The engine's ownership contract must keep them read-only, or SpacePixels must copy them | D09 |
 | JA-08 tuning measurement, policy and presentation | The Overview, `AutoTuneChartDialog` and `AutoTuneSessionStore` read `AutoTunerResult`, `Calibration` and `AutoTuneProfile` (10 files use the profile). Follow the moved types through adapters, and keep the saved `auto_tune.json` files readable | D10 |
 | JA-09 progress and stage outcomes | SpacePixels maps the engine's percentages (standard, iterative and report ranges) and reads `PipelineTelemetry` in 15 files, including the slow-mover legacy telemetry. Move progress to stage events, and the report's diagnostics to the explicit stage outcomes | D04, D09 (S16) |
-| JA-10 reference provenance | The iterative run and the Test Star Mask stack pass a bare `short[][]` master stack. Adopt the prepared-reference value, or retire that path with F09 (directory-based iterative detection); decide which comes first | F09 |
+| JA-10 reference provenance | F09 retires the iterative provided-master path. Review the remaining Test Star Mask/reference integration when adopting the engine's prepared-reference value | D09 |
 | JA-11 release contract | Declare the supported SpacePixels/JTransient pair and Java baseline. Bump `build.gradle` to the release that brings each slice above | releases |
 | SM-2 (deferred) | F01, the slow-mover sigma following the tuned per-frame sigma, waits for the empirical maximum-stack comparison | F01 |
 
@@ -231,11 +220,11 @@ The localhost lookup proxy's lifecycle can remain application-scoped. Give it an
 
 ## Delivery plan
 
-Stages A (focused correctness) and B (workflow foundation), including D04 engine cancellation and viewer cleanup, are done. See the [D04 implementation record](docs/archive/design-improvements-completed-2026-10.md#d04-engine-cancellation-and-viewer-lifecycle-2026-10-21) and the [earlier delivery plan](docs/archive/design-improvements-completed-2026-10.md#delivery-plan-as-of-2026-10-20). Stage C is in progress; S7's application preferences and explicit session handover are complete.
+Stages A (focused correctness) and B (workflow foundation), including D04 engine cancellation and viewer cleanup, are done. See the [D04 implementation record](docs/archive/design-improvements-completed-2026-10.md#d04-engine-cancellation-and-viewer-lifecycle-2026-10-21) and the [earlier delivery plan](docs/archive/design-improvements-completed-2026-10.md#delivery-plan-as-of-2026-10-20). Stage C is in progress; S7's application preferences and explicit session handover are complete, as is [D08's remaining preference-write and ASTAP-check work](docs/archive/design-improvements-completed-2026-10.md#d08-background-preference-writes-and-astap-checks-2026-10-22).
 
 | Stage | Work | Why this order |
 |---|---|---|
-| C: session boundary | D08 shared GUI/API preparation (S12) and remaining preference I/O; no GUI in `util` (S13) | Reduces UI/service coupling and protects session transitions. |
+| C: session boundary | No GUI in `util` (S13) | Reduces UI/service coupling and protects session transitions. |
 | D: presentation and polish | D09 prepared report data (S14–S16); D10 typed settings bindings; D11 results and readiness; D12/D13 layout and access | Builds on explicit state; accessibility fixes that are independent can start earlier. |
 
 Add one adapter or command at a time, and keep the public API and file formats compatible.
@@ -317,9 +306,10 @@ For behavioural changes, follow the maintainer's real-data comparison method. An
 | F05 | Deferred | Image Stretch preview sampling remains reduced to at most 2400 px on its long side; Show full size provides full-resolution inspection. If revisited, compare averaging or full-resolution rendering for small-star visibility and memory cost. This is separate from D03 request ordering. |
 | F06 | Proposed; Windows first | Explore native platform installers, starting with a native Windows installer. Decide packaging, Java runtime distribution, installation/update behavior and release validation before implementation. See [native platform installers](#native-platform-installers-f06). |
 | F07 | Proposed | Prepare compressed 32-bit FITS (`.fz`) directly as uncompressed unsigned 16-bit FITS in one import operation, avoiding an intermediate uncompressed 32-bit directory and a second conversion/import step. See [combined FITS preparation](#combined-fits-preparation-f07). |
-| F09 | Proposed; frame-selection policy to confirm | Make Detect Iteratively choose a directory and orchestrate ordinary pipeline runs with identical settings and different input subsets, followed by an index of the reports. See [directory-based iterative detection](#directory-based-iterative-detection-f09). |
+| F09 | Proposed enhancement; basic workflow complete | Consolidate findings from the individual iterative reports into a “super report”, selecting the best supported information with links and provenance. See [directory-based iterative detection](#directory-based-iterative-detection-f09). |
+| F10 | Proposed | A small, optional live preview in the detection progress dialog: occasional stretched frame/reference thumbnails and provisional source or streak crops, without slowing analysis or implying confirmed discoveries. Support normal runs first and reuse it for iterative passes. See [live detection preview](#live-detection-preview-f10). |
 
-Results summaries/run history are covered by D11. The completed cancellation work is archived under D04; future stage-aware engine progress belongs to JA-09 and its SpacePixels integration. Their detailed information should live there rather than become competing feature entries. The old drift-grown void-band concern is Dropped: those settings and the old border mechanism were replaced by session data areas.
+Results summaries/run history are covered by D11. The completed cancellation work is archived under D04; future stage-aware engine progress belongs to JA-09 and its SpacePixels integration. Their detailed information should live there rather than become competing feature entries. F10 is an optional visual presentation feature, not a second progress protocol; coordinate its stage/snapshot needs with JA-09. The old drift-grown void-band concern is Dropped: those settings and the old border mechanism were replaced by session data areas.
 
 ### MCP agent services (F04)
 
@@ -342,11 +332,13 @@ Decide the Windows package format (for example, EXE or MSI), whether to bundle a
 
 Compare packaging options against the existing Gradle distribution and publishing workflow before selecting tooling. Validate a proposed installer on a clean Windows environment: install, launch, run a small analysis and open its report, upgrade from a previous version, and uninstall while preserving saved profiles and observing data. These are exploration criteria, not a claim that a native installer or bundled runtime already exists.
 
+Note: Moreover, we should investigate extending the startSpacePixels scripts, to give the possibility of installing openJDK (temurin 25) via a single command on windows / mac / linux. Like: winget install EclipseAdoptium.Temurin.25.JDK --accept-package-agreements --accept-source-agreements, or similar for Linux / Mac etc. 
+
 ### Combined FITS preparation (F07)
 
 When a compressed FITS sequence contains 32-bit images, importing it should offer one preparation operation that decompresses and converts directly to uncompressed unsigned 16-bit output, then loads that output. The current GUI compression gate in `FitsImportService`, behind `ImageProcessing.getFitsfileInformation()`, first calls `batchDecompress` and redirects import to an `_uncompressed` directory; the later format gate can then require another conversion and import. This creates an unnecessary intermediate 32-bit sequence and repeated user steps.
 
-Inspect the image HDU's actual sample format during preparation and normalize its decompressed pixels before writing the final files. Reuse the existing conversion rules and the headless `DetectionInputPreparation` path, which already reads the image HDU and writes normalized 16-bit output. Connect this with the shared GUI/API preparation work in D08 rather than adding another independent conversion policy.
+Inspect the image HDU's actual sample format during preparation and normalize its decompressed pixels before writing the final files. Reuse `FitsPreparationService`, which now supplies shared inspection and normalization to GUI conversion and `DetectionInputPreparation`. Keep the existing interactive decision adapter and automatic/refusal policies rather than adding another conversion policy.
 
 Preserve sequence validation before conversion, header/WCS and timing metadata, the sequence-wide negative-value offset or clipping choice, zero registration padding, and `SPOFFSET`. Keep the existing mono/color output behavior and original compressed files. Already-ready compressed unsigned 16-bit data should only need decompression, with no unnecessary rescaling. The headless refusal mode must continue to reject inputs requiring preparation.
 
@@ -354,27 +346,49 @@ Acceptance: import representative compressed 32-bit integer and floating-point s
 
 ### Directory-based iterative detection (F09)
 
-Make **Detect Iteratively** a directory-based sequence of ordinary runs. Choosing the source folder should not require first importing it into the main window or replace an already imported session. Capture one validated detection configuration and the export settings for the whole operation.
+The basic directory-based workflow is implemented: independent ordinary runs with Start/Increase/Maximum planning, fixed manual settings or one-time Auto-Tune, and an index of per-pass reports. The manual-setting reminder replaces the proposed dedicated sample-import workflow. Implementation decisions and validation are recorded in the [F09 completion record](docs/archive/design-improvements-completed-2026-10.md#f09-directory-based-iterative-detection-2026-10-22); current behavior belongs in the manual and developer/architecture guides.
 
-The current `IterativeDetectionPipelineService` is a specialised path: it builds a shared global master stack, supplies it to each pass, disables variable-star analysis, and exports against the full sequence. The proposed replacement delegates each pass to the same standard processing/report flow used by a normal run, with only the input file list changing. Each pass builds its own master and retains the configured analyses and their normal readiness checks. This changes results relative to the old iterative method and must be evaluated explicitly.
+**Proposed enhancement: a consolidated “super report”.** Read the completed pass reports and saved run metadata, identify findings that refer to the same physical object or event, and present one combined finding with the best available information from its contributing runs. Keep the individual reports and their original identities accessible.
 
-Use a small planner to produce ordered subsets, a sequential runner to call the standard service, and an index writer to link their outputs. The standard service already accepts `FitsFileInformation[]`, so temporary input folders or copies of FITS files should be unnecessary. Validate directory metadata through the shared input rules, load only the current subset's pixels, use local frame indices and subset metadata throughout detection and export, and release its buffers before the next pass. Preserve original filenames and timestamps in each report.
+- **Associate findings across passes.** Use shared input identities, timestamps, sky/pixel positions, motion and category-specific evidence. Report-local T/ST/A/V IDs alone are insufficient. Handle split/merged tracks, missing WCS, ambiguous matches and incompatible datasets explicitly; preserve disagreements instead of forcing a merge.
+- **Combine evidence with provenance.** A finding may have its strongest detection in one pass, a longer track in another, and better astrometry, photometry, crops or animations elsewhere. Define how to select or combine each measurement, and link it to its source pass and report anchor. Repeated use of the same frames is correlated evidence, not an independent confirmation or an automatic confidence increase.
+- **Present a useful combined view.** Show distinct consolidated findings, contributing passes and their frame counts, coverage and confidence/measurement limitations. Provide the best supported visualizations and direct links to all source reports. Treat combined counts separately from per-pass counts.
+- **Persist enough evidence.** The implemented `run-data.json` and per-pass input manifests capture settings, outcomes, selected filenames, dimensions, exposure and timestamps. Today's `report-data.json` is still a findings summary, not a complete per-frame replay record. Determine and version the additional per-frame positions, associations, quality flags, catalogue/WCS provenance or light-curve evidence needed before promising consolidation of every category. Coordinate with D09/D11 instead of introducing another identity or replay format.
+- **Support partial runs and bounded memory.** Consolidate usable completed outputs after cancellation or pass failure, explain omissions, and work from saved measurements and on-demand images without retaining every run's pixel buffers.
 
-Write a separate output folder per pass and an index with frame count, observing span, outcome, detection counts and report links. Show failed, cancelled or declined passes accurately and retain completed reports. Run admission, progress and cancellation belong to the existing job coordinator. Keep public compatibility entry points where callers need them; no JTransient algorithm change is proposed.
+**Acceptance for the enhancement.** Exercise one finding seen in several passes, distinct nearby objects, split tracks, conflicting measurements, changed/missing inputs, different fields with matching filenames, missing WCS and older summary-only reports. Verify that chosen measurements remain traceable, ambiguous associations remain visible, unique counts are justified, and individual reports stay unchanged. Cross-pass consolidation is not part of the completed basic workflow; its matching and evidence-selection policies need a separate implementation decision.
 
-Open question: how to determine the best settings for the dataset? should we run the auto tuner in a specific setting? This should be input form the user, how to shoose the best settings for the datasets.
+### Live detection preview (F10)
 
-**Open selection decision.** The recommended initial policy preserves the current aim: progressively larger, time-spaced subsets across the sequence, subject to a frame limit. Consecutive batches, possibly overlapping, answer a different sampling need. Confirm the intended policy and exact pass sizes before replacing the implementation; expose the planned passes before starting. Do not silently retune settings between passes.
+**Idea.** Make waiting more engaging with a small “Live view” or “Observatory window” showing a representative image from the work actually under way. Refresh roughly every 3–5 seconds when a useful new snapshot is available, not on every frame or progress event. This is a proposed future feature, not an implementation commitment or a replacement for the final report.
 
-**Acceptance.** For a given subset, compare its measurements, rejections, enabled analyses and report data against an independent normal run on exactly those files with the same configuration. Check first/last frames, incomplete final pass sizes, gaps and absent timestamps, metadata/preparation failures, cancellation and export failure. Report frame counts, quality-control denominators, images and photometry must refer only to the pass's inputs. Verify bounded memory across passes and that the current GUI session remains intact. Separately document the differences from the old shared-master/photometry-disabled method.
+**Preferred placement.** Start with a collapsible area inside the existing `ProcessingProgressDialog`, rather than a second splash window that steals focus or covers controls. Explore a thumbnail around 240–320 logical pixels on its long side, with a short stage/caption line. Keep progress, status and Cancel visible; avoid repeated dialog resizing. Offer Hide/Show preview and retain the preference. Use readable text and accessible descriptions, not colour alone, and avoid flashing or continuous animation.
+
+**Possible content by phase, only when already available:**
+
+- **Loading/preparation:** an appropriately stretched source-frame thumbnail, optionally with frame number or observation time. Show a neutral waiting state until real pixels are available.
+- **Reference and masking:** a reduced master/reference image or a star-mask view, with a plain explanation such as “Building the stationary-sky reference”. Do not suggest the reference is finished while it is still being built.
+- **Extraction and linking:** a crop of an interesting source, streak or emerging track, with a restrained marker. Label it “Provisional candidate” or “Sample extraction”; an extracted source is not necessarily a surviving detection, and later filtering can reject it.
+- **Report generation:** reuse a crop or track visualization as the report produces it. Show “Latest preview from …” if the image belongs to an earlier stage; the current textual progress remains authoritative. No detections, disabled analyses and stages without imagery must remain understandable without manufactured discoveries or unrelated pictures.
+
+**A little creative polish.** Consider an optional small field-of-view inset marking where a crop came from. A short two/three-frame motion strip could later make moving sources or streaks more intuitive; a miniature light curve could serve variable-star analysis if those measurements are already available. These are follow-ups, not prerequisites for the first static-thumbnail version. Prefer real astronomical data over decorative random images, a simulated radar sweep or an invented discovery counter. The preview is illustrative, not a claim to show every finding, the strongest finding or the current full analysis state.
+
+**Normal and iterative runs.** Build on the shared standard-run path so the same component can serve both workflows. For iteration, display the pass number and subset frame count; clear or explicitly retire the previous pass's image. If shown during the one-time Auto-Tune, identify it as a tuning sample, not an iterative detection result. Do not attach another directory's preview to the open session or change its selection, overlays or report reference.
+
+**Technical boundary and cost.** The current engine progress callback carries percentages and text, not image snapshots. Do not infer stages or objects by parsing those messages, or promise live extraction crops without a safe engine integration. Reuse available loading/report assets first; explore an explicit optional, GUI-independent preview/diagnostic observer at safe engine stages in coordination with JA-09 and D09. SpacePixels owns stretching and Swing presentation. Pass bounded, detached thumbnails/crops or safe copied data, not mutable in-flight engine objects or retained full-resolution frame buffers. Rendering must not change scientific pixels, thresholds or exported visualization settings.
+
+Throttle before expensive snapshot/crop work, render off the EDT and keep only the displayed image and at most the newest pending update. Prefer existing pipeline buffers and produced report assets over extra FITS reads, extraction passes or disk exports. Drop stale updates by job/session/pass identity and snapshot order; cancel/release preview work and listeners when hidden, cancelled, completed or superseded. A slow or failed preview must be skipped, never fail detection, delay cancellation or queue work indefinitely. Headless/API runs and disabled previews should incur no preview-generation work.
+
+**Delivery and open decisions.** First prototype the small progress-dialog layout with real source thumbnails and already-produced report images; decide default visibility, size, cadence and stretch policy after using it on short and long runs. Add live reference/extraction/streak samples only where explicit safe snapshots are available. Do not expand the first version into an interactive viewer, saved-results store or the F09 super report.
+
+**Acceptance.** Compare findings and report measurements with preview enabled and disabled; measure wall time and peak memory on representative large frames and set an acceptable overhead budget before release. Exercise no detections, rejected candidates, missing imagery, long stages, short runs, slow rendering and preview failures. Verify responsive Cancel, bounded queues/buffers, correct provisional/stale captions and no updates after completion. Check iterative pass transitions, cancellation/restart and different source directories, including a run while another session remains open. Confirm hiding/disabling stops preview work, headless runs do not produce previews, and text/progress remain usable with keyboard navigation and larger fonts.
 
 ## Refactor scope retained from the earlier plan
 
 - **Settings (D10):** extract persistence and compatibility handling, then validated config/widget and visualization bindings. Split page builders only after those boundaries are useful. Preserve profile formats, hidden values, shared Overview/detail models, migration backups, defaults/revert and auto-apply semantics.
-- **Input preparation (D06, D08):** share discovery/validation, metadata and conversion facts between GUI and headless paths; keep interactive decisions separate from API policy. Extract WCS writeback and solve-artifact cleanup as their own boundary. Keep `ImageProcessing` as a compatibility facade, preserve output-directory naming and avoid combining this with preview/stretch changes.
+- **Input preparation (F07):** extend the shared `FitsPreparationService` operations, keeping interactive decisions separate from API policy. Extract WCS writeback and solve-artifact cleanup as their own boundary when needed. Keep `ImageProcessing` as a compatibility facade, preserve output-directory naming and avoid combining this with preview/stretch changes.
 - **Reporting (D09):** extract image assets, maps or iterative index helpers when relevant feature work needs them. Preserve stable finding identities, filenames, CSV data and lookup/live-render behavior. `DetectionReportAstrometry` already delegates its query/URL/HTML helpers; it is not a standing extraction project.
 - **Main panel (D02, D06):** move the session state and the remaining ownership into tested seams before moving listeners into controllers. Commands and their availability are already separate (D07). A component's size does not determine the extraction order.
 - **Cohesive renderers:** leave `CreativeTributeRenderer` and target section writers intact unless feature work exposes an independent responsibility. No target line counts or mass static-helper replacement are proposed.
 
 Verification follows the strategy above and [AGENTS.md](AGENTS.md). Import changes cover ready mono FITS, compressed files, signed/scaled and 32-bit conversions, color, XISF, exposure groups and negative-value policy in both GUI and headless modes. Settings changes cover load/save, failed saves, defaults/revert, migration, hidden values, previews and both tuners. Report changes compare equivalent standard/iterative bundles, CSVs, identities, crops/GIFs and offline/live lookup behavior against a baseline. Use disposable settings and inputs.
-

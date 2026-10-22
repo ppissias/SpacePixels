@@ -86,6 +86,7 @@ Owns:
 - `SpacePixelsVisualizationPreferences`
 - `SpacePixelsVisualizationPreferencesIO`
 - `SpacePixelsSettingsFiles` (Save on the detection settings tab)
+- `SettingsStorage` (application-owned, ordered background preference writes and migration)
 - `DetectionSettingsRules` (finite numbers and the ordered pairs of settings; checked by the detection settings tab, not yet by profile loading or the API)
 
 The detection profile wraps JTransient `DetectionConfig` plus SpacePixels' Auto-Tune candidate-frame limit. Visualization preferences are intentionally separate because they do not affect detection results.
@@ -180,7 +181,7 @@ Internal backend facade and processing services.
 Important classes:
 
 - `ImageProcessing`
-- `FitsImportService`, `FitsBatchService`, `FitsFiles`, `FitsImages`
+- `FitsImportService`, `FitsPreparationService`, `FitsBatchService`, `FitsFiles`, `FitsImages`
 - `FitsImportInteraction` (decisions/progress; implemented on the EDT by `gui.GuiFitsImportInteraction`)
 - `DetectionInputPreparation`
 - `StandardDetectionPipelineService`
@@ -410,12 +411,14 @@ Iterative large-dataset/slow-target workflow orchestrator.
 
 Responsibilities:
 
-- create an iterative output directory
-- sample frames by timestamp when available, otherwise by sequence position
-- generate one shared master stack from globally spaced frames
-- run multiple `JTransientEngine.runPipeline(..., providedMasterStack)` passes
-- export a report for each pass
-- write an iterative index report linking the pass reports
+- validate/prepare a directory independently of the GUI session using the shared input services
+- use `IterativeDetectionPlan` for Start/Increase/Maximum sizes, exact final maximum and endpoint-preserving time/index sampling
+- optionally run calibrated Auto-Tune once with a bounded candidate pool, then freeze the resulting settings
+- call `StandardDetectionPipelineService.run(...)` for each subset, with its own master, ordinary analyses/readiness, local frame indices and subset export metadata
+- release each pass's private processing state and pixel buffers before starting the next
+- publish lightweight outcomes and counts through `IterativeDetectionIndex`, with separate input manifests on disk and links to ordinary per-pass reports
+
+`IterativeDetectionDialog` runs its directory scan off the EDT, previews the pass sizes and explains manual tuning through normal import and Preview Frame. `IterativeDetectionRequest` captures unsaved validated settings, application/site values, export options and the source/plan. The job is admitted even without a GUI session; its completion does not change an existing session's frames, selection, catalogue, overlays or last-report reference. The public processing facade's legacy iterative entry point remains as an adapter over the new passes.
 
 ### `DefaultSpacePixelsPipelineApi`
 
@@ -512,7 +515,9 @@ GUI import may prompt for:
 - importing the largest exposure group into a working subdirectory when exposure times differ
 - color-to-mono conversion through the main UI
 
-`FitsSequenceValidator` and `XisfImageConverter.validateSequence` check headers before conversion: uniform dimensions, channel layout/sample type, all-or-none usable timestamps, and one exposure group. FITS also compares `BZERO`/`BSCALE`. Exposure durations may differ within 2% (at least 0.1 s); missing durations form a separate group. The GUI can copy the largest exposure group to a working subdirectory; headless runs reject the mixed sequence.
+`FitsPreparationService` supplies the same sequence inspection, readiness facts and copied header metadata to interactive import, strict headless loading and automatic API preparation. Interactive and strict imports use the existing bounded import pool; automatic preparation inspects serially. `FitsSequenceValidator` checks those facts before conversion: uniform dimensions, channel layout/sample type, all-or-none usable timestamps, and one exposure group. FITS also compares `BZERO`/`BSCALE` and compression. `XisfImageConverter.validateSequence` performs the corresponding pre-conversion XISF checks. Exposure durations may differ within 2% (at least 0.1 s); missing durations form a separate group. The GUI can copy the largest exposure group to a working subdirectory; headless runs reject the mixed sequence.
+
+`FitsPreparationService.standardizeFile` owns normalization, optional colour output, luminance extraction and staged FITS writes for both `FitsBatchService` and `DetectionInputPreparation`. GUI conversions preserve their `_16bit_converted`, `_16bit_mono` and `_16bit_color` folders and suffixes; automatic preparation preserves its `_spacepixels_prepared_mono16_*` layout. Interaction and negative-value policy remain with the caller. Compressed GUI inputs still decompress to `_uncompressed` before any later standardization; the proposed combined operation is F07.
 
 The engine receives unsigned-16-bit-equivalent pixels (`BZERO` 32768, `BSCALE` 1), represented in signed Java shorts. A conversion offset is shared across frames and recorded in `SPOFFSET`, while row-end zero padding stays zero. The GUI path is interactive and may redirect the active import directory to a generated working directory.
 
@@ -567,16 +572,17 @@ JTransient owns the actual tuning search and validation. `AutoTunerRunner` only 
 
 ```text
 MainApplicationPanel
+-> IterativeDetectionDialog and IterativeDetectionRequest
 -> IterativeDetectionTask
--> ImageProcessing.detectSlowObjectsIterative(...)
 -> IterativeDetectionPipelineService
--> JTransientEngine.generateMasterStack(...)
--> repeated JTransientEngine.runPipeline(..., providedMasterStack)
+-> shared input preparation/validation and IterativeDetectionPlan
+-> optional one-time Auto-Tune
+-> repeated StandardDetectionPipelineService.run(...) on subset metadata
 -> per-pass reports
--> DetectionReportGenerator.exportIterativeIndexReport(...)
+-> IterativeDetectionIndex (index.html, run-data.json, per-pass input manifests)
 ```
 
-This flow trades one full-baseline run for several temporally spaced passes and reuses a shared master stack.
+Each pass builds its own master and preserves the normal configured analyses, including variable-star analysis when ready. Settings stay fixed between passes, and only selected input files change. Report counts and frames refer to the subset. Results therefore differ from the retired shared-master, photometry-disabled implementation. A failed or report-declined pass is recorded and later passes continue; cancellation retains completed reports and marks remaining passes. Cross-pass finding consolidation is future F09 work.
 
 ### Plate Solving and WCS Flow
 
@@ -769,7 +775,7 @@ Detection report output:
 - image and GIF assets beside the report
 - effective settings in `detection_config.json`, stable finding data in `report-data.json` and CSV exports
 - session catalogue/correction files (`sky_catalogue.json`, `plate_correction.json`) in the imported dataset folder, guarded by field and plate-solution identity
-- iterative root directory containing per-pass report directories plus `index.html`
+- iterative root directory containing per-pass report directories, `index.html`, versioned `run-data.json`, per-pass `<count>_inputs.json` and optional `auto_tune.txt`; manifests use filenames rather than private absolute paths and do not store observing-site coordinates
 
 Replacing files:
 
@@ -787,6 +793,8 @@ Desktop:
 - **Previews:** the frame viewers and the Image Stretch previews render on `SwingWorker`s; the newest request wins.
 - **Sky catalogue:** the fetch and the plate-solution check run on their own thread. Their results are dropped when another session has been imported meanwhile.
 - **Session metadata:** the window owns a serialized `SessionStorage` queue. Import prepares saved catalogue/correction/Auto-Tune data before EDT handover, retaining field and frame guards. Session-scoped persistence captures detached snapshots and returns guarded completion to the EDT. A correction switch updates viewers immediately from memory; a run waits for pending saves/acknowledgements on its worker before resolving on-disk context. Failed correction edits revert to the last successful save, without overwriting newer edits. Reimports read behind writes, and window close drains writes off the EDT before exit; replacing a session suppresses obsolete callbacks without discarding its queued writes.
+- **Application preferences:** the separate `SettingsStorage` queue serializes application-default saves, detection-profile/visualization saves, profile migration and window-placement persistence. UI handlers capture snapshots before submission; only successful EDT completion updates the corresponding saved baseline. Editing during a write does not change its contents or become falsely marked saved. Failures preserve edits and partial-write explanations. Closing stops admission, drains both storage queues off the EDT, and reports failures before exiting. Initial preference/profile reads remain in startup initialization.
+- **ASTAP checks:** `AstapInstallationCheck` performs executable/directory inspection and the Browse selection's help launch off the EDT. It permits one active check and only the newest pending request; obsolete completions cannot replace a newer selection, and closure cancels/detaches the UI callback. It does not start a foreground detection job or lock the workspace.
 
 Headless/API:
 
@@ -799,7 +807,7 @@ Progress ranges:
 - the standard pipeline shows frame loading at 0-20% and the engine at 20-100% of the detection run; the GUI shows the detection run as 0-90% and report export as 90-99%, then 100% when done
 - the report reports each step and each item of its slow steps (`ReportProgress`: tracks and anomalies, unclassified-transient cutouts, likely-artifact cards); the shares follow the time each step took on a 33-frame 61-megapixel session
 - the API shows input preparation up to 15%, Auto-Tune 15-35%, the detection run up to 90% and report export 90-100%
-- the iterative pipeline gives each pass an equal share; within a pass the engine takes 0-90% and report generation 95-98%
+- the iterative pipeline reserves 0-10% for preparation and, when requested, 10-30% for one-time tuning; the passes share the remaining progress range and use the ordinary detection/export progress internally
 
 JTransient:
 
