@@ -35,6 +35,10 @@ final class FitsImportService implements AutoCloseable {
     public FitsFileInformation[] getFitsfileInformation() throws Exception {
         File[] files = FitsFiles.list(directory);
         FitsPreparationService.Input[] inputs = FitsPreparationService.inspect(files, executor, false);
+        if (interaction == null) {
+            for (FitsPreparationService.Input input : inputs) input.requireDetectionReady();
+            return installMetadata(inputs, "Headless import");
+        }
         FitsPreparationService.Input reference = inputs[0];
         if (reference.compressed()) {
             int choice = interaction.confirm(

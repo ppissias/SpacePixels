@@ -1,6 +1,5 @@
 package eu.startales.spacepixels.util;
 
-import eu.startales.spacepixels.gui.ApplicationWindow;
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
@@ -32,6 +31,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Logger;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 
@@ -40,6 +40,7 @@ import java.util.zip.Inflater;
  * the same batch-import path used for native FITS sequences.
  */
 public final class XisfImageConverter {
+    private static final Logger LOGGER = Logger.getLogger(XisfImageConverter.class.getName());
 
     private static final byte[] MONOLITHIC_SIGNATURE = "XISF0100".getBytes(StandardCharsets.US_ASCII);
     private static final String GENERATED_DIRECTORY_NAME = "_spacepixels_xisf_mono16";
@@ -79,7 +80,7 @@ public final class XisfImageConverter {
 
         // The conversion turns every file into 16-bit mono, so the sequence is checked before it hides the differences.
         validateSequence(xisfFiles);
-        ApplicationWindow.logger.info("No FITS files found. Converting " + xisfFiles.length + " XISF files to 16-bit monochrome FITS.");
+        LOGGER.info("No FITS files found. Converting " + xisfFiles.length + " XISF files to 16-bit monochrome FITS.");
         return convertDirectory(directory, xisfFiles, progressListener);
     }
 

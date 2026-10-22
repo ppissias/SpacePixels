@@ -329,7 +329,8 @@ public class ApplicationWindow {
     public void importFolder(File folder) {
         if (folder != null && folder.isDirectory()) {
             JobCoordinator.Admission admission = jobCoordinator.start(JobKind.IMPORT, sessions.current(),
-                    new FitsImportTask(folder, applicationSettings, sessionStorage), (handle, outcome) -> importFinished(handle.session(), outcome));
+                    new FitsImportTask(folder, applicationSettings, sessionStorage, new GuiFitsImportInteraction()),
+                    (handle, outcome) -> importFinished(handle.session(), outcome));
             if (!admission.admitted()) {
                 mainApplicationPanel.showStatus(admission.refusal());
             }

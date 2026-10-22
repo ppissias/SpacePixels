@@ -26,10 +26,19 @@ public class DetectionTask implements Job<File> {
 
     // Hold the configuration
     private final DetectionConfig config;
+    private final ImageProcessing.DetectionSafetyPrompt safetyPrompt;
 
+    /** Creates a noninteractive job that declines report export above 50 classified detections. */
     public DetectionTask(ImageProcessing preProcessing, DetectionConfig config) {
+        this(preProcessing, config, summary -> summary.totalDetections <= 50);
+    }
+
+    /** Creates a job with an explicit report decision; null exports every result without asking. */
+    public DetectionTask(ImageProcessing preProcessing, DetectionConfig config,
+                         ImageProcessing.DetectionSafetyPrompt safetyPrompt) {
         this.preProcessing = preProcessing;
         this.config = config;
+        this.safetyPrompt = safetyPrompt;
     }
 
     @Override
@@ -41,10 +50,6 @@ public class DetectionTask implements Job<File> {
     }
 
     private JobOutcome<File> runCancellable(JobContext context) throws Exception {
-        // Asks before writing a report for very many detections.
-        ImageProcessing.DetectionSafetyPrompt safetyPrompt = (summary) ->
-                summary.confirmReport(preProcessing.hasPlateSolvedFrame(), 50, null, config);
-
         File exportDir = preProcessing.detectObjects(config, safetyPrompt, context::progress);
         if (exportDir == null) {
             return JobOutcome.declined("Report generation aborted by user due to high track count. Try raising your thresholds.");

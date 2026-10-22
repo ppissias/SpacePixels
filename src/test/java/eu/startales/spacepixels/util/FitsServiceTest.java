@@ -46,6 +46,40 @@ public class FitsServiceTest {
         }
     }
 
+    /** The facade delegates conversions to the caller's interaction rather than constructing Swing adapters. */
+    @Test
+    public void facadeUsesExplicitInteractionForConversionAndRedirect() throws Exception {
+        File input = folder.newFolder("facade-float");
+        write(input, "float.fit", new float[][]{{1, 2}, {3, 4}}, false);
+        Interaction interaction = new Interaction();
+        File converted;
+        try (ImageProcessing processing = ImageProcessing.getInstance(input, settings(), interaction)) {
+            try {
+                processing.getFitsfileInformation();
+                throw new AssertionError("Expected the accepted conversion to redirect import");
+            } catch (ImageProcessing.RedirectImportException redirect) {
+                converted = redirect.getNewDirectory();
+            }
+        }
+        assertEquals(List.of("Format Conversion Required", "Success"), interaction.questions);
+        assertEquals(0, interaction.openProgress);
+        try (ImageProcessing processing = ImageProcessing.getInstance(converted, settings())) {
+            assertEquals(1, processing.getFitsfileInformation().length);
+        }
+    }
+
+    /** Default factories validate strictly and never ask how to convert an unsupported input. */
+    @Test
+    public void facadeWithoutInteractionRejectsFloatInputWithoutWritingDerivatives() throws Exception {
+        File input = folder.newFolder("headless-float");
+        write(input, "float.fit", new float[][]{{1, 2}, {3, 4}}, false);
+        try (ImageProcessing processing = ImageProcessing.getInstance(input, settings())) {
+            Exception failure = assertThrows(nom.tam.fits.FitsException.class, processing::getFitsfileInformation);
+            assertTrue(failure.getMessage(), failure.getMessage().contains("BITPIX=-32"));
+        }
+        assertEquals(1, input.listFiles().length);
+    }
+
     @Test
     public void negativeFloatConversionPreservesPixelsPaddingHeadersAndOutputNames() throws Exception {
         File input = folder.newFolder("negative");

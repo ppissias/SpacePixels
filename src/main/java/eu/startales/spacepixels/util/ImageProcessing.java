@@ -16,7 +16,6 @@ import nom.tam.fits.*;
 
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
-import eu.startales.spacepixels.gui.GuiFitsImportInteraction;
 import eu.startales.spacepixels.session.SessionFrames;
 
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -24,14 +23,7 @@ import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 
-import javax.swing.*;
 import java.awt.Color;
-import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.file.Files;
@@ -52,8 +44,10 @@ public class ImageProcessing implements AutoCloseable {
     public static final int MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS =
             DetectionPipelineSupport.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS;
 
+    /** Caller-supplied report decision after detection; implementations may set report-only inclusion. */
     @FunctionalInterface
     public interface DetectionSafetyPrompt {
+        /** Returns whether export may proceed for this summary. */
         boolean shouldProceed(DetectionSummary summary);
     }
 
@@ -82,7 +76,8 @@ public class ImageProcessing implements AutoCloseable {
         /** Groups to write. The warning dialog replaces this when the user leaves some out. */
         private ReportInclusion reportInclusion = ReportInclusion.all();
 
-        DetectionSummary(int totalDetections,
+        /** Captures measured counts; report inclusion starts with every optional group enabled. */
+        public DetectionSummary(int totalDetections,
                          int singleStreaks,
                          int streakTracks,
                          int movingTargets,
@@ -117,42 +112,24 @@ public class ImageProcessing implements AutoCloseable {
             return reportInclusion;
         }
 
+        /** Replaces report-only inclusion choices without mutating detection settings or measured results. */
+        public void includeInReport(ReportInclusion inclusion) {
+            reportInclusion = Objects.requireNonNull(inclusion);
+        }
+
         /**
-         * Asks whether to build the report when the classified count is above {@code limit}.
-         * A count at or under the limit proceeds without a dialog. Optional groups the detection had switched on
-         * can be left out of the report; groups that were switched off are not offered.
+         * Noninteractive compatibility guard: accepts counts at or below the limit and declines larger reports.
+         * Desktop callers must supply an explicit report prompt instead of relying on a hidden dialog.
          *
-         * @param heading optional line above the summary, for an iterative pass
-         * @param config the settings this detection used, or null when every measured group may be offered
-         * @return true when the report should be generated
+         * @deprecated use an explicit {@link DetectionSafetyPrompt} for interactive confirmation
          */
+        @Deprecated
         public boolean confirmReport(boolean plateSolved, int limit, String heading, DetectionConfig config) {
-            if (totalDetections <= limit) {
-                return true;
-            }
-            final boolean[] proceed = {false};
-            try {
-                SwingUtilities.invokeAndWait(() -> {
-                    ReportChoice choice = warningPanel(plateSolved, heading, config);
-                    int answer = JOptionPane.showConfirmDialog(
-                            null,
-                            choice.panel,
-                            "Detection summary",
-                            JOptionPane.YES_NO_OPTION,
-                            JOptionPane.WARNING_MESSAGE);
-                    proceed[0] = answer == JOptionPane.YES_OPTION;
-                    if (proceed[0]) {
-                        reportInclusion = choice.inclusion();
-                    }
-                });
-            } catch (Exception e) {
-                return false;
-            }
-            return proceed[0];
+            return totalDetections <= limit;
         }
 
         /** A checkbox is offered only for a group the detection ran and that found something. */
-        static boolean offerInReport(boolean featureEnabled, int count) {
+        public static boolean offerInReport(boolean featureEnabled, int count) {
             return featureEnabled && count > 0;
         }
 
@@ -194,255 +171,8 @@ public class ImageProcessing implements AutoCloseable {
                     + "Do you want to generate the report anyway?";
         }
 
-        private ReportChoice warningPanel(boolean plateSolved, String heading, DetectionConfig config) {
-            JPanel panel = new JPanel();
-            panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-            panel.setOpaque(false);
-            panel.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 4));
-
-            String title = (heading == null || heading.isBlank() ? "" : heading + " — ")
-                    + "This run found " + totalDetections + " detections.";
-            panel.add(aligned(label(title, true)));
-            panel.add(Box.createVerticalStrut(10));
-
-            JPanel grid = new JPanel(new GridBagLayout());
-            grid.setOpaque(false);
-            grid.setAlignmentX(Component.LEFT_ALIGNMENT);
-            boolean anomaliesOn = config == null || config.enableAnomalyRescue;
-            boolean slowMoversOn = config == null || config.enableSlowMoverDetection;
-            boolean residualOn = config == null || config.enableResidualTransientAnalysis;
-            boolean localRescueOn = residualOn && (config == null || config.enableLocalRescueCandidates);
-            boolean localActivityOn = residualOn && (config == null || config.enableLocalActivityClusters);
-            boolean commonMotionOn = config == null || config.enableCommonMotionRejection;
-            boolean cameraFixedOn = config == null || config.enableCameraFixedRejection;
-            boolean variableStarsOn = config != null && config.enableVariableStarDetection
-                    && photometryVerdict != null && !"NOT_RUN".equals(photometryVerdict);
-            OptionalRow[] rows = {
-                    OptionalRow.always("Moving-object tracks", Integer.toString(movingTargets), movingTargets),
-                    OptionalRow.always("Streak tracks", Integer.toString(streakTracks), streakTracks),
-                    OptionalRow.always("Single streaks", Integer.toString(singleStreaks), singleStreaks),
-                    OptionalRow.when(anomaliesOn, "Single-frame anomalies", Integer.toString(anomalies), anomalies),
-                    OptionalRow.when(slowMoversOn, "Slow-mover candidates", Integer.toString(slowMoverCandidates), slowMoverCandidates),
-                    OptionalRow.when(localRescueOn, "Local rescue candidates", Integer.toString(localRescueCandidates), localRescueCandidates),
-                    OptionalRow.when(localActivityOn, "Local activity clusters", Integer.toString(localActivityClusters), localActivityClusters),
-                    OptionalRow.when(commonMotionOn, "Common-motion groups", Integer.toString(commonMotionGroups), commonMotionGroups),
-                    OptionalRow.when(cameraFixedOn, "Camera-fixed groups", Integer.toString(cameraFixedGroups), cameraFixedGroups)
-            };
-            JCheckBox anomaliesBox = null;
-            JCheckBox slowMoversBox = null;
-            JCheckBox localRescueBox = null;
-            JCheckBox localActivityBox = null;
-            JCheckBox commonMotionBox = null;
-            JCheckBox cameraFixedBox = null;
-            JCheckBox[] boxes = new JCheckBox[rows.length];
-            if (offerInReport(anomaliesOn, anomalies)) {
-                anomaliesBox = includeBox();
-                boxes[3] = anomaliesBox;
-            }
-            if (offerInReport(slowMoversOn, slowMoverCandidates)) {
-                slowMoversBox = includeBox();
-                boxes[4] = slowMoversBox;
-            }
-            if (offerInReport(localRescueOn, localRescueCandidates)) {
-                localRescueBox = includeBox();
-                boxes[5] = localRescueBox;
-            }
-            if (offerInReport(localActivityOn, localActivityClusters)) {
-                localActivityBox = includeBox();
-                boxes[6] = localActivityBox;
-            }
-            if (offerInReport(commonMotionOn, commonMotionGroups)) {
-                commonMotionBox = includeBox();
-                boxes[7] = commonMotionBox;
-            }
-            if (offerInReport(cameraFixedOn, cameraFixedGroups)) {
-                cameraFixedBox = includeBox();
-                boxes[8] = cameraFixedBox;
-            }
-            JCheckBox variableStarsBox = offerInReport(variableStarsOn, 1) ? includeBox() : null;
-
-            GridBagConstraints name = new GridBagConstraints();
-            name.gridx = 0;
-            name.anchor = GridBagConstraints.WEST;
-            name.insets = new Insets(2, 0, 2, 18);
-            GridBagConstraints value = new GridBagConstraints();
-            value.gridx = 1;
-            value.anchor = GridBagConstraints.EAST;
-            value.insets = new Insets(2, 0, 2, 8);
-            GridBagConstraints choice = new GridBagConstraints();
-            choice.gridx = 2;
-            choice.anchor = GridBagConstraints.WEST;
-            choice.insets = new Insets(2, 0, 2, 0);
-            Color quiet = UIManager.getColor("Label.disabledForeground");
-            JLabel included = label("", false);
-            int row = 0;
-            boolean anyChoice = false;
-            for (int i = 0; i < rows.length; i++) {
-                if (rows[i] == null) {
-                    continue;
-                }
-                name.gridy = row;
-                value.gridy = row;
-                choice.gridy = row;
-                boolean zero = rows[i].count == 0;
-                JLabel nameLabel = new JLabel(rows[i].label);
-                JLabel valueLabel = new JLabel(rows[i].value);
-                valueLabel.setFont(valueLabel.getFont().deriveFont(Font.BOLD));
-                if (zero && quiet != null) {
-                    nameLabel.setForeground(quiet);
-                    valueLabel.setForeground(quiet);
-                }
-                grid.add(nameLabel, name);
-                grid.add(valueLabel, value);
-                if (boxes[i] != null) {
-                    grid.add(boxes[i], choice);
-                    anyChoice = true;
-                }
-                row++;
-            }
-            if (variableStarsOn) {
-                name.gridy = row;
-                value.gridy = row;
-                choice.gridy = row;
-                grid.add(new JLabel("Variable stars"), name);
-                grid.add(new JLabel(photometryLine()), value);
-                if (variableStarsBox != null) {
-                    grid.add(variableStarsBox, choice);
-                    anyChoice = true;
-                }
-            }
-            panel.add(grid);
-            JCheckBox[] watched = {anomaliesBox, slowMoversBox, localRescueBox, localActivityBox, commonMotionBox, cameraFixedBox};
-            Runnable refreshIncluded = () -> included.setText(includedLine(watched));
-            for (JCheckBox box : watched) {
-                if (box != null) {
-                    box.addItemListener(e -> refreshIncluded.run());
-                }
-            }
-            refreshIncluded.run();
-            panel.add(Box.createVerticalStrut(8));
-            panel.add(aligned(wrapped("Still unclassified, not counted above: " + unclassifiedDetections
-                    + ". The inspector lists them.")));
-            panel.add(Box.createVerticalStrut(6));
-            panel.add(aligned(wrapped("Astrometry: " + (plateSolved
-                    ? "a plate-solved frame is available, so the report has sky coordinates and online identification."
-                    : "no plate-solved frame, so the report has no sky coordinates or identification."))));
-            panel.add(Box.createVerticalStrut(8));
-            panel.add(aligned(wrapped("Largest group: " + largestGroup() + ". "
-                    + "Image crops, GIFs and the HTML report for this many objects take a long time and a lot of disk. "
-                    + "Many tracks or anomalies usually mean the Detection Sigma is too low and noise was linked.")));
-            if (anyChoice) {
-                panel.add(Box.createVerticalStrut(8));
-                panel.add(aligned(wrapped("Uncheck a group to leave it out of this report. The detection settings stay as they are.")));
-                panel.add(Box.createVerticalStrut(4));
-                panel.add(aligned(included));
-            }
-            panel.add(Box.createVerticalStrut(10));
-            panel.add(aligned(label("Generate the report?", true)));
-            return new ReportChoice(panel, anomaliesBox, slowMoversBox, localRescueBox, localActivityBox, commonMotionBox,
-                    cameraFixedBox, variableStarsBox);
-        }
-
-        private String includedLine(JCheckBox[] boxes) {
-            int included = movingTargets + streakTracks + singleStreaks;
-            if (boxes[0] == null || boxes[0].isSelected()) {
-                included += anomalies;
-            }
-            if (boxes[1] == null || boxes[1].isSelected()) {
-                included += slowMoverCandidates;
-            }
-            if (boxes[2] == null || boxes[2].isSelected()) {
-                included += localRescueCandidates;
-            }
-            if (boxes[3] == null || boxes[3].isSelected()) {
-                included += localActivityClusters;
-            }
-            if (boxes[4] == null || boxes[4].isSelected()) {
-                included += commonMotionGroups;
-            }
-            if (boxes[5] == null || boxes[5].isSelected()) {
-                included += cameraFixedGroups;
-            }
-            return "The report will include " + included + " of these detections.";
-        }
-
-        private String photometryLine() {
-            if ("NOT_READY".equals(photometryVerdict)) {
-                return "session not ready for photometry";
-            }
-            return variableStarCandidates + " candidates, " + possibleVariableStars + " possible";
-        }
-
-        private static JCheckBox includeBox() {
-            JCheckBox box = new JCheckBox("In report");
-            box.setSelected(true);
-            box.setOpaque(false);
-            return box;
-        }
-
-        private static JLabel label(String text, boolean bold) {
-            JLabel result = new JLabel(text);
-            if (bold) {
-                result.setFont(result.getFont().deriveFont(Font.BOLD));
-            }
-            return result;
-        }
-
-        /** Wrapped plain text whose height is known before the dialog is shown. HTML labels report one line until they are on screen, and the option pane then clips the question and the buttons. */
-        private static JComponent wrapped(String text) {
-            JTextArea area = new JTextArea(text);
-            area.setLineWrap(true);
-            area.setWrapStyleWord(true);
-            area.setEditable(false);
-            area.setOpaque(false);
-            area.setFocusable(false);
-            area.setBorder(null);
-            Font font = UIManager.getFont("Label.font");
-            if (font != null) {
-                area.setFont(font);
-            }
-            Color foreground = UIManager.getColor("Label.foreground");
-            if (foreground != null) {
-                area.setForeground(foreground);
-            }
-            int width = 640;
-            int height = wrappedHeight(area.getFontMetrics(area.getFont()), text, width);
-            area.setPreferredSize(new Dimension(width, height));
-            area.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
-            return area;
-        }
-
-        /** Line count for a word-wrapped label before the component is on screen. */
-        private static int wrappedHeight(java.awt.FontMetrics fm, String text, int width) {
-            int height = 0;
-            int lineHeight = fm.getHeight();
-            for (String paragraph : text.split("\n", -1)) {
-                if (paragraph.isEmpty()) {
-                    height += lineHeight;
-                    continue;
-                }
-                int lineWidth = 0;
-                int lines = 1;
-                for (String word : paragraph.split(" ")) {
-                    int wordWidth = fm.stringWidth(word + " ");
-                    if (lineWidth > 0 && lineWidth + wordWidth > width) {
-                        lines++;
-                        lineWidth = wordWidth;
-                    } else {
-                        lineWidth += wordWidth;
-                    }
-                }
-                height += lines * lineHeight;
-            }
-            return height + fm.getDescent();
-        }
-
-        private static JComponent aligned(JComponent component) {
-            component.setAlignmentX(Component.LEFT_ALIGNMENT);
-            return component;
-        }
-
-        private String largestGroup() {
+        /** Describes the largest classified group, preserving the existing tie order. */
+        public String largestGroup() {
             String[] names = {"moving objects", "single-frame anomalies", "slow-mover candidates",
                     "residual analysis", "common-motion groups", "camera-fixed groups"};
             int[] counts = {movingTargets + streakTracks + singleStreaks, anomalies,
@@ -455,66 +185,6 @@ public class ImageProcessing implements AutoCloseable {
                 }
             }
             return names[best] + " (" + counts[best] + ")";
-        }
-    }
-
-    /** One line of the warning. Null when that part of the detection was switched off. */
-    private static final class OptionalRow {
-        final String label;
-        final String value;
-        final int count;
-
-        private OptionalRow(String label, String value, int count) {
-            this.label = label;
-            this.value = value;
-            this.count = count;
-        }
-
-        static OptionalRow always(String label, String value, int count) {
-            return new OptionalRow(label, value, count);
-        }
-
-        static OptionalRow when(boolean featureEnabled, String label, String value, int count) {
-            return featureEnabled ? new OptionalRow(label, value, count) : null;
-        }
-    }
-
-    /** The warning panel and the include boxes, read after the dialog closes. */
-    private static final class ReportChoice {
-        final JComponent panel;
-        final JCheckBox anomalies;
-        final JCheckBox slowMovers;
-        final JCheckBox localRescue;
-        final JCheckBox localActivity;
-        final JCheckBox commonMotion;
-        final JCheckBox cameraFixed;
-        final JCheckBox variableStars;
-
-        ReportChoice(JComponent panel, JCheckBox anomalies, JCheckBox slowMovers, JCheckBox localRescue,
-                     JCheckBox localActivity, JCheckBox commonMotion, JCheckBox cameraFixed, JCheckBox variableStars) {
-            this.panel = panel;
-            this.anomalies = anomalies;
-            this.slowMovers = slowMovers;
-            this.localRescue = localRescue;
-            this.localActivity = localActivity;
-            this.commonMotion = commonMotion;
-            this.cameraFixed = cameraFixed;
-            this.variableStars = variableStars;
-        }
-
-        ReportInclusion inclusion() {
-            return new ReportInclusion(
-                    selected(anomalies),
-                    selected(slowMovers),
-                    selected(localRescue),
-                    selected(localActivity),
-                    selected(commonMotion),
-                    selected(cameraFixed),
-                    selected(variableStars));
-        }
-
-        private static boolean selected(JCheckBox box) {
-            return box == null || box.isSelected();
         }
     }
 
@@ -595,14 +265,22 @@ public class ImageProcessing implements AutoCloseable {
     public SessionFrames getSessionFrames() { return sessionFrames; }
 
     /**
-     * Creates a processing facade bound to a specific aligned FITS directory.
+     * Creates a noninteractive processing facade bound to an aligned FITS directory.
+     * Desktop import decisions require the overload accepting a FitsImportInteraction.
      */
     public static synchronized ImageProcessing getInstance(File alignedFitsFolderFullPath) throws IOException, FitsException {
         return getInstance(alignedFitsFolderFullPath, ApplicationSettings.loadDefault());
     }
 
+    /** Creates a noninteractive facade using the caller's settings. */
     public static ImageProcessing getInstance(File folder, ApplicationSettings settings) throws IOException, FitsException {
-        return new ImageProcessing(folder, settings);
+        return getInstance(folder, settings, null);
+    }
+
+    /** Creates a facade with explicit import decisions; null uses strict, noninteractive validation. */
+    public static ImageProcessing getInstance(File folder, ApplicationSettings settings,
+                                              FitsImportInteraction interaction) throws IOException, FitsException {
+        return new ImageProcessing(folder, settings, interaction);
     }
 
     @Override
@@ -615,7 +293,7 @@ public class ImageProcessing implements AutoCloseable {
     /**
      * Initializes the processor and loads persisted app-level preferences if they exist.
      */
-    private ImageProcessing(File alignedFitsFolderFullPath, ApplicationSettings settings) throws IOException, FitsException {
+    private ImageProcessing(File alignedFitsFolderFullPath, ApplicationSettings settings, FitsImportInteraction interaction) throws IOException, FitsException {
         this.applicationSettings = Objects.requireNonNull(settings);
         this.appConfig = settings.getConfig();
         this.plateSolveService = new PlateSolveService(this.appConfig);
@@ -623,7 +301,7 @@ public class ImageProcessing implements AutoCloseable {
         this.iterativeDetectionPipelineService = new IterativeDetectionPipelineService(this.appConfig);
         this.fitsVisualizationRenderer = new FitsVisualizationRenderer();
         this.batchService = new FitsBatchService(alignedFitsFolderFullPath, fitsVisualizationRenderer);
-        this.importService = new FitsImportService(alignedFitsFolderFullPath, sessionFrames, batchService, new GuiFitsImportInteraction());
+        this.importService = new FitsImportService(alignedFitsFolderFullPath, sessionFrames, batchService, interaction);
     }
 
     // =========================================================================
@@ -750,8 +428,8 @@ public class ImageProcessing implements AutoCloseable {
     }
 
     /**
-     * Loads FITS metadata for interactive use after validating compression state, format
-     * consistency, dimensions, and optional auto-conversion paths. Replaces the imported frames with new objects.
+     * Loads metadata, checking sequence consistency before readiness. Explicit interaction may offer conversions;
+     * without it, unsupported inputs are rejected without dialogs or derivatives. Replaces the cached frames.
      */
     public FitsFileInformation[] getFitsfileInformation() throws Exception {
         return importService.getFitsfileInformation();
@@ -828,11 +506,19 @@ public class ImageProcessing implements AutoCloseable {
     }
 
     /**
-     * Warns that the images have different exposure times and offers to import only the largest group, copied into a
-     * subfolder because SpacePixels works on whole folders. Returns that subfolder, or null when the user cancels.
+     * Noninteractive compatibility entry point: declines copying an exposure group without explicit interaction.
+     *
+     * @deprecated supply an explicit FitsImportInteraction to the overload
      */
+    @Deprecated
     public static File offerToImportLargestExposureGroup(MixedExposureException mixed) throws IOException {
-        return FitsImportService.offerToImportLargestExposureGroup(mixed, new GuiFitsImportInteraction());
+        return offerToImportLargestExposureGroup(mixed, null);
+    }
+
+    /** Offers to copy the largest exposure group; returns null when declined or no interaction is supplied. */
+    public static File offerToImportLargestExposureGroup(MixedExposureException mixed,
+                                                        FitsImportInteraction interaction) throws IOException {
+        return interaction == null ? null : FitsImportService.offerToImportLargestExposureGroup(mixed, interaction);
     }
 
     /** The warning {@link #offerToImportLargestExposureGroup} shows. */

@@ -24,6 +24,8 @@ Other `eu.startales.spacepixels.*` packages should be treated as internal implem
 - `io.github.ppissias.jtransient.engine.PipelineResult`
 - `eu.startales.spacepixels.util.FitsFileInformation`
 
+The internal `ImageProcessing` compatibility facade no longer creates Swing adapters implicitly (S13). Its existing factories without interaction use strict headless validation; desktop code supplies `FitsImportInteraction` explicitly. Legacy summary confirmation/exposure-group signatures remain noninteractive guards/declines. This does not change the supported pipeline request/result surface, preparation policy or API report behavior; API execution continues without report-size questions.
+
 ## Dependency
 
 When the artifact is published to Maven Central, depend on it as:

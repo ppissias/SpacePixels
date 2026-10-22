@@ -79,6 +79,45 @@ public class TaskOutcomesTest {
         }
     }
 
+    /** Detection forwards the measured summary to an injected decision and respects report refusal. */
+    @Test
+    public void detectionUsesTheSuppliedReportDecision() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "prompt", 5);
+        AtomicBoolean asked = new AtomicBoolean();
+        try (ImageProcessing processing = ImageProcessing.getInstance(sequence.toFile())) {
+            DetectionTask task = new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig(), summary -> {
+                asked.set(true);
+                assertTrue(summary.totalDetections >= 0);
+                return false;
+            });
+            assertTrue(outcomeOf(task) instanceof JobOutcome.Declined<?>);
+        }
+        assertTrue(asked.get());
+        assertEquals(0, foldersStartingWith(sequence, "detections_").length);
+    }
+
+    /** Every independent iterative pass supplies its own subset and effective settings to the injected decision. */
+    @Test
+    public void iterativeRequestUsesTheSuppliedPerPassReportDecision() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "pass-prompts", 6);
+        var config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
+        var application = new eu.startales.spacepixels.config.AppConfig();
+        var request = new eu.startales.spacepixels.util.IterativeDetectionRequest(sequence.toFile(), config, application,
+                eu.startales.spacepixels.util.reporting.DetectionReportGenerator.captureExportSettings(application.variableStarReportOptions),
+                new eu.startales.spacepixels.util.IterativeDetectionPlan(5, 1, 6), null, 5, false, true, 6);
+        List<Integer> subsets = new ArrayList<>();
+        IterativeDetectionTask task = new IterativeDetectionTask(request, (summary, files, settings) -> {
+            subsets.add(files.length);
+            assertEquals(config.detectionSigmaMultiplier, settings.detectionSigmaMultiplier, 0);
+            return false;
+        });
+        assertTrue(outcomeOf(task) instanceof JobOutcome.Completed<?>);
+        assertEquals(List.of(5, 6), subsets);
+        String run = java.nio.file.Files.readString(new File(task.getIndexFile().getParentFile(), "run-data.json").toPath());
+        assertTrue(run.contains("REPORT_DECLINED"));
+        assertFalse(run.contains("\"outcome\": \"FAILED\""));
+    }
+
     @Test
     public void aDetectionCancelledWhileItRunsStopsBeforeWritingAReport() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 5);

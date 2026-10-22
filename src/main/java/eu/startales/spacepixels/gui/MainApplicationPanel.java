@@ -459,7 +459,10 @@ public class MainApplicationPanel extends JPanel {
             return;
         }
         ImageProcessing session = mainAppWindow.getImageProcessing();
-        startJob(JobKind.DETECTION, session, new DetectionTask(session, settings), this::showDetectionOutcome);
+        GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
+        startJob(JobKind.DETECTION, session, new DetectionTask(session, settings,
+                summary -> reportPrompt.confirm(summary, session.hasPlateSolvedFrame(), 50, null, settings)),
+                this::showDetectionOutcome);
     }
 
     /** Blinks the selected frames, or stops the blink that is loading or playing. */
@@ -554,7 +557,10 @@ public class MainApplicationPanel extends JPanel {
         IterativeDetectionRequest request = new IterativeDetectionRequest(selected.directory(), settings, application,
                 DetectionReportGenerator.captureExportSettings(application.variableStarReportOptions), selected.plan(),
                 selected.autoTuneProfile(), selected.autoTuneFrames(), selected.autoPrepare(), selected.keepNegative(), selected.availableFrames());
-        IterativeDetectionTask task = new IterativeDetectionTask(request);
+        GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
+        IterativeDetectionTask task = new IterativeDetectionTask(request, (summary, files, passSettings) ->
+                reportPrompt.confirm(summary, java.util.Arrays.stream(files).anyMatch(FitsFileInformation::isWcsSolved),
+                        50, "Iterative pass: " + files.length + " frames", passSettings));
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.ITERATIVE_DETECTION,
                 mainAppWindow.getSession(), mainAppWindow.sessionJob(task),
                 mainAppWindow.forCurrentSession((handle, outcome) -> showIterativeOutcome(outcome, task)));

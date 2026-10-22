@@ -10,7 +10,6 @@
 package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.AppConfig;
-import eu.startales.spacepixels.gui.ApplicationWindow;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jplatesolve.PlateSolveOperation;
 import java.util.function.Consumer;
@@ -46,11 +45,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
+import java.util.logging.Logger;
 
 /**
  * Handles plate-solving execution together with WCS header import and solve-artifact cleanup.
  */
 final class PlateSolveService implements AutoCloseable {
+    private static final Logger LOGGER = Logger.getLogger(PlateSolveService.class.getName());
 
     @FunctionalInterface
     interface FitsWriteHandler {
@@ -234,11 +235,11 @@ final class PlateSolveService implements AutoCloseable {
     }
 
     private static int downloadFile(URL fileURL, String targetFilePath) throws IOException {
-        ApplicationWindow.logger.info("downloading : " + fileURL + " to " + targetFilePath);
+        LOGGER.info("downloading : " + fileURL + " to " + targetFilePath);
         File targetfile = new File(targetFilePath);
         if (targetfile.exists()) {
             targetfile.delete();
-            ApplicationWindow.logger.info("deleted pre-existing : " + targetFilePath);
+            LOGGER.info("deleted pre-existing : " + targetFilePath);
         }
 
         try (BufferedInputStream in = new BufferedInputStream(fileURL.openStream());

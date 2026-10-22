@@ -54,11 +54,18 @@ public class DependencyRulesTest {
         }
     }
 
+    /** Keeps all processing and reporting utilities window-free while allowing headless AWT rendering. */
+    @Test
+    public void processingUtilitiesDoNotDependOnSwingOrTheWindow() throws IOException {
+        assertNoReferences("util", "eu.startales.spacepixels.gui.", "javax.swing.");
+    }
+
+    /** Scans Java sources recursively for imports and qualified references across the selected boundary. */
     private static void assertNoReferences(String packageName, String... forbidden) throws IOException {
         Path directory = SOURCES.resolve(packageName);
         assertTrue("Run from the project folder: " + directory.toAbsolutePath(), Files.exists(directory));
         List<String> found = new ArrayList<>();
-        try (Stream<Path> files = Files.isDirectory(directory) ? Files.list(directory) : Stream.of(directory)) {
+        try (Stream<Path> files = Files.isDirectory(directory) ? Files.walk(directory) : Stream.of(directory)) {
             for (Path file : (Iterable<Path>) files.filter(f -> f.toString().endsWith(".java"))::iterator) {
                 List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
                 for (int i = 0; i < lines.size(); i++) {

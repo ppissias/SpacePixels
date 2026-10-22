@@ -19,6 +19,7 @@ import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.FitsImportInteraction;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.MixedExposureException;
 import eu.startales.spacepixels.util.SessionReports;
@@ -46,6 +47,7 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
     private final File directory;
     private final ApplicationSettings settings;
     private final SessionStorage storage;
+    private final FitsImportInteraction interaction;
 
     public FitsImportTask(File directory) {
         this(directory, null);
@@ -56,9 +58,16 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
     }
 
     public FitsImportTask(File directory, ApplicationSettings settings, SessionStorage storage) {
+        this(directory, settings, storage, null);
+    }
+
+    /** Imports with explicit conversion and exposure-group decisions; null uses strict headless validation. */
+    public FitsImportTask(File directory, ApplicationSettings settings, SessionStorage storage,
+                          FitsImportInteraction interaction) {
         this.directory = directory;
         this.settings = settings;
         this.storage = storage;
+        this.interaction = interaction;
     }
 
     @Override
@@ -75,7 +84,7 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
                     context.progress(90, "Loading generated FITS metadata...");
                 }
 
-                imgProcessing = ImageProcessing.getInstance(importDirectory, preferences);
+                imgProcessing = ImageProcessing.getInstance(importDirectory, preferences, interaction);
                 FitsFileInformation[] filesInfo = imgProcessing.getFitsfileInformation();
                 context.progress(90, "FITS metadata loaded.");
                 if (filesInfo.length == 0) {
@@ -97,10 +106,10 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
                 folder = e.getNewDirectory();
             } catch (MixedExposureException e) {
                 // Only the window can ask; the API and batch runs reject the folder with the exception's message.
-                if (!e.canImportLargestGroup()) {
+                if (interaction == null || !e.canImportLargestGroup()) {
                     throw e;
                 }
-                File largestGroup = ImageProcessing.offerToImportLargestExposureGroup(e);
+                File largestGroup = ImageProcessing.offerToImportLargestExposureGroup(e, interaction);
                 if (largestGroup == null) {
                     return JobOutcome.declined("The import was cancelled.");
                 }
