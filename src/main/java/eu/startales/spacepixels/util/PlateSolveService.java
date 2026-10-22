@@ -115,9 +115,27 @@ final class PlateSolveService implements AutoCloseable {
                     .withDownsample_factor(2f)
                     .withRadius(10f)
                     .build();
-            return astrometryNetClient(appConfig.astrometryNetApiKeyInUse()).startCustomSolve(new File(path), parameters, progress);
+            // Anonymous uploads share one account: send a copy without the site and the observer.
+            File upload = FitsUploadCopy.create(new File(path));
+            try {
+                PlateSolveOperation operation = astrometryNetClient(appConfig.astrometryNetApiKeyInUse())
+                        .startCustomSolve(upload, parameters, progress);
+                operation.completion().whenComplete((outcome, failure) -> deleteUploadCopy(upload));
+                return operation;
+            } catch (RuntimeException failure) {
+                deleteUploadCopy(upload);
+                throw failure;
+            }
         }
         throw new IOException("No plate solver was chosen.");
+    }
+
+    private static void deleteUploadCopy(File upload) {
+        try {
+            Files.deleteIfExists(upload.toPath());
+        } catch (IOException failure) {
+            LOGGER.warning("Could not delete the plate-solve upload copy " + upload + ": " + failure.getMessage());
+        }
     }
 
     /** The client for this key. A client made for another key is closed and replaced. */

@@ -126,7 +126,8 @@ public class ConfigurationPanel extends JPanel {
                 "ASTAP Executable Path",
                 "The local ASTAP solver used by <b>Plate Solve Selected</b> with the ASTAP option. ASTAP also needs a star "
                         + "database (D50 is a good choice for most setups), installed next to the program. "
-                        + "The <b>Astrometry.net (online)</b> option needs no installation; images are submitted as private.",
+                        + "The <b>Astrometry.net (online)</b> option needs no installation; images are submitted as private, "
+                        + "as a copy without your site location or observer name.",
                 astapControl));
 
         ButtonGroup astrometryAccount = new ButtonGroup();
@@ -149,7 +150,7 @@ public class ConfigurationPanel extends JPanel {
         mainContent.add(createConfigRow(
                 "Astrometry.net Account",
                 "Used by <b>Plate Solve Selected</b> with the <b>Astrometry.net (online)</b> option. <b>Anonymous</b> needs "
-                        + "no account. With <b>My API key</b>, your uploads also show up on your Astrometry.net profile. "
+                        + "no account; all anonymous uploads belong to one shared account. With <b>My API key</b>, your uploads also show up on your Astrometry.net profile. "
                         + "To get a key, sign in at nova.astrometry.net: the key is in the <b>My Profile</b> section of the "
                         + "dashboard. SpacePixels keeps it in plain text in <code>spacepixels_app.json</code> in your home "
                         + "folder. <b>Check</b> logs in without uploading anything.",

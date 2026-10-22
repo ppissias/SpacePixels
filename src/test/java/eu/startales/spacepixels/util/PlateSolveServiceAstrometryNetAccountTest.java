@@ -5,10 +5,15 @@ import io.github.ppissias.jplatesolve.PlateSolveOperation;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jplatesolve.astrometrydotnet.AstrometryDotNet;
 import io.github.ppissias.jplatesolve.astrometrydotnet.SubmitFileRequest;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,8 +21,10 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -36,6 +43,10 @@ public class PlateSolveServiceAstrometryNetAccountTest {
         int logins;
         int solves;
         boolean closed;
+        RuntimeException startFailure;
+        File uploaded;
+        boolean uploadExisted;
+        boolean uploadHadSite;
 
         RecordingClient(String requestedKey) {
             super(requestedKey);
@@ -54,6 +65,16 @@ public class PlateSolveServiceAstrometryNetAccountTest {
         public PlateSolveOperation startCustomSolve(File imageFile, SubmitFileRequest parameters,
                                                     Consumer<PlateSolveOperation.Progress> progress) {
             solves++;
+            uploaded = imageFile;
+            uploadExisted = imageFile.isFile();
+            try {
+                uploadHadSite = new String(Files.readAllBytes(imageFile.toPath()), StandardCharsets.ISO_8859_1).contains("SITELAT");
+            } catch (IOException unreadable) {
+                throw new UncheckedIOException(unreadable);
+            }
+            if (startFailure != null) {
+                throw startFailure;
+            }
             return PlateSolveOperation.start(Duration.ofSeconds(5), progress, Runnable::run,
                     context -> new PlateSolveResult(true, null, null, Map.of()));
         }
@@ -64,6 +85,9 @@ public class PlateSolveServiceAstrometryNetAccountTest {
             super.close();
         }
     }
+
+    @Rule
+    public TemporaryFolder folder = new TemporaryFolder();
 
     private final List<RecordingClient> clients = new ArrayList<>();
 
@@ -168,8 +192,47 @@ public class PlateSolveServiceAstrometryNetAccountTest {
                 service.astrometryNetFailure(new IOException(REFUSED_LOGIN)));
     }
 
-    private static void solve(PlateSolveService service) throws Exception {
-        PlateSolveOperation operation = service.startSolve("frame.fits", false, true, null);
+    @Test
+    public void anOnlineSolveUploadsACopyWithoutTheSiteAndDeletesItAfterwards() throws Exception {
+        PlateSolveService service = new PlateSolveService(new AppConfig(), this::record);
+        File frame = FitsUploadCopyTest.frameWithSite(folder.newFile("frame.fit"));
+        byte[] before = Files.readAllBytes(frame.toPath());
+
+        solve(service, frame);
+
+        RecordingClient client = clients.get(0);
+        assertNotEquals("the frame itself is not uploaded", frame, client.uploaded);
+        assertTrue(client.uploadExisted);
+        assertFalse("the uploaded copy has no site", client.uploadHadSite);
+        assertFalse("the copy is deleted once the solve has ended", client.uploaded.exists());
+        assertArrayEquals("the frame is unchanged", before, Files.readAllBytes(frame.toPath()));
+        service.close();
+    }
+
+    @Test
+    public void aSolveThatCannotStartDeletesItsCopy() throws Exception {
+        PlateSolveService service = new PlateSolveService(new AppConfig(), key -> {
+            RecordingClient client = record(key);
+            client.startFailure = new IllegalStateException("Astrometry.net client is closed.");
+            return client;
+        });
+        File frame = FitsUploadCopyTest.frameWithSite(folder.newFile("frame.fit"));
+        try {
+            service.startSolve(frame.getPath(), false, true, null);
+            fail("the start failure must reach the caller");
+        } catch (IllegalStateException expected) {
+            assertFalse(clients.get(0).uploaded.exists());
+        } finally {
+            service.close();
+        }
+    }
+
+    private void solve(PlateSolveService service) throws Exception {
+        solve(service, FitsUploadCopyTest.frameWithSite(folder.newFile()));
+    }
+
+    private static void solve(PlateSolveService service, File frame) throws Exception {
+        PlateSolveOperation operation = service.startSolve(frame.getPath(), false, true, null);
         assertEquals(PlateSolveOperation.Status.SUCCEEDED,
                 operation.completion().toCompletableFuture().get(5, TimeUnit.SECONDS).status());
     }
