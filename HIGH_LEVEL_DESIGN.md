@@ -16,7 +16,7 @@ Related documents:
 
 ## 1. System Summary
 
-SpacePixels has a headless Gradle `:core` Java-library module and a root desktop/tool module, with three entry surfaces:
+SpacePixels is one Gradle project with headless `main` and application-only `desktop` source sets, with three entry surfaces:
 
 - Swing desktop application: `eu.startales.spacepixels.gui.ApplicationWindow`
 - Public Java embedding API: `eu.startales.spacepixels.api`
@@ -206,7 +206,7 @@ Important classes:
 
 The window explicitly injects `gui.GuiFitsImportInteraction` through `FitsImportTask` into the facade's interaction-taking factory and exposure-group decisions. Factories without interaction validate strictly and never create dialogs. `MainApplicationPanel` injects `gui.GuiDetectionReportPrompt` callbacks into normal/iterative jobs; only this GUI adapter builds the report-size question on the EDT. The threshold remains 50, and iterative callbacks use each pass's subset/WCS and effective config. Accepted choices replace only the summary's `ReportInclusion`, consumed by export, not the measurements/config. Default task constructors and the retained deprecated summary confirmation method are noninteractive threshold guards; explicit null report callbacks permit export without asking. A declined import preserves the current session. These S13 boundaries are protected by recursive dependency tests and dialog/job tests; they do not implement D09/S14 run-wide context or category unification.
 
-F11 gives the headless implementation its own `eu.startales.spacepixels:spacepixels-core` publication, including API/config/session/util sources and reporting resources. Root owns GUI/jobs/tasks/tools and GUI icons and depends on core, so the existing desktop coordinate and distributions retain access to the same implementation without duplicate classes. Package names and source paths stay stable through complementary source sets. Binary/source/Javadoc and dependency-metadata checks plus an isolated Maven-resolved consumer protect this boundary. Headless graphics still require `java.desktop`; no scientific or S14 run-context behavior changes are part of this build split. See [developer build modules](DEVELOPER.md#build-modules-and-artifacts) and [publishing](PUBLISHING.md).
+F11 publishes only `eu.startales.spacepixels:spacepixels`: the headless API/config/session/util implementation, CLI tools and reporting resources, with matching sources/Javadocs. There is no separate core project or desktop Maven publication. An unpublished `desktopJar` owns GUI/jobs/tasks and GUI icons; `run` and distributions combine it with the API and desktop-only FlatLaf. CLI launchers need only the API/runtime graph. Package names and source paths stay stable through complementary source sets. Binary/source/Javadoc and dependency-metadata checks plus an isolated Maven-resolved consumer protect this boundary. JTransient is compile/API-scoped for exposed DTOs; JPlateSolve/FITS/Gson remain runtime-transitive implementation dependencies. Headless graphics still require `java.desktop`; no scientific or S14 run-context behavior changes are part of this packaging. See [developer build source sets](DEVELOPER.md#build-source-sets-and-artifacts) and [publishing](PUBLISHING.md).
 
 ### `eu.startales.spacepixels.util.reporting`
 

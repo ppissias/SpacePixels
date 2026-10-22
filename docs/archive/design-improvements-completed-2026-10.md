@@ -3,7 +3,8 @@
 > Historical record, archived 2026-10-21. These sections were moved out of [DESIGN-IMPROVEMENTS.md](../../DESIGN-IMPROVEMENTS.md) once their work was done, so that the plan holds only pending work and open decisions. They keep the decisions, the evidence and the validation as written at the time, including statements that later changes superseded. Current behaviour is described in [HIGH_LEVEL_DESIGN.md](../../HIGH_LEVEL_DESIGN.md), [DEVELOPER.md](../../DEVELOPER.md) and the [manual](../../MANUAL.md). Where a section names work that was still open when it was archived, that work continues in the plan.
 
 Contents:
-- [F11 headless API/core Maven Central packaging](#f11-headless-apicore-maven-central-packaging-2026-10-22)
+- [F11 clarified single-project API and CLI publication](#f11-clarified-single-project-api-and-cli-publication-2026-10-22)
+- [F11 original packaging implementation (superseded)](#f11-headless-apicore-maven-central-packaging-2026-10-22)
 - [S13 explicit GUI interactions and headless processing boundary](#s13-explicit-gui-interactions-and-headless-processing-boundary-2026-10-22)
 - [Plan consistency review](#plan-consistency-review-2026-10-22) and [historical GUI mechanics draft](#gui-mechanics-planning-snapshot-2026-10-22)
 - [JA-01 shared settings rules and review integration](#ja-01-shared-settings-rules-and-review-integration-2026-10-22)
@@ -13,7 +14,28 @@ Contents:
 - [The EventBus decision](#guava-eventbus-keep-or-replace) and [the first job-coordinator slice](#s2-and-s3-first-slice-a-job-coordinator-for-the-detection-jobs)
 - [Delivery stages A and B](#delivery-plan-as-of-2026-10-20) and [the earlier completed-work list](#completed-work-removed-from-the-queue)
 
+## F11 clarified single-project API and CLI publication (2026-10-22)
+
+**User clarification.** Maven Central should contain only the headless API, everything it needs and useful command-line tools, under the original `eu.startales.spacepixels:spacepixels:<version>` coordinate. Keep the desktop application build, not a desktop Maven publication. A separate core project is unnecessary. This contract supersedes the original two-module/two-publication layout recorded below; F11 remains completed, not another active backlog item.
+
+- One Gradle project uses complementary `main` (API/config/session/util/tools and report/version resources) and `desktop` (GUI/jobs/tasks/icons) source sets without moving source files or duplicating classes. The standard binary/sources/Javadoc artifacts describe only `main`; an unpublished `desktopJar` and desktop-only FlatLaf retain the application build and distribution launchers.
+- The root `build.gradle` owns the single publication, signing, metadata and `mavenCentralBundle` command. It builds a local signed API/CLI ZIP only, never uploads, and whitelists current artifact filenames so old core versions/publications or desktop classifiers cannot enter the bundle from stale staging files. No separate core project, core coordinate or shared two-module publishing script remains.
+- JTransient remains `api` because supported request/result types expose its DTOs. JPlateSolve/FITS/Gson remain runtime-transitive `implementation` dependencies. Internal solver compatibility helpers do not expand the supported embedding API; consumers compiling against those helpers must declare the solver themselves.
+- `verifyApiPublication` checks headless binary/source/Javadoc ownership, CLI inclusion, report/version assets and dependency metadata. `verifyDesktopArchive` checks disjoint desktop/API ownership and that only the API publication exists. Source dependency rules include the CLI tools. `apiConsumerTest` validates actual Maven-resolved JARs with substitution disabled, in Gradle metadata and POM-only modes: five preparation/detection/Auto-Tune/report cases plus packaged batch CLI execution and injector availability, with explicit engine compile/solver runtime scope checks.
+- Desktop `run`, `installDist`, `distZip` and `distTar` retain both application JARs/dependencies. CLI launchers use only the API/runtime graph, without FlatLaf or the desktop companion. The API artifact is not shaded and does not replace a complete desktop installation.
+
+**Executed validation (Java 21, both local composites enabled).** `check :JTransient:check installDist distZip distTar` passes: 388 application tests (four opt-in skips, no failures), unchanged/up-to-date engine checks, API/source/Javadoc/POM/module checks and desktop ownership checks. `apiConsumerTest` passes all seven isolated cases in each Gradle-metadata and POM-only mode (`-PapiConsumerMetadata=pom`), including the actual batch CLI subprocess and injector help. The installed batch launcher help and two CLI regression tests pass.
+
+`mavenCentralBundle` succeeds with the existing local signing/developer configuration. `build/distributions/spacepixels-2026.10-04-central-bundle.zip` contains exactly one API GAV subtree: five primary binary/sources/Javadoc/POM/module files, five PGP signature envelopes and checksum files (50 files total). All 20 SHA-256/SHA-512 checksums are recomputed successfully. Old core artifacts remain in local staging but are excluded from this bundle. Signature envelopes/presence are inspected, not a new external signing-key certification; no upload occurs.
+
+Nine GUI mechanics cases pass against the installed distribution's JARs, not application class directories: main window/import/settings, viewer, normal report prompts and iterative configuration/run behavior. Validation uses the ignored `build/s13-validation.init.gradle` to force headless ordinary tests and avoid running-app JAR locks, plus an ignored installed-GUI classpath init script and `JAVA_TOOL_OPTIONS=--add-opens=java.base/java.util=ALL-UNNAMED` for the existing AssertJ monitor. Generated launchers and installed library contents confirm only desktop launchers require the desktop companion/FlatLaf; CLI launchers exclude both. Documentation validation checks 169 local links/anchors and 14 unique canonical backlog IDs; whitespace checks pass. IDE Gradle re-import and new real-data numerical comparisons are not exercised; source paths and scientific code are unchanged.
+
+**Release limitation.** No Central upload or new release certification is claimed. Java 21 and headless AWT/`java.desktop` are still required. JA-11 must verify that the actual released engine/solver pair supplies the source APIs used here; local composite/staged-source tests do not prove that. Scientific algorithms and S14 run-context work are unchanged. Current contracts: [API.md](../../API.md#dependency), [DEVELOPER.md](../../DEVELOPER.md#build-source-sets-and-artifacts), [PUBLISHING.md](../../PUBLISHING.md), [HIGH_LEVEL_DESIGN.md](../../HIGH_LEVEL_DESIGN.md) and the README.
+
 ## F11 headless API/core Maven Central packaging (2026-10-22)
+
+**Historical/superseded layout.** The following records what the initial F11 implementation and its tests actually did. Its core/desktop publication model and commands are not current instructions; use the clarified single-project contract above and the current developer/publishing guides.
+
 
 **Decision and scope.** Deliver the approved packaging follow-up to S13 as a real headless Java-library module, not an API-classifier JAR filter. Preserve Java package names, supported API signatures, scientific behavior, source paths and the existing desktop coordinate/launchers. No S14 context refactor, engine change, Central upload or published-pair certification is part of F11.
 
@@ -32,7 +54,7 @@ Contents:
 
 Documentation validation checks 144 local links/anchors and 14 unique remaining canonical backlog IDs, with F11 archived rather than duplicated in the active queue. Whitespace checks pass. IDE Gradle re-import is not exercised; sources retain their existing paths and the documented Gradle source-set ownership remains authoritative.
 
-**Release limitation.** Local staging proves the tested source pair's packaging, not that its required JA-01/cancellation engine APIs are available from Central. JA-11 must validate the actual supplying engine/solver releases and Java contract before distribution. S14–S16 remain separate D09/D10 slices. Current coordinates, build ownership, consumer commands and local bundle paths are documented in [API.md](../../API.md#dependency), [DEVELOPER.md](../../DEVELOPER.md#build-modules-and-artifacts), [PUBLISHING.md](../../PUBLISHING.md), [HIGH_LEVEL_DESIGN.md](../../HIGH_LEVEL_DESIGN.md) and the README.
+**Release limitation.** Local staging proves the tested source pair's packaging, not that its required JA-01/cancellation engine APIs are available from Central. JA-11 must validate the actual supplying engine/solver releases and Java contract before distribution. S14–S16 remain separate D09/D10 slices. The corrected current coordinates, build ownership, consumer commands and local bundle paths are documented in [API.md](../../API.md#dependency), [DEVELOPER.md](../../DEVELOPER.md#build-source-sets-and-artifacts), [PUBLISHING.md](../../PUBLISHING.md), [HIGH_LEVEL_DESIGN.md](../../HIGH_LEVEL_DESIGN.md) and the README.
 
 ## S13 explicit GUI interactions and headless processing boundary (2026-10-22)
 

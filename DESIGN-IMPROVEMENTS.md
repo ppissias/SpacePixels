@@ -15,7 +15,7 @@ The single active plan for SpacePixels application design, GUI improvements and 
 - **Completed work:** [design work completed in October 2026](docs/archive/design-improvements-completed-2026-10.md) holds:
   - D01, D02, D03, D04, D05, D06, D07 and D08;
   - the architecture review with its finished steps, including S7, S8, S10, S12 and [S13](docs/archive/design-improvements-completed-2026-10.md#s13-explicit-gui-interactions-and-headless-processing-boundary-2026-10-22);
-  - the EventBus decision, the basic F09 workflow, F08, [F11 core packaging](docs/archive/design-improvements-completed-2026-10.md#f11-headless-apicore-maven-central-packaging-2026-10-22) and the coordinated JA-01 integration.
+  - the EventBus decision, the basic F09 workflow, F08, [F11 API/CLI-only publication](docs/archive/design-improvements-completed-2026-10.md#f11-clarified-single-project-api-and-cli-publication-2026-10-22) and the coordinated JA-01 integration.
 
   Completed S1–S13 and D01–D08 are prerequisites to preserve, not unfinished tasks. Their historical acceptance notes do not reopen them.
 
@@ -246,7 +246,7 @@ This is the dependency/order view of the canonical backlog, not another set of f
 | C: session/service boundary | Complete | D06/D08, S7/S8/S10/S12/S13 and basic F09 are delivered. Preserve explicit interaction injection and the headless service boundary; there is no new session-model rewrite. |
 | D: run/results/settings | Remaining outcome proposals; JA-01 rules foundation complete | D09 via S14–S16, D10 typed bindings/capabilities and D11 completed-result/history work. S14 can improve application snapshots now; removing engine statics waits for JA-04. S16 builds on a stable run/identity contract. |
 | Cross-cutting usability | D12/D13 proposed | Independent wrapping/label/action/focus fixes can ship alongside D; neither requires completing every report refactor. |
-| Feature track | Per F-row status | F03/F07 can proceed in bounded slices without waiting for all of D. F04 can reuse the completed headless core artifact; F09 consolidation shares D09/D11 persisted evidence; F10 starts with existing thumbnails/assets before any engine observer extension. F01/F02/F05 keep their experiment/deferred decisions. |
+| Feature track | Per F-row status | F03/F07 can proceed in bounded slices without waiting for all of D. F04 can reuse the completed headless API/CLI artifact; F09 consolidation shares D09/D11 persisted evidence; F10 starts with existing thumbnails/assets before any engine observer extension. F01/F02/F05 keep their experiment/deferred decisions. |
 | Release gate | Before distribution of the changed dependency pair | JA-11 published-pair/Java contract validation applies to the next release, not only after all features, including F11's headless artifact. F06 must decide installer/runtime policy against that contract. |
 
 **Suggested next architecture slice:** the application-side S14 run-context slice under D09/D10, building on the completed S13 boundary without waiting to remove engine statics. A typed-binding page in D10 or independent D12/D13 work can proceed separately; this is ordering guidance, not approval to implement them all.

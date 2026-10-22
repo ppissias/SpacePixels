@@ -60,12 +60,12 @@ public class DependencyRulesTest {
         assertNoReferences("util", "eu.startales.spacepixels.gui.", "javax.swing.");
     }
 
-    /** Keeps every core package independent of desktop workflows as well as Swing. */
+    /** Keeps every published headless package independent of desktop workflows as well as Swing. */
     @Test
-    public void corePackagesDoNotDependOnDesktopCode() throws IOException {
-        for (String packageName : List.of("api", "config", "session", "util")) {
+    public void headlessPackagesDoNotDependOnDesktopCode() throws IOException {
+        for (String packageName : List.of("api", "config", "session", "util", "tools")) {
             assertNoReferences(packageName, "eu.startales.spacepixels.gui.", "eu.startales.spacepixels.tasks.",
-                    "eu.startales.spacepixels.jobs.", "eu.startales.spacepixels.tools.", "javax.swing.");
+                    "eu.startales.spacepixels.jobs.", "javax.swing.");
         }
     }
 

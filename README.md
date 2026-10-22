@@ -148,7 +148,7 @@ For the underlying detection logic and the meaning of the engine configuration o
 
 The supported Java integration surface is [`eu.startales.spacepixels.api`](src/main/java/eu/startales/spacepixels/api).
 
-Use `eu.startales.spacepixels:spacepixels-core:<version>` for headless embedding once the supplying version/dependency pair is released. It includes preparation, detection and report resources without desktop GUI classes or FlatLaf. The existing desktop coordinate re-exports core transitively; installed launchers include both JARs. Java 21 and headless AWT (`java.desktop`) remain required.
+Use `eu.startales.spacepixels:spacepixels:<version>` for headless embedding once the supplying version/dependency pair is released. This sole Maven artifact includes the API, preparation, detection, report resources and CLI tools, without GUI classes or FlatLaf. There is no separate core project/publication. Desktop distributions still include an unpublished GUI companion and all application dependencies. Java 21 and headless AWT (`java.desktop`) remain required.
 
 For setup, request/result behavior, and usage examples, see [API.md](API.md).
 

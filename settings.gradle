@@ -8,7 +8,6 @@
  */
 
 rootProject.name = 'SpacePixels'
-include 'core'
 
 def isTruthy = { Object value ->
     value != null && value.toString().trim().equalsIgnoreCase('true')

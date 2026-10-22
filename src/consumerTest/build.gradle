@@ -35,7 +35,7 @@ configurations.configureEach {
 }
 
 dependencies {
-    testImplementation "eu.startales.spacepixels:spacepixels-core:${providers.gradleProperty('spacepixelsVersion').get()}"
+    testImplementation "eu.startales.spacepixels:spacepixels:${providers.gradleProperty('spacepixelsVersion').get()}"
     testImplementation 'junit:junit:4.13.2'
 }
 
@@ -68,11 +68,18 @@ tasks.register('verifyRuntime') {
         }
         def modules = resolution.allComponents.findAll { it.moduleVersion != null }*.moduleVersion
         if (unexpectedProjects || modules.any { it.group == 'com.formdev' ||
-                (it.group == 'eu.startales.spacepixels' && it.name != 'spacepixels-core') }) {
+                (it.group == 'eu.startales.spacepixels' && it.name != 'spacepixels') }) {
             throw new GradleException('Consumer resolved a project/composite or desktop dependency instead of the headless artifact.')
         }
-        if (!modules.any { it.group == 'eu.startales.spacepixels' && it.name == 'spacepixels-core' }) {
-            throw new GradleException('Consumer did not resolve the core module from Maven metadata.')
+        if (!modules.any { it.group == 'eu.startales.spacepixels' && it.name == 'spacepixels' }) {
+            throw new GradleException('Consumer did not resolve the API module from Maven metadata.')
+        }
+        def compileModules = configurations.testCompileClasspath.incoming.resolutionResult.allComponents
+                .findAll { it.moduleVersion != null }*.moduleVersion
+        if (!compileModules.any { it.group == 'io.github.ppissias.jtransient' } ||
+                compileModules.any { it.group == 'io.github.ppissias.jplatesolve' } ||
+                !modules.any { it.group == 'io.github.ppissias.jplatesolve' }) {
+            throw new GradleException('JTransient must be exposed at compile time; JPlateSolve must remain runtime-transitive only.')
         }
         if (configurations.testRuntimeClasspath.files.any { !it.name.endsWith('.jar') }) {
             throw new GradleException('The consumer dependency classpath must contain packaged JARs only.')
@@ -86,6 +93,9 @@ tasks.named('test') {
     systemProperty 'java.awt.headless', 'true'
     systemProperty 'spacepixels.expectedVersion', providers.gradleProperty('spacepixelsVersion').get()
     systemProperty 'user.home', layout.buildDirectory.dir('test-home').get().asFile.absolutePath
-    doFirst { layout.buildDirectory.dir('test-home').get().asFile.mkdirs() }
+    doFirst {
+        layout.buildDirectory.dir('test-home').get().asFile.mkdirs()
+        systemProperty 'spacepixels.consumerClasspath', configurations.testRuntimeClasspath.asPath
+    }
     testLogging { events 'passed', 'failed' }
 }
