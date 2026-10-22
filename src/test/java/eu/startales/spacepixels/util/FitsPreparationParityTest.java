@@ -19,6 +19,7 @@ import java.util.TreeMap;
 
 import static org.junit.Assert.*;
 
+/** Compares interactive and automatic preparation pixels, metadata and preservation of original inputs. */
 public class FitsPreparationParityTest {
     @Rule public TemporaryFolder folder = new TemporaryFolder();
 
@@ -62,7 +63,7 @@ public class FitsPreparationParityTest {
     }
 
     @Test
-    public void compressedUnsigned16AndInteger32SequencesKeepTheirExistingPreparationFlows() throws Exception {
+    public void compressedUnsigned16OnlyDecompressesAndInteger32ConvertsDirectly() throws Exception {
         File ready = folder.newFolder();
         short[][] unsigned = {{-32768, -30000, 0}, {-32768, -20000, 1000}};
         write(ready, "frame.fit.fz", unsigned, 32768, 1, "2026-10-22T01:00:01", true);
@@ -76,7 +77,107 @@ public class FitsPreparationParityTest {
         write(integer, "frame.fit.fz", new int[][]{{0, -10, 100, 0}}, 0, 1, "2026-10-22T01:00:01", true);
         File normalized = assertParity(integer, true);
         assertEquals("_16bit_converted", normalized.getName());
-        assertEquals("_uncompressed", normalized.getParentFile().getName());
+        assertEquals(integer, normalized.getParentFile());
+        assertFalse(new File(integer, "_uncompressed").exists());
+    }
+
+    /** Compressed integer/float mono/color sequences match API preparation and the previous two-step pixels. */
+    @Test public void combinedCompressedPreparationMatchesDecompressThenConvert() throws Exception {
+        for (Object kernel : List.of(new int[][]{{0, -10, 100, 0}, {0, 5, 20, 0}},
+                new float[][]{{0, -0.001f, 0.01f, 0}, {0, 0.0005f, 0.002f, 0}})) {
+            for (boolean color : new boolean[]{false, true}) {
+                for (boolean keepNegative : new boolean[]{false, true}) {
+                    File input = folder.newFolder();
+                    write(input, "frame.fit.fz", color ? color(kernel) : kernel, 0, 1,
+                            "2026-10-22T01:00:01", true);
+                    File direct = assertParity(input, keepNegative);
+                    assertEquals(input, direct.getParentFile());
+                    assertFalse(new File(input, "_uncompressed").exists());
+                    int offset = keepNegative ? FitsPixelConverter.scanNegativeValues(
+                            FitsFiles.list(input), null).offsetToKeepNegativeValues() : 0;
+                    FitsBatchService batch = new FitsBatchService(input, new FitsVisualizationRenderer());
+                    File plain = batch.batchDecompress(FitsFiles.list(input), null);
+                    File previous = batch.batchStandardizeTo16Bit(FitsFiles.list(plain), color, offset, null);
+                    String filename = color ? "frame_16bit_mono.fit" : "frame_16bit.fit";
+                    assertSamePreparedImage(new File(previous, filename), new File(direct, filename));
+                    if (color) {
+                        assertSamePreparedImage(new File(plain, "_16bit_color/frame_16bit_color.fit"),
+                                new File(input, "_16bit_color/frame_16bit_color.fit"));
+                    }
+                }
+            }
+        }
+    }
+
+    /** Refusal/cancellation cannot install compressed metadata or write an intermediate sequence. */
+    @Test public void combinedPreparationDeclineAndNegativeValueCancellationKeepOriginals() throws Exception {
+        for (boolean decline : new boolean[]{false, true}) {
+            File input = folder.newFolder();
+            File original = write(input, "frame.fit.fz", new int[][]{{0, -10, 100, 0}}, 0, 1,
+                    "2026-10-22T01:00:01", true);
+            byte[] bytes = Files.readAllBytes(original.toPath());
+            Interaction interaction = new Interaction(true);
+            interaction.confirm = decline ? 1 : 0;
+            interaction.negativeChoice = 2;
+            try (FitsImportService importer = importer(input, interaction)) {
+                assertEquals(0, importer.getFitsfileInformation().length);
+                assertThrows(Exception.class, importer::getFitsfileInformationHeadless);
+            }
+            assertEquals(List.of("Combined FITS Preparation"), interaction.confirmationTitles);
+            assertEquals(1, input.listFiles().length);
+            assertArrayEquals(bytes, Files.readAllBytes(original.toPath()));
+            assertEquals(0, interaction.openProgress);
+        }
+    }
+
+    /** A compressed sequence uses one offset from its lowest frame and keeps registration zeros untouched. */
+    @Test public void compressedSequenceUsesOneOffsetAndValidatesBeforeConversion() throws Exception {
+        File input = folder.newFolder();
+        write(input, "later.fit.fz", new int[][]{{0, -10, 100, 0}}, 0, 1, "2026-10-22T01:00:02", true);
+        write(input, "earlier.fit.fz", new int[][]{{0, -20, 100, 0}}, 0, 1, "2026-10-22T01:00:01", true);
+        File output = assertParity(input, true);
+        try (Fits later = new Fits(new File(output, "later_16bit.fit"));
+             Fits earlier = new Fits(new File(output, "earlier_16bit.fit"))) {
+            BasicHDU<?> laterImage = ImageProcessing.getImageHDU(later);
+            BasicHDU<?> earlierImage = ImageProcessing.getImageHDU(earlier);
+            assertEquals(20, laterImage.getHeader().getIntValue("SPOFFSET"));
+            assertEquals(20, earlierImage.getHeader().getIntValue("SPOFFSET"));
+            assertEquals(10, ((short[][]) laterImage.getKernel())[0][1] + 32768);
+            assertEquals(0, ((short[][]) earlierImage.getKernel())[0][1] + 32768);
+            assertEquals(0, ((short[][]) laterImage.getKernel())[0][0] + 32768);
+        }
+        File mixed = folder.newFolder();
+        write(mixed, "first.fit.fz", new int[][]{{0, -10, 100, 0}}, 0, 1, "2026-10-22T01:00:01", true);
+        write(mixed, "second.fit.fz", new float[][]{{0, -10, 100, 0}}, 0, 1, "2026-10-22T01:00:02", true);
+        Interaction interaction = new Interaction(true);
+        try (FitsImportService importer = importer(mixed, interaction)) {
+            assertThrows(java.io.IOException.class, importer::getFitsfileInformation);
+        }
+        assertTrue(interaction.confirmationTitles.isEmpty());
+        assertEquals(2, mixed.listFiles().length);
+    }
+
+    /** Compares final pixels and relevant headers, including all color channels and the sequence offset. */
+    private static void assertSamePreparedImage(File expected, File actual) throws Exception {
+        try (Fits baseline = new Fits(expected); Fits combined = new Fits(actual)) {
+            BasicHDU<?> baselineImage = ImageProcessing.getImageHDU(baseline);
+            BasicHDU<?> combinedImage = ImageProcessing.getImageHDU(combined);
+            if (baselineImage.getKernel() instanceof short[][][] baselineColor) {
+                short[][][] combinedColor = (short[][][]) combinedImage.getKernel();
+                assertEquals(baselineColor.length, combinedColor.length);
+                for (int channel = 0; channel < baselineColor.length; channel++) {
+                    assertRows(baselineColor[channel], combinedColor[channel]);
+                }
+            } else {
+                assertRows((short[][]) baselineImage.getKernel(), (short[][]) combinedImage.getKernel());
+            }
+            for (String key : List.of("OBJECT", "CRVAL1", "CRVAL2", "DATE-OBS", "EXPTIME", "BZERO", "BSCALE", "SPOFFSET")) {
+                var baselineCard = baselineImage.getHeader().findCard(key);
+                var combinedCard = combinedImage.getHeader().findCard(key);
+                assertEquals(key, baselineCard == null ? null : baselineCard.getValue(),
+                        combinedCard == null ? null : combinedCard.getValue());
+            }
+        }
     }
 
     @Test
@@ -206,7 +307,7 @@ public class FitsPreparationParityTest {
             header.addValue("OBJECT", "parity", null);
             if (compressed) {
                 CompressedImageHDU packed = CompressedImageHDU.fromImageHDU(image);
-                packed.setCompressAlgorithm("RICE_1");
+                packed.setCompressAlgorithm("GZIP_1");
                 packed.compress();
                 output.addHDU(packed);
             } else {
@@ -227,10 +328,19 @@ public class FitsPreparationParityTest {
         private int confirm;
         private int openProgress;
         private boolean cancelProgress;
+        private int negativeChoice = -1;
+        private final java.util.List<String> confirmationTitles = new java.util.ArrayList<>();
 
         Interaction(boolean keepNegative) { this.keepNegative = keepNegative; }
-        @Override public int confirm(String message, String title) { return confirm; }
-        @Override public int choose(String message, String title, String[] options) { return keepNegative ? 0 : 1; }
+        /** Records preparation/load prompts without displaying dialogs. */
+        @Override public int confirm(String message, String title) {
+            confirmationTitles.add(title);
+            return confirm;
+        }
+        /** Selects the requested offset policy or simulates cancelling the negative-value question. */
+        @Override public int choose(String message, String title, String[] options) {
+            return negativeChoice >= 0 ? negativeChoice : keepNegative ? 0 : 1;
+        }
         @Override public void error(String message, String title) { throw new AssertionError(title + ": " + message); }
         @Override public Progress progress(String title) {
             openProgress++;

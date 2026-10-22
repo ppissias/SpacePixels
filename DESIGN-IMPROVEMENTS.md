@@ -52,7 +52,6 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 | F04 | Unranked | Proposed; explore design | MCP access to the existing headless pipeline, then explicitly scoped inspection capabilities | Reuse API and completed S13 headless service boundary |
 | F05 | Unranked | Deferred | Revisit reduced Image Stretch preview sampling and small-star visibility | Existing 2400 px preview cap / full-size viewer remain; independent of completed D03 |
 | F06 | Unranked | Proposed; Windows first | Native installer and optional runtime/bootstrap distribution | Release-pair gate JA-11; no Java-baseline change approved |
-| F07 | Unranked | Proposed | One-step compressed-32-bit to uncompressed mono16 preparation/import | Build on completed S12 shared preparation; can proceed independently of D09 |
 | F09 | Unranked | Proposed enhancement only | Cross-pass findings consolidation into a provenance-preserving super report | Basic iteration is complete; share saved evidence/identities with D09/D11 |
 | F10 | Unranked | Proposed | Optional throttled progress-dialog imagery | Loading/report thumbnails first; deeper engine snapshots depend on a safe JA-09-compatible boundary |
 
@@ -245,7 +244,7 @@ This is the dependency/order view of the canonical backlog, not another set of f
 | C: session/service boundary | Complete | D06/D08, S7/S8/S10/S12/S13 and basic F09 are delivered. Preserve explicit interaction injection and the headless service boundary; there is no new session-model rewrite. |
 | D: run/results/settings | Remaining outcome proposals; JA-01 rules foundation complete | D09 via S14–S16, D10 typed bindings/capabilities and D11 completed-result/history work. S14 can improve application snapshots now; removing engine statics waits for JA-04. S16 builds on a stable run/identity contract. |
 | Cross-cutting usability | D12/D13 proposed | Independent wrapping/label/action/focus fixes can ship alongside D; neither requires completing every report refactor. |
-| Feature track | Per F-row status | F03/F07 can proceed in bounded slices without waiting for all of D. F04 can reuse the completed headless API/CLI artifact; F09 consolidation shares D09/D11 persisted evidence; F10 starts with existing thumbnails/assets before any engine observer extension. F01/F02/F05 keep their experiment/deferred decisions. |
+| Feature track | Per F-row status | F03/F07 are completed. F04 can reuse the completed headless API/CLI artifact; F09 consolidation shares D09/D11 persisted evidence; F10 starts with existing thumbnails/assets before any engine observer extension. F01/F02/F05 keep their experiment/deferred decisions. |
 | Release gate | Before distribution of the changed dependency pair | JA-11 published-pair/Java contract validation applies to the next release, not only after all features, including F11's headless artifact. F06 must decide installer/runtime policy against that contract. |
 
 **Suggested next architecture slice:** the application-side S14 run-context slice under D09/D10, building on the completed S13 boundary without waiting to remove engine statics. A typed-binding page in D10 or independent D12/D13 work can proceed separately; this is ordering guidance, not approval to implement them all.
@@ -337,13 +336,7 @@ Compare packaging options against the existing Gradle distribution and publishin
 
 ### Combined FITS preparation (F07)
 
-When a compressed FITS sequence contains 32-bit images, importing it should offer one preparation operation that decompresses and converts directly to uncompressed unsigned 16-bit output, then loads that output. The current GUI compression gate in `FitsImportService`, behind `ImageProcessing.getFitsfileInformation()`, first calls `batchDecompress` and redirects import to an `_uncompressed` directory; the later format gate can then require another conversion and import. This creates an unnecessary intermediate 32-bit sequence and repeated user steps.
-
-Inspect the image HDU's actual sample format during preparation and normalize its decompressed pixels before writing the final files. Reuse `FitsPreparationService`, which now supplies shared inspection and normalization to GUI conversion and `DetectionInputPreparation`. Keep the existing interactive decision adapter and automatic/refusal policies rather than adding another conversion policy.
-
-Preserve sequence validation before conversion, header/WCS and timing metadata, the sequence-wide negative-value offset or clipping choice, zero registration padding, and `SPOFFSET`. Keep the existing mono/color output behavior and original compressed files. Already-ready compressed unsigned 16-bit data should only need decompression, with no unnecessary rescaling. The headless refusal mode must continue to reject inputs requiring preparation.
-
-Acceptance: import representative compressed 32-bit integer and floating-point sequences, including negative pixels, through one preparation flow; load the final detection-ready directory without creating an intermediate uncompressed 32-bit sequence. Compare output pixels and relevant headers with the existing decompression-then-conversion path, check compressed 16-bit controls and color handling, and verify that GUI and API preparation apply the same rules. Detection results should match for equivalent prepared pixels and settings.
+Completed on 2026-10-22; see the [implementation and validation record](docs/archive/design-improvements-completed-2026-10.md#f07-combined-compressed-fits-preparation-2026-10-22). The manual and high-level design describe the combined import behavior. Real compressed observing data remains a release smoke check; no `.fz` samples were found under this machine's `C:\astrodata\Subs`.
 
 ### Directory-based iterative detection (F09)
 
@@ -387,7 +380,7 @@ Throttle before expensive snapshot/crop work, render off the EDT and keep only t
 ## Refactor scope retained from the earlier plan
 
 - **Settings (D10):** reuse extracted persistence/background storage and engine rules; work on typed config/widget/visualization bindings and explicit capabilities. Split page builders only when those boundaries help. Preserve profile formats, hidden values, shared models, migration backups and defaults/revert/auto-apply semantics.
-- **Input preparation (F07):** extend completed shared preparation, preserving interactive versus API policy and output naming. WCS writeback already has a task/service boundary and JPlateSolve owns unsuccessful-solve cleanup; do not re-propose those as missing. Preserve S13's explicit interaction injection and service-owned loggers rather than reintroducing GUI dependencies during conversion work.
+- **Input preparation:** preserve completed S12/S13/F07 shared preparation, interactive versus API policy and output naming. WCS writeback already has a task/service boundary and JPlateSolve owns unsuccessful-solve cleanup; do not re-propose those as missing. Preserve explicit interaction injection and service-owned loggers.
 - **Reporting (D09):** extract image assets, maps or iterative index helpers when relevant feature work needs them. Preserve stable finding identities, filenames, CSV data and lookup/live-render behavior. `DetectionReportAstrometry` already delegates its query/URL/HTML helpers; it is not a standing extraction project.
 - **Main panel (D11):** preserve the implemented session owner, application preferences, jobs, shared actions and explicit UI interaction adapters from D02/D06/D07/S13. Extract only a remaining result/workflow or UI-decision responsibility justified by the owning outcome; a panel's size is not an extraction order or a reason to rebuild session state.
 - **Cohesive renderers:** leave `CreativeTributeRenderer` and target section writers intact unless feature work exposes an independent responsibility. No target line counts or mass static-helper replacement are proposed.

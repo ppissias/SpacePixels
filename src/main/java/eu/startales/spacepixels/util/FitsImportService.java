@@ -41,6 +41,23 @@ final class FitsImportService implements AutoCloseable {
         }
         FitsPreparationService.Input reference = inputs[0];
         if (reference.compressed()) {
+            FitsFormatChecker.FitsFormat compressedFormat = reference.format();
+            boolean conversionRequired = Math.abs(reference.bitpix()) == 32
+                    || (reference.bitpix() == 16 && !reference.unsigned16Bit());
+            if (conversionRequired && compressedFormat != FitsFormatChecker.FitsFormat.UNSUPPORTED) {
+                boolean color = reference.axes().length == 3;
+                int choice = interaction.confirm(
+                        "These compressed images also need conversion to standard unsigned 16-bit pixels.\n\n"
+                                + "Would you like to decompress and convert this sequence in one operation?\n"
+                                + (color ? "Both 16-bit luminance and color copies will be saved."
+                                         : "Uncompressed 16-bit Mono copies will be saved.")
+                                + "\nThe original compressed files will be kept.",
+                        "Combined FITS Preparation");
+                if (choice == FitsImportInteraction.YES) {
+                    return standardizeAndOfferToLoad(files, color);
+                }
+                return new FitsFileInformation[0];
+            }
             int choice = interaction.confirm(
                     "These images appear to be compressed (.fz format).\nSpacePixels requires uncompressed FITS files for optimal tracking and plate-solving.\n\n"
                             + "Would you like to automatically decompress this sequence into a new directory?",
@@ -137,6 +154,7 @@ final class FitsImportService implements AutoCloseable {
         return value == Math.rint(value) && Math.abs(value) < 1e15 ? Long.toString((long) value) : Double.toString(value);
     }
 
+    /** Writes final mono/color copies directly from either compressed or plain images, then offers import. */
     private FitsFileInformation[] standardizeAndOfferToLoad(File[] files, boolean isColor) throws Exception {
         int addedOffset = chooseNegativeValueOffset(files);
         if (addedOffset < 0) {
