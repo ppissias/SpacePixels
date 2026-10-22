@@ -372,6 +372,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         }
         String tooltip = "<html><div style='width: 380px;'>" + description + "</div></html>";
         JLabel label = new JLabel(title);
+        AccessibleControls.label(label, spinner, description);
         label.setToolTipText(tooltip);
         spinner.setToolTipText(tooltip);
         JLabel marker = new JLabel("●");
@@ -412,16 +413,9 @@ public class AutoTuneOverviewPanel extends JPanel {
         }
         JLabel descriptionLabel = new JLabel("<html><div style='width: 360px;'>" + description + "</div></html>");
         descriptionLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
-        JLabel settingsLink = new JLabel("Settings ›");
-        settingsLink.setForeground(new Color(0x4da6ff));
-        settingsLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        JButton settingsLink = AccessibleControls.link("Settings ›", "Open " + tabTitle + " settings",
+                () -> host.showSettingsTab(tabTitle));
         settingsLink.setToolTipText("Open the " + tabTitle + " tab.");
-        settingsLink.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                host.showSettingsTab(tabTitle);
-            }
-        });
 
         // Two lines per analysis: the switch and its settings link, then the description under the title.
         GridBagConstraints c = new GridBagConstraints();

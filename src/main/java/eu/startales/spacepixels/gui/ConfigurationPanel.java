@@ -19,8 +19,6 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.io.File;
 import java.net.URI;
 import java.util.Locale;
@@ -54,6 +52,8 @@ public class ConfigurationPanel extends JPanel {
 
     private final JLabel astapPathLabel = new JLabel("Not set");
     private final JLabel astapStatusLabel = new JLabel(" ");
+    private final JButton astapDownloadButton = AccessibleControls.link("Download ASTAP and star databases",
+            "Download ASTAP and star databases", () -> openBrowser(ASTAP_DOWNLOAD_URL));
     private final JRadioButton astrometryAnonymousButton = new JRadioButton("Anonymous");
     private final JRadioButton astrometryOwnKeyButton = new JRadioButton("My API key");
     private final JPasswordField astrometryKeyField = new JPasswordField();
@@ -104,15 +104,7 @@ public class ConfigurationPanel extends JPanel {
         astapCheckButton.setToolTipText("Check that ASTAP is there and that a star database is installed next to it.");
         astapCheckButton.addActionListener(e -> checkAstap());
         astapStatusLabel.setFont(astapStatusLabel.getFont().deriveFont(12f));
-        astapStatusLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        astapStatusLabel.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                if (astapStatusLabel.getText().contains("Download")) {
-                    openBrowser(ASTAP_DOWNLOAD_URL);
-                }
-            }
-        });
+        astapDownloadButton.setVisible(false);
 
         JPanel astapPathRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         astapPathRow.add(astapPathLabel);
@@ -120,7 +112,7 @@ public class ConfigurationPanel extends JPanel {
         astapPathRow.add(astapPathButton);
         astapPathRow.add(Box.createHorizontalStrut(6));
         astapPathRow.add(astapCheckButton);
-        JPanel astapControl = verticalStack(astapPathRow, astapStatusLabel);
+        JPanel astapControl = verticalStack(astapPathRow, verticalStack(astapStatusLabel, astapDownloadButton));
 
         mainContent.add(createConfigRow(
                 "ASTAP Executable Path",
@@ -674,8 +666,9 @@ public class ConfigurationPanel extends JPanel {
     private void showAstapStatus(boolean ok, String text) {
         astapStatusLabel.setForeground(ok ? UIManager.getColor("Label.disabledForeground") : warningColor());
         boolean download = text.contains("Download");
-        astapStatusLabel.setText(download ? "<html>" + text.replace("Download", "<a href='#'>Download</a>") + "</html>" : text);
+        astapStatusLabel.setText(text);
         astapStatusLabel.setToolTipText(download ? ASTAP_DOWNLOAD_URL : null);
+        astapDownloadButton.setVisible(download);
     }
 
     private void openBrowser(String url) {
@@ -771,6 +764,7 @@ public class ConfigurationPanel extends JPanel {
         textPanel.setLayout(new BoxLayout(textPanel, BoxLayout.Y_AXIS));
 
         JLabel titleLabel = new JLabel(title);
+        AccessibleControls.label(titleLabel, inputControl, description);
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
         titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 

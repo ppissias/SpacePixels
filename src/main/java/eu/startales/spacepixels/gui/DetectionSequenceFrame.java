@@ -109,6 +109,7 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
 
             String tooltip = "<html><div style='width: 320px;'>" + setting.description() + "</div></html>";
             JLabel label = new JLabel(setting.title());
+            AccessibleControls.label(label, spinner, setting.description());
             label.setToolTipText(tooltip);
             spinner.setToolTipText(tooltip);
             editors.put(editor, setting.title());

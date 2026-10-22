@@ -789,19 +789,15 @@ public class MainApplicationPanel extends JPanel {
                 "Maximum share of a detection that may overlap the star mask.");
         addReadoutRow(card, c, 3, small, nameColor, "Jitter", activeJitterValue,
                 "Base star jitter radius, in pixels. Detections that move less than this are treated as star jitter.");
-        JLabel editSettingsLink = new JLabel("<html><u>Edit settings…</u></html>");
+        JButton editSettingsLink = AccessibleControls.link("Edit settings…", "Edit detection settings", () -> {
+            if (!uiLocked) {
+                mainAppWindow.getTabbedPane().setSelectedComponent(mainAppWindow.getDetectionConfigurationPanel());
+            }
+        });
         editSettingsLink.setFont(small);
         editSettingsLink.setForeground(LINK_COLOR);
         editSettingsLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         editSettingsLink.setToolTipText("Open Detection Settings to change these values.");
-        editSettingsLink.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                if (!uiLocked) {
-                    mainAppWindow.getTabbedPane().setSelectedComponent(mainAppWindow.getDetectionConfigurationPanel());
-                }
-            }
-        });
         c.gridy = 4;
         c.gridx = 0;
         c.gridwidth = 2;

@@ -84,7 +84,10 @@ final class StretchControls {
         row.add(secondaryLabel);
         row.add(secondarySlider);
         row.add(resetButton);
-        ViewerSupport.removeFocus(row);
+        ViewerSupport.prepareControls(row);
+        primaryLabel.setLabelFor(primarySlider);
+        secondaryLabel.setLabelFor(secondarySlider);
+        algorithmCombo.getAccessibleContext().setAccessibleName("Display stretch algorithm");
         String widestPrimary = "";
         String widestSecondary = "";
         for (StretchAlgorithm algorithm : StretchAlgorithm.values()) {

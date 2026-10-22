@@ -43,7 +43,40 @@ import java.util.Locale;
  * and double-click switches between the fitted view and 100 %. Used by Blink, Preview Frame and Manual Transient
  * Inspection; catalogue labels, tracks and detections are drawn on top, so they stay sharp at any zoom.
  */
-final class FrameView extends JComponent {
+final class FrameView extends JComponent implements javax.accessibility.Accessible {
+
+    /** Exposes the displayed frame and navigation state as an accessible image, without retaining extra pixels. */
+    @Override
+    public javax.accessibility.AccessibleContext getAccessibleContext() {
+        if (accessibleContext == null) accessibleContext = new AccessibleFrameView();
+        return accessibleContext;
+    }
+
+    /** Supplies image semantics and current frame/status text for the custom-painted component. */
+    protected class AccessibleFrameView extends AccessibleJComponent {
+        /** Identifies the custom-painted astronomical frame as an image. */
+        @Override public javax.accessibility.AccessibleRole getAccessibleRole() {
+            return javax.accessibility.AccessibleRole.ICON;
+        }
+
+        /** Reports the owning viewer's image name and currently loaded filename. */
+        @Override public String getAccessibleName() {
+            String name = super.getAccessibleName();
+            return (name == null ? "Astronomical frame" : name)
+                    + (frame == null ? " · " + placeholder : " · " + frame.getInfo().getFileName());
+        }
+
+        /** Describes dimensions, zoom and enabled overlays together with the viewer's keyboard guidance. */
+        @Override public String getAccessibleDescription() {
+            String guidance = super.getAccessibleDescription();
+            return (guidance == null ? "" : guidance + " ") + (frame == null ? placeholder
+                    : frame.getWidth() + " by " + frame.getHeight() + " pixels; "
+                    + Math.round(scale() * 100) + " percent zoom. "
+                    + (skyMarks == null ? "Catalogue annotations off. " : "Catalogue annotations on. ")
+                    + (overlayVisible && overlay != null ? "Tracks on. " : "")
+                    + (variableStarsVisible && variableStarOverlay != null ? "Variable candidates on." : ""));
+        }
+    }
 
     /** Receives the frame pixel under the cursor, or null when the cursor leaves the frame. */
     interface CursorListener {
@@ -179,6 +212,8 @@ final class FrameView extends JComponent {
         this.frame = frame;
         this.tables = tables;
         this.extremeColour = extremeColour;
+        if (accessibleContext != null) accessibleContext.firePropertyChange(
+                javax.accessibility.AccessibleContext.ACCESSIBLE_VISIBLE_DATA_PROPERTY, null, frame.getInfo().getFileName());
         repaint();
     }
 

@@ -481,6 +481,8 @@ Both windows, and **Show full size** on the Image Stretch tab, work like the bli
 
 ### Annotate: stars, deep-sky objects and variable stars
 
+Viewer shortcuts apply while the image has keyboard focus. **Tab** and **Shift+Tab** reach the viewer controls; Space operates a focused button or checkbox, and arrow keys edit a focused slider, number or list without changing frames. **Escape** from a control returns to the image; Escape on the image closes the viewer. Clicking the image also restores navigation. Preview's numeric fields retain Enter to apply and Escape to discard a typed value.
+
 ![Annotate at 100 %: the open cluster NGC 2236, Gaia stars and catalogued variables](docs/images/manual/ui-annotate.jpg)
 
 Once one frame is plate-solved, **Fetch Sky Catalogue** in **2 Astrometry** downloads what is known in the field of your frames:

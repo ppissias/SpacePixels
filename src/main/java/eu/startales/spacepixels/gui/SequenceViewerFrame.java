@@ -115,9 +115,11 @@ abstract class SequenceViewerFrame extends JFrame {
         contentPane.add(view, BorderLayout.CENTER);
         contentPane.add(statusBar, BorderLayout.SOUTH);
 
-        // Only the frame view takes the keyboard focus, so the keys below always reach the window.
-        ViewerSupport.removeFocus(controls);
-        ViewerSupport.removeFocus(statusBar);
+        ViewerSupport.prepareControls(controls);
+        ViewerSupport.prepareControls(statusBar);
+        view.getAccessibleContext().setAccessibleName(windowName + " image");
+        view.getAccessibleContext().setAccessibleDescription("Arrow keys step frames while this image has focus. "
+                + "Tab reaches controls; Escape from a control returns here, and Escape here closes the viewer.");
         view.setFocusable(true);
         view.addMouseListener(new MouseAdapter() {
             @Override
@@ -196,7 +198,7 @@ abstract class SequenceViewerFrame extends JFrame {
     // OPEN AND CLOSE
     // ==========================================
 
-    /** Adds a row of controls under the first one. Its fields can take the keyboard focus, unlike the other controls. */
+    /** Adds an editable control row under the first one; its keys stay with the focused editor. */
     protected void addControlRow(JComponent row) {
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         controlRows.add(row, 1);

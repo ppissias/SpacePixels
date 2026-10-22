@@ -14,8 +14,6 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -54,7 +52,7 @@ final class SettingsNavigator extends JPanel {
         final List<String> extraSearchTitles;
         final List<Section> sections = new ArrayList<>();
         final JLabel emptyLabel = new JLabel("No settings on this page match the filter.");
-        final JLabel expertHint = new JLabel();
+        final JButton expertHint = AccessibleControls.link("", "Show expert settings", () -> {});
         int matchCount;
         int changedCount;
 
@@ -96,6 +94,8 @@ final class SettingsNavigator extends JPanel {
         searchField.putClientProperty("JTextField.placeholderText", "Search settings (Ctrl+F)");
         searchField.putClientProperty("JTextField.showClearButton", true);
         searchField.setToolTipText("Filter all pages by setting name, description or section.");
+        searchField.getAccessibleContext().setAccessibleName("Search settings");
+        navList.getAccessibleContext().setAccessibleName("Settings pages");
         searchField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -204,12 +204,7 @@ final class SettingsNavigator extends JPanel {
         page.expertHint.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         page.expertHint.setToolTipText("Click to show the expert settings on every page.");
         page.expertHint.setVisible(false);
-        page.expertHint.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                showExpertCheck.setSelected(true);
-            }
-        });
+        page.expertHint.addActionListener(event -> showExpertCheck.setSelected(true));
         content.add(page.expertHint);
 
         JPanel holder = new WidthTrackingPanel();

@@ -16,7 +16,6 @@ import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
 
 import javax.swing.*;
-import javax.swing.text.JTextComponent;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.util.ArrayList;
@@ -64,35 +63,45 @@ final class ViewerSupport {
 
     /** F fits, 1 shows 100 %; the stepping keys are bound by each viewer. */
     static void bindZoomKeys(JRootPane rootPane, FrameView view) {
+        rootPane.putClientProperty("spacepixels.navigationView", view);
         bind(rootPane, "F", "fit", view::fit);
         bind(rootPane, "1", "actualSize", () -> view.zoomToScale(1.0));
     }
 
-    /** Binds a key of the window. While a text field has the focus, the key goes to the field: "1" typed there does not zoom. */
+    /** Binds image-navigation keys only while the image owns focus; Escape from controls returns to the image. */
     static void bind(JRootPane rootPane, String key, String name, Runnable action) {
         rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(key), name);
         rootPane.getActionMap().put(name, new AbstractAction() {
             @Override
-            public void actionPerformed(ActionEvent e) {
-                action.run();
+            public void actionPerformed(ActionEvent event) {
+                Component focus = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+                Object navigationView = rootPane.getClientProperty("spacepixels.navigationView");
+                if ("ESCAPE".equals(key) && focus != navigationView && navigationView instanceof FrameView view) {
+                    view.requestFocusInWindow();
+                } else {
+                    action.run();
+                }
             }
 
             @Override
             public boolean isEnabled() {
-                return !(KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() instanceof JTextComponent);
+                Component focus = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+                return MenuSelectionManager.defaultManager().getSelectedPath().length == 0
+                        && focus != null && (focus == rootPane.getClientProperty("spacepixels.navigationView")
+                        || ("ESCAPE".equals(key) && SwingUtilities.isDescendingFrom(focus, rootPane)));
             }
         });
     }
 
     /**
-     * Makes these controls unable to take the keyboard focus. The viewers keep the focus on the frame view: a
-     * focused button would take Space and a focused list the arrow keys.
+     * Retains Tab access to controls. Ordinary button clicks leave image navigation focused; deliberate Tab
+     * navigation lets buttons own Space and lets sliders, numeric editors and combo boxes own their arrows.
      */
-    static void removeFocus(Container container) {
+    static void prepareControls(Container container) {
         for (Component component : container.getComponents()) {
-            component.setFocusable(false);
-            if (component instanceof Container) {
-                removeFocus((Container) component);
+            if (component instanceof AbstractButton button) button.setRequestFocusEnabled(false);
+            if (component instanceof Container child) {
+                prepareControls(child);
             }
         }
     }

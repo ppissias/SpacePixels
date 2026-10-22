@@ -38,7 +38,7 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 
 ## Findings and priorities
 
-**Canonical backlog.** Status belongs here; the detailed sections define scope/acceptance, the architecture mapping gives implementation slices, and the delivery plan gives dependencies. All five remaining D findings are still applicable after narrowing out completed work. Priorities are unchanged; an unranked feature has not been promoted by appearing in this table.
+**Canonical backlog.** Status belongs here; the detailed sections define scope/acceptance, the architecture mapping gives implementation slices, and the delivery plan gives dependencies. D09–D12 remain after completing D13. Priorities are unchanged; an unranked feature has not been promoted by appearing in this table.
 
 | ID | Priority | Status | Remaining outcome | Delivery / relationship |
 |---|---|---|---|---|
@@ -46,7 +46,6 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 | D10 | Medium | Proposed remaining scope | Typed application setting bindings and explicit engine capabilities/compatibility; JA-01 rules and persistence foundations are complete | S14 options; JA-04/JA-08/JA-11 dependencies where relevant |
 | D11 | Medium | Proposed; completed-run viewing direction agreed | Clear analysis scope, unified completed-result access and lightweight history/saved-result restoration | Extend existing session/overlays; reuse D09 identity/context; F02 remains deferred |
 | D12 | Medium | Proposed | Shared visual defaults and content-driven/scalable layout | Independent small slices; coordinate progress layout with F10 |
-| D13 | Medium | Proposed | Keyboard/accessible links, labels, reset actions and deliberate viewer focus | Independent slices, preserving existing viewer editing/navigation behavior |
 | F01 | Unranked | Proposed; experiment first | Compare slow-mover thresholds with tuned frame thresholds on real data before deciding any change | JTransient SM-2 is deferred; existing calibrated master tuning is not pending |
 | F02 | Unranked | Deferred | Richer header-derived session summary / multiple-night warning | Owned by D11; not a separate expensive pre-run quality table |
 | F04 | Unranked | Proposed; explore design | MCP access to the existing headless pipeline, then explicitly scoped inspection capabilities | Reuse API and completed S13 headless service boundary |
@@ -130,15 +129,9 @@ Keep the existing dark theme and restrained primary-action emphasis. Make enable
 
 **Acceptance.** Inspect the empty and loaded main window, core/expert settings, configuration and viewers at representative small/large windows, 100/150/200% scale and a larger base font. Long descriptions and error messages wrap, primary actions remain visible and the workflow strip does not consume the usable frame/table area. Existing screenshots are context, not evidence that these tests have passed.
 
-### D13. Restore keyboard access without breaking viewer navigation
+### D13. Keyboard access and viewer focus
 
-**Current evidence.** `AutoTuneOverviewPanel.addAnalysis` still uses a mouse-driven `JLabel` for “Settings ›”; some manual/update/download links follow the same pattern. Settings rows do not consistently associate labels with editors through `setLabelFor`, and [SettingRow](src/main/java/eu/startales/spacepixels/gui/SettingRow.java) makes Reset non-focusable. `ViewerSupport.removeFocus` removes ordinary control focus to protect Space/arrow navigation. Preview's separate numeric-control row already permits deliberate editing/focus handback; preserve that exception and the solved key-interception behavior. D13 concerns the remaining keyboard/accessibility paths, not replacing all viewer focus rules.
-
-**Proposal.** Use link-styled buttons/actions for interactive text, with accessible names and keyboard activation. Associate labels with editors, supply units and descriptions, and make changed state available beyond colour. Provide a keyboard path to reset a setting. Audit `FrameView`'s custom accessible context if it is to expose more than an image, including useful frame/status text and selected-overlay information.
-
-For viewers, scope stepping/playback shortcuts to the image-navigation context while allowing deliberate Tab navigation into controls. Do not simply set everything focusable and reintroduce the Space/arrow bug. Editing a numeric value or operating a combo box must not step the sequence. Oracle's [Swing accessibility guidance](https://docs.oracle.com/javase/tutorial/uiswing/misc/access.html) specifically covers label associations, accessible descriptions and keyboard alternatives.
-
-**Acceptance.** Complete import, settings search/edit/reset, Auto-Tune, preview navigation and result opening using the keyboard. Drive actual key events to the focus owner in viewer tests, as the maintainer's existing harness guidance requires. Check the accessible names of inputs and link controls; do not claim a full screen-reader audit from a source search alone.
+Implemented on 2026-10-22; see the [completion record and desktop-test limitations](docs/archive/design-improvements-completed-2026-10.md#d13-keyboard-controls-and-viewer-focus-2026-10-22). Labels, accessible state and native button actions are shared; viewer keys follow image focus while controls remain reachable by Tab. A full assistive-technology/keyboard-only workflow audit remains a usability validation task, not a claim established by the focused tests.
 
 ## Proposed architecture: a few clear boundaries
 
@@ -243,7 +236,7 @@ This is the dependency/order view of the canonical backlog, not another set of f
 | B: workflow foundation | Complete | D02/D04/D07 and the implemented job/cancellation/viewer lifecycle remain the baseline, not a claim that every future engine resource/failure contract is finished. |
 | C: session/service boundary | Complete | D06/D08, S7/S8/S10/S12/S13 and basic F09 are delivered. Preserve explicit interaction injection and the headless service boundary; there is no new session-model rewrite. |
 | D: run/results/settings | Remaining outcome proposals; JA-01 rules foundation complete | D09 via S14–S16, D10 typed bindings/capabilities and D11 completed-result/history work. S14 can improve application snapshots now; removing engine statics waits for JA-04. S16 builds on a stable run/identity contract. |
-| Cross-cutting usability | D12/D13 proposed | Independent wrapping/label/action/focus fixes can ship alongside D; neither requires completing every report refactor. |
+| Cross-cutting usability | D12 remaining; D13 implemented | Independent wrapping and scaling fixes can ship alongside D without completing every report refactor. |
 | Feature track | Per F-row status | F03/F07 are completed. F04 can reuse the completed headless API/CLI artifact; F09 consolidation shares D09/D11 persisted evidence; F10 starts with existing thumbnails/assets before any engine observer extension. F01/F02/F05 keep their experiment/deferred decisions. |
 | Release gate | Before distribution of the changed dependency pair | JA-11 published-pair/Java contract validation applies to the next release, not only after all features, including F11's headless artifact. F06 must decide installer/runtime policy against that contract. |
 

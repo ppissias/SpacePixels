@@ -123,8 +123,11 @@ public class BlinkFrame extends JFrame {
         contentPane.add(statusBar, BorderLayout.SOUTH);
 
         // Only the frame view takes the keyboard focus: a focused button would take Space for itself.
-        ViewerSupport.removeFocus(controls);
-        ViewerSupport.removeFocus(statusBar);
+        ViewerSupport.prepareControls(controls);
+        ViewerSupport.prepareControls(statusBar);
+        view.getAccessibleContext().setAccessibleName("Blink image");
+        view.getAccessibleContext().setAccessibleDescription("Space plays or pauses and arrow keys step frames "
+                + "while the image has focus. Tab reaches controls; Escape from controls returns to the image.");
         view.setFocusable(true);
         view.addMouseListener(new MouseAdapter() {
             @Override

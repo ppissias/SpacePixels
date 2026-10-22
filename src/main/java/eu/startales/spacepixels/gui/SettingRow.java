@@ -39,6 +39,7 @@ final class SettingRow {
     /** Whether the row applies at all, for settings that only matter while another switch is on. */
     BooleanSupplier applies = () -> true;
 
+    /** Binds one row to its control; the row owns its reset action and accessible saved-state description. */
     SettingRow(JPanel parent, JPanel row, JLabel titleLabel, String title, String description, JComponent input) {
         this.parent = parent;
         this.row = row;
@@ -49,7 +50,8 @@ final class SettingRow {
         this.normalTitleColor = titleLabel.getForeground();
 
         resetButton.putClientProperty("JButton.buttonType", "toolBarButton");
-        resetButton.setFocusable(false);
+        AccessibleControls.label(titleLabel, input, description);
+        resetButton.getAccessibleContext().setAccessibleName("Reset " + title + " to saved value");
         resetButton.setVisible(false);
         resetButton.addActionListener(e -> resetToSaved());
 
@@ -120,12 +122,16 @@ final class SettingRow {
         }
     }
 
+    /** Updates visible and accessible dirty state without changing the input value or saved baseline. */
     void refresh() {
         boolean changed = isChanged();
         titleLabel.setForeground(changed ? DetectionConfigurationPanel.accentColor() : normalTitleColor);
         resetButton.setVisible(changed);
         resetButton.setToolTipText(savedValue == null ? null : "Back to the saved value (" + format(savedValue) + ")");
         titleLabel.setToolTipText(changed ? "Changed since the last save (saved: " + format(savedValue) + ")" : null);
+        AccessibleControls.label(titleLabel, input, description + (changed
+                ? " Changed since the last save; saved value: " + format(savedValue) + "." : ""));
+        resetButton.getAccessibleContext().setAccessibleDescription(resetButton.getToolTipText());
         changeListener.run();
     }
 

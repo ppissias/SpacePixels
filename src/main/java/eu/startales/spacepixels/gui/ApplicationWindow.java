@@ -35,8 +35,6 @@ import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -96,17 +94,7 @@ public class ApplicationWindow {
 
 
     /** The "new version" notice: a pill in the accent colour at the right end of the tab bar, hidden until a newer release is found. */
-    private final JLabel updateNoticeLabel = new JLabel() {
-        @Override
-        protected void paintComponent(Graphics g) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(getBackground());
-            g2.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
-            g2.dispose();
-            super.paintComponent(g);
-        }
-    };
+    private final JButton updateNoticeLabel = new JButton();
 
     public static void main(String[] args) {
         DebugOutput.configureApplicationLogging();
@@ -588,37 +576,18 @@ public class ApplicationWindow {
         updateNoticeLabel.setToolTipText("A newer SpacePixels release is available. Click to open the releases page.");
         updateNoticeLabel.setVisible(true);
         updateNoticeLabel.getParent().revalidate();
-        updateNoticeLabel.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                openInBrowser(latestRelease.htmlUrl);
-            }
-        });
+        for (var listener : updateNoticeLabel.getActionListeners()) updateNoticeLabel.removeActionListener(listener);
+        updateNoticeLabel.addActionListener(event -> openInBrowser(latestRelease.htmlUrl));
     }
 
     /** A "User Manual" link at the right end of the tab bar, so it is visible from every tab. */
     private void installManualLink() {
-        JLabel manualLink = new JLabel("User Manual");
+        JButton manualLink = AccessibleControls.link("User Manual", "Open SpacePixels user manual",
+                () -> openInBrowser(MANUAL_URL));
         manualLink.setForeground(DetectionConfigurationPanel.accentColor());
         manualLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         manualLink.setToolTipText("Open the SpacePixels user manual in your browser: workflows, the report and examples.");
         manualLink.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
-        manualLink.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                openInBrowser(MANUAL_URL);
-            }
-
-            @Override
-            public void mouseEntered(MouseEvent e) {
-                manualLink.setText("<html><u>User Manual</u></html>");
-            }
-
-            @Override
-            public void mouseExited(MouseEvent e) {
-                manualLink.setText("User Manual");
-            }
-        });
         updateNoticeLabel.setFont(updateNoticeLabel.getFont().deriveFont(Font.BOLD));
         updateNoticeLabel.setForeground(Color.WHITE);
         updateNoticeLabel.setBackground(DetectionConfigurationPanel.accentColor());
