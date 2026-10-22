@@ -21,7 +21,6 @@ import eu.startales.spacepixels.util.WcsSolutionResolver;
 import eu.startales.spacepixels.util.skycatalog.PlateCorrectionFitter;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogueClient;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogueStore;
 import eu.startales.spacepixels.util.skycatalog.SkyField;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -477,7 +476,7 @@ public class MainApplicationPanel extends JPanel {
         BlinkImagesTask task = new BlinkImagesTask(selectedFitsFilesInfo, stop,
                 (read, total) -> EventQueue.invokeLater(() -> blinkFrame.showLoadProgress(read, total)));
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.BLINK,
-                mainAppWindow.getSession(), task,
+                mainAppWindow.getSession(), mainAppWindow.sessionJob(task),
                 mainAppWindow.forCurrentSession((handle, outcome) -> blinkLoaded(selectedFitsFilesInfo, outcome)));
         if (!admission.admitted()) {
             statusLabel.setText(admission.refusal());
@@ -1091,6 +1090,7 @@ public class MainApplicationPanel extends JPanel {
         if (job != skyFetchThread || !mainAppWindow.isCurrentSession(skyFetchSession)) {
             return; // cancelled by a new import: the result belongs to the previous session
         }
+        ProcessingSession owner = skyFetchSession;
         if (!fitFollows) {
             stopSkyFetchIndicator();
         }
@@ -1104,13 +1104,13 @@ public class MainApplicationPanel extends JPanel {
             statusLabel.setText("Sky catalogue: nothing could be fetched");
         } else {
             skyFetchProblem = result.problems.isEmpty() ? null : String.join("\n", result.problems);
-            try {
-                SkyCatalogueStore.save(folder, result);
-            } catch (IOException e) {
-                ApplicationWindow.logger.log(java.util.logging.Level.WARNING, "Cannot save the sky catalogue in " + folder, e);
-                skyFetchProblem = (skyFetchProblem == null ? "" : skyFetchProblem + "\n")
-                        + "It could not be saved in the session folder (" + e.getMessage() + "), so it lasts until SpacePixels closes.";
-            }
+            owner.getPersistence().save(() -> owner.getPersistence().storage().store().saveCatalogue(folder, result), problem -> {
+                if (problem != null && mainAppWindow.isCurrentSession(owner) && owner.getSkyCatalogue().get() == result) {
+                    ApplicationWindow.logger.log(java.util.logging.Level.WARNING, "Cannot save the sky catalogue in " + folder, problem);
+                    skyFetchProblem = "The catalogue could not be saved (" + problem.getMessage() + "); it lasts until SpacePixels closes.";
+                    refreshWorkflowStatus();
+                }
+            });
             skyCatalogue().set(result);
             statusLabel.setText("Sky catalogue: " + result.summary() + (result.problems.isEmpty() ? "" : " (incomplete)"));
         }
@@ -1136,11 +1136,10 @@ public class MainApplicationPanel extends JPanel {
             PlateSolutionCorrection previous = skyCatalogue().getCorrection();
             correction.initializeEnabled(previous);
             try {
-                PlateSolutionCorrection.save(folder, correction);
+                skyCatalogue().saveCorrection(correction);
             } catch (IOException e) {
                 correctionProblem = "It could not be saved in the session folder (" + e.getMessage() + ").";
             }
-            skyCatalogue().setCorrection(correction);
             statusLabel.setText(!correction.isNeeded()
                     ? String.format(Locale.US, "Plate solution checked: the FITS header already matches the stars (%.2f px)", correction.beforeMedianPx)
                     : "Plate solution checked: " + correction.improvementText()
@@ -1177,20 +1176,11 @@ public class MainApplicationPanel extends JPanel {
         correctionProblem = null;
         FitsFileInformation[] files = getImportedFiles();
         File folder = files == null ? null : sessionFolder(files);
-        skyCatalogue().setSessionFolder(folder);
-        SkyCatalogue saved = folder == null ? null : SkyCatalogueStore.load(folder);
+        SkyCatalogue saved = skyCatalogue().get();
         WcsSolutionResolver.ResolvedWcsSolution solution = files == null ? null : WcsSolutionResolver.resolveUncorrected(null, files);
         SkyField current = solution == null ? null
                 : SkyField.of(solution.getTransformer(), files[0].getSizeWidth(), files[0].getSizeHeight());
-        if (saved != null && current != null && !current.isSameFieldAs(saved.field)) {
-            saved = null; // fetched for other frames
-        }
-        PlateSolutionCorrection correction = folder == null ? null : PlateSolutionCorrection.load(folder);
-        if (correction != null && (solution == null || !solution.getTransformer().solutionKey().equals(correction.solutionKey))) {
-            correction = null; // fitted to another solution
-        }
-        skyCatalogue().set(saved);
-        skyCatalogue().setCorrection(correction);
+        PlateSolutionCorrection correction = skyCatalogue().getCorrection();
         if (saved != null && correction == null && !saved.stars.isEmpty() && current != null) {
             startSkyJob(files, folder, current, saved.starMagnitudeLimit, saved);
         }
@@ -1205,6 +1195,9 @@ public class MainApplicationPanel extends JPanel {
     private String skyCatalogueStatusText() {
         String catalogueText = catalogueStatusText();
         PlateSolutionCorrection correction = skyCatalogue().getCorrection();
+        if (skyCatalogue().getSaveFailure() != null) {
+            return catalogueText + "<br>⚠ Correction could not be saved; the last saved setting is in use";
+        }
         if (correction != null) {
             return catalogueText + "<br>" + (!correction.isNeeded()
                     ? "✓ Plate solution checked · " + String.format(Locale.US, "%.2f px", correction.beforeMedianPx)
@@ -1254,6 +1247,11 @@ public class MainApplicationPanel extends JPanel {
         if (skyFetchProblem != null) {
             text.append("<br><br><b>").append(catalogue == null ? "Not fetched:" : "Incomplete:").append("</b> ")
                     .append(escapeHtml(skyFetchProblem).replace("\n", "<br>"));
+        }
+        if (skyCatalogue().getSaveFailure() != null) {
+            text.append("<br><br><b>Correction save failed:</b> ")
+                    .append(escapeHtml(String.valueOf(skyCatalogue().getSaveFailure().getMessage())))
+                    .append(". The last saved setting is in use.");
         }
         PlateSolutionCorrection correction = skyCatalogue().getCorrection();
         if (correction != null && !correction.isNeeded()) {
@@ -1422,7 +1420,7 @@ public class MainApplicationPanel extends JPanel {
     <R> void startJob(JobKind kind, Object session, Job<R> job, JobCoordinator.OutcomeHandler<R> handler) {
         ProcessingSession owner = mainAppWindow.getSession();
         if (owner == null || owner.getProcessing() != session) return;
-        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(kind, owner, job,
+        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(kind, owner, mainAppWindow.sessionJob(job),
                 mainAppWindow.forCurrentSession(handler));
         if (!admission.admitted()) {
             statusLabel.setText(admission.refusal());
@@ -1666,7 +1664,7 @@ public class MainApplicationPanel extends JPanel {
                 // Writing rewrites the whole frame, which takes a while for a large one: it is a job, off this thread.
                 ImageProcessing session = mainAppWindow.getImageProcessing();
                 JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.WRITE_WCS, mainAppWindow.getSession(),
-                        new WriteWcsTask(session, fileInfo.getFilePath(), result),
+                        mainAppWindow.sessionJob(new WriteWcsTask(session, fileInfo.getFilePath(), result)),
                         mainAppWindow.forCurrentSession((handle, written) -> showWcsWriteOutcome(fileInfo, written)));
                 if (admission.admitted()) {
                     return;

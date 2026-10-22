@@ -13,12 +13,11 @@ import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jplatesolve.PlateSolveOperation;
 
 import nom.tam.fits.*;
-import nom.tam.util.Cursor;
-import nom.tam.image.compression.hdu.CompressedImageHDU;
 
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
-import eu.startales.spacepixels.gui.ApplicationWindow;
+import eu.startales.spacepixels.gui.GuiFitsImportInteraction;
+import eu.startales.spacepixels.session.SessionFrames;
 
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.PipelineResult;
@@ -36,14 +35,8 @@ import java.awt.Insets;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.file.Files;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
@@ -58,8 +51,6 @@ import java.util.function.Consumer;
 public class ImageProcessing implements AutoCloseable {
     public static final int MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS =
             DetectionPipelineSupport.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS;
-    private static final DateTimeFormatter TRACE_TIMESTAMP_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS 'UTC'").withZone(ZoneOffset.UTC);
 
     @FunctionalInterface
     public interface DetectionSafetyPrompt {
@@ -571,72 +562,6 @@ public class ImageProcessing implements AutoCloseable {
         }
     }
 
-    private static void logFitsTimestampDiagnostics(String stageLabel, FitsFileInformation[] filesInfo) {
-        if (!DebugOutput.isEnabled()) {
-            return;
-        }
-        if (filesInfo == null) {
-            System.out.println("\n--- " + stageLabel + " FITS Timestamp Diagnostics ---");
-            System.out.println("No FITS metadata loaded.");
-            return;
-        }
-
-        int validTimestamps = 0;
-        int displayWithoutTimestamp = 0;
-
-        System.out.println("\n--- " + stageLabel + " FITS Timestamp Diagnostics ---");
-        for (int i = 0; i < filesInfo.length; i++) {
-            FitsFileInformation info = filesInfo[i];
-            long timestamp = info.getObservationTimestamp();
-            if (timestamp > 0L) {
-                validTimestamps++;
-            }
-            if (info.hasDisplayableObservationDateWithoutUsableTimestamp()) {
-                displayWithoutTimestamp++;
-            }
-
-            System.out.println(String.format(
-                    Locale.US,
-                    "[%03d] file='%s' | parsedTimestamp=%d | parsedUtc='%s' | %s",
-                    i,
-                    info.getFileName(),
-                    timestamp,
-                    formatTraceTimestamp(timestamp),
-                    info.getObservationTimestampDiagnostics()));
-        }
-        System.out.println(String.format(
-                Locale.US,
-                "Timestamp diagnostics summary: %d/%d files produced a usable timestamp; %d files displayed a date/time but would pass no usable timestamp to JTransient.",
-                validTimestamps,
-                filesInfo.length,
-                displayWithoutTimestamp));
-    }
-
-    private static String formatTraceTimestamp(long timestampMillis) {
-        if (timestampMillis <= 0L) {
-            return "N/A";
-        }
-        return TRACE_TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(timestampMillis));
-    }
-
-    /**
-     * Internal metadata bundle used during parallel FITS validation/loading in headless mode.
-     */
-    private static class FitsMetadataLoadResult {
-        private final FitsFileInformation fileInfo;
-        private final int width;
-        private final int height;
-        private final int bitpix;
-
-        private FitsMetadataLoadResult(FitsFileInformation fileInfo, int width, int height, int bitpix) {
-            this.fileInfo = fileInfo;
-            this.width = width;
-            this.height = height;
-            this.bitpix = bitpix;
-        }
-    }
-
-    // --- NEW: Custom Exception for Automatic Redirection ---
     public static class RedirectImportException extends Exception {
         private final File newDirectory;
 
@@ -656,10 +581,9 @@ public class ImageProcessing implements AutoCloseable {
         }
     }
 
-    private final File alignedFitsFolderFullPath;
-
-    private final ExecutorService executor = Executors.newFixedThreadPool(
-            Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors())));
+    private final SessionFrames sessionFrames = new SessionFrames();
+    private final FitsImportService importService;
+    private final FitsBatchService batchService;
 
     private final AppConfig appConfig;
     private final ApplicationSettings applicationSettings;
@@ -668,7 +592,7 @@ public class ImageProcessing implements AutoCloseable {
     private final IterativeDetectionPipelineService iterativeDetectionPipelineService;
     private final FitsVisualizationRenderer fitsVisualizationRenderer;
 
-    private FitsFileInformation[] cachedFileInfo;
+    public SessionFrames getSessionFrames() { return sessionFrames; }
 
     /**
      * Creates a processing facade bound to a specific aligned FITS directory.
@@ -683,21 +607,23 @@ public class ImageProcessing implements AutoCloseable {
 
     @Override
     public void close() {
-        executor.shutdown();
+        importService.close();
         plateSolveService.close();
+        sessionFrames.clear();
     }
 
     /**
      * Initializes the processor and loads persisted app-level preferences if they exist.
      */
     private ImageProcessing(File alignedFitsFolderFullPath, ApplicationSettings settings) throws IOException, FitsException {
-        this.alignedFitsFolderFullPath = alignedFitsFolderFullPath;
         this.applicationSettings = Objects.requireNonNull(settings);
         this.appConfig = settings.getConfig();
         this.plateSolveService = new PlateSolveService(this.appConfig);
-        this.standardDetectionPipelineService = new StandardDetectionPipelineService(this.appConfig);
+        this.standardDetectionPipelineService = new StandardDetectionPipelineService(this.appConfig, sessionFrames);
         this.iterativeDetectionPipelineService = new IterativeDetectionPipelineService(this.appConfig, this.standardDetectionPipelineService);
         this.fitsVisualizationRenderer = new FitsVisualizationRenderer();
+        this.batchService = new FitsBatchService(alignedFitsFolderFullPath, fitsVisualizationRenderer);
+        this.importService = new FitsImportService(alignedFitsFolderFullPath, sessionFrames, batchService, new GuiFitsImportInteraction());
     }
 
     // =========================================================================
@@ -709,67 +635,10 @@ public class ImageProcessing implements AutoCloseable {
      * Safely decompresses .fz files and skips empty primary headers.
      */
     public static BasicHDU<?> getImageHDU(Fits fits) throws FitsException, IOException {
-        BasicHDU<?> hdu;
-        BasicHDU<?> fallback = null;
-        
-        // 1. If the Fits object already read HDUs into memory, use them directly
-        int numHdus = fits.getNumberOfHDUs();
-        for (int i = 0; i < numHdus; i++) {
-            hdu = fits.getHDU(i);
-            if (fallback == null) fallback = hdu;
-            
-            if (hdu instanceof CompressedImageHDU) {
-                return ((CompressedImageHDU) hdu).asImageHDU();
-            }
-            int[] axes = hdu.getAxes();
-            if (axes != null && axes.length >= 2) {
-                boolean hasData = true;
-                for (int axis : axes) if (axis <= 0) hasData = false;
-                if (hasData) return hdu;
-            }
-        }
-
-        // 2. Otherwise, safely stream through the file to find the target HDU
-        while ((hdu = fits.readHDU()) != null) {
-            if (fallback == null) fallback = hdu; // Store the dummy Primary HDU just in case
-
-            if (hdu instanceof CompressedImageHDU) {
-                return ((CompressedImageHDU) hdu).asImageHDU();
-            }
-            
-            int[] axes = hdu.getAxes();
-            if (axes != null && axes.length >= 2) {
-                boolean hasData = true;
-                for (int axis : axes) {
-                    if (axis <= 0) hasData = false;
-                }
-                if (hasData) return hdu;
-            }
-        }
-        return fallback;
+        return FitsImages.getImageHDU(fits);
     }
 
-    /**
-     * Detects whether a FITS file is compressed, either via a compressed HDU or `ZIMAGE` header.
-     */
-    private boolean isCompressedFits(Fits fits) throws FitsException, IOException {
-        int numHdus = fits.getNumberOfHDUs();
-        for (int i = 0; i < numHdus; i++) {
-            if (fits.getHDU(i) instanceof CompressedImageHDU || fits.getHDU(i).getHeader().getBooleanValue("ZIMAGE", false)) {
-                return true;
-            }
-        }
-        
-        BasicHDU<?> hdu;
-        while ((hdu = fits.readHDU()) != null) {
-            if (hdu instanceof CompressedImageHDU || hdu.getHeader().getBooleanValue("ZIMAGE", false)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // =========================================================================
+// =========================================================================
     // NEW BATCH PROCESSING METHODS (Called by UI)
     // =========================================================================
 
@@ -781,77 +650,15 @@ public class ImageProcessing implements AutoCloseable {
      * outputs.</p>
      */
     public File batchConvertToMono(boolean stretch, int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
-        File[] fitsFileInformation = getFitsFilesDetails();
-        File generatedMonoDirectory = null;
-
-        int total = fitsFileInformation.length;
-        for (int i = 0; i < total; i++) {
-            File fileInfo = fitsFileInformation[i];
-            if (progressListener != null) {
-                int percent = (int) (((float) i / total) * 100);
-                progressListener.onProgressUpdate(percent, "Converting " + fileInfo.getName() + "...");
-            }
-
-            Fits originalFits = new Fits(fileInfo);
-            BasicHDU<?> imageHDU = getImageHDU(originalFits);
-
-            // Check if it's already mono to save time
-            int naxis = imageHDU.getHeader().getIntValue("NAXIS");
-            if (naxis == 3) { // It's a color image
-                ApplicationWindow.logger.info("Converting color image to mono: " + fileInfo.getName());
-                Fits monochromeFits = convertToMono(originalFits);
-
-                // Save standard mono
-                String monoFilename = addDirectory(fileInfo, "_mono");
-                if (generatedMonoDirectory == null) {
-                    generatedMonoDirectory = new File(monoFilename).getParentFile();
-                }
-                writeFitsWithSuffix(monochromeFits, monoFilename, "_mono");
-
-                // If stretch is enabled, stretch the mono version and save it
-                if (stretch) {
-                    ApplicationWindow.logger.info("Stretching newly converted mono image: " + fileInfo.getName());
-                    stretchFITSImage(monochromeFits, stretchFactor, iterations, algo);
-                    String monoStretchFilename = addDirectory(fileInfo, "_mono_stretched");
-                    writeFitsWithSuffix(monochromeFits, monoStretchFilename, "_mono_stretch");
-                }
-            } else {
-                ApplicationWindow.logger.info("Skipping mono conversion (already mono): " + fileInfo.getName());
-            }
-            originalFits.close();
-        }
-        return generatedMonoDirectory;
+        return batchService.batchConvertToMono(stretch, stretchFactor, iterations, algo, progressListener);
     }
 
     /**
      * Stretches all images in the folder, regardless of whether they are color or mono.
      */
     public void batchStretch(int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
-        File[] fitsFileInformation = getFitsFilesDetails();
-
-        int total = fitsFileInformation.length;
-        for (int i = 0; i < total; i++) {
-            File fileInfo = fitsFileInformation[i];
-            if (progressListener != null) {
-                int percent = (int) (((float) i / total) * 100);
-                progressListener.onProgressUpdate(percent, "Stretching " + fileInfo.getName() + "...");
-            }
-
-            Fits originalFits = new Fits(fileInfo);
-
-            ApplicationWindow.logger.info("Stretching image: " + fileInfo.getName());
-
-            // Stretch the file in memory
-            stretchFITSImage(originalFits, stretchFactor, iterations, algo);
-
-            // Save the stretched version
-            String stretchFilename = addDirectory(fileInfo, "_stretched");
-            writeFitsWithSuffix(originalFits, stretchFilename, "_stretch");
-
-            originalFits.close();
-        }
+        batchService.batchStretch(stretchFactor, iterations, algo, progressListener);
     }
-
 
 // =========================================================================
     // THE MULTI-THREADED DETECTION PIPELINE
@@ -862,18 +669,18 @@ public class ImageProcessing implements AutoCloseable {
      * session report plus associated visualizations.
      */
     public File detectObjects(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
-        if (this.cachedFileInfo == null) getFitsfileInformation();
-        return standardDetectionPipelineService.detectObjects(config, this.cachedFileInfo, safetyPrompt, progressListener);
+        if (sessionFrames.getFiles() == null) getFitsfileInformation();
+        return standardDetectionPipelineService.detectObjects(config, sessionFrames.getFiles(), safetyPrompt, progressListener);
     }
 
     /** Tracks of the last detection run on these frames, or null when none has run. */
     public TrackOverlay getLastTrackOverlay() {
-        return standardDetectionPipelineService.getLastTrackOverlay();
+        return sessionFrames.getTracks();
     }
 
     /** Variable-star candidates of the last standard detection run, numbered as in its report. */
     public VariableStarOverlay getLastVariableStarOverlay() {
-        return standardDetectionPipelineService.getLastVariableStarOverlay();
+        return sessionFrames.getVariables();
     }
 
     /**
@@ -881,8 +688,8 @@ public class ImageProcessing implements AutoCloseable {
      * any report artifacts to disk.
      */
     public PipelineExecutionData runDetectionPipeline(DetectionConfig config, TransientEngineProgressListener progressListener) throws Exception {
-        if (this.cachedFileInfo == null) getFitsfileInformation();
-        return standardDetectionPipelineService.runDetectionPipeline(config, this.cachedFileInfo, progressListener);
+        if (sessionFrames.getFiles() == null) getFitsfileInformation();
+        return standardDetectionPipelineService.runDetectionPipeline(config, sessionFrames.getFiles(), progressListener);
     }
 
     /**
@@ -906,10 +713,10 @@ public class ImageProcessing implements AutoCloseable {
      * across several pass sizes while sharing a single global master stack.
      */
     public File detectSlowObjectsIterative(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener, int maxFramesLimit) throws Exception {
-        if (this.cachedFileInfo == null) getFitsfileInformation();
+        if (sessionFrames.getFiles() == null) getFitsfileInformation();
         return iterativeDetectionPipelineService.detectSlowObjectsIterative(
                 config,
-                this.cachedFileInfo,
+                sessionFrames.getFiles(),
                 safetyPrompt,
                 progressListener,
                 maxFramesLimit);
@@ -939,7 +746,7 @@ public class ImageProcessing implements AutoCloseable {
      * {@link #getFitsfileInformation()} only to import.
      */
     public FitsFileInformation[] getImportedFiles() throws Exception {
-        return cachedFileInfo != null ? cachedFileInfo : getFitsfileInformation();
+        return sessionFrames.getFiles() != null ? sessionFrames.getFiles() : getFitsfileInformation();
     }
 
     /**
@@ -947,271 +754,7 @@ public class ImageProcessing implements AutoCloseable {
      * consistency, dimensions, and optional auto-conversion paths. Replaces the imported frames with new objects.
      */
     public FitsFileInformation[] getFitsfileInformation() throws Exception {
-        File[] fitsFileInformation = getFitsFilesDetails();
-        int numFiles = fitsFileInformation.length;
-
-        if (numFiles == 0) return new FitsFileInformation[0];
-        FitsSequenceValidator.validate(fitsFileInformation);
-
-        // --- NEW: COMPRESSION GATEKEEPER ---
-        try (Fits firstFits = new Fits(fitsFileInformation[0])) {
-            if (isCompressedFits(firstFits)) {
-                int choice = JOptionPane.showConfirmDialog(null,
-                        "These images appear to be compressed (.fz format).\nSpacePixels requires uncompressed FITS files for optimal tracking and plate-solving.\n\n" +
-                                "Would you like to automatically decompress this sequence into a new directory?",
-                        "Decompression Required",
-                        JOptionPane.YES_NO_OPTION,
-                        JOptionPane.QUESTION_MESSAGE);
-
-                if (choice == JOptionPane.YES_OPTION) {
-                    ApplicationWindow.logger.info("Starting decompression...");
-                    File newDir = batchDecompress(fitsFileInformation);
-                    
-                    int loadChoice = JOptionPane.showConfirmDialog(null, 
-                            "Decompression Complete!\n\nWould you like to automatically load the new uncompressed directory?", 
-                            "Success", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-                    
-                    if (loadChoice == JOptionPane.YES_OPTION && newDir != null) {
-                        throw new RedirectImportException(newDir);
-                    }
-                }
-                return new FitsFileInformation[0]; // Stop the current import
-            }
-        } catch (RedirectImportException re) {
-            throw re;
-        } catch (Exception e) {
-            ApplicationWindow.logger.warning("Failed to read first FITS for compression check: " + e.getMessage());
-        }
-
-
-        // --- PRE-FLIGHT CONSISTENCY CHECK ---
-        ApplicationWindow.logger.info("Performing pre-flight consistency check on " + numFiles + " files...");
-        FitsFormatChecker.FitsFormat refFormat = FitsFormatChecker.FitsFormat.UNSUPPORTED;
-        try {
-            refFormat = FitsFormatChecker.checkFormat(fitsFileInformation[0]);
-        } catch (Exception ignore) {}
-
-        int tempRefWidth = -1;
-        int tempRefHeight = -1;
-        boolean tempRefMono = true;
-        Header refHeader;
-
-        try {
-            Fits firstFits = new Fits(fitsFileInformation[0]);
-            BasicHDU<?> hdu = getImageHDU(firstFits);
-            refHeader = hdu.getHeader();
-            int[] axes = hdu.getAxes();
-            if (axes == null) throw new FitsException("No image axes found");
-
-            if (axes.length == 2) {
-                tempRefHeight = axes[0];
-                tempRefWidth = axes[1];
-                tempRefMono = true;
-            } else if (axes.length == 3) {
-                tempRefHeight = axes[1];
-                tempRefWidth = axes[2];
-                tempRefMono = false;
-            } else {
-                firstFits.close();
-                JOptionPane.showMessageDialog(null, "Unsupported FITS axes length: " + axes.length, "Import Error", JOptionPane.ERROR_MESSAGE);
-                return new FitsFileInformation[0];
-            }
-            firstFits.close();
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(null, "Failed to read the first FITS file: " + e.getMessage(), "Import Error", JOptionPane.ERROR_MESSAGE);
-            return new FitsFileInformation[0];
-        }
-
-        final int refWidth = tempRefWidth;
-        final int refHeight = tempRefHeight;
-        final boolean refMono = tempRefMono;
-        final FitsFormatChecker.FitsFormat finalRefFormat = refFormat;
-
-        List<Callable<String>> validationTasks = new ArrayList<>();
-        for (int i = 1; i < numFiles; i++) {
-            final File f = fitsFileInformation[i];
-            validationTasks.add(() -> {
-                FitsFormatChecker.FitsFormat format = FitsFormatChecker.FitsFormat.UNSUPPORTED;
-                try { format = FitsFormatChecker.checkFormat(f); } catch (Exception ignore) {}
-
-                if (format != finalRefFormat) {
-                    return "Inconsistent FITS formats detected!\nFile: " + f.getName() + " has format " + format + " but expected " + finalRefFormat + ".\nAll FITS files in the sequence must be of the exact same type.";
-                }
-                Fits fits = null;
-                try {
-                    fits = new Fits(f);
-                    BasicHDU<?> hdu = getImageHDU(fits);
-                    int[] axes = hdu.getAxes();
-                    if (axes == null) return "No valid image HDU found in " + f.getName();
-
-                    boolean mono = (axes.length == 2);
-                    int w = -1, h = -1;
-                    if (mono) {
-                        h = axes[0];
-                        w = axes[1];
-                    } else if (axes.length == 3) {
-                        h = axes[1];
-                        w = axes[2];
-                    }
-
-                    if (mono != refMono || w != refWidth || h != refHeight) {
-                        return "Inconsistent FITS dimensions or color-space detected!\nFile: " + f.getName() + " is " + w + "x" + h + " (Mono: " + mono + ")\nExpected: " + refWidth + "x" + refHeight + " (Mono: " + refMono + ").\nAll files must have the exact same resolution and color space.";
-                    }
-                } catch (Exception e) {
-                    return "Failed to read FITS file " + f.getName() + ": " + e.getMessage();
-                } finally {
-                    if (fits != null) {
-                        try { fits.close(); } catch (Exception ignored) {}
-                    }
-                }
-                return null; // OK
-            });
-        }
-
-        try {
-            List<Future<String>> results = executor.invokeAll(validationTasks);
-            for (Future<String> res : results) {
-                String errorMsg = res.get();
-                if (errorMsg != null) {
-                    JOptionPane.showMessageDialog(null, errorMsg, "Import Error", JOptionPane.ERROR_MESSAGE);
-                    return new FitsFileInformation[0];
-                }
-            }
-        } catch (Exception e) {
-            throw new IOException("Multi-threaded validation failed: " + e.getMessage(), e);
-        }
-        // --- END CONSISTENCY CHECK ---
-
-        // --- THE GATEKEEPER: Check the format of the first file ---
-        FitsFormatChecker.FitsFormat format = refFormat;
-
-        if ((format == FitsFormatChecker.FitsFormat.MONO_16BIT || format == FitsFormatChecker.FitsFormat.COLOR_16BIT)
-                && !FitsPixelConverter.isUnsigned16Bit(refHeader)) {
-            boolean color = format == FitsFormatChecker.FitsFormat.COLOR_16BIT;
-            int choice = JOptionPane.showConfirmDialog(null,
-                    dialogParagraphs("These 16-bit images store their pixels with BZERO " + headerNumber(refHeader.getDoubleValue("BZERO", 0.0))
-                                    + " and BSCALE " + headerNumber(refHeader.getDoubleValue("BSCALE", 1.0)) + ". "
-                                    + "SpacePixels reads 16-bit images as unsigned values (BZERO 32768, BSCALE 1), so it would read these "
-                                    + "at the wrong brightness level, which breaks the saturation, padding and void checks.",
-                            color ? "Would you like to extract the Luminance (16-bit Mono) and save a standard 16-bit Color version?"
-                                  : "Would you like to convert this sequence to standard 16-bit images in a new folder?"),
-                    "Format Conversion Required",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.QUESTION_MESSAGE);
-
-            if (choice == JOptionPane.YES_OPTION) {
-                ApplicationWindow.logger.info("Starting signed/scaled 16-bit to standard 16-bit conversion...");
-                return standardizeAndOfferToLoad(fitsFileInformation, color);
-            }
-
-            ApplicationWindow.logger.info("User declined 16-bit standardization. Clearing the active import.");
-            return new FitsFileInformation[0];
-
-        } else if (format == FitsFormatChecker.FitsFormat.MONO_32BIT_FLOAT || format == FitsFormatChecker.FitsFormat.MONO_32BIT_INT) {
-            int choice = JOptionPane.showConfirmDialog(null,
-                    "These images appear to be 32-bit.\nSpacePixels' transient detection engine is highly optimized for 16-bit monochrome files.\n\n" +
-                            "Would you like to automatically standardize this sequence to 16-bit Mono?",
-                    "Format Conversion Required",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.QUESTION_MESSAGE);
-
-            if (choice == JOptionPane.YES_OPTION) {
-                ApplicationWindow.logger.info("Starting 32-bit Mono to 16-bit Mono conversion...");
-                return standardizeAndOfferToLoad(fitsFileInformation, false);
-            }
-
-            ApplicationWindow.logger.info("User declined 32-bit mono standardization. Clearing the active import.");
-            return new FitsFileInformation[0];
-
-        } else if (format == FitsFormatChecker.FitsFormat.COLOR_32BIT_FLOAT || format == FitsFormatChecker.FitsFormat.COLOR_32BIT_INT) {
-            int choice = JOptionPane.showConfirmDialog(null,
-                    "These images are 32-bit Color.\nSpacePixels' transient detection engine requires 16-bit monochrome files.\n\n" +
-                            "Would you like to extract the Luminance (16-bit Mono) and save a 16-bit Color version?",
-                    "Color Format Conversion Required",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.QUESTION_MESSAGE);
-
-            if (choice == JOptionPane.YES_OPTION) {
-                ApplicationWindow.logger.info("Starting 32-bit Color to 16-bit Mono/Color conversion...");
-                return standardizeAndOfferToLoad(fitsFileInformation, true);
-            }
-
-            ApplicationWindow.logger.info("User declined 32-bit color standardization. Clearing the active import.");
-            return new FitsFileInformation[0];
-        } else if (format == FitsFormatChecker.FitsFormat.UNSUPPORTED) {
-            JOptionPane.showMessageDialog(null, "Unsupported FITS format detected. SpacePixels supports 16-bit and 32-bit FITS files.", "Import Error", JOptionPane.ERROR_MESSAGE);
-            return new FitsFileInformation[0];
-        }
-
-        DebugOutput.println("\n--- Fast-Loading Information for " + numFiles + " FITS files ---");
-
-        List<Callable<FitsFileInformation>> tasks = new ArrayList<>();
-
-        for (int i = 0; i < numFiles; i++) {
-            final int index = i;
-            final File currentFile = fitsFileInformation[i];
-
-            tasks.add(() -> {
-                Fits fitsFile = null;
-                try {
-                    fitsFile = new Fits(currentFile);
-                    BasicHDU<?> hdu = getImageHDU(fitsFile);
-                    Header fitsHeader = hdu.getHeader();
-
-                    String fpath = currentFile.getAbsolutePath();
-                    boolean monochromeImage;
-                    int width;
-                    int height;
-
-                    int[] axes = hdu.getAxes();
-
-                    if (axes.length == 2) {
-                        monochromeImage = true;
-                        height = axes[0];
-                        width = axes[1];
-                    } else if (axes.length == 3) {
-                        monochromeImage = false;
-                        height = axes[1];
-                        width = axes[2];
-                    } else {
-                        throw new FitsException("Cannot understand file, it has axes length=" + axes.length);
-                    }
-
-                    FitsFileInformation fileInfo = new FitsFileInformation(fpath, currentFile.getName(), monochromeImage, width, height);
-
-                    Cursor<String, HeaderCard> iter = fitsHeader.iterator();
-                    while (iter.hasNext()) {
-                        HeaderCard fitsHeaderCard = iter.next();
-                        fileInfo.getFitsHeader().put(fitsHeaderCard.getKey(), fitsHeaderCard.getValue());
-                    }
-
-                    return fileInfo;
-
-                } finally {
-                    if (fitsFile != null) {
-                        fitsFile.close();
-                    }
-                }
-            });
-        }
-
-        FitsFileInformation[] ret = new FitsFileInformation[numFiles];
-
-        try {
-            List<Future<FitsFileInformation>> futures = executor.invokeAll(tasks);
-            for (int i = 0; i < futures.size(); i++) {
-                ret[i] = futures.get(i).get();
-            }
-        } catch (Exception e) {
-            throw new IOException("Multi-threaded file loading failed: " + e.getMessage(), e);
-        }
-
-        FitsSequenceValidator.validateAndSort(ret);
-
-        this.cachedFileInfo = ret;
-        DebugOutput.println("Finished loading metadata for " + numFiles + " files instantly.");
-        logFitsTimestampDiagnostics("Interactive import", ret);
-        return ret;
+        return importService.getFitsfileInformation();
     }
 
     /**
@@ -1219,172 +762,7 @@ public class ImageProcessing implements AutoCloseable {
      * user for decompression or format-conversion decisions.
      */
     public FitsFileInformation[] getFitsfileInformationHeadless() throws Exception {
-        File[] fitsFiles = getFitsFilesDetails();
-        int numFiles = fitsFiles.length;
-
-        if (numFiles == 0) {
-            this.cachedFileInfo = new FitsFileInformation[0];
-            return this.cachedFileInfo;
-        }
-
-        DebugOutput.println("\n--- Validating " + numFiles + " FITS files for headless batch detection ---");
-
-        List<Callable<FitsMetadataLoadResult>> tasks = new ArrayList<>();
-        for (File currentFile : fitsFiles) {
-            tasks.add(() -> loadFitsMetadataHeadless(currentFile));
-        }
-
-        FitsMetadataLoadResult[] loadedResults = new FitsMetadataLoadResult[numFiles];
-        try {
-            List<Future<FitsMetadataLoadResult>> futures = executor.invokeAll(tasks);
-            for (int i = 0; i < futures.size(); i++) {
-                loadedResults[i] = futures.get(i).get();
-            }
-        } catch (java.util.concurrent.ExecutionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof Exception) {
-                throw (Exception) cause;
-            }
-            throw new IOException("Headless FITS validation failed.", cause);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Headless FITS validation was interrupted.", e);
-        }
-
-        FitsMetadataLoadResult reference = loadedResults[0];
-        for (int i = 1; i < loadedResults.length; i++) {
-            validateHeadlessFitsConsistency(reference, loadedResults[i]);
-        }
-
-        FitsFileInformation[] ret = new FitsFileInformation[numFiles];
-        for (int i = 0; i < loadedResults.length; i++) {
-            ret[i] = loadedResults[i].fileInfo;
-        }
-
-        FitsSequenceValidator.validateAndSort(ret);
-
-        this.cachedFileInfo = ret;
-        DebugOutput.println("Validated and loaded metadata for " + numFiles + " FITS files.");
-        logFitsTimestampDiagnostics("Headless import", ret);
-        return ret;
-    }
-
-    // =========================================================================
-    // EXISTING HELPER METHODS (Unchanged)
-    // =========================================================================
-
-    /**
-     * Loads and validates a single FITS file for headless mode, enforcing the strict mono 16-bit
-     * requirements expected by the batch pipeline.
-     */
-    private FitsMetadataLoadResult loadFitsMetadataHeadless(File currentFile) throws Exception {
-        Fits fitsFile = null;
-        try {
-            fitsFile = new Fits(currentFile);
-            if (isCompressedFits(fitsFile)) {
-                throw new IOException("Compressed FITS files are not supported in batch mode: " + currentFile.getName());
-            }
-
-            BasicHDU<?> hdu = getImageHDU(fitsFile);
-            if (hdu == null) {
-                throw new FitsException("No valid image HDU found in " + currentFile.getName());
-            }
-
-            int[] axes = hdu.getAxes();
-            if (axes == null || axes.length != 2) {
-                throw new FitsException("Expected uncompressed 16-bit monochrome FITS files. File " + currentFile.getName() + " has axes length " + (axes == null ? 0 : axes.length) + ".");
-            }
-
-            Header fitsHeader = hdu.getHeader();
-            int bitpix = fitsHeader.getIntValue("BITPIX", 0);
-            if (bitpix != 16) {
-                throw new FitsException("Expected uncompressed 16-bit monochrome FITS files. File " + currentFile.getName() + " has BITPIX=" + bitpix + ".");
-            }
-            if (!FitsPixelConverter.isUnsigned16Bit(fitsHeader)) {
-                throw new IOException("Expected unsigned 16-bit FITS files (BZERO=32768, BSCALE=1). File " + currentFile.getName()
-                        + " has BZERO=" + headerNumber(fitsHeader.getDoubleValue("BZERO", 0.0))
-                        + " and BSCALE=" + headerNumber(fitsHeader.getDoubleValue("BSCALE", 1.0))
-                        + ", so read as they are its pixels would be at the wrong brightness level. Convert the folder first:"
-                        + " import it in the SpacePixels window, which offers the conversion, or use the API with"
-                        + " InputPreparationMode.AUTO_PREPARE_TO_16BIT_MONO.");
-            }
-
-            int height = axes[0];
-            int width = axes[1];
-            if (width <= 0 || height <= 0) {
-                throw new FitsException("Invalid image dimensions in " + currentFile.getName() + ": " + width + "x" + height);
-            }
-
-            FitsFileInformation fileInfo = new FitsFileInformation(currentFile.getAbsolutePath(), currentFile.getName(), true, width, height);
-
-            Cursor<String, HeaderCard> iter = fitsHeader.iterator();
-            while (iter.hasNext()) {
-                HeaderCard fitsHeaderCard = iter.next();
-                fileInfo.getFitsHeader().put(fitsHeaderCard.getKey(), fitsHeaderCard.getValue());
-            }
-
-            return new FitsMetadataLoadResult(fileInfo, width, height, bitpix);
-        } finally {
-            if (fitsFile != null) {
-                fitsFile.close();
-            }
-        }
-    }
-
-    /** A header number without a trailing ".0" when it is whole. */
-    private static String headerNumber(double value) {
-        return value == Math.rint(value) && Math.abs(value) < 1e15 ? Long.toString((long) value) : Double.toString(value);
-    }
-
-    /**
-     * Ensures every headless input frame matches the reference frame in geometry and bit depth.
-     */
-    private void validateHeadlessFitsConsistency(FitsMetadataLoadResult reference, FitsMetadataLoadResult candidate) throws IOException {
-        if (candidate.bitpix != reference.bitpix) {
-            throw new IOException("Inconsistent FITS bit depth detected. File " + candidate.fileInfo.getFileName() +
-                    " has BITPIX=" + candidate.bitpix + " but " + reference.fileInfo.getFileName() + " has BITPIX=" + reference.bitpix + ".");
-        }
-
-        if (candidate.width != reference.width || candidate.height != reference.height) {
-            throw new IOException("Inconsistent FITS dimensions detected. File " + candidate.fileInfo.getFileName() +
-                    " is " + candidate.width + "x" + candidate.height + " but " + reference.fileInfo.getFileName() +
-                    " is " + reference.width + "x" + reference.height + ".");
-        }
-    }
-
-
-
-    /**
-     * Enumerates FITS-like files in the configured directory and returns them in stable path order.
-     */
-    private File[] getFitsFilesDetails() throws IOException, FitsException {
-        File directory = alignedFitsFolderFullPath;
-        if (!directory.isDirectory()) {
-            throw new IOException("file:" + directory.getAbsolutePath() + " is not a directory");
-        }
-
-        FitsSequenceValidator.validateDirectoryExtensions(directory);
-        File[] ret = directory.listFiles(file -> file.isFile()
-                && FitsSequenceValidator.imageExtension(file.getName()) != null
-                && !".xisf".equals(FitsSequenceValidator.imageExtension(file.getName())));
-        if (ret == null) {
-            throw new IOException("Could not list input directory: " + directory);
-        }
-        if (ret.length == 0) {
-            throw new IOException("No fits files in directory:" + directory.getAbsolutePath());
-        }
-
-        Arrays.sort(ret, Comparator.comparing(File::getAbsolutePath));
-        return ret;
-    }
-
-    /**
-     * Closes a group of FITS handles that were opened as a batch.
-     */
-    private static void closeFitsFiles(Fits[] fitsFiles) throws IOException {
-        for (Fits fitsFile : fitsFiles) {
-            fitsFile.close();
-        }
+        return importService.getFitsfileInformationHeadless();
     }
 
     /**
@@ -1404,24 +782,18 @@ public class ImageProcessing implements AutoCloseable {
      * Copies WCS keywords from a reference FITS file into every file in the active directory and
      * optionally emits stretched derivatives alongside the solved outputs.
      */
+    @Deprecated
     public void applyWCSHeader(String wcsHeaderFile, int stretchFactor, int iterations, boolean stretch, StretchAlgorithm algo) throws IOException, FitsException {
-        File[] fitsFileInformation = getFitsFilesDetails();
-        plateSolveService.applyWCSHeader(
-                wcsHeaderFile,
-                fitsFileInformation,
-                (fitsFile, fits) -> writeUpdatedFITSFile(fitsFile, fits, stretchFactor, iterations, stretch, algo));
+        batchService.applyWCSHeader(plateSolveService, wcsHeaderFile, stretchFactor, iterations, stretch, algo);
     }
 
     /**
      * Writes stretched derivatives for every FITS file in the active directory without modifying
      * headers or running any detection logic.
      */
+    @Deprecated
     public void onlyStretch(int stretchFactor, int iterations, StretchAlgorithm algo) throws IOException, FitsException {
-        File[] fitsFileInformation = getFitsFilesDetails();
-        for (int i = 0; i < fitsFileInformation.length; i++) {
-            Fits fitsFile = new Fits(fitsFileInformation[i]);
-            writeOnlyStretchedFitsFile(fitsFileInformation[i], fitsFile, stretchFactor, iterations, algo);
-        }
+        batchService.onlyStretch(stretchFactor, iterations, algo);
     }
 
     /**
@@ -1450,211 +822,9 @@ public class ImageProcessing implements AutoCloseable {
         applicationSettings.save();
     }
 
-    /**
-     * Emits solved FITS derivatives for a single source file, including mono conversions and
-     * optional stretched variants when requested.
-     */
-    private void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, boolean stretch, StretchAlgorithm algo) throws FitsException, IOException {
-        int naxis = getImageHDU(originalFits).getHeader().getIntValue("NAXIS");
-        boolean isColor = false;
-        if (naxis == 3) {
-            isColor = true;
-        }
-
-        String newFNameSolved = addDirectory(fileInformation, "_solved");
-        writeFitsWithSuffix(originalFits, newFNameSolved, "_wcs");
-
-        Fits monochromeFits = null;
-        if (isColor) {
-            monochromeFits = convertToMono(originalFits);
-            String newFNameSolvedMono = addDirectory(fileInformation, "_solved_mono");
-            writeFitsWithSuffix(monochromeFits, newFNameSolvedMono, "_mono_wcs");
-        }
-
-        if (stretch) {
-            String newFNameSolvedStretched = addDirectory(fileInformation, "_solved_stretched");
-            stretchFITSImage(originalFits, stretchFactor, iterations, algo);
-            writeFitsWithSuffix(originalFits, newFNameSolvedStretched, "_wcs_stretch");
-
-            if (isColor) {
-                String newFNameSolvedMonoStretch = addDirectory(fileInformation, "_solved_mono_stretched");
-                stretchFITSImage(monochromeFits, stretchFactor, iterations, algo);
-                writeFitsWithSuffix(monochromeFits, newFNameSolvedMonoStretch, "_mono_wcs_stretch");
-            }
-        }
-    }
-
-    /**
-     * Emits only stretched derivatives for a single FITS file, preserving both color and derived
-     * mono outputs when applicable.
-     */
-    private void writeOnlyStretchedFitsFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException, IOException {
-        int naxis = getImageHDU(originalFits).getHeader().getIntValue("NAXIS");
-        boolean isColor = false;
-        if (naxis == 3) {
-            isColor = true;
-        }
-
-        Fits monochromeFits = null;
-        if (isColor) {
-            monochromeFits = convertToMono(originalFits);
-        }
-
-        String newFNameSolvedStretched = addDirectory(fileInformation, "_stretched");
-        stretchFITSImage(originalFits, stretchFactor, iterations, algo);
-        writeFitsWithSuffix(originalFits, newFNameSolvedStretched, "_stretch");
-
-        if (isColor) {
-            String newFNameSolvedMonoStretch = addDirectory(fileInformation, "_mono_stretched");
-            stretchFITSImage(monochromeFits, stretchFactor, iterations, algo);
-            writeFitsWithSuffix(monochromeFits, newFNameSolvedMonoStretch, "_mono_stretch");
-        }
-    }
-
-    /**
-     * Converts a color FITS container into a new mono FITS container while preserving the original
-     * non-structural header metadata.
-     */
-    private Fits convertToMono(Fits colorFITSImage) throws FitsException, IOException {
-        BasicHDU<?> originalHDU = getImageHDU(colorFITSImage);
-        Object monoKernelData = FitsPixelConverter.extractLuminance(
-                FitsPixelConverter.standardizeTo16BitColor(originalHDU.getKernel(), originalHDU.getHeader()));
-        return FitsPixelConverter.createFitsFromData(monoKernelData, originalHDU.getHeader());
-    }
-
-    /**
-     * Writes a FITS object to disk using SpacePixels' suffix-based naming convention. An earlier file of that name is
-     * replaced only once the new one is complete, so an interrupted write never leaves a cut-off image.
-     */
-    private void writeFitsWithSuffix(Fits fitsImage, String fitsFilename, String suffix) throws IOException, FitsException {
-        int lastSepPosition = fitsFilename.lastIndexOf(".");
-        fitsFilename = fitsFilename.substring(0, lastSepPosition) + suffix + ".fit";
-        StagedFile.write(new File(fitsFilename), staged -> fitsImage.write(staged.toFile()));
-    }
-
-    /**
-     * Ensures a sibling output directory exists and returns the matching output path for a file.
-     */
-    private String addDirectory(File currentFile, String directory) throws IOException {
-        String newDirectory = currentFile.getParent() + File.separator + directory;
-        File newDirFile = new File(newDirectory);
-        if (!newDirFile.exists()) {
-            newDirFile.mkdirs();
-        }
-        return newDirFile.getAbsolutePath() + File.separator + currentFile.getName();
-    }
-
-// =========================================================================
-    // 32-BIT TO 16-BIT STANDARDIZATION LOGIC
-    // =========================================================================
-
-    /**
-     * Decompresses a sequence of compressed FITS files into a sibling directory and returns that
-     * new directory for optional reload.
-     */
-    private File batchDecompress(File[] files) throws Exception {
-        eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog =
-                new eu.startales.spacepixels.gui.ProcessingProgressDialog(null);
-        progressDialog.setTitle("Decompressing FITS files...");
-
-        SwingUtilities.invokeLater(() -> progressDialog.setVisible(true));
-
-        File targetDir = null;
-        try {
-            for (int i = 0; i < files.length; i++) {
-                File file = files[i];
-                final int percent = (int) (((float) i / files.length) * 100);
-                SwingUtilities.invokeLater(() -> progressDialog.updateProgress(percent, "Decompressing " + file.getName() + "..."));
-
-                Fits originalFits = new Fits(file);
-                BasicHDU<?> imageHDU = getImageHDU(originalFits);
-
-                if (imageHDU != null) {
-                    Fits decompressedFits = new Fits();
-                    decompressedFits.addHDU(imageHDU);
-
-                    String outName = addDirectory(file, "_uncompressed");
-                    if (outName.toLowerCase().endsWith(".fz")) {
-                        outName = outName.substring(0, outName.length() - 3);
-                    }
-
-                    if (targetDir == null) targetDir = new File(outName).getParentFile();
-                    StagedFile.write(new File(outName), staged -> decompressedFits.write(staged.toFile()));
-                }
-                originalFits.close();
-            }
-        } finally {
-            SwingUtilities.invokeLater(() -> progressDialog.dispose());
-        }
-        return targetDir;
-    }
-
-    /**
-     * Converts to standard 16-bit after asking how to store pixel values below zero, then offers to load the new
-     * folder (the mono one for colour input). Always ends the current import.
-     */
-    private FitsFileInformation[] standardizeAndOfferToLoad(File[] files, boolean isColor) throws Exception {
-        int addedOffset = chooseNegativeValueOffset(files);
-        if (addedOffset < 0) {
-            ApplicationWindow.logger.info("Conversion cancelled at the negative-value choice. Clearing the active import.");
-            return new FitsFileInformation[0];
-        }
-        File newDir = batchStandardizeTo16Bit(files, isColor, addedOffset);
-
-        int loadChoice = JOptionPane.showConfirmDialog(null,
-                isColor ? "Conversion Complete!\n\nWould you like to automatically load the newly created 16-bit Mono directory to run detections?"
-                        : "Conversion Complete!\n\nWould you like to automatically load the newly created 16-bit directory?",
-                "Success", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-        if (loadChoice == JOptionPane.YES_OPTION && newDir != null) {
-            throw new RedirectImportException(newDir);
-        }
-        return new FitsFileInformation[0]; // Stop the current import
-    }
-
-    /**
-     * Looks for pixels the conversion would put below zero and asks how to store them. Returns the ADU to add to every
-     * pixel (0 when there are none or they are to be set to 0), or -1 when the user cancels.
-     */
-    private int chooseNegativeValueOffset(File[] files) throws Exception {
-        eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog =
-                new eu.startales.spacepixels.gui.ProcessingProgressDialog(null);
-        progressDialog.setTitle("Checking pixel values...");
-        SwingUtilities.invokeLater(() -> progressDialog.setVisible(true));
-        FitsPixelConverter.NegativeValueScan scan;
-        try {
-            scan = FitsPixelConverter.scanNegativeValues(files, percent -> SwingUtilities.invokeLater(
-                    () -> progressDialog.updateProgress(percent, "Checking for pixel values below zero...")));
-        } finally {
-            SwingUtilities.invokeLater(progressDialog::dispose);
-        }
-        if (!scan.hasNegativeValues()) {
-            return 0;
-        }
-
-        int offset = scan.offsetToKeepNegativeValues();
-        String[] options = {"Add an Offset (Recommended)", "Set to 0", "Cancel"};
-        int choice = JOptionPane.showOptionDialog(null, negativeValueQuestion(scan, offset), "Pixel Values Below Zero",
-                JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
-        ApplicationWindow.logger.info(scan.negativePixels() + " of " + scan.totalPixels() + " pixels below zero, lowest "
-                + scan.lowest() + "; choice: " + (choice == 0 ? "add " + offset + " ADU" : choice == 1 ? "set to 0" : "cancel"));
-        return choice == 0 ? offset : choice == 1 ? 0 : -1;
-    }
-
-    /** The question {@link #chooseNegativeValueOffset} asks. */
+    /** The interactive conversion's negative-value question. */
     static String negativeValueQuestion(FitsPixelConverter.NegativeValueScan scan, int offset) {
-        double percent = 100.0 * scan.negativePixels() / Math.max(1, scan.totalPixels());
-        String share = percent >= 10 ? String.format(Locale.ROOT, "%.0f %%", percent)
-                : percent >= 0.1 ? String.format(Locale.ROOT, "%.1f %%", percent) : "Less than 0.1 %";
-        return dialogParagraphs(
-                String.format(Locale.ROOT, "%s of the pixels are below zero (the lowest is %,.0f ADU). This usually means the "
-                        + "frames were bias- or dark-subtracted without a pedestal. Standard 16-bit images cannot store values "
-                        + "below zero.", share, scan.lowest()),
-                String.format(Locale.ROOT, "<b>Add an Offset (recommended):</b> adds %,d ADU to every pixel of every frame. All "
-                        + "values are kept, so the sky background and its noise stay intact. Padding left by registration stays "
-                        + "at 0, and the report takes the offset off again for the sky brightness.", offset),
-                "<b>Set to 0:</b> keeps the original levels, but every pixel below zero becomes 0. Where the sky is close to "
-                        + "zero this cuts off the low side of the noise, so the background is measured too high and the noise "
-                        + "too low. With the sky at zero, detection can fail.");
+        return FitsImportService.negativeValueQuestion(scan, offset);
     }
 
     /**
@@ -1662,198 +832,12 @@ public class ImageProcessing implements AutoCloseable {
      * subfolder because SpacePixels works on whole folders. Returns that subfolder, or null when the user cancels.
      */
     public static File offerToImportLargestExposureGroup(MixedExposureException mixed) throws IOException {
-        ExposureGroup largest = mixed.getLargestGroup();
-        String[] options = {"Import the " + largest.describe(), "Cancel"};
-        int choice = JOptionPane.showOptionDialog(null, mixedExposureQuestion(mixed), "Different Exposure Times",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[0]);
-        ApplicationWindow.logger.info(mixed.getMessage() + " Choice: " + (choice == 0 ? "import the largest group" : "cancel"));
-        if (choice != 0) {
-            return null;
-        }
-
-        eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog =
-                new eu.startales.spacepixels.gui.ProcessingProgressDialog(null);
-        progressDialog.setTitle("Copying images...");
-        SwingUtilities.invokeLater(() -> progressDialog.setVisible(true));
-        try {
-            return largest.copyIntoSubfolder(percent -> SwingUtilities.invokeLater(
-                    () -> progressDialog.updateProgress(percent, "Copying the " + largest.describe() + "...")));
-        } finally {
-            SwingUtilities.invokeLater(progressDialog::dispose);
-        }
+        return FitsImportService.offerToImportLargestExposureGroup(mixed, new GuiFitsImportInteraction());
     }
 
     /** The warning {@link #offerToImportLargestExposureGroup} shows. */
     static String mixedExposureQuestion(MixedExposureException mixed) {
-        ExposureGroup largest = mixed.getLargestGroup();
-        StringBuilder groups = new StringBuilder();
-        for (String group : MixedExposureException.describeGroups(mixed.getGroups())) {
-            groups.append("<br>&bull; ").append(htmlText(group));
-        }
-        return dialogParagraphs(
-                "These " + mixed.getImageCount() + " images do not all have the same exposure time:" + groups,
-                "SpacePixels needs one exposure time for the whole sequence: the brightness of the stars and the sky, and "
-                        + "the length of trails, change with the exposure, and the detection compares the frames with each other.",
-                "Would you like to import only the " + largest.describe() + "? They are copied into the subfolder <b>"
-                        + htmlText(largest.getFolderName()) + "</b>, and the original folder stays as it is.");
-    }
-
-    private static String htmlText(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-    }
-
-    /** A dialog message of wrapped paragraphs (Swing's own wrapping of plain text drops characters). */
-    private static String dialogParagraphs(String... paragraphs) {
-        StringBuilder html = new StringBuilder("<html><body style='width: 430px'>");
-        for (int i = 0; i < paragraphs.length; i++) {
-            html.append(i == 0 ? "<p>" : "<p style='margin-top: 8px'>").append(paragraphs[i]).append("</p>");
-        }
-        return html.append("</body></html>").toString();
-    }
-
-    /**
-     * Standardizes 32-bit, signed or scaled 16-bit FITS inputs into unsigned 16-bit outputs, optionally preserving
-     * color frames and extracting luminance for detection workflows. {@code addedOffset} ADU are added to every pixel
-     * except registration padding, so values below zero are kept.
-     */
-    private File batchStandardizeTo16Bit(File[] files, boolean isColor, int addedOffset) throws Exception {
-        eu.startales.spacepixels.gui.ProcessingProgressDialog progressDialog =
-                new eu.startales.spacepixels.gui.ProcessingProgressDialog(null);
-        progressDialog.setTitle("Converting to standard 16-bit...");
-
-        SwingUtilities.invokeLater(() -> progressDialog.setVisible(true));
-
-        File targetDir = null;
-        try {
-            for (int i = 0; i < files.length; i++) {
-                File file = files[i];
-                final int percent = (int) (((float) i / files.length) * 100);
-                SwingUtilities.invokeLater(() -> progressDialog.updateProgress(percent, "Converting " + file.getName() + "..."));
-
-                ApplicationWindow.logger.info("Converting file to standard 16-bit: " + file.getName());
-
-                // --- DEBUG: Print Original File ---
-                printFitsDebugInfo("ORIGINAL", file);
-
-                Fits originalFits = new Fits(file);
-                BasicHDU<?> imageHDU = getImageHDU(originalFits);
-                Header origHeader = imageHDU.getHeader();
-                Object kernel = imageHDU.getKernel();
-
-                if (isColor) {
-                    // 1. Convert to 16-bit Color
-                    short[][][] color16 = FitsPixelConverter.standardizeTo16BitColor(kernel, origHeader, addedOffset);
-                    Fits colorFits = FitsPixelConverter.createFitsFromData(color16, origHeader, addedOffset);
-                    String colorName = addDirectory(file, "_16bit_color");
-                    writeFitsWithSuffix(colorFits, colorName, "_16bit_color");
-
-                    // --- DEBUG: Print Converted Color File ---
-                    String finalColorPath = colorName.substring(0, colorName.lastIndexOf(".")) + "_16bit_color.fit";
-                    printFitsDebugInfo("CONVERTED 16-BIT COLOR", new File(finalColorPath));
-
-                    // 2. Extract Luminance to 16-bit Mono
-                    short[][] mono16 = FitsPixelConverter.extractLuminance(color16);
-                    Fits monoFits = FitsPixelConverter.createFitsFromData(mono16, origHeader, addedOffset);
-
-                    // Note: No manual header hacking needed here anymore!
-                    // createFitsFromData safely handles NAXIS and NAXIS3 automatically.
-                    String monoName = addDirectory(file, "_16bit_mono");
-                    if (targetDir == null) targetDir = new File(monoName).getParentFile();
-                    writeFitsWithSuffix(monoFits, monoName, "_16bit_mono");
-
-                    // --- DEBUG: Print Converted Luminance File ---
-                    String finalLuminancePath = monoName.substring(0, monoName.lastIndexOf(".")) + "_16bit_mono.fit";
-                    printFitsDebugInfo("CONVERTED 16-BIT LUMINANCE", new File(finalLuminancePath));
-
-                } else {
-                    // Convert to 16-bit Mono
-                    short[][] mono16 = FitsPixelConverter.standardizeTo16BitMono(kernel, origHeader, addedOffset);
-                    Fits monoFits = FitsPixelConverter.createFitsFromData(mono16, origHeader, addedOffset);
-                    String monoName = addDirectory(file, "_16bit_converted");
-                    if (targetDir == null) targetDir = new File(monoName).getParentFile();
-                    writeFitsWithSuffix(monoFits, monoName, "_16bit");
-
-                    // --- DEBUG: Print Converted Mono File ---
-                    String finalMonoPath = monoName.substring(0, monoName.lastIndexOf(".")) + "_16bit.fit";
-                    printFitsDebugInfo("CONVERTED 16-BIT MONO", new File(finalMonoPath));
-                }
-                originalFits.close();
-            }
-        } finally {
-            SwingUtilities.invokeLater(() -> progressDialog.dispose());
-        }
-        return targetDir;
-    }
-
-// =========================================================================
-    // DEBUG: FITS VERIFICATION
-    // =========================================================================
-
-    /**
-     * Dumps a compact debug summary of a FITS file's stored and display-scaled numeric range.
-     */
-    private void printFitsDebugInfo(String label, File fitsFile) {
-        if (!DebugOutput.isEnabled()) {
-            return;
-        }
-        try (Fits fits = new Fits(fitsFile)) {
-            BasicHDU<?> hdu = getImageHDU(fits);
-            Header header = hdu.getHeader();
-            Object kernel = hdu.getKernel();
-
-            int bitpix = header.getIntValue("BITPIX", 0);
-            double bzero = header.getDoubleValue("BZERO", 0.0);
-            double bscale = header.getDoubleValue("BSCALE", 1.0);
-
-            double min = Double.MAX_VALUE;
-            double max = -Double.MAX_VALUE;
-
-            // Scan 2D arrays (Mono)
-            if (kernel instanceof float[][]) {
-                float[][] data = (float[][]) kernel;
-                for (float[] row : data) {
-                    for (float val : row) {
-                        if (val < min) min = val;
-                        if (val > max) max = val;
-                    }
-                }
-            } else if (kernel instanceof short[][]) {
-                short[][] data = (short[][]) kernel;
-                for (short[] row : data) {
-                    for (short val : row) {
-                        if (val < min) min = val;
-                        if (val > max) max = val;
-                    }
-                }
-            } else if (kernel instanceof int[][]) {
-                int[][] data = (int[][]) kernel;
-                for (int[] row : data) {
-                    for (int val : row) {
-                        if (val < min) min = val;
-                        if (val > max) max = val;
-                    }
-                }
-            }
-
-            System.out.println("\n--- DEBUG: " + label + " ---");
-            System.out.println("File:   " + fitsFile.getName());
-            System.out.println("BITPIX: " + bitpix);
-            System.out.println("BZERO:  " + bzero);
-            System.out.println("BSCALE: " + bscale);
-            if (min != Double.MAX_VALUE) {
-                System.out.println("Raw Min Value: " + min);
-                System.out.println("Raw Max Value: " + max);
-                // Calculate what the true value is after BZERO/BSCALE are applied by a viewer
-                System.out.println("True Visual Min: " + ((min * bscale) + bzero));
-                System.out.println("True Visual Max: " + ((max * bscale) + bzero));
-            } else {
-                System.out.println("(3D Color array, skipping min/max scan for brevity)");
-            }
-            System.out.println("-----------------------------------");
-
-        } catch (Exception e) {
-            System.err.println("Debug read failed for " + fitsFile.getName() + ": " + e.getMessage());
-        }
+        return FitsImportService.mixedExposureQuestion(mixed);
     }
 
     /**

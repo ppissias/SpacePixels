@@ -31,20 +31,18 @@ SpacePixels prepares the frames, runs the work, and presents the results. Detect
 | `gui` | The Swing window, its tabs, dialogs and frame viewers | [ApplicationWindow](src/main/java/eu/startales/spacepixels/gui/ApplicationWindow.java), [MainApplicationPanel](src/main/java/eu/startales/spacepixels/gui/MainApplicationPanel.java), [DetectionConfigurationPanel](src/main/java/eu/startales/spacepixels/gui/DetectionConfigurationPanel.java) |
 | `jobs` | Runs long operations one at a time, with no Swing | [JobCoordinator](src/main/java/eu/startales/spacepixels/jobs/JobCoordinator.java), `Job`, `JobOutcome`, `JobFailures` |
 | `tasks` | The long operations themselves, one class per job | `FitsImportTask`, `DetectionTask`, `PlateSolveTask`, `BlinkImagesTask`, … |
-| `util` | Services and file formats: import and preparation, pipelines, plate solving, FITS and WCS | [ImageProcessing](src/main/java/eu/startales/spacepixels/util/ImageProcessing.java), `StandardDetectionPipelineService`, `PlateSolveService` |
+| `util` | Services and file formats: import and preparation, pipelines, plate solving, FITS and WCS | [ImageProcessing](src/main/java/eu/startales/spacepixels/util/ImageProcessing.java), `FitsImportService`, `FitsBatchService`, `StandardDetectionPipelineService`, `PlateSolveService` |
 | `util.reporting` | The HTML report | [DetectionReportGenerator](src/main/java/eu/startales/spacepixels/util/reporting/DetectionReportGenerator.java), `ReportData`, the `…SectionWriter` classes |
 | `util.skycatalog` | Fetching and storing the sky catalogue, and the plate-solution correction | `SkyCatalogueClient`, `SkyCatalogueStore`, `PlateCorrectionFitter` |
 | `api`, `tools` | The public Java API and the command line | [DefaultSpacePixelsPipelineApi](src/main/java/eu/startales/spacepixels/api/DefaultSpacePixelsPipelineApi.java), `BatchDetectionCli` |
-| `session` | Session identity, owned state and guarded handover (no Swing/`gui` dependencies) | `ProcessingSession`, `SessionOwner`, `SkyCatalogueModel`, `AutoTuneState` |
+| `session` | Session identity, owned state and guarded handover (no Swing/`gui` dependencies) | `ProcessingSession`, `SessionOwner`, `SessionFrames`, `SessionStorage`, `SessionPersistence`, `SkyCatalogueModel`, `AutoTuneState` |
 | `config` | The settings files and their reading and writing | `AppConfig`, `SpacePixelsDetectionProfileIO`, `SpacePixelsSettingsFiles` |
 
 The dependencies point one way:
 - **The GUI path:** `gui` → `jobs` and `tasks` → `util` → JTransient.
 - **The headless path:** `api` and `tools` → `util` → JTransient.
 
-Two exceptions are not fixed yet:
-- `util` still uses a few GUI pieces (step S13 in the plan).
-- `ImageProcessing` asks import questions with dialogs (step S12).
+`util` still uses a few GUI pieces (S13), including the facade's compatibility factory for interactive decisions and its report-size dialog. The extracted FITS import/batch services have no Swing/`gui` references; `GuiFitsImportInteraction` creates questions and progress windows on the EDT. Sharing their preparation orchestration with the API remains S12.
 
 ## How a user action runs
 
@@ -82,13 +80,17 @@ Plate solve uses JPlateSolve **1.0.1**, resolved from the local sibling during d
 
 `ApplicationWindow` loads `ApplicationSettings` once, before import. Its `AppConfig` is shared with each imported processor; importing never reloads it or discards unsaved Astrometry Config edits. The tab is available before import. The existing `ImageProcessing.getInstance(File)` entry point still loads standalone preferences for API/CLI callers; desktop import injects the window's settings explicitly.
 
-`session.SessionOwner` owns the current `ProcessingSession`. Each session has a UUID, shared frame metadata references, a protected selection, its own `SkyCatalogueModel` (catalogue/correction), `AutoTuneState`, master-stack cache and last-report reference. The processing facade and its pipeline/overlay services belong to that session; their further extraction is S10. Arrays of metadata are copied defensively, not image buffers.
+`session.SessionOwner` owns the current `ProcessingSession`. Each session has a UUID, shared frame metadata references, a protected selection, its own `SkyCatalogueModel` (catalogue/correction), `AutoTuneState`, master-stack cache and last-report reference. The processing facade delegates import to `FitsImportService` and derivative operations to `FitsBatchService`. `SessionFrames` is shared by the session, import and pipeline services; it holds metadata and the last track/variable overlays, not a second copy of their buffers. Arrays of metadata are copied defensively, not image buffers.
 
 **Import and handover:**
 1. `FitsImportTask` prepares a processor and frames, using the application's settings even across conversion redirects.
 2. Only a completed import can transfer them into a new session. `SessionOwner.replace(expected, candidate)` rejects stale imports and closes their processors; failed, declined or cancelled imports preserve the existing session.
 3. The window refreshes the table and notifies its panels. Configuration validation refreshes without replacing edited text or saved-value markers.
 4. Replacing/closing a session interrupts its owned sky worker, closes its processor and releases the stack cache, selection and tuning results. Closing the window also rejects later import completion.
+
+**Session metadata I/O:** the window owns one serialized `SessionStorage` queue. `FitsImportTask` loads and validates saved catalogue, correction and Auto-Tune data there before handover; panels only apply the prepared state. Saves capture detached correction/tuning snapshots and use the existing atomic stores through per-session `SessionPersistence`. Reimports read behind earlier writes. Correction edits apply in memory immediately, with version-guarded rollback to the last successful save on failure. Viewers resolve that in-memory correction without touching disk; processing jobs wait on their worker for pending writes and UI acknowledgements before reading saved context. Closing a session drops its callbacks, not its queued writes. Normal window close drains the queue off the EDT before exiting and reports failed writes.
+
+**Compatibility:** `applyWCSHeader` and `onlyStretch` remain deprecated thin adapters because public APIs are preserved. Their implementations live in the batch service; the unused private close helper is removed. Output folders, suffixes and conversion mathematics are unchanged.
 
 **Asynchronous work:** job handles now carry `ProcessingSession`, not a processor standing in for identity. Outcome handlers use `forCurrentSession`; sky completion also checks worker identity and session. Old work cannot change the replacement's status, catalogue, tuning result or cache. `JobCoordinator` retains its current-job checks, so old progress/end events cannot unlock another job.
 
@@ -169,7 +171,5 @@ The report never changes the engine's results. The report's live lookups (SatChe
 ## What comes next
 
 The open steps from the architecture review, in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md#open-steps-from-the-architecture-review):
-- **S8:** session-folder I/O off the EDT.
-- **S10:** split `ImageProcessing`.
-- **S12:** ask the import questions on the EDT.
+- **S12:** share the GUI/API preparation flow, retaining the existing EDT decision adapter.
 - **S13 to S16:** no GUI in `util`, an explicit run context, one source of finding labels, and prepared report diagnostics.

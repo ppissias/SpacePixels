@@ -48,7 +48,7 @@ abstract class MechanicsTestCase extends AssertJSwingJUnitTestCase {
         System.setProperty("user.home", home.toString());
         application = GuiActionRunner.execute(() -> {
             FlatDarkLaf.setup();
-            ApplicationWindow created = new ApplicationWindow();
+            ApplicationWindow created = createApplicationWindow();
             ((JFrame) created.getFrame()).setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
             return created;
         });
@@ -91,11 +91,13 @@ abstract class MechanicsTestCase extends AssertJSwingJUnitTestCase {
         return application;
     }
 
+    protected ApplicationWindow createApplicationWindow() { return new ApplicationWindow(); }
+
     /** Closes this window and opens another against the same scratch home, so a saved profile can be read back. */
     final void reopenWindow() {
         window.cleanUp();
         application = GuiActionRunner.execute(() -> {
-            ApplicationWindow created = new ApplicationWindow();
+            ApplicationWindow created = createApplicationWindow();
             ((JFrame) created.getFrame()).setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
             return created;
         });

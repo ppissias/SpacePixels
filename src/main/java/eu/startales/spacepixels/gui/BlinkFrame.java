@@ -167,7 +167,7 @@ public class BlinkFrame extends JFrame {
         this.sequence = sequence;
         this.files = files;
         FitsFileInformation[] alignedFiles = sessionFiles != null ? sessionFiles : files;
-        cursorReadout.reset(alignedFiles);
+        cursorReadout.reset(alignedFiles, sky::solutionFor);
         sky.attach(alignedFiles);
         this.skipped = new boolean[sequence.getFrames().size()];
         this.current = 0;

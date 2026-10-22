@@ -111,7 +111,7 @@ The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker
 - **The last report:** `util.SessionReports.latest(...)` finds the newest finished report beside the frames when a session is imported (in the import job); a completed detection replaces it. The Main tab's Detect group offers it as **Open last report**.
 - **Failures:** an exception or `Error` becomes a failure. Running out of memory leaves the worker for the application's uncaught-exception handler. The handler marks it in `JobFailures`, and every other running job then stops at its next progress report while SpacePixels closes.
 
-Each `JobHandle` carries its explicit `ProcessingSession`, which has a UUID and owns frame metadata references, selection, catalogue/correction, tuning state, the master-stack cache, last report and processing facade. `SessionOwner` guards handover and callback admission independently of Swing. Only a successful import replaces the current session; stale callbacks and stale imports cannot modify its replacement. The window loads `ApplicationSettings` once and injects it into each processor, preserving unsaved preferences across imports. Further extraction of facade storage/services remains S10.
+Each `JobHandle` carries its explicit `ProcessingSession`, which has a UUID and owns frame metadata references, selection, catalogue/correction, tuning state, the master-stack cache, last report and processing facade. `SessionOwner` guards handover and callback admission independently of Swing. Only a successful import replaces the current session; stale callbacks and stale imports cannot modify its replacement. The window loads `ApplicationSettings` once and injects it into each processor, preserving unsaved preferences across imports. `SessionFrames` holds the shared metadata and last track/variable overlays; import and pipeline services use that same store, without deep-copying buffers. `ImageProcessing` is a compatibility facade over `FitsImportService`, `FitsBatchService`, rendering, solving and pipeline services.
 
 ### `eu.startales.spacepixels.gui`
 
@@ -180,6 +180,8 @@ Internal backend facade and processing services.
 Important classes:
 
 - `ImageProcessing`
+- `FitsImportService`, `FitsBatchService`, `FitsFiles`, `FitsImages`
+- `FitsImportInteraction` (decisions/progress; implemented on the EDT by `gui.GuiFitsImportInteraction`)
 - `DetectionInputPreparation`
 - `StandardDetectionPipelineService`
 - `IterativeDetectionPipelineService`
@@ -198,7 +200,7 @@ Important classes:
 - `XisfImageConverter`
 - `StagedFile` (safe replacement of a file; see section 7)
 
-`ImageProcessing` is still the main internal backend facade. New work should prefer extracting focused services behind it instead of expanding it further.
+`ImageProcessing` remains the public compatibility facade. FITS import/strict headless metadata loading and derivative operations live in separate services with no Swing/GUI dependencies; shared HDU discovery and directory listing are separate helpers. Import owns its bounded pool, closed by the facade. The facade's report-size dialog and compatibility creation of the GUI decision adapter remain S13. The deprecated `applyWCSHeader` and `onlyStretch` signatures delegate to the batch service, preserving existing outputs.
 
 ### `eu.startales.spacepixels.util.reporting`
 
@@ -784,6 +786,7 @@ Desktop:
   - progress and the single outcome come back on the EDT.
 - **Previews:** the frame viewers and the Image Stretch previews render on `SwingWorker`s; the newest request wins.
 - **Sky catalogue:** the fetch and the plate-solution check run on their own thread. Their results are dropped when another session has been imported meanwhile.
+- **Session metadata:** the window owns a serialized `SessionStorage` queue. Import prepares saved catalogue/correction/Auto-Tune data before EDT handover, retaining field and frame guards. Session-scoped persistence captures detached snapshots and returns guarded completion to the EDT. A correction switch updates viewers immediately from memory; a run waits for pending saves/acknowledgements on its worker before resolving on-disk context. Failed correction edits revert to the last successful save, without overwriting newer edits. Reimports read behind writes, and window close drains writes off the EDT before exit; replacing a session suppresses obsolete callbacks without discarding its queued writes.
 
 Headless/API:
 

@@ -8,6 +8,7 @@
 package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.session.SessionFrames;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
@@ -31,12 +32,11 @@ import java.util.List;
 final class StandardDetectionPipelineService {
 
     private final AppConfig appConfig;
-    /** Tracks of the last run, for the blink viewer. */
-    private volatile TrackOverlay lastTrackOverlay;
-    private volatile VariableStarOverlay lastVariableStarOverlay;
+    private final SessionFrames state;
 
-    StandardDetectionPipelineService(AppConfig appConfig) {
+    StandardDetectionPipelineService(AppConfig appConfig, SessionFrames state) {
         this.appConfig = appConfig;
+        this.state = state;
     }
 
     File detectObjects(DetectionConfig config,
@@ -46,8 +46,8 @@ final class StandardDetectionPipelineService {
         // Detection takes 0-90% of the bar; exporting the report the rest.
         ImageProcessing.PipelineExecutionData executionData = runDetectionPipeline(config, cachedFileInfo,
                 progressListener == null ? null : (percent, message) -> progressListener.onProgressUpdate((int) (percent * 0.9), message));
-        lastTrackOverlay = TrackOverlay.from(executionData.getPipelineResult());
-        lastVariableStarOverlay = VariableStarOverlay.from(executionData.getPipelineResult(), cachedFileInfo);
+        state.setOverlays(TrackOverlay.from(executionData.getPipelineResult()),
+                VariableStarOverlay.from(executionData.getPipelineResult(), cachedFileInfo));
 
         ReportInclusion reportInclusion = ReportInclusion.all();
         if (safetyPrompt != null) {
@@ -84,14 +84,6 @@ final class StandardDetectionPipelineService {
             progressListener.onProgressUpdate(100, "Finished!");
         }
         return reportFile;
-    }
-
-    TrackOverlay getLastTrackOverlay() {
-        return lastTrackOverlay;
-    }
-
-    VariableStarOverlay getLastVariableStarOverlay() {
-        return lastVariableStarOverlay;
     }
 
     ImageProcessing.PipelineExecutionData runDetectionPipeline(DetectionConfig config,

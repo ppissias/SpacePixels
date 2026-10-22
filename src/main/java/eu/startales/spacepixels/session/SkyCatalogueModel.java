@@ -31,6 +31,16 @@ public final class SkyCatalogueModel {
     private SkyCatalogue catalogue;
     private PlateSolutionCorrection correction;
     private File sessionFolder;
+    private SessionPersistence persistence;
+    private PlateSolutionCorrection savedCorrection;
+    private Throwable saveFailure;
+    private long revision;
+    private boolean closed;
+
+    public void setPersistence(SessionPersistence persistence) { this.persistence = persistence; }
+    public Throwable getSaveFailure() { return saveFailure; }
+    public boolean isClosed() { return closed; }
+    public void close() { closed = true; }
 
 
     /** The catalogue of the session, or null. */
@@ -61,31 +71,46 @@ public final class SkyCatalogueModel {
 
     public void setCorrection(PlateSolutionCorrection correction) {
         this.correction = correction;
+        savedCorrection = correction == null ? null : correction.copy();
+        saveFailure = null;
+        revision++;
         PlateSolutionCorrection.forget(sessionFolder);
         fireCorrectionChanged();
     }
 
     /**
-     * Switches the correction on or off for the whole session. It is saved at once, so everything that resolves the
-     * plate solution, including a detection run, uses the new setting.
+     * Switches the correction immediately in memory. Desktop sessions queue a detached snapshot for saving;
+     * detection jobs wait for outstanding writes before resolving the saved plate solution.
      */
     public void setCorrectionEnabled(boolean enabled) throws IOException {
+        if (closed) throw new IOException("This session is closed.");
         if (correction == null || !correction.isNeeded()) {
             return;
         }
-        boolean previousEnabled = correction.enabled;
-        Boolean previousChoice = correction.userEnabled;
-        correction.enabled = enabled;
-        correction.userEnabled = enabled;
-        try {
-            PlateSolutionCorrection.save(sessionFolder, correction);
-        } catch (IOException e) {
-            correction.enabled = previousEnabled;
-            correction.userEnabled = previousChoice;
-            throw e;
-        } finally {
-            PlateSolutionCorrection.forget(sessionFolder);
+        PlateSolutionCorrection updated = correction.copy();
+        updated.enabled = enabled;
+        updated.userEnabled = enabled;
+        saveCorrection(updated);
+    }
+
+    public void saveCorrection(PlateSolutionCorrection updated) throws IOException {
+        if (closed) throw new IOException("This session is closed.");
+        PlateSolutionCorrection snapshot = updated.copy();
+        if (persistence == null) {
+            PlateSolutionCorrection.save(sessionFolder, snapshot);
+            setCorrection(updated);
+            return;
         }
+        correction = updated;
+        saveFailure = null;
+        long version = ++revision;
+        persistence.save(() -> persistence.storage().store().saveCorrection(sessionFolder, snapshot), failure -> {
+            if (failure == null) savedCorrection = snapshot;
+            if (revision != version) return;
+            saveFailure = failure;
+            if (failure != null) correction = savedCorrection == null ? null : savedCorrection.copy();
+            fireCorrectionChanged();
+        });
         fireCorrectionChanged();
     }
 

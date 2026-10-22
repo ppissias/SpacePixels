@@ -132,6 +132,10 @@ public final class PlateSolutionCorrection {
         return global != null;
     }
 
+    public PlateSolutionCorrection copy() {
+        return GSON.fromJson(GSON.toJson(this), PlateSolutionCorrection.class);
+    }
+
     /** Select the initial state of a new fit without overriding a saved, explicit viewer choice. */
     public void initializeEnabled(PlateSolutionCorrection previous) {
         boolean sameSolution = previous != null && solutionKey != null && solutionKey.equals(previous.solutionKey)

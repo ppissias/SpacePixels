@@ -17,7 +17,9 @@ public final class ProcessingSession implements AutoCloseable {
     private final ImageProcessing processing;
     private final SkyCatalogueModel skyCatalogue = new SkyCatalogueModel();
     private final AutoTuneState autoTune = new AutoTuneState();
-    private FitsFileInformation[] files;
+    private final SessionMetadata metadata;
+    private final SessionPersistence persistence;
+    private final SessionFrames frames;
     private List<FitsFileInformation> selection = List.of();
     private File lastReport;
     private String masterStackKey;
@@ -26,15 +28,29 @@ public final class ProcessingSession implements AutoCloseable {
     private volatile boolean closed;
 
     public ProcessingSession(ImageProcessing processing, FitsFileInformation[] files, File lastReport) {
+        this(processing, files, lastReport, SessionMetadata.empty(), null);
+    }
+
+    public ProcessingSession(ImageProcessing processing, FitsFileInformation[] files, File lastReport,
+                             SessionMetadata metadata, SessionPersistence persistence) {
+        this.metadata = Objects.requireNonNull(metadata);
+        this.persistence = persistence;
         this.processing = Objects.requireNonNull(processing);
-        this.files = Objects.requireNonNull(files).clone();
+        this.frames = processing.getSessionFrames();
+        frames.setFiles(Objects.requireNonNull(files).clone());
         this.lastReport = lastReport;
         skyCatalogue.setSessionFolder(files.length == 0 ? null : new File(files[0].getFilePath()).getParentFile());
+        skyCatalogue.setPersistence(persistence);
+        skyCatalogue.set(metadata.catalogue());
+        skyCatalogue.setCorrection(metadata.correction());
     }
+
+    public SessionMetadata getMetadata() { return metadata; }
+    public SessionPersistence getPersistence() { return persistence; }
 
     public UUID getId() { return id; }
     public ImageProcessing getProcessing() { return processing; }
-    public FitsFileInformation[] getFiles() { return files.clone(); }
+    public FitsFileInformation[] getFiles() { return frames.getFiles() == null ? new FitsFileInformation[0] : frames.getFiles().clone(); }
     public SkyCatalogueModel getSkyCatalogue() { return skyCatalogue; }
     public AutoTuneState getAutoTune() { return autoTune; }
     public File getLastReport() { return lastReport; }
@@ -43,7 +59,7 @@ public final class ProcessingSession implements AutoCloseable {
 
     public void setSelection(FitsFileInformation[] selected) {
         requireOpen();
-        if (selected != null && !Arrays.asList(files).containsAll(Arrays.asList(selected))) {
+        if (selected != null && !Arrays.asList(getFiles()).containsAll(Arrays.asList(selected))) {
             throw new IllegalArgumentException("Selected frames belong to another session.");
         }
         selection = selected == null ? List.of() : List.copyOf(Arrays.asList(selected));
@@ -85,6 +101,8 @@ public final class ProcessingSession implements AutoCloseable {
     public void close() {
         if (closed) return;
         closed = true;
+        skyCatalogue.close();
+        if (persistence != null) persistence.close();
         if (skyCatalogueWorker != null) {
             skyCatalogueWorker.interrupt();
             skyCatalogueWorker = null;
@@ -96,7 +114,7 @@ public final class ProcessingSession implements AutoCloseable {
             masterStackKey = null;
             autoTune.clear();
             selection = List.of();
-            files = new FitsFileInformation[0];
+            frames.clear();
             lastReport = null;
         }
     }

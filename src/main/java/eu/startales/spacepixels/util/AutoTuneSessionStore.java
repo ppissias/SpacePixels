@@ -113,6 +113,11 @@ public final class AutoTuneSessionStore {
         }
     }
 
+    /** Detached compact result data for ordered asynchronous persistence, without sharing mutable UI objects. */
+    public static Document snapshot(Document document) {
+        return GSON.fromJson(GSON.toJson(document), Document.class);
+    }
+
     /**
      * The saved document, or null when there is none, it cannot be read, or it is from a newer version.
      * The caller still checks {@link #matches}.

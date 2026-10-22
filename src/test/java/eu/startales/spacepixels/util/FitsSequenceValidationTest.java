@@ -255,9 +255,12 @@ public class FitsSequenceValidationTest {
         File directory = temporaryFolder.newFolder();
         writeFits(directory, "A.fit", new short[2][3], null);
         ImageProcessing processor = ImageProcessing.getInstance(directory);
-        Field field = ImageProcessing.class.getDeclaredField("executor");
+        Field importField = ImageProcessing.class.getDeclaredField("importService");
+        importField.setAccessible(true);
+        Object importer = importField.get(processor);
+        Field field = FitsImportService.class.getDeclaredField("executor");
         field.setAccessible(true);
-        ThreadPoolExecutor executor = (ThreadPoolExecutor) field.get(processor);
+        ThreadPoolExecutor executor = (ThreadPoolExecutor) field.get(importer);
         try {
             processor.getFitsfileInformationHeadless();
             assertTrue(executor.getMaximumPoolSize() <= 4);

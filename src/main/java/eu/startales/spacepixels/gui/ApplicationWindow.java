@@ -12,10 +12,13 @@ package eu.startales.spacepixels.gui;
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.SessionOwner;
+import eu.startales.spacepixels.session.SessionStorage;
+import eu.startales.spacepixels.session.SessionPersistence;
 import eu.startales.spacepixels.jobs.JobFailures;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
@@ -68,6 +71,8 @@ public class ApplicationWindow {
 
     private final ApplicationSettings applicationSettings = ApplicationSettings.loadDefault();
     private final SessionOwner sessions = new SessionOwner();
+    private final SessionStorage sessionStorage;
+    private boolean closing;
 
     private volatile MainApplicationPanel mainApplicationPanel;
     private volatile ConfigurationPanel configurationApplicationPanel;
@@ -152,6 +157,11 @@ public class ApplicationWindow {
     }
 
     public ApplicationWindow() {
+        this(new SessionStorage());
+    }
+
+    public ApplicationWindow(SessionStorage sessionStorage) {
+        this.sessionStorage = sessionStorage;
         initialize();
     }
 
@@ -169,17 +179,17 @@ public class ApplicationWindow {
         frmIpodImage.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                jobCoordinator.cancel();
-                if (mainApplicationPanel != null) mainApplicationPanel.closeSessionViews();
-                sessions.close();
-                ReportLookupProxyServer.getInstance().stop();
+                int closeOperation = frmIpodImage.getDefaultCloseOperation();
+                frmIpodImage.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+                if (closing) return;
+                closing = true;
+                closeSessionResources();
+                finishSessionStorage(closeOperation == JFrame.EXIT_ON_CLOSE);
             }
 
             @Override
             public void windowClosed(WindowEvent e) {
-                jobCoordinator.cancel();
-                if (mainApplicationPanel != null) mainApplicationPanel.closeSessionViews();
-                sessions.close();
+                closeSessionResources();
             }
         });
         frmIpodImage.getContentPane().setLayout(new BorderLayout(0, 0));
@@ -247,6 +257,45 @@ public class ApplicationWindow {
         startReleaseCheck();
     }
 
+    private void closeSessionResources() {
+        jobCoordinator.cancel();
+        if (mainApplicationPanel != null) mainApplicationPanel.closeSessionViews();
+        sessions.close();
+        sessionStorage.close();
+        ReportLookupProxyServer.getInstance().stop();
+    }
+
+    private void finishSessionStorage(boolean exit) {
+        new Thread(() -> {
+            try {
+                sessionStorage.finish();
+                EventQueue.invokeLater(() -> {
+                    if (sessionStorage.getWriteFailure() != null) {
+                        JOptionPane.showMessageDialog(frmIpodImage,
+                                "A session metadata write failed. Some edits may not have been saved.\n"
+                                        + sessionStorage.getWriteFailure().getMessage(),
+                                "Session save error", JOptionPane.WARNING_MESSAGE);
+                    }
+                    frmIpodImage.dispose();
+                    if (exit) System.exit(0);
+                });
+            } catch (Exception failure) {
+                logger.log(Level.WARNING, "Session metadata is still being saved", failure);
+                EventQueue.invokeLater(() -> {
+                    int answer = JOptionPane.showConfirmDialog(frmIpodImage,
+                            "Session metadata has not finished saving. Wait and try closing again?\n" + failure.getMessage(),
+                            "Pending session writes", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                    if (answer == JOptionPane.YES_OPTION) {
+                        finishSessionStorage(exit);
+                    } else {
+                        frmIpodImage.dispose();
+                        if (exit) System.exit(1);
+                    }
+                });
+            }
+        }, "SpacePixels-session-shutdown").start();
+    }
+
     /** Asks for a folder of aligned frames and imports it. */
     public void chooseAndImportFolder() {
         logger.info("Will try to import FITS/XISF files.");
@@ -262,7 +311,7 @@ public class ApplicationWindow {
     public void importFolder(File folder) {
         if (folder != null && folder.isDirectory()) {
             JobCoordinator.Admission admission = jobCoordinator.start(JobKind.IMPORT, sessions.current(),
-                    new FitsImportTask(folder, applicationSettings), (handle, outcome) -> importFinished(handle.session(), outcome));
+                    new FitsImportTask(folder, applicationSettings, sessionStorage), (handle, outcome) -> importFinished(handle.session(), outcome));
             if (!admission.admitted()) {
                 mainApplicationPanel.showStatus(admission.refusal());
             }
@@ -284,7 +333,8 @@ public class ApplicationWindow {
     private void importFinished(Object expectedSession, JobOutcome<FitsImportTask.Result> outcome) {
         if (outcome instanceof JobOutcome.Completed<FitsImportTask.Result> completed) {
             ProcessingSession imported = new ProcessingSession(completed.result().processing(),
-                    completed.result().files(), completed.result().lastReport());
+                    completed.result().files(), completed.result().lastReport(), completed.result().metadata(),
+                    new SessionPersistence(sessionStorage, EventQueue::invokeLater));
             if (sessions.replace(expectedSession, imported)) {
                 installSession(imported);
                 mainApplicationPanel.showLastReport(imported.getLastReport());
@@ -390,6 +440,14 @@ public class ApplicationWindow {
 
     public <R> JobCoordinator.OutcomeHandler<R> forCurrentSession(JobCoordinator.OutcomeHandler<R> handler) {
         return (handle, outcome) -> sessions.applyIfCurrent(handle.session(), () -> handler.handle(handle, outcome));
+    }
+
+    public <Result> Job<Result> sessionJob(Job<Result> job) {
+        ProcessingSession owner = sessions.current();
+        return context -> {
+            if (owner != null && owner.getPersistence() != null) owner.getPersistence().awaitWrites(context::isCancelled);
+            return job.run(context);
+        };
     }
 
     public ImageProcessing getImageProcessing() {

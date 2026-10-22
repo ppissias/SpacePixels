@@ -9,8 +9,8 @@ The single active plan for SpacePixels application design, GUI improvements and 
 - **The work queue** is the findings table, the open architecture steps, the [engine changes that need SpacePixels work](#engine-changes-that-need-spacepixels-work) and the feature table below. Add new proposals there; do not keep a separate TODO or refactor list.
 - **When an item is done,** describe its behaviour in the manual, API or architecture documents, and move its record (decision, evidence and validation) to the archive. Do not bring completed items back into this plan.
 - **Completed work:** [design work completed in October 2026](docs/archive/design-improvements-completed-2026-10.md) holds:
-  - D01, D02, D03, D04, D05 and D07;
-  - the architecture review with its finished steps, including S7;
+  - D01, D02, D03, D04, D05, D06 and D07;
+  - the architecture review with its finished steps, including S7, S8 and S10;
   - the EventBus decision.
 
   Older sources: [GUI review](docs/archive/gui-enhancements-2026-10.md), [refactor snapshot](docs/archive/refactor-2026-09.md), [completed task list](docs/archive/completed-tasks-2026-10.md) and [maintenance notes and regression evidence](docs/archive/maintenance-notes-2026-10-19.md). Their old priorities do not override this plan.
@@ -34,8 +34,7 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 
 | ID | Priority | Status | Improvement | First useful result |
 |---|---|---|---|---|
-| D06 | Medium | In progress; open: facade/service split (S10) | Application, session and viewer ownership | State is scoped to the session it describes, and global preferences can be edited before import. |
-| D08 | Medium | In progress; open: session-folder I/O and import questions (S8, S12) | Keep slow work off the EDT | Importing a session does not read its catalogue, correction and Auto-Tune files on the UI thread. |
+| D08 | Medium | In progress; open: shared preparation (S12) and preference I/O | Keep slow work off the EDT | Importing a session does not read its catalogue, correction and Auto-Tune files on the UI thread. |
 | D09 | Medium | Proposed | Complete the analysis/report separation | Display changes reuse prepared diagnostics and stable finding identities. |
 | D10 | Medium | Proposed | Typed settings metadata and engine integration | A setting's identity and rules are not maintained in several unrelated lists. |
 | D11 | Medium | Proposed | A clearer analysis workflow and persistent results | Users see what will run and can reopen its results without another detection. |
@@ -44,30 +43,15 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 
 “High” means to address before expanding the affected workflow. It does not mean undertaking all high-priority items in one change.
 
-### D06. Separate application preferences, the session and individual viewers
-
-**In progress.** S7 is complete: application preferences load once per window through `ApplicationSettings`; `ProcessingSession` owns an explicit UUID, frame metadata references, selection, catalogue/correction, tuning measurements/preferences, master-stack cache, last report and the session's processing facade. Jobs and sky workers are bound to that session. A successful import alone replaces it; old result callbacks cannot update the replacement. See the [S7 completion record](docs/archive/design-improvements-completed-2026-10.md#s7-explicit-session-ownership-and-application-preferences-2026-10-21).
-
-**Open: S10.** The compatibility `ImageProcessing` facade still contains its FITS cache and owns the pipeline services that retain overlays. Extract batch/import responsibilities and delegate the remaining session storage without changing public APIs or deep-copying large buffers. Per-run context and the legacy static Auto-Tune/report fallback remain S14, not a new multi-window feature.
-
-**Acceptance.** Preserve session isolation and handover tests while extracting the remaining facade responsibilities. Keep settings formats, detection measurements, viewer coverage checks and saved catalogue/correction field guards unchanged.
-
 ### D08. Keep UI access on the EDT and slow work off it
 
-**In progress.** The WCS write runs as a job since 2026-10-20:
-- the question is asked on the EDT;
-- the write runs on a worker;
-- the table is updated from its outcome.
+**In progress.** S8 completes session-folder metadata I/O off the EDT; WCS writes already run as jobs. The S10 import extraction also introduces an EDT decision/progress adapter for FITS conversion and exposure-group questions. See the [S8/S10 completion record](docs/archive/design-improvements-completed-2026-10.md#s8-and-s10-background-session-storage-and-fits-service-boundaries-2026-10-21).
 
-**Evidence (remaining).** `restoreSkyCatalogue`, called while applying an imported table model, reads the catalogue and correction files on the EDT. The Auto-Tune results and the correction switch are read and written there too. Config writes and ASTAP-directory scans also run from UI callbacks. These can be small on local storage, but their duration is not bounded by the GUI code.
+**Remaining.** Interactive FITS preparation and the policy-driven `DetectionInputPreparation` API path still have separate orchestration. S12 should share their discovery, validation and conversion facts, retaining headless refusal/automatic policies versus interactive decisions. Reuse `FitsImportInteraction` rather than introducing another dialog path. Combined compressed-32-bit preparation is F07, not part of the completed extraction.
 
-The reverse boundary also needs attention: `FitsImportTask.run` calls `ImageProcessing.getFitsfileInformation` on its worker, and that method directly opens compression/format confirmation dialogs. Other helpers correctly bridge to Swing, but there is no consistent rule that prevents a processing method from touching GUI components on a worker thread.
+Config writes and ASTAP-directory scans still run from UI callbacks. Their duration is not bounded by the GUI code; move potentially slow preference operations behind explicit background completion when taking up that work.
 
-**Proposal.** Load the session's saved catalogue, correction and Auto-Tune results as part of background session preparation, while preserving field checks. Separate a fast edit from potentially slow persistence. The rule is about slow operations, not banning every trivial local read. Swing's [threading contract](https://docs.oracle.com/en/java/javase/21/docs/api/java.desktop/javax/swing/SwingWorker.html) puts UI access on the EDT and lengthy work elsewhere.
-
-Move GUI prompts out of the processing facade into an explicit preparation-decision adapter. `DetectionInputPreparation` already gives the API a policy-driven path. Retain differences between headless refusal/automatic preparation and interactive questions; share the underlying facts and conversions.
-
-**Acceptance.** A deliberately slow disposable file store does not stop repainting or keyboard navigation while a header write or metadata restore runs. Import questions are created and handled on the EDT. Completion returns to the correct session/file, and errors release the command lock. A modal dialog's nested event loop is not itself proof of a deadlock; avoid using modality as the lifecycle mechanism.
+**Acceptance.** Preserve slow-store responsiveness, correct-session completion, field/solution guards and save-failure recovery. Import questions stay on the EDT; processing and file operations stay on workers. Validate GUI/API preparation equivalence across ready, compressed, signed/scaled, 32-bit and colour inputs without changing pixel or negative-value policy.
 
 ### D09. Complete the distinction between measurements and report presentation
 
@@ -182,13 +166,11 @@ The pattern is close to a modest **model–view–presenter** arrangement: a sta
 
 ## Open steps from the architecture review
 
-The [architecture adoption review](docs/archive/design-improvements-completed-2026-10.md#architecture-adoption-review) (2026-10-20) accounted for every production class; its working record is [docs/architecture-review.md](docs/architecture-review.md). Its finished steps (S1–S6, S9, S11) are archived. A step is accepted when the maintainer takes it up.
+The [architecture adoption review](docs/archive/design-improvements-completed-2026-10.md#architecture-adoption-review) (2026-10-20) accounted for every production class; its working record is [docs/architecture-review.md](docs/architecture-review.md). Its finished steps (S1–S11) are archived. A step is accepted when the maintainer takes it up.
 
 | Step | Stage | Work | Covers |
 |---|---|---|---|
-| S8 | C | The WCS write and session-folder I/O off the EDT. **The WCS write is done (2026-10-20)**: it runs as a job. The session-folder reads and writes (sky catalogue and correction on import, Auto-Tune results, the correction switch) are still on the EDT | D08 |
-| S10 | C | Split `ImageProcessing`: its session part into the session object, with batch operations and import as their own services. Keep it as a facade, and remove its dead methods | D06 |
-| S12 | C | One preparation flow for the GUI and the API, with the GUI's questions asked on the EDT. Typed import outcomes are done: since `74bbded` a declined import keeps the open session. The questions are still asked from the import worker | D08, D06, F07 |
+| S12 | C | Share GUI/API preparation facts and orchestration. Preserve typed import outcomes and the FITS decision/progress adapter introduced in S10; its dialogs already run on the EDT. Combined compressed-32-bit preparation remains F07 | D08, F07 |
 | S13 | B–C | No `gui` and no Swing in `util` | new |
 | S14 | D | An explicit run context: the site, rendering options and Auto-Tune frame limit go with the run, instead of coming from the home folder and static fields | D09, D10 |
 | S15 | D | One source of finding labels and categories. Today T1, ST1, A1… are computed in seven places that agree only by walking the tracks in the same order | D09 |
@@ -253,7 +235,7 @@ Stages A (focused correctness) and B (workflow foundation), including D04 engine
 
 | Stage | Work | Why this order |
 |---|---|---|
-| C: session boundary | D06 remaining facade/service split (S10); D08 session-folder I/O and import questions off the worker (S8, S12); no GUI in `util` (S13) | Reduces UI/service coupling and protects session transitions. |
+| C: session boundary | D08 shared GUI/API preparation (S12) and remaining preference I/O; no GUI in `util` (S13) | Reduces UI/service coupling and protects session transitions. |
 | D: presentation and polish | D09 prepared report data (S14–S16); D10 typed settings bindings; D11 results and readiness; D12/D13 layout and access | Builds on explicit state; accessibility fixes that are independent can start earlier. |
 
 Add one adapter or command at a time, and keep the public API and file formats compatible.
@@ -362,7 +344,7 @@ Compare packaging options against the existing Gradle distribution and publishin
 
 ### Combined FITS preparation (F07)
 
-When a compressed FITS sequence contains 32-bit images, importing it should offer one preparation operation that decompresses and converts directly to uncompressed unsigned 16-bit output, then loads that output. The current GUI compression gate in `ImageProcessing.getFitsfileInformation()` first calls `batchDecompress` and redirects import to an `_uncompressed` directory; the later format gate can then require another conversion and import. This creates an unnecessary intermediate 32-bit sequence and repeated user steps.
+When a compressed FITS sequence contains 32-bit images, importing it should offer one preparation operation that decompresses and converts directly to uncompressed unsigned 16-bit output, then loads that output. The current GUI compression gate in `FitsImportService`, behind `ImageProcessing.getFitsfileInformation()`, first calls `batchDecompress` and redirects import to an `_uncompressed` directory; the later format gate can then require another conversion and import. This creates an unnecessary intermediate 32-bit sequence and repeated user steps.
 
 Inspect the image HDU's actual sample format during preparation and normalize its decompressed pixels before writing the final files. Reuse the existing conversion rules and the headless `DetectionInputPreparation` path, which already reads the image HDU and writes normalized 16-bit output. Connect this with the shared GUI/API preparation work in D08 rather than adding another independent conversion policy.
 

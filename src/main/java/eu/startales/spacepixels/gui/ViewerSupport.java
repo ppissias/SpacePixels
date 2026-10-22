@@ -136,11 +136,16 @@ final class ViewerSupport {
     static final class CursorReadout {
         /** Sky coordinates of each frame, resolved when the cursor first moves over it (null: not solved). */
         private final Map<FitsFileInformation, WcsCoordinateTransformer> skyCoordinates = new IdentityHashMap<>();
-        private FitsFileInformation[] files;
+        private java.util.function.Function<FitsFileInformation, WcsSolutionResolver.ResolvedWcsSolution> resolver;
 
         /** The frames of the sequence, which can share a plate solution. */
         void reset(FitsFileInformation[] files) {
-            this.files = files;
+            reset(files, info -> WcsSolutionResolver.resolve(info, files));
+        }
+
+        void reset(FitsFileInformation[] files,
+                   java.util.function.Function<FitsFileInformation, WcsSolutionResolver.ResolvedWcsSolution> resolver) {
+            this.resolver = resolver;
             skyCoordinates.clear();
         }
 
@@ -171,7 +176,7 @@ final class ViewerSupport {
             if (!skyCoordinates.containsKey(info)) {
                 WcsCoordinateTransformer transformer = null;
                 try {
-                    WcsSolutionResolver.ResolvedWcsSolution solution = WcsSolutionResolver.resolve(info, files);
+                    WcsSolutionResolver.ResolvedWcsSolution solution = resolver.apply(info);
                     transformer = solution != null ? solution.getTransformer() : null;
                 } catch (Exception ignored) {
                     // No usable plate solution: the cursor shows pixel coordinates only.

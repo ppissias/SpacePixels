@@ -14,15 +14,19 @@ public final class WcsSolutionResolver {
     }
 
     public static ResolvedWcsSolution resolve(FitsFileInformation preferredFile, FitsFileInformation[] alignedFiles) {
-        return resolve(preferredFile, alignedFiles, true);
+        FitsFileInformation reference = preferredFile != null ? preferredFile : firstFile(alignedFiles);
+        PlateSolutionCorrection correction = reference == null ? null : PlateSolutionCorrection.activeIn(folderOf(reference));
+        return resolve(preferredFile, alignedFiles, correction);
     }
 
     /** The solution as the FITS headers give it, without a correction. */
     public static ResolvedWcsSolution resolveUncorrected(FitsFileInformation preferredFile, FitsFileInformation[] alignedFiles) {
-        return resolve(preferredFile, alignedFiles, false);
+        return resolve(preferredFile, alignedFiles, null);
     }
 
-    private static ResolvedWcsSolution resolve(FitsFileInformation preferredFile, FitsFileInformation[] alignedFiles, boolean corrected) {
+    /** Resolves against an in-memory snapshot, without accessing the session folder. */
+    public static ResolvedWcsSolution resolve(FitsFileInformation preferredFile, FitsFileInformation[] alignedFiles,
+                                              PlateSolutionCorrection correction) {
         ResolvedWcsSolution solution = null;
         if (preferredFile != null) {
             solution = resolveForFile(preferredFile, false);
@@ -44,12 +48,11 @@ public final class WcsSolutionResolver {
             }
         }
 
-        if (solution == null || !corrected) {
+        if (solution == null || correction == null || !correction.enabled) {
             return solution;
         }
         FitsFileInformation reference = preferredFile != null ? preferredFile : firstFile(alignedFiles);
-        PlateSolutionCorrection correction = reference == null ? null : PlateSolutionCorrection.activeIn(folderOf(reference));
-        if (correction == null) {
+        if (reference == null) {
             return solution;
         }
         WcsCoordinateTransformer transformer = correction.apply(solution.getTransformer(),

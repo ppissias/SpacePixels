@@ -230,7 +230,7 @@ abstract class SequenceViewerFrame extends JFrame {
 
     protected void openAt(int index, StretchPanel stretchPanel, FitsFileInformation[] files) {
         bindStretch(stretchPanel);
-        cursorReadout.reset(files);
+        cursorReadout.reset(files, sky::solutionFor);
         sky.attach(files);
         open = true;
         shown = null;

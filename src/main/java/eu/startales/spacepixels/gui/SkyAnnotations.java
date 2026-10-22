@@ -209,11 +209,18 @@ final class SkyAnnotations {
         } else if (!wasAvailable && correctBox.isSelected()) {
             notice.setText("Plate solution corrected · " + model.getCorrection().improvementText() + " · C switches it off");
         }
+        if (model.getSaveFailure() != null) {
+            notice.setText("Cannot save the correction: " + model.getSaveFailure().getMessage() + "; the last saved setting is in use.");
+        }
+    }
+
+    WcsSolutionResolver.ResolvedWcsSolution solutionFor(FitsFileInformation info) {
+        return WcsSolutionResolver.resolve(info, files, model.getCorrection());
     }
 
     private void updateEnabled() {
         eu.startales.spacepixels.util.PlateSolutionCorrection correction = model.getCorrection();
-        correctBox.setEnabled(correction != null && correction.isNeeded());
+        correctBox.setEnabled(!model.isClosed() && correction != null && correction.isNeeded());
         correctBox.setSelected(correction != null && correction.enabled);
         if (correction == null) {
             correctBox.setToolTipText("<html>Use the plate solution corrected to the Gaia stars (C).<br><i>Not available: "
@@ -246,7 +253,7 @@ final class SkyAnnotations {
         }
         WcsSolutionResolver.ResolvedWcsSolution solution;
         try {
-            solution = WcsSolutionResolver.resolve(info, files);
+            solution = solutionFor(info);
         } catch (Exception e) {
             solution = null;
         }

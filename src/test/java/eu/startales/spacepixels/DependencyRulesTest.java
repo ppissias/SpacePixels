@@ -38,11 +38,18 @@ public class DependencyRulesTest {
         assertNoReferences("session", "eu.startales.spacepixels.gui.", "javax.swing.", "java.awt.");
     }
 
+    @Test
+    public void fitsImportAndBatchServicesDoNotDependOnSwingOrTheWindow() throws IOException {
+        for (String file : List.of("FitsImportService", "FitsBatchService", "FitsImportInteraction", "FitsFiles", "FitsImages")) {
+            assertNoReferences("util/" + file + ".java", "eu.startales.spacepixels.gui.", "javax.swing.", "java.awt.");
+        }
+    }
+
     private static void assertNoReferences(String packageName, String... forbidden) throws IOException {
         Path directory = SOURCES.resolve(packageName);
-        assertTrue("Run from the project folder: " + directory.toAbsolutePath(), Files.isDirectory(directory));
+        assertTrue("Run from the project folder: " + directory.toAbsolutePath(), Files.exists(directory));
         List<String> found = new ArrayList<>();
-        try (Stream<Path> files = Files.list(directory)) {
+        try (Stream<Path> files = Files.isDirectory(directory) ? Files.list(directory) : Stream.of(directory)) {
             for (Path file : (Iterable<Path>) files.filter(f -> f.toString().endsWith(".java"))::iterator) {
                 List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
                 for (int i = 0; i < lines.size(); i++) {

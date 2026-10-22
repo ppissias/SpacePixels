@@ -12,6 +12,9 @@ package eu.startales.spacepixels.tasks;
 
 import eu.startales.spacepixels.config.ApplicationSettings;
 
+import eu.startales.spacepixels.session.SessionMetadata;
+import eu.startales.spacepixels.session.SessionMetadataStore;
+import eu.startales.spacepixels.session.SessionStorage;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
@@ -32,21 +35,30 @@ import java.util.logging.Logger;
 public class FitsImportTask implements Job<FitsImportTask.Result> {
 
     /** The imported session: its processor, its frames, and the newest report beside them (or null). */
-    public record Result(ImageProcessing processing, FitsFileInformation[] files, File lastReport) {
+    public record Result(ImageProcessing processing, FitsFileInformation[] files, File lastReport, SessionMetadata metadata) {
+        public Result(ImageProcessing processing, FitsFileInformation[] files, File lastReport) {
+            this(processing, files, lastReport, SessionMetadata.empty());
+        }
     }
 
     private static final Logger LOGGER = Logger.getLogger(FitsImportTask.class.getName());
 
     private final File directory;
     private final ApplicationSettings settings;
+    private final SessionStorage storage;
 
     public FitsImportTask(File directory) {
         this(directory, null);
     }
 
     public FitsImportTask(File directory, ApplicationSettings settings) {
+        this(directory, settings, null);
+    }
+
+    public FitsImportTask(File directory, ApplicationSettings settings, SessionStorage storage) {
         this.directory = directory;
         this.settings = settings;
+        this.storage = storage;
     }
 
     @Override
@@ -65,13 +77,19 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
 
                 imgProcessing = ImageProcessing.getInstance(importDirectory, preferences);
                 FitsFileInformation[] filesInfo = imgProcessing.getFitsfileInformation();
-                context.progress(100, "Import complete.");
+                context.progress(90, "FITS metadata loaded.");
                 if (filesInfo.length == 0) {
                     return JobOutcome.declined("No frames were imported.");
                 }
-                File lastReport = SessionReports.latest(new File(filesInfo[0].getFilePath()).getParentFile());
+                File sessionFolder = new File(filesInfo[0].getFilePath()).getParentFile();
+                File lastReport = SessionReports.latest(sessionFolder);
+                context.progress(95, "Loading saved session metadata...");
+                SessionMetadata metadata = storage == null
+                        ? SessionMetadataStore.filesystem().load(sessionFolder, filesInfo)
+                        : storage.submit(() -> storage.store().load(sessionFolder, filesInfo)).get();
+                context.progress(100, "Import complete.");
                 ownershipTransferred = true;
-                return JobOutcome.completed(new Result(imgProcessing, filesInfo, lastReport));
+                return JobOutcome.completed(new Result(imgProcessing, filesInfo, lastReport, metadata));
 
             } catch (ImageProcessing.RedirectImportException e) {
                 // The user opted to automatically load the newly converted directory!

@@ -338,7 +338,7 @@ public class DetectionConfigurationPanel extends JPanel {
             return;
         }
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.STAR_MASK_STACK, owner,
-                new StarMaskStackTask(files, config.clone()), mainAppWindow.forCurrentSession((handle, outcome) -> {
+                mainAppWindow.sessionJob(new StarMaskStackTask(files, config.clone())), mainAppWindow.forCurrentSession((handle, outcome) -> {
                     if (!(outcome instanceof JobOutcome.Completed<JTransientEngine.MasterStackResult> completed)) {
                         MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
                         if (mainPanel != null) {
@@ -608,7 +608,7 @@ public class DetectionConfigurationPanel extends JPanel {
                 selectedProfile,
                 algorithm);
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.AUTO_TUNE,
-                mainAppWindow.getSession(), tuneTask,
+                mainAppWindow.getSession(), mainAppWindow.sessionJob(tuneTask),
                 mainAppWindow.forCurrentSession((handle, outcome) -> autoTuneFinished(outcome)));
         if (!admission.admitted()) {
             showFooterNote(admission.refusal(), true);

@@ -27,7 +27,6 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -529,17 +528,12 @@ public class AutoTuneOverviewPanel extends JPanel {
 
     /** Shows a result saved for these frames, and applies the default profile when that result has it. */
     private void restoreSavedRuns() {
-        AutoTuneSessionStore.Document saved = AutoTuneSessionStore.loadMatching(
-                sessionFolder, sessionFrames, sessionWidth, sessionHeight, sessionFileNames);
+        AutoTuneSessionStore.Document saved = session == null ? null : session.getMetadata().autoTune();
         if (saved == null) {
             return;
         }
-        boolean bulky = AutoTuneSessionStore.slim(saved);
         install(AutoTunerRunner.Algorithm.CALIBRATED, saved.calibrated);
         install(AutoTunerRunner.Algorithm.LEGACY, saved.legacy);
-        if (bulky && autoTune.result(AutoTunerRunner.Algorithm.CALIBRATED) != null) {
-            saveRuns();
-        }
         if (autoTune.isEmpty()) {
             return;
         }
@@ -623,12 +617,17 @@ public class AutoTuneOverviewPanel extends JPanel {
         if (sessionFolder == null || sessionFileNames.isEmpty()) {
             return;
         }
-        try {
-            AutoTuneSessionStore.save(sessionFolder, currentDocument());
-        } catch (IOException e) {
-            statusLabel.setText(statusLabel.getText()
-                    + " It could not be saved in the session folder (" + e.getMessage() + "), so it lasts until SpacePixels closes.");
-        }
+        ProcessingSession owner = session;
+        if (owner == null || owner.getPersistence() == null) return;
+        AutoTuneSessionStore.Document snapshot = AutoTuneSessionStore.snapshot(currentDocument());
+        if (snapshot == null) return;
+        File folder = sessionFolder;
+        owner.getPersistence().save(() -> owner.getPersistence().storage().store().saveAutoTune(folder, snapshot), failure -> {
+            if (session == owner && failure != null) {
+                statusLabel.setText(statusLabel.getText()
+                        + " It could not be saved (" + failure.getMessage() + "); it lasts until SpacePixels closes.");
+            }
+        });
     }
 
     private AutoTuneSessionStore.Document currentDocument() {
