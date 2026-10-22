@@ -45,6 +45,8 @@ final class SkyAnnotations {
     private final JCheckBoxMenuItem starsItem = new JCheckBoxMenuItem("Stars (Gaia)", true);
     private final JCheckBoxMenuItem deepSkyItem = new JCheckBoxMenuItem("Galaxies, nebulae and clusters (SIMBAD)", true);
     private final JCheckBoxMenuItem variablesItem = new JCheckBoxMenuItem("Variable stars (AAVSO VSX)", true);
+    private final JCheckBoxMenuItem namesItem = new JCheckBoxMenuItem("Names and magnitude labels", true);
+    private ViewerAnnotationPreferences preferences = ViewerAnnotationPreferences.DEFAULT;
     private final JCheckBox correctBox = new JCheckBox("Correct plate solution");
     private final JLabel notice = new JLabel(" ");
     private final Runnable catalogueListener = this::catalogueChanged;
@@ -65,14 +67,29 @@ final class SkyAnnotations {
     private boolean attached;
     private SkyCatalogueModel model = new SkyCatalogueModel();
 
+    /** Creates viewer-owned controls, restoring display preferences without changing the session catalogue. */
     SkyAnnotations(FrameView view) {
         this.view = view;
+        try {
+            preferences = ViewerAnnotationPreferences.load(ViewerAnnotationPreferences.storage());
+        } catch (RuntimeException unavailable) {
+            notice.setText("Cannot load annotation preferences; defaults are in use.");
+        }
+        namesItem.setSelected(preferences.names());
+        view.setSkyPreferences(preferences);
         annotateBox.addActionListener(e -> apply());
         JPopupMenu layers = new JPopupMenu();
         for (JCheckBoxMenuItem item : new JCheckBoxMenuItem[]{starsItem, deepSkyItem, variablesItem}) {
             item.addActionListener(e -> apply());
             layers.add(item);
         }
+        layers.addSeparator();
+        namesItem.addActionListener(e -> updatePreferences(new ViewerAnnotationPreferences(
+                preferences.faintestStar(), preferences.faintestVariable(), namesItem.isSelected())));
+        layers.add(namesItem);
+        JMenuItem limitsItem = new JMenuItem("Faintest magnitude…");
+        limitsItem.addActionListener(e -> editMagnitudeLimits());
+        layers.add(limitsItem);
         layersButton.setToolTipText("Choose what Annotate shows.");
         layersButton.addActionListener(e -> layers.show(layersButton, 0, layersButton.getHeight()));
         correctBox.addActionListener(e -> setCorrection(correctBox.isSelected()));
@@ -181,6 +198,48 @@ final class SkyAnnotations {
             view.setSkyMarks(marksFor(shownInfo), catalogue.starMagnitudeLimit);
         } else {
             view.setSkyMarks(null, 0);
+        }
+    }
+
+    /** Edits independent catalogue limits in a dialog so numeric keys belong to its editors, not navigation. */
+    private void editMagnitudeLimits() {
+        JSpinner stars = new JSpinner(new SpinnerNumberModel(preferences.faintestStar(), -10, 99, 0.5));
+        JSpinner variables = new JSpinner(new SpinnerNumberModel(preferences.faintestVariable(), -10, 99, 0.5));
+        JPanel fields = new JPanel(new GridLayout(0, 2, 12, 8));
+        JLabel starLabel = new JLabel("Faintest star (Gaia G / named-star V):");
+        starLabel.setLabelFor(stars);
+        fields.add(starLabel);
+        fields.add(stars);
+        JLabel variableLabel = new JLabel("Faintest variable (catalogue maximum):");
+        variableLabel.setLabelFor(variables);
+        fields.add(variableLabel);
+        fields.add(variables);
+        Object[] message = {"99 shows all available magnitudes. Unknown magnitudes remain visible.", fields,
+                "These display filters do not change catalogue downloads, detection or reports."};
+        while (JOptionPane.showConfirmDialog(view, message, "Catalogue magnitude limits",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION) {
+            try {
+                stars.commitEdit();
+                variables.commitEdit();
+                updatePreferences(new ViewerAnnotationPreferences(((Number) stars.getValue()).doubleValue(),
+                        ((Number) variables.getValue()).doubleValue(), namesItem.isSelected()));
+                return;
+            } catch (java.text.ParseException | IllegalArgumentException invalid) {
+                JOptionPane.showMessageDialog(view, "Enter a magnitude between -10 and 99.",
+                        "Invalid magnitude", JOptionPane.WARNING_MESSAGE);
+            }
+        }
+    }
+
+    /** Applies this viewer's filters immediately and persists them for viewers opened later. */
+    private void updatePreferences(ViewerAnnotationPreferences updated) {
+        preferences = updated;
+        view.setSkyPreferences(preferences);
+        apply();
+        try {
+            preferences.save(ViewerAnnotationPreferences.storage());
+        } catch (RuntimeException unavailable) {
+            notice.setText("Annotation preferences apply here but could not be saved.");
         }
     }
 

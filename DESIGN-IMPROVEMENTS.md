@@ -49,7 +49,6 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 | D13 | Medium | Proposed | Keyboard/accessible links, labels, reset actions and deliberate viewer focus | Independent slices, preserving existing viewer editing/navigation behavior |
 | F01 | Unranked | Proposed; experiment first | Compare slow-mover thresholds with tuned frame thresholds on real data before deciding any change | JTransient SM-2 is deferred; existing calibrated master tuning is not pending |
 | F02 | Unranked | Deferred | Richer header-derived session summary / multiple-night warning | Owned by D11; not a separate expensive pre-run quality table |
-| F03 | Unranked | Proposed | Viewer faint-magnitude/name controls with persisted preferences | Build on existing annotations, density thinning and candidate toggles |
 | F04 | Unranked | Proposed; explore design | MCP access to the existing headless pipeline, then explicitly scoped inspection capabilities | Reuse API and completed S13 headless service boundary |
 | F05 | Unranked | Deferred | Revisit reduced Image Stretch preview sampling and small-star visibility | Existing 2400 px preview cap / full-size viewer remain; independent of completed D03 |
 | F06 | Unranked | Proposed; Windows first | Native installer and optional runtime/bootstrap distribution | Release-pair gate JA-11; no Java-baseline change approved |
@@ -307,9 +306,9 @@ This is a source inventory, not a claim that every case was rerun during this do
 
 ## Consolidated feature work
 
-Feature statuses and ownership are in the [canonical backlog](#findings-and-priorities); this section only supplies detailed scopes. F01 is an experiment proposal tied to deferred JTransient SM-2; F02's extended summary is deferred within D11; F03 preserves existing density thinning while exploring label controls; F05 retains the current `GeneratePreviewsTask.MAX_PREVIEW_SIDE = 2400` behavior unless its deferred sampling proposal is reopened. F08 and basic F09 are completed, not missing rows.
+Feature statuses and ownership are in the [canonical backlog](#findings-and-priorities); this section only supplies detailed scopes. F01 is an experiment proposal tied to deferred JTransient SM-2; F02's extended summary is deferred within D11; F05 retains the current `GeneratePreviewsTask.MAX_PREVIEW_SIDE = 2400` behavior unless its deferred sampling proposal is reopened. F03, F08 and basic F09 are completed, not missing rows.
 
-For F01, compare the maximum-stack noise distribution and recovery on real data before relating slow-mover thresholds to tuned frame thresholds; do not silently change legacy tuning. For F03, first establish whether star marks or variable names cause clutter, then consider a Faintest magnitude limit and Names switch with persistent viewer preferences; variables may need an independent limit. For deferred F05, compare averaging or full-resolution preview rendering for small-star visibility and memory cost; Show full size already supplies full-resolution inspection.
+For F01, compare the maximum-stack noise distribution and recovery on real data before relating slow-mover thresholds to tuned frame thresholds; do not silently change legacy tuning. For deferred F05, compare averaging or full-resolution preview rendering for small-star visibility and memory cost; Show full size already supplies full-resolution inspection.
 
 Run history/result restoration belongs to D11. Engine stage outcomes belong to JA-09 with D09/S16 integration, not to a second progress protocol in F10. The retired drift-grown void-band concern stays dropped; session data areas replaced it.
 

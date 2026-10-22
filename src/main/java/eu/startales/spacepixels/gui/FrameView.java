@@ -90,6 +90,7 @@ final class FrameView extends JComponent {
     private boolean skyStars = true;
     private boolean skyDeepSky = true;
     private boolean skyVariables = true;
+    private ViewerAnnotationPreferences skyPreferences = ViewerAnnotationPreferences.DEFAULT;
     /** The catalogue marks drawn last, for {@link #skyMarkAt}. */
     private List<SkyMark> drawnSkyMarks = new java.util.ArrayList<>();
     private VariableStarOverlay variableStarOverlay;
@@ -217,6 +218,13 @@ final class FrameView extends JComponent {
         this.skyStars = stars;
         this.skyDeepSky = deepSky;
         this.skyVariables = variables;
+        drawnSkyMarks = new java.util.ArrayList<>();
+        repaint();
+    }
+
+    /** Changes catalogue presentation only, clearing hover targets until the filtered marks are repainted. */
+    void setSkyPreferences(ViewerAnnotationPreferences preferences) {
+        skyPreferences = java.util.Objects.requireNonNull(preferences);
         drawnSkyMarks = new java.util.ArrayList<>();
         repaint();
     }
@@ -571,7 +579,7 @@ final class FrameView extends JComponent {
         for (SkyMark mark : skyMarks) {
             boolean shown = mark.kind == SkyMark.Kind.STAR || mark.kind == SkyMark.Kind.NAMED_STAR ? skyStars
                     : mark.kind == SkyMark.Kind.VARIABLE ? skyVariables : skyDeepSky;
-            if (!shown) {
+            if (!shown || !skyPreferences.includes(mark)) {
                 continue;
             }
             if (mark.kind == SkyMark.Kind.NAMED_STAR) {
@@ -605,7 +613,7 @@ final class FrameView extends JComponent {
         double circleZoom = Math.max(1, Math.pow(scale, 0.75));
         g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 11f));
         g2.setStroke(new BasicStroke(1.2f));
-        boolean labelStars = stars.size() <= MAX_LABELLED_STARS;
+        boolean labelStars = skyPreferences.names() && stars.size() <= MAX_LABELLED_STARS;
         for (SkyMark mark : stars) {
             double x = left + (mark.x + 0.5) * scale;
             double y = top + (mark.y + 0.5) * scale;
@@ -617,7 +625,7 @@ final class FrameView extends JComponent {
             }
             drawn.add(mark);
         }
-        boolean labelVariables = variables.size() <= MAX_LABELLED_VARIABLES;
+        boolean labelVariables = skyPreferences.names() && variables.size() <= MAX_LABELLED_VARIABLES;
         boolean labelSurveyNames = variables.size() <= MAX_LABELLED_SURVEY_VARIABLES;
         for (SkyMark mark : variables) {
             double x = left + (mark.x + 0.5) * scale;
@@ -636,7 +644,7 @@ final class FrameView extends JComponent {
             }
             drawn.add(mark);
         }
-        boolean labelDeepSky = deepSky.size() <= MAX_LABELLED_DEEP_SKY;
+        boolean labelDeepSky = skyPreferences.names() && deepSky.size() <= MAX_LABELLED_DEEP_SKY;
         for (SkyMark mark : deepSky) {
             double x = left + (mark.x + 0.5) * scale;
             double y = top + (mark.y + 0.5) * scale;
@@ -666,7 +674,6 @@ final class FrameView extends JComponent {
             }
             drawn.add(mark);
         }
-        // The few bright stars with a proper name are always named.
         for (SkyMark mark : namedStars) {
             double x = left + (mark.x + 0.5) * scale;
             double y = top + (mark.y + 0.5) * scale;
@@ -674,7 +681,9 @@ final class FrameView extends JComponent {
             g2.setColor(SKY_NAMED_STAR_COLOR);
             g2.draw(new Ellipse2D.Double(x - radius, y - radius, 2 * radius, 2 * radius));
             g2.setFont(g2.getFont().deriveFont(Font.BOLD, 13f));
-            drawLabel(g2, mark.label, x + radius + 4, y - radius / 2, SKY_NAMED_STAR_COLOR);
+            if (skyPreferences.names()) {
+                drawLabel(g2, mark.label, x + radius + 4, y - radius / 2, SKY_NAMED_STAR_COLOR);
+            }
             g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 11f));
             drawn.add(mark);
         }
