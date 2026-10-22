@@ -77,6 +77,10 @@ public class MainApplicationPanel extends JPanel {
     private final JButton detectIterativelyButton = new JButton("Detect Iteratively (large datasets)");
     // The newest report of the session, under the Detect buttons; hidden when there is none.
     private final JButton lastReportButton = new JButton();
+    private final JButton outputFolderButton = AccessibleControls.link("Open output folder", "Open last report output folder",
+            this::openOutputFolder);
+    private final WrappingHelpLabel analysisScope = new WrappingHelpLabel("", 1000);
+    private String enabledAnalyses = "moving objects and streaks";
     private final SkyCatalogueModel emptySkyCatalogue = new SkyCatalogueModel();
     private SkyCatalogueModel subscribedSkyCatalogue;
     private final Runnable correctionChanged = this::refreshWorkflowStatus;
@@ -326,6 +330,9 @@ public class MainApplicationPanel extends JPanel {
         lastReportButton.addActionListener(e -> openLastReport());
         detectColumn.add(Box.createVerticalStrut(2));
         detectColumn.add(lastReportButton);
+        outputFolderButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+        outputFolderButton.setVisible(false);
+        detectColumn.add(outputFolderButton);
         JPanel detectBody = new JPanel();
         detectBody.setLayout(new BoxLayout(detectBody, BoxLayout.X_AXIS));
         detectBody.setOpaque(false);
@@ -349,7 +356,13 @@ public class MainApplicationPanel extends JPanel {
                 + "<br>(including variable-star photometry) need monochrome frames. Import the converted mono folder to use them.</html>");
         JPanel topArea = new JPanel(new BorderLayout());
         topArea.add(workflowStrip, BorderLayout.CENTER);
-        topArea.add(colourNotice, BorderLayout.SOUTH);
+        JPanel notices = new JPanel();
+        notices.setLayout(new BoxLayout(notices, BoxLayout.Y_AXIS));
+        analysisScope.setBorder(BorderFactory.createEmptyBorder(0, UiStyle.space(12), UiStyle.space(6), UiStyle.space(12)));
+        analysisScope.getAccessibleContext().setAccessibleName("Analysis plan and frame scope");
+        notices.add(analysisScope);
+        notices.add(colourNotice);
+        topArea.add(notices, BorderLayout.SOUTH);
         add(topArea, BorderLayout.NORTH);
         refreshWorkflowStatus();
 
@@ -750,7 +763,28 @@ public class MainApplicationPanel extends JPanel {
             }
         }
         updateAutoTuneTooltip();
+        refreshAnalysisScope();
         refreshCommands();
+    }
+
+    /** Updates the configured analyses after settings apply, without committing editor text during selection changes. */
+    void showEnabledAnalyses(String enabled) {
+        enabledAnalyses = enabled;
+        refreshAnalysisScope();
+    }
+
+    /** Makes whole-run versus selected-frame behavior visible before any processing starts. */
+    private void refreshAnalysisScope() {
+        int frames = table == null ? 0 : table.getRowCount();
+        int selected = table == null ? 0 : table.getSelectedRowCount();
+        analysisScope.setVisible(frames > 0);
+        if (frames == 0) return;
+        String scopes = "Blink: " + selected + " selected frames · Preview: sequence from "
+                + (selected == 0 ? "the first frame" : "the selected frame") + " · " + AnalysisScopeText.autoTune(frames, selected);
+        analysisScope.setText("<html><b>Run:</b> all " + frames + " imported frames · " + enabledAnalyses
+                + "<br>" + scopes + "</html>");
+        analysisScope.setToolTipText("Analyses use current settings; report-category choices only affect export. "
+                + "Auto-Tune's configured candidate limit still applies. Manual Transient Inspection runs a new analysis.");
     }
 
     /**
@@ -857,8 +891,10 @@ public class MainApplicationPanel extends JPanel {
     private void updateAutoTuneTooltip() {
         int frames = table == null ? 0 : table.getRowCount();
         String saved = frames == 0 ? null : savedAutoTuneLine();
-        autoTuneAction.setDescription(saved == null ? AUTO_TUNE_TOOLTIP
-                : AUTO_TUNE_TOOLTIP.replace("</html>", "<br>" + saved + ". A click measures the frames again.</html>"));
+        int selected = table == null ? 0 : table.getSelectedRowCount();
+        String scope = frames == 0 ? "" : "<br>" + AnalysisScopeText.autoTune(frames, selected) + ".";
+        autoTuneAction.setDescription(AUTO_TUNE_TOOLTIP.replace("</html>", scope
+                + (saved == null ? "" : "<br>" + saved + ". A click measures the frames again.") + "</html>"));
     }
 
     /** Right-click menu on the frame table for the actions on selected frames. */
@@ -1558,6 +1594,7 @@ public class MainApplicationPanel extends JPanel {
         if (mainAppWindow.getSession() != null) mainAppWindow.getSession().setLastReport(report);
         if (report == null) {
             lastReportButton.setVisible(false);
+            outputFolderButton.setVisible(false);
             return;
         }
         java.time.LocalDateTime written = java.time.LocalDateTime.ofInstant(
@@ -1567,6 +1604,28 @@ public class MainApplicationPanel extends JPanel {
                 + (SessionReports.isIterative(report) ? " (iterative)" : "") + "</html>");
         lastReportButton.setToolTipText(report.getAbsolutePath());
         lastReportButton.setVisible(true);
+        outputFolderButton.setToolTipText(report.getAbsoluteFile().getParent());
+        outputFolderButton.setVisible(true);
+    }
+
+    /** Opens the current session's completed output directory without starting or changing any analysis. */
+    private void openOutputFolder() {
+        File report = mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getLastReport();
+        File directory = SessionReports.outputDirectory(report);
+        if (directory == null) {
+            statusLabel.setText("The last report or its output folder was moved or deleted.");
+            showLastReport(null);
+            return;
+        }
+        try {
+            if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+                statusLabel.setText("Output folder: " + directory.getAbsolutePath());
+                return;
+            }
+            Desktop.getDesktop().open(directory);
+        } catch (IOException | RuntimeException failure) {
+            statusLabel.setText("Cannot open output folder: " + directory.getAbsolutePath() + " · " + failure.getMessage());
+        }
     }
 
     private void openLastReport() {

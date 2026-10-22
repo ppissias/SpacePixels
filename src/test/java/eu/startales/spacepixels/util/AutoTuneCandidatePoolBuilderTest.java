@@ -5,13 +5,33 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 /**
  * Covers the deterministic selection contract for the auto-tune candidate pool.
  */
 public class AutoTuneCandidatePoolBuilderTest {
+
+    /** The request selection and displayed policy agree at the minimum, and array edits cannot alter a captured job. */
+    @Test public void selectedPoolFallsBackUntilTheMinimumAndSnapshotsOnlyTheArray() {
+        FitsFileInformation[] imported = new FitsFileInformation[8];
+        FitsFileInformation[] small = new FitsFileInformation[3];
+        FitsFileInformation[] sufficient = new FitsFileInformation[4];
+        imported[0] = new FitsFileInformation("imported.fit", "imported.fit", true, 100, 100);
+        sufficient[0] = new FitsFileInformation("selected.fit", "selected.fit", true, 100, 100);
+        assertFalse(AutoTuneCandidatePoolBuilder.usesSelectedFrames(3));
+        assertTrue(AutoTuneCandidatePoolBuilder.usesSelectedFrames(4));
+        FitsFileInformation[] fallback = AutoTuneCandidatePoolBuilder.inputFrames(imported, small);
+        assertEquals(8, fallback.length);
+        assertSame(imported[0], fallback[0]);
+        assertNotSame(imported, fallback);
+        FitsFileInformation[] chosen = AutoTuneCandidatePoolBuilder.inputFrames(imported, sufficient);
+        assertEquals(4, chosen.length);
+        assertSame(sufficient[0], chosen[0]);
+        sufficient[0] = null;
+        assertNotNull(chosen[0]);
+        assertNull(AutoTuneCandidatePoolBuilder.inputFrames(null, small));
+    }
 
     @Test
     public void returnsAllFramesInSequenceOrderWhenPoolIsAlreadySmallEnough() {

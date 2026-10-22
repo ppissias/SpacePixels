@@ -20,6 +20,7 @@ import eu.startales.spacepixels.config.SpacePixelsSettingsFiles;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.DetectionSetting;
 import eu.startales.spacepixels.config.ResidualAnalysisSettings;
+import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
@@ -594,15 +595,8 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private void runAutoTuner(JTransientAutoTuner.AutoTuneProfile selectedProfile, AutoTunerRunner.Algorithm algorithm) {
         FitsFileInformation[] selectedFiles = mainAppWindow.getMainApplicationPanel().getSelectedFilesInformation();
-        FitsFileInformation[] poolToUse;
-
-        if (selectedFiles != null && selectedFiles.length >= SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
-            poolToUse = selectedFiles;
-            DebugOutput.println("Auto-Tuning using user's explicit selection of " + poolToUse.length + " frames.");
-        } else {
-            poolToUse = mainAppWindow.getMainApplicationPanel().getImportedFiles();
-            DebugOutput.println("Auto-Tuning using entire imported sequence.");
-        }
+        FitsFileInformation[] poolToUse = AutoTuneCandidatePoolBuilder.inputFrames(
+                mainAppWindow.getMainApplicationPanel().getImportedFiles(), selectedFiles);
 
         if (poolToUse == null || poolToUse.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
             JOptionPane.showMessageDialog(this,
@@ -1534,6 +1528,7 @@ doubleSpinnerModel(jTransientConfig.streakTimeConsistencyTolerance, 0.0, 1.0, 0.
         if (mainPanel == null) {
             return;
         }
+        mainPanel.showEnabledAnalyses(AnalysisScopeText.analyses(jTransientConfig));
         mainPanel.showActiveDetectionSettings(
                 ((Number) spinDetectionSigma.getValue()).doubleValue(),
                 ((Number) spinGrowSigma.getValue()).doubleValue(),

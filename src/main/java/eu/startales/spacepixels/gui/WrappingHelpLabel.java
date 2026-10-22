@@ -4,6 +4,7 @@ import javax.swing.JLabel;
 import javax.swing.plaf.basic.BasicHTML;
 import javax.swing.text.View;
 import java.awt.Dimension;
+import java.awt.Insets;
 
 /** HTML guidance whose preferred height follows measured content at the available form-column width. */
 final class WrappingHelpLabel extends JLabel {
@@ -32,8 +33,9 @@ final class WrappingHelpLabel extends JLabel {
         }
         View html = (View) getClientProperty(BasicHTML.propertyKey);
         if (html == null) return super.getPreferredSize();
-        html.setSize(width, 0);
-        return new Dimension(width, (int) Math.ceil(html.getPreferredSpan(View.Y_AXIS)));
+        Insets insets = getInsets();
+        html.setSize(Math.max(1, width - insets.left - insets.right), 0);
+        return new Dimension(width, (int) Math.ceil(html.getPreferredSpan(View.Y_AXIS)) + insets.top + insets.bottom);
     }
 
     /** Allows narrow windows to wrap the content rather than enforcing its preferred width. */

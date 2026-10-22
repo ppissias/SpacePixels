@@ -94,6 +94,8 @@ Click **Import Aligned Frames…** (the highlighted button in **1 Prepare**) and
 
 The table lists every frame with its size, time, exposure and whether it is plate-solved. The status lines confirm what SpacePixels found: here *Monochrome, 33 frames* and *33 / 33 solved*. If this folder already has a saved auto-tune, the note under **Auto-Tune Settings** names the profile and when it was run, and the box on the right shows those detection settings. If the frames are in colour, click **Convert to Mono** first; if they are compressed, XISF, 32 bit or signed 16 bit, SpacePixels offers the conversion during import.
 
+The **Run** line below the workflow groups lists the configured analyses and makes their frame scope explicit. Normal detection uses the whole imported sequence; Blink uses the selection; Preview opens the sequence from the selected frame (or the first). Auto-Tune uses a selection of at least four frames, otherwise the whole imported sequence; its candidate-frame limit still applies. Variable-star photometry must also pass its runtime readiness checks. Report-category choices affect exported presentation, while these analysis switches control computation. **Open output folder**, beside **Open last report**, opens the completed report's directory; it never starts detection.
+
 ### Step 2 (optional): plate-solve one frame
 
 If **Solved** says `No`, select one frame and click **Plate Solve Selected** in **2 Astrometry**. One frame is enough, because the frames are aligned. Set up the solver on the **Astrometry Config** tab:

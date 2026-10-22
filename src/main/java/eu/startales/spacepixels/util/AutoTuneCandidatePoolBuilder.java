@@ -35,6 +35,17 @@ public final class AutoTuneCandidatePoolBuilder {
     private AutoTuneCandidatePoolBuilder() {
     }
 
+    /** Whether the explicit selection is large enough to replace the imported sequence as the tuning input. */
+    public static boolean usesSelectedFrames(int selectedFrames) {
+        return selectedFrames >= SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
+    }
+
+    /** Chooses the existing selection/fallback policy and copies only the metadata array for a stable job request. */
+    public static FitsFileInformation[] inputFrames(FitsFileInformation[] imported, FitsFileInformation[] selected) {
+        FitsFileInformation[] chosen = selected != null && usesSelectedFrames(selected.length) ? selected : imported;
+        return chosen == null ? null : chosen.clone();
+    }
+
     /**
      * Progress callback for the pre-tuning candidate-pool preparation stage.
      */

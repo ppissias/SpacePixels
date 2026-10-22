@@ -53,6 +53,9 @@ public class SettingsRowLayoutTest {
             WrappingHelpLabel help = new WrappingHelpLabel("Guidance", 480);
             assertEquals(UiStyle.bodyFont(), help.getFont());
             assertEquals(UiStyle.helpColor(), help.getForeground());
+            int unborderedHeight = help.getPreferredSize().height;
+            help.setBorder(BorderFactory.createEmptyBorder(5, 8, 7, 8));
+            assertTrue(help.getPreferredSize().height >= unborderedHeight + 12);
         });
     }
 

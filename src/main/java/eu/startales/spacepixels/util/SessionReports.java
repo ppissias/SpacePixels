@@ -43,4 +43,11 @@ public final class SessionReports {
         return report != null && report.getParentFile() != null
                 && report.getParentFile().getName().startsWith("iterative_detections_");
     }
+
+    /** Resolves a completed report's output directory, refusing missing reports and detached parent paths. */
+    public static File outputDirectory(File report) {
+        if (report == null || !report.isFile()) return null;
+        File parent = report.getAbsoluteFile().getParentFile();
+        return parent != null && parent.isDirectory() ? parent : null;
+    }
 }
