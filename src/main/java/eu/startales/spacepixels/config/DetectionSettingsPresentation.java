@@ -4,6 +4,11 @@ import io.github.ppissias.jtransient.config.DetectionConfigRules;
 
 import java.util.Map;
 
+/**
+ * Formats shared JTransient rule identifiers and values for SpacePixels settings feedback.
+ * Numeric meanings, applicability and alignment remain in {@link DetectionConfigRules}; this class supplies
+ * only application-owned English titles and explanations for the GUI and compatibility adapter.
+ */
 public final class DetectionSettingsPresentation {
     private static final Map<String, String> TITLES = Map.ofEntries(
             Map.entry("growSigmaMultiplier", "Grow Sigma"), Map.entry("detectionSigmaMultiplier", "Detection Sigma"),
@@ -14,10 +19,23 @@ public final class DetectionSettingsPresentation {
             Map.entry("rhythmStationaryThreshold", "Rhythm Stationary Threshold"), Map.entry("maxJumpPixels", "Max Jump Velocity"),
             Map.entry("qualityGrowSigmaMultiplier", "Quality Grow Sigma"), Map.entry("qualitySigmaMultiplier", "Quality Sigma"));
 
+    /** Prevents instantiation of this stateless presentation utility. */
     private DetectionSettingsPresentation() {}
 
+    /**
+     * Resolves a known settings title, falling back to the field ID for hidden or unmapped settings.
+     *
+     * @param field engine configuration field identifier
+     * @return display title or the unchanged identifier
+     */
     public static String title(String field) { return TITLES.getOrDefault(field, field); }
 
+    /**
+     * Explains a shared finding without redefining its numeric comparison or changing settings.
+     *
+     * @param issue engine-produced diagnostic containing rule, fields and numeric evidence
+     * @return application-facing English explanation
+     */
     public static String issue(DetectionConfigRules.Issue issue) {
         String first = title(issue.fields().getFirst());
         return switch (issue.ruleId()) {
@@ -41,6 +59,14 @@ public final class DetectionSettingsPresentation {
         };
     }
 
+    /**
+     * Describes an applied alignment direction using the caller's formatted replacement value.
+     * Rhythm/jump feedback explicitly identifies the historical GUI policy rather than an engine invariant.
+     *
+     * @param adjustment engine-produced change with direction and related field identifiers
+     * @param value replacement value already formatted for the relevant control
+     * @return concise footer explanation of the applied change
+     */
     public static String adjustment(DetectionConfigRules.Adjustment adjustment, String value) {
         String other = adjustment.relatedFields().stream().filter(field -> !field.equals(adjustment.field())).findFirst().orElse(adjustment.field());
         if (adjustment.ruleId() == DetectionConfigRules.RuleId.RHYTHM_STATIONARY_THRESHOLD) {

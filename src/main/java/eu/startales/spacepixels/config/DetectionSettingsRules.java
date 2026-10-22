@@ -37,6 +37,7 @@ public final class DetectionSettingsRules {
         public final boolean lowersFirst;
         private final DetectionConfigRules.Pair rule;
 
+        /** Resolves the matching engine policy and application titles without defining another numeric rule. */
         Pair() {
             rule = DetectionConfigRules.pairs().stream().filter(pair -> pair.ruleId().name().equals(name())).findFirst().orElseThrow();
             firstTitle = DetectionSettingsPresentation.title(rule.firstField());
@@ -44,6 +45,7 @@ public final class DetectionSettingsRules {
             lowersFirst = rule.direction() == DetectionConfigRules.Direction.LOWER;
         }
 
+        /** Checks the engine-owned ordering policy; numeric validity and applicability are validated separately. */
         public boolean holds(DetectionConfig config) {
             return rule.holds(config);
         }

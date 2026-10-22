@@ -22,7 +22,9 @@ import java.util.Map;
 
 import static org.junit.Assert.*;
 
+/** Drives rule-review choices, hidden-value persistence and legacy pair bindings in an isolated desktop session. */
 public class SharedSettingsRulesMechanicsTest extends MechanicsTestCase {
+    /** Exercises Keep/Align in the real dialog and verifies only explicit alignment changes the saved hidden policy. */
     @Test(timeout = 180_000)
     public void reviewKeepsHiddenValuesUntilExplicitAlignmentAndSavePreservesThem() throws Exception {
         importSyntheticSequence();
@@ -68,6 +70,7 @@ public class SharedSettingsRulesMechanicsTest extends MechanicsTestCase {
         }
     }
 
+    /** Crosses all six bound pairs to verify engine-selected directions and the automatic master-grow sentinel. */
     @Test(timeout = 120_000)
     public void everyLegacyWidgetPairUsesTheEngineAdjustmentDirection() throws Exception {
         importSyntheticSequence();
@@ -88,14 +91,17 @@ public class SharedSettingsRulesMechanicsTest extends MechanicsTestCase {
         });
     }
 
+    /** Finds the currently showing rules dialog without depending on generated component names. */
     private DialogFixture reviewDialog() {
         return WindowFinder.findDialog(new GenericTypeMatcher<>(JDialog.class) {
+            /** Matches only the visible shared-rules dialog, excluding unrelated application dialogs. */
             @Override protected boolean isMatching(JDialog dialog) {
                 return dialog.isShowing() && "Shared settings rules".equals(dialog.getTitle());
             }
         }).using(robot());
     }
 
+    /** Retrieves the diagnostic text area from a dialog subtree, or null when none is present. */
     private static String text(Container root) {
         for (Component component : root.getComponents()) {
             if (component instanceof JTextArea area) return area.getText();
@@ -107,6 +113,7 @@ public class SharedSettingsRulesMechanicsTest extends MechanicsTestCase {
         return null;
     }
 
+    /** Reads a private test binding without exposing widget/configuration internals in the production API. */
     private static <Value> Value field(Object owner, String name, Class<Value> type) {
         try {
             var field = owner.getClass().getDeclaredField(name);

@@ -4,6 +4,8 @@ An onboarding map for developers and agents: how to run SpacePixels, where respo
 
 Update this overview in the same change whenever package responsibilities, entry points, ownership, threading, persistence, development commands or design patterns change. Describe implemented behavior here; keep proposals and acceptance criteria in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md). Check the implementation and build files when older design records disagree.
 
+Document new Java types (including nested types and tests) with their responsibility, and add concise method/constructor Javadocs covering purpose and important ownership, units or compatibility contracts. Update those descriptions with behavior changes. Both repositories' ignored local `AGENTS.md` files carry this instruction; this guide and JTransient's README preserve the convention in version control.
+
 ## Start here
 
 Read any applicable `AGENTS.md` before changing code. Local tool paths, sibling-build requirements and test-data locations can differ between machines. On Windows, consult the machine's `setpaths.bat` as directed there; it changes the working directory, so return to this repository before running project commands.

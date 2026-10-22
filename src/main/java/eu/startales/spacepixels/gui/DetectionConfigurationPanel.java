@@ -1574,6 +1574,7 @@ public class DetectionConfigurationPanel extends JPanel {
         return adjustments;
     }
 
+    /** Shows configuration-only advice and applies reviewed-policy changes only after explicit confirmation. */
     private void reviewRules() {
         DetectionConfig config = checkedSettings("Review did not start.");
         if (config == null) return;

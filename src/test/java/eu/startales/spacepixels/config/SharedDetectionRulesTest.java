@@ -13,7 +13,9 @@ import java.io.StringWriter;
 
 import static org.junit.Assert.*;
 
+/** Verifies that profiles and API requests share engine diagnostics without rewriting accepted legacy settings. */
 public class SharedDetectionRulesTest {
+    /** Compares structured rejection for every double field using NaN and both infinities in complete profiles. */
     @Test
     public void profileAndApiUseTheSameStructuredNumericRules() throws Exception {
         for (var field : DetectionConfig.class.getFields()) {
@@ -34,6 +36,7 @@ public class SharedDetectionRulesTest {
         }
     }
 
+    /** Round-trips hidden values and sentinels, then checks API snapshot independence and advisory diagnostics. */
     @Test
     public void auditedLegacyProfilesRoundTripWithoutSilentScientificChanges() throws Exception {
         DetectionConfig config = new DetectionConfig();
