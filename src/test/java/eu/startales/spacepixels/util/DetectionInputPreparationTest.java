@@ -9,10 +9,15 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class DetectionInputPreparationTest {
@@ -43,6 +48,38 @@ public class DetectionInputPreparationTest {
         assertTrue(preparedDirectory.isInputWasPrepared());
         assertNotEquals(sequenceDirectory.toFile().getCanonicalPath(), preparedDirectory.getPreparedInputDirectory().getCanonicalPath());
         assertDetectionReadyDirectory(preparedDirectory.getPreparedInputDirectory(), FRAME_COUNT);
+    }
+
+    @Test
+    public void aPreparationNamesOnlyAFolderItCreated() throws Exception {
+        Path tempRoot = Files.createTempDirectory("spacepixels-created-folder");
+        Path ready = SyntheticDatasetFactory.createMono16FitsSequence(tempRoot, "mono16", FRAME_COUNT);
+        Path floating = SyntheticDatasetFactory.createMono32FloatFitsSequence(tempRoot, "float32mono", FRAME_COUNT);
+
+        assertNull(DetectionInputPreparation.prepareInputDirectory(ready.toFile(), true, null).getCreatedDirectory());
+        DetectionInputPreparation.PreparedDirectory converted =
+                DetectionInputPreparation.prepareInputDirectory(floating.toFile(), true, null);
+        assertEquals(converted.getPreparedInputDirectory(), converted.getCreatedDirectory());
+    }
+
+    @Test
+    public void aStoppedPreparationRemovesTheFolderItWasWriting() throws Exception {
+        Path tempRoot = Files.createTempDirectory("spacepixels-stopped-preparation");
+        Path sequenceDirectory = SyntheticDatasetFactory.createMono32FloatFitsSequence(tempRoot, "float32mono", FRAME_COUNT);
+        AtomicInteger frames = new AtomicInteger();
+
+        assertThrows(CancellationException.class, () -> DetectionInputPreparation.prepareInputDirectory(
+                sequenceDirectory.toFile(), true, (percentage, message) -> {
+                    // A job stops at its next progress report: here, before the third frame is converted.
+                    if (message.startsWith("Preparing ") && frames.incrementAndGet() == 3) {
+                        throw new CancellationException("stopped");
+                    }
+                }));
+
+        try (Stream<Path> entries = Files.list(sequenceDirectory)) {
+            assertTrue(entries.noneMatch(entry -> entry.getFileName().toString().startsWith("_spacepixels_prepared_mono16_")));
+        }
+        assertEquals("the original frames stay", FRAME_COUNT, sequenceDirectory.toFile().listFiles(File::isFile).length);
     }
 
     @Test

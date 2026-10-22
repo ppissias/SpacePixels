@@ -72,8 +72,22 @@ public final class IterativeDetectionPipelineService {
                     TransientEngineProgressListener progress) throws Exception {
         indexFile = null;
         emit(progress, 0, "Preparing iterative input...");
-        File prepared = DetectionInputPreparation.prepareInputDirectory(request.directory(), request.autoPrepare(),
-                request.keepNegativeValues(), (percent, message) -> emit(progress, percent / 10, message)).getPreparedInputDirectory();
+        DetectionInputPreparation.PreparedDirectory preparation = DetectionInputPreparation.prepareInputDirectory(
+                request.directory(), request.autoPrepare(), request.keepNegativeValues(),
+                (percent, message) -> emit(progress, percent / 10, message));
+        try {
+            return runPrepared(request, preparation.getPreparedInputDirectory(), prompt, progress);
+        } catch (Exception failure) {
+            // A cancelled run that published no index leaves nothing behind, including the copy it converted.
+            if (Cancellation.isCancellation(failure) && indexFile == null) {
+                OutputFolders.deleteUnfinished(preparation.getCreatedDirectory());
+            }
+            throw failure;
+        }
+    }
+
+    private File runPrepared(IterativeDetectionRequest request, File prepared, ReportPrompt prompt,
+                             TransientEngineProgressListener progress) throws Exception {
         FitsFileInformation[] files;
         try (FitsImportService importer = new FitsImportService(prepared, new SessionFrames(), null, null)) {
             files = importer.getFitsfileInformationHeadless();

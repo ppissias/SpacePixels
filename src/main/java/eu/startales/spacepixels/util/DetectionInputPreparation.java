@@ -37,11 +37,22 @@ public final class DetectionInputPreparation {
         private final File originalInputDirectory;
         private final File preparedInputDirectory;
         private final boolean inputWasPrepared;
+        private final File createdDirectory;
 
-        private PreparedDirectory(File originalInputDirectory, File preparedInputDirectory, boolean inputWasPrepared) {
+        private PreparedDirectory(File originalInputDirectory, File preparedInputDirectory, boolean inputWasPrepared,
+                                  File createdDirectory) {
             this.originalInputDirectory = originalInputDirectory;
             this.preparedInputDirectory = preparedInputDirectory;
             this.inputWasPrepared = inputWasPrepared;
+            this.createdDirectory = createdDirectory;
+        }
+
+        /**
+         * The converted copy this preparation created, or null when it created none: ready input, or input whose
+         * only conversion went to the reused XISF folder. A caller may remove it when nothing refers to it.
+         */
+        public File getCreatedDirectory() {
+            return createdDirectory;
         }
 
         public File getOriginalInputDirectory() {
@@ -78,7 +89,7 @@ public final class DetectionInputPreparation {
         FitsSequenceValidator.validateDirectoryExtensions(inputDirectory);
 
         if (!autoPrepare) {
-            return new PreparedDirectory(inputDirectory, inputDirectory, false);
+            return new PreparedDirectory(inputDirectory, inputDirectory, false, null);
         }
 
         emitProgress(progressListener, 0, "Inspecting input directory...");
@@ -92,7 +103,7 @@ public final class DetectionInputPreparation {
         FitsPreparationService.Input[] inputs = FitsPreparationService.inspect(fitsFiles, null, false);
         if (Arrays.stream(inputs).allMatch(FitsPreparationService.Input::detectionReady)) {
             emitProgress(progressListener, 100, "Input directory is already ready for 16-bit monochrome detection.");
-            return new PreparedDirectory(inputDirectory, workingDirectory, inputWasPrepared);
+            return new PreparedDirectory(inputDirectory, workingDirectory, inputWasPrepared, null);
         }
 
         int addedOffset = 0;
@@ -109,17 +120,23 @@ public final class DetectionInputPreparation {
         }
 
         File preparedOutputDirectory = createPreparedOutputDirectory(workingDirectory);
-        for (int fileIndex = 0; fileIndex < fitsFiles.length; fileIndex++) {
-            File fitsFile = fitsFiles[fileIndex];
-            emitProgress(progressListener,
-                    scaleProgress(fileIndex + 1, fitsFiles.length, 75, 100),
-                    "Preparing " + fitsFile.getName() + " for mono 16-bit detection...");
-            File outputFile = new File(preparedOutputDirectory, FitsPreparationService.preparedFilename(fitsFile, ""));
-            FitsPreparationService.standardizeFile(fitsFile, addedOffset, outputFile, null);
+        try {
+            for (int fileIndex = 0; fileIndex < fitsFiles.length; fileIndex++) {
+                File fitsFile = fitsFiles[fileIndex];
+                emitProgress(progressListener,
+                        scaleProgress(fileIndex + 1, fitsFiles.length, 75, 100),
+                        "Preparing " + fitsFile.getName() + " for mono 16-bit detection...");
+                File outputFile = new File(preparedOutputDirectory, FitsPreparationService.preparedFilename(fitsFile, ""));
+                FitsPreparationService.standardizeFile(fitsFile, addedOffset, outputFile, null);
+            }
+        } catch (Exception failure) {
+            // A stopped or failed conversion leaves a partial copy that nothing refers to.
+            OutputFolders.deleteUnfinished(preparedOutputDirectory);
+            throw failure;
         }
 
         emitProgress(progressListener, 100, "Prepared a 16-bit monochrome FITS directory for detection.");
-        return new PreparedDirectory(inputDirectory, preparedOutputDirectory, true);
+        return new PreparedDirectory(inputDirectory, preparedOutputDirectory, true, preparedOutputDirectory);
     }
 
     private static File createPreparedOutputDirectory(File workingDirectory) throws IOException {

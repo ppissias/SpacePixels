@@ -103,6 +103,32 @@ public class IterativeDetectionRunTest {
         assertFalse(new File(service.getIndexFile().getParentFile(), "7_frames").exists());
     }
 
+    @Test public void aCancelledRunWithNoFinishedPassRemovesTheCopyItConverted() throws Exception {
+        File source = SyntheticDatasetFactory.createMono32FloatFitsSequence(folder.getRoot().toPath(), "float-cancel", 9).toFile();
+        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
+                (config, files, app, prompt, progress, output, visualization) -> {
+                    throw new CancellationException();
+                });
+        assertThrows(CancellationException.class, () -> service.run(
+                request(source, new DetectionConfig(), new AppConfig(), new IterativeDetectionPlan(5, 2, 9)), null, null));
+        assertNull(service.getIndexFile());
+        assertEquals("only the original frames stay", 9, source.listFiles().length);
+    }
+
+    @Test public void aCancelledRunThatPublishedAnIndexKeepsTheCopyItLinks() throws Exception {
+        File source = SyntheticDatasetFactory.createMono32FloatFitsSequence(folder.getRoot().toPath(), "float-keep", 9).toFile();
+        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
+                (config, files, app, prompt, progress, output, visualization) -> {
+                    if (files.length == 7) throw new CancellationException();
+                    return completed(output);
+                });
+        assertThrows(CancellationException.class, () -> service.run(
+                request(source, new DetectionConfig(), new AppConfig(), new IterativeDetectionPlan(5, 2, 9)), null, null));
+        String prepared = record(service.getIndexFile()).get("preparedDirectory").getAsString();
+        assertTrue("the index names the converted copy", prepared.startsWith("_spacepixels_prepared_mono16_"));
+        assertTrue(new File(source, prepared).isDirectory());
+    }
+
     @Test public void everyRealPassMatchesAnIndependentNormalRunOnThoseInputs() throws Exception {
         File source = SyntheticDatasetFactory.createSolvedMono16FitsSequence(folder.getRoot().toPath(), "parity", 9).toFile();
         addMovingTargetAndRejectedFrame(source);
