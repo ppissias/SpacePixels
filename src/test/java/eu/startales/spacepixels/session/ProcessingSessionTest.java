@@ -155,6 +155,27 @@ public class ProcessingSessionTest {
     }
 
     @Test
+    public void aSessionThatCannotConfirmItsShutdownDoesNotStopTheHandoverOrTheWindowClosing() throws Exception {
+        // As when a plate-solve client cannot confirm in time that its threads stopped.
+        List<ProcessingSession> closed = new ArrayList<>();
+        SessionOwner owner = new SessionOwner(session -> {
+            closed.add(session);
+            session.close();
+            throw new IllegalStateException("Cannot confirm Astrometry.net client shutdown.");
+        });
+        ApplicationSettings settings = settings();
+        ProcessingSession first = session("first", settings);
+        ProcessingSession second = session("second", settings);
+        assertTrue(owner.replace(null, first));
+        assertTrue("the handover completes", owner.replace(first, second));
+        assertSame(second, owner.current());
+        owner.close();
+        assertNull(owner.current());
+        assertEquals(List.of(first, second), closed);
+        assertTrue(second.isClosed());
+    }
+
+    @Test
     public void closingTheWindowOwnerRejectsEvenAnInitialImportThatFinishesLater() throws Exception {
         SessionOwner owner = new SessionOwner();
         owner.close();

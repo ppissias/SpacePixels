@@ -285,9 +285,13 @@ public class ImageProcessing implements AutoCloseable {
 
     @Override
     public void close() {
-        importService.close();
-        plateSolveService.close();
-        sessionFrames.clear();
+        try {
+            importService.close();
+            plateSolveService.close();
+        } finally {
+            // Also when the plate-solve client cannot confirm in time that it stopped.
+            sessionFrames.clear();
+        }
     }
 
     /**
