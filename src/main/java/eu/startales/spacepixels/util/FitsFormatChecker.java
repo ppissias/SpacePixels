@@ -42,18 +42,22 @@ public class FitsFormatChecker {
 
             boolean isColor = (naxis == 3 && naxis3 >= 3);
 
-            if (bitpix == 16) {
-                return isColor ? FitsFormat.COLOR_16BIT : FitsFormat.MONO_16BIT;
-            } else if (bitpix == 32) {
-                return isColor ? FitsFormat.COLOR_32BIT_INT : FitsFormat.MONO_32BIT_INT;
-            } else if (bitpix == -32) {
-                return isColor ? FitsFormat.COLOR_32BIT_FLOAT : FitsFormat.MONO_32BIT_FLOAT;
-            }
-
+            return format(bitpix, isColor);
         } catch (Exception e) {
             if (DebugOutput.isEnabled()) {
                 e.printStackTrace();
             }
+        }
+        return FitsFormat.UNSUPPORTED;
+    }
+
+    static FitsFormat format(int bitpix, boolean isColor) {
+        if (bitpix == 16) {
+            return isColor ? FitsFormat.COLOR_16BIT : FitsFormat.MONO_16BIT;
+        } else if (bitpix == 32) {
+            return isColor ? FitsFormat.COLOR_32BIT_INT : FitsFormat.MONO_32BIT_INT;
+        } else if (bitpix == -32) {
+            return isColor ? FitsFormat.COLOR_32BIT_FLOAT : FitsFormat.MONO_32BIT_FLOAT;
         }
         return FitsFormat.UNSUPPORTED;
     }

@@ -75,9 +75,12 @@ final class FitsPixelConverter {
 
     /** True for the layout the detection reads directly: 16-bit integers stored as unsigned (BZERO 32768, BSCALE 1). */
     static boolean isUnsigned16Bit(Header header) {
-        return header.getIntValue("BITPIX", 0) == 16
-                && header.getDoubleValue("BZERO", 0.0) == 32768.0
-                && header.getDoubleValue("BSCALE", 1.0) == 1.0;
+        return isUnsigned16Bit(header.getIntValue("BITPIX", 0), header.getDoubleValue("BZERO", 0.0),
+                header.getDoubleValue("BSCALE", 1.0));
+    }
+
+    static boolean isUnsigned16Bit(int bitpix, double bzero, double bscale) {
+        return bitpix == 16 && bzero == 32768.0 && bscale == 1.0;
     }
 
     /** Whether the stored values can stand for pixels below zero once BZERO and BSCALE are applied. */

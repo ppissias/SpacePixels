@@ -40,7 +40,8 @@ public class DependencyRulesTest {
 
     @Test
     public void fitsImportAndBatchServicesDoNotDependOnSwingOrTheWindow() throws IOException {
-        for (String file : List.of("FitsImportService", "FitsBatchService", "FitsImportInteraction", "FitsFiles", "FitsImages")) {
+        for (String file : List.of("FitsImportService", "FitsBatchService", "FitsImportInteraction", "FitsFiles", "FitsImages",
+                "FitsPreparationService", "DetectionInputPreparation", "FitsSequenceValidator", "FitsFormatChecker")) {
             assertNoReferences("util/" + file + ".java", "eu.startales.spacepixels.gui.", "javax.swing.", "java.awt.");
         }
     }

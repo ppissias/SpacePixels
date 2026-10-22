@@ -1,12 +1,5 @@
 package eu.startales.spacepixels.util;
 
-import nom.tam.fits.BasicHDU;
-import nom.tam.fits.Fits;
-import nom.tam.fits.Header;
-import nom.tam.fits.HeaderCard;
-import nom.tam.image.compression.hdu.CompressedImageHDU;
-import nom.tam.util.Cursor;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
@@ -50,56 +43,28 @@ final class FitsSequenceValidator {
         }
     }
 
-    static void validate(File[] files) throws Exception {
-        validateExtensions(files);
-        FitsFileInformation[] metadata = new FitsFileInformation[files.length];
-        int[] referenceAxes = null;
-        int referenceBitpix = 0;
-        double referenceBzero = 0.0;
-        double referenceBscale = 1.0;
-        boolean referenceCompressed = false;
-        for (int position = 0; position < files.length; position++) {
-            File file = files[position];
-            try (Fits fits = new Fits(file)) {
-                BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
-                int[] axes = hdu == null ? null : hdu.getAxes();
-                if (axes == null || !(axes.length == 2 || (axes.length == 3 && axes[0] == 3))
-                        || Arrays.stream(axes).anyMatch(axis -> axis <= 0)) {
-                    throw new IOException("Expected a monochrome or three-channel FITS image: " + file.getName());
-                }
-                Header header = hdu.getHeader();
-                int bitpix = header.getIntValue("BITPIX", 0);
-                // Part of the sample type: 16-bit data with BZERO 0 is signed, with BZERO 32768 unsigned.
-                double bzero = header.getDoubleValue("BZERO", 0.0);
-                double bscale = header.getDoubleValue("BSCALE", 1.0);
-                boolean compressed = false;
-                for (int hduIndex = 0; hduIndex < fits.getNumberOfHDUs(); hduIndex++) {
-                    BasicHDU<?> originalHdu = fits.getHDU(hduIndex);
-                    compressed |= originalHdu instanceof CompressedImageHDU
-                            || originalHdu.getHeader().getBooleanValue("ZIMAGE", false);
-                }
-                if (position == 0) {
-                    referenceAxes = axes;
-                    referenceBitpix = bitpix;
-                    referenceBzero = bzero;
-                    referenceBscale = bscale;
-                    referenceCompressed = compressed;
-                } else if (bitpix != referenceBitpix || bzero != referenceBzero || bscale != referenceBscale
-                        || !Arrays.equals(axes, referenceAxes) || compressed != referenceCompressed) {
-                    throw new IOException("All imported FITS files must have the same type, dimensions and compression. "
-                            + file.getName() + " (" + describe(axes, bitpix, bzero, bscale, compressed) + ") differs from "
-                            + files[0].getName() + " (" + describe(referenceAxes, referenceBitpix, referenceBzero,
-                            referenceBscale, referenceCompressed) + ").");
-                }
-                FitsFileInformation information = new FitsFileInformation(file.getAbsolutePath(), file.getName(),
-                        axes.length == 2, axes[axes.length - 1], axes[axes.length - 2]);
-                Cursor<String, HeaderCard> cards = header.iterator();
-                while (cards.hasNext()) {
-                    HeaderCard card = cards.next();
-                    information.getFitsHeader().put(card.getKey(), card.getValue());
-                }
-                metadata[position] = information;
+    static void validateInputs(FitsPreparationService.Input[] inputs) throws IOException {
+        if (inputs.length == 0) return;
+        FitsPreparationService.Input reference = inputs[0];
+        FitsFileInformation[] metadata = new FitsFileInformation[inputs.length];
+        for (int position = 0; position < inputs.length; position++) {
+            FitsPreparationService.Input input = inputs[position];
+            int[] axes = input.axes();
+            if (axes == null || !(axes.length == 2 || (axes.length == 3 && axes[0] == 3))
+                    || Arrays.stream(axes).anyMatch(axis -> axis <= 0)) {
+                throw new IOException("Expected a monochrome or three-channel FITS image: " + input.information().getFileName());
             }
+            if (input.bitpix() != reference.bitpix() || input.bzero() != reference.bzero()
+                    || input.bscale() != reference.bscale() || !Arrays.equals(axes, reference.axes())
+                    || input.compressed() != reference.compressed()) {
+                throw new IOException("All imported FITS files must have the same type, dimensions and compression. "
+                        + input.information().getFileName() + " ("
+                        + describe(axes, input.bitpix(), input.bzero(), input.bscale(), input.compressed())
+                        + ") differs from " + reference.information().getFileName() + " ("
+                        + describe(reference.axes(), reference.bitpix(), reference.bzero(), reference.bscale(),
+                        reference.compressed()) + ").");
+            }
+            metadata[position] = input.information();
         }
         validateTiming(metadata);
         validateExposures(metadata);

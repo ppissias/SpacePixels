@@ -4,6 +4,7 @@ import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 import nom.tam.fits.*;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.logging.Logger;
 
 /** FITS derivative operations; no window, dialogs, preferences or session cache. */
@@ -198,57 +199,25 @@ final class FitsBatchService {
         File targetDir = null;
         for (int fileIndex = 0; fileIndex < files.length; fileIndex++) {
             File file = files[fileIndex];
-            final int percent = (int) (((float) fileIndex / files.length) * 100);
+            int percent = (int) (((float) fileIndex / files.length) * 100);
             if (progress != null) progress.onProgressUpdate(percent, "Converting " + file.getName() + "...");
-
             LOGGER.info("Converting file to standard 16-bit: " + file.getName());
-
-            // --- DEBUG: Print Original File ---
             printFitsDebugInfo("ORIGINAL", file);
 
-            try (Fits originalFits = new Fits(file)) {
-                BasicHDU<?> imageHDU = FitsImages.getImageHDU(originalFits);
-                Header origHeader = imageHDU.getHeader();
-                Object kernel = imageHDU.getKernel();
-
-                if (isColor) {
-                    // 1. Convert to 16-bit Color
-                    short[][][] color16 = FitsPixelConverter.standardizeTo16BitColor(kernel, origHeader, addedOffset);
-                    Fits colorFits = FitsPixelConverter.createFitsFromData(color16, origHeader, addedOffset);
-                    String colorName = addDirectory(file, "_16bit_color");
-                    writeFitsWithSuffix(colorFits, colorName, "_16bit_color");
-
-                    // --- DEBUG: Print Converted Color File ---
-                    String finalColorPath = colorName.substring(0, colorName.lastIndexOf(".")) + "_16bit_color.fit";
-                    printFitsDebugInfo("CONVERTED 16-BIT COLOR", new File(finalColorPath));
-
-                    // 2. Extract Luminance to 16-bit Mono
-                    short[][] mono16 = FitsPixelConverter.extractLuminance(color16);
-                    Fits monoFits = FitsPixelConverter.createFitsFromData(mono16, origHeader, addedOffset);
-
-                    // Note: No manual header hacking needed here anymore!
-                    // createFitsFromData safely handles NAXIS and NAXIS3 automatically.
-                    String monoName = addDirectory(file, "_16bit_mono");
-                    if (targetDir == null) targetDir = new File(monoName).getParentFile();
-                    writeFitsWithSuffix(monoFits, monoName, "_16bit_mono");
-
-                    // --- DEBUG: Print Converted Luminance File ---
-                    String finalLuminancePath = monoName.substring(0, monoName.lastIndexOf(".")) + "_16bit_mono.fit";
-                    printFitsDebugInfo("CONVERTED 16-BIT LUMINANCE", new File(finalLuminancePath));
-
-                } else {
-                    // Convert to 16-bit Mono
-                    short[][] mono16 = FitsPixelConverter.standardizeTo16BitMono(kernel, origHeader, addedOffset);
-                    Fits monoFits = FitsPixelConverter.createFitsFromData(mono16, origHeader, addedOffset);
-                    String monoName = addDirectory(file, "_16bit_converted");
-                    if (targetDir == null) targetDir = new File(monoName).getParentFile();
-                    writeFitsWithSuffix(monoFits, monoName, "_16bit");
-
-                    // --- DEBUG: Print Converted Mono File ---
-                    String finalMonoPath = monoName.substring(0, monoName.lastIndexOf(".")) + "_16bit.fit";
-                    printFitsDebugInfo("CONVERTED 16-BIT MONO", new File(finalMonoPath));
-                }
+            File monoDirectory = new File(file.getParentFile(), isColor ? "_16bit_mono" : "_16bit_converted");
+            Files.createDirectories(monoDirectory.toPath());
+            File monoOutput = new File(monoDirectory,
+                    FitsPreparationService.preparedFilename(file, isColor ? "_16bit_mono" : "_16bit"));
+            File colorOutput = null;
+            if (isColor) {
+                File colorDirectory = new File(file.getParentFile(), "_16bit_color");
+                Files.createDirectories(colorDirectory.toPath());
+                colorOutput = new File(colorDirectory, FitsPreparationService.preparedFilename(file, "_16bit_color"));
             }
+            FitsPreparationService.standardizeFile(file, addedOffset, monoOutput, colorOutput);
+            if (colorOutput != null) printFitsDebugInfo("CONVERTED 16-BIT COLOR", colorOutput);
+            printFitsDebugInfo(isColor ? "CONVERTED 16-BIT LUMINANCE" : "CONVERTED 16-BIT MONO", monoOutput);
+            if (targetDir == null) targetDir = monoDirectory;
         }
         return targetDir;
     }
