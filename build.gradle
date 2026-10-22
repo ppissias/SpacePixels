@@ -335,8 +335,15 @@ publishing {
 
 tasks.register('validateCentralReleaseConfiguration') {
     group = 'publishing'
-    description = 'Checks signing credentials and developer metadata before Central staging.'
+    description = 'Checks published library dependencies, signing credentials and developer metadata before Central staging.'
+    // A POM built against a local checkout can name a library version that Central does not have.
+    def localLibraryBuilds = gradle.includedBuilds.collect { it.name }.findAll { it in ['JTransient', 'JPlateSolve'] }
     doLast {
+        if (localLibraryBuilds) {
+            throw new GradleException("A Central bundle must be built against published libraries, but ${localLibraryBuilds.join(' and ')} " +
+                    'come from local checkouts. Rerun with -PuseLocalJTransientBuild=false -PuseLocalJPlateSolveBuild=false; ' +
+                    'if a required library version does not resolve, publish it first.')
+        }
         if (!signingConfigured) {
             throw new GradleException('Central bundle generation requires signing credentials. Set signingKey/signingPassword ' +
                     'or signing.keyId/signing.password/signing.secretKeyRingFile.')
