@@ -232,6 +232,10 @@ Common-motion filtering precedes optional local rescue and activity clustering a
 
 `SpacePixelsPipelineApi.run(...)` throws `SpacePixelsPipelineException` when input preparation, validation, Auto-Tune, pipeline execution, or report generation fails.
 
+Request construction snapshots an explicitly supplied `DetectionConfig` with JTransient's `DetectionConfigRules.Operation.CONFIGURATION`. Non-finite numbers, including hidden/disabled settings, throw `DetectionConfigRules.InvalidConfigurationException` from `build()`, before `run`; its `issues()` contain rule, stage and field identifiers. Profile loading uses the same validation and wraps this exception as an `IOException` cause. Finite legacy profiles and sentinels are not silently aligned or newly rejected.
+
+Call `DetectionConfigRules.validate(config, operation[, timing])` for advisory issues, or explicitly request `align` and inspect its adjustments before building a request. Engine execution validates only the captured operation's read set; GUI spinner ranges are not extra API restrictions. SpacePixels uses detached `tuneSnapshot` results, including unsuccessful tuning fallbacks. Configuration warnings are available from the shared validator, not a new pipeline-result warnings property. See JTransient's [configuration contract](../JTransient/PIPELINE.md#configuration-snapshots-and-shared-rules).
+
 Example: 
 
 ```java

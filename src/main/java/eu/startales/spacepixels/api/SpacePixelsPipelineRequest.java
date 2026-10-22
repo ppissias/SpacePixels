@@ -10,6 +10,7 @@ package eu.startales.spacepixels.api;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.config.DetectionConfigRules;
 import eu.startales.spacepixels.util.AutoTunerRunner;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 
@@ -37,7 +38,8 @@ public final class SpacePixelsPipelineRequest {
 
     private SpacePixelsPipelineRequest(Builder builder) {
         this.inputDirectory = builder.inputDirectory;
-        this.detectionConfig = builder.detectionConfig == null ? null : builder.detectionConfig.clone();
+        this.detectionConfig = builder.detectionConfig == null ? null
+                : DetectionConfigRules.snapshot(builder.detectionConfig, DetectionConfigRules.Operation.CONFIGURATION);
         this.autoTuneProfile = builder.autoTuneProfile;
         this.autoTuneAlgorithm = builder.autoTuneAlgorithm;
         this.autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.normalizeAutoTuneMaxCandidateFrames(builder.autoTuneMaxCandidateFrames);

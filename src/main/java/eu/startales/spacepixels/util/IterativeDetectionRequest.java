@@ -3,6 +3,7 @@ package eu.startales.spacepixels.util;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.config.DetectionConfigRules;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner.AutoTuneProfile;
 
 import java.io.File;
@@ -14,9 +15,7 @@ public record IterativeDetectionRequest(File directory, DetectionConfig config, 
                                        boolean autoPrepare, boolean keepNegativeValues, int expectedFrameCount) {
     public IterativeDetectionRequest {
         Objects.requireNonNull(directory);
-        config = Objects.requireNonNull(config).clone();
-        java.util.List<String> problems = eu.startales.spacepixels.config.DetectionSettingsRules.problems(config);
-        if (!problems.isEmpty()) throw new IllegalArgumentException("Invalid detection settings: " + problems.getFirst());
+        config = DetectionConfigRules.snapshot(config, DetectionConfigRules.Operation.CONFIGURATION);
         appConfig = Objects.requireNonNull(appConfig).copy();
         Objects.requireNonNull(visualization);
         Objects.requireNonNull(plan);

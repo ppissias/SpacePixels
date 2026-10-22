@@ -72,11 +72,11 @@ public final class AutoTunerRunner {
             int originalSampleSize = JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE;
             JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = Math.min(originalSampleSize, candidateFrames.size());
             try {
-                return JTransientAutoTuner.tune(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
+                return JTransientAutoTuner.tuneSnapshot(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
             } finally {
                 JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE = originalSampleSize;
             }
         }
-        return CalibratedAutoTuner.tune(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
+        return CalibratedAutoTuner.tuneSnapshot(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
     }
 }

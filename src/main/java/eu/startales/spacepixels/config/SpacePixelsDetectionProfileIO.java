@@ -14,6 +14,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import eu.startales.spacepixels.util.StagedFile;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.config.DetectionConfigRules;
 
 import java.io.File;
 import java.io.IOException;
@@ -54,6 +55,11 @@ public final class SpacePixelsDetectionProfileIO {
         DetectionConfig detectionConfig = GSON.fromJson(root, DetectionConfig.class);
         if (detectionConfig == null) {
             throw new IOException("Configuration file did not contain a DetectionConfig object.");
+        }
+        try {
+            detectionConfig = DetectionConfigRules.snapshot(detectionConfig, DetectionConfigRules.Operation.CONFIGURATION);
+        } catch (DetectionConfigRules.InvalidConfigurationException failure) {
+            throw new IOException("Invalid detection profile: " + failure.getMessage(), failure);
         }
 
         int autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;

@@ -1,12 +1,12 @@
 package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.AppConfig;
-import eu.startales.spacepixels.config.DetectionSettingsRules;
 import eu.startales.spacepixels.session.SessionFrames;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import eu.startales.spacepixels.util.reporting.IterativeDetectionIndex;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.config.DetectionConfigRules;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
@@ -92,8 +92,7 @@ public final class IterativeDetectionPipelineService {
             tuneReport = tuned.telemetry();
             passStart = 30;
         }
-        List<String> problems = DetectionSettingsRules.problems(config);
-        if (!problems.isEmpty()) throw new IllegalArgumentException("Invalid iterative detection settings: " + problems.getFirst());
+        config = DetectionConfigRules.snapshot(config, DetectionConfigRules.Operation.CONFIGURATION);
         return runPasses(config, files, request.appConfig(), request.visualization(), request.plan(),
                 request.directory(), prepared, request.autoTuneProfile(), tuneLimit, tuneReport, prompt, progress, passStart);
     }

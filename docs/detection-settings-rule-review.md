@@ -1,10 +1,30 @@
 # Detection settings: field and dependency review
 
-Reviewed 2026-10-21 against SpacePixels `4d8da29` and the adjacent JTransient checkout `6c3f34d` (declared version `1.0.5`, also pinned by SpacePixels). This is a source review, not a real-data experiment or verification of a published binary. No numerical rules, defaults or processing behaviour are changed by this review.
+Original source review: 2026-10-21 against SpacePixels `4d8da29` and adjacent JTransient `6c3f34d` (declared `1.0.5`, also pinned by SpacePixels). That review alone changed no processing. The implementation decisions and validation below supersede its proposed status; the original evidence/inventory remains historical context, not a description of today's missing features or verification of a published binary.
 
-This document records evidence and recommendations for [D10 / shared settings rules](../DESIGN-IMPROVEMENTS.md#d10-describe-settings-and-engine-compatibility-once-with-typed-boundaries). That plan remains the work queue; the recommendations here are proposed, not accepted implementation decisions.
+This document records evidence and resolution for JA-01 and [D10 / shared settings rules](../DESIGN-IMPROVEMENTS.md#d10-describe-settings-and-engine-compatibility-once-with-typed-boundaries). JA-01's shared-rules integration is implemented; D10's typed application bindings and release-pair validation remain separate work.
 
-## Scope and interpretation
+## Implementation decisions: JA-01 (2026-10-22)
+
+JTransient `DetectionConfigRules` owns metadata for all **107 fields**, validation and explicit alignment. Issues identify rule, severity, stage, fields and values. Adjustments identify the changed/related fields, direction and old/new values. SpacePixels only binds controls, parses/focuses editor text and formats messages; its old rules class is a deprecated compatibility adapter. Profiles, API and iterative requests apply the same finite-number rules. Engine/tuner entry points capture private snapshots before progress/workers; new `tuneSnapshot` APIs detach fallbacks while legacy `tune` preserves its fallback alias contract.
+
+| Finding | Implemented decision |
+|---|---|
+| Scalar domains | Non-finite values consumed by an operation are errors. Persisted `CONFIGURATION` requires every numeric field finite. Other domain findings are advisory; existing finite profiles stay accepted. Metadata preserves types/defaults and covers every hidden field. |
+| Operation/stage scope | Validate shared preparation and enabled stages actually read; calibrated tuning has its own `CALIBRATION` read set, legacy tuning uses `AUTO_TUNE`. Overridden detection settings and unused quality/rejection settings do not block tuning. Unknown timing gives conditional geometric advice. |
+| Existing six pairs | Numeric comparisons and directions move into JTransient. `LEGACY_GUI` preserves automatic widget behavior, including disabled preferences and the historical rhythm/jump policy. Direct engine calls do not auto-align. |
+| Quality grow / limited amplitude | Warn without rewriting profiles. **Review rules… → Align listed changes** explicitly lowers hidden quality grow or raises limited amplitude through `REVIEWED_CONSISTENCY`. Keep settings preserves them. |
+| Geometric jitter / jump | Warn only for geometric linking or missing/unknown timestamps; equality stays accepted. Do not choose new jitter or jump values. |
+| Positive photometry cap too small | Warn below `max(linearityMinStars, MIN_ENSEMBLE_STARS)` (10). Preserve nonpositive uncapped values and optional plane-fit fallback; never increase a cap or lower readiness thresholds automatically. |
+| Aperture / annulus geometry | `PhotometryGeometry` shares the existing 1 px aperture floor, fixed apertures through 2.5 FWHM, 1 px inner clearance and 2 px sky width. Guide/measurement, selection, frame-detection inner crossings and track/slow-mover outer crossings use effective geometry. `adjustments(config, fwhm)` exposes structured configured/effective pixel values; factors stay unchanged. This does not add a new report UI. |
+| Rhythm / raw jump | A new actual-linker regression accepts 1.2 px stationary threshold above a 1 px raw cap after pruning 10/10.8/11.3/12.3 into 10/10.8/12.3. Therefore it is advisory, not a universal precondition, and excluded from reviewed alignment. The separate legacy GUI policy remains for compatibility. |
+| Redundancy / dataset readiness | Anomaly subsumption and dominated integrated pixel floors are informational; harmless default combinations do not produce permanent warnings. Do not invent frame-count, persistence, neighbour-count or independent-image sigma orderings. Prepared-data readiness remains with the existing analyzers, not the configuration dialog. |
+
+Automatic master grow <= 0, disabled nonpositive ratios, uncapped nonpositive photometry caps and nonpositive track defaults survive unchanged. Positive ratios below 1 warn; relative allowances may exceed 1; signed correlations retain -1 to 1. No config field, default, report-inclusion dependency or hidden GUI control is introduced.
+
+**Validation:** 235 JTransient tests and 375 SpacePixels tests (four opt-in skips), all without failures; nine settings/viewer GUI mechanics cases pass. Coverage includes metadata drift, non-finite scope, API/profile equivalence, hidden/sentinel roundtrips, explicit versus legacy alignment, detached tuning success/fallback, a paused operation followed by caller mutation, real geometric pruning, expanded-radius selection/crossings and measured Gaussian flux. On the full 153-frame africano-reg dataset, baseline/rules/geometry/final scientific snapshots match byte for byte (timings excluded, image/mask buffers hashed), SHA-256 `f0b49f2887ffe2a318b52ae288d39ef9f56527401057c363824da54ad69e58f4`. See the [completion record](../docs/archive/design-improvements-completed-2026-10.md#ja-01-shared-settings-rules-and-review-integration-2026-10-22). Local composite sources are validated; unreleased `1.0.5` publication and published-pair certification are not claimed. Preview Frame/Blink navigation and annotations also pass.
+
+## Original source review: scope and interpretation
 
 All **107 instance fields** of JTransient's [DetectionConfig](../../JTransient/src/main/java/io/github/ppissias/jtransient/config/DetectionConfig.java) were inventoried: 75 doubles, 18 integers and 14 booleans. Their consumers were traced through extraction, master preparation, frame quality, tracking, slow movers, residual analysis and photometry. The inventory includes hidden settings. The additional application-owned settings exposed by the panel are covered separately below.
 
@@ -317,7 +337,7 @@ These values are application-owned, outside the 107 engine fields:
 | `trackCropPadding` | Nonnegative export padding; crop/image clipping belongs to rendering context. |
 | `includeAiCreativeReportSections` | Independent report-inclusion preference; no engine-analysis dependency. |
 
-## How this fits the planned shared rules
+## Original implementation recommendations (2026-10-21)
 
 Implementing any proposal belongs to JTransient's JA-01 and SpacePixels D10, following the published engine release. This review does not expand the initial migration of the existing six pairs into an unreviewed rules change.
 

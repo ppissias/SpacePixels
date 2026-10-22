@@ -10,7 +10,8 @@
 
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.config.DetectionSettingsRules;
+import eu.startales.spacepixels.config.DetectionSettingsPresentation;
+import io.github.ppissias.jtransient.config.DetectionConfigRules;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
@@ -135,7 +136,7 @@ public class DetectionConfigurationPanel extends JPanel {
     // The description of each core setting, as the Overview shows it.
     private final Map<JSpinner, String> coreDescriptions = new HashMap<>();
     // The spinners of each pair of settings kept in order: the first, then the second.
-    private final Map<DetectionSettingsRules.Pair, JSpinner[]> pairedSpinners = new EnumMap<>(DetectionSettingsRules.Pair.class);
+    private final Map<DetectionConfigRules.RuleId, JSpinner[]> pairedSpinners = new EnumMap<>(DetectionConfigRules.RuleId.class);
     private final JLabel footerStateLabel = new JLabel(" ");
     private final JLabel footerMessageLabel = new JLabel(" ");
     private final JButton saveButton = new JButton("Save");
@@ -227,6 +228,10 @@ public class DetectionConfigurationPanel extends JPanel {
         footerText.add(footerMessageLabel);
 
         JPanel footerButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        JButton reviewRules = new JButton("Review rules…");
+        reviewRules.setToolTipText("Review shared engine diagnostics and explicitly align supported consistency policies.");
+        reviewRules.addActionListener(event -> reviewRules());
+        footerButtons.add(reviewRules);
         footerButtons.add(revertBtn);
         footerButtons.add(loadDefaultsBtn);
         footerButtons.add(saveButton);
@@ -573,16 +578,16 @@ public class DetectionConfigurationPanel extends JPanel {
 
     /**
      * The spinners of the settings that come in pairs. Every edit is applied through {@link #applySettingsToMemory},
-     * which keeps each pair in order as {@link DetectionSettingsRules.Pair} says and reports what it moved.
+     * which delegates pair alignment to JTransient and reports what it moved.
      */
     private void setupPairs() {
-        pairedSpinners.put(DetectionSettingsRules.Pair.GROW_SIGMA, new JSpinner[]{spinGrowSigma, spinDetectionSigma});
-        pairedSpinners.put(DetectionSettingsRules.Pair.MASTER_GROW_SIGMA, new JSpinner[]{spinMasterGrowSigma, spinMasterSigma});
-        pairedSpinners.put(DetectionSettingsRules.Pair.SLOW_MOVER_GROW_SIGMA, new JSpinner[]{spinMasterSlowMoverGrowSigma, spinMasterSlowMoverSigma});
-        pairedSpinners.put(DetectionSettingsRules.Pair.SLOW_MOVER_AXIS_RATIO, new JSpinner[]{spinSlowMoverMinAxisRatio, spinSlowMoverMaxAxisRatio});
-        pairedSpinners.put(DetectionSettingsRules.Pair.MEDIAN_MASK_OVERLAP,
+        pairedSpinners.put(DetectionConfigRules.RuleId.GROW_SIGMA, new JSpinner[]{spinGrowSigma, spinDetectionSigma});
+        pairedSpinners.put(DetectionConfigRules.RuleId.MASTER_GROW_SIGMA, new JSpinner[]{spinMasterGrowSigma, spinMasterSigma});
+        pairedSpinners.put(DetectionConfigRules.RuleId.SLOW_MOVER_GROW_SIGMA, new JSpinner[]{spinMasterSlowMoverGrowSigma, spinMasterSlowMoverSigma});
+        pairedSpinners.put(DetectionConfigRules.RuleId.SLOW_MOVER_AXIS_RATIO, new JSpinner[]{spinSlowMoverMinAxisRatio, spinSlowMoverMaxAxisRatio});
+        pairedSpinners.put(DetectionConfigRules.RuleId.MEDIAN_MASK_OVERLAP,
                 new JSpinner[]{spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction});
-        pairedSpinners.put(DetectionSettingsRules.Pair.RHYTHM_STATIONARY_THRESHOLD, new JSpinner[]{spinRhythmStatThresh, spinMaxJump});
+        pairedSpinners.put(DetectionConfigRules.RuleId.RHYTHM_STATIONARY_THRESHOLD, new JSpinner[]{spinRhythmStatThresh, spinMaxJump});
     }
 
     private void runAutoTuner(JTransientAutoTuner.AutoTuneProfile selectedProfile, AutoTunerRunner.Algorithm algorithm) {
@@ -757,7 +762,7 @@ public class DetectionConfigurationPanel extends JPanel {
     /**
      * The detection settings for a save or a run starting now: a copy of the session settings, hidden settings
      * included, so later edits cannot change that run. When a field holds invalid text or the settings break a rule
-     * of {@link DetectionSettingsRules}, nothing is copied: this tab shows why, starting with {@code refusedAction}
+     * of the shared engine rules, nothing is copied: this tab shows why, starting with {@code refusedAction}
      * (for example "Detect Moving Targets did not start."), the cursor goes into the field, and the result is null.
      */
     DetectionConfig checkedSettings(String refusedAction) {
@@ -771,14 +776,17 @@ public class DetectionConfigurationPanel extends JPanel {
             return null;
         }
         List<String> adjustments = applySettingsToMemory();
-        List<String> problems = DetectionSettingsRules.problems(jTransientConfig);
+        List<DetectionConfigRules.Issue> issues = DetectionConfigRules.validate(jTransientConfig, DetectionConfigRules.Operation.CONFIGURATION);
+        List<DetectionConfigRules.Issue> problems = issues.stream().filter(issue -> issue.severity() == DetectionConfigRules.Severity.ERROR).toList();
         if (!problems.isEmpty()) {
             mainAppWindow.getTabbedPane().setSelectedComponent(this);
-            showFooterNote(refusedAction + " " + problems.get(0), true);
+            showFooterNote(refusedAction + " " + DetectionSettingsPresentation.issue(problems.getFirst()), true);
             return null;
         }
         if (!adjustments.isEmpty()) {
             showFooterNote(String.join(" · ", adjustments));
+        } else if (issues.stream().anyMatch(issue -> issue.severity() == DetectionConfigRules.Severity.WARNING)) {
+            showFooterNote("Settings have advisory warnings. Use Review rules… for details.");
         }
         return jTransientConfig.clone();
     }
@@ -1541,20 +1549,61 @@ public class DetectionConfigurationPanel extends JPanel {
 
     /** Puts each pair of settings back in order by moving the one its rule names, and says what was moved. */
     private List<String> normalizeDependentSpinners() {
-        List<String> adjustments = new ArrayList<>();
-        for (Map.Entry<DetectionSettingsRules.Pair, JSpinner[]> entry : pairedSpinners.entrySet()) {
-            DetectionSettingsRules.Pair pair = entry.getKey();
-            JSpinner first = entry.getValue()[0];
-            JSpinner second = entry.getValue()[1];
-            double firstValue = ((Number) first.getValue()).doubleValue();
-            double secondValue = ((Number) second.getValue()).doubleValue();
-            if (firstValue > secondValue) {
-                JSpinner moved = pair.lowersFirst ? first : second;
-                moved.setValue(pair.lowersFirst ? secondValue : firstValue);
-                adjustments.add(pair.adjustment(formatSpinnerValue(moved)));
+        DetectionConfig draft = jTransientConfig.clone();
+        Map<String, JSpinner> bindings = new LinkedHashMap<>();
+        for (DetectionConfigRules.Pair pair : DetectionConfigRules.pairs()) {
+            JSpinner[] inputs = pairedSpinners.get(pair.ruleId());
+            if (inputs == null) continue;
+            bindings.put(pair.firstField(), inputs[0]);
+            bindings.put(pair.secondField(), inputs[1]);
+        }
+        try {
+            for (Map.Entry<String, JSpinner> entry : bindings.entrySet()) {
+                DetectionConfig.class.getField(entry.getKey()).setDouble(draft, ((Number) entry.getValue().getValue()).doubleValue());
             }
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Engine rule fields do not match their GUI bindings", failure);
+        }
+        List<String> adjustments = new ArrayList<>();
+        for (DetectionConfigRules.Adjustment change : DetectionConfigRules.align(draft, DetectionConfigRules.Operation.CONFIGURATION).adjustments()) {
+            JSpinner moved = bindings.get(change.field());
+            if (moved == null) throw new IllegalStateException("No GUI binding for aligned field " + change.field());
+            moved.setValue(change.newValue().doubleValue());
+            adjustments.add(DetectionSettingsPresentation.adjustment(change, formatSpinnerValue(moved)));
         }
         return adjustments;
+    }
+
+    private void reviewRules() {
+        DetectionConfig config = checkedSettings("Review did not start.");
+        if (config == null) return;
+        List<DetectionConfigRules.Issue> issues = DetectionConfigRules.validate(config, DetectionConfigRules.Operation.CONFIGURATION);
+        DetectionConfigRules.Alignment aligned = DetectionConfigRules.align(config, DetectionConfigRules.Operation.CONFIGURATION,
+                DetectionConfigRules.AlignmentPolicy.REVIEWED_CONSISTENCY);
+        String diagnostics = issues.isEmpty() ? "No configuration-only issues. Dataset readiness is checked during analysis."
+                : String.join("\n\n", issues.stream().map(issue -> issue.severity() + " / " + issue.stage() + " / " + issue.ruleId() + ": "
+                        + DetectionSettingsPresentation.issue(issue) + "\nFields: " + String.join(", ", issue.fields())).toList());
+        String proposed = aligned.adjustments().isEmpty() ? ""
+                : "\n\nOptional changes (not yet applied):\n" + String.join("\n", aligned.adjustments().stream()
+                        .map(change -> DetectionSettingsPresentation.title(change.field()) + ": " + change.oldValue() + " → " + change.newValue()).toList())
+                + "\n\nOnly these changes will be applied. Star caps, jitter and persisted annulus factors are not changed.";
+        JTextArea text = new JTextArea(diagnostics + proposed, 17, 68);
+        text.setEditable(false);
+        text.setLineWrap(true);
+        text.setWrapStyleWord(true);
+        if (aligned.adjustments().isEmpty()) {
+            JOptionPane.showMessageDialog(this, new JScrollPane(text), "Shared settings rules", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        int choice = JOptionPane.showOptionDialog(this, new JScrollPane(text), "Shared settings rules",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null,
+                new Object[]{"Align listed changes", "Keep settings"}, "Keep settings");
+        if (choice != 0) return;
+        jTransientConfig = aligned.config();
+        updateSpinnersFromConfig(jTransientConfig);
+        applySettingsToMemory();
+        updateSavedState();
+        showFooterNote("Reviewed consistency changes applied in memory; Save keeps them for the next start.");
     }
 
     private void commitAllSpinners() {

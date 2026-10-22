@@ -584,6 +584,8 @@ Changes apply as soon as you make them. A run uses the settings as they are when
 
 In most sessions you only need Auto-Tune and the profile. Change single settings when a report shows a specific problem; the tooltip of each setting explains what it does.
 
+**Review rules…** explains advisory conflicts, including quality-grow thresholds, a star cap too small for photometry, and a limited-readiness amplitude below the ordinary minimum. **Keep settings** leaves these preferences unchanged. **Align listed changes** applies only the changes listed in the dialog, in memory; Save persists them. It does not change star caps, measured jitter or configured annulus factors. Warnings do not stop a run, and the dialog cannot predict whether a particular dataset has enough usable stars, frames or timestamps. The original paired-control adjustments still apply while you edit; rhythm/jump alignment is a legacy GUI policy, not a universal engine requirement.
+
 ---
 
 ## 9. Tips and troubleshooting

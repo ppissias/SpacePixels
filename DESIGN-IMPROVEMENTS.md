@@ -36,7 +36,7 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 | ID | Priority | Status | Improvement | First useful result |
 |---|---|---|---|---|
 | D09 | Medium | Proposed | Complete the analysis/report separation | Display changes reuse prepared diagnostics and stable finding identities. |
-| D10 | Medium | Proposed | Typed settings metadata and engine integration | A setting's identity and rules are not maintained in several unrelated lists. |
+| D10 | Medium | Proposed; JA-01 shared-rules slice complete | Typed settings bindings and engine compatibility | A setting's identity and rules are not maintained in several unrelated lists. |
 | D11 | Medium | Proposed | A clearer analysis workflow and persistent results | Users see what will run and can reopen its results without another detection. |
 | D12 | Medium | Proposed | Shared visual rules and adaptable layout | Longer descriptions and larger fonts fit without fixed-height clipping. |
 | D13 | Medium | Proposed | Keyboard and assistive-technology access | Visible links, settings inputs and viewer controls are reachable and named. |
@@ -67,12 +67,9 @@ If supporting several engine versions is a real requirement, isolate capability/
 
 [AutoTunerRunner](src/main/java/eu/startales/spacepixels/util/AutoTunerRunner.java) temporarily changes a legacy engine static, and the API documents a concurrency restriction. Keep that restriction visible in application admission policy. An eventual engine-instance option would be a separate JTransient proposal, not a GUI-only refactor.
 
-**Open from D05: one set of rules.** Profile loading and the API do not apply `DetectionSettingsRules` yet. JTransient's JA-01 (direction agreed 2026-10-20) moves the finite-number checks and the six pair rules into a shared JTransient rules service. SpacePixels then consumes it and keeps only the presentation: titles, sentences and the field to focus. The settings tab and Preview Frame need these back from the service:
-- the direction of each adjustment;
-- a rule identifier;
-- the field identifiers.
+**Completed from D05 / JA-01 (2026-10-22): one set of rules.** GUI, profiles, API and iterative requests consume JTransient `DetectionConfigRules`; it owns all 107 field definitions and numeric relationships. Issues/adjustments identify rule/stage/fields, direction and old/new values. SpacePixels keeps parsing/focus, binding, titles and English messages; the deprecated adapter contains no duplicate numeric definitions. Preview Frame uses the existing shared models. See the [completion record](docs/archive/design-improvements-completed-2026-10.md#ja-01-shared-settings-rules-and-review-integration-2026-10-22).
 
-**Additional rule proposals.** The [field and dependency review](docs/detection-settings-rule-review.md) covers all 107 `DetectionConfig` fields and the panel's application settings. Consider quality grow/seed consistency, geometric jitter/jump conflicts, photometry cap/readiness conflicts, consistent effective aperture/annulus geometry and the limited-readiness amplitude policy. Keep cross-image sigma thresholds independent, distinguish redundancy and dataset readiness from invalid configurations, and review the scope of the existing rhythm/jump pair. These are proposals for JA-01/D10, with compatibility decisions and validation required before changing any rule.
+The [field and dependency review](docs/detection-settings-rule-review.md#implementation-decisions-ja-01-2026-10-22) now records implemented decisions: advisory quality-grow, geometric jitter/jump, photometry cap and limited-amplitude findings; explicit reviewed alignment; shared effective pixel geometry; and preservation of independent image thresholds, sentinels and accepted finite profiles. Rhythm/jump remains a legacy GUI policy, not an engine rejection rule. Typed setting bindings, capability handling, richer dataset-readiness feedback and published-pair release validation remain D10/JA-11 work.
 
 **Acceptance.** Moving a setting between existing sections does not require editing unrelated string/index lists. UI and API validation use the intended shared rules, hidden values survive, unsupported settings are not falsely shown as applied, and release builds test the dependency pair they distribute.
 
@@ -171,14 +168,13 @@ The [architecture adoption review](docs/archive/design-improvements-completed-20
 
 ## Engine changes that need SpacePixels work
 
-Pending items of the [JTransient plan](../JTransient/DESIGN-IMPROVEMENTS.md) that SpacePixels must follow with its own change. The agreed JA-01 direction and partially implemented JA-02/JA-03 are distinguished there. The completed local cancellation integration is recorded in the [D04 archive](docs/archive/design-improvements-completed-2026-10.md#d04-engine-cancellation-and-viewer-lifecycle-2026-10-21).
+Pending items of the [JTransient plan](../JTransient/DESIGN-IMPROVEMENTS.md) that SpacePixels must follow with its own change. JA-01's shared-rules integration is [completed](docs/archive/design-improvements-completed-2026-10.md#ja-01-shared-settings-rules-and-review-integration-2026-10-22); JA-02/JA-03 remain partially implemented. The completed local cancellation integration is recorded in the [D04 archive](docs/archive/design-improvements-completed-2026-10.md#d04-engine-cancellation-and-viewer-lifecycle-2026-10-21).
 - **Order.** Develop engine changes first against the local sibling checkout, as configured in `gradle.properties` and documented in `AGENTS.md`. Before distribution, publish and declare the supported JTransient release and validate the published-dependency build. The new cancellation API currently requires the companion local JTransient changes.
 - **Compatibility.** Preserve existing engine entry points and saved data formats. New application integrations must name the engine release that supplies them before distribution; local composite validation is not published-pair validation.
 - **Checking.** Every engine slice is checked on the reference datasets on both sides, comparing base and change with the same profile.
 
 | JTransient item | SpacePixels work | Belongs to |
 |---|---|---|
-| JA-01 shared validation and alignment rules (direction agreed 2026-10-20) | Replace `config.DetectionSettingsRules` with the engine's validate and align. The settings tab's auto-apply (`normalizeDependentSpinners`), `checkedSettings` and Preview Frame apply the returned adjustments and keep their own titles and sentences. Apply the same validation to profile loading and the API, which D05 left open | D10 |
 | JA-02 execution and resource ownership | SpacePixels creates an engine per run and shuts it down when the call returns; follow the agreed contract of one operation per engine. Process-wide admission stays the job coordinator's (D02). | D02, D04 |
 | JA-04 tuning options and diagnostics per operation | `AutoTunerRunner` stops changing the static `JTransientAutoTuner.AUTO_TUNE_SAMPLE_SIZE`. Remove the API's rule against concurrent legacy auto-tunes in one JVM ([API.md](API.md)) only once both sides support it. `DebugOutput.applyToEngine` moves from the engine's static debug switches to a per-run diagnostic sink | D10, S14 |
 | JA-05 frame identity | The report reads the engine's `frameIndex` in several places: `CatalogueComparisonWriter`, `ClaudePerspectiveSectionWriter`, and the rejected frames in `StarMaskExplorerFrame`. When the engine names the retained position and the original sequence index separately, update each reader and compare the reports | D09 |

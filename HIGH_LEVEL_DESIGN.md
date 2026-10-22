@@ -87,7 +87,8 @@ Owns:
 - `SpacePixelsVisualizationPreferencesIO`
 - `SpacePixelsSettingsFiles` (Save on the detection settings tab)
 - `SettingsStorage` (application-owned, ordered background preference writes and migration)
-- `DetectionSettingsRules` (finite numbers and the ordered pairs of settings; checked by the detection settings tab, not yet by profile loading or the API)
+- `DetectionSettingsPresentation` (application titles/messages for shared JTransient issues and adjustments)
+- `DetectionSettingsRules` (deprecated presentation adapter for the original rules; numeric definitions live in JTransient `DetectionConfigRules`)
 
 The detection profile wraps JTransient `DetectionConfig` plus SpacePixels' Auto-Tune candidate-frame limit. Visualization preferences are intentionally separate because they do not affect detection results.
 
@@ -323,10 +324,11 @@ Owns:
 - the per-frame thresholds that Preview Frame edits on this tab's spinner models (`perFrameDetectionSettings()`), and the copy of the settings in use it detects each frame with (`settingsInUse()`)
 - Auto-Tune launch through `AutoTuneTask`
 - applying every edit to the session right away, the unsaved-changes indicator, and Revert to the last saved state
-- keeping the pairs of `DetectionSettingsRules` in order while applying an edit, and saying in the footer which setting it moved
+- binding paired controls to JTransient rule IDs, consuming `LEGACY_GUI` alignment while applying an edit, and explaining the returned changes in the footer
+- **Review rules…**, configuration-only diagnostics and explicit `REVIEWED_CONSISTENCY` alignment for the additional policies, including hidden quality grow
 - `checkedSettings(...)`, the one step behind Save and every run: Detect Moving Targets, Detect Iteratively, Manual Transient Inspection, Preview Frame, Auto-Tune and Test Star Mask
 
-`checkedSettings` returns a copy of the session `DetectionConfig` (hidden settings included), so editing the tab while a run works cannot change that run. It returns null instead, and nothing starts, while a field holds invalid text or the settings break a rule (for example a hidden setting loaded as NaN). The tab then comes forward, the footer names the action that did not start and what to enter, and the cursor goes into the field; `SettingsNavigator.reveal` shows a setting hidden by the filters or the expert switch with a search for its title. A setting whose feature is switched off is hidden and unused, so its text does not stop a run.
+`checkedSettings` returns a copy of the session `DetectionConfig` (hidden settings included), so editing the tab while a run works cannot change that run. It returns null instead while an applicable editor holds invalid text or shared validation reports an error. Invalid editor text is focused through `SettingsNavigator.reveal`; backend errors are explained in the footer. Advisory issues do not block Save or execution. A setting whose feature is switched off is hidden and unused, so its editor text does not stop a run; persisted numeric configuration still must be finite. Profile loading and API/iterative request construction use the same engine validator. The engine captures and validates its own operation-scoped snapshot, so callers outside SpacePixels receive the same structured errors without Swing dependencies.
 
 Design notes:
 
