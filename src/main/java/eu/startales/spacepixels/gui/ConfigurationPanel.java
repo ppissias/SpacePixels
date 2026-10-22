@@ -11,6 +11,7 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.util.AstrometryNetAccount;
 import eu.startales.spacepixels.util.FitsFileInformation;
 
 import javax.swing.*;
@@ -24,11 +25,14 @@ import java.io.File;
 import java.net.URI;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * The Astrometry Config tab: the ASTAP solver and the observing site used to identify objects in the report.
+ * The Astrometry Config tab: the ASTAP solver, the Astrometry.net account, and the observing site used to identify
+ * objects in the report.
  * Edits apply to the session as soon as they are valid; Save keeps them for the next start.
  */
 public class ConfigurationPanel extends JPanel {
@@ -50,6 +54,13 @@ public class ConfigurationPanel extends JPanel {
 
     private final JLabel astapPathLabel = new JLabel("Not set");
     private final JLabel astapStatusLabel = new JLabel(" ");
+    private final JRadioButton astrometryAnonymousButton = new JRadioButton("Anonymous");
+    private final JRadioButton astrometryOwnKeyButton = new JRadioButton("My API key");
+    private final JPasswordField astrometryKeyField = new JPasswordField();
+    private final JButton astrometryCheckButton = new JButton("Check");
+    private final JLabel astrometryStatus = statusLabel();
+    /** The running login check; null when none runs. */
+    private SwingWorker<Void, Void> astrometryCheck;
     private final JTextField observatoryCodeTextField = new JTextField();
     private final JTextField latTextField = new JTextField();
     private final JTextField longTextField = new JTextField();
@@ -68,6 +79,8 @@ public class ConfigurationPanel extends JPanel {
     private String savedLat = "";
     private String savedLong = "";
     private String savedAstap = "";
+    private boolean savedAstrometryUseOwnKey;
+    private String savedAstrometryApiKey = "";
     private double savedStarDepth;
     private long saveVersion;
     /** True while the fields are filled from the configuration, so the fill is not treated as an edit. */
@@ -115,6 +128,32 @@ public class ConfigurationPanel extends JPanel {
                         + "database (D50 is a good choice for most setups), installed next to the program. "
                         + "The <b>Astrometry.net (online)</b> option needs no installation; images are submitted as private.",
                 astapControl));
+
+        ButtonGroup astrometryAccount = new ButtonGroup();
+        astrometryAccount.add(astrometryAnonymousButton);
+        astrometryAccount.add(astrometryOwnKeyButton);
+        astrometryAnonymousButton.setSelected(true);
+        astrometryKeyField.setEnabled(false);
+        astrometryKeyField.setPreferredSize(new Dimension(CONFIG_TEXT_FIELD_WIDTH, CONFIG_TEXT_FIELD_HEIGHT));
+        astrometryKeyField.setMaximumSize(new Dimension(CONFIG_TEXT_FIELD_WIDTH, CONFIG_TEXT_FIELD_HEIGHT));
+        astrometryCheckButton.setToolTipText("Log in to Astrometry.net with this account. Nothing is uploaded.");
+        JPanel astrometryChoiceRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        astrometryChoiceRow.add(astrometryAnonymousButton);
+        astrometryChoiceRow.add(Box.createHorizontalStrut(14));
+        astrometryChoiceRow.add(astrometryOwnKeyButton);
+        JPanel astrometryKeyRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        astrometryKeyRow.add(astrometryKeyField);
+        astrometryKeyRow.add(Box.createHorizontalStrut(6));
+        astrometryKeyRow.add(astrometryCheckButton);
+
+        mainContent.add(createConfigRow(
+                "Astrometry.net Account",
+                "Used by <b>Plate Solve Selected</b> with the <b>Astrometry.net (online)</b> option. <b>Anonymous</b> needs "
+                        + "no account. With <b>My API key</b>, your uploads also show up on your Astrometry.net profile. "
+                        + "To get a key, sign in at nova.astrometry.net: the key is in the <b>My Profile</b> section of the "
+                        + "dashboard. SpacePixels keeps it in plain text in <code>spacepixels_app.json</code> in your home "
+                        + "folder. <b>Check</b> logs in without uploading anything.",
+                verticalStack(astrometryChoiceRow, verticalStack(astrometryKeyRow, astrometryStatus))));
 
         // --- SKY CATALOGUE ---
         mainContent.add(createSectionHeader("Sky Catalogue (Annotate)"));
@@ -182,6 +221,25 @@ public class ConfigurationPanel extends JPanel {
 
         // --- LISTENERS ---
         astapPathButton.addActionListener(e -> chooseAstap());
+        astrometryAnonymousButton.addActionListener(e -> astrometryAccountChanged());
+        astrometryOwnKeyButton.addActionListener(e -> astrometryAccountChanged());
+        astrometryCheckButton.addActionListener(e -> checkAstrometryNet());
+        astrometryKeyField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                astrometryAccountChanged();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                astrometryAccountChanged();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                astrometryAccountChanged();
+            }
+        });
         onEdit(observatoryCodeTextField, text -> validateObservatoryCode(text), value -> config().observatoryCode = value);
         onEdit(latTextField, text -> validateCoordinate(text, 90, "latitude"), value -> config().siteLat = value);
         onEdit(longTextField, text -> validateCoordinate(text, 180, "longitude"), value -> config().siteLong = value);
@@ -195,6 +253,10 @@ public class ConfigurationPanel extends JPanel {
         try {
             starDepthSpinner.setValue(config.skyCatalogueStarMagnitude());
             starDepthStatus.setText(" ");
+            astrometryOwnKeyButton.setSelected(config.astrometryNetUseOwnKey);
+            astrometryAnonymousButton.setSelected(!config.astrometryNetUseOwnKey);
+            astrometryKeyField.setText(nullToEmpty(config.astrometryNetApiKey));
+            astrometryKeyField.setEnabled(config.astrometryNetUseOwnKey);
             observatoryCodeTextField.setText(nullToEmpty(config.observatoryCode));
             latTextField.setText(nullToEmpty(config.siteLat));
             longTextField.setText(nullToEmpty(config.siteLong));
@@ -205,9 +267,12 @@ public class ConfigurationPanel extends JPanel {
         savedLat = nullToEmpty(config.siteLat);
         savedLong = nullToEmpty(config.siteLong);
         savedAstap = nullToEmpty(config.astapExecutablePath);
+        savedAstrometryUseOwnKey = config.astrometryNetUseOwnKey;
+        savedAstrometryApiKey = nullToEmpty(config.astrometryNetApiKey);
         savedStarDepth = config.skyCatalogueStarMagnitude();
         validateAll();
         checkAstap();
+        showAstrometryAccountNote();
         updateSavedState();
     }
 
@@ -396,6 +461,8 @@ public class ConfigurationPanel extends JPanel {
                 savedLat = nullToEmpty(snapshot.siteLat);
                 savedLong = nullToEmpty(snapshot.siteLong);
                 savedAstap = nullToEmpty(snapshot.astapExecutablePath);
+                savedAstrometryUseOwnKey = snapshot.astrometryNetUseOwnKey;
+                savedAstrometryApiKey = nullToEmpty(snapshot.astrometryNetApiKey);
                 savedStarDepth = snapshot.skyCatalogueStarMagnitude();
             }
             updateSavedState();
@@ -441,6 +508,8 @@ public class ConfigurationPanel extends JPanel {
                 || !nullToEmpty(config().siteLat).equals(savedLat)
                 || !nullToEmpty(config().siteLong).equals(savedLong)
                 || !nullToEmpty(config().astapExecutablePath).equals(savedAstap)
+                || config().astrometryNetUseOwnKey != savedAstrometryUseOwnKey
+                || !nullToEmpty(config().astrometryNetApiKey).equals(savedAstrometryApiKey)
                 || config().skyCatalogueStarMagnitude() != savedStarDepth;
     }
 
@@ -452,6 +521,91 @@ public class ConfigurationPanel extends JPanel {
         config().skyCatalogueStarMagnitude = ((Number) starDepthSpinner.getValue()).doubleValue();
         updateSavedState();
         saveDefaults(false);
+    }
+
+    // ==========================================
+    // ASTROMETRY.NET ACCOUNT
+    // ==========================================
+
+    /** Applies the account choice and the key at once and keeps them for the next start, like the star depth. */
+    private void astrometryAccountChanged() {
+        astrometryKeyField.setEnabled(astrometryOwnKeyButton.isSelected());
+        if (loading) {
+            return;
+        }
+        AppConfig config = config();
+        config.astrometryNetUseOwnKey = astrometryOwnKeyButton.isSelected();
+        config.astrometryNetApiKey = new String(astrometryKeyField.getPassword()).trim();
+        showAstrometryAccountNote();
+        updateSavedState();
+        saveDefaults(false);
+    }
+
+    private void showAstrometryAccountNote() {
+        AppConfig config = config();
+        if (!config.astrometryNetUseOwnKey) {
+            showAstrometryStatus(null, "Online solves log in anonymously.");
+        } else if (config.astrometryNetApiKeyInUse().isEmpty()) {
+            showAstrometryStatus("Enter your key. Until then, online solves log in anonymously.", null);
+        } else {
+            showAstrometryStatus(null, "Online solves use your key.");
+        }
+    }
+
+    /** Logs in to Astrometry.net with the chosen account on a worker thread. Nothing is uploaded. */
+    private void checkAstrometryNet() {
+        if (mainAppWindow.isClosing() || astrometryCheck != null) {
+            return;
+        }
+        AppConfig account = config().copy();
+        String apiKey = account.astrometryNetApiKeyInUse();
+        astrometryCheckButton.setEnabled(false);
+        showAstrometryStatus(null, "Checking with Astrometry.net…");
+        astrometryCheck = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                AstrometryNetAccount.checkLogin(account);
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                if (astrometryCheck != this || mainAppWindow.isClosing()) {
+                    return;
+                }
+                astrometryCheck = null;
+                astrometryCheckButton.setEnabled(true);
+                if (!apiKey.equals(config().astrometryNetApiKeyInUse())) {
+                    // The account changed during the check, so this answer is about the previous one.
+                    showAstrometryAccountNote();
+                    return;
+                }
+                try {
+                    get();
+                    showAstrometryStatus(null, apiKey.isEmpty()
+                            ? "✓ Astrometry.net accepted the anonymous login"
+                            : "✓ Astrometry.net accepted your key");
+                } catch (CancellationException ignored) {
+                    showAstrometryAccountNote();
+                } catch (ExecutionException e) {
+                    Throwable failure = e.getCause() != null ? e.getCause() : e;
+                    showAstrometryStatus(failure.getMessage() != null ? failure.getMessage() : failure.toString(), null);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        };
+        astrometryCheck.execute();
+    }
+
+    /** A login failure can be a long sentence, so the status wraps at the width of the account controls. */
+    private void showAstrometryStatus(String problem, String note) {
+        showStatus(astrometryStatus, problem == null ? null : wrapStatus(problem), note == null ? null : wrapStatus(note));
+    }
+
+    private static String wrapStatus(String text) {
+        String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        return "<html><div style='width: 330px;'>" + escaped + "</div></html>";
     }
 
     // ==========================================
@@ -504,6 +658,11 @@ public class ConfigurationPanel extends JPanel {
 
     void close() {
         astapChecks.close();
+        SwingWorker<Void, Void> check = astrometryCheck;
+        astrometryCheck = null;
+        if (check != null) {
+            check.cancel(true);
+        }
     }
 
     /** Star databases found in the folder, by name (e.g. D50), with their file counts. */

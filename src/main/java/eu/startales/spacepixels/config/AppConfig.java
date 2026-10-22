@@ -5,6 +5,8 @@ public class AppConfig {
         AppConfig copy = new AppConfig();
         copy.variableStarReportOptions = variableStarReportOptions;
         copy.astapExecutablePath = astapExecutablePath;
+        copy.astrometryNetUseOwnKey = astrometryNetUseOwnKey;
+        copy.astrometryNetApiKey = astrometryNetApiKey;
         copy.observatoryCode = observatoryCode;
         copy.imageRA = imageRA;
         copy.imageDEC = imageDEC;
@@ -19,6 +21,10 @@ public class AppConfig {
     /** Supplied by the detection profile/request; excluded from the separate astrometry configuration file. */
     public transient VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
     public String astapExecutablePath = "";
+    /** False (the default): Astrometry.net solves log in anonymously. True: with {@link #astrometryNetApiKey}. */
+    public boolean astrometryNetUseOwnKey = false;
+    /** The observer's own Astrometry.net API key. Kept while solving anonymously, so it can be chosen again. */
+    public String astrometryNetApiKey = "";
     public String observatoryCode = "";
     public String imageRA = "";
     public String imageDEC = "";
@@ -39,5 +45,13 @@ public class AppConfig {
             return skyCatalogueStarMagnitude == 0 ? DEFAULT_SKY_CATALOGUE_STAR_MAGNITUDE : MIN_SKY_CATALOGUE_STAR_MAGNITUDE;
         }
         return Math.min(MAX_SKY_CATALOGUE_STAR_MAGNITUDE, skyCatalogueStarMagnitude);
+    }
+
+    /** The key Astrometry.net solves log in with: the observer's own key, or "" for an anonymous login. */
+    public String astrometryNetApiKeyInUse() {
+        if (!astrometryNetUseOwnKey || astrometryNetApiKey == null) {
+            return "";
+        }
+        return astrometryNetApiKey.trim();
     }
 }

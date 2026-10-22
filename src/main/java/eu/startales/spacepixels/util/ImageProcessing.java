@@ -457,6 +457,14 @@ public class ImageProcessing implements AutoCloseable {
     }
 
     /**
+     * What to tell the user when an online solve fails: a lost connection and a refused login are named, for the
+     * Astrometry.net account in use.
+     */
+    public String astrometryNetFailure(Throwable failure) {
+        return plateSolveService.astrometryNetFailure(failure);
+    }
+
+    /**
      * Copies WCS keywords from a reference FITS file into every file in the active directory and
      * optionally emits stretched derivatives alongside the solved outputs.
      */

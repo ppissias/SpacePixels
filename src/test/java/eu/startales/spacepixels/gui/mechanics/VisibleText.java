@@ -5,6 +5,7 @@ import org.assertj.swing.core.GenericTypeMatcher;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
+import javax.swing.JRadioButton;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import java.awt.Component;
@@ -32,6 +33,15 @@ final class VisibleText {
         return new GenericTypeMatcher<>(JCheckBox.class, true) {
             @Override
             protected boolean isMatching(JCheckBox component) {
+                return text.equals(component.getText());
+            }
+        };
+    }
+
+    static GenericTypeMatcher<JRadioButton> radioButton(String text) {
+        return new GenericTypeMatcher<>(JRadioButton.class, true) {
+            @Override
+            protected boolean isMatching(JRadioButton component) {
                 return text.equals(component.getText());
             }
         };

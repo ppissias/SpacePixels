@@ -13,6 +13,7 @@ import eu.startales.spacepixels.config.AppConfig;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jplatesolve.PlateSolveOperation;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import io.github.ppissias.jplatesolve.astap.ASTAPInterface;
 import io.github.ppissias.jplatesolve.astrometrydotnet.AstrometryDotNet;
 import io.github.ppissias.jplatesolve.astrometrydotnet.SubmitFileRequest;
@@ -28,13 +29,7 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.net.ConnectException;
-import java.net.NoRouteToHostException;
-import java.net.SocketTimeoutException;
 import java.net.URL;
-import java.net.UnknownHostException;
-import java.net.http.HttpTimeoutException;
-import java.nio.channels.UnresolvedAddressException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -83,15 +78,19 @@ final class PlateSolveService implements AutoCloseable {
     };
 
     private final AppConfig appConfig;
-    private final AstrometryDotNet astrometryNetInterface;
+    private final Function<String, AstrometryDotNet> astrometryNetClients;
+    /** The Astrometry.net client for {@link #astrometryNetClientKey}, made at the first online solve. */
+    private AstrometryDotNet astrometryNetInterface;
+    private String astrometryNetClientKey;
 
     PlateSolveService(AppConfig appConfig) {
-        this(appConfig, new AstrometryDotNet());
+        this(appConfig, AstrometryNetAccount::newClient);
     }
 
-    PlateSolveService(AppConfig appConfig, AstrometryDotNet astrometryNetInterface) {
+    /** {@code astrometryNetClients} makes a client for a key; "" is an anonymous login. */
+    PlateSolveService(AppConfig appConfig, Function<String, AstrometryDotNet> astrometryNetClients) {
         this.appConfig = appConfig;
-        this.astrometryNetInterface = astrometryNetInterface;
+        this.astrometryNetClients = astrometryNetClients;
     }
 
     public Future<PlateSolveResult> solve(String path, boolean astap, boolean astrometry) throws FitsException, IOException {
@@ -116,36 +115,35 @@ final class PlateSolveService implements AutoCloseable {
                     .withDownsample_factor(2f)
                     .withRadius(10f)
                     .build();
-            return astrometryNetInterface.startCustomSolve(new File(path), parameters, progress);
+            return astrometryNetClient(appConfig.astrometryNetApiKeyInUse()).startCustomSolve(new File(path), parameters, progress);
         }
         throw new IOException("No plate solver was chosen.");
     }
 
-    @Override
-    public void close() {
-        astrometryNetInterface.close();
+    /** The client for this key. A client made for another key is closed and replaced. */
+    synchronized AstrometryDotNet astrometryNetClient(String apiKey) {
+        if (astrometryNetInterface == null || !apiKey.equals(astrometryNetClientKey)) {
+            close();
+            astrometryNetInterface = astrometryNetClients.apply(apiKey);
+            astrometryNetClientKey = apiKey;
+        }
+        return astrometryNetInterface;
     }
 
-    /**
-     * What to tell the user when Astrometry.net fails. A lost connection often comes without any message, so the
-     * network failures are named by their type; otherwise the first message in the cause chain is used.
-     */
-    static String astrometryNetFailure(IOException failure) {
-        String message = null;
-        Throwable cause = failure;
-        for (int depth = 0; cause != null && depth < 32; depth++, cause = cause.getCause()) {
-            if (cause instanceof ConnectException || cause instanceof UnknownHostException
-                    || cause instanceof NoRouteToHostException || cause instanceof UnresolvedAddressException) {
-                return "Could not reach Astrometry.net (nova.astrometry.net). Check the internet connection.";
-            }
-            if (cause instanceof HttpTimeoutException || cause instanceof SocketTimeoutException) {
-                return "Astrometry.net did not answer in time. Try again later.";
-            }
-            if (message == null && cause.getMessage() != null && !cause.getMessage().isBlank()) {
-                message = cause.getMessage();
-            }
+    /** What to tell the user when an online solve fails, for the account in use. */
+    String astrometryNetFailure(Throwable failure) {
+        return AstrometryNetAccount.failureMessage(failure, !appConfig.astrometryNetApiKeyInUse().isEmpty());
+    }
+
+    /** Closes the Astrometry.net client, if one was made; JPlateSolve cancels and joins its solves. */
+    @Override
+    public synchronized void close() {
+        AstrometryDotNet client = astrometryNetInterface;
+        astrometryNetInterface = null;
+        astrometryNetClientKey = null;
+        if (client != null) {
+            client.close();
         }
-        return "Astrometry.net could not solve the image: " + (message != null ? message : failure.getClass().getSimpleName());
     }
 
     public void applyWCSHeader(String wcsHeaderFile, File[] fitsFileInformation, FitsWriteHandler writeHandler)

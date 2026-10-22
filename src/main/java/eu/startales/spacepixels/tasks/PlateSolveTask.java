@@ -17,6 +17,7 @@ import eu.startales.spacepixels.util.ImageProcessing;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 
 import io.github.ppissias.jplatesolve.PlateSolveOperation;
+import java.io.IOException;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -45,7 +46,15 @@ public class PlateSolveTask implements Job<PlateSolveResult> {
         if (context.isCancelled()) return JobOutcome.cancelled();
         AtomicReference<PlateSolveOperation.Progress> progress = new AtomicReference<>();
         PlateSolveOperation operation = preProcessing.startSolve(filePath, useAstap, useAstrometryNet, progress::set);
-        return awaitSolve(operation, context, progress);
+        if (useAstap || !useAstrometryNet) {
+            return awaitSolve(operation, context, progress);
+        }
+        try {
+            return awaitSolve(operation, context, progress);
+        } catch (Exception failure) {
+            // A lost connection often has no message, and a refused login depends on the account: say which.
+            throw new IOException(preProcessing.astrometryNetFailure(failure), failure);
+        }
     }
 
     static JobOutcome<PlateSolveResult> awaitSolve(PlateSolveOperation operation, JobContext context,
