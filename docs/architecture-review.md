@@ -1,6 +1,8 @@
 # Architecture review: inventory and path traces
 
-This is the working record of the [architecture adoption review](archive/design-improvements-completed-2026-10.md#architecture-adoption-review). It holds the class inventory, the traced paths and the evidence. The open steps the review leads to are in [DESIGN-IMPROVEMENTS.md](../DESIGN-IMPROVEMENTS.md#open-steps-from-the-architecture-review); the finished ones, and the review itself, are archived.
+This is the **historical evidence record** of the [architecture adoption review](archive/design-improvements-completed-2026-10.md#architecture-adoption-review), against the dated commits below. Its class inventory, counts, 'today' path descriptions and proposed steps describe those 2026-10-20 snapshots, not the current application. Preserve them as evidence rather than updating the inventory into another task list.
+
+The current status lives only in the [canonical backlog](../DESIGN-IMPROVEMENTS.md#findings-and-priorities); the [architecture mapping](../DESIGN-IMPROVEMENTS.md#open-steps-from-the-architecture-review) explains its remaining implementation slices. S1–S12 are complete; S13 remains a boundary item and S14–S16 map to D09/D10. The [2026-10-22 consistency review](archive/design-improvements-completed-2026-10.md#plan-consistency-review-2026-10-22) records superseded evidence and current-source checks. Historical acceptance prose here does not reopen completed work or authorize new features.
 
 | Part | Packages | Status |
 |---|---|---|
@@ -10,7 +12,7 @@ This is the working record of the [architecture adoption review](archive/design-
 
 All three parts are done. See [Review summary](#review-summary) at the end.
 
-**Classifications**, as defined in DESIGN-IMPROVEMENTS:
+**Classification terms used in this historical inventory:**
 
 - **retain:** the class fits the target as it is.
 - **move responsibility:** part of what the class does belongs elsewhere.

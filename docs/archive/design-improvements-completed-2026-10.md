@@ -3,6 +3,7 @@
 > Historical record, archived 2026-10-21. These sections were moved out of [DESIGN-IMPROVEMENTS.md](../../DESIGN-IMPROVEMENTS.md) once their work was done, so that the plan holds only pending work and open decisions. They keep the decisions, the evidence and the validation as written at the time, including statements that later changes superseded. Current behaviour is described in [HIGH_LEVEL_DESIGN.md](../../HIGH_LEVEL_DESIGN.md), [DEVELOPER.md](../../DEVELOPER.md) and the [manual](../../MANUAL.md). Where a section names work that was still open when it was archived, that work continues in the plan.
 
 Contents:
+- [Plan consistency review](#plan-consistency-review-2026-10-22) and [historical GUI mechanics draft](#gui-mechanics-planning-snapshot-2026-10-22)
 - [JA-01 shared settings rules and review integration](#ja-01-shared-settings-rules-and-review-integration-2026-10-22)
 - [The 2026-10 review: assessment and scope](#overall-assessment)
 - Findings: [D01](#d01-treat-file-replacement-as-a-shared-application-responsibility), [D02](#d02-give-every-background-job-an-owner-and-an-identity) (the parts done), [D03](#d03-extend-the-viewers-latest-request-wins-rule-to-stretch-previews), [D04](#d04-make-cancellation-failure-and-resource-cleanup-explicit) (the parts done), [D05](#d05-build-a-validated-settings-snapshot-instead-of-reading-a-mutable-panel), [D07](#d07-derive-availability-from-state-and-use-real-command-actions)
@@ -23,6 +24,64 @@ The read-only `EngineCancellationRealDataIT.main` comparison uses all 153 africa
 Validation commands use Java 21 and both local composites: `gradlew.bat check :JTransient:build`, and `gradlew.bat guiMechanicsTest --tests '*SharedSettingsRulesMechanicsTest' --tests '*SettingsMechanicsTest' --tests '*SettingsIoMechanicsTest' --tests '*ViewerMechanicsTest'`. GUI validation uses `JAVA_TOOL_OPTIONS=--add-opens=java.base/java.util=ALL-UNNAMED` for the existing AssertJ monitor. The snapshot harness gets an 8 GB heap and `SPACEPIXELS_CANCELLATION_DATASET=C:/astrodata/Subs/africano-reg` only in its dedicated JVM; leave that variable unset for ordinary tests. Local init scripts redirect JAR output away from running-app locks without changing tracked build files.
 
 Current contracts are in [DEVELOPER.md](../../DEVELOPER.md#settings), [API.md](../../API.md#error-handling) and JTransient [PIPELINE.md](../../../JTransient/PIPELINE.md#configuration-snapshots-and-shared-rules). The engine's [completion record](../../../JTransient/docs/archive/design-improvements-closed-2026-10.md#ja-01-configuration-snapshots-and-shared-rules-2026-10-22) preserves the original decisions/acceptance. Both ignored local sibling flags remain enabled. This source pair uses the unreleased `1.0.5` engine line; no publication or old-binary fallback is claimed. Typed bindings/capability handling (D10), richer dataset readiness and published dependency-pair validation (JA-11) remain separate work.
+
+## Plan consistency review (2026-10-22)
+
+This documentation-only review reconciles the active plan with SpacePixels `f504364`, JTransient `6a410ad`, completion records and focused source/test checks. It does not introduce implementation approval, change scientific behavior or claim a fresh runtime/accessibility audit.
+
+- D09 remains applicable: `DetectionReportGenerator` still measures `FieldDepth`/`NightEquipment` during export, `SessionCatalogue` loads lazily and label/category rules remain distributed.
+- D10 remains applicable only for remaining typed bindings/capabilities/run options: JA-01 shared rules, captured configs, separate settings I/O and background storage are already delivered.
+- D11 remains applicable for unified completed-result access, history/restoration and clearer scope/readiness, not pre-import application preferences or initial overlays. `ApplicationSettings` and session handover exist; Blink consumes cached tracks/candidates and Preview consumes cached variable candidates. Do not rebuild those foundations.
+- D12/D13 remain applicable: fixed description geometry, stable-width/unwrapped progress text, mouse-only links, label associations and deliberate focus constraints still need their own layout/keyboard checks. The progress dialog is not universally 420 px wide, and Preview already has a focused numeric-editing path.
+- S13 remains an independent boundary item. S14 has completed snapshot/context pieces but remaining standard/API/default/static integration. S15/S16 are D09 implementation slices, not three additional feature findings.
+- The GUI coordinator is per window, not a process-wide resource budget for independent API/engine callers. Engine cancellation and one-operation-per-engine integration are complete; remaining JA-02/JA-03 work is resource policy/structured failure context.
+- Basic F09, S1–S12 and D01–D08 stay closed. Deferred/experimental features keep their status. The Java 25 bootstrap suggestion remains an installer exploration, not a change to Java 21 development.
+
+The active plan now has one canonical D/F/S13 backlog, an architecture implementation mapping, a dependency-aware delivery view and a current mechanics source inventory. Historical class counts and 'today' path descriptions stay in [the dated architecture review](../architecture-review.md), clearly marked as evidence rather than another queue. The old GUI testing draft below is retained for its accepted harness decisions and review history; it is not the current coverage/status list.
+
+Validation for the documentation change checks 92 local links/anchors and 15 unique canonical backlog IDs, excluding completed IDs and subordinate S14–S16 rows. References were checked against source; no new processing/GUI execution is claimed. The user's pre-existing UI text edits in `ApplicationWindow` and `DetectionConfigurationPanel` are outside this change and their content hashes remain unchanged.
+
+## GUI mechanics planning snapshot (2026-10-22)
+
+The following was removed from the active plan during consistency review. It contains original 2026-10-20/21 decisions, historical pass statements and then-pending suggestions. Current test classes and gaps are described by [the active verification section](../../DESIGN-IMPROVEMENTS.md#gui-mechanics-tests); completed items mentioned here must not be re-proposed.
+
+### Original test plan and review notes
+
+**Accepted (2026-10-20).** The suite checks the mechanics of the window: every control can be used, settings can be changed and saved, runs can be started, and a load can be cancelled. It does not check detection results. Those stay on `batchDetect` and the real-data tests.
+
+**Driver.** AssertJ Swing on the existing JUnit 4, dependency `tokyo.northside:assertj-swing-junit:4.0.0-beta-3` (Apache 2.0; the maintained Java 21 fork). If that beta misbehaves, `org.assertj:assertj-swing-junit:3.17.1` has the same API. Jemmy, image search and recorders are not used.
+
+**Lookup is the visible text.** Tests match a showing button or label by the words the user sees, such as `Import Aligned Frames…` or `Detection Sigma`. No `setName` is added for the suite. AssertJ's `button(String)` finds a component name, so the tests do not use it for a caption. When two controls share a caption (`Save`, `Detect Moving Targets`), only the one on the selected tab is showing, and the matcher requires that.
+
+**Where it lives.** The tests and their support are in `src/test/java/eu/startales/spacepixels/gui/mechanics/`. `build.gradle` holds the test dependency and the `guiMechanicsTest` task. Run `./gradlew guiMechanicsTest`. That task is not part of `./gradlew test`: it needs a desktop, it moves the mouse, and it runs one test at a time. `./gradlew test` excludes this package and opens no window. The mechanics task runs again even when the classes have not changed, prints each case name, and brings the window to the front of the main display.
+
+**Isolation.** Each test sets `user.home` to a scratch folder before the window is created, and restores it afterwards. Java preferences are not in that folder. The test exports `/eu/startales/spacepixels` (the window placement, the stretch, the blink speed, the auto-tune profile and `showExpertSettings`) and restores that node after the window is gone. The frame's close operation is set to dispose, so closing it does not exit the JVM. Since D04's Cancel, the modal **Processing...** dialog's close box cancels a job that can be cancelled. Plate solving now joins JPlateSolve's cancellable operation. For the WCS write and Blink it still asks to exit SpacePixels, so the suite must not click it there.
+
+**Data.** Synthetic frames from `SyntheticDatasetFactory`. The reference datasets are not opened. The folder chooser is the real one: the test clicks **Import Aligned Frames…**, selects the synthetic folder and approves the chooser. The approve button's own caption follows the operating-system language, so the test uses the chooser's approve action rather than that caption.
+
+**First tests drafted.** `WindowMechanicsTest` covers four cases:
+
+- Before any import, the workflow buttons are present, detection and blink are unavailable, and the prepare line says `No frames imported`.
+- Importing a synthetic monochrome sequence enables the other tabs and shows `Monochrome` with the frame count. The status line then reads `Imported N file(s)` (the session install replaces the job's own `Import finished` text).
+- Changing **Detection Sigma**, pressing **Save**, and opening the window again shows the saved value.
+- **Blink Selected** can be stopped with **Cancel** on the loading card or **Stop Blinking**, and the status line says `Blinking stopped`.
+
+**Stretch.** `StretchMechanicsTest` imports a synthetic sequence and opens Image Stretch. Moving the sliders changes the stretched preview and leaves the linear one. Unticking **Stretch display** makes both previews the linear frame (`Linear (stretch off)`). **Enable batch stretch**, **Next ▶** steps the preview to frame 2, and **Batch Stretch** on the main screen ends at **Stretch Complete**, where the test clicks **OK**. It then checks that the `_stretched` folder holds the five copies. This case passed on 2026-10-21.
+
+**Viewers.** `ViewerMechanicsTest` builds its own solved session (`CRVAL1` and `CTYPE1`, a `sky_catalogue.json` for that field, and a `plate_correction.json`). Import restores the catalogue and does not fetch or start the plate-solution check. **Preview Frame** steps to frame 3 and closes. **Blink Selected** on three frames shows **Show tracks** disabled, because nothing has been detected. **Annotate** toggles, **Correct plate solution** switches on, Pause and **▶** leave the paused frame, and closing the window says `Blinking stopped`. This case passed on 2026-10-21. Clicking **Show tracks** waits for a later test that has run a detection.
+
+**Settings.** `SettingsMechanicsTest` imports a synthetic sequence and opens Detection Settings on the scratch home. **Show expert settings** is turned on and every page is opened. Typing `abc` into **Detection Sigma** and into the expert field **Streak Min Pixels** outlines the field in red and the footer says what to enter; the stored value stays. Changing those two, **Revert** puts them back. Changing them again and **Save** keeps them when the window is opened again. This case passed on 2026-10-21.
+
+**Still to draft.** The settings search and Load Defaults; plate-solve availability; cancelling the sky-catalogue fetch; the iterative frame-limit question; Cancel in the progress dialog (since D04, 2026-10-20), for example for Auto-Tune and a detection run; **Show tracks** after a detection.
+
+**Review notes (Claude, 2026-10-20).** The draft is a good base: lookup by visible text, the scratch home with the preference snapshot, synthetic data and an opt-in task are the right choices. Suggestions, roughly in order of value:
+- **Split availability from wiring after S4.** Once `CommandAvailability` exists, the "which button is enabled when" checks (the first case, Blink with three frames, Convert on colour frames) belong in fast unit tests of the model. Keep one mechanics test per shared command for the wiring: button, shortcut, table menu and Overview button agree, and a shortcut does nothing while its command is unavailable.
+- **Port two scratch-harness checks into the suite.** Both catch regressions that unit tests cannot:
+  - **Preview Frame:** a value typed into a settings field stays in the field ("1" does not zoom), Enter and Esc give the keys back to the frame, and an arrow click leaves them there.
+  - **Report link and Copy details:** **Open last report** appears after importing a folder with reports, and Copy details puts the versions and the error on the clipboard. The clipboard must be saved and restored, as the preferences are.
+- **Cancel is hard to time on synthetic frames:** a detection finishes in about a second. Cancel at a progress message from inside the test instead (the job tests do this without a window). In the window, check that Cancel is shown for a cancellable job and hidden otherwise.
+- **Matching captions.** The **Open last report** link's caption is HTML with the date, so it needs a "contains" matcher. S4 keeps every button caption as it is today, so `VisibleText.button` keeps working.
+- **Speed and robustness.** `pauseForTheEye` adds 1.2 s per test; a system property could turn it off for unattended runs. The robot takes over the mouse for the whole run, which the task description says; a note in the run output to keep hands off the mouse would help.
 
 ## Overall assessment
 
