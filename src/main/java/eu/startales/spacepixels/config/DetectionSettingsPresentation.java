@@ -28,7 +28,10 @@ public final class DetectionSettingsPresentation {
      * @param field engine configuration field identifier
      * @return display title or the unchanged identifier
      */
-    public static String title(String field) { return TITLES.getOrDefault(field, field); }
+    public static String title(String field) {
+        return ResidualAnalysisSettings.all().stream().filter(setting -> setting.id().equals(field))
+                .map(DetectionSetting::title).findFirst().orElseGet(() -> TITLES.getOrDefault(field, field));
+    }
 
     /**
      * Explains a shared finding without redefining its numeric comparison or changing settings.

@@ -20,10 +20,13 @@ import java.util.function.BooleanSupplier;
  */
 final class SettingRow {
     static final String PRESET_CHOOSER = "spacepixels.presetChooser";
+    static final String SETTING_ID = "spacepixels.settingId";
+    static final String EXPERT_SETTING = "spacepixels.expertSetting";
 
     final JPanel parent;
     final JPanel row;
     final String title;
+    final String id;
     final String description;
     final JComponent input;
 
@@ -45,6 +48,7 @@ final class SettingRow {
         this.row = row;
         this.titleLabel = titleLabel;
         this.title = title;
+        this.id = input.getClientProperty(SETTING_ID) instanceof String settingId ? settingId : title;
         this.description = description;
         this.input = input;
         this.normalTitleColor = titleLabel.getForeground();
@@ -104,9 +108,15 @@ final class SettingRow {
     }
 
     boolean matches(String query) {
-        return title.toLowerCase(Locale.ROOT).contains(query)
+        return id.toLowerCase(Locale.ROOT).contains(query) || title.toLowerCase(Locale.ROOT).contains(query)
                 || description.toLowerCase(Locale.ROOT).contains(query)
                 || (section != null && section.title.toLowerCase(Locale.ROOT).contains(query));
+    }
+
+    /** Typed definitions own visibility even if moved under another section; legacy rows inherit their section. */
+    boolean isExpert() {
+        Object declared = input.getClientProperty(EXPERT_SETTING);
+        return declared instanceof Boolean expert ? expert : section != null && section.expert;
     }
 
     void resetToSaved() {

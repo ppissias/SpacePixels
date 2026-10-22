@@ -373,11 +373,11 @@ final class SettingsNavigator extends JPanel {
                     boolean changed = row.isChanged();
                     boolean matches = (query.isEmpty() || row.matches(query)) && (!onlyChanged || changed);
                     boolean applies = row.applies.getAsBoolean();
-                    boolean shown = filtering ? matches : applies && (!section.expert || showExpert);
+                    boolean shown = filtering ? matches : applies && (!row.isExpert() || showExpert);
                     row.row.setVisible(shown);
                     if (shown) {
                         sectionShown++;
-                    } else if (!filtering && applies && section.expert) {
+                    } else if (!filtering && applies && row.isExpert()) {
                         hiddenExpert++;
                         if (changed) {
                             hiddenExpertChanged++;

@@ -18,6 +18,8 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
 import eu.startales.spacepixels.config.SpacePixelsSettingsFiles;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
+import eu.startales.spacepixels.config.DetectionSetting;
+import eu.startales.spacepixels.config.ResidualAnalysisSettings;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
@@ -36,7 +38,6 @@ import java.awt.*;
 import java.io.File;
 import java.io.FileReader;
 import java.io.StringWriter;
-import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -131,6 +132,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private SettingsNavigator navigator;
 
     private final List<SettingRow> settingRows = new ArrayList<>();
+    private final List<DetectionSettingBinding<?>> typedBindings = new ArrayList<>();
     // The title of each number setting, in page order, for the messages about its field.
     private final Map<JSpinner, String> inputTitles = new LinkedHashMap<>();
     // The description of each core setting, as the Overview shows it.
@@ -910,7 +912,7 @@ public class DetectionConfigurationPanel extends JPanel {
                 panel,
                 "Streak Time Consistency Tolerance",
                 "When timestamps are available, this controls how much projected-speed variation the multi-frame streak linker tolerates between sampled frames. Higher values are more permissive for fragmented or faint streak trails.",
-                doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "streakTimeConsistencyTolerance", 0.50), 0.0, 1.0, 0.01));
+doubleSpinnerModel(jTransientConfig.streakTimeConsistencyTolerance, 0.0, 1.0, 0.01));
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Faint Streak Fragments"));
@@ -942,7 +944,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Geometric Linker"));
-        chkEnableGeometricTrackLinking = addCheckboxRow(panel, "Enable Geometric Track Linking", "Enable the geometric (time-agnostic) track linker. May produce false positives. Its settings appear below when it is on.", getOptionalBooleanField(jTransientConfig, "enableGeometricTrackLinking", true));
+        chkEnableGeometricTrackLinking = addCheckboxRow(panel, "Enable Geometric Track Linking", "Enable the geometric (time-agnostic) track linker. May produce false positives. Its settings appear below when it is on.", jTransientConfig.enableGeometricTrackLinking);
         spinMaxJump = addRow(panel, "Max Jump Velocity", "Maximum geometric jump allowed between linked detections. This is only relevant to the geometric moving-object linker.", doubleSpinnerModel(jTransientConfig.maxJumpPixels, 0.0, 10000.0, 0.1));
         spinRhythmVar = addRow(panel, "Allowed Rhythm Variance", "Maximum deviation from the median step size allowed when checking whether a track moves at a steady rate.", doubleSpinnerModel(jTransientConfig.rhythmAllowedVariance, 0.0, 20.0, 0.1));
         spinRhythmMinRatio = addRow(panel, "Min Rhythm Consistency Ratio", "Minimum fraction of jumps that must match the median speed within the allowed variance for the geometric linker to keep the track.", doubleSpinnerModel(jTransientConfig.rhythmMinConsistencyRatio, 0.0, 1.0, 0.01));
@@ -998,6 +1000,7 @@ public class DetectionConfigurationPanel extends JPanel {
         return panel;
     }
 
+    /** Builds the existing residual page from typed definitions without exposing hidden engine controls. */
     private JPanel buildResidualAnalysisPanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
@@ -1006,19 +1009,19 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createTabIntro("Analysis of point transients left after tracks, streaks and standalone anomalies. Common-motion filtering first sets aside compact sources that share a displacement, independently of the residual-analysis switch. Optional residual analysis then looks for weak local rescue candidates and builds activity clusters from the remaining points."));
 
         panel.add(createSectionHeader("Common Settings"));
-        chkEnableResidualTransientAnalysis = addCheckboxRow(panel, "Enable Residual Transient Analysis", "Enables local rescue and activity clustering after common-motion filtering. Common-motion filtering has its own switch and still runs when residual analysis is off.", getOptionalBooleanField(jTransientConfig, "enableResidualTransientAnalysis", true));
-        chkEnableLocalRescueCandidates = addCheckboxRow(panel, "Enable Local Rescue Candidates", "Runs the object-like rescue pass on leftover point detections to surface weak local motion or repeaters that did not become normal tracks.", getOptionalBooleanField(jTransientConfig, "enableLocalRescueCandidates", true));
+        chkEnableResidualTransientAnalysis = addTypedCheckbox(panel, ResidualAnalysisSettings.ENABLE_RESIDUAL);
+        chkEnableLocalRescueCandidates = addTypedCheckbox(panel, ResidualAnalysisSettings.ENABLE_RESCUE);
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Activity Clusters"));
-        chkEnableLocalActivityClusters = addCheckboxRow(panel, "Enable Local Activity Clusters", "After local rescue candidates are removed, groups the remaining leftover detections into broad same-area activity clusters for review. These are not confirmed objects. Their settings appear below when this is on.", getOptionalBooleanField(jTransientConfig, "enableLocalActivityClusters", true));
-        spinLocalActivityClusterRadiusPixels = addRow(panel, "Local Activity Cluster Radius (Pixels)", "Spatial linkage radius used when grouping leftover detections into broad local activity clusters after rescue candidates are consumed.", doubleSpinnerModel(getOptionalDoubleField(jTransientConfig, "localActivityClusterRadiusPixels", 10.0), 0.0, 100.0, 0.5));
-        spinLocalActivityClusterMinFrames = addRow(panel, "Local Activity Cluster Min Frames", "Minimum number of unique frames required before a broad local activity cluster is exported for review.", intSpinnerModel(getOptionalIntField(jTransientConfig, "localActivityClusterMinFrames", 3), 1, 100, 1));
+        chkEnableLocalActivityClusters = addTypedCheckbox(panel, ResidualAnalysisSettings.ENABLE_CLUSTERS);
+        spinLocalActivityClusterRadiusPixels = addTypedDouble(panel, ResidualAnalysisSettings.CLUSTER_RADIUS, 0.0, 100.0, 0.5);
+        spinLocalActivityClusterMinFrames = addTypedInteger(panel, ResidualAnalysisSettings.CLUSTER_FRAMES, 1, 100, 1);
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Common Motion"));
-        chkEnableCommonMotionRejection = addCheckboxRow(panel, "Reject Common Motion", "Before local rescue and activity clustering, sets aside separated compact sources that share one displacement on at least three frames. Matching motion suggests hot pixels or registration residuals; the groups remain visible in the report. Runs independently of the residual-analysis switch. Ambiguous associations and pairs seen in only two frames are kept. The tolerance appears below when this is on.", jTransientConfig.enableCommonMotionRejection);
-        spinCommonMotionShiftTolerance = addRow(panel, "Common Motion Shift Tolerance", "How closely, in pixels, those sources must share the same frame-to-frame displacement. Lower values keep only a tighter match.", doubleSpinnerModel(jTransientConfig.commonMotionShiftTolerance, 0.0, 20.0, 0.1));
+        chkEnableCommonMotionRejection = addTypedCheckbox(panel, ResidualAnalysisSettings.REJECT_COMMON_MOTION);
+        spinCommonMotionShiftTolerance = addTypedDouble(panel, ResidualAnalysisSettings.MOTION_TOLERANCE, 0.0, 20.0, 0.1);
 
         return panel;
     }
@@ -1351,6 +1354,40 @@ public class DetectionConfigurationPanel extends JPanel {
         return checkBox;
     }
 
+    /** Adds a typed boolean row using the same model later shared with the Overview analysis switch. */
+    private JCheckBox addTypedCheckbox(JPanel parent, DetectionSetting<Boolean> setting) {
+        JCheckBox input = new JCheckBox();
+        input.setSelected(setting.read(jTransientConfig));
+        UiStyle.inputWidth(input, 80);
+        addTypedBinding(parent, setting, input, input::isSelected, input::setSelected);
+        return input;
+    }
+
+    /** Binds a double-valued engine field while retaining the existing GUI range and editor behavior. */
+    private JSpinner addTypedDouble(JPanel parent, DetectionSetting<Double> setting, double min, double max, double step) {
+        JSpinner input = createSpinner(doubleSpinnerModel(setting.read(jTransientConfig), min, max, step));
+        addTypedBinding(parent, setting, input, () -> ((Number) input.getValue()).doubleValue(),
+                value -> setSpinnerValueClamped(input, value.doubleValue()));
+        return input;
+    }
+
+    /** Binds an integer-valued engine field without changing the persisted numeric type. */
+    private JSpinner addTypedInteger(JPanel parent, DetectionSetting<Integer> setting, int min, int max, int step) {
+        JSpinner input = createSpinner(intSpinnerModel(setting.read(jTransientConfig), min, max, step));
+        addTypedBinding(parent, setting, input, () -> ((Number) input.getValue()).intValue(),
+                value -> setSpinnerValueClamped(input, value.intValue()));
+        return input;
+    }
+
+    /** Registers identity, disclosure and typed load/apply together so page moves need no separate copy lists. */
+    private <Value> void addTypedBinding(JPanel parent, DetectionSetting<Value> setting, JComponent input,
+            java.util.function.Supplier<Value> current, java.util.function.Consumer<Value> display) {
+        input.putClientProperty(SettingRow.SETTING_ID, setting.id());
+        input.putClientProperty(SettingRow.EXPERT_SETTING, setting.expert());
+        addSettingRow(parent, setting.title(), setting.help(), input);
+        typedBindings.add(new DetectionSettingBinding<>(setting, current, display));
+    }
+
     /** Adds a setting row (title, description, input and reset button) and registers it with the navigator. */
     private void addSettingRow(JPanel parent, String title, String description, JComponent input) {
         JLabel titleLabel = new JLabel(title);
@@ -1399,7 +1436,7 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.streakMinElongation = ((Number) spinStreakMinElong.getValue()).doubleValue();
             jTransientConfig.streakMinPixels = ((Number) spinStreakMinPix.getValue()).intValue();
             jTransientConfig.singleStreakMinPeakSigma = ((Number) spinSingleStreakMinPeakSigma.getValue()).doubleValue();
-            setOptionalDoubleField(jTransientConfig, "streakTimeConsistencyTolerance", ((Number) spinStreakTimeConsistencyTolerance.getValue()).doubleValue());
+            jTransientConfig.streakTimeConsistencyTolerance = ((Number) spinStreakTimeConsistencyTolerance.getValue()).doubleValue();
             jTransientConfig.enableFaintStreakFragments = chkEnableFaintStreakFragments.isSelected();
             jTransientConfig.faintStreakLineTolerance = ((Number) spinFaintStreakLineTolerance.getValue()).doubleValue();
 
@@ -1410,7 +1447,7 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.angleToleranceDegrees = ((Number) spinAngleTol.getValue()).doubleValue();
             jTransientConfig.maxJumpPixels = ((Number) spinMaxJump.getValue()).doubleValue();
             jTransientConfig.strictExposureKinematics = chkStrictExposureKinematics.isSelected();
-            setOptionalBooleanField(jTransientConfig, "enableGeometricTrackLinking", chkEnableGeometricTrackLinking.isSelected());
+            jTransientConfig.enableGeometricTrackLinking = chkEnableGeometricTrackLinking.isSelected();
             jTransientConfig.maxFwhmRatio = ((Number) spinMaxFwhmRatio.getValue()).doubleValue();
             jTransientConfig.maxSurfaceBrightnessRatio = ((Number) spinMaxSurfaceBrightnessRatio.getValue()).doubleValue();
             jTransientConfig.trackMinFrameRatio = ((Number) spinTrackMinFrameRatio.getValue()).doubleValue();
@@ -1426,14 +1463,8 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.anomalyMinIntegratedSigma = ((Number) spinAnomalyMinIntegratedSigma.getValue()).doubleValue();
             jTransientConfig.anomalyMinIntegratedPixels = ((Number) spinAnomalyMinIntegratedPixels.getValue()).intValue();
             jTransientConfig.anomalyMinPeakSigmaFloor = ((Number) spinAnomalyMinPeakSigmaFloor.getValue()).doubleValue();
-            setOptionalBooleanField(jTransientConfig, "enableResidualTransientAnalysis", chkEnableResidualTransientAnalysis.isSelected());
-            setOptionalBooleanField(jTransientConfig, "enableLocalRescueCandidates", chkEnableLocalRescueCandidates.isSelected());
-            setOptionalBooleanField(jTransientConfig, "enableLocalActivityClusters", chkEnableLocalActivityClusters.isSelected());
-            setOptionalDoubleField(jTransientConfig, "localActivityClusterRadiusPixels", ((Number) spinLocalActivityClusterRadiusPixels.getValue()).doubleValue());
-            setOptionalIntField(jTransientConfig, "localActivityClusterMinFrames", ((Number) spinLocalActivityClusterMinFrames.getValue()).intValue());
-            jTransientConfig.enableCommonMotionRejection = chkEnableCommonMotionRejection.isSelected();
+            typedBindings.forEach(binding -> binding.applyTo(jTransientConfig));
             jTransientConfig.enableCameraFixedRejection = chkEnableCameraFixedRejection.isSelected();
-            jTransientConfig.commonMotionShiftTolerance = ((Number) spinCommonMotionShiftTolerance.getValue()).doubleValue();
 
             autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
             SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
@@ -1688,7 +1719,7 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinSlowMoverMaxStationaryLikelihood, config.slowMoverMaxStationaryLikelihood);
 
         chkStrictExposureKinematics.setSelected(config.strictExposureKinematics);
-        chkEnableGeometricTrackLinking.setSelected(getOptionalBooleanField(config, "enableGeometricTrackLinking", true));
+        chkEnableGeometricTrackLinking.setSelected(config.enableGeometricTrackLinking);
         setSpinnerValueClamped(spinStarJitter, config.maxStarJitter);
         setSpinnerValueClamped(spinMaxMaskOverlapFraction, config.maxMaskOverlapFraction);
         setSpinnerValueClamped(spinPredTol, config.predictionTolerance);
@@ -1706,7 +1737,7 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinStreakMinElong, config.streakMinElongation);
         setSpinnerValueClamped(spinStreakMinPix, config.streakMinPixels);
         setSpinnerValueClamped(spinSingleStreakMinPeakSigma, config.singleStreakMinPeakSigma);
-        setSpinnerValueClamped(spinStreakTimeConsistencyTolerance, getOptionalDoubleField(config, "streakTimeConsistencyTolerance", 0.50));
+        setSpinnerValueClamped(spinStreakTimeConsistencyTolerance, config.streakTimeConsistencyTolerance);
         chkEnableFaintStreakFragments.setSelected(config.enableFaintStreakFragments);
         setSpinnerValueClamped(spinFaintStreakLineTolerance, config.faintStreakLineTolerance);
 
@@ -1716,14 +1747,8 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinAnomalyMinIntegratedSigma, config.anomalyMinIntegratedSigma);
         setSpinnerValueClamped(spinAnomalyMinIntegratedPixels, config.anomalyMinIntegratedPixels);
         setSpinnerValueClamped(spinAnomalyMinPeakSigmaFloor, config.anomalyMinPeakSigmaFloor);
-        chkEnableResidualTransientAnalysis.setSelected(getOptionalBooleanField(config, "enableResidualTransientAnalysis", true));
-        chkEnableLocalRescueCandidates.setSelected(getOptionalBooleanField(config, "enableLocalRescueCandidates", true));
-        chkEnableLocalActivityClusters.setSelected(getOptionalBooleanField(config, "enableLocalActivityClusters", true));
-        setSpinnerValueClamped(spinLocalActivityClusterRadiusPixels, getOptionalDoubleField(config, "localActivityClusterRadiusPixels", 10.0));
-        setSpinnerValueClamped(spinLocalActivityClusterMinFrames, getOptionalIntField(config, "localActivityClusterMinFrames", 3));
-        chkEnableCommonMotionRejection.setSelected(config.enableCommonMotionRejection);
+        typedBindings.forEach(binding -> binding.loadFrom(config));
         chkEnableCameraFixedRejection.setSelected(config.enableCameraFixedRejection);
-        setSpinnerValueClamped(spinCommonMotionShiftTolerance, config.commonMotionShiftTolerance);
 
         setSpinnerValueClamped(spinStarCountSigma, config.starCountSigmaDeviation);
         setSpinnerValueClamped(spinFwhmSigma, config.fwhmSigmaDeviation);
@@ -1752,57 +1777,6 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinVariableMaxSystematicsCorrelation, config.variableMaxSystematicsCorrelation);
         setSpinnerValueClamped(spinVariableLocalRadiusPixels, config.variableLocalRadiusPixels);
         setSpinnerValueClamped(spinVariableMaxLocalCorrelation, config.variableMaxLocalCorrelation);
-    }
-
-    private boolean getOptionalBooleanField(DetectionConfig config, String fieldName, boolean defaultValue) {
-        try {
-            Field field = DetectionConfig.class.getField(fieldName);
-            return field.getBoolean(config);
-        } catch (ReflectiveOperationException ignored) {
-            return defaultValue;
-        }
-    }
-
-    private double getOptionalDoubleField(DetectionConfig config, String fieldName, double defaultValue) {
-        try {
-            Field field = DetectionConfig.class.getField(fieldName);
-            return field.getDouble(config);
-        } catch (ReflectiveOperationException ignored) {
-            return defaultValue;
-        }
-    }
-
-    private int getOptionalIntField(DetectionConfig config, String fieldName, int defaultValue) {
-        try {
-            Field field = DetectionConfig.class.getField(fieldName);
-            return field.getInt(config);
-        } catch (ReflectiveOperationException ignored) {
-            return defaultValue;
-        }
-    }
-
-    private void setOptionalBooleanField(DetectionConfig config, String fieldName, boolean value) {
-        try {
-            Field field = DetectionConfig.class.getField(fieldName);
-            field.setBoolean(config, value);
-        } catch (ReflectiveOperationException ignored) {
-        }
-    }
-
-    private void setOptionalDoubleField(DetectionConfig config, String fieldName, double value) {
-        try {
-            Field field = DetectionConfig.class.getField(fieldName);
-            field.setDouble(config, value);
-        } catch (ReflectiveOperationException ignored) {
-        }
-    }
-
-    private void setOptionalIntField(DetectionConfig config, String fieldName, int value) {
-        try {
-            Field field = DetectionConfig.class.getField(fieldName);
-            field.setInt(config, value);
-        } catch (ReflectiveOperationException ignored) {
-        }
     }
 
     private void showTelemetryReportWindow(String reportText) {
