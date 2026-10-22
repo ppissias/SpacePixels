@@ -9,6 +9,8 @@
  */
 package eu.startales.spacepixels.gui;
 
+import eu.startales.spacepixels.config.SettingsStorage;
+
 import javax.swing.JFrame;
 import java.awt.Frame;
 import java.awt.GraphicsDevice;
@@ -19,6 +21,7 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.prefs.Preferences;
+import java.util.prefs.BackingStoreException;
 
 /**
  * Size and position of the main window: restored from the last session when it still fits on a screen, otherwise
@@ -42,7 +45,7 @@ final class WindowPlacement {
     }
 
     /** Applies the restored or default placement and saves the placement when the window closes. */
-    static void install(JFrame frame) {
+    static void install(JFrame frame, SettingsStorage storage) {
         Preferences preferences = preferences();
         Rectangle usable = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
         frame.setMinimumSize(new java.awt.Dimension(Math.min(MIN_WIDTH, usable.width), Math.min(MIN_HEIGHT, usable.height)));
@@ -74,9 +77,18 @@ final class WindowPlacement {
             }
         });
         frame.addWindowListener(new WindowAdapter() {
+            private boolean saving;
+
             @Override
             public void windowClosing(WindowEvent e) {
-                save(preferences, normalBounds[0], (frame.getExtendedState() & Frame.MAXIMIZED_BOTH) != 0);
+                if (saving) return;
+                saving = true;
+                Rectangle snapshot = new Rectangle(normalBounds[0]);
+                boolean maximized = (frame.getExtendedState() & Frame.MAXIMIZED_BOTH) != 0;
+                storage.submit("Window placement", () -> {
+                    save(preferences, snapshot, maximized);
+                    return null;
+                });
             }
         });
     }
@@ -117,20 +129,16 @@ final class WindowPlacement {
         return new Rectangle(preferences.getInt(KEY_X, 0), preferences.getInt(KEY_Y, 0), width, height);
     }
 
-    private static void save(Preferences preferences, Rectangle bounds, boolean maximized) {
+    private static void save(Preferences preferences, Rectangle bounds, boolean maximized) throws BackingStoreException {
         if (preferences == null || bounds == null) {
             return;
         }
-        try {
-            preferences.putInt(KEY_X, bounds.x);
-            preferences.putInt(KEY_Y, bounds.y);
-            preferences.putInt(KEY_WIDTH, bounds.width);
-            preferences.putInt(KEY_HEIGHT, bounds.height);
-            preferences.putBoolean(KEY_MAXIMIZED, maximized);
-            preferences.flush();
-        } catch (Exception e) {
-            ApplicationWindow.logger.fine("Could not save the window placement: " + e.getMessage());
-        }
+        preferences.putInt(KEY_X, bounds.x);
+        preferences.putInt(KEY_Y, bounds.y);
+        preferences.putInt(KEY_WIDTH, bounds.width);
+        preferences.putInt(KEY_HEIGHT, bounds.height);
+        preferences.putBoolean(KEY_MAXIMIZED, maximized);
+        preferences.flush();
     }
 
     private static Preferences preferences() {

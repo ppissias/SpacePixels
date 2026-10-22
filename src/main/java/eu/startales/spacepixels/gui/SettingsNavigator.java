@@ -252,15 +252,23 @@ final class SettingsNavigator extends JPanel {
 
     /** Takes the current values as the saved ones (after loading or saving the configuration) and refreshes the marks. */
     void markAllSaved() {
+        captureSavedState().run();
+    }
+
+    Runnable captureSavedState() {
+        Map<SettingRow, Object> values = new LinkedHashMap<>();
         for (SettingRow row : rows) {
-            row.captureSaved();
+            values.put(row, row.value());
         }
-        if (ready) {
-            for (SettingRow row : rows) {
-                row.refresh();
+        return () -> {
+            values.forEach(SettingRow::setSavedValue);
+            if (ready) {
+                for (SettingRow row : rows) {
+                    row.refresh();
+                }
+                applyFilters();
             }
-            applyFilters();
-        }
+        };
     }
 
     /** Shows the page with this title. */

@@ -34,7 +34,6 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.io.File;
 import java.io.FileReader;
-import java.io.IOException;
 import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
@@ -139,6 +138,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private final Map<DetectionSettingsRules.Pair, JSpinner[]> pairedSpinners = new EnumMap<>(DetectionSettingsRules.Pair.class);
     private final JLabel footerStateLabel = new JLabel(" ");
     private final JLabel footerMessageLabel = new JLabel(" ");
+    private final JButton saveButton = new JButton("Save");
     // The footer message: a note (saved, reverted, a setting moved to keep its pair in order), replaced by what to
     // enter while a field holds invalid text, after the name of a save or run that it stopped.
     private String footerNote = " ";
@@ -206,9 +206,8 @@ public class DetectionConfigurationPanel extends JPanel {
         });
 
         // Changes apply to the session as soon as they are made; only saving for the next start is explicit.
-        JButton saveBtn = new JButton("Save");
-        saveBtn.setToolTipText("Save the detection profile and visualization preferences as the defaults for future startups.");
-        saveBtn.addActionListener(e -> savePersistedSettings());
+        saveButton.setToolTipText("Save the detection profile and visualization preferences as the defaults for future startups.");
+        saveButton.addActionListener(e -> savePersistedSettings());
 
         JButton revertBtn = new JButton("Revert");
         revertBtn.setToolTipText("Return every setting to the last saved state.");
@@ -230,7 +229,7 @@ public class DetectionConfigurationPanel extends JPanel {
         JPanel footerButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         footerButtons.add(revertBtn);
         footerButtons.add(loadDefaultsBtn);
-        footerButtons.add(saveBtn);
+        footerButtons.add(saveButton);
 
         JPanel footer = new JPanel(new BorderLayout());
         footer.setBorder(new EmptyBorder(10, 0, 0, 0));
@@ -498,20 +497,30 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void rememberSavedState() {
-        savedConfig = jTransientConfig.clone();
-        savedAutoTuneMaxCandidateFrames = autoTuneMaxCandidateFrames;
-        savedVariableStarReportOptions = variableStarReportOptions;
-        savedVisualization = SpacePixelsVisualizationPreferences.captureCurrent();
-        savedSnapshot = currentSnapshot();
-        // The saved configuration is what changes are marked against (not the built-in starting values).
-        navigator.markAllSaved();
+        rememberSavedState(new SpacePixelsDetectionProfile(jTransientConfig.clone(), autoTuneMaxCandidateFrames, variableStarReportOptions),
+                SpacePixelsVisualizationPreferences.captureCurrent(), navigator.captureSavedState());
+    }
+
+    private void rememberSavedState(SpacePixelsDetectionProfile profile, SpacePixelsVisualizationPreferences visualization,
+                                    Runnable savedRows) {
+        savedConfig = profile.getDetectionConfig().clone();
+        savedAutoTuneMaxCandidateFrames = profile.getAutoTuneMaxCandidateFrames();
+        savedVariableStarReportOptions = profile.getVariableStarReportOptions();
+        savedVisualization = visualization;
+        savedSnapshot = snapshot(profile, visualization);
+        savedRows.run();
         overviewPanel.setSavedValues(this::savedCoreValue);
     }
 
     private String currentSnapshot() {
+        return snapshot(new SpacePixelsDetectionProfile(jTransientConfig, autoTuneMaxCandidateFrames, variableStarReportOptions),
+                SpacePixelsVisualizationPreferences.captureCurrent());
+    }
+
+    private static String snapshot(SpacePixelsDetectionProfile profile, SpacePixelsVisualizationPreferences visualization) {
         StringWriter writer = new StringWriter();
-        SpacePixelsDetectionProfileIO.write(writer, jTransientConfig, autoTuneMaxCandidateFrames, variableStarReportOptions);
-        SpacePixelsVisualizationPreferencesIO.write(writer, SpacePixelsVisualizationPreferences.captureCurrent());
+        SpacePixelsDetectionProfileIO.write(writer, profile);
+        SpacePixelsVisualizationPreferencesIO.write(writer, visualization);
         return writer.toString();
     }
 
@@ -633,7 +642,9 @@ public class DetectionConfigurationPanel extends JPanel {
                 variableStarReportOptions = detectionProfile.getVariableStarReportOptions();
                 try (FileReader migrationReader = new FileReader(profileToLoad)) {
                     if (SpacePixelsDetectionProfileIO.needsMigration(migrationReader)) {
-                        SwingUtilities.invokeLater(() -> offerDetectionProfileMigration(profileToLoad, detectionProfile));
+                        SpacePixelsDetectionProfile migrationProfile = new SpacePixelsDetectionProfile(jTransientConfig.clone(),
+                                autoTuneMaxCandidateFrames, variableStarReportOptions);
+                        SwingUtilities.invokeLater(() -> offerDetectionProfileMigration(profileToLoad, migrationProfile));
                     }
                 } catch (Exception e) {
                     System.err.println("Failed to inspect detection profile for migration: " + e.getMessage());
@@ -650,6 +661,7 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void offerDetectionProfileMigration(File profileToLoad, SpacePixelsDetectionProfile detectionProfile) {
+        if (mainAppWindow.isClosing()) return;
         int choice = JOptionPane.showConfirmDialog(
                 this,
                 "Your saved detection profile has missing or unrecognized settings.\n\n"
@@ -664,17 +676,25 @@ public class DetectionConfigurationPanel extends JPanel {
             return;
         }
 
-        try {
-            File backup = SpacePixelsDetectionProfileIO.migrate(profileToLoad, detectionProfileFile, detectionProfile);
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Detection profile migrated to:\n" + detectionProfileFile.getAbsolutePath()
-                            + "\n\nOriginal profile kept at:\n" + backup.getAbsolutePath(),
-                    "Migration Complete",
-                    JOptionPane.INFORMATION_MESSAGE);
-        } catch (IOException e) {
-            JOptionPane.showMessageDialog(this, "Failed to migrate detection profile: " + e.getMessage(), "Migration Failed", JOptionPane.ERROR_MESSAGE);
-        }
+        saveButton.setEnabled(false);
+        showFooterNote("Migrating detection profile...");
+        mainAppWindow.getSettingsStorage().submit("Detection settings", () ->
+                SpacePixelsDetectionProfileIO.migrate(profileToLoad, detectionProfileFile, detectionProfile))
+                .whenComplete((backup, failure) -> EventQueue.invokeLater(() -> {
+                    if (mainAppWindow.isClosing()) return;
+                    saveButton.setEnabled(true);
+                    if (failure == null) {
+                        showFooterNote("Detection profile migrated.");
+                        JOptionPane.showMessageDialog(this,
+                                "Detection profile migrated to:\n" + detectionProfileFile.getAbsolutePath()
+                                        + "\n\nOriginal profile kept at:\n" + backup.getAbsolutePath(),
+                                "Migration Complete", JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        showFooterNote("Migration failed; saved settings are unchanged.", true);
+                        JOptionPane.showMessageDialog(this, "Failed to migrate detection profile: " + failure.getMessage(),
+                                "Migration Failed", JOptionPane.ERROR_MESSAGE);
+                    }
+                }));
     }
 
     private void loadVisualizationPreferences() {
@@ -691,27 +711,39 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void savePersistedSettings() {
+        if (mainAppWindow.isClosing() || !saveButton.isEnabled()) return;
         DetectionConfig settings = checkedSettings("Not saved.");
         if (settings == null) {
             return;
         }
 
-        try {
+        SpacePixelsDetectionProfile profile = new SpacePixelsDetectionProfile(settings, autoTuneMaxCandidateFrames, variableStarReportOptions);
+        SpacePixelsVisualizationPreferences visualization = SpacePixelsVisualizationPreferences.captureCurrent();
+        Runnable savedRows = navigator.captureSavedState();
+        ProcessingSession expectedSession = mainAppWindow.getSession();
+        saveButton.setEnabled(false);
+        showFooterNote("Saving settings...");
+        mainAppWindow.getSettingsStorage().submit("Detection settings", () -> {
             SpacePixelsSettingsFiles.save(
-                    detectionProfileFile, new SpacePixelsDetectionProfile(settings, autoTuneMaxCandidateFrames, variableStarReportOptions),
-                    visualizationPreferencesFile, SpacePixelsVisualizationPreferences.captureCurrent());
-        } catch (IOException e) {
-            // Nothing is marked as saved, so the changes keep showing as unsaved.
-            JOptionPane.showMessageDialog(this, "Could not save the settings.\n" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-        rememberSavedState();
-        // Saved values are simply the settings now: drop the "set by Auto-Tune" marks.
-        overviewPanel.clearTunedMarkers();
-        updateSavedState();
-        showFooterNote("Saved to " + detectionProfileFile.getParent());
-        footerMessageLabel.setToolTipText("<html>" + detectionProfileFile.getAbsolutePath() + "<br>"
-                + visualizationPreferencesFile.getAbsolutePath() + "</html>");
+                    detectionProfileFile, profile, visualizationPreferencesFile, visualization);
+            return null;
+        }).whenComplete((ignored, failure) -> EventQueue.invokeLater(() -> {
+            if (mainAppWindow.isClosing()) return;
+            saveButton.setEnabled(true);
+            if (failure != null) {
+                showFooterNote("Not saved. " + failure.getMessage(), true);
+                JOptionPane.showMessageDialog(this, "Could not save the settings.\n" + failure.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            rememberSavedState(profile, visualization, savedRows);
+            boolean unchanged = savedSnapshot.equals(currentSnapshot());
+            if (unchanged && mainAppWindow.getSession() == expectedSession) overviewPanel.clearTunedMarkers();
+            updateSavedState();
+            showFooterNote("Saved to " + detectionProfileFile.getParent()
+                    + (unchanged ? "" : "; newer edits remain unsaved."));
+            footerMessageLabel.setToolTipText("<html>" + detectionProfileFile.getAbsolutePath() + "<br>"
+                    + visualizationPreferencesFile.getAbsolutePath() + "</html>");
+        }));
     }
 
     private void loadDetectionDefaults() {

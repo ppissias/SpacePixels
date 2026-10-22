@@ -102,6 +102,8 @@ If **Solved** says `No`, select one frame and click **Plate Solve Selected** in 
 - **Observing Site**: your latitude and longitude, or your IAU observatory code, make the object identification exact for your location. When the FITS headers contain the site (as here), SpacePixels uses them; **Fill Site from FITS Header** copies them into the fields.
 - **Sky Catalogue (Annotate)**: how faint the stars are that **Fetch Sky Catalogue** downloads (**Star Depth**, see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
 
+ASTAP checks run in the background and show **Checking ASTAP installation...** while inspecting the program and nearby star databases. Selecting a different executable supersedes an older check without freezing the window. Application-default saves also run in the background; a failed save leaves the valid settings in use, with a warning so you can retry.
+
 Without a plate solution everything still works except sky coordinates and the identification buttons. With one, **Fetch Sky Catalogue** in **2 Astrometry** downloads the stars, deep-sky objects and variable stars of the field, which the viewers can then draw on your frames (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
 
 ### Step 3: Auto-Tune
@@ -575,6 +577,8 @@ The **Detection Settings** tab has a list of pages on the left, a search box at 
 Each page shows its main settings. The fine-tuning settings are expert settings: tick **Show expert settings** under the page list to see them on every page (SpacePixels remembers the choice). A search or **Show only unsaved changes** finds expert settings either way, and a page tells you how many expert settings it hides. Settings that only matter while a feature is on, such as those of the geometric linker, appear when you switch the feature on.
 
 A setting you changed since the last save shows its name in blue; **Show only unsaved changes** lists only those, and the **Reset** button next to a changed setting puts it back to the saved value. **Save** keeps the settings for the next start; **Load Defaults** goes back to the starting settings of SpacePixels.
+
+Save runs in the background and temporarily disables its button, not the settings fields. You can keep editing: only the values captured when you clicked Save are written, and later edits remain marked unsaved. Revert and each row's Reset use the last successfully saved values. If a save fails, your edits remain available and the error explains which files were saved; correct the problem and retry. Closing SpacePixels waits for queued settings writes without freezing the window.
 
 Changes apply as soon as you make them. A run uses the settings as they are when you start it, so changing a setting during a run does not affect that run. An open Preview Frame follows your changes: it detects each frame with the settings as they are then, and its three per-frame settings are the ones on this tab. Text that is not a number, or is outside a setting's range, stays in the field outlined in red, and the line at the bottom says what to enter, for example *Detection Sigma: enter a number between 1.0 and 20.0*. Save and the runs do not start until it is corrected; SpacePixels shows you the setting instead. Some settings come in pairs: Grow Sigma, for example, cannot be above Detection Sigma. When a change crosses a pair, SpacePixels moves the other setting and says so at the bottom.
 

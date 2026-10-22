@@ -21,15 +21,11 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.io.IOException;
 import java.net.URI;
 import java.util.Locale;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * The Astrometry Config tab: the ASTAP solver and the observing site used to identify objects in the report.
@@ -45,11 +41,12 @@ public class ConfigurationPanel extends JPanel {
     /** FITS keywords the report reads for the site, in the same order. */
     static final String[] LATITUDE_KEYS = {"SITELAT", "OBSGEO-B", "LAT-OBS"};
     static final String[] LONGITUDE_KEYS = {"SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS"};
-    /** ASTAP star database files, e.g. d50_0101.1476, named after the database. */
-    private static final Pattern STAR_DATABASE_FILE = Pattern.compile("^([a-z]\\d\\d)_\\d{4}\\.\\w+$", Pattern.CASE_INSENSITIVE);
 
     // link to main window
     private final ApplicationWindow mainAppWindow;
+    private final AstapInstallationCheck astapChecks;
+    private final JButton astapCheckButton = new JButton("Check");
+    private final JButton saveButton = new JButton("Save");
 
     private final JLabel astapPathLabel = new JLabel("Not set");
     private final JLabel astapStatusLabel = new JLabel(" ");
@@ -70,11 +67,15 @@ public class ConfigurationPanel extends JPanel {
     private String savedObservatoryCode = "";
     private String savedLat = "";
     private String savedLong = "";
+    private String savedAstap = "";
+    private double savedStarDepth;
+    private long saveVersion;
     /** True while the fields are filled from the configuration, so the fill is not treated as an edit. */
     private boolean loading;
 
     public ConfigurationPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
+        astapChecks = new AstapInstallationCheck(this::astapChecked, this::astapCheckFailed);
 
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(10, 20, 20, 20));
@@ -87,7 +88,6 @@ public class ConfigurationPanel extends JPanel {
 
         astapPathLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
         JButton astapPathButton = new JButton("Browse...");
-        JButton astapCheckButton = new JButton("Check");
         astapCheckButton.setToolTipText("Check that ASTAP is there and that a star database is installed next to it.");
         astapCheckButton.addActionListener(e -> checkAstap());
         astapStatusLabel.setFont(astapStatusLabel.getFont().deriveFont(12f));
@@ -161,7 +161,6 @@ public class ConfigurationPanel extends JPanel {
         JButton revertButton = new JButton("Revert");
         revertButton.setToolTipText("Return the site fields to the last saved values.");
         revertButton.addActionListener(e -> revertSite());
-        JButton saveButton = new JButton("Save");
         saveButton.setToolTipText("Keep the site values for the next start.");
         saveButton.addActionListener(e -> saveSite());
 
@@ -205,6 +204,8 @@ public class ConfigurationPanel extends JPanel {
         savedObservatoryCode = nullToEmpty(config.observatoryCode);
         savedLat = nullToEmpty(config.siteLat);
         savedLong = nullToEmpty(config.siteLong);
+        savedAstap = nullToEmpty(config.astapExecutablePath);
+        savedStarDepth = config.skyCatalogueStarMagnitude();
         validateAll();
         checkAstap();
         updateSavedState();
@@ -375,16 +376,41 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private void saveSite() {
-        try {
-            mainAppWindow.getApplicationSettings().save();
-            savedObservatoryCode = nullToEmpty(config().observatoryCode);
-            savedLat = nullToEmpty(config().siteLat);
-            savedLong = nullToEmpty(config().siteLong);
-            footerMessageLabel.setText("Saved.");
+        saveDefaults(true);
+    }
+
+    private void saveDefaults(boolean showError) {
+        if (mainAppWindow.isClosing()) return;
+        AppConfig snapshot = config().copy();
+        long expectedVersion = ++saveVersion;
+        saveButton.setEnabled(false);
+        footerMessageLabel.setText("Saving application defaults...");
+        starDepthStatus.setText("Saving...");
+        mainAppWindow.getSettingsStorage().submit("Application defaults", () -> {
+            mainAppWindow.getApplicationSettings().save(snapshot);
+            return null;
+        }).whenComplete((ignored, failure) -> EventQueue.invokeLater(() -> {
+            if (mainAppWindow.isClosing()) return;
+            if (failure == null) {
+                savedObservatoryCode = nullToEmpty(snapshot.observatoryCode);
+                savedLat = nullToEmpty(snapshot.siteLat);
+                savedLong = nullToEmpty(snapshot.siteLong);
+                savedAstap = nullToEmpty(snapshot.astapExecutablePath);
+                savedStarDepth = snapshot.skyCatalogueStarMagnitude();
+            }
             updateSavedState();
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this, "Cannot save configuration: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
+            if (saveVersion != expectedVersion) return;
+            saveButton.setEnabled(true);
+            starDepthStatus.setForeground(failure == null ? UIManager.getColor("Label.disabledForeground") : warningColor());
+            starDepthStatus.setText(failure == null ? "✓ Saved · used by the next Fetch Sky Catalogue"
+                    : "Cannot save: " + failure.getMessage());
+            footerMessageLabel.setText(failure == null ? "Saved application defaults."
+                    + (hasUnsavedDefaults() ? " Newer edits remain unsaved." : "")
+                    : "Not saved: " + failure.getMessage());
+            if (failure != null && showError) {
+                JOptionPane.showMessageDialog(this, "Cannot save configuration: " + failure.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }));
     }
 
     private void revertSite() {
@@ -398,13 +424,10 @@ public class ConfigurationPanel extends JPanel {
         boolean fieldsMatchConfig = observatoryCodeTextField.getText().trim().equals(nullToEmpty(config().observatoryCode))
                 && latTextField.getText().trim().equals(nullToEmpty(config().siteLat))
                 && longTextField.getText().trim().equals(nullToEmpty(config().siteLong));
-        boolean unsaved = !nullToEmpty(config().observatoryCode).equals(savedObservatoryCode)
-                || !nullToEmpty(config().siteLat).equals(savedLat)
-                || !nullToEmpty(config().siteLong).equals(savedLong);
         if (!fieldsMatchConfig) {
             footerStateLabel.setForeground(warningColor());
             footerStateLabel.setText("● Fix the marked field; the last valid value stays in use");
-        } else if (unsaved) {
+        } else if (hasUnsavedDefaults()) {
             footerStateLabel.setForeground(warningColor());
             footerStateLabel.setText("● Unsaved application defaults (in use)");
         } else {
@@ -413,20 +436,22 @@ public class ConfigurationPanel extends JPanel {
         }
     }
 
+    private boolean hasUnsavedDefaults() {
+        return !nullToEmpty(config().observatoryCode).equals(savedObservatoryCode)
+                || !nullToEmpty(config().siteLat).equals(savedLat)
+                || !nullToEmpty(config().siteLong).equals(savedLong)
+                || !nullToEmpty(config().astapExecutablePath).equals(savedAstap)
+                || config().skyCatalogueStarMagnitude() != savedStarDepth;
+    }
+
     /** Keeps the new star depth at once, like the ASTAP path. */
     private void starDepthChanged() {
         if (loading) {
             return;
         }
         config().skyCatalogueStarMagnitude = ((Number) starDepthSpinner.getValue()).doubleValue();
-        try {
-            mainAppWindow.getApplicationSettings().save();
-            starDepthStatus.setForeground(UIManager.getColor("Label.disabledForeground"));
-            starDepthStatus.setText("✓ Saved · used by the next Fetch Sky Catalogue");
-        } catch (IOException ex) {
-            starDepthStatus.setForeground(warningColor());
-            starDepthStatus.setText("Cannot save: " + ex.getMessage());
-        }
+        updateSavedState();
+        saveDefaults(false);
     }
 
     // ==========================================
@@ -441,55 +466,49 @@ public class ConfigurationPanel extends JPanel {
             return;
         }
         File astapExecutable = fc.getSelectedFile();
-        try {
-            Runtime.getRuntime().exec(new String[]{astapExecutable.getAbsolutePath(), "-h"}, null, astapExecutable.getParentFile());
-            config().astapExecutablePath = astapExecutable.getAbsolutePath();
-            mainAppWindow.getApplicationSettings().save();
-            astapPathLabel.setText(astapExecutable.getAbsolutePath());
-            checkAstap();
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this, "Cannot execute ASTAP or save config: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
+        startAstapCheck(astapExecutable.getAbsolutePath(), true);
     }
 
     /** Shows whether ASTAP is present and which star databases are installed next to it. */
     private void checkAstap() {
-        String path = config().astapExecutablePath;
-        if (path == null || path.isEmpty()) {
-            showAstapStatus(false, "ASTAP is not set. Download ASTAP and a star database (D50), then choose astap.exe.");
-            return;
+        startAstapCheck(config().astapExecutablePath, false);
+    }
+
+    private void startAstapCheck(String path, boolean select) {
+        if (mainAppWindow.isClosing()) return;
+        astapCheckButton.setEnabled(false);
+        showAstapStatus(true, "Checking ASTAP installation...");
+        astapChecks.check(path, select);
+    }
+
+    private void astapChecked(AstapInstallationCheck.Request request, AstapInstallationCheck.Result result) {
+        if (mainAppWindow.isClosing()) return;
+        astapCheckButton.setEnabled(true);
+        if (request.select()) {
+            config().astapExecutablePath = request.path();
+            astapPathLabel.setText(request.path());
+            updateSavedState();
+            saveDefaults(true);
         }
-        File executable = new File(path);
-        if (!executable.isFile()) {
-            showAstapStatus(false, "ASTAP was not found at this path. Choose it again, or Download it.");
-            return;
+        showAstapStatus(result.available(), result.message());
+    }
+
+    private void astapCheckFailed(AstapInstallationCheck.Request request, Throwable failure) {
+        if (mainAppWindow.isClosing()) return;
+        astapCheckButton.setEnabled(true);
+        showAstapStatus(false, "Cannot check ASTAP: " + failure.getMessage());
+        if (request.select()) {
+            JOptionPane.showMessageDialog(this, "Cannot execute ASTAP: " + failure.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
-        Map<String, Integer> databases = starDatabases(executable.getParentFile());
-        if (databases.isEmpty()) {
-            showAstapStatus(false, "ASTAP found, but no star database next to it, so solving will fail. Download one (D50 is a good choice).");
-            return;
-        }
-        StringBuilder names = new StringBuilder();
-        for (Map.Entry<String, Integer> entry : databases.entrySet()) {
-            names.append(names.length() == 0 ? "" : ", ").append(entry.getKey());
-        }
-        showAstapStatus(true, "✓ ASTAP found · star database " + names);
+    }
+
+    void close() {
+        astapChecks.close();
     }
 
     /** Star databases found in the folder, by name (e.g. D50), with their file counts. */
     static Map<String, Integer> starDatabases(File folder) {
-        Map<String, Integer> databases = new TreeMap<>();
-        File[] files = folder == null ? null : folder.listFiles();
-        if (files == null) {
-            return databases;
-        }
-        for (File file : files) {
-            Matcher matcher = STAR_DATABASE_FILE.matcher(file.getName());
-            if (file.isFile() && matcher.matches()) {
-                databases.merge(matcher.group(1).toUpperCase(Locale.ROOT), 1, Integer::sum);
-            }
-        }
-        return databases;
+        return AstapInstallationCheck.starDatabases(folder);
     }
 
     private void showAstapStatus(boolean ok, String text) {

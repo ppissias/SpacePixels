@@ -39,6 +39,13 @@ public class DependencyRulesTest {
     }
 
     @Test
+    public void settingsStorageDoesNotDependOnSwingOrTheWindow() throws IOException {
+        for (String file : List.of("SettingsStorage", "ApplicationSettings")) {
+            assertNoReferences("config/" + file + ".java", "eu.startales.spacepixels.gui.", "javax.swing.", "java.awt.");
+        }
+    }
+
+    @Test
     public void fitsImportAndBatchServicesDoNotDependOnSwingOrTheWindow() throws IOException {
         for (String file : List.of("FitsImportService", "FitsBatchService", "FitsImportInteraction", "FitsFiles", "FitsImages",
                 "FitsPreparationService", "DetectionInputPreparation", "FitsSequenceValidator", "FitsFormatChecker",

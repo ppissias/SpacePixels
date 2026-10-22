@@ -15,6 +15,7 @@ import com.google.gson.JsonParser;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.config.ApplicationSettings;
+import eu.startales.spacepixels.config.SettingsStorage;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.SessionOwner;
 import eu.startales.spacepixels.session.SessionStorage;
@@ -72,6 +73,7 @@ public class ApplicationWindow {
     private final ApplicationSettings applicationSettings = ApplicationSettings.loadDefault();
     private final SessionOwner sessions = new SessionOwner();
     private final SessionStorage sessionStorage;
+    private final SettingsStorage settingsStorage;
     private boolean closing;
 
     private volatile MainApplicationPanel mainApplicationPanel;
@@ -161,7 +163,12 @@ public class ApplicationWindow {
     }
 
     public ApplicationWindow(SessionStorage sessionStorage) {
+        this(sessionStorage, new SettingsStorage());
+    }
+
+    public ApplicationWindow(SessionStorage sessionStorage, SettingsStorage settingsStorage) {
         this.sessionStorage = sessionStorage;
+        this.settingsStorage = settingsStorage;
         initialize();
     }
 
@@ -173,7 +180,7 @@ public class ApplicationWindow {
         frmIpodImage.setTitle("SpacePixels" + " " + version);
         AppIcon.apply(frmIpodImage);
         // Resizable, sized to the screen or restored from the last session.
-        WindowPlacement.install(frmIpodImage);
+        WindowPlacement.install(frmIpodImage, settingsStorage);
         frmIpodImage.setResizable(true);
         frmIpodImage.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frmIpodImage.addWindowListener(new WindowAdapter() {
@@ -258,10 +265,13 @@ public class ApplicationWindow {
     }
 
     private void closeSessionResources() {
+        closing = true;
         jobCoordinator.cancel();
+        if (configurationApplicationPanel != null) configurationApplicationPanel.close();
         if (mainApplicationPanel != null) mainApplicationPanel.closeSessionViews();
         sessions.close();
         sessionStorage.close();
+        settingsStorage.close();
         ReportLookupProxyServer.getInstance().stop();
     }
 
@@ -269,6 +279,7 @@ public class ApplicationWindow {
         new Thread(() -> {
             try {
                 sessionStorage.finish();
+                settingsStorage.finish();
                 EventQueue.invokeLater(() -> {
                     if (sessionStorage.getWriteFailure() != null) {
                         JOptionPane.showMessageDialog(frmIpodImage,
@@ -276,15 +287,22 @@ public class ApplicationWindow {
                                         + sessionStorage.getWriteFailure().getMessage(),
                                 "Session save error", JOptionPane.WARNING_MESSAGE);
                     }
+                    if (!settingsStorage.getFailures().isEmpty()) {
+                        StringBuilder details = new StringBuilder("Some application defaults may not have been saved.\n");
+                        settingsStorage.getFailures().forEach((target, failure) ->
+                                details.append(target).append(": ").append(failure.getMessage()).append('\n'));
+                        JOptionPane.showMessageDialog(frmIpodImage, details.toString(),
+                                "Settings save error", JOptionPane.WARNING_MESSAGE);
+                    }
                     frmIpodImage.dispose();
                     if (exit) System.exit(0);
                 });
             } catch (Exception failure) {
-                logger.log(Level.WARNING, "Session metadata is still being saved", failure);
+                logger.log(Level.WARNING, "Application data is still being saved", failure);
                 EventQueue.invokeLater(() -> {
                     int answer = JOptionPane.showConfirmDialog(frmIpodImage,
-                            "Session metadata has not finished saving. Wait and try closing again?\n" + failure.getMessage(),
-                            "Pending session writes", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                            "Session metadata or settings have not finished saving. Wait and try closing again?\n" + failure.getMessage(),
+                            "Pending writes", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
                     if (answer == JOptionPane.YES_OPTION) {
                         finishSessionStorage(exit);
                     } else {
@@ -433,6 +451,10 @@ public class ApplicationWindow {
     }
 
     public ApplicationSettings getApplicationSettings() { return applicationSettings; }
+
+    public SettingsStorage getSettingsStorage() { return settingsStorage; }
+
+    boolean isClosing() { return closing; }
 
     public ProcessingSession getSession() { return sessions.current(); }
 

@@ -86,6 +86,10 @@ final class SettingRow {
         savedValue = value();
     }
 
+    void setSavedValue(Object value) {
+        savedValue = value;
+    }
+
     boolean isChanged() {
         if (savedValue == null) {
             return false;

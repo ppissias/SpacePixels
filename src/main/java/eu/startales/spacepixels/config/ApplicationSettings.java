@@ -38,6 +38,10 @@ public final class ApplicationSettings {
     }
 
     public void save() throws IOException {
-        SpacePixelsAppConfigIO.write(file, config);
+        save(config.copy());
+    }
+
+    public void save(AppConfig snapshot) throws IOException {
+        SpacePixelsAppConfigIO.write(file, snapshot);
     }
 }
