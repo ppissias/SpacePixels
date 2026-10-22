@@ -414,8 +414,7 @@ public class ApplicationWindow {
         if (filesInfo.length > 100) {
             JOptionPane.showMessageDialog(frmIpodImage,
                     "You have imported a large dataset (" + filesInfo.length + " files).\n" +
-                    "Please be aware that running the standard detection pipeline on the entire dataset at once\n" +
-                    "may cause the application to run out of memory depending on your system's resources.\n\n" +
+                    "Please be aware that running the standard detection pipeline on the entire dataset at once may cause the application to run out of memory depending on your system's resources.\n\n" +
                     "Consider using the Iterative Detection option with a safe frame limit.",
                     "Large Dataset Warning", JOptionPane.WARNING_MESSAGE);
         }

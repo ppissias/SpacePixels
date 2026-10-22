@@ -229,7 +229,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
         JPanel footerButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         JButton reviewRules = new JButton("Review rules…");
-        reviewRules.setToolTipText("Review shared engine diagnostics and explicitly align supported consistency policies.");
+        reviewRules.setToolTipText("Review configuration and explicitly align supported consistency policies.");
         reviewRules.addActionListener(event -> reviewRules());
         footerButtons.add(reviewRules);
         footerButtons.add(revertBtn);
