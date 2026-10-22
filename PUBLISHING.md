@@ -2,6 +2,8 @@
 
 This document covers publishing the current single-module SpacePixels artifact to Maven Central.
 
+The current publication includes desktop classes and declares the FlatLaf dependency even though API execution is headless. [F11: headless API/core artifact](DESIGN-IMPROVEMENTS.md#headless-apicore-maven-central-artifact-f11) proposes a separate minimal library publication with its own dependencies, sources/Javadocs and Central bundle. That split is not implemented; the commands and coordinates here still describe the desktop-inclusive artifact.
+
 ## Maven Central publishing
 
 SpacePixels is configured to generate a Maven Central-compatible upload bundle with:

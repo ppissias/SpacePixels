@@ -36,6 +36,8 @@ implementation 'eu.startales.spacepixels:spacepixels:<version>'
 
 The published artifact is the current single-module SpacePixels JAR, so it contains both the public API and the desktop application code. For library consumers, the supported surface is still only `eu.startales.spacepixels.api`.
 
+API execution and its processing services are Swing/GUI-independent after S13, but the current JAR and dependency metadata are not an API-only distribution. A separate minimal headless API/core artifact is proposed in [F11](DESIGN-IMPROVEMENTS.md#headless-apicore-maven-central-artifact-f11); it is not yet implemented and the dependency example above remains the current packaging contract. Required headless AWT image/report rendering will remain available.
+
 ## What the API does
 
 The API runs the standard SpacePixels detection pipeline on a directory of aligned FITS files, or an XISF-only directory when input preparation is enabled, and returns:

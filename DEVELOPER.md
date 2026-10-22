@@ -229,6 +229,8 @@ The API is synchronous and closes its processor in `finally`; it does not drive 
 
 The supported embedding surface is `eu.startales.spacepixels.api`, with the request/result types it exposes as documented in [API.md](API.md). The distributed JAR also contains GUI and internal services; their presence does not make them supported embedding contracts.
 
+S13 makes API execution Swing/GUI-independent, not its publication API-only: `build.gradle` still publishes the entire Java component with desktop code and the FlatLaf dependency. [F11](DESIGN-IMPROVEMENTS.md#headless-apicore-maven-central-artifact-f11) proposes a minimal headless API/core publication with a complete supporting-code/resource closure and separate dependency metadata. Headless AWT rendering remains necessary; do not simply package `api` alone or remove `java.desktop`.
+
 ## Persistence and outputs
 
 | Location | Contents |
