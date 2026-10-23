@@ -43,8 +43,12 @@ final class SessionCatalogue {
     }
 
     static SessionCatalogue load(DetectionReportContext context) {
-        FitsFileInformation[] files = context.fitsFiles;
-        WcsCoordinateTransformer transformer = context.astrometryContext != null ? context.astrometryContext.getTransformer() : null;
+        return load(context.fitsFiles, context.astrometryContext);
+    }
+
+    /** Loads an independently owned catalogue once for the supplied resolved run metadata. */
+    static SessionCatalogue load(FitsFileInformation[] files, DetectionReportAstrometry.Context astrometry) {
+        WcsCoordinateTransformer transformer = astrometry != null ? astrometry.getTransformer() : null;
         if (files == null || files.length == 0 || files[0] == null || files[0].getFilePath() == null || transformer == null) {
             return new SessionCatalogue(null, 0);
         }

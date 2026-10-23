@@ -39,10 +39,10 @@ public class IterativeDetectionRunTest {
         List<Integer> sizes = new ArrayList<>();
         List<String> progressMessages = new ArrayList<>();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
-                (settings, files, app, prompt, progress, output, visualization) -> {
+                (settings, files, options, prompt, progress, output) -> {
                     sizes.add(files.length);
                     assertTrue(settings.enableVariableStarDetection);
-                    assertEquals("37", app.siteLat);
+                    assertEquals("37", options.siteLatitude());
                     assertEquals(files.length, Arrays.stream(files).map(FitsFileInformation::getFileName).distinct().count());
                     settings.enableVariableStarDetection = false;
                     progress.onProgressUpdate(30, "running");
@@ -65,7 +65,7 @@ public class IterativeDetectionRunTest {
     @Test public void declinedAndFailedPassesAreRecordedAndLaterPassesStillRun() throws Exception {
         File source = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "outcomes", 9).toFile();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
-                (config, files, app, prompt, progress, output, visualization) -> {
+                (config, files, options, prompt, progress, output) -> {
                     if (files.length == 5) return new StandardDetectionPipelineService.RunResult(null, summary());
                     if (files.length == 7) throw new IOException("export <failed>");
                     return completed(output);
@@ -84,7 +84,7 @@ public class IterativeDetectionRunTest {
     @Test public void cancellationRetainsCompletedReportsAndMarksRemainingPasses() throws Exception {
         File source = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "cancel", 9).toFile();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
-                (config, files, app, prompt, progress, output, visualization) -> {
+                (config, files, options, prompt, progress, output) -> {
                     if (files.length == 7) {
                         Files.createDirectories(output.toPath());
                         Files.writeString(new File(output, "partial.txt").toPath(), "partial");
@@ -112,7 +112,7 @@ public class IterativeDetectionRunTest {
             @Override public void preview(RunPreview preview) { previews.add(preview); }
         };
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
-                (config, files, app, prompt, progress, output, visualization) -> completed(output));
+                (config, files, options, prompt, progress, output) -> completed(output));
         try (RunPreviewScope scope = RunPreviewScope.open(sink)) {
             service.run(request(source, new DetectionConfig(), new AppConfig(), new IterativeDetectionPlan(5, 3, 8)), null, null);
         }
@@ -125,7 +125,7 @@ public class IterativeDetectionRunTest {
     @Test public void aCancelledRunWithNoFinishedPassRemovesTheCopyItConverted() throws Exception {
         File source = SyntheticDatasetFactory.createMono32FloatFitsSequence(folder.getRoot().toPath(), "float-cancel", 9).toFile();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
-                (config, files, app, prompt, progress, output, visualization) -> {
+                (config, files, options, prompt, progress, output) -> {
                     throw new CancellationException();
                 });
         assertThrows(CancellationException.class, () -> service.run(
@@ -137,7 +137,7 @@ public class IterativeDetectionRunTest {
     @Test public void aCancelledRunThatPublishedAnIndexKeepsTheCopyItLinks() throws Exception {
         File source = SyntheticDatasetFactory.createMono32FloatFitsSequence(folder.getRoot().toPath(), "float-keep", 9).toFile();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
-                (config, files, app, prompt, progress, output, visualization) -> {
+                (config, files, options, prompt, progress, output) -> {
                     if (files.length == 7) throw new CancellationException();
                     return completed(output);
                 });
@@ -205,7 +205,7 @@ public class IterativeDetectionRunTest {
         List<String> messages = new ArrayList<>();
         java.util.concurrent.atomic.AtomicInteger tuningCalls = new java.util.concurrent.atomic.AtomicInteger();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
-                (settings, files, application, prompt, progress, output, visualization) -> {
+                (settings, files, options, prompt, progress, output) -> {
                     passSettings.add(new com.google.gson.Gson().toJson(settings));
                     assertFalse(messages.isEmpty());
                     progress.onProgressUpdate(10, "run");

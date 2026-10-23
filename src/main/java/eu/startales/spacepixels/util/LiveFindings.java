@@ -9,6 +9,9 @@
  */
 package eu.startales.spacepixels.util;
 
+import eu.startales.spacepixels.config.VariableStarReportOptions;
+import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
+import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import eu.startales.spacepixels.util.reporting.LiveFindingPictures;
 import eu.startales.spacepixels.util.reporting.LiveFindingPictures.Spot;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
@@ -52,6 +55,7 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
     static final int FINISH_SECONDS = 2;
     private static final String PROVISIONAL = "provisional";
 
+    private final ExportVisualizationSettings settings;
     private final RunPreviewSink sink;
     private final List<short[][]> frames;
     private final ExecutorService worker = Executors.newSingleThreadExecutor(task -> {
@@ -62,7 +66,16 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
     /** The median reference, set when its stage finishes; the engine does not change it afterwards. */
     private short[][] reference;
 
+    /** Captures default rendering once for direct component callers. */
     LiveFindings(RunPreviewSink sink, List<short[][]> frames) {
+        this(sink, frames, DetectionReportGenerator.captureExportSettings(
+                VariableStarReportOptions.DEFAULT));
+    }
+
+    /** Borrows read-only frames and retains the admitted run's immutable rendering choices. */
+    private LiveFindings(RunPreviewSink sink, List<short[][]> frames,
+            ExportVisualizationSettings settings) {
+        this.settings = settings;
         this.sink = sink;
         this.frames = frames;
     }
@@ -73,8 +86,15 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
      * @param frames the run's frames, by sequence index; they are only read
      */
     public static LiveFindings forCurrentRun(List<short[][]> frames) {
+        return forCurrentRun(frames, DetectionReportGenerator.captureExportSettings(
+                eu.startales.spacepixels.config.VariableStarReportOptions.DEFAULT));
+    }
+
+    /** Creates an observer only for a live view, using the captured run settings for every asynchronous picture. */
+    public static LiveFindings forCurrentRun(List<short[][]> frames,
+            eu.startales.spacepixels.util.reporting.ExportVisualizationSettings settings) {
         RunPreviewSink sink = RunPreviewScope.currentSink();
-        return sink == null ? null : new LiveFindings(sink, frames);
+        return sink == null ? null : new LiveFindings(sink, frames, settings);
     }
 
     @Override
@@ -114,17 +134,17 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
         }
     }
 
-    private static Supplier<RunPreview> reference(PipelineStage.MasterReference stage) {
+    private Supplier<RunPreview> reference(PipelineStage.MasterReference stage) {
         short[][] median = stage.medianStack();
         int stars = stage.masterStars().size();
         if (median == null || median.length == 0) {
             return null;
         }
-        return () -> RunPreview.of(PreviewThumbnails.frame(median),
+        return () -> RunPreview.of(PreviewThumbnails.frame(median, settings.getAutoStretchBlackSigma(), settings.getAutoStretchWhiteSigma()),
                 "Stationary-sky reference: the median of the kept frames · " + count(stars, "stationary star", "stationary stars"));
     }
 
-    private static Supplier<RunPreview> slowMovers(PipelineStage.SlowMovers stage) {
+    private Supplier<RunPreview> slowMovers(PipelineStage.SlowMovers stage) {
         if (!stage.enabled()) {
             return null;
         }
@@ -141,7 +161,7 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
         return () -> {
             List<RunPreview> slides = new ArrayList<>();
             for (Spot spot : spots) {
-                slides.add(RunPreview.of(LiveFindingPictures.crop(maximumStack, spot, LiveFindingPictures.SLOW_MOVER, null),
+                slides.add(RunPreview.of(LiveFindingPictures.crop(maximumStack, spot, LiveFindingPictures.SLOW_MOVER, null, settings),
                         "Slow-mover candidate · maximum stack · " + PROVISIONAL + "\n" + total));
             }
             return RunPreview.slides(slides);
@@ -199,9 +219,9 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
             }
             for (Finding finding : findings) {
                 BufferedImage image = finding.spots().size() > 1
-                        ? LiveFindingPictures.strip(frames, finding.spots(), finding.ring())
+                        ? LiveFindingPictures.strip(frames, finding.spots(), finding.ring(), settings)
                         : LiveFindingPictures.crop(frames.get(finding.spots().get(0).frame()), finding.spots().get(0),
-                        finding.ring(), "Frame " + (finding.spots().get(0).frame() + 1));
+                        finding.ring(), "Frame " + (finding.spots().get(0).frame() + 1), settings);
                 slides.add(RunPreview.of(PreviewThumbnails.fit(image), finding.caption() + "\n" + total));
             }
             return RunPreview.slides(slides);
@@ -209,7 +229,7 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
     }
 
     /** The reference with the stars masked before linking tinted, and how much of the field they cover. */
-    private static RunPreview starMask(short[][] median, boolean[][] mask, String findings) {
+    private RunPreview starMask(short[][] median, boolean[][] mask, String findings) {
         long masked = 0;
         for (boolean[] row : mask) {
             for (boolean pixel : row) {
@@ -219,7 +239,7 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
             }
         }
         double share = 100.0 * masked / ((long) mask.length * mask[0].length);
-        return RunPreview.of(LiveFindingPictures.withStarMask(PreviewThumbnails.frame(median), mask),
+        return RunPreview.of(LiveFindingPictures.withStarMask(PreviewThumbnails.frame(median, settings.getAutoStretchBlackSigma(), settings.getAutoStretchWhiteSigma()), mask),
                 String.format(Locale.US, "Star mask: stationary stars cover %.1f %% of the field, masked before linking", share)
                         + "\n" + findings);
     }
@@ -247,7 +267,7 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
             for (Finding finding : findings) {
                 Spot spot = finding.spots().get(0);
                 slides.add(RunPreview.of(LiveFindingPictures.crop(frames.get(spot.frame()), spot, finding.ring(),
-                        "Frame " + (spot.frame() + 1)), finding.caption() + "\n" + total));
+                        "Frame " + (spot.frame() + 1), settings), finding.caption() + "\n" + total));
             }
             return RunPreview.slides(slides);
         };
@@ -283,7 +303,7 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
         return () -> {
             List<RunPreview> slides = new ArrayList<>();
             for (int index = 0; index < spots.size(); index++) {
-                BufferedImage crop = LiveFindingPictures.crop(median, spots.get(index), LiveFindingPictures.VARIABLE_STAR, null);
+                BufferedImage crop = LiveFindingPictures.crop(median, spots.get(index), LiveFindingPictures.VARIABLE_STAR, null, settings);
                 slides.add(RunPreview.of(PreviewThumbnails.fit(LiveFindingPictures.withLightCurve(crop, curves.get(index))),
                         captions.get(index) + "\n" + total));
             }

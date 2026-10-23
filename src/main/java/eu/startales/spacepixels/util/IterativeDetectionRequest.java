@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util;
 
+import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -25,4 +26,10 @@ public record IterativeDetectionRequest(File directory, DetectionConfig config, 
 
     @Override public DetectionConfig config() { return config.clone(); }
     @Override public AppConfig appConfig() { return appConfig.copy(); }
+
+    /** Returns the admitted application options without consulting runtime defaults during a pass. */
+    public DetectionRunOptions runOptions() {
+        return new DetectionRunOptions(appConfig.observatoryCode,
+                appConfig.siteLat, appConfig.siteLong, visualization, autoTuneFrames);
+    }
 }

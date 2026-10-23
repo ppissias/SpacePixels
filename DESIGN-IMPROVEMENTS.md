@@ -90,7 +90,7 @@ Verification follows the strategy above and [AGENTS.md](AGENTS.md). Import chang
 
 **Current foundation.** `FindingCategory` now owns stable prefixes, JSON category text, detailed-card anchors, marker/legend colors, summary labels/counts, report inclusion, computed-row visibility and representative-coordinate policy. `ReportData`, report-category filtering, detection-map legends/buttons and the GUI report prompt consume it while preserving existing IDs/text/anchors/colors and JSON schema. See the [completion record](docs/archive/design-improvements-completed-2026-10.md#d09-shared-finding-category-descriptors-first-slice-2026-10-22).
 
-**Remaining evidence.** [DetectionReportGenerator](src/main/java/eu/startales/spacepixels/util/reporting/DetectionReportGenerator.java) already delegates sections, snapshots display settings, constructs `ReportData` and atomically publishes HTML. [NightEquipment](src/main/java/eu/startales/spacepixels/util/reporting/NightEquipment.java) and [FieldDepth](src/main/java/eu/startales/spacepixels/util/reporting/FieldDepth.java) still calculate diagnostics from frames during report export. `SessionCatalogue` loads catalogue state lazily from the session folder. Some individual section/CSV renderers still construct compatible labels/anchors directly; finish their consolidation when completing S15 against the prepared-result contract.
+**Remaining evidence.** [DetectionReportGenerator](src/main/java/eu/startales/spacepixels/util/reporting/DetectionReportGenerator.java) delegates sections, consumes captured display/site/tuning options, constructs `ReportData` and atomically publishes HTML. S14's `ReportRunContext` resolves copied FITS metadata, plate correction and catalogue before detection; report writers and variable-star overlays share that context. [NightEquipment](src/main/java/eu/startales/spacepixels/util/reporting/NightEquipment.java) and [FieldDepth](src/main/java/eu/startales/spacepixels/util/reporting/FieldDepth.java) still calculate diagnostics during report export, as allowed while S16 is deferred. Some individual section/CSV renderers still construct compatible labels/anchors directly; finish their consolidation in S15.
 
 **Proposal.** Keep section writers, but prepare a read-only report model once: stable finding IDs, accepted candidates, included categories, rejected frames, coordinates, catalogue snapshot and optional session diagnostics. Extend `ReportData`; do not introduce a competing identity system. A small category descriptor can provide the label, colour, prefix, count, inclusion option and anchor rule for the dialog, legends and maps. Existing report consistency checks are useful protection when consolidating these rules.
 
@@ -108,7 +108,9 @@ Decisions: Please go ahead as proposed in the review note.
 
 **Completed foundation (2026-10-23).** All 78 visible engine controls now use typed page definitions indexed by `DetectionSettings`; twelve application-owned controls register typed profile/rendering access with their rows. IDs, titles, units, guidance, disclosure and load/apply ownership stay together. Overview search, saved markers and shared Preview Frame guidance derive from the same definitions. Rule alignment uses typed drafts and editor IDs, without reflective field writes or a separate pair/spinner map. Existing ranges, hidden values, JSON formats, shared models and saved-versus-tuned state are preserved. Rendering values reload together under auto-apply suppression so Revert cannot overwrite later values with stale controls. The processor factories are named `ImageProcessing.openProcessor`; every call creates a new caller-owned facade that must be closed. See the [completion records](docs/archive/design-improvements-completed-2026-10.md#d10-all-visible-application-settings-bound-with-their-rows-2026-10-23) and [current settings design](DEVELOPER.md#settings).
 
-**Remaining scope.** S14 completes explicit application run context for standard/API/CLI paths; capture any remaining site, rendering, tuning and report options once rather than reading live defaults while work runs. Selected-release verification remains JA-11: a successful local composite build does not certify the final published engine/solver/application combination. Dataset-specific readiness feedback may be extended when its concrete checks and presentation are agreed. Shared numeric validation/metadata, persistence and background storage are completed foundations; no engine-version capability probing or additional rules implementation is needed.
+**Run context completed (S14, 2026-10-23).** `DetectionRunOptions` and `ReportRunContext` capture application choices and resolved input context before processing. GUI jobs freeze configuration/options before queuing; API requests carry explicit options and deterministic defaults; CLI preference loading supplies detached values. Reports, diagnostics and live previews no longer read changing rendering/tuning defaults, and catalogue/WCS state is owned by each ordinary run. See [API behavior and isolation](API.md#run-options-and-isolation).
+
+**Remaining scope.** Selected-release verification remains JA-11: a successful local composite build does not certify the final published engine/solver/application combination. Dataset-specific readiness feedback may be extended when its concrete checks and presentation are agreed. Typed bindings, run context, shared validation/metadata, persistence and background storage are completed foundations.
 
 **Acceptance.** Independent runs retain their captured options. Hidden values and saved/Auto-Tune behavior continue to round-trip, and release checks exercise the exact artifacts being distributed. Completed widget migration is protected by typed ownership tests and an all-control Save/Revert/defaults/startup mechanics test; do not reopen it as pending work.
 
@@ -126,11 +128,10 @@ Keep the existing dark theme and restrained primary-action emphasis. Make enable
 
 ### Remaining architecture steps
 
-S14–S16 are parts of D09/D10, not a duplicate backlog. Earlier steps are indexed as implemented at the end.
+S15/S16 are parts of D09/D10, not a duplicate backlog. S14 and earlier steps are indexed as implemented at the end.
 
 | Step | Owner | Remaining implementation and acceptance |
 |---|---|---|
-| S14 | D09, D10 | Complete run-wide capture and explicit site/render/tuning/report context for standard/API/CLI paths; remove remaining home/default/static reads during work. Do not read a live application tuning limit from report diagnostics; engine tuning/debug globals are removed; capture any remaining application options explicitly. Verify independent runs retain their own context. |
 | S15 | D09 | Make category/identity descriptors authoritative across writers, maps, JSON, inclusion UI and overlays instead of parallel counters/prefix rules. Preserve T/ST/A/V anchors, filenames, counts and filtering. |
 | S16 | D09 | Prepare `FieldDepth`, `NightEquipment` and catalogue/correction snapshots before rendering, with measured/unavailable/failed states and a consistent optional-section failure policy. Re-export must reuse prepared values, not newer live state; inject failures and compare real measurements. |
 
@@ -334,7 +335,7 @@ Implemented rows are not a second backlog. Partial/deferred rows retain only the
 | D07 | State-driven commands and availability | Implemented |
 | D08 | Background I/O and preference writes | Implemented |
 | D09 | Prepared report diagnostics and identities | In progress |
-| D10 | Typed settings and explicit run options | Typed bindings and factory naming implemented 2026-10-23; S14/release validation remain |
+| D10 | Typed settings and explicit run options | Typed bindings, factory naming and S14 implemented 2026-10-23; selected-release validation remains JA-11 |
 | D11 | Last run's tracks in Blink, Preview Frame and Manual Transient Inspection | Implemented 2026-10-23 (reduced scope) |
 | D12 | Shared visual/layout rules | In progress |
 | D13 | Keyboard access and viewer focus | Implemented |
@@ -363,7 +364,7 @@ Implemented rows are not a second backlog. Partial/deferred rows retain only the
 | S11 | Truthful failure reporting | Implemented |
 | S12 | Shared GUI/API input preparation | Implemented |
 | S13 | Headless util and explicit interactions | Implemented |
-| S14 | Explicit application run context | In progress; D09/D10 |
+| S14 | Explicit application run context | Implemented 2026-10-23 |
 | S15 | Authoritative finding identities/categories | In progress; D09 |
 | S16 | Prepared diagnostic states/failure policy | Deferred until a saved result can be re-rendered |
 | Library compatibility | Historical API/version fallback machinery | Dropped; coordinated cleanup implemented |

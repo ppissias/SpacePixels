@@ -69,7 +69,26 @@ public final class VariableStarOverlay {
         return fromCandidates(result == null ? Collections.emptyList() : result.variableStarAnalysis.candidates, files);
     }
 
+    /** Builds an overlay from explicit run-owned astrometry/catalogue data without reading session files. */
+    public static VariableStarOverlay from(PipelineResult result, FitsFileInformation[] files,
+            WcsCoordinateTransformer transformer, SkyCatalogue catalogue) {
+        return fromCandidates(result == null ? Collections.emptyList() : result.variableStarAnalysis.candidates,
+                files, transformer, catalogue);
+    }
+
+    /** Captures current session context for standalone viewer callers. */
     static VariableStarOverlay fromCandidates(List<StarLightCurve> stars, FitsFileInformation[] files) {
+        var solution = WcsSolutionResolver.resolve(null, files);
+        var transformer = solution == null ? null : solution.getTransformer();
+        FitsFileInformation first = files != null && files.length > 0 ? files[0] : null;
+        SkyCatalogue catalogue = first == null || first.getFilePath() == null || transformer == null ? null
+                : SkyCatalogueStore.load(new File(first.getFilePath()).getAbsoluteFile().getParentFile());
+        return fromCandidates(stars, files, transformer, catalogue);
+    }
+
+    /** Copies candidate display state using only the supplied metadata and read-only catalogue. */
+    private static VariableStarOverlay fromCandidates(List<StarLightCurve> stars, FitsFileInformation[] files,
+            WcsCoordinateTransformer transformer, SkyCatalogue catalogue) {
         List<Candidate> candidates = new ArrayList<>();
         Set<String> paths = new HashSet<>();
         FitsFileInformation first = files != null && files.length > 0 ? files[0] : null;
@@ -83,10 +102,6 @@ public final class VariableStarOverlay {
         if (stars.isEmpty() || width <= 0 || height <= 0) {
             return new VariableStarOverlay(candidates, paths, width, height);
         }
-        WcsSolutionResolver.ResolvedWcsSolution solution = WcsSolutionResolver.resolve(null, files);
-        WcsCoordinateTransformer transformer = solution == null ? null : solution.getTransformer();
-        SkyCatalogue catalogue = first == null || first.getFilePath() == null || transformer == null ? null
-                : SkyCatalogueStore.load(new File(first.getFilePath()).getAbsoluteFile().getParentFile());
         if (catalogue != null && (catalogue.field == null || !SkyField.of(transformer, width, height).isSameFieldAs(catalogue.field))) {
             catalogue = null;
         }

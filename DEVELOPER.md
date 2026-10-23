@@ -338,10 +338,10 @@ For console diagnostics, use `.\gradlew.bat run -PspacepixelsDebug` or set `-Dsp
 
 ## What comes next
 
-The open steps from the architecture review, in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md#remaining-architecture-steps), build on completed S13's headless utility boundary:
+The architecture work in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md#remaining-architecture-steps) builds on completed S13's headless utility boundary:
 
-- **S14:** pass site, rendering options and the Auto-Tune frame limit in an explicit run context.
+- **S14 is implemented:** `DetectionRunOptions` captures site/rendering/tuning choices at admission. GUI jobs snapshot configuration/options before queuing; API requests use explicit immutable options and built-in defaults; CLI preference loading passes detached values without changing globals. `ReportRunContext` resolves copied FITS metadata, plate correction and catalogue before each ordinary run's pixel loading. Execution data carries that context into reports and variable-star overlays; asynchronous live previews use the captured stretch. Diagnostics write the captured tuning limit and variable-star presentation into `detection_config.json`. Component-level convenience entrypoints may capture defaults once at their own admission boundary.
 - **S15:** consolidate finding labels and category rules.
-- **S16:** prepare diagnostics with explicit measured/unavailable/failed states and consistent optional-section failure handling.
+- **S16 is deferred:** prepared diagnostic states/re-export wait for a concrete saved-result rendering path.
 
 S7 session ownership and application preferences, S8 background session metadata I/O, S10 FITS service extraction, and S12 shared GUI/API preparation are implemented. The [completed-work archive](docs/archive/design-improvements-completed-2026-10.md) records their validation and historical limitations; earlier review proposals are not the current implementation. Broader features such as run history, saved-result viewing and MCP services remain in the design backlog.

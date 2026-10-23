@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.VariableStarReportOptions;
 import eu.startales.spacepixels.util.DisplayImageRenderer;
 import io.github.ppissias.jtransient.model.DetectedObject;
 
@@ -60,12 +61,18 @@ public final class LiveFindingPictures {
 
     /** A crop of {@code image} around the spot with a ring, and the frame number when {@code label} is not null. */
     public static BufferedImage crop(short[][] image, Spot spot, Color ring, String label) {
+        return crop(image, spot, ring, label, DetectionReportGenerator.captureExportSettings(
+                VariableStarReportOptions.DEFAULT));
+    }
+
+    /** Renders a crop using the run's captured stretch settings rather than live desktop defaults. */
+    public static BufferedImage crop(short[][] image, Spot spot, Color ring, String label, ExportVisualizationSettings settings) {
         int size = Math.min(MAX_CROP, Math.max(MIN_CROP, (int) Math.round(spot.radius() * 2) + PADDING));
         int centerX = (int) Math.round(spot.x());
         int centerY = (int) Math.round(spot.y());
         short[][] crop = TrackVisualizationRenderer.robustEdgeAwareCrop(image, centerX, centerY, size, size);
         BufferedImage picture = DisplayImageRenderer.createDisplayImage(crop,
-                DisplayImageRenderer.autoStretchBlackSigma, DisplayImageRenderer.autoStretchWhiteSigma);
+                settings.getAutoStretchBlackSigma(), settings.getAutoStretchWhiteSigma());
         Graphics2D graphics = picture.createGraphics();
         try {
             graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -144,12 +151,18 @@ public final class LiveFindingPictures {
 
     /** Crops of the first, a middle and the last spot of a track side by side, each in its own frame. */
     public static BufferedImage strip(List<short[][]> frames, List<Spot> spots, Color ring) {
+        return strip(frames, spots, ring, DetectionReportGenerator.captureExportSettings(
+                eu.startales.spacepixels.config.VariableStarReportOptions.DEFAULT));
+    }
+
+    /** Uses one captured stretch for every frame in a moving-object preview strip. */
+    public static BufferedImage strip(List<short[][]> frames, List<Spot> spots, Color ring, ExportVisualizationSettings settings) {
         BufferedImage[] crops = new BufferedImage[spots.size()];
         int width = 0;
         int height = 0;
         for (int index = 0; index < spots.size(); index++) {
             Spot spot = spots.get(index);
-            crops[index] = crop(frames.get(spot.frame()), spot, ring, "Frame " + (spot.frame() + 1));
+            crops[index] = crop(frames.get(spot.frame()), spot, ring, "Frame " + (spot.frame() + 1), settings);
             width += crops[index].getWidth() + (index == 0 ? 0 : GAP);
             height = Math.max(height, crops[index].getHeight());
         }

@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import io.github.ppissias.jtransient.model.AnomalyDetection;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Track;
@@ -50,6 +51,7 @@ final class DetectionReportContext {
     /** Where the slow sections report their items; set after construction. */
     ReportProgress progress = ReportProgress.NONE;
     private SessionCatalogue catalogue;
+    ReportRunContext runContext;
     private VariableStarPresentation variablePresentation;
 
     VariableStarPresentation variablePresentation(io.github.ppissias.jtransient.photometry.VariableStarAnalysis analysis) {
@@ -58,8 +60,15 @@ final class DetectionReportContext {
     }
 
     SessionCatalogue catalogue() {
+        if (runContext != null) return runContext.catalogue();
         if (catalogue == null) catalogue = SessionCatalogue.load(this);
         return catalogue;
+    }
+
+    /** Returns the captured tuning limit; isolated section callers use deterministic built-in defaults. */
+    int autoTuneMaxCandidateFrames() {
+        return runContext == null ? SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES
+                : runContext.options().autoTuneMaxCandidateFrames();
     }
 
     List<Integer> sampleFrames(java.util.Set<Integer> mandatory, int limit) {

@@ -10,6 +10,10 @@
 
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.DetectionRunOptions;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
+import eu.startales.spacepixels.config.VariableStarReportOptions;
 import io.github.ppissias.jtransient.model.AnomalyDetection;
 import io.github.ppissias.jtransient.model.AnomalyType;
 import io.github.ppissias.jtransient.model.DetectedObject;
@@ -57,18 +61,18 @@ public class DetectionReportGenerator {
     // =================================================================
 
     // --- Export & Cropping Parameters ---
-    public static int gifBlinkSpeedMs = 300;
-    public static int trackCropPadding = 200;
-    public static int trackObjectCentricCropSize = 200;
-    public static boolean includeAiCreativeReportSections = false;
+    public static int gifBlinkSpeedMs = ExportVisualizationSettings.defaults().getGifBlinkSpeedMs();
+    public static int trackCropPadding = ExportVisualizationSettings.defaults().getTrackCropPadding();
+    public static int trackObjectCentricCropSize = ExportVisualizationSettings.defaults().getTrackObjectCentricCropSize();
+    public static boolean includeAiCreativeReportSections = ExportVisualizationSettings.defaults().isIncludeAiCreativeReportSections();
 
     // --- Annotation Tools (For GIFs) ---
-    public static int targetCircleRadius = 15;
-    public static float targetCircleStrokeWidth = 2.0f;
+    public static int targetCircleRadius = ExportVisualizationSettings.defaults().getTargetCircleRadius();
+    public static float targetCircleStrokeWidth = ExportVisualizationSettings.defaults().getTargetCircleStrokeWidth();
 
     public static final String detectionReportName = "detection_report.html";
 
-    public static ExportVisualizationSettings captureExportSettings(eu.startales.spacepixels.config.VariableStarReportOptions options) {
+    public static ExportVisualizationSettings captureExportSettings(VariableStarReportOptions options) {
         return snapshotCurrentExportVisualizationSettings().withVariableStarReportOptions(options);
     }
 
@@ -1257,7 +1261,7 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
         exportTrackVisualizationsInternal(result, rawFrames, fitsFiles, exportDir, config, appConfig,
                 inclusion == null ? ReportInclusion.all() : inclusion, new ReportProgress(progress),
                 settings == null ? captureExportSettings(appConfig != null && appConfig.variableStarReportOptions != null
-                        ? appConfig.variableStarReportOptions : eu.startales.spacepixels.config.VariableStarReportOptions.DEFAULT) : settings);
+                        ? appConfig.variableStarReportOptions : VariableStarReportOptions.DEFAULT) : settings);
     }
 
     static void exportTrackVisualizationsInternal(PipelineResult result, List<short[][]> rawFrames,
@@ -1266,13 +1270,34 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
                                                   ReportProgress progress) throws IOException {
         exportTrackVisualizationsInternal(result, rawFrames, fitsFiles, exportDir, config, appConfig, inclusion, progress,
                 captureExportSettings(appConfig != null && appConfig.variableStarReportOptions != null
-                        ? appConfig.variableStarReportOptions : eu.startales.spacepixels.config.VariableStarReportOptions.DEFAULT));
+                        ? appConfig.variableStarReportOptions : VariableStarReportOptions.DEFAULT));
+    }
+
+    /** Exports an admitted run using its captured application, metadata and catalogue context. */
+    public static void exportTrackVisualizations(PipelineResult result, List<short[][]> rawFrames,
+            FitsFileInformation[] fitsFiles, File exportDir, DetectionConfig config, ReportRunContext runContext,
+            ReportInclusion inclusion, TransientEngineProgressListener progress) throws IOException {
+        exportTrackVisualizationsInternal(result, rawFrames, fitsFiles, exportDir, config,
+                runContext.options().applicationConfig(), inclusion == null ? ReportInclusion.all() : inclusion,
+                new ReportProgress(progress), runContext.options().visualization(), runContext);
     }
 
     private static void exportTrackVisualizationsInternal(PipelineResult result, List<short[][]> rawFrames,
                                                   FitsFileInformation[] fitsFiles, File exportDir,
                                                   DetectionConfig config, AppConfig appConfig, ReportInclusion inclusion,
                                                   ReportProgress progress, ExportVisualizationSettings settings) throws IOException {
+        var options = DetectionRunOptions.capture(appConfig,
+                SpacePixelsDetectionProfileIO.getActiveAutoTuneMaxCandidateFrames())
+                .withVisualization(settings);
+        exportTrackVisualizationsInternal(result, rawFrames, fitsFiles, exportDir, config, appConfig,
+                inclusion, progress, settings, ReportRunContext.capture(options, fitsFiles));
+    }
+
+    /** Emits a report from a single resolved run context without reading live application preferences. */
+    private static void exportTrackVisualizationsInternal(PipelineResult result, List<short[][]> rawFrames,
+            FitsFileInformation[] fitsFiles, File exportDir, DetectionConfig config, AppConfig appConfig,
+            ReportInclusion inclusion, ReportProgress progress, ExportVisualizationSettings settings,
+            ReportRunContext runContext) throws IOException {
         progress.step(0, 2, "preparing");
 
         // Extract variables from the PipelineResult and normalize newer track categories for rendering.
@@ -1330,7 +1355,7 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
         List<ResidualTransientAnalysis.CommonMotionGroup> commonMotionGroups = FindingCategory.COMMON_MOTION.included(inclusion)
                 ? residualTransientAnalysis.commonMotionGroups
                 : java.util.Collections.emptyList();
-        DetectionReportAstrometry.Context astrometryContext = DetectionReportAstrometry.buildContext(fitsFiles, appConfig);
+        DetectionReportAstrometry.Context astrometryContext = runContext.astrometry();
         List<Track> singleStreaks = new ArrayList<>();
         List<Track> streakTracks = new ArrayList<>();
         List<Track> movingTargets = new ArrayList<>();
@@ -1390,6 +1415,7 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
                 streakTracks,
                 movingTargets);
 
+        reportContext.runContext = runContext;
         reportContext.progress = progress;
         reportContext.dataArea = result.dataArea;
         reportContext.cameraFixedGroups = FindingCategory.CAMERA_FIXED.included(inclusion) ? result.cameraFixedGroups : java.util.Collections.emptyList();

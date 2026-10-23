@@ -608,7 +608,7 @@ final class PipelineDiagnosticsSectionWriter {
             SpacePixelsDetectionProfileIO.write(
                     writer,
                     reportContext.config,
-                    SpacePixelsDetectionProfileIO.getActiveAutoTuneMaxCandidateFrames());
+                    reportContext.autoTuneMaxCandidateFrames(), reportContext.settings.getVariableStarReportOptions());
         } catch (Exception e) {
             System.err.println("Failed to write config JSON: " + e.getMessage());
         }
@@ -664,7 +664,7 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<div class='metric-box'><span class='metric-value'>" + summary.masterMapObjectCount + "</span><span class='metric-label'>Objects in the star mask</span></div>");
         report.println("</div>");
         if (hasMasterShieldDiagnostics) {
-            BufferedImage masterImg = DetectionReportGenerator.createDisplayImage(reportContext.masterStackData);
+            BufferedImage masterImg = TrackVisualizationRenderer.createDisplayImage(reportContext.masterStackData, reportContext.settings);
             TrackVisualizationRenderer.saveLosslessPng(masterImg, new File(reportContext.exportDir, "master_stack.png"));
 
             BufferedImage masterMaskImg = DetectionReportGenerator.createMasterMaskOverlay(reportContext.masterStackData, reportContext.masterVetoMask);

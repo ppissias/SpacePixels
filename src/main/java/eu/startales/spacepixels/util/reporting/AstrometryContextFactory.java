@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
@@ -17,7 +18,18 @@ final class AstrometryContextFactory {
     }
 
     static DetectionReportAstrometry.Context buildContext(FitsFileInformation[] fitsFiles, AppConfig appConfig) {
-        WcsSolutionResolver.ResolvedWcsSolution wcsSolution = WcsSolutionResolver.resolve(null, fitsFiles);
+        return buildResolvedContext(fitsFiles, appConfig, WcsSolutionResolver.resolve(null, fitsFiles));
+    }
+
+    /** Resolves astrometry against a privately loaded correction without consulting the live correction cache. */
+    static DetectionReportAstrometry.Context buildContext(FitsFileInformation[] fitsFiles, AppConfig appConfig,
+            PlateSolutionCorrection correction) {
+        return buildResolvedContext(fitsFiles, appConfig, WcsSolutionResolver.resolve(null, fitsFiles, correction));
+    }
+
+    /** Combines resolved WCS with the captured site and copied frame timing metadata. */
+    private static DetectionReportAstrometry.Context buildResolvedContext(FitsFileInformation[] fitsFiles,
+            AppConfig appConfig, WcsSolutionResolver.ResolvedWcsSolution wcsSolution) {
         DetectionReportAstrometry.ObserverSite observerSite = resolveObserverSite(fitsFiles, appConfig);
         String observerCode = resolveSkybotObserverCode(appConfig);
         String observerCodeSource = observerCode != null ? "Configuration panel" : null;

@@ -16,6 +16,12 @@ import eu.startales.spacepixels.config.VariableStarReportOptions;
  * Immutable snapshot of the visualization settings used while rendering report images and animations.
  */
 public final class ExportVisualizationSettings {
+    private static final ExportVisualizationSettings DEFAULTS = new ExportVisualizationSettings(0.5, 5.0, 300, 200, 200, false, 15, 2.0f);
+
+    /** Returns built-in rendering defaults independently of mutable desktop preferences. */
+    public static ExportVisualizationSettings defaults() {
+        return DEFAULTS;
+    }
 
     private final double autoStretchBlackSigma;
     private final double autoStretchWhiteSigma;
@@ -56,7 +62,8 @@ public final class ExportVisualizationSettings {
 
     public VariableStarReportOptions getVariableStarReportOptions() { return variableStarReportOptions; }
 
-    ExportVisualizationSettings withVariableStarReportOptions(VariableStarReportOptions options) {
+    /** Returns an independent immutable snapshot with the supplied variable-star presentation choices. */
+    public ExportVisualizationSettings withVariableStarReportOptions(VariableStarReportOptions options) {
         return new ExportVisualizationSettings(autoStretchBlackSigma, autoStretchWhiteSigma, gifBlinkSpeedMs,
                 trackCropPadding, trackObjectCentricCropSize, includeAiCreativeReportSections, targetCircleRadius,
                 targetCircleStrokeWidth, options);

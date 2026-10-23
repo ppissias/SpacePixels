@@ -6,18 +6,23 @@ import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** Application preferences, loaded independently of imported sessions. */
+/** Application preferences loaded independently of sessions, or detached headless settings with no persistence file. */
 public final class ApplicationSettings {
     private final File file;
     private final AppConfig config;
 
     private ApplicationSettings(File file, AppConfig config) {
-        this.file = Objects.requireNonNull(file);
+        this.file = file;
         this.config = Objects.requireNonNull(config);
     }
 
     public static ApplicationSettings loadDefault() {
         return load(new File(System.getProperty("user.home", ""), SpacePixelsAppConfigIO.DEFAULT_FILENAME));
+    }
+
+    /** Creates detached headless settings without reading or owning a user preference file. */
+    public static ApplicationSettings inMemory(AppConfig config) {
+        return new ApplicationSettings(null, Objects.requireNonNull(config).copy());
     }
 
     public static ApplicationSettings load(File file) {
@@ -41,7 +46,9 @@ public final class ApplicationSettings {
         save(config.copy());
     }
 
+    /** Saves an explicit snapshot; detached headless settings reject persistence without creating a file. */
     public void save(AppConfig snapshot) throws IOException {
+        if (file == null) throw new IOException("In-memory application settings have no persistence file.");
         SpacePixelsAppConfigIO.write(file, snapshot);
     }
 }

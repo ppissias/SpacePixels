@@ -63,6 +63,14 @@ Library consumers should use `getExportDirectory()` and `getReportFile()` rather
 
 The report directory also contains `report-data.json` (schema version 1): generation time, application/engine versions, included groups, rejected frame numbers and findings. A finding has a report-local `id`, `category`, HTML `anchor`, pixel position, optional sky position, observed `frames`, and optional variable-star `starId`/`tier`. Frame numbers in this file are one-based. Empty frame lists on maximum-stack candidates mean per-frame evidence is unavailable; they do not mean zero support. IDs are not persistent identities across reports or iterations. Input paths and observing-site coordinates are not included in this JSON. Existing photometry CSV columns are retained; report labels and identification columns are appended.
 
+## Run options and isolation
+
+`SpacePixelsPipelineRequest.Builder.runOptions(DetectionRunOptions)` supplies the observing-site fallback, immutable `ExportVisualizationSettings` and Auto-Tune candidate-frame limit. The existing `autoTuneMaxCandidateFrames` and `variableStarReportOptions` setters override those values when called afterwards. Site latitude/longitude strings keep the application's decimal-degree/cardinal syntax; FITS site cards still take priority. Invalid or absent configured coordinates retain the existing no-site behavior.
+
+API requests use built-in rendering defaults and no configured observing site unless supplied explicitly. They do not load user-home preferences or modify desktop rendering/tuning defaults. The batch CLI preserves its startup preference loading and passes those values explicitly instead of changing process-wide statics. This replaces the API's former implicit preference lookup; callers needing a particular site or presentation should supply run options.
+
+After input preparation, each ordinary run captures FITS metadata, the active plate correction and the matching saved catalogue before pixel loading/detection. The execution data carries this context into report export and viewer overlays. Later settings edits or catalogue/correction-file replacements affect subsequent runs. Iterative passes share admitted application options and each resolve their own input context before detection. This capture owns metadata/catalogue data, not duplicate image buffers, and does not implement saved-run restoration or diagnostic re-export.
+
 ## Input preparation modes
 
 All imported images must use the same extension (case-insensitive), so FITS and XISF files cannot

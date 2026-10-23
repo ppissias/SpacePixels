@@ -7,6 +7,7 @@
  */
 package eu.startales.spacepixels.config;
 
+import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import eu.startales.spacepixels.util.DisplayImageRenderer;
 import eu.startales.spacepixels.util.RawImageAnnotator;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
@@ -28,6 +29,14 @@ public class SpacePixelsVisualizationPreferences {
 
     public static SpacePixelsVisualizationPreferences captureCurrent() {
         return new SpacePixelsVisualizationPreferences();
+    }
+
+    /** Converts this detached preference snapshot into explicit export options without writing runtime statics. */
+    public ExportVisualizationSettings exportSettings(VariableStarReportOptions options) {
+        var defaults = ExportVisualizationSettings.defaults();
+        return new ExportVisualizationSettings(autoStretchBlackSigma,
+                autoStretchWhiteSigma, gifBlinkSpeedMs, trackCropPadding, defaults.getTrackObjectCentricCropSize(),
+                includeAiCreativeReportSections, defaults.getTargetCircleRadius(), defaults.getTargetCircleStrokeWidth(), options);
     }
 
     public void applyToRuntime() {

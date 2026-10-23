@@ -1,6 +1,9 @@
 package eu.startales.spacepixels.util;
 
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.session.SessionFrames;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
@@ -32,8 +35,8 @@ public final class IterativeDetectionPipelineService {
     @FunctionalInterface
     interface PassRunner {
         StandardDetectionPipelineService.RunResult run(DetectionConfig config, FitsFileInformation[] files,
-                AppConfig appConfig, ImageProcessing.DetectionSafetyPrompt prompt,
-                TransientEngineProgressListener progress, File output, ExportVisualizationSettings visualization) throws Exception;
+                DetectionRunOptions options, ImageProcessing.DetectionSafetyPrompt prompt,
+                TransientEngineProgressListener progress, File output) throws Exception;
     }
 
     @FunctionalInterface
@@ -109,7 +112,7 @@ public final class IterativeDetectionPipelineService {
             passStart = 30;
         }
         config = DetectionConfigRules.snapshot(config, DetectionConfigRules.Operation.CONFIGURATION);
-        return runPasses(config, files, request.appConfig(), request.visualization(), request.plan(),
+        return runPasses(config, files, request.runOptions(), request.plan(),
                 request.directory(), prepared, request.autoTuneProfile(), tuneLimit, tuneReport, prompt, progress, passStart);
     }
 
@@ -123,8 +126,8 @@ public final class IterativeDetectionPipelineService {
         }
         File directory = new File(files[0].getFilePath()).getParentFile();
         IterativeDetectionPlan plan = new IterativeDetectionPlan(5, 5, maximumFrames > 0 ? Math.max(5, maximumFrames) : 0);
-        return runPasses(config.clone(), files, appConfig,
-                DetectionReportGenerator.captureExportSettings(appConfig.variableStarReportOptions), plan,
+        return runPasses(config.clone(), files, DetectionRunOptions.capture(appConfig,
+                SpacePixelsDetectionProfileIO.getActiveAutoTuneMaxCandidateFrames()), plan,
                 directory, directory, null, 0, null,
                 prompt == null ? null : (summary, subset, settings) -> prompt.shouldProceed(summary), progress, 0);
     }
@@ -133,11 +136,12 @@ public final class IterativeDetectionPipelineService {
         return IterativeDetectionPlan.sampleIndices(times, timed, availableFrames, count);
     }
 
-    private File runPasses(DetectionConfig config, FitsFileInformation[] files, AppConfig appConfig,
-                           ExportVisualizationSettings visualization, IterativeDetectionPlan plan,
+    private File runPasses(DetectionConfig config, FitsFileInformation[] files, DetectionRunOptions options,
+                           IterativeDetectionPlan plan,
                            File source, File prepared, AutoTuneProfile tuneProfile,
                            int tuneLimit, String tuneReport, ReportPrompt prompt,
                            TransientEngineProgressListener progress, int passStart) throws Exception {
+        ExportVisualizationSettings visualization = options.visualization();
         List<Integer> sizes = plan.frameCounts(files.length);
         long[] timestamps = Arrays.stream(files).mapToLong(FitsFileInformation::getObservationTimestamp).toArray();
         boolean timed = Arrays.stream(timestamps).allMatch(timestamp -> timestamp >= 0);
@@ -178,8 +182,8 @@ public final class IterativeDetectionPipelineService {
                 StandardDetectionPipelineService.RunResult result;
                 // The pass's pictures say which pass they belong to.
                 try (RunPreviewScope passPictures = RunPreviewScope.labelled("Pass " + (passIndex + 1) + " of " + sizes.size())) {
-                    result = passRunner.run(passConfig, subset, appConfig,
-                            prompt == null ? null : summary -> prompt.confirm(summary, subset, passConfig), passProgress, output, visualization);
+                    result = passRunner.run(passConfig, subset, options,
+                            prompt == null ? null : summary -> prompt.confirm(summary, subset, passConfig), passProgress, output);
                 }
                 passes.set(passIndex, pass(subset, result.report() == null ? "REPORT_DECLINED" : "COMPLETED",
                         result.report() == null ? null : subset.length + "_frames/" + result.report().getName(),
@@ -250,11 +254,11 @@ public final class IterativeDetectionPipelineService {
     }
 
     private static StandardDetectionPipelineService.RunResult standardPass(DetectionConfig config,
-            FitsFileInformation[] files, AppConfig appConfig, ImageProcessing.DetectionSafetyPrompt prompt,
-            TransientEngineProgressListener progress, File output, ExportVisualizationSettings visualization) throws Exception {
+            FitsFileInformation[] files, DetectionRunOptions options, ImageProcessing.DetectionSafetyPrompt prompt,
+            TransientEngineProgressListener progress, File output) throws Exception {
         SessionFrames state = new SessionFrames();
         try {
-            return new StandardDetectionPipelineService(appConfig, state).run(config, files, prompt, progress, output, visualization);
+            return new StandardDetectionPipelineService(options.applicationConfig(), state).run(config, files, prompt, progress, output, options);
         } finally {
             state.clear();
         }

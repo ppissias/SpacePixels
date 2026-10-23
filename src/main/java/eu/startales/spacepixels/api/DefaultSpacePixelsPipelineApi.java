@@ -7,6 +7,7 @@
  */
 package eu.startales.spacepixels.api;
 
+import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.util.AutoTunerRunner;
@@ -48,6 +49,7 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
             }
 
             SpacePixelsProgressListener progressListener = request.getProgressListener();
+            var runOptions = request.getRunOptions();
             DetectionInputPreparation.PreparedDirectory preparedDirectory = DetectionInputPreparation.prepareInputDirectory(
                     request.getInputDirectory(),
                     request.getInputPreparationMode() == InputPreparationMode.AUTO_PREPARE_TO_16BIT_MONO,
@@ -55,8 +57,8 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
                     (percentage, message) -> emitScaledProgress(progressListener, 0, 15, percentage, message));
 
             emitProgress(progressListener, 15, "Validating FITS metadata for pipeline execution...");
-            imageProcessing = ImageProcessing.openProcessor(preparedDirectory.getPreparedInputDirectory());
-            imageProcessing.getAppConfig().variableStarReportOptions = request.getVariableStarReportOptions();
+            imageProcessing = ImageProcessing.openProcessor(preparedDirectory.getPreparedInputDirectory(),
+                    ApplicationSettings.inMemory(runOptions.applicationConfig()));
             FitsFileInformation[] filesInfo = imageProcessing.getFitsfileInformationHeadless();
 
             AutoTunerResult autoTuneResult = null;
@@ -79,7 +81,7 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
             final int finalPipelineEndPercent = pipelineEndPercent;
             ImageProcessing.PipelineExecutionData executionData = imageProcessing.runDetectionPipeline(
                     pipelineBaseConfig,
-                    (percentage, message) -> emitScaledProgress(progressListener, finalPipelineStartPercent, finalPipelineEndPercent, percentage, message));
+                    (percentage, message) -> emitScaledProgress(progressListener, finalPipelineStartPercent, finalPipelineEndPercent, percentage, message), runOptions);
 
             File reportFile = null;
             File exportDirectory = null;

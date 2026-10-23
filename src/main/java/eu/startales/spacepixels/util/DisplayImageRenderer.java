@@ -10,6 +10,7 @@
 
 package eu.startales.spacepixels.util;
 
+import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
 
@@ -18,8 +19,8 @@ import java.awt.image.WritableRaster;
  */
 public final class DisplayImageRenderer {
 
-    public static double autoStretchBlackSigma = 0.5;
-    public static double autoStretchWhiteSigma = 5.0;
+    public static double autoStretchBlackSigma = ExportVisualizationSettings.defaults().getAutoStretchBlackSigma();
+    public static double autoStretchWhiteSigma = ExportVisualizationSettings.defaults().getAutoStretchWhiteSigma();
 
     private DisplayImageRenderer() {
     }

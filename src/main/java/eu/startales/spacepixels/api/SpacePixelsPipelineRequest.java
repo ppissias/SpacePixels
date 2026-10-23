@@ -7,6 +7,7 @@
  */
 package eu.startales.spacepixels.api;
 
+import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -24,6 +25,7 @@ import java.util.Objects;
  * progress listener.
  */
 public final class SpacePixelsPipelineRequest {
+    private final DetectionRunOptions runOptions;
     private final File inputDirectory;
     private final DetectionConfig detectionConfig;
     private final AutoTuneProfile autoTuneProfile;
@@ -34,6 +36,7 @@ public final class SpacePixelsPipelineRequest {
     private final VariableStarReportOptions variableStarReportOptions;
     private final SpacePixelsProgressListener progressListener;
 
+    /** Captures independent engine and application options without consulting runtime preferences. */
     private SpacePixelsPipelineRequest(Builder builder) {
         this.inputDirectory = builder.inputDirectory;
         this.detectionConfig = builder.detectionConfig == null ? null
@@ -45,6 +48,8 @@ public final class SpacePixelsPipelineRequest {
         this.generateReport = builder.generateReport;
         this.variableStarReportOptions = builder.variableStarReportOptions;
         this.progressListener = builder.progressListener;
+        this.runOptions = builder.runOptions.withAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames)
+                .withVariableStarReportOptions(variableStarReportOptions);
     }
 
     /**
@@ -55,6 +60,11 @@ public final class SpacePixelsPipelineRequest {
      */
     public static Builder builder(File inputDirectory) {
         return new Builder(inputDirectory);
+    }
+
+    /** Returns immutable site/render/tuning options; built-in defaults never read home preferences or desktop globals. */
+    public DetectionRunOptions getRunOptions() {
+        return runOptions;
     }
 
     /**
@@ -137,6 +147,7 @@ public final class SpacePixelsPipelineRequest {
      * Builder for {@link SpacePixelsPipelineRequest}.
      */
     public static final class Builder {
+        private DetectionRunOptions runOptions = DetectionRunOptions.defaults();
         private final File inputDirectory;
         private DetectionConfig detectionConfig;
         private AutoTuneProfile autoTuneProfile;
@@ -149,6 +160,14 @@ public final class SpacePixelsPipelineRequest {
 
         private Builder(File inputDirectory) {
             this.inputDirectory = Objects.requireNonNull(inputDirectory, "inputDirectory");
+        }
+
+        /** Sets explicit application options; later tuning-limit/card setters override their respective values. */
+        public Builder runOptions(DetectionRunOptions options) {
+            this.runOptions = Objects.requireNonNull(options, "options");
+            this.autoTuneMaxCandidateFrames = options.autoTuneMaxCandidateFrames();
+            this.variableStarReportOptions = options.visualization().getVariableStarReportOptions();
+            return this;
         }
 
         /** Sets the card limit and display order, retaining fixed report candidate identities. */

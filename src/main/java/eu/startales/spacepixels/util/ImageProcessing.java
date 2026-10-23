@@ -9,6 +9,10 @@
  */
 package eu.startales.spacepixels.util;
 
+import eu.startales.spacepixels.config.DetectionRunOptions;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
+import eu.startales.spacepixels.util.reporting.ReportRunContext;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jplatesolve.PlateSolveOperation;
 
@@ -178,6 +182,7 @@ public class ImageProcessing implements AutoCloseable {
      * report export starts.
      */
     public static final class PipelineExecutionData {
+        private final ReportRunContext reportContext;
         private final PipelineResult pipelineResult;
         private final DetectionConfig effectiveConfig;
         private final FitsFileInformation[] filesInformation;
@@ -188,12 +193,19 @@ public class ImageProcessing implements AutoCloseable {
                               DetectionConfig effectiveConfig,
                               FitsFileInformation[] filesInformation,
                               List<short[][]> rawFramesForExport,
-                              long pipelineDurationMillis) {
+                              long pipelineDurationMillis,
+                              ReportRunContext reportContext) {
+            this.reportContext = java.util.Objects.requireNonNull(reportContext);
             this.pipelineResult = pipelineResult;
             this.effectiveConfig = effectiveConfig == null ? null : effectiveConfig.clone();
             this.filesInformation = filesInformation == null ? new FitsFileInformation[0] : filesInformation.clone();
             this.rawFramesForExport = Collections.unmodifiableList(new ArrayList<>(rawFramesForExport));
             this.pipelineDurationMillis = pipelineDurationMillis;
+        }
+
+        /** Returns the captured report options, metadata, WCS and catalogue owned by this execution. */
+        public ReportRunContext getReportContext() {
+            return reportContext;
         }
 
         public PipelineResult getPipelineResult() {
@@ -205,7 +217,7 @@ public class ImageProcessing implements AutoCloseable {
         }
 
         public FitsFileInformation[] getFilesInformation() {
-            return filesInformation.clone();
+            return java.util.Arrays.stream(filesInformation).map(FitsFileInformation::snapshot).toArray(FitsFileInformation[]::new);
         }
 
         public List<short[][]> getRawFramesForExport() {
@@ -337,8 +349,20 @@ public class ImageProcessing implements AutoCloseable {
      * session report plus associated visualizations.
      */
     public File detectObjects(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
+        return detectObjects(config, safetyPrompt, progressListener, captureRunOptions());
+    }
+
+    /** Captures application options before a desktop job is queued; no file access or image copying occurs. */
+    public DetectionRunOptions captureRunOptions() {
+        return DetectionRunOptions.capture(appConfig,
+                SpacePixelsDetectionProfileIO.getActiveAutoTuneMaxCandidateFrames());
+    }
+
+    /** Runs a previously admitted request with its captured application options. */
+    public File detectObjects(DetectionConfig config, DetectionSafetyPrompt safetyPrompt,
+            TransientEngineProgressListener progressListener, DetectionRunOptions options) throws Exception {
         if (sessionFrames.getFiles() == null) getFitsfileInformation();
-        return standardDetectionPipelineService.detectObjects(config, sessionFrames.getFiles(), safetyPrompt, progressListener);
+        return standardDetectionPipelineService.run(config, sessionFrames.getFiles(), safetyPrompt, progressListener, null, options).report();
     }
 
     /** Tracks of the last detection run on these frames, or null when none has run. */
@@ -356,8 +380,14 @@ public class ImageProcessing implements AutoCloseable {
      * any report artifacts to disk.
      */
     public PipelineExecutionData runDetectionPipeline(DetectionConfig config, TransientEngineProgressListener progressListener) throws Exception {
+        return runDetectionPipeline(config, progressListener, captureRunOptions());
+    }
+
+    /** Runs with explicit immutable application options; returned execution data carries them into later export. */
+    public PipelineExecutionData runDetectionPipeline(DetectionConfig config, TransientEngineProgressListener progressListener,
+            DetectionRunOptions options) throws Exception {
         if (sessionFrames.getFiles() == null) getFitsfileInformation();
-        return standardDetectionPipelineService.runDetectionPipeline(config, sessionFrames.getFiles(), progressListener);
+        return standardDetectionPipelineService.runDetectionPipeline(config, sessionFrames.getFiles(), progressListener, options);
     }
 
     /**

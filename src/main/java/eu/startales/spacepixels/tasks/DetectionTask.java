@@ -10,6 +10,8 @@
 
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.config.DetectionRunOptions;
+import io.github.ppissias.jtransient.config.DetectionConfigRules;
 import io.github.ppissias.jtransient.execution.CancellationScope;
 
 import eu.startales.spacepixels.jobs.Job;
@@ -28,6 +30,7 @@ public class DetectionTask implements Job<File> {
 
     // Hold the configuration
     private final DetectionConfig config;
+    private final DetectionRunOptions options;
     private final ImageProcessing.DetectionSafetyPrompt safetyPrompt;
     /** Where the run's live-view pictures go; null makes none. */
     private RunPreviewSink previews;
@@ -37,11 +40,13 @@ public class DetectionTask implements Job<File> {
         this(preProcessing, config, summary -> summary.totalDetections <= 50);
     }
 
-    /** Creates a job with an explicit report decision; null exports every result without asking. */
+    /** Captures a job's settings and report decision; a missing processor retains the existing execution-time failure. */
     public DetectionTask(ImageProcessing preProcessing, DetectionConfig config,
                          ImageProcessing.DetectionSafetyPrompt safetyPrompt) {
         this.preProcessing = preProcessing;
-        this.config = config;
+        this.config = DetectionConfigRules.snapshot(config,
+                DetectionConfigRules.Operation.CONFIGURATION);
+        this.options = preProcessing == null ? DetectionRunOptions.defaults() : preProcessing.captureRunOptions();
         this.safetyPrompt = safetyPrompt;
     }
 
@@ -61,7 +66,7 @@ public class DetectionTask implements Job<File> {
     }
 
     private JobOutcome<File> runCancellable(JobContext context) throws Exception {
-        File exportDir = preProcessing.detectObjects(config, safetyPrompt, context::progress);
+        File exportDir = preProcessing.detectObjects(config, safetyPrompt, context::progress, options);
         if (exportDir == null) {
             return JobOutcome.declined("Report generation aborted by user due to high track count. Try raising your thresholds.");
         }

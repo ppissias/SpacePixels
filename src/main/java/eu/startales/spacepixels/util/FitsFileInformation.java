@@ -121,6 +121,13 @@ public class FitsFileInformation {
         return fitsHeader;
     }
 
+    /** Copies file identity, dimensions and header metadata for a run; no image pixels are loaded or retained. */
+    public FitsFileInformation snapshot() {
+        FitsFileInformation copy = new FitsFileInformation(filePath, fileName, monochrome, sizeWidth, sizeHeight);
+        copy.fitsHeader.putAll(fitsHeader);
+        return copy;
+    }
+
     // --- NEW: Helper methods to extract display information from the FITS header map ---
 
     public String getRawObservationDateHeader() {
