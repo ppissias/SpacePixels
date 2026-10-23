@@ -27,7 +27,7 @@ public class ProcessingSessionTest {
     private ProcessingSession session(String name, ApplicationSettings settings) throws Exception {
         File directory = folder.newFolder(name);
         FitsFileInformation frame = new FitsFileInformation(new File(directory, "frame.fit").toString(), "frame.fit", true, 10, 10);
-        return new ProcessingSession(ImageProcessing.getInstance(directory, settings), new FitsFileInformation[]{frame}, null);
+        return new ProcessingSession(ImageProcessing.openProcessor(directory, settings), new FitsFileInformation[]{frame}, null);
     }
 
     private ApplicationSettings settings() {

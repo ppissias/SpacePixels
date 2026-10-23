@@ -17,7 +17,7 @@ public class SessionMetadataStoreTest {
     @Test
     public void preparationRestoresOnlyMetadataThatBelongsToTheImportedFrames() throws Exception {
         File directory = SyntheticDatasetFactory.createSolvedMono16FitsSequence(folder.getRoot().toPath(), "frames", 3).toFile();
-        try (ImageProcessing processing = ImageProcessing.getInstance(directory,
+        try (ImageProcessing processing = ImageProcessing.openProcessor(directory,
                 ApplicationSettings.load(new File(folder.getRoot(), "preferences.json")))) {
             FitsFileInformation[] frames = processing.getFitsfileInformationHeadless();
             var solution = WcsSolutionResolver.resolveUncorrected(null, frames);
@@ -56,7 +56,7 @@ public class SessionMetadataStoreTest {
     @Test
     public void suppliedWcsCorrectionDoesNotConsultOrOverrideTheSavedFile() throws Exception {
         File directory = SyntheticDatasetFactory.createSolvedMono16FitsSequence(folder.getRoot().toPath(), "wcs", 3).toFile();
-        try (ImageProcessing processing = ImageProcessing.getInstance(directory,
+        try (ImageProcessing processing = ImageProcessing.openProcessor(directory,
                 ApplicationSettings.load(new File(folder.getRoot(), "preferences.json")))) {
             FitsFileInformation[] frames = processing.getFitsfileInformationHeadless();
             var header = WcsSolutionResolver.resolveUncorrected(null, frames).getTransformer();

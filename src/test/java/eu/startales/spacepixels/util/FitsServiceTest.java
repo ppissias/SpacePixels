@@ -25,7 +25,7 @@ public class FitsServiceTest {
         Interaction interaction = new Interaction();
         FitsBatchService batch = new FitsBatchService(input, new FitsVisualizationRenderer());
         try (FitsImportService importer = new FitsImportService(input, state, batch, interaction);
-             ImageProcessing processing = ImageProcessing.getInstance(input, settings())) {
+             ImageProcessing processing = ImageProcessing.openProcessor(input, settings())) {
             FitsFileInformation[] interactive = importer.getFitsfileInformation();
             FitsFileInformation[] headless = processing.getFitsfileInformationHeadless();
             assertEquals(3, interactive.length);
@@ -53,7 +53,7 @@ public class FitsServiceTest {
         write(input, "float.fit", new float[][]{{1, 2}, {3, 4}}, false);
         Interaction interaction = new Interaction();
         File converted;
-        try (ImageProcessing processing = ImageProcessing.getInstance(input, settings(), interaction)) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(input, settings(), interaction)) {
             try {
                 processing.getFitsfileInformation();
                 throw new AssertionError("Expected the accepted conversion to redirect import");
@@ -63,7 +63,7 @@ public class FitsServiceTest {
         }
         assertEquals(List.of("Format Conversion Required", "Success"), interaction.questions);
         assertEquals(0, interaction.openProgress);
-        try (ImageProcessing processing = ImageProcessing.getInstance(converted, settings())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(converted, settings())) {
             assertEquals(1, processing.getFitsfileInformation().length);
         }
     }
@@ -73,7 +73,7 @@ public class FitsServiceTest {
     public void facadeWithoutInteractionRejectsFloatInputWithoutWritingDerivatives() throws Exception {
         File input = folder.newFolder("headless-float");
         write(input, "float.fit", new float[][]{{1, 2}, {3, 4}}, false);
-        try (ImageProcessing processing = ImageProcessing.getInstance(input, settings())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(input, settings())) {
             Exception failure = assertThrows(nom.tam.fits.FitsException.class, processing::getFitsfileInformation);
             assertTrue(failure.getMessage(), failure.getMessage().contains("BITPIX=-32"));
         }
@@ -183,7 +183,7 @@ public class FitsServiceTest {
         try (Fits converted = new Fits(new File(input, "_uncompressed/sample.fit"))) {
             assertRows(pixels, (short[][]) ImageProcessing.getImageHDU(converted).getKernel());
         }
-        try (ImageProcessing processing = ImageProcessing.getInstance(new File(input, "_uncompressed"), settings())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(new File(input, "_uncompressed"), settings())) {
             assertEquals(1, processing.getFitsfileInformationHeadless().length);
         }
     }
@@ -193,7 +193,7 @@ public class FitsServiceTest {
         File input = SyntheticDatasetFactory.createColor16FitsSequence(folder.getRoot().toPath(), "batch", 2).toFile();
         File original = FitsFiles.list(input)[0];
         byte[] untouched = Files.readAllBytes(original.toPath());
-        try (ImageProcessing processing = ImageProcessing.getInstance(input, settings())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(input, settings())) {
             File generated = processing.batchConvertToMono(true, 10, 2, StretchAlgorithm.ASINH, null);
             assertEquals("_mono", generated.getName());
             String stem = original.getName().replace(".fit", "");

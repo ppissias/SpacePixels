@@ -58,7 +58,7 @@ public class LivePreviewPipelineTest {
         config.starCountSigmaDeviation = 1.5;
         AppConfig app = new AppConfig();
         FitsFileInformation[] files;
-        try (ImageProcessing processing = ImageProcessing.getInstance(source)) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(source)) {
             files = processing.getFitsfileInformationHeadless();
         }
 

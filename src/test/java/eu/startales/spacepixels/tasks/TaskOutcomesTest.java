@@ -36,7 +36,7 @@ public class TaskOutcomesTest {
 
     @Test
     public void aFailedPlateSolveCarriesItsReasonWithoutOpeningADialog() throws Exception {
-        try (ImageProcessing processing = ImageProcessing.getInstance(folder.newFolder("session"))) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(folder.newFolder("session"))) {
             // In memory only: the saved application config is not touched.
             processing.getAppConfig().astapExecutablePath = new File(folder.getRoot(), "missing-astap.exe").getAbsolutePath();
             JobOutcome<?> solved = outcomeOf(new PlateSolveTask(processing, missingFrame().getFilePath(), true, false));
@@ -63,7 +63,7 @@ public class TaskOutcomesTest {
     @Test
     public void blinkLoadsEveryFrameAndStopsWhenAsked() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 3);
-        try (ImageProcessing processing = ImageProcessing.getInstance(sequence.toFile())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             FitsFileInformation[] files = processing.getFitsfileInformationHeadless();
             List<String> reads = new ArrayList<>();
             JobOutcome<BlinkSequence> loaded = outcomeOf(new BlinkImagesTask(files, new AtomicBoolean(),
@@ -83,7 +83,7 @@ public class TaskOutcomesTest {
     public void detectionUsesTheSuppliedReportDecision() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "prompt", 5);
         AtomicBoolean asked = new AtomicBoolean();
-        try (ImageProcessing processing = ImageProcessing.getInstance(sequence.toFile())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             DetectionTask task = new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig(), summary -> {
                 asked.set(true);
                 assertTrue(summary.totalDetections >= 0);
@@ -165,7 +165,7 @@ public class TaskOutcomesTest {
     private static JobOutcome<File> runCancelledAt(Path sequence, String cancelAt,
                                                    java.util.function.Function<ImageProcessing, Job<File>> job,
                                                    List<String> messages) throws Exception {
-        try (ImageProcessing processing = ImageProcessing.getInstance(sequence.toFile())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             processing.getFitsfileInformationHeadless();
             List<JobOutcome<File>> outcomes = new ArrayList<>();
             JobCoordinator coordinator = new JobCoordinator(Runnable::run, Runnable::run, () -> false);

@@ -23,7 +23,7 @@ Other `eu.startales.spacepixels.*` packages should be treated as internal implem
 - `io.github.ppissias.jtransient.engine.PipelineResult`
 - `eu.startales.spacepixels.util.FitsFileInformation`
 
-The internal `ImageProcessing` facade creates no Swing adapters (S13). Its factories without interaction use strict headless validation; desktop code supplies `FitsImportInteraction` explicitly. This does not change the supported pipeline request/result surface, preparation policy or API report behavior; API execution continues without report-size questions.
+The internal `ImageProcessing` facade creates no Swing adapters (S13). Its `openProcessor` factories each create a new caller-owned facade, which must be closed to release its services and buffers. Factories without interaction use strict headless validation; desktop code supplies `FitsImportInteraction` explicitly. This does not change the supported pipeline request/result surface, preparation policy or API report behavior; API execution continues without report-size questions.
 
 ## Dependency
 

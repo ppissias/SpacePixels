@@ -35,7 +35,7 @@ public class WriteWcsJobTest {
     public void theSolutionIsWrittenIntoTheFrameAndTheSolverFilesAreRemoved() throws Exception {
         File frame = frame();
         File sidecar = sidecarOf(frame);
-        try (ImageProcessing processing = ImageProcessing.getInstance(frame.getParentFile())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(frame.getParentFile())) {
             JobOutcome<Map<String, String>> outcome = outcomeOf(new WriteWcsTask(processing, frame.getAbsolutePath(),
                     new PlateSolveResult(true, "", "", solution())));
             assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Completed<?>);
@@ -53,7 +53,7 @@ public class WriteWcsJobTest {
         File frame = frame();
         File sidecar = sidecarOf(frame);
         byte[] before = Files.readAllBytes(frame.toPath());
-        try (ImageProcessing processing = ImageProcessing.getInstance(frame.getParentFile())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(frame.getParentFile())) {
             JobOutcome<Map<String, String>> outcome = outcomeOf(new WriteWcsTask(processing, frame.getAbsolutePath(),
                     new PlateSolveResult(true, "", "", new LinkedHashMap<>())));
             assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Failed<?> failed

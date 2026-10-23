@@ -164,7 +164,7 @@ public class IterativeDetectionRunTest {
         for (int passIndex = 0; passIndex < passes.size(); passIndex++) {
             JsonObject pass = passes.get(passIndex).getAsJsonObject();
             List<FitsFileInformation> subset = new ArrayList<>();
-            try (ImageProcessing processing = ImageProcessing.getInstance(source)) {
+            try (ImageProcessing processing = ImageProcessing.openProcessor(source)) {
                 FitsFileInformation[] all = processing.getFitsfileInformationHeadless();
                 for (var frame : inputs(index, pass)) {
                     String filename = frame.getAsJsonObject().get("filename").getAsString();

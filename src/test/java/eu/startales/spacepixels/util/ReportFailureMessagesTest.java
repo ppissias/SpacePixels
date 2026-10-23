@@ -32,7 +32,7 @@ public class ReportFailureMessagesTest {
     public void aReportThatCannotBeWrittenFailsWithItsReason() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", FRAME_COUNT);
         DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
-        try (ImageProcessing processing = ImageProcessing.getInstance(sequence.toFile())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             processing.getFitsfileInformationHeadless();
             // After the detection, before the report: the session folder becomes a file, so no report folder fits in it.
             IOException failure = assertThrows(IOException.class, () -> processing.detectObjects(config, summary -> {
@@ -47,7 +47,7 @@ public class ReportFailureMessagesTest {
     public void anIterativePassWithoutAReportSaysSoOnTheIndexPage() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", FRAME_COUNT);
         DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
-        try (ImageProcessing processing = ImageProcessing.getInstance(sequence.toFile())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             processing.getFitsfileInformationHeadless();
             // Before the pass writes its report: a file takes the place of the pass's folder.
             File index = processing.detectSlowObjectsIterative(config, summary -> {

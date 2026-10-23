@@ -59,7 +59,7 @@ public class JobCoordinatorTest {
     public void aJobLocksTheWindowBeforeItsWorkerRunsAndASecondJobIsRefused() throws Exception {
         File directory = folder.newFolder("session");
         FitsFileInformation frame = new FitsFileInformation(new File(directory, "frame.fit").toString(), "frame.fit", true, 10, 10);
-        try (ProcessingSession session = new ProcessingSession(ImageProcessing.getInstance(directory,
+        try (ProcessingSession session = new ProcessingSession(ImageProcessing.openProcessor(directory,
                 ApplicationSettings.load(new File(folder.getRoot(), "preferences.json"))), new FitsFileInformation[]{frame}, null)) {
             JobCoordinator.Admission first = coordinator.start(JobKind.DETECTION, session, context -> JobOutcome.completed("report"), record());
             assertTrue(first.admitted());

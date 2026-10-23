@@ -57,7 +57,7 @@ public class SpacePixelsIterativeRealDataIT {
                     null);
             assertTrue(preparedDirectory.getPreparedInputDirectory().isDirectory());
 
-            ImageProcessing imageProcessing = ImageProcessing.getInstance(preparedDirectory.getPreparedInputDirectory());
+            ImageProcessing imageProcessing = ImageProcessing.openProcessor(preparedDirectory.getPreparedInputDirectory());
             int frameCount = imageProcessing.getFitsfileInformationHeadless().length;
             assertTrue(frameCount >= 5);
             int maxFrames = resolveConfiguredMaxFrames();

@@ -31,7 +31,7 @@ public class BatchJobsTest {
     @Test
     public void convertToMonoReturnsTheFolderOfTheMonoFrames() throws Exception {
         Path sequence = SyntheticDatasetFactory.createColor16FitsSequence(folder.getRoot().toPath(), "color16", FRAME_COUNT);
-        try (ImageProcessing processing = ImageProcessing.getInstance(sequence.toFile())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             JobOutcome<File> outcome = outcomeOf(new BatchConvertMonoTask(processing, false, 1, 1, StretchAlgorithm.values()[0]));
             File mono = ((JobOutcome.Completed<File>) outcome).result();
             assertNotNull(mono);
@@ -42,7 +42,7 @@ public class BatchJobsTest {
     @Test
     public void batchStretchWritesAStretchedCopyOfEveryFrame() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", FRAME_COUNT);
-        try (ImageProcessing processing = ImageProcessing.getInstance(sequence.toFile())) {
+        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             JobOutcome<Void> outcome = outcomeOf(new BatchStretchTask(processing, 1, 1, StretchAlgorithm.values()[0]));
             assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Completed<Void>);
             File[] stretched = sequence.toFile().listFiles(file -> file.isDirectory() && file.getName().contains("stretched"));

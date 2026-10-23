@@ -404,7 +404,7 @@ Owns or coordinates:
 
 Design note:
 
-- `ImageProcessing.getInstance(directory)` binds processing state to the active imported directory.
+- `ImageProcessing.openProcessor(directory)` binds processing state to the active imported directory.
 - For new backend behavior, prefer a focused helper/service and delegate from `ImageProcessing`.
 
 ### `StandardDetectionPipelineService`
@@ -514,7 +514,7 @@ The report remains a static disk artifact; this server only supports live enrich
 ApplicationWindow
 -> FitsImportTask
 -> XisfImageConverter.prepareDirectoryForFitsImport(...)
--> ImageProcessing.getInstance(importDirectory, applicationSettings)
+-> ImageProcessing.openProcessor(importDirectory, applicationSettings)
 -> ImageProcessing.getFitsfileInformation()
 -> JobOutcome (Completed with the session, Declined, Cancelled or Failed)
 -> ApplicationWindow.installSession(...) and the SessionListeners
@@ -542,7 +542,7 @@ The engine receives unsigned-16-bit-equivalent pixels (`BZERO` 32768, `BSCALE` 1
 ```text
 DefaultSpacePixelsPipelineApi
 -> DetectionInputPreparation.prepareInputDirectory(...)
--> ImageProcessing.getInstance(preparedDirectory)
+-> ImageProcessing.openProcessor(preparedDirectory)
 -> ImageProcessing.getFitsfileInformationHeadless()
 ```
 

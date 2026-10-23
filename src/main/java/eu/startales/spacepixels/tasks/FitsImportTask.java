@@ -84,7 +84,7 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
                     context.progress(90, "Loading generated FITS metadata...");
                 }
 
-                imgProcessing = ImageProcessing.getInstance(importDirectory, preferences, interaction);
+                imgProcessing = ImageProcessing.openProcessor(importDirectory, preferences, interaction);
                 FitsFileInformation[] filesInfo = imgProcessing.getFitsfileInformation();
                 context.progress(90, "FITS metadata loaded.");
                 if (filesInfo.length == 0) {

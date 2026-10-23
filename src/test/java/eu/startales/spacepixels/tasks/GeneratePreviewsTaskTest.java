@@ -25,7 +25,7 @@ public class GeneratePreviewsTaskTest {
         short[][][] colour = {{{Short.MAX_VALUE, Short.MIN_VALUE}}, {{0, Short.MAX_VALUE}}, {{Short.MIN_VALUE, 0}}};
         Object[] frames = {mono, colour};
         int[][] expected = {{0x000000, 0x010101, 0x808080, 0xffffff}, {0xff8000, 0x00ff80}};
-        try (ImageProcessing processor = ImageProcessing.getInstance(temporary.getRoot())) {
+        try (ImageProcessing processor = ImageProcessing.openProcessor(temporary.getRoot())) {
             for (int i = 0; i < frames.length; i++) {
                 File file = new File(temporary.getRoot(), "frame" + i + ".fit");
                 try (Fits fits = new Fits()) {

@@ -63,7 +63,7 @@ public class ImageProcessingTest {
         remoteWcsHeader.put("CD2_2", -0.000467862222d);
         writeFitsFile(remoteWcsPath, 2, 2, remoteWcsHeader);
 
-        ImageProcessing imageProcessing = ImageProcessing.getInstance(tempDirectory.toFile());
+        ImageProcessing imageProcessing = ImageProcessing.openProcessor(tempDirectory.toFile());
         Map<String, String> updatedHeader = imageProcessing.updateFitsHeaderWithWCS(
                 fitsPath.toString(),
                 createAstrometrySolveInfo(remoteWcsPath.toUri().toString().replace(":", "\\:")));
@@ -104,7 +104,7 @@ public class ImageProcessingTest {
 
         writeFitsFile(fitsPath, 100, 80, new HashMap<>());
 
-        ImageProcessing imageProcessing = ImageProcessing.getInstance(tempDirectory.toFile());
+        ImageProcessing imageProcessing = ImageProcessing.openProcessor(tempDirectory.toFile());
         imageProcessing.updateFitsHeaderWithWCS(fitsPath.toString(), createStandardWcsSolveInfo());
 
         try (Fits updatedFits = new Fits(fitsPath.toFile())) {
@@ -133,7 +133,7 @@ public class ImageProcessingTest {
         originalHeader.put("OBJECT", "M81");
         writeFitsFile(fitsPath, 100, 80, originalHeader);
 
-        ImageProcessing imageProcessing = ImageProcessing.getInstance(tempDirectory.toFile());
+        ImageProcessing imageProcessing = ImageProcessing.openProcessor(tempDirectory.toFile());
         try (FileInputStream heldOpen = new FileInputStream(fitsPath.toFile())) {
             imageProcessing.updateFitsHeaderWithWCS(fitsPath.toString(), createStandardWcsSolveInfo());
             fail("Expected the replacement of an open file to fail.");
@@ -176,7 +176,7 @@ public class ImageProcessingTest {
 
         writeFitsFile(fitsPath, 100, 80, new HashMap<>());
 
-        ImageProcessing imageProcessing = ImageProcessing.getInstance(tempDirectory.toFile());
+        ImageProcessing imageProcessing = ImageProcessing.openProcessor(tempDirectory.toFile());
 
         try {
             imageProcessing.updateFitsHeaderWithWCS(fitsPath.toString(), createAstrometrySolveInfo(null));
@@ -215,7 +215,7 @@ public class ImageProcessingTest {
         solveInfo.put("wcs_link", temporaryWcsPath.toString());
         solveInfo.put("annotated_image_link", temporaryPreviewPath.toString());
 
-        ImageProcessing imageProcessing = ImageProcessing.getInstance(tempDirectory.toFile());
+        ImageProcessing imageProcessing = ImageProcessing.openProcessor(tempDirectory.toFile());
         imageProcessing.cleanupSolveArtifacts(
                 fitsPath.toString(),
                 new PlateSolveResult(true, "", "", solveInfo));

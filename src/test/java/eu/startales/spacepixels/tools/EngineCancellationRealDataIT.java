@@ -118,7 +118,7 @@ public class EngineCancellationRealDataIT {
         scratchHome = Files.createTempDirectory("spacepixels-cancellation-home-");
         try {
             System.setProperty("user.home", scratchHome.toString());
-            try (ImageProcessing processing = ImageProcessing.getInstance(new File(dataset))) {
+            try (ImageProcessing processing = ImageProcessing.openProcessor(new File(dataset))) {
                 FitsFileInformation[] files = processing.getFitsfileInformationHeadless();
                 frames = new ArrayList<>();
                 for (int index = 0; index < files.length; index++) {

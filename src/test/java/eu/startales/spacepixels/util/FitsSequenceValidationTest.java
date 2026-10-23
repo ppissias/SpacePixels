@@ -85,7 +85,7 @@ public class FitsSequenceValidationTest {
             signed.write(new File(directory, "C.fit"));
         }
         assertRejectedGuiAndPreparation(directory, "same type");
-        try (ImageProcessing processor = ImageProcessing.getInstance(directory)) {
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
             IOException exception = assertThrows(IOException.class, processor::getFitsfileInformationHeadless);
             assertTrue(exception.getMessage(), exception.getMessage().contains("C.fit has BZERO=0 and BSCALE=1"));
         }
@@ -100,7 +100,7 @@ public class FitsSequenceValidationTest {
                 signed.write(new File(directory, name));
             }
         }
-        try (ImageProcessing processor = ImageProcessing.getInstance(directory)) {
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
             IOException exception = assertThrows(IOException.class, processor::getFitsfileInformationHeadless);
             assertTrue(exception.getMessage(), exception.getMessage().contains("Expected unsigned 16-bit FITS files"));
         }
@@ -115,7 +115,7 @@ public class FitsSequenceValidationTest {
         writeFits(directory, "Long1.fit", new short[2][3], null, 120.0);
         writeFits(directory, "Long2.fit", new short[2][3], null, 120.0);
         assertRejectedEverywhere(directory, "4 images of 60 s, 2 images of 120 s (Long1.fit, Long2.fit)");
-        try (ImageProcessing processor = ImageProcessing.getInstance(directory)) {
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
             MixedExposureException mixed = assertThrows(MixedExposureException.class, processor::getFitsfileInformation);
             assertTrue(mixed.canImportLargestGroup());
             assertEquals(4, mixed.getLargestGroup().size());
@@ -175,7 +175,7 @@ public class FitsSequenceValidationTest {
         File directory = temporaryFolder.newFolder();
         writeFits(directory, "A.fit", new short[2][3], null, 30.0);
         writeFits(directory, "B.fit", new short[2][3], null, 60.0);
-        try (ImageProcessing processor = ImageProcessing.getInstance(directory)) {
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
             MixedExposureException mixed = assertThrows(MixedExposureException.class, processor::getFitsfileInformation);
             assertFalse(mixed.canImportLargestGroup());
             assertTrue(mixed.getMessage(), mixed.getMessage().endsWith("Import a sequence of images that share one exposure time."));
@@ -189,7 +189,7 @@ public class FitsSequenceValidationTest {
         writeFits(directory, "B.fit", new short[2][3], "2026-04-08T01:00:01", 60.0);
         writeFits(directory, "C.fit", new short[2][3], "2026-04-08T01:00:03", 120.0);
         MixedExposureException mixed;
-        try (ImageProcessing processor = ImageProcessing.getInstance(directory)) {
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
             mixed = assertThrows(MixedExposureException.class, processor::getFitsfileInformation);
         }
         File subfolder = mixed.getLargestGroup().copyIntoSubfolder(null);
@@ -217,7 +217,7 @@ public class FitsSequenceValidationTest {
             writeFits(directory, "S" + i + ".fit", new short[2][3], null, 60.0);
         }
         writeFits(directory, "L&1.fit", new short[2][3], null, 120.0);
-        try (ImageProcessing processor = ImageProcessing.getInstance(directory)) {
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
             MixedExposureException mixed = assertThrows(MixedExposureException.class, processor::getFitsfileInformation);
             String question = ImageProcessing.mixedExposureQuestion(mixed);
             assertTrue(question, question.contains("These 4 images do not all have the same exposure time:"
@@ -254,7 +254,7 @@ public class FitsSequenceValidationTest {
     public void imageProcessorCloseTerminatesItsBoundedImportPool() throws Exception {
         File directory = temporaryFolder.newFolder();
         writeFits(directory, "A.fit", new short[2][3], null);
-        ImageProcessing processor = ImageProcessing.getInstance(directory);
+        ImageProcessing processor = ImageProcessing.openProcessor(directory);
         Field importField = ImageProcessing.class.getDeclaredField("importService");
         importField.setAccessible(true);
         Object importer = importField.get(processor);
@@ -274,7 +274,7 @@ public class FitsSequenceValidationTest {
 
     private static void assertRejectedEverywhere(File directory, String message) throws Exception {
         assertRejectedGuiAndPreparation(directory, message);
-        try (ImageProcessing processor = ImageProcessing.getInstance(directory)) {
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
             IOException exception = assertThrows(IOException.class, processor::getFitsfileInformationHeadless);
             assertTrue(exception.getMessage(), exception.getMessage().contains(message));
         }
@@ -284,14 +284,14 @@ public class FitsSequenceValidationTest {
         IOException preparationException = assertThrows(IOException.class,
                 () -> DetectionInputPreparation.prepareInputDirectory(directory, true, null));
         assertTrue(preparationException.getMessage(), preparationException.getMessage().contains(message));
-        try (ImageProcessing processor = ImageProcessing.getInstance(directory)) {
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
             IOException importException = assertThrows(IOException.class, processor::getFitsfileInformation);
             assertTrue(importException.getMessage(), importException.getMessage().contains(message));
         }
     }
 
     private static void assertOrderForBothImports(File directory, String... expectedNames) throws Exception {
-        try (ImageProcessing processor = ImageProcessing.getInstance(directory)) {
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
             assertOrder(processor.getFitsfileInformation(), expectedNames);
             assertOrder(processor.getFitsfileInformationHeadless(), expectedNames);
         }

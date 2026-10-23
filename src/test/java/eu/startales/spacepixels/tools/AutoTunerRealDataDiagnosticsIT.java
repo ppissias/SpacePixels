@@ -54,7 +54,7 @@ public class AutoTunerRealDataDiagnosticsIT {
             System.out.println("Prepared input directory: " + directory.getAbsolutePath());
         }
 
-        FitsFileInformation[] files = ImageProcessing.getInstance(directory).getFitsfileInformationHeadless();
+        FitsFileInformation[] files = ImageProcessing.openProcessor(directory).getFitsfileInformationHeadless();
         List<ImageFrame> pool = AutoTuneCandidatePoolBuilder.buildCandidatePool(files, base, poolSize, (p, m) -> { });
 
         long start = System.currentTimeMillis();

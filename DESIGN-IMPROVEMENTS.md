@@ -104,31 +104,13 @@ Capture resolved catalogue/correction/export context at a documented point. Curr
 
 Decisions: Please go ahead as proposed in the review note.  
 
-### D10. Describe settings and engine contracts once, with typed boundaries
+### D10. Complete explicit run options and selected-release validation
 
-**Current foundation.** Residual Analysis's seven visible controls now use typed application definitions for stable field ID, title, units, guidance, expert disclosure and direct getter/setter ownership. Their load/apply bindings are registered with their rows rather than copied in separate lists. Search accepts field IDs, and engine diagnostics use the same identity/title. Shared Overview button models and saved/Auto-Tune state stay intact. Optional setting reflection and silent fallback setters are removed; the pinned compile-time JTransient contract supplies those fields. See the [completion record](docs/archive/design-improvements-completed-2026-10.md#d10-typed-residual-settings-and-pinned-engine-contract-first-slice-2026-10-22).
+**Completed foundation (2026-10-23).** All 78 visible engine controls now use typed page definitions indexed by `DetectionSettings`; twelve application-owned controls register typed profile/rendering access with their rows. IDs, titles, units, guidance, disclosure and load/apply ownership stay together. Overview search, saved markers and shared Preview Frame guidance derive from the same definitions. Rule alignment uses typed drafts and editor IDs, without reflective field writes or a separate pair/spinner map. Existing ranges, hidden values, JSON formats, shared models and saved-versus-tuned state are preserved. Rendering values reload together under auto-apply suppression so Revert cannot overwrite later values with stale controls. The processor factories are named `ImageProcessing.openProcessor`; every call creates a new caller-owned facade that must be closed. See the [completion records](docs/archive/design-improvements-completed-2026-10.md#d10-all-visible-application-settings-bound-with-their-rows-2026-10-23) and [current settings design](DEVELOPER.md#settings).
 
-**Remaining scope.** Other visible pages still describe/bind/copy/load controls separately and maintain core/tuned lists. Migrate them only in focused slices; do not generate hidden controls. Processor factory naming and distributed dependency-pair validation remain. Shared numeric rules/metadata and persistence/background storage are complete foundations. Preserve hidden DTO fields and defensive snapshots; arbitrary unknown JSON keys are a different concern (Gson ignores them, migration compares key sets).
+**Remaining scope.** S14 completes explicit application run context for standard/API/CLI paths; capture any remaining site, rendering, tuning and report options once rather than reading live defaults while work runs. Selected-release verification remains JA-11: a successful local composite build does not certify the final published engine/solver/application combination. Dataset-specific readiness feedback may be extended when its concrete checks and presentation are agreed. Shared numeric validation/metadata, persistence and background storage are completed foundations; no engine-version capability probing or additional rules implementation is needed.
 
-**Proposal.** Introduce typed setting definitions incrementally for an existing page: stable ID, title, unit, description, basic/expert visibility, typed getter/setter and validation. Use the same identity for search, changed markers and validation messages. Preserve shared button models between Overview and detail pages. Keep “changed from saved” distinct from “set by Auto-Tune”. Do not turn all engine fields into a generated form or add hidden rows back.
-
-Make side effects clear in new method names. `ImageProcessing.getInstance()` constructs a new processor rather than returning a singleton; a name such as `openProcessor` would convey the actual operation. Preserve compatibility wrappers where public callers depend on existing names; this is gradual clarity work, not a mass rename.
-
-SpacePixels builds against one pinned JTransient, so a missing setting is a compile error, not a capability to probe. A composite build can use unpublished engine changes; release validation (JA-11) checks the selected pair before distribution. Do not treat a local composite compile as proof that a published-dependency build works. [AutoTunerRunner](src/main/java/eu/startales/spacepixels/util/AutoTunerRunner.java) passes per-run tuner options; it no longer changes an engine static (JTransient JA-04).
-
-**Current foundation:** engine rules already own field metadata/validation/alignment; remaining D10 work is typed application bindings, explicit factories/options and ownership, not another rules implementation.
-
-The [field and dependency review](docs/detection-settings-rule-review.md#implementation-decisions-ja-01-2026-10-22) now records implemented decisions: advisory quality-grow, geometric jitter/jump, photometry cap and limited-amplitude findings; explicit reviewed alignment; shared effective pixel geometry; and preservation of independent image thresholds, sentinels and accepted finite profiles. Rhythm/jump remains a legacy GUI policy, not an engine rejection rule. Typed setting bindings, capability handling, richer dataset-readiness feedback and published-pair release validation remain D10/JA-11 work.
-
-**Acceptance.** Moving a setting between existing sections does not require editing unrelated string/index lists. UI and API validation use the intended shared rules, hidden values survive, unsupported settings are not falsely shown as applied, and release builds test the dependency pair they distribute.
-
-**Review note (2026-10-23).**
-
-- **The typed slice covers 7 of about 110 controls.** `DetectionConfigurationPanel` therefore has two binding mechanisms: typed definitions on Residual Analysis, and separate describe/bind/copy/load code everywhere else. The panel changed in 24 commits since 18 October, so that double cost is paid often. Either finish the migration, one page per mechanical commit, or stop and keep the slice as it is. Finishing is the better choice: the pattern is proven, and the acceptance above holds only once every visible page uses it. Leaving both mechanisms in place indefinitely is the worst outcome.
-- **The `getInstance` → `openProcessor` rename is low value.** `ImageProcessing` is an internal facade (API.md says so), and the rename touches 46 calls in 21 files for a naming gain. Drop it from D10 unless the factory changes for another reason.
-- **Stale text, corrected 2026-10-23.** Two paragraphs here described an engine-version capability adapter and a tuner static that `AutoTunerRunner` changed. Both are gone under the pinned-release policy and JA-04. The paragraph above now states the current position.
-
-Decisions: Please go ahead with the migration of the configuration panel. Please keep openProcessor rename, I would like to have it.  
+**Acceptance.** Independent runs retain their captured options. Hidden values and saved/Auto-Tune behavior continue to round-trip, and release checks exercise the exact artifacts being distributed. Completed widget migration is protected by typed ownership tests and an all-control Save/Revert/defaults/startup mechanics test; do not reopen it as pending work.
 
 ### D12. Use shared visual rules and content-driven layout
 
@@ -352,7 +334,7 @@ Implemented rows are not a second backlog. Partial/deferred rows retain only the
 | D07 | State-driven commands and availability | Implemented |
 | D08 | Background I/O and preference writes | Implemented |
 | D09 | Prepared report diagnostics and identities | In progress |
-| D10 | Typed settings and explicit run options | In progress |
+| D10 | Typed settings and explicit run options | Typed bindings and factory naming implemented 2026-10-23; S14/release validation remain |
 | D11 | Last run's tracks in Blink, Preview Frame and Manual Transient Inspection | Implemented 2026-10-23 (reduced scope) |
 | D12 | Shared visual/layout rules | In progress |
 | D13 | Keyboard access and viewer focus | Implemented |

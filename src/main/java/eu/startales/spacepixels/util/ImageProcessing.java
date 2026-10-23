@@ -250,20 +250,21 @@ public class ImageProcessing implements AutoCloseable {
     public SessionFrames getSessionFrames() { return sessionFrames; }
 
     /**
-     * Creates a noninteractive processing facade bound to an aligned FITS directory.
-     * Desktop import decisions require the overload accepting a FitsImportInteraction.
+     * Opens a new, caller-owned noninteractive processing facade bound to an aligned FITS directory.
+     * Loads standalone preferences; desktop import injects settings and explicit interaction instead.
+     * The caller closes the facade to release its import/solver services and session buffers.
      */
-    public static synchronized ImageProcessing getInstance(File alignedFitsFolderFullPath) throws IOException, FitsException {
-        return getInstance(alignedFitsFolderFullPath, ApplicationSettings.loadDefault());
+    public static synchronized ImageProcessing openProcessor(File alignedFitsFolderFullPath) throws IOException, FitsException {
+        return openProcessor(alignedFitsFolderFullPath, ApplicationSettings.loadDefault());
     }
 
-    /** Creates a noninteractive facade using the caller's settings. */
-    public static ImageProcessing getInstance(File folder, ApplicationSettings settings) throws IOException, FitsException {
-        return getInstance(folder, settings, null);
+    /** Opens a new caller-owned facade sharing the supplied application settings; closing it releases its services. */
+    public static ImageProcessing openProcessor(File folder, ApplicationSettings settings) throws IOException, FitsException {
+        return openProcessor(folder, settings, null);
     }
 
-    /** Creates a facade with explicit import decisions; null uses strict, noninteractive validation. */
-    public static ImageProcessing getInstance(File folder, ApplicationSettings settings,
+    /** Opens a new caller-owned facade with explicit import decisions; null interaction uses strict headless validation. */
+    public static ImageProcessing openProcessor(File folder, ApplicationSettings settings,
                                               FitsImportInteraction interaction) throws IOException, FitsException {
         return new ImageProcessing(folder, settings, interaction);
     }
