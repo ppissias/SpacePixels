@@ -12,7 +12,7 @@ Read any applicable `AGENTS.md` before changing code. Local tool paths, sibling-
 
 Use **Java 21** for development and the checked-in Gradle wrapper (`gradlew.bat` on Windows, `./gradlew` on Linux/macOS). SpacePixels is one Gradle project with headless `main` and application-only `desktop` source sets. Both compile for Java 21. Configure the sibling libraries below before building.
 
-For selected-release artifact checks, use the [engine artifact validation guide](docs/engine-compatibility.md). Disable composite substitution per invocation without changing ignored development flags, verify the actual chosen versions, and exercise Gradle/POM metadata. Local staged success is not proof that the same versions are available from the final release repository. The older two-engine compatibility script remains implemented but is no longer a required release gate.
+For selected-release artifact checks, use the [engine artifact validation guide](docs/release-artifacts.md). Disable composite substitution per invocation without changing ignored development flags, verify the actual chosen versions, and exercise Gradle/POM metadata. Local staged success is not proof that the same versions are available from the final release repository. The selected-artifact script checks one current combination; historical-version tooling has been removed.
 
 | Read | For |
 |---|---|
@@ -224,9 +224,9 @@ The engine and tuners capture their caller's primitive config once at entry and 
 
 JTransient's `PhotometryGeometry.resolve(config, fwhm)` owns effective pixel radii: the 1 px aperture floor, fixed comparison apertures through 2.5 FWHM, inner sky at least 1 px outside the largest aperture and at least 2 px sky width. Selection, measurement, detection/track/slow-mover crossing checks use that geometry. `adjustments(config, fwhm)` exposes structured pixel-radius expansions for diagnostics without changing persisted factors. See the [implemented rule-review decisions](docs/detection-settings-rule-review.md#implementation-decisions-ja-01-2026-10-22).
 
-The calibrated Auto-Tuner is the default; the distinct legacy algorithm remains available through `AutoTunerRunner`. The current `LegacyTunerSupport` adapter uses JTransient 1.0.6's independent available-sample API when present; only its older-engine fallback temporarily changes/restores the static sample count under a lock. This reflective version fallback is unnecessary under the coordinated release policy and is scheduled for removal in favor of a direct current-API call. It has not been removed by this documentation review.
+The calibrated Auto-Tuner is the default; the distinct legacy algorithm remains available through `AutoTunerRunner`. Legacy tuning calls the current engine available-sample API directly; there is no reflection, old-engine fallback or global sample-size mutation.
 
-Current sibling JTransient sources declare `1.0.6`; SpacePixels's non-composite default still names `1.0.5` and the adapter was written to support the older source baseline. Those are existing build details, not a requirement to maintain two supported combinations. Keep both composites enabled for active development, remove compatibility-only indirection during coordinated cleanup, and choose/pin/validate the actual release versions before distribution. A version label alone is not evidence that a published artifact contains the required APIs.
+The coordinated development dependency is JTransient `1.0.6` and JPlateSolve `1.0.1`; both can be selected explicitly for artifact validation. Choose and pin the intended final release versions before distribution. A version label alone is not proof of publication.
 
 ## Frame viewers
 

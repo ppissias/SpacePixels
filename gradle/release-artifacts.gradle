@@ -1,0 +1,36 @@
+def validationRepository = providers.gradleProperty('releaseValidationRepository')
+def selectedLibraries = [
+        'io.github.ppissias.jtransient': providers.gradleProperty('jTransientVersion').getOrElse('1.0.6'),
+        'io.github.ppissias.jplatesolve': providers.gradleProperty('jPlateSolveVersion').getOrElse('1.0.1')
+]
+
+if (validationRepository.isPresent()) {
+    repositories.maven {
+        name = 'releaseValidation'
+        url = uri(validationRepository.get())
+        content { selectedLibraries.keySet().each { includeGroup it } }
+    }
+}
+
+tasks.register('verifyReleaseArtifacts') {
+    group = 'verification'
+    description = 'Verifies the selected packaged engine and solver without sibling substitution.'
+    doLast {
+        if (gradle.includedBuilds.any { it.name in ['JTransient', 'JPlateSolve'] }) {
+            throw new GradleException('Artifact verification requires both local library build flags=false.')
+        }
+        def components = configurations.runtimeClasspath.incoming.resolutionResult.allComponents
+        selectedLibraries.each { group, version ->
+            def library = components.find { it.moduleVersion?.group == group }
+            if (library == null || library.id instanceof org.gradle.api.artifacts.component.ProjectComponentIdentifier ||
+                    library.moduleVersion.version != version) {
+                throw new GradleException("Expected packaged ${group}:${version}, resolved ${library?.id}.")
+            }
+            logger.lifecycle("Verified packaged ${group}:${version}; no sibling substitution.")
+        }
+    }
+}
+
+if (validationRepository.isPresent()) {
+    tasks.named('check') { dependsOn tasks.named('verifyReleaseArtifacts') }
+}

@@ -68,7 +68,7 @@ public final class AutoTunerRunner {
                                                           Algorithm algorithm,
                                                           TransientEngineProgressListener listener) {
         if (algorithm == Algorithm.LEGACY) {
-            return LegacyTunerSupport.available().run(candidateFrames, baseConfig, profile, listener);
+            return JTransientAutoTuner.tuneAvailableSnapshot(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
         }
         return CalibratedAutoTuner.tuneSnapshot(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
     }

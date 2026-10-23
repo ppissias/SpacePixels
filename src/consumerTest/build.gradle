@@ -7,9 +7,9 @@ if (!(metadataMode in ['gradle', 'pom'])) throw new GradleException('consumerMet
 def stagedGroups = providers.gradleProperty('stagedLibraryGroups').orElse('').get().split(',').findAll { it }
 
 repositories {
-    if (providers.gradleProperty('engineCompatibilityRepository').orElse('').get()) {
+    if (providers.gradleProperty('releaseValidationRepository').orElse('').get()) {
         maven {
-            url = providers.gradleProperty('engineCompatibilityRepository').get()
+            url = providers.gradleProperty('releaseValidationRepository').get()
             content {
                 includeGroup 'io.github.ppissias.jtransient'
                 includeGroup 'io.github.ppissias.jplatesolve'
@@ -85,6 +85,10 @@ tasks.register('verifyRuntime') {
         def expectedEngine = providers.gradleProperty('expectedJTransientVersion').orElse('').get()
         if (expectedEngine && !modules.any { it.group == 'io.github.ppissias.jtransient' && it.version == expectedEngine }) {
             throw new GradleException("Consumer did not resolve the expected packaged JTransient ${expectedEngine}.")
+        }
+        def expectedSolver = providers.gradleProperty('expectedJPlateSolveVersion').orElse('').get()
+        if (expectedSolver && !modules.any { it.group == 'io.github.ppissias.jplatesolve' && it.version == expectedSolver }) {
+            throw new GradleException("Consumer did not resolve the expected packaged JPlateSolve ${expectedSolver}.")
         }
         if (unexpectedProjects || modules.any { it.group == 'com.formdev' ||
                 (it.group == 'eu.startales.spacepixels' && it.name != 'spacepixels') }) {

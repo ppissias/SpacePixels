@@ -104,7 +104,7 @@ For the desktop application, use `gradlew.bat installDist` (or `./gradlew instal
 
 ## Upload to the Central Portal
 
-Before release, select and pin the exact JTransient/JPlateSolve versions for this SpacePixels release and use the [selected-artifact validation workflow](docs/engine-compatibility.md). Verify actual public artifact availability with composites and the validation-only repository disabled. One application binary need not support historical engine versions, and an old-JAR/new-runtime or two-engine matrix is not required. Central staging rejects `engineCompatibilityRepository`; unsigned locally staged libraries cannot establish a publishable dependency combination.
+Before release, select and pin the exact JTransient/JPlateSolve versions for this SpacePixels release and use the [selected-artifact validation workflow](docs/release-artifacts.md). Verify actual public artifact availability with composites and the validation-only repository disabled. One application binary need not support historical engine versions, and an old-JAR/new-runtime or two-engine matrix is not required. Central staging rejects `releaseValidationRepository`; unsigned locally staged libraries cannot establish a publishable dependency combination.
 
 Upload the generated ZIP bundle manually in the Maven Central Portal after verifying that your namespace is ready there.
 

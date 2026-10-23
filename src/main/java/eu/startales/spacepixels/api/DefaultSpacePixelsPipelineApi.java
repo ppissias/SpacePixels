@@ -29,9 +29,7 @@ import java.util.Objects;
  * This implementation performs optional input preparation, optional Auto-Tune optimization,
  * standard pipeline execution, and optional HTML report export.
  *
- * <p>Auto-Tune-enabled runs should not be executed concurrently in the same JVM. The current
- * implementation temporarily adjusts shared JTransient Auto-Tune state while a tuning run is in
- * progress.
+ * <p>Auto-Tune uses independent per-operation engine options without temporarily changing shared sample settings.
  */
 public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineApi {
 
