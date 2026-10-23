@@ -7,7 +7,8 @@ import java.util.stream.Stream;
 public final class DetectionSettings {
     private static final List<DetectionSetting<?>> DEFINITIONS = Stream.of(
             ResidualAnalysisSettings.all(),
-            StreakDetectionSettings.all())
+            StreakDetectionSettings.all(),
+            MovingObjectsSettings.all())
             .flatMap(List::stream).toList();
 
     /** Prevents constructing the fixed definition registry. */

@@ -20,6 +20,7 @@ import eu.startales.spacepixels.config.SpacePixelsSettingsFiles;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.DetectionSetting;
 import eu.startales.spacepixels.config.ResidualAnalysisSettings;
+import eu.startales.spacepixels.config.MovingObjectsSettings;
 import eu.startales.spacepixels.config.StreakDetectionSettings;
 import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
@@ -921,25 +922,25 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createTabIntro("Configuration for moving-object track construction. Base Star Jitter Radius is on the Overview with the other values the Auto-Tuner sets. Hot pixels and dust are set aside before tracking. The time-based linker is used when the frames have timestamps; the geometric linker is an optional extra."));
 
         panel.add(createSectionHeader("Hot Pixels And Dust"));
-        chkEnableCameraFixedRejection = addCheckboxRow(panel, "Reject Camera-Fixed Sources", "Before tracking, sets aside detections that stay at one camera position while the sky moves between frames: hot pixels, warm pixels and dust that the calibration left, which registration moves with the dither and the drift. How each frame was moved is measured from its registration fill, so frames without fill are not checked. The groups remain visible in the report.", jTransientConfig.enableCameraFixedRejection);
+        chkEnableCameraFixedRejection = addTypedCheckbox(panel, MovingObjectsSettings.ENABLE_CAMERA_FIXED_REJECTION);
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Track Linking"));
-        chkStrictExposureKinematics = addCheckboxRow(panel, "Strict Exposure Kinematics", "Rejects candidate links when the implied motion is inconsistent with exposure timing assumptions. Usually it is a good way to filter out false positives", jTransientConfig.strictExposureKinematics);
-        spinPredTol = addRow(panel, "Prediction Line Tolerance", "Maximum distance a candidate point may sit from the projected track line and still be accepted. Higher values allow noisier tracks but increase false links.", doubleSpinnerModel(jTransientConfig.predictionTolerance, 0.1, 50.0, 0.1));
-        spinTrackMinFrameRatio = addRow(panel, "Track Length Min Frame Ratio", "Controls minimum track length as required points = total frames / this value. Lower values demand longer tracks; higher values allow shorter ones.", doubleSpinnerModel(jTransientConfig.trackMinFrameRatio, 1.0, 20.0, 0.25));
-        spinAbsMaxPoints = addRow(panel, "Absolute Max Required Points", "Upper limit on the required number of points for a valid track in very long sequences.", intSpinnerModel(jTransientConfig.absoluteMaxPointsRequired, 2, 100, 1));
-        spinMaxFwhmRatio = addRow(panel, "Max FWHM Ratio", "Maximum allowed FWHM difference between linked points. Helps ensure all points in a track have similar optical blur; 0 disables this check.", doubleSpinnerModel(jTransientConfig.maxFwhmRatio, 0.0, 10.0, 0.1));
-        spinMaxSurfaceBrightnessRatio = addRow(panel, "Max Surface Brightness Ratio", "Maximum allowed surface-brightness difference between linked points. Helps prevent linking compact artifacts to diffuse blobs; 0 disables this check.", doubleSpinnerModel(jTransientConfig.maxSurfaceBrightnessRatio, 0.0, 10.0, 0.1));
-        spinTimeBasedVelocityTolerance = addRow(panel, "Time-Based Velocity Tolerance", "When timestamps are available, this controls how much speed variation the moving-object linker tolerates between points before rejecting the track.", doubleSpinnerModel(jTransientConfig.timeBasedVelocityTolerance, 0.0, 1.0, 0.01));
+        chkStrictExposureKinematics = addTypedCheckbox(panel, MovingObjectsSettings.STRICT_EXPOSURE_KINEMATICS);
+        spinPredTol = addTypedDouble(panel, MovingObjectsSettings.PREDICTION_TOLERANCE, 0.1, 50.0, 0.1);
+        spinTrackMinFrameRatio = addTypedDouble(panel, MovingObjectsSettings.TRACK_MIN_FRAME_RATIO, 1.0, 20.0, 0.25);
+        spinAbsMaxPoints = addTypedInteger(panel, MovingObjectsSettings.ABSOLUTE_MAX_POINTS_REQUIRED, 2, 100, 1);
+        spinMaxFwhmRatio = addTypedDouble(panel, MovingObjectsSettings.MAX_FWHM_RATIO, 0.0, 10.0, 0.1);
+        spinMaxSurfaceBrightnessRatio = addTypedDouble(panel, MovingObjectsSettings.MAX_SURFACE_BRIGHTNESS_RATIO, 0.0, 10.0, 0.1);
+        spinTimeBasedVelocityTolerance = addTypedDouble(panel, MovingObjectsSettings.TIME_BASED_VELOCITY_TOLERANCE, 0.0, 1.0, 0.01);
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Geometric Linker"));
-        chkEnableGeometricTrackLinking = addCheckboxRow(panel, "Enable Geometric Track Linking", "Enable the geometric (time-agnostic) track linker. May produce false positives. Its settings appear below when it is on.", jTransientConfig.enableGeometricTrackLinking);
-        spinMaxJump = addRow(panel, "Max Jump Velocity", "Maximum geometric jump allowed between linked detections. This is only relevant to the geometric moving-object linker.", doubleSpinnerModel(jTransientConfig.maxJumpPixels, 0.0, 10000.0, 0.1));
-        spinRhythmVar = addRow(panel, "Allowed Rhythm Variance", "Maximum deviation from the median step size allowed when checking whether a track moves at a steady rate.", doubleSpinnerModel(jTransientConfig.rhythmAllowedVariance, 0.0, 20.0, 0.1));
-        spinRhythmMinRatio = addRow(panel, "Min Rhythm Consistency Ratio", "Minimum fraction of jumps that must match the median speed within the allowed variance for the geometric linker to keep the track.", doubleSpinnerModel(jTransientConfig.rhythmMinConsistencyRatio, 0.0, 1.0, 0.01));
-        spinRhythmStatThresh = addRow(panel, "Rhythm Stationary Threshold", "Tracks with median jump below this value are treated as stationary noise or residual stars rather than moving objects by the geometric linker.", doubleSpinnerModel(jTransientConfig.rhythmStationaryThreshold, 0.0, 20.0, 0.1));
+        chkEnableGeometricTrackLinking = addTypedCheckbox(panel, MovingObjectsSettings.ENABLE_GEOMETRIC_TRACK_LINKING);
+        spinMaxJump = addTypedDouble(panel, MovingObjectsSettings.MAX_JUMP_PIXELS, 0.0, 10000.0, 0.1);
+        spinRhythmVar = addTypedDouble(panel, MovingObjectsSettings.RHYTHM_ALLOWED_VARIANCE, 0.0, 20.0, 0.1);
+        spinRhythmMinRatio = addTypedDouble(panel, MovingObjectsSettings.RHYTHM_MIN_CONSISTENCY_RATIO, 0.0, 1.0, 0.01);
+        spinRhythmStatThresh = addTypedDouble(panel, MovingObjectsSettings.RHYTHM_STATIONARY_THRESHOLD, 0.0, 20.0, 0.1);
 
         return panel;
     }
@@ -1428,18 +1429,6 @@ public class DetectionConfigurationPanel extends JPanel {
             // --- Apply Tracker Settings to the POJO ---
             jTransientConfig.maxStarJitter = ((Number) spinStarJitter.getValue()).doubleValue();
             jTransientConfig.maxMaskOverlapFraction = ((Number) spinMaxMaskOverlapFraction.getValue()).doubleValue();
-            jTransientConfig.predictionTolerance = ((Number) spinPredTol.getValue()).doubleValue();
-            jTransientConfig.maxJumpPixels = ((Number) spinMaxJump.getValue()).doubleValue();
-            jTransientConfig.strictExposureKinematics = chkStrictExposureKinematics.isSelected();
-            jTransientConfig.enableGeometricTrackLinking = chkEnableGeometricTrackLinking.isSelected();
-            jTransientConfig.maxFwhmRatio = ((Number) spinMaxFwhmRatio.getValue()).doubleValue();
-            jTransientConfig.maxSurfaceBrightnessRatio = ((Number) spinMaxSurfaceBrightnessRatio.getValue()).doubleValue();
-            jTransientConfig.trackMinFrameRatio = ((Number) spinTrackMinFrameRatio.getValue()).doubleValue();
-            jTransientConfig.absoluteMaxPointsRequired = ((Number) spinAbsMaxPoints.getValue()).intValue();
-            jTransientConfig.rhythmAllowedVariance = ((Number) spinRhythmVar.getValue()).doubleValue();
-            jTransientConfig.rhythmMinConsistencyRatio = ((Number) spinRhythmMinRatio.getValue()).doubleValue();
-            jTransientConfig.rhythmStationaryThreshold = ((Number) spinRhythmStatThresh.getValue()).doubleValue();
-            jTransientConfig.timeBasedVelocityTolerance = ((Number) spinTimeBasedVelocityTolerance.getValue()).doubleValue();
 
             jTransientConfig.enableAnomalyRescue = chkEnableAnomalyRescue.isSelected();
             jTransientConfig.anomalyMinPeakSigma = ((Number) spinAnomalyMinPeakSigma.getValue()).doubleValue();
@@ -1448,7 +1437,6 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.anomalyMinIntegratedPixels = ((Number) spinAnomalyMinIntegratedPixels.getValue()).intValue();
             jTransientConfig.anomalyMinPeakSigmaFloor = ((Number) spinAnomalyMinPeakSigmaFloor.getValue()).doubleValue();
             typedBindings.forEach(binding -> binding.applyTo(jTransientConfig));
-            jTransientConfig.enableCameraFixedRejection = chkEnableCameraFixedRejection.isSelected();
 
             autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
             SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
@@ -1703,20 +1691,8 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinSlowMoverMinFrameSupport, config.slowMoverMinFrameSupport);
         setSpinnerValueClamped(spinSlowMoverMaxStationaryLikelihood, config.slowMoverMaxStationaryLikelihood);
 
-        chkStrictExposureKinematics.setSelected(config.strictExposureKinematics);
-        chkEnableGeometricTrackLinking.setSelected(config.enableGeometricTrackLinking);
         setSpinnerValueClamped(spinStarJitter, config.maxStarJitter);
         setSpinnerValueClamped(spinMaxMaskOverlapFraction, config.maxMaskOverlapFraction);
-        setSpinnerValueClamped(spinPredTol, config.predictionTolerance);
-        setSpinnerValueClamped(spinMaxJump, config.maxJumpPixels);
-        setSpinnerValueClamped(spinMaxFwhmRatio, config.maxFwhmRatio);
-        setSpinnerValueClamped(spinMaxSurfaceBrightnessRatio, config.maxSurfaceBrightnessRatio);
-        setSpinnerValueClamped(spinTrackMinFrameRatio, config.trackMinFrameRatio);
-        setSpinnerValueClamped(spinAbsMaxPoints, config.absoluteMaxPointsRequired);
-        setSpinnerValueClamped(spinRhythmVar, config.rhythmAllowedVariance);
-        setSpinnerValueClamped(spinRhythmMinRatio, config.rhythmMinConsistencyRatio);
-        setSpinnerValueClamped(spinRhythmStatThresh, config.rhythmStationaryThreshold);
-        setSpinnerValueClamped(spinTimeBasedVelocityTolerance, config.timeBasedVelocityTolerance);
 
 
         chkEnableAnomalyRescue.setSelected(config.enableAnomalyRescue);
@@ -1726,7 +1702,6 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinAnomalyMinIntegratedPixels, config.anomalyMinIntegratedPixels);
         setSpinnerValueClamped(spinAnomalyMinPeakSigmaFloor, config.anomalyMinPeakSigmaFloor);
         typedBindings.forEach(binding -> binding.loadFrom(config));
-        chkEnableCameraFixedRejection.setSelected(config.enableCameraFixedRejection);
 
         setSpinnerValueClamped(spinStarCountSigma, config.starCountSigmaDeviation);
         setSpinnerValueClamped(spinFwhmSigma, config.fwhmSigmaDeviation);

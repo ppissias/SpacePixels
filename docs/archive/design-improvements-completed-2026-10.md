@@ -987,3 +987,7 @@ Decision: Both SpacePixels and JTransient have external users. So please run thi
 ## D10: typed streak detection bindings (2026-10-23)
 
 Migrated 7 existing controls to typed definitions registered with their rows. IDs, titles, guidance, units and basic/expert disclosure now accompany direct field getters/setters. Removed the separate apply/load lists for this page; preserved control models, ranges, hidden fields and current alignment policy. The shared ownership test checks that each definition changes only its named serialized field. Focused typed-setting tests are run for this slice; the complete settings and GUI suites follow the full migration.
+
+## D10: typed moving objects bindings (2026-10-23)
+
+Migrated 13 existing controls to typed definitions registered with their rows. IDs, titles, guidance, units and basic/expert disclosure now accompany direct field getters/setters. Removed the separate apply/load lists for this page; preserved control models, ranges, hidden fields and current alignment policy. The shared ownership test checks that each definition changes only its named serialized field. Focused typed-setting tests are run for this slice; the complete settings and GUI suites follow the full migration.
