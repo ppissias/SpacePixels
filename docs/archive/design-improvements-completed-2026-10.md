@@ -1007,3 +1007,7 @@ Migrated 19 existing controls to typed definitions registered with their rows. I
 ## D10: typed quality bindings (2026-10-23)
 
 Migrated 7 existing controls to typed definitions registered with their rows. IDs, titles, guidance, units and basic/expert disclosure now accompany direct field getters/setters. Removed the separate apply/load lists for this page; preserved control models, ranges, hidden fields and current alignment policy. The shared ownership test checks that each definition changes only its named serialized field. Focused typed-setting tests are run for this slice; the complete settings and GUI suites follow the full migration.
+
+## D10: typed Overview and shared-rule alignment (2026-10-23)
+
+The eight Auto-Tune core controls now use the same typed definitions as the detail pages. Overview search terms, saved-value markers and Preview Frame guidance derive from their registered definitions. Shared spinner/button models and tuned markers remain unchanged. Rule alignment now builds its draft through typed bindings and locates editors by stable ID; the reflection and hand-maintained pair/spinner map are removed. Validation covers field ownership, shared rules, core saved-state behavior and the existing Preview Frame mechanics as part of the full D10 checks.

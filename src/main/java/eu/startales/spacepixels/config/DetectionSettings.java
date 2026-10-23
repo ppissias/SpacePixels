@@ -6,7 +6,7 @@ import java.util.stream.Stream;
 /** Application-owned visible detection definitions; unlisted engine fields retain their profile values. */
 public final class DetectionSettings {
     private static final List<DetectionSetting<?>> DEFINITIONS = Stream.of(
-            ResidualAnalysisSettings.all(),
+            ResidualAnalysisSettings.all(), CoreDetectionSettings.all(),
             StreakDetectionSettings.all(),
             MovingObjectsSettings.all(),
             AnomalyDetectionSettings.all(),
