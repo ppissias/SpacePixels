@@ -5,12 +5,11 @@ import eu.startales.spacepixels.config.SpacePixelsAppConfigIO;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
-import eu.startales.spacepixels.util.AutoTunerRunner;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
+import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -75,10 +74,9 @@ public class ProcessingSessionTest {
             second.getAutoTune().setMaxCandidateFrames(24);
             assertEquals(12, first.getAutoTune().getMaxCandidateFrames());
             assertEquals(24, second.getAutoTune().getMaxCandidateFrames());
-            JTransientAutoTuner.AutoTunerResult result = new JTransientAutoTuner.AutoTunerResult();
-            first.getAutoTune().remember(AutoTunerRunner.Algorithm.CALIBRATED,
-                    new AutoTuneState.Run(result, Instant.now(), 7, null));
-            assertSame(result, first.getAutoTune().result(AutoTunerRunner.Algorithm.CALIBRATED));
+            AutoTunerResult result = new AutoTunerResult();
+            first.getAutoTune().remember(new AutoTuneState.Run(result, Instant.now(), 7, null));
+            assertSame(result, first.getAutoTune().result());
             assertTrue(second.getAutoTune().isEmpty());
         }
     }

@@ -2,8 +2,8 @@ package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.util.IterativeDetectionPlan;
 import eu.startales.spacepixels.util.IterativeDetectionPipelineService;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner.AutoTuneProfile;
 
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;

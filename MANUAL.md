@@ -140,9 +140,7 @@ The profile chosen in **Apply after run** (High by default) is applied as soon a
 
 ![The Auto-Tune chart](docs/images/manual/ui-autotune-chart.png)
 
-The result is also written next to the frames, as `auto_tune.json`, in the same way as the sky catalogue. The file keeps the chosen settings and this chart, not every combination the tuner tried. An older, much larger file is rewritten in this smaller form the next time that folder is imported. Importing that folder again shows when the calibrated tuner and the legacy tuner last ran (each is kept on its own). The profile in **Apply after run** is selected from the saved calibrated result when that result has it, so detection can use it without measuring again. **Run Auto-Tune**, **Auto-Tune Settings** and **Ctrl+T** always measure again and replace the saved result of the tuner you run. A legacy result is applied on import only when the **Tuner** box is set to Legacy and its profile matches the one that was tuned; otherwise the row is there and **Use Selected Profile** applies it.
-
-The **Legacy** tuner sets only the per-frame detection settings, the mask overlap and the star jitter; it keeps your star mask settings and does not measure noise rates. Its table shows just those columns, and only those settings get the dot.
+The result is also written next to the frames, as `auto_tune.json`, in the same way as the sky catalogue. The file keeps the chosen settings and this chart, not every combination the tuner tried. An older, much larger file is rewritten in this smaller form the next time that folder is imported. Importing that folder again shows when Auto-Tune last ran. The profile in **Apply after run** is selected from the saved result when that result has it, so detection can use it without measuring again. **Run Auto-Tune**, **Auto-Tune Settings** and **Ctrl+T** always measure again and replace the saved result.
 
 ### Step 4: detect
 
@@ -374,7 +372,7 @@ Without a plate solution the report has no sky coordinates or identification but
 
 ### A faint near-Earth asteroid among satellite trails
 
-(99942) Apophis, 15 frames, plate-solved, with the observing site in the FITS headers. The field is crossed by several satellite trails, and Apophis is faint in each frame. This session was detected with the **Legacy** tuner at **High**; it found the satellite trails as streaks and Apophis as track T1, moving 2 pixels per minute:
+(99942) Apophis, 15 frames, plate-solved, with the observing site in the FITS headers. The field is crossed by several satellite trails, and Apophis is faint in each frame. This session was detected with the score-based tuner SpacePixels had until October 2026, at **High**; it found the satellite trails as streaks and Apophis as track T1, moving 2 pixels per minute. With today's Auto-Tune, use **Maximum** for this session: a deeper star mask at the lower profiles hides Apophis where it passes faint stars.
 
 ![Apophis](docs/images/manual/apophis-track.png)
 
@@ -576,7 +574,7 @@ The `batchDetect` tool runs the detection without the window, for example to pro
 bin\batchDetect.bat "C:\astro\session1" "config\default_detection_profile.json" --auto-tune high
 ```
 
-On Linux and macOS use `bin/batchDetect`. The profile can be `low`, `medium`, `high` or `maximum`, and `--tuner legacy` selects the Legacy tuner. See [README.md](README.md) for all options.
+On Linux and macOS use `bin/batchDetect`. The profile can be `low`, `medium`, `high` or `maximum`. See [README.md](README.md) for all options.
 
 ---
 
@@ -612,7 +610,7 @@ In most sessions you only need Auto-Tune and the profile. Change single settings
 
 **A known object is missing.**
 - Check the Unclassified Transient Inspector: if the object is there, it was detected but not linked into a track.
-- Try a higher profile, or the **Legacy** tuner (choose it under **Tuner** on the Overview): the two tuners choose differently, and one may suit a session better.
+- Try a higher profile: it accepts more noise detections and uses a shallower star mask.
 - Objects that cross bright stars are hidden by the star mask; the Star Mask Explorer shows where.
 - Objects that hardly move during the session end up in the median stack and are masked. Use a longer session, or look at the slow-mover candidates.
 

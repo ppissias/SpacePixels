@@ -10,12 +10,12 @@
 
 package eu.startales.spacepixels.gui;
 
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import io.github.ppissias.jtransient.engine.CalibratedAutoTuner;
 import io.github.ppissias.jtransient.engine.CalibratedAutoTuner.Candidate;
 import io.github.ppissias.jtransient.engine.CalibratedAutoTuner.ProfileTradeoff;
 import io.github.ppissias.jtransient.engine.CalibratedAutoTuner.SigmaChoice;
 import io.github.ppissias.jtransient.engine.CalibratedAutoTuner.Tradeoff;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner.AutoTuneProfile;
 
 import javax.swing.*;
 import java.awt.*;

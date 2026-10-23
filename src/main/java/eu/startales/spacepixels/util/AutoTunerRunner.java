@@ -9,69 +9,33 @@
  */
 package eu.startales.spacepixels.util;
 
-import io.github.ppissias.jtransient.execution.CancellationScope;
-
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
+import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import io.github.ppissias.jtransient.engine.CalibratedAutoTuner;
 import io.github.ppissias.jtransient.engine.ImageFrame;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 
 import java.util.List;
-import java.util.Locale;
 
 /**
- * Runs the selected JTransient auto-tuner. Both tuners are kept while the calibrated one is evaluated.
+ * Runs JTransient's calibrated auto-tuner with SpacePixels' engine diagnostics. Cancellation comes from the
+ * caller's {@link io.github.ppissias.jtransient.execution.CancellationScope}.
  */
 public final class AutoTunerRunner {
-
-    /** Which auto-tuning algorithm to use. */
-    public enum Algorithm {
-        /** Measures noise (negative image), star leakage and sensitivity (synthetic sources) directly. */
-        CALIBRATED("Calibrated (measured)"),
-        /** The original score-based tuner. */
-        LEGACY("Legacy (score-based)");
-
-        private final String label;
-
-        Algorithm(String label) {
-            this.label = label;
-        }
-
-        /** Parses {@code calibrated} or {@code legacy}, case-insensitive. */
-        public static Algorithm parse(String value) {
-            try {
-                return valueOf(value.trim().toUpperCase(Locale.ROOT));
-            } catch (Exception e) {
-                throw new IllegalArgumentException("Unknown auto-tuner '" + value + "'. Expected calibrated or legacy.");
-            }
-        }
-
-        @Override
-        public String toString() {
-            return label;
-        }
-    }
-
-    /** Default algorithm for new runs. */
-    public static final Algorithm DEFAULT_ALGORITHM = Algorithm.CALIBRATED;
 
     private AutoTunerRunner() {
     }
 
     /**
-     * Tunes {@code baseConfig} on the candidate frames with the chosen algorithm and profile.
+     * Tunes {@code baseConfig} on the candidate frames for the given profile.
      */
-    public static JTransientAutoTuner.AutoTunerResult run(List<ImageFrame> candidateFrames,
-                                                          DetectionConfig baseConfig,
-                                                          JTransientAutoTuner.AutoTuneProfile profile,
-                                                          Algorithm algorithm,
-                                                          TransientEngineProgressListener listener) {
+    public static AutoTunerResult run(List<ImageFrame> candidateFrames,
+                                      DetectionConfig baseConfig,
+                                      AutoTuneProfile profile,
+                                      TransientEngineProgressListener listener) {
         try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
-            if (algorithm == Algorithm.LEGACY) {
-                return JTransientAutoTuner.tuneAvailable(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
-            }
-            return CalibratedAutoTuner.tune(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
+            return CalibratedAutoTuner.tune(candidateFrames, baseConfig, profile, listener);
         }
     }
 }

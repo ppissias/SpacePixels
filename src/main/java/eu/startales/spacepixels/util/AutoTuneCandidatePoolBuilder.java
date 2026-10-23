@@ -23,7 +23,7 @@ import java.util.List;
 
 /**
  * Builds the deterministic frame pool that SpacePixels passes to
- * {@code JTransientAutoTuner.tune(...)}.
+ * {@code CalibratedAutoTuner.tune(...)}.
  * <p>
  * SpacePixels does not pick the final internal tuning sample. It only provides a broader candidate
  * pool, using frame quality plus sequence coverage, and leaves the final sampling to JTransient.

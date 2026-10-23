@@ -9,7 +9,7 @@ import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.BuildInfo;
 import eu.startales.spacepixels.tools.BatchDetectionCli;
 import eu.startales.spacepixels.tools.ArtificialStarInjector;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -104,7 +104,7 @@ public class HeadlessApiConsumerTest {
         Path input = ConsumerDatasetFactory.createTuningSequence(folder.getRoot().toPath());
         SpacePixelsPipelineResult result = run(input, InputPreparationMode.FAIL_IF_NOT_READY, false, true);
         assertTrue(result.isAutoTuneApplied());
-        assertEquals(JTransientAutoTuner.AutoTuneProfile.MEDIUM, result.getAutoTuneProfileUsed());
+        assertEquals(AutoTuneProfile.MEDIUM, result.getAutoTuneProfileUsed());
         assertNotNull(result.getAutoTuneTelemetryReport());
         assertFalse(result.getAutoTuneTelemetryReport().isBlank());
         assertNotNull(result.getBaseConfig());
@@ -148,7 +148,7 @@ public class HeadlessApiConsumerTest {
                 .detectionConfig(SyntheticDatasetFactory.createSyntheticDetectionConfig())
                 .inputPreparationMode(preparation)
                 .generateReport(report)
-                .autoTuneProfile(tune ? JTransientAutoTuner.AutoTuneProfile.MEDIUM : null)
+                .autoTuneProfile(tune ? AutoTuneProfile.MEDIUM : null)
                 .autoTuneMaxCandidateFrames(5)
                 .build();
         return new DefaultSpacePixelsPipelineApi().run(request);

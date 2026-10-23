@@ -355,11 +355,11 @@ The Overview page of Detection Settings.
 
 Owns:
 
-- the tuner and profile choice and the run button
+- the profile choice and the run button
 - the profile table, built from `AutoTunerResult.calibration` (one calibrated run covers all profiles; `CalibratedAutoTuner.configFor(...)` applies a chosen row)
 - the expected false detections for the imported session (measured rate × megapixels × frames)
-- the eight core fields: detection sigma/grow/min pixels, master sigma/grow/min pixels, mask overlap and jitter; the calibrated tuner supplies all eight, while the legacy tuner supplies only the three per-frame values, overlap and jitter
-- markers showing which displayed values still equal the applied tune; applying a legacy result preserves the current master settings
+- the eight core fields: detection sigma/grow/min pixels, master sigma/grow/min pixels, mask overlap and jitter; the tuner supplies all eight
+- markers showing which displayed values still equal the applied tune
 - the settings summary shown in the main window's Detect group
 
 A tune result belongs to the imported session and is cleared when another dataset is imported.
@@ -450,7 +450,7 @@ Responsibilities:
 
 Design constraint:
 
-- API calls with the legacy auto-tuner should be serialized in a single JVM because it temporarily adjusts shared JTransient Auto-Tune sample-size state. The calibrated tuner (the default) has no shared state.
+- Auto-Tune has no shared state, so API calls can run concurrently in one JVM, memory permitting.
 
 ### `DetectionReportGenerator`
 
@@ -568,9 +568,8 @@ The effective config is a clone of the caller config. JTransient builds the slow
 ```text
 DetectionConfigurationPanel (AutoTuneTask), DefaultSpacePixelsPipelineApi or BatchDetectionCli
 -> AutoTuneCandidatePoolBuilder
--> AutoTunerRunner.run(..., profile, algorithm, ...)
-   -> CalibratedAutoTuner.tune(...)   (CALIBRATED, the default)
-   -> JTransientAutoTuner.tune(...)   (LEGACY)
+-> AutoTunerRunner.run(..., profile, ...)
+   -> CalibratedAutoTuner.tune(...)
 -> AutoTunerResult.optimizedConfig, summary, telemetryReport
 -> standard pipeline effective config
 ```
@@ -581,7 +580,7 @@ SpacePixels owns candidate-pool preparation:
 - otherwise the full imported sequence
 - for large sets, a deterministic mix of best-quality, median-quality, and evenly spaced frames
 
-JTransient owns the actual tuning search and validation. `AutoTunerRunner` only selects the tuner (the `Tuner` box in the GUI, `--tuner` in the CLI, `autoTuneAlgorithm(...)` in the API) and the profile (`LOW`, `MEDIUM`, `HIGH`, `MAXIMUM`; the earlier names remain parsing aliases).
+JTransient owns the actual tuning search and validation. `AutoTunerRunner` passes the profile (`LOW`, `MEDIUM`, `HIGH`, `MAXIMUM`; the earlier names remain parsing aliases) and opens the engine diagnostics.
 
 ### Iterative Detection Flow
 

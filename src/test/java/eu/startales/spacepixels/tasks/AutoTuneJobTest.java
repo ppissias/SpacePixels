@@ -5,10 +5,10 @@ import eu.startales.spacepixels.jobs.JobHandle;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.AutoTunerRunner;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
+import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -33,9 +33,9 @@ public class AutoTuneJobTest {
     @Test
     public void autoTuneReportsProgressAndReturnsTheTunersResult() throws Exception {
         List<Integer> progress = new ArrayList<>();
-        JobOutcome<JTransientAutoTuner.AutoTunerResult> outcome = runAutoTune(null, progress);
+        JobOutcome<AutoTunerResult> outcome = runAutoTune(null, progress);
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Completed<?>);
-        assertNotNull(((JobOutcome.Completed<JTransientAutoTuner.AutoTunerResult>) outcome).result());
+        assertNotNull(((JobOutcome.Completed<AutoTunerResult>) outcome).result());
         assertFalse(progress.isEmpty());
         assertEquals(100, (int) progress.get(progress.size() - 1));
     }
@@ -44,7 +44,7 @@ public class AutoTuneJobTest {
     @Test
     public void aCancelWhileTheTunerRunsEndsAsCancelled() throws Exception {
         List<Integer> progress = new ArrayList<>();
-        JobOutcome<JTransientAutoTuner.AutoTunerResult> outcome = runAutoTune("Starting mathematical tuning", progress);
+        JobOutcome<AutoTunerResult> outcome = runAutoTune("Starting mathematical tuning", progress);
         assertTrue(outcome + " " + messages, outcome instanceof JobOutcome.Cancelled<?>);
         assertFalse("never reports 100 %", progress.contains(100));
     }
@@ -52,11 +52,11 @@ public class AutoTuneJobTest {
     private final List<String> messages = new ArrayList<>();
 
     /** Runs Auto-Tune on synthetic frames; it is cancelled at the first progress message starting with {@code cancelAt}. */
-    private JobOutcome<JTransientAutoTuner.AutoTunerResult> runAutoTune(String cancelAt, List<Integer> progress) throws Exception {
+    private JobOutcome<AutoTunerResult> runAutoTune(String cancelAt, List<Integer> progress) throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", FRAME_COUNT);
         try (ImageProcessing processing = ImageProcessing.getInstance(sequence.toFile())) {
             FitsFileInformation[] files = processing.getFitsfileInformationHeadless();
-            List<JobOutcome<JTransientAutoTuner.AutoTunerResult>> outcomes = new ArrayList<>();
+            List<JobOutcome<AutoTunerResult>> outcomes = new ArrayList<>();
             JobCoordinator coordinator = new JobCoordinator(Runnable::run, Runnable::run, () -> false);
             coordinator.setListener(new JobCoordinator.Listener() {
                 @Override
@@ -77,7 +77,7 @@ public class AutoTuneJobTest {
                 }
             });
             coordinator.start(JobKind.AUTO_TUNE, processing, new AutoTuneTask(files, SyntheticDatasetFactory.createSyntheticDetectionConfig(),
-                    FRAME_COUNT, JTransientAutoTuner.AutoTuneProfile.values()[0], AutoTunerRunner.Algorithm.CALIBRATED),
+                    FRAME_COUNT, AutoTuneProfile.values()[0]),
                     (handle, outcome) -> outcomes.add(outcome));
             assertEquals(1, outcomes.size());
             return outcomes.get(0);

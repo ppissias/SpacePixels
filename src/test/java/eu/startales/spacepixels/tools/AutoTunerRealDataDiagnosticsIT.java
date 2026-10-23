@@ -7,9 +7,10 @@ import eu.startales.spacepixels.util.DetectionInputPreparation;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
+import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import io.github.ppissias.jtransient.engine.CalibratedAutoTuner;
 import io.github.ppissias.jtransient.engine.ImageFrame;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 import org.junit.Assume;
 import org.junit.Test;
 
@@ -57,8 +58,8 @@ public class AutoTunerRealDataDiagnosticsIT {
         List<ImageFrame> pool = AutoTuneCandidatePoolBuilder.buildCandidatePool(files, base, poolSize, (p, m) -> { });
 
         long start = System.currentTimeMillis();
-        JTransientAutoTuner.AutoTunerResult result = CalibratedAutoTuner.tune(pool, base,
-                JTransientAutoTuner.AutoTuneProfile.MEDIUM, null);
+        AutoTunerResult result = CalibratedAutoTuner.tune(pool, base,
+                AutoTuneProfile.MEDIUM, null);
         System.out.println(result.telemetryReport);
         System.out.printf("Calibration wall time: %.1f s%n", (System.currentTimeMillis() - start) / 1000.0);
         assertTrue(result.telemetryReport, result.success);

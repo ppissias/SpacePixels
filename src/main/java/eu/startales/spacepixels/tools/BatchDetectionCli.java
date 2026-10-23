@@ -19,10 +19,9 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import eu.startales.spacepixels.util.AutoTunerRunner;
 import eu.startales.spacepixels.util.DebugOutput;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
@@ -40,19 +39,16 @@ public class BatchDetectionCli {
     private static class CliArguments {
         private final File inputDir;
         private final File configFile;
-        private final JTransientAutoTuner.AutoTuneProfile autoTuneProfile;
-        private final AutoTunerRunner.Algorithm autoTuneAlgorithm;
+        private final AutoTuneProfile autoTuneProfile;
         private final boolean showHelp;
 
         private CliArguments(File inputDir,
                              File configFile,
-                             JTransientAutoTuner.AutoTuneProfile autoTuneProfile,
-                             AutoTunerRunner.Algorithm autoTuneAlgorithm,
+                             AutoTuneProfile autoTuneProfile,
                              boolean showHelp) {
             this.inputDir = inputDir;
             this.configFile = configFile;
             this.autoTuneProfile = autoTuneProfile;
-            this.autoTuneAlgorithm = autoTuneAlgorithm;
             this.showHelp = showHelp;
         }
     }
@@ -110,7 +106,6 @@ public class BatchDetectionCli {
         SpacePixelsPipelineRequest request = SpacePixelsPipelineRequest.builder(cliArguments.inputDir)
                 .detectionConfig(baseConfig)
                 .autoTuneProfile(cliArguments.autoTuneProfile)
-                .autoTuneAlgorithm(cliArguments.autoTuneAlgorithm)
                 .autoTuneMaxCandidateFrames(detectionProfile.getAutoTuneMaxCandidateFrames())
                 .variableStarReportOptions(detectionProfile.getVariableStarReportOptions())
                 .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
@@ -149,30 +144,16 @@ public class BatchDetectionCli {
 
     private static CliArguments parseArguments(String[] args) {
         if (args.length == 0) {
-            return new CliArguments(null, null, null, AutoTunerRunner.DEFAULT_ALGORITHM, true);
+            return new CliArguments(null, null, null, true);
         }
 
         List<String> positionalArgs = new ArrayList<>();
-        JTransientAutoTuner.AutoTuneProfile autoTuneProfile = null;
-        AutoTunerRunner.Algorithm autoTuneAlgorithm = AutoTunerRunner.DEFAULT_ALGORITHM;
+        AutoTuneProfile autoTuneProfile = null;
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
             if ("--help".equalsIgnoreCase(arg) || "-h".equalsIgnoreCase(arg)) {
-                return new CliArguments(null, null, null, AutoTunerRunner.DEFAULT_ALGORITHM, true);
-            }
-
-            if (arg.startsWith("--tuner=")) {
-                autoTuneAlgorithm = AutoTunerRunner.Algorithm.parse(arg.substring("--tuner=".length()));
-                continue;
-            }
-
-            if ("--tuner".equalsIgnoreCase(arg)) {
-                if (i + 1 >= args.length) {
-                    throw new IllegalArgumentException("Missing auto-tuner name after " + arg + ".");
-                }
-                autoTuneAlgorithm = AutoTunerRunner.Algorithm.parse(args[++i]);
-                continue;
+                return new CliArguments(null, null, null, true);
             }
 
             if (arg.startsWith("--auto-tune=")) {
@@ -199,14 +180,13 @@ public class BatchDetectionCli {
                 new File(positionalArgs.get(0)),
                 new File(positionalArgs.get(1)),
                 autoTuneProfile,
-                autoTuneAlgorithm,
                 false);
     }
 
-    private static JTransientAutoTuner.AutoTuneProfile parseAutoTuneProfile(String value) {
+    private static AutoTuneProfile parseAutoTuneProfile(String value) {
         try {
             // Also accepts the names of earlier versions (conservative, balanced, aggressive).
-            return JTransientAutoTuner.AutoTuneProfile.parse(value);
+            return AutoTuneProfile.parse(value);
         } catch (Exception e) {
             throw new IllegalArgumentException("Unknown auto-tune profile '" + value + "'. Expected low, medium, high or maximum.");
         }
@@ -233,7 +213,7 @@ public class BatchDetectionCli {
         out.println("  SpacePixels - Batch Detection CLI");
         out.println("==================================================================");
         out.println("Usage:");
-        out.println("  java eu.startales.spacepixels.tools.BatchDetectionCli <fits_directory> <detection_config.json> [--auto-tune <low|medium|high|maximum>] [--tuner <calibrated|legacy>]");
+        out.println("  java eu.startales.spacepixels.tools.BatchDetectionCli <fits_directory> <detection_config.json> [--auto-tune <low|medium|high|maximum>]");
         out.println();
         out.println("Notes:");
         out.println("  - The input directory must contain only uncompressed unsigned 16-bit (BZERO 32768) monochrome FITS files with identical dimensions.");
@@ -241,7 +221,6 @@ public class BatchDetectionCli {
         out.println("  - Packaged distributions include config/default_detection_profile.json as a starting point.");
         out.println("  - When Auto-Tune is enabled, the tuned configuration is used for the pipeline run and exported with the report.");
         out.println("  - Only the report path and problems are printed; add -D" + DebugOutput.PROPERTY + "=true to the JVM options for progress and diagnostics.");
-        out.println("  - --tuner selects the auto-tuning algorithm: calibrated (default, measures noise and sensitivity) or legacy (original score-based tuner).");
         out.println();
         out.println("Packaged launcher example:");
         out.println("  batchDetect.bat \"C:\\astro\\sequence\" \"config\\default_detection_profile.json\" --auto-tune high");

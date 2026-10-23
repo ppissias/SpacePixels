@@ -24,7 +24,7 @@
  * request/result contract also exposes
  * {@link eu.startales.spacepixels.util.FitsFileInformation},
  * {@link io.github.ppissias.jtransient.config.DetectionConfig},
- * {@link io.github.ppissias.jtransient.engine.JTransientAutoTuner.AutoTuneProfile}, and
+ * {@link io.github.ppissias.jtransient.engine.AutoTuneProfile}, and
  * {@link io.github.ppissias.jtransient.engine.PipelineResult}.
  */
 package eu.startales.spacepixels.api;

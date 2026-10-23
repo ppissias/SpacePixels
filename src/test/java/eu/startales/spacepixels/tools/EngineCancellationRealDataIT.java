@@ -7,9 +7,10 @@ import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.GsonBuilder;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
+import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import io.github.ppissias.jtransient.engine.CalibratedAutoTuner;
 import io.github.ppissias.jtransient.engine.ImageFrame;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
@@ -187,7 +188,7 @@ public class EngineCancellationRealDataIT {
                     List<ImageFrame> pool = new ArrayList<>();
                     int poolSize = Math.min(15, frames.size());
                     for (int index = 0; index < poolSize; index++) pool.add(frames.get(index * frames.size() / poolSize));
-                    result = CalibratedAutoTuner.tune(pool, config, JTransientAutoTuner.AutoTuneProfile.MEDIUM, listener);
+                    result = CalibratedAutoTuner.tune(pool, config, AutoTuneProfile.MEDIUM, listener);
                 } else {
                     try (JTransientEngine engine = new JTransientEngine()) {
                         result = engine.runPipeline(new ArrayList<>(frames), config, listener);
@@ -206,7 +207,7 @@ public class EngineCancellationRealDataIT {
         System.out.printf(java.util.Locale.ROOT, "Cancellation latency | %s | %.3f s | %s%n", stage, seconds,
                 failure == null ? "returned result" : failure.getClass().getSimpleName());
         if (listenerOnly && tuning && failure == null) {
-            assertTrue(result instanceof JTransientAutoTuner.AutoTunerResult tune && !tune.success);
+            assertTrue(result instanceof AutoTunerResult tune && !tune.success);
         } else {
             assertNotNull("Cancelled work returned normally: " + stage, failure);
             if (!Cancellation.isCancellation(failure)) fail("Unexpected failure: " + failure);

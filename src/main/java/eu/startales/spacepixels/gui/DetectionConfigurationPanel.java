@@ -28,7 +28,8 @@ import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.tasks.AutoTuneTask;
 import eu.startales.spacepixels.tasks.StarMaskStackTask;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
+import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import eu.startales.spacepixels.util.*;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
@@ -254,23 +255,23 @@ public class DetectionConfigurationPanel extends JPanel {
     /** The settings the Auto-Tuner chooses, shown on the Overview page. */
     private void buildCoreSettings(AutoTuneOverviewPanel overview) {
         spinDetectionSigma = createSpinner(doubleSpinnerModel(jTransientConfig.detectionSigmaMultiplier, 1.0, 20.0, 0.1));
-        addCoreSetting(overview, "Detection in each frame", "Detection Sigma", "Minimum brightness threshold for starting a new detection. Higher values reduce noise; lower values detect fainter objects.", spinDetectionSigma, true);
+        addCoreSetting(overview, "Detection in each frame", "Detection Sigma", "Minimum brightness threshold for starting a new detection. Higher values reduce noise; lower values detect fainter objects.", spinDetectionSigma);
         spinGrowSigma = createSpinner(doubleSpinnerModel(jTransientConfig.growSigmaMultiplier, 0.1, 20.0, 0.1));
-        addCoreSetting(overview, null, "Grow Sigma (Hysteresis)", "Secondary threshold used to expand a detection after it starts during per-frame object detection. Lower values capture fainter edges; higher values keep detections tighter. It cannot exceed Detection Sigma. If it goes below Master Sigma, faint star wings detected in the frames may extend past the veto mask and leak as transients; the calibrated Auto-Tuner measures that trade-off.", spinGrowSigma, true);
+        addCoreSetting(overview, null, "Grow Sigma (Hysteresis)", "Secondary threshold used to expand a detection after it starts during per-frame object detection. Lower values capture fainter edges; higher values keep detections tighter. It cannot exceed Detection Sigma. If it goes below Master Sigma, faint star wings detected in the frames may extend past the veto mask and leak as transients; the calibrated Auto-Tuner measures that trade-off.", spinGrowSigma);
         spinMinPixels = createSpinner(intSpinnerModel(jTransientConfig.minDetectionPixels, 1, 2000, 1));
-        addCoreSetting(overview, null, "Min Detection Pixels", "Minimum blob size required for a detection to be kept. Higher values reject hot pixels and noise; lower values allow smaller sources.", spinMinPixels, true);
+        addCoreSetting(overview, null, "Min Detection Pixels", "Minimum blob size required for a detection to be kept. Higher values reject hot pixels and noise; lower values allow smaller sources.", spinMinPixels);
         overview.addPreviewAction();
 
         spinMasterSigma = createSpinner(doubleSpinnerModel(jTransientConfig.masterSigmaMultiplier, 0.5, 15.0, 0.1));
-        addCoreSetting(overview, "Star mask (master map)", "Master Sigma", "Detection threshold used when building the master star map. Lower values mask more faint stars and halos; higher values create a smaller, cleaner mask. Stars are seeded at this value and grown down to Master Grow Sigma (or this value when that is 0). A master shallower than the per-frame Grow Sigma hides less sky but lets more star wings leak; the calibrated Auto-Tuner measures that trade-off.", spinMasterSigma, false);
+        addCoreSetting(overview, "Star mask (master map)", "Master Sigma", "Detection threshold used when building the master star map. Lower values mask more faint stars and halos; higher values create a smaller, cleaner mask. Stars are seeded at this value and grown down to Master Grow Sigma (or this value when that is 0). A master shallower than the per-frame Grow Sigma hides less sky but lets more star wings leak; the calibrated Auto-Tuner measures that trade-off.", spinMasterSigma);
         spinMasterGrowSigma = createSpinner(doubleSpinnerModel(jTransientConfig.masterGrowSigmaMultiplier, 0.0, 15.0, 0.1));
-        addCoreSetting(overview, null, "Master Grow Sigma", "Threshold for growing master-map stars after they are seeded at Master Sigma. A lower value covers the faint wings of stars without adding noise islands; 0 uses Master Sigma (no hysteresis). Cannot exceed Master Sigma.", spinMasterGrowSigma, false);
+        addCoreSetting(overview, null, "Master Grow Sigma", "Threshold for growing master-map stars after they are seeded at Master Sigma. A lower value covers the faint wings of stars without adding noise islands; 0 uses Master Sigma (no hysteresis). Cannot exceed Master Sigma.", spinMasterGrowSigma);
         spinMasterMinPix = createSpinner(intSpinnerModel(jTransientConfig.masterMinDetectionPixels, 1, 2000, 1));
-        addCoreSetting(overview, null, "Master Min Pixels", "Minimum size required for a source to be included in the master star map. Lower values include fainter stars.", spinMasterMinPix, false);
+        addCoreSetting(overview, null, "Master Min Pixels", "Minimum size required for a source to be included in the master star map. Lower values include fainter stars.", spinMasterMinPix);
         spinMaxMaskOverlapFraction = createSpinner(doubleSpinnerModel(jTransientConfig.maxMaskOverlapFraction, 0.0, 1.0, 0.01));
-        addCoreSetting(overview, null, "Max Mask Overlap Fraction", "Maximum fraction of a point footprint that may overlap the master veto mask before it is rejected as likely stellar residual contamination.", spinMaxMaskOverlapFraction, true);
+        addCoreSetting(overview, null, "Max Mask Overlap Fraction", "Maximum fraction of a point footprint that may overlap the master veto mask before it is rejected as likely stellar residual contamination.", spinMaxMaskOverlapFraction);
         spinStarJitter = createSpinner(doubleSpinnerModel(jTransientConfig.maxStarJitter, 0.0, 20.0, 0.1));
-        addCoreSetting(overview, null, "Base Star Jitter Radius", "Baseline radius under which detections are treated as stationary star jitter instead of true moving points. Higher values are more conservative around registration residuals.", spinStarJitter, true);
+        addCoreSetting(overview, null, "Base Star Jitter Radius", "Baseline radius under which detections are treated as stationary star jitter instead of true moving points. Higher values are more conservative around registration residuals.", spinStarJitter);
 
         JButton testStarMaskButton = new JButton("Test Star Mask…");
         testStarMaskButton.setToolTipText("<html>Build the master stack as a detection run would, then try star mask settings "
@@ -280,8 +281,8 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void addCoreSetting(AutoTuneOverviewPanel overview, String group, String title, String description,
-                                JSpinner spinner, boolean setByLegacyTuner) {
-        overview.addCoreSetting(group, title, description, spinner, setByLegacyTuner);
+                                JSpinner spinner) {
+        overview.addCoreSetting(group, title, description, spinner);
         inputTitles.put(spinner, title);
         coreDescriptions.put(spinner, description);
     }
@@ -399,8 +400,8 @@ public class DetectionConfigurationPanel extends JPanel {
     /** Callbacks of the Overview page. */
     private final class OverviewHost implements AutoTuneOverviewPanel.Host {
         @Override
-        public void startAutoTune(JTransientAutoTuner.AutoTuneProfile profile, AutoTunerRunner.Algorithm algorithm) {
-            runAutoTuner(profile, algorithm);
+        public void startAutoTune(AutoTuneProfile profile) {
+            runAutoTuner(profile);
         }
 
         @Override
@@ -593,7 +594,7 @@ public class DetectionConfigurationPanel extends JPanel {
         pairedSpinners.put(DetectionConfigRules.RuleId.RHYTHM_STATIONARY_THRESHOLD, new JSpinner[]{spinRhythmStatThresh, spinMaxJump});
     }
 
-    private void runAutoTuner(JTransientAutoTuner.AutoTuneProfile selectedProfile, AutoTunerRunner.Algorithm algorithm) {
+    private void runAutoTuner(AutoTuneProfile selectedProfile) {
         FitsFileInformation[] selectedFiles = mainAppWindow.getMainApplicationPanel().getSelectedFilesInformation();
         FitsFileInformation[] poolToUse = AutoTuneCandidatePoolBuilder.inputFrames(
                 mainAppWindow.getMainApplicationPanel().getImportedFiles(), selectedFiles);
@@ -615,8 +616,7 @@ public class DetectionConfigurationPanel extends JPanel {
                 poolToUse,
                 settings,
                 autoTuneMaxCandidateFrames,
-                selectedProfile,
-                algorithm);
+                selectedProfile);
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.AUTO_TUNE,
                 mainAppWindow.getSession(), mainAppWindow.sessionJob(tuneTask),
                 mainAppWindow.forCurrentSession((handle, outcome) -> autoTuneFinished(outcome)));
@@ -1098,7 +1098,7 @@ doubleSpinnerModel(jTransientConfig.streakTimeConsistencyTolerance, 0.0, 1.0, 0.
         spinAutoTuneMaxCandidateFrames = addRow(
                 panel,
                 "Frames Used by Auto-Tune (both tuners)",
-                "Most frames given to Auto-Tune, for both the calibrated and the legacy tuner. When the session has more, SpacePixels picks the best-quality, median-quality and evenly spaced frames. More frames give the calibrated tuner more measurements on small sensors and a master stack closer to the real run; fewer frames use less memory on large sensors (about 120 MB per frame at 61 megapixels).",
+                "Most frames given to Auto-Tune. When the session has more, SpacePixels picks the best-quality, median-quality and evenly spaced frames. More frames give Auto-Tune more measurements on small sensors and a master stack closer to the real run; fewer frames use less memory on large sensors (about 120 MB per frame at 61 megapixels).",
                 intSpinnerModel(autoTuneMaxCandidateFrames, SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES, 5000, 1));
 
         return panel;
@@ -1650,7 +1650,7 @@ doubleSpinnerModel(jTransientConfig.streakTimeConsistencyTolerance, 0.0, 1.0, 0.
     }
 
     /** The end of Auto-Tune: the Overview shows the result or the problem, and the status bar says how it ended. */
-    private void autoTuneFinished(JobOutcome<JTransientAutoTuner.AutoTunerResult> outcome) {
+    private void autoTuneFinished(JobOutcome<AutoTunerResult> outcome) {
         setCursor(Cursor.getDefaultCursor());
         if (outcome instanceof JobOutcome.Cancelled<?>) {
             // The status bar already says that Auto-Tune was cancelled.
@@ -1658,19 +1658,19 @@ doubleSpinnerModel(jTransientConfig.streakTimeConsistencyTolerance, 0.0, 1.0, 0.
             return;
         }
         boolean completed = outcome instanceof JobOutcome.Completed<?>;
-        JTransientAutoTuner.AutoTunerResult result =
-                outcome instanceof JobOutcome.Completed<JTransientAutoTuner.AutoTunerResult> done ? done.result() : null;
+        AutoTunerResult result =
+                outcome instanceof JobOutcome.Completed<AutoTunerResult> done ? done.result() : null;
         if (result != null && result.telemetryReport != null) {
             DebugOutput.println(result.telemetryReport);
         }
         String message = completed ? "Auto-Tuning completed successfully."
-                : outcome instanceof JobOutcome.Failed<JTransientAutoTuner.AutoTunerResult> failed ? failed.reason() : null;
+                : outcome instanceof JobOutcome.Failed<AutoTunerResult> failed ? failed.reason() : null;
         overviewPanel.tuneFinished(completed, message, result);
         MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
         if (mainPanel != null) {
             mainPanel.showStatus(completed ? "Auto-Tuning completed successfully." : "Auto-Tuning failed or aborted.");
         }
-        if (outcome instanceof JobOutcome.Failed<JTransientAutoTuner.AutoTunerResult> failed) {
+        if (outcome instanceof JobOutcome.Failed<AutoTunerResult> failed) {
             FailureDialog.show(this, "Auto-Tune Failed", "Auto-Tune failed: " + failed.reason(), failed.cause());
         }
     }

@@ -4,8 +4,8 @@ import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.config.DetectionConfigRules;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner.AutoTuneProfile;
 
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import java.io.File;
 import java.util.Objects;
 

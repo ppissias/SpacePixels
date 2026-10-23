@@ -19,8 +19,7 @@ Supported public types:
 Other `eu.startales.spacepixels.*` packages should be treated as internal implementation details and may change between releases. The current public request/result model also exposes:
 
 - `io.github.ppissias.jtransient.config.DetectionConfig`
-- `io.github.ppissias.jtransient.engine.JTransientAutoTuner.AutoTuneProfile`
-- `eu.startales.spacepixels.util.AutoTunerRunner.Algorithm` (auto-tuner choice: `CALIBRATED`, the default, or `LEGACY`)
+- `io.github.ppissias.jtransient.engine.AutoTuneProfile`
 - `io.github.ppissias.jtransient.engine.PipelineResult`
 - `eu.startales.spacepixels.util.FitsFileInformation`
 
@@ -173,9 +172,8 @@ import eu.startales.spacepixels.api.DefaultSpacePixelsPipelineApi;
 import eu.startales.spacepixels.api.InputPreparationMode;
 import eu.startales.spacepixels.api.SpacePixelsPipelineRequest;
 import eu.startales.spacepixels.api.SpacePixelsPipelineResult;
-import eu.startales.spacepixels.util.AutoTunerRunner;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 
 import java.io.File;
 
@@ -183,8 +181,7 @@ SpacePixelsPipelineResult result = new DefaultSpacePixelsPipelineApi().run(
         SpacePixelsPipelineRequest.builder(new File("C:/astro/sequence"))
                 .detectionConfig(new DetectionConfig())
                 .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
-                .autoTuneProfile(JTransientAutoTuner.AutoTuneProfile.MEDIUM)
-                .autoTuneAlgorithm(AutoTunerRunner.Algorithm.CALIBRATED)
+                .autoTuneProfile(AutoTuneProfile.MEDIUM)
                 .autoTuneMaxCandidateFrames(12)
                 .progressListener((percentage, message) ->
                         System.out.println(percentage + "% " + message))
@@ -198,7 +195,7 @@ System.out.println("Telemetry report available: " + (result.getAutoTuneTelemetry
 
 Use this when you want SpacePixels to optimize the effective detection configuration before running the standard pipeline.
 
-Profiles: `LOW`, `MEDIUM`, `HIGH` and `MAXIMUM` (as sensitive as possible; on large sensors it leaves many candidates, so it is meant for small sensors or targeted searches). `autoTuneAlgorithm(...)` selects the calibrated tuner (default), which measures false detections and sensitivity on the session, or the legacy score-based tuner, which treats `MAXIMUM` like `HIGH`.
+Profiles: `LOW`, `MEDIUM`, `HIGH` and `MAXIMUM` (as sensitive as possible; on large sensors it leaves many candidates, so it is meant for small sensors or targeted searches). Auto-Tune measures false detections and sensitivity on the session and picks the most sensitive settings within the profile's budget.
 
 Progress is reported from 0 to 100% and only moves forward: input preparation up to 15%, Auto-Tune 15-35% when enabled, the detection pipeline up to 90%, and report generation 90-100%.
 
@@ -265,7 +262,7 @@ try {
 - The API returns a defensive copy for exposed configs and FITS metadata arrays.
 - The API is quiet by default; problems are thrown or logged as `java.util.logging` warnings. Engine/tuner diagnostics capture `spacepixels.debug` per run through a scoped sink; an explicit caller `DiagnosticContext` policy takes precedence. No shared engine/tuner debug flags or mutable tuning defaults are changed.
 - The public artifact currently contains GUI code as well, but GUI classes are not part of the supported API contract.
-- Both tuners use independent per-operation options. Legacy tuning calls the selected engine API directly and never temporarily edits a global sample size. Use the engine/solver versions selected for this SpacePixels release; arbitrary older replacement JARs are not supported.
+- Auto-Tune uses independent per-operation options. Use the engine/solver versions selected for this SpacePixels release; arbitrary older replacement JARs are not supported.
 
 
 ### Variable-star report presentation

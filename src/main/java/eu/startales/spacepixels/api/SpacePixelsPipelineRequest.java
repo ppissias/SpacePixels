@@ -11,9 +11,8 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.config.DetectionConfigRules;
-import eu.startales.spacepixels.util.AutoTunerRunner;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import java.io.File;
 import java.util.Objects;
 
@@ -27,8 +26,7 @@ import java.util.Objects;
 public final class SpacePixelsPipelineRequest {
     private final File inputDirectory;
     private final DetectionConfig detectionConfig;
-    private final JTransientAutoTuner.AutoTuneProfile autoTuneProfile;
-    private final AutoTunerRunner.Algorithm autoTuneAlgorithm;
+    private final AutoTuneProfile autoTuneProfile;
     private final int autoTuneMaxCandidateFrames;
     private final InputPreparationMode inputPreparationMode;
     private final NegativeValueHandling negativeValueHandling;
@@ -41,7 +39,6 @@ public final class SpacePixelsPipelineRequest {
         this.detectionConfig = builder.detectionConfig == null ? null
                 : DetectionConfigRules.snapshot(builder.detectionConfig, DetectionConfigRules.Operation.CONFIGURATION);
         this.autoTuneProfile = builder.autoTuneProfile;
-        this.autoTuneAlgorithm = builder.autoTuneAlgorithm;
         this.autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.normalizeAutoTuneMaxCandidateFrames(builder.autoTuneMaxCandidateFrames);
         this.inputPreparationMode = builder.inputPreparationMode;
         this.negativeValueHandling = builder.negativeValueHandling;
@@ -84,16 +81,7 @@ public final class SpacePixelsPipelineRequest {
      *
      * @return Auto-Tune profile, or {@code null} when Auto-Tune is disabled
      */
-    /**
-     * Returns the auto-tuning algorithm used when Auto-Tune is enabled.
-     *
-     * @return auto-tuning algorithm
-     */
-    public AutoTunerRunner.Algorithm getAutoTuneAlgorithm() {
-        return autoTuneAlgorithm;
-    }
-
-    public JTransientAutoTuner.AutoTuneProfile getAutoTuneProfile() {
+    public AutoTuneProfile getAutoTuneProfile() {
         return autoTuneProfile;
     }
 
@@ -151,8 +139,7 @@ public final class SpacePixelsPipelineRequest {
     public static final class Builder {
         private final File inputDirectory;
         private DetectionConfig detectionConfig;
-        private JTransientAutoTuner.AutoTuneProfile autoTuneProfile;
-        private AutoTunerRunner.Algorithm autoTuneAlgorithm = AutoTunerRunner.DEFAULT_ALGORITHM;
+        private AutoTuneProfile autoTuneProfile;
         private int autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
         private InputPreparationMode inputPreparationMode = InputPreparationMode.FAIL_IF_NOT_READY;
         private NegativeValueHandling negativeValueHandling = NegativeValueHandling.ADD_OFFSET;
@@ -188,19 +175,8 @@ public final class SpacePixelsPipelineRequest {
          * @param autoTuneProfile Auto-Tune profile, or {@code null} to disable Auto-Tune
          * @return this builder
          */
-        public Builder autoTuneProfile(JTransientAutoTuner.AutoTuneProfile autoTuneProfile) {
+        public Builder autoTuneProfile(AutoTuneProfile autoTuneProfile) {
             this.autoTuneProfile = autoTuneProfile;
-            return this;
-        }
-
-        /**
-         * Selects the auto-tuning algorithm (calibrated by default; legacy is kept for comparison).
-         *
-         * @param autoTuneAlgorithm algorithm to use when Auto-Tune is enabled
-         * @return this builder
-         */
-        public Builder autoTuneAlgorithm(AutoTunerRunner.Algorithm autoTuneAlgorithm) {
-            this.autoTuneAlgorithm = Objects.requireNonNull(autoTuneAlgorithm, "autoTuneAlgorithm");
             return this;
         }
 

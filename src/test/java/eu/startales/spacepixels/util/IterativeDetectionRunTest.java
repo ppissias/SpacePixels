@@ -7,6 +7,7 @@ import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -199,7 +200,7 @@ public class IterativeDetectionRunTest {
         AppConfig app = new AppConfig();
         IterativeDetectionRequest request = new IterativeDetectionRequest(source, config, app,
                 DetectionReportGenerator.captureExportSettings(app.variableStarReportOptions), new IterativeDetectionPlan(5, 3, 8),
-                io.github.ppissias.jtransient.engine.JTransientAutoTuner.AutoTuneProfile.LOW, 5, true, true, 9);
+                io.github.ppissias.jtransient.engine.AutoTuneProfile.LOW, 5, true, true, 9);
         List<String> passSettings = new ArrayList<>();
         List<String> messages = new ArrayList<>();
         java.util.concurrent.atomic.AtomicInteger tuningCalls = new java.util.concurrent.atomic.AtomicInteger();

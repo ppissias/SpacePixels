@@ -13,8 +13,8 @@ package eu.startales.spacepixels.util;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
+import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import io.github.ppissias.jtransient.engine.CalibratedAutoTuner;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 
 import java.io.File;
 import java.io.IOException;
@@ -34,9 +34,10 @@ import java.util.Locale;
 /**
  * The auto-tune results of one session, kept in its folder as {@value #FILE_NAME}, the same way
  * {@link eu.startales.spacepixels.util.skycatalog.SkyCatalogueStore} keeps the sky catalogue.
- * A later import of the same frames shows the saved runs. Running Auto-Tune again replaces
- * the result of the tuner that was run. The calibrated sweep itself is not stored: only the chosen
- * settings, the measurement report, and the per-sigma summary used by the auto-tune chart.
+ * A later import of the same frames shows the saved run. Running Auto-Tune again replaces it.
+ * The calibrated sweep itself is not stored: only the chosen settings, the measurement report,
+ * and the per-sigma summary used by the auto-tune chart. A {@code legacy} entry written by an
+ * earlier version, when the legacy tuner existed, is ignored.
  */
 public final class AutoTuneSessionStore {
 
@@ -50,7 +51,7 @@ public final class AutoTuneSessionStore {
     private AutoTuneSessionStore() {
     }
 
-    /** One saved file: both tuners, and the frames it was measured on. */
+    /** One saved file: the Auto-Tune run, and the frames it was measured on. */
     public static final class Document {
         public int version = CURRENT_VERSION;
         public int frameCount;
@@ -59,15 +60,14 @@ public final class AutoTuneSessionStore {
         /** File names only, sorted, so the folder can be moved. */
         public List<String> fileNames = new ArrayList<>();
         public Run calibrated;
-        public Run legacy;
     }
 
-    /** One tuner's result. {@code ranAt} is an ISO-8601 instant. {@code profile} is the profile the run was asked for. */
+    /** The saved run. {@code ranAt} is an ISO-8601 instant. {@code profile} is the profile the run was asked for. */
     public static final class Run {
         public String ranAt;
         public long elapsedSeconds;
         public String profile;
-        public JTransientAutoTuner.AutoTunerResult result;
+        public AutoTunerResult result;
     }
 
     public static File fileIn(File sessionFolder) {
@@ -169,17 +169,17 @@ public final class AutoTuneSessionStore {
     }
 
     /**
-     * One line for the main window and the Overview, or null when neither tuner has a readable time.
-     * Example: {@code Auto-tune saved: calibrated, run at 2026-10-15 18:42 (2 min 7 s); legacy, run at 2026-10-14 09:10 (45 s)}.
+     * One line for the main window and the Overview, or null when the run has no readable time.
+     * Example: {@code Auto-tune saved: run at 2026-10-15 18:42 (2 min 7 s)}.
      */
     public static String describe(Document document) {
-        if (document == null) {
+        Run run = document == null ? null : document.calibrated;
+        String when = run == null ? null : formatRanAt(run.ranAt);
+        if (when == null) {
             return null;
         }
-        List<String> parts = new ArrayList<>();
-        addRun(parts, "calibrated", document.calibrated);
-        addRun(parts, "legacy", document.legacy);
-        return parts.isEmpty() ? null : "Auto-tune saved: " + String.join("; ", parts);
+        String duration = run.elapsedSeconds > 0 ? " (" + formatDuration(run.elapsedSeconds) + ")" : "";
+        return "Auto-tune saved: run at " + when + duration;
     }
 
     /** Local date and time of an ISO-8601 instant, or null when it cannot be read. */
@@ -192,15 +192,6 @@ public final class AutoTuneSessionStore {
         } catch (DateTimeParseException e) {
             return null;
         }
-    }
-
-    private static void addRun(List<String> parts, String tuner, Run run) {
-        String when = run == null ? null : formatRanAt(run.ranAt);
-        if (when == null) {
-            return;
-        }
-        String duration = run.elapsedSeconds > 0 ? " (" + formatDuration(run.elapsedSeconds) + ")" : "";
-        parts.add(tuner + ", run at " + when + duration);
     }
 
     private static String formatDuration(long seconds) {

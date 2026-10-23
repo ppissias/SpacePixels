@@ -9,6 +9,8 @@
  */
 package eu.startales.spacepixels.tasks;
 
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
+import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import io.github.ppissias.jtransient.execution.CancellationScope;
 
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
@@ -20,7 +22,6 @@ import eu.startales.spacepixels.util.AutoTunerRunner;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 
 import java.util.List;
@@ -30,37 +31,34 @@ import java.util.logging.Logger;
  * Runs the chosen Auto-Tuner on a pool of the session's frames. The result is the tuner's answer, which says itself
  * whether it found usable settings.
  */
-public class AutoTuneTask implements Job<JTransientAutoTuner.AutoTunerResult> {
+public class AutoTuneTask implements Job<AutoTunerResult> {
 
     private static final Logger LOGGER = Logger.getLogger(AutoTuneTask.class.getName());
 
     private final FitsFileInformation[] filesInfo;
     private final DetectionConfig baseConfig;
     private final int autoTuneMaxCandidateFrames;
-    private final JTransientAutoTuner.AutoTuneProfile profile;
-    private final AutoTunerRunner.Algorithm algorithm;
+    private final AutoTuneProfile profile;
 
     public AutoTuneTask(FitsFileInformation[] filesInfo,
                         DetectionConfig baseConfig,
                         int autoTuneMaxCandidateFrames,
-                        JTransientAutoTuner.AutoTuneProfile profile,
-                        AutoTunerRunner.Algorithm algorithm) {
+                        AutoTuneProfile profile) {
         this.filesInfo = filesInfo;
         this.baseConfig = baseConfig;
         this.autoTuneMaxCandidateFrames = autoTuneMaxCandidateFrames;
         this.profile = profile;
-        this.algorithm = algorithm;
     }
 
     @Override
-    public JobOutcome<JTransientAutoTuner.AutoTunerResult> run(JobContext context) throws Exception {
+    public JobOutcome<AutoTunerResult> run(JobContext context) throws Exception {
         try (CancellationScope cancellation = CancellationScope.open(context::isCancelled)) {
             CancellationScope.check();
             return runCancellable(context);
         }
     }
 
-    private JobOutcome<JTransientAutoTuner.AutoTunerResult> runCancellable(JobContext context) throws Exception {
+    private JobOutcome<AutoTunerResult> runCancellable(JobContext context) throws Exception {
         if (filesInfo == null || filesInfo.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
             throw new IllegalStateException("Not enough frames to run Auto-Tuning.");
         }
@@ -82,9 +80,8 @@ public class AutoTuneTask implements Job<JTransientAutoTuner.AutoTunerResult> {
 
         context.progress(50, "Starting mathematical tuning algorithms...");
 
-        LOGGER.info("Auto-Tuner algorithm: " + algorithm + ", profile: " + profile);
-        JTransientAutoTuner.AutoTunerResult result =
-                AutoTunerRunner.run(candidateFrames, baseConfig, profile, algorithm, autoTuneListener);
+        LOGGER.info("Auto-Tuner profile: " + profile);
+        AutoTunerResult result = AutoTunerRunner.run(candidateFrames, baseConfig, profile, autoTuneListener);
         context.progress(100, "Auto-Tuning complete!");
         return JobOutcome.completed(result);
     }

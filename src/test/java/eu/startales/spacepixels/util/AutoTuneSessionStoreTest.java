@@ -1,9 +1,9 @@
 package eu.startales.spacepixels.util;
 
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
+import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import io.github.ppissias.jtransient.engine.CalibratedAutoTuner;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner.AutoTuneProfile;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -25,7 +25,7 @@ public class AutoTuneSessionStoreTest {
     public TemporaryFolder folder = new TemporaryFolder();
 
     @Test
-    public void savesBothTunersAndReloadsTheSettingsTheyChose() throws Exception {
+    public void savesTheRunAndReloadsTheSettingsItChose() throws Exception {
         CalibratedAutoTuner.Candidate candidate = new CalibratedAutoTuner.Candidate();
         candidate.sigma = 1.7;
         candidate.growSigma = 1.4;
@@ -58,23 +58,12 @@ public class AutoTuneSessionStoreTest {
             calibration.candidates.add(extra);
         }
 
-        JTransientAutoTuner.AutoTunerResult calibrated = new JTransientAutoTuner.AutoTunerResult();
+        AutoTunerResult calibrated = new AutoTunerResult();
         calibrated.success = true;
         calibrated.calibration = calibration;
         calibrated.telemetryReport = "report <line>";
         calibrated.optimizedConfig = new DetectionConfig();
         calibrated.summary = "High profile";
-
-        DetectionConfig legacyConfig = new DetectionConfig();
-        legacyConfig.detectionSigmaMultiplier = 2.2;
-        legacyConfig.growSigmaMultiplier = 1.8;
-        legacyConfig.minDetectionPixels = 5;
-        legacyConfig.maxMaskOverlapFraction = 0.4;
-        legacyConfig.maxStarJitter = 2.5;
-        JTransientAutoTuner.AutoTunerResult legacy = new JTransientAutoTuner.AutoTunerResult();
-        legacy.success = true;
-        legacy.optimizedConfig = legacyConfig;
-        legacy.telemetryReport = "legacy report";
 
         AutoTuneSessionStore.Document document = new AutoTuneSessionStore.Document();
         document.frameCount = 10;
@@ -82,7 +71,6 @@ public class AutoTuneSessionStoreTest {
         document.height = 80;
         document.fileNames = Arrays.asList("b.fits", "a.fits");
         document.calibrated = run("2026-10-15T16:42:00Z", 127, "HIGH", calibrated);
-        document.legacy = run("2026-10-14T07:10:00Z", 45, "MEDIUM", legacy);
 
         File session = folder.newFolder("session");
         AutoTuneSessionStore.save(session, document);
@@ -107,17 +95,30 @@ public class AutoTuneSessionStoreTest {
         assertEquals(1.7, applied.detectionSigmaMultiplier, 0);
         assertEquals(3.2, applied.masterSigmaMultiplier, 0);
         assertEquals(1.25, applied.maxStarJitter, 0);
-        assertEquals(2.2, loaded.legacy.result.optimizedConfig.detectionSigmaMultiplier, 0);
-        assertEquals(2.5, loaded.legacy.result.optimizedConfig.maxStarJitter, 0);
 
-        String described = AutoTuneSessionStore.describe(loaded);
-        assertTrue(described, described.contains("calibrated, run at " + AutoTuneSessionStore.formatRanAt("2026-10-15T16:42:00Z")));
-        assertTrue(described, described.contains("2 min 7 s"));
-        assertTrue(described, described.contains("legacy, run at " + AutoTuneSessionStore.formatRanAt("2026-10-14T07:10:00Z")));
-        assertTrue(described, described.contains("45 s"));
+        assertEquals("Auto-tune saved: run at " + AutoTuneSessionStore.formatRanAt("2026-10-15T16:42:00Z") + " (2 min 7 s)",
+                AutoTuneSessionStore.describe(loaded));
 
         assertNull(AutoTuneSessionStore.loadMatching(session, 11, 100, 80, Arrays.asList("a.fits", "b.fits")));
         assertNull(AutoTuneSessionStore.loadMatching(session, 10, 100, 80, Collections.singletonList("a.fits")));
+    }
+
+    @Test
+    public void loadsAFileThatStillHasALegacyTunerRun() throws Exception {
+        File session = folder.newFolder("older");
+        Files.write(new File(session, AutoTuneSessionStore.FILE_NAME).toPath(),
+                ("{\"version\":1,\"frameCount\":2,\"width\":10,\"height\":8,\"fileNames\":[\"a.fits\",\"b.fits\"],"
+                        + "\"calibrated\":{\"ranAt\":\"2026-10-15T16:42:00Z\",\"elapsedSeconds\":3,\"profile\":\"HIGH\","
+                        + "\"result\":{\"success\":true,\"telemetryReport\":\"calibrated\",\"bestTransientRatio\":0.2}},"
+                        + "\"legacy\":{\"ranAt\":\"2026-10-14T07:10:00Z\",\"elapsedSeconds\":45,\"profile\":\"MEDIUM\","
+                        + "\"result\":{\"success\":true,\"bestStarCount\":12,\"finalValidationTelemetry\":{\"executed\":true}}}}")
+                        .getBytes(StandardCharsets.UTF_8));
+        AutoTuneSessionStore.Document loaded = AutoTuneSessionStore.loadMatching(
+                session, 2, 10, 8, Arrays.asList("b.fits", "a.fits"));
+        assertNotNull(loaded);
+        assertEquals("calibrated", loaded.calibrated.result.telemetryReport);
+        assertEquals("Auto-tune saved: run at " + AutoTuneSessionStore.formatRanAt("2026-10-15T16:42:00Z") + " (3 s)",
+                AutoTuneSessionStore.describe(loaded));
     }
 
     @Test
@@ -137,7 +138,7 @@ public class AutoTuneSessionStoreTest {
         throw new AssertionError("sigma " + sigma);
     }
 
-    private static AutoTuneSessionStore.Run run(String ranAt, long seconds, String profile, JTransientAutoTuner.AutoTunerResult result) {
+    private static AutoTuneSessionStore.Run run(String ranAt, long seconds, String profile, AutoTunerResult result) {
         AutoTuneSessionStore.Run run = new AutoTuneSessionStore.Run();
         run.ranAt = ranAt;
         run.elapsedSeconds = seconds;

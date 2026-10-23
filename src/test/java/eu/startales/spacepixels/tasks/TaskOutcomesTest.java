@@ -5,13 +5,12 @@ import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.AutoTunerRunner;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -53,7 +52,7 @@ public class TaskOutcomesTest {
         assertFailed(outcomeOf(new BatchConvertMonoTask(null, false, 1, 1, algorithm)));
         assertFailed(outcomeOf(new PlateSolveTask(null, missingFrame().getFilePath(), true, false)));
         assertFailed(outcomeOf(new AutoTuneTask(null, new DetectionConfig(), 10,
-                JTransientAutoTuner.AutoTuneProfile.values()[0], AutoTunerRunner.Algorithm.CALIBRATED)));
+                AutoTuneProfile.values()[0])));
         assertFailed(outcomeOf(new DetectionTask(null, new DetectionConfig())));
         assertFailed(outcomeOf(new IterativeDetectionTask(null, new DetectionConfig(), 0)));
         assertFailed(outcomeOf(new ManualTransientInspectionTask(null, new DetectionConfig())));

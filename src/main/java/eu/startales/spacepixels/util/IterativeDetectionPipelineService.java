@@ -7,8 +7,9 @@ import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import eu.startales.spacepixels.util.reporting.IterativeDetectionIndex;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.config.DetectionConfigRules;
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
+import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import io.github.ppissias.jtransient.engine.ImageFrame;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 import io.github.ppissias.jtransient.execution.CancellationScope;
 
@@ -38,7 +39,7 @@ public final class IterativeDetectionPipelineService {
     @FunctionalInterface
     interface Tuner {
         Tuned run(FitsFileInformation[] files, DetectionConfig config, int limit,
-                  JTransientAutoTuner.AutoTuneProfile profile, TransientEngineProgressListener progress) throws Exception;
+                  AutoTuneProfile profile, TransientEngineProgressListener progress) throws Exception;
     }
 
     private static final Logger LOGGER = Logger.getLogger(IterativeDetectionPipelineService.class.getName());
@@ -134,7 +135,7 @@ public final class IterativeDetectionPipelineService {
 
     private File runPasses(DetectionConfig config, FitsFileInformation[] files, AppConfig appConfig,
                            ExportVisualizationSettings visualization, IterativeDetectionPlan plan,
-                           File source, File prepared, JTransientAutoTuner.AutoTuneProfile tuneProfile,
+                           File source, File prepared, AutoTuneProfile tuneProfile,
                            int tuneLimit, String tuneReport, ReportPrompt prompt,
                            TransientEngineProgressListener progress, int passStart) throws Exception {
         List<Integer> sizes = plan.frameCounts(files.length);
@@ -206,7 +207,7 @@ public final class IterativeDetectionPipelineService {
     }
 
     private void publish(File root, File source, File prepared, IterativeDetectionPlan plan,
-                         JTransientAutoTuner.AutoTuneProfile tuneProfile, int tuneLimit, DetectionConfig config,
+                         AutoTuneProfile tuneProfile, int tuneLimit, DetectionConfig config,
                          ExportVisualizationSettings visualization, String outcome,
                          List<IterativeDetectionIndex.Pass> passes) throws IOException {
         IterativeDetectionIndex.write(root, new IterativeDetectionIndex.Run(1, source.getName(), prepared.getName(),
@@ -258,12 +259,12 @@ public final class IterativeDetectionPipelineService {
     record Tuned(DetectionConfig config, String telemetry) {}
 
     private static Tuned tune(FitsFileInformation[] files, DetectionConfig config, int limit,
-                              JTransientAutoTuner.AutoTuneProfile profile, TransientEngineProgressListener progress) throws Exception {
+                              AutoTuneProfile profile, TransientEngineProgressListener progress) throws Exception {
         List<ImageFrame> candidates = AutoTuneCandidatePoolBuilder.buildCandidatePool(files, config, limit,
                 (percent, message) -> emit(progress, 10 + percent / 10, "Auto-Tune: " + message));
         try {
-            JTransientAutoTuner.AutoTunerResult result = AutoTunerRunner.run(candidates, config.clone(), profile,
-                    AutoTunerRunner.DEFAULT_ALGORITHM, (percent, message) -> emit(progress, 20 + percent / 10, "Auto-Tune: " + message));
+            AutoTunerResult result = AutoTunerRunner.run(candidates, config.clone(), profile,
+                    (percent, message) -> emit(progress, 20 + percent / 10, "Auto-Tune: " + message));
             if (result == null || !result.success || result.optimizedConfig == null) {
                 throw new IOException("Auto-Tune did not produce usable settings. Import the dataset normally to experiment with settings."
                         + (result == null ? "" : "\n" + result.telemetryReport));

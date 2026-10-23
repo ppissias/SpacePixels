@@ -9,7 +9,7 @@ package eu.startales.spacepixels.api;
 
 import eu.startales.spacepixels.util.FitsFileInformation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
+import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 
 import java.io.File;
@@ -29,7 +29,7 @@ public final class SpacePixelsPipelineResult {
     private final DetectionConfig baseConfig;
     private final DetectionConfig effectiveConfig;
     private final boolean autoTuneApplied;
-    private final JTransientAutoTuner.AutoTuneProfile autoTuneProfileUsed;
+    private final AutoTuneProfile autoTuneProfileUsed;
     private final String autoTuneTelemetryReport;
     private final PipelineResult pipelineResult;
     private final File exportDirectory;
@@ -42,7 +42,7 @@ public final class SpacePixelsPipelineResult {
                                      DetectionConfig baseConfig,
                                      DetectionConfig effectiveConfig,
                                      boolean autoTuneApplied,
-                                     JTransientAutoTuner.AutoTuneProfile autoTuneProfileUsed,
+                                     AutoTuneProfile autoTuneProfileUsed,
                                      String autoTuneTelemetryReport,
                                      PipelineResult pipelineResult,
                                      File exportDirectory,
@@ -129,7 +129,7 @@ public final class SpacePixelsPipelineResult {
      *
      * @return Auto-Tune profile, or {@code null} when Auto-Tune was disabled
      */
-    public JTransientAutoTuner.AutoTuneProfile getAutoTuneProfileUsed() {
+    public AutoTuneProfile getAutoTuneProfileUsed() {
         return autoTuneProfileUsed;
     }
 

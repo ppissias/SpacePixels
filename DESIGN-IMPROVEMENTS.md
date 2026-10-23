@@ -82,7 +82,7 @@ The pattern is close to a modest **model–view–presenter** arrangement: a sta
 - **Main panel (D11):** preserve the implemented session owner, application preferences, jobs, shared actions and explicit UI interaction adapters from D02/D06/D07/S13. Extract only a remaining result/workflow or UI-decision responsibility justified by the owning outcome; a panel's size is not an extraction order or a reason to rebuild session state.
 - **Cohesive renderers:** leave `CreativeTributeRenderer` and target section writers intact unless feature work exposes an independent responsibility. No target line counts or mass static-helper replacement are proposed.
 
-Verification follows the strategy above and [AGENTS.md](AGENTS.md). Import changes cover ready mono FITS, compressed files, signed/scaled and 32-bit conversions, color, XISF, exposure groups and negative-value policy in both GUI and headless modes. Settings changes cover load/save, failed saves, defaults/revert, migration, hidden values, previews and both tuners. Report changes compare equivalent standard/iterative bundles, CSVs, identities, crops/GIFs and offline/live lookup behavior against a baseline. Use disposable settings and inputs.
+Verification follows the strategy above and [AGENTS.md](AGENTS.md). Import changes cover ready mono FITS, compressed files, signed/scaled and 32-bit conversions, color, XISF, exposure groups and negative-value policy in both GUI and headless modes. Settings changes cover load/save, failed saves, defaults/revert, migration, hidden values, previews and Auto-Tune. Report changes compare equivalent standard/iterative bundles, CSVs, identities, crops/GIFs and offline/live lookup behavior against a baseline. Use disposable settings and inputs.
 
 ## Pending findings
 
@@ -366,7 +366,6 @@ Use current sibling APIs directly and update importing callers with library chan
 | Engine work | Remaining application responsibility |
 |---|---|
 | JA-06/07 | Update imports for the top-level `model` types and any changed tracking calls in the same change; preserve scientific identity and shared buffers. |
-| JA-08 | Remove the legacy tuner choice from the GUI, Java API, batch tool and saved state; use the renamed calibrated measurement. |
 | JA-09 | Adopt stage events/outcomes without GUI concerns in the engine; preserve maintainer-owned F10 preview behavior. F10 slice 2 consumes the stage-products observer. |
 | JA-12 | Adapt to the reduced execution API (cancellation scope, diagnostics, structured failures); compile and tests pass. |
 | JA-10 | Closed 2026-10-23; nothing to do. |
