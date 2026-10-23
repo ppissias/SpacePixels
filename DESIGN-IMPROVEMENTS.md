@@ -47,11 +47,11 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 | D11 | Medium | In progress; frame-scope/output-folder slice complete | Unified completed-result access, lightweight history/restoration and dimension-aware processing guidance remain | Extend existing session/overlays; reuse D09 identity/context; F02 remains deferred |
 | D12 | Medium | In progress; settings layout slice complete | Shared styles and content-driven settings forms implemented; finish main-window/viewer layout review and coordinated progress wrapping | Independent slices; leave F10's progress dialog to its parallel implementation |
 | F01 | Unranked | Proposed; experiment first | Compare slow-mover thresholds with tuned frame thresholds on real data before deciding any change | JTransient SM-2 is deferred; existing calibrated master tuning is not pending |
-| F02 | Unranked | Deferred | Richer header-derived session summary / multiple-night warning | Owned by D11; not a separate expensive pre-run quality table |
-| F04 | Unranked | Proposed; explore design | MCP access to the existing headless pipeline, then explicitly scoped inspection capabilities | Reuse API and completed S13 headless service boundary |
-| F05 | Unranked | Deferred | Revisit reduced Image Stretch preview sampling and small-star visibility | Existing 2400 px preview cap / full-size viewer remain; independent of completed D03 |
-| F06 | Unranked | Proposed; Windows first | Native installer and optional runtime/bootstrap distribution | Release-pair gate JA-11; no Java-baseline change approved |
-| F09 | Unranked | Proposed enhancement only | Cross-pass findings consolidation into a provenance-preserving super report | Basic iteration is complete; share saved evidence/identities with D09/D11 |
+| F02 | Unranked | Deferred for now | Richer header-derived session summary / multiple-night warning | Owned by D11; not a separate expensive pre-run quality table |
+| F04 | Unranked | Agreed, last in order | MCP access to the existing headless pipeline, then explicitly scoped inspection capabilities | Reuse API and completed S13 headless service boundary |
+| F05 | Unranked | Deferred for now | Revisit reduced Image Stretch preview sampling and small-star visibility | Existing 2400 px preview cap / full-size viewer remain; independent of completed D03 |
+| F06 | Unranked | Agreed, lst in order; Windows first | Native installer and optional runtime/bootstrap distribution | Release-pair gate JA-11; no Java-baseline change approved |
+| F09 | Unranked | deferred for now | Cross-pass findings consolidation into a provenance-preserving super report | Basic iteration is complete; share saved evidence/identities with D09/D11 |
 | F10 | Unranked | Proposed | Optional throttled progress-dialog imagery | Loading/report thumbnails first; deeper engine snapshots depend on a safe JA-09-compatible boundary |
 
 “High” would mean before expanding the affected workflow, not authorization to implement several items together. F08, F11 and the original F09 workflow are completed and archived; ID gaps are intentional. F11's packaging does not certify the published dependency pair or imply a Central upload; JA-11 remains the release gate. The feature details below elaborate these same rows and do not define another status list.
