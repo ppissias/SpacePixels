@@ -10,7 +10,8 @@ public final class DetectionSettings {
             StreakDetectionSettings.all(),
             MovingObjectsSettings.all(),
             AnomalyDetectionSettings.all(),
-            SlowMoversSettings.all())
+            SlowMoversSettings.all(),
+            VariableStarsSettings.all())
             .flatMap(List::stream).toList();
 
     /** Prevents constructing the fixed definition registry. */
