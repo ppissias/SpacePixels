@@ -113,7 +113,7 @@ final class SettingRow {
                 || (section != null && section.title.toLowerCase(Locale.ROOT).contains(query));
     }
 
-    /** Typed definitions own visibility even if moved under another section; legacy rows inherit their section. */
+    /** Definitions own visibility even if moved under another section; standalone rows may inherit their section. */
     boolean isExpert() {
         Object declared = input.getClientProperty(EXPERT_SETTING);
         return declared instanceof Boolean expert ? expert : section != null && section.expert;

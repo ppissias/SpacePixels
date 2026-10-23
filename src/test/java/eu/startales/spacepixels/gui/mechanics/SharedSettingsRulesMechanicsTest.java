@@ -22,7 +22,7 @@ import java.util.Map;
 
 import static org.junit.Assert.*;
 
-/** Drives rule-review choices, hidden-value persistence and legacy pair bindings in an isolated desktop session. */
+/** Drives rule-review choices, hidden-value persistence and typed pair bindings in an isolated desktop session. */
 public class SharedSettingsRulesMechanicsTest extends MechanicsTestCase {
     /** Exercises Keep/Align in the real dialog and verifies only explicit alignment changes the saved hidden policy. */
     @Test(timeout = 180_000)
@@ -72,19 +72,20 @@ public class SharedSettingsRulesMechanicsTest extends MechanicsTestCase {
 
     /** Crosses all six bound pairs to verify engine-selected directions and the automatic master-grow sentinel. */
     @Test(timeout = 120_000)
-    public void everyLegacyWidgetPairUsesTheEngineAdjustmentDirection() throws Exception {
+    public void everyTypedWidgetPairUsesTheEngineAdjustmentDirection() throws Exception {
         importSyntheticSequence();
         var panel = application().getDetectionConfigurationPanel();
         GuiActionRunner.execute(() -> {
-            Map<?, ?> bindings = field(panel, "pairedSpinners", Map.class);
+            Map<?, ?> bindings = field(panel, "detectionInputs", Map.class);
             for (DetectionConfigRules.Pair pair : DetectionConfigRules.pairs()) {
-                JSpinner[] inputs = (JSpinner[]) bindings.get(pair.ruleId());
-                if (inputs == null) continue;
-                inputs[0].setValue(((Number) inputs[1].getValue()).doubleValue() + 0.1);
+                JSpinner first = (JSpinner) bindings.get(pair.firstField());
+                JSpinner second = (JSpinner) bindings.get(pair.secondField());
+                if (first == null || second == null) continue;
+                first.setValue(((Number) second.getValue()).doubleValue() + 0.1);
                 DetectionConfig config = field(panel, "jTransientConfig", DetectionConfig.class);
                 assertTrue(pair.ruleId().name(), pair.holds(config));
-                assertEquals(((Number) inputs[0].getValue()).doubleValue(),
-                        ((Number) inputs[1].getValue()).doubleValue(), 0);
+                assertEquals(((Number) first.getValue()).doubleValue(),
+                        ((Number) second.getValue()).doubleValue(), 0);
             }
             field(panel, "spinMasterGrowSigma", JSpinner.class).setValue(0.0);
             assertEquals(0, field(panel, "jTransientConfig", DetectionConfig.class).masterGrowSigmaMultiplier, 0);

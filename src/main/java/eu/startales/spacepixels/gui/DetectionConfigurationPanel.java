@@ -53,6 +53,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/** Owns typed detection and application settings bindings, preserving hidden profile fields and shared viewer models. */
 public class DetectionConfigurationPanel extends JPanel {
 
     //link to main window
@@ -135,6 +136,9 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private final List<SettingRow> settingRows = new ArrayList<>();
     private final List<DetectionSettingBinding<?>> typedBindings = new ArrayList<>();
+    private final List<ApplicationSettingBinding<?>> reportBindings = new ArrayList<>();
+    private final List<ApplicationSettingBinding<?>> tuningBindings = new ArrayList<>();
+    private final List<ApplicationSettingBinding<?>> visualizationBindings = new ArrayList<>();
     // The title of each number setting, in page order, for the messages about its field.
     private final Map<JSpinner, String> inputTitles = new LinkedHashMap<>();
     private final Map<JSpinner, DetectionSetting<? extends Number>> coreDefinitions = new LinkedHashMap<>();
@@ -155,6 +159,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private String savedSnapshot;
     private boolean suppressAutoApply;
 
+    /** Builds the EDT-owned settings editor against the window's session and isolated persistence services. */
     public DetectionConfigurationPanel(ApplicationWindow mainAppWindow) {
         this.mainAppWindow = mainAppWindow;
         loadPersistedSettings();
@@ -583,16 +588,15 @@ public class DetectionConfigurationPanel extends JPanel {
         updateSavedState();
     }
 
+    /** Reloads rendering controls as one EDT update so a partial reload cannot overwrite restored preferences. */
     private void updateVisualizationSpinnersFromRuntime() {
-        setSpinnerValueClamped(spinAutoBlackSigma, DisplayImageRenderer.autoStretchBlackSigma);
-        setSpinnerValueClamped(spinAutoWhiteSigma, DisplayImageRenderer.autoStretchWhiteSigma);
-        setSpinnerValueClamped(spinGifBlinkSpeed, DetectionReportGenerator.gifBlinkSpeedMs);
-        setSpinnerValueClamped(spinStreakScale, RawImageAnnotator.streakLineScaleFactor);
-        setSpinnerValueClamped(spinStreakCentroidRad, RawImageAnnotator.streakCentroidBoxRadius);
-        setSpinnerValueClamped(spinPointBoxRad, RawImageAnnotator.pointSourceMinBoxRadius);
-        setSpinnerValueClamped(spinBoxPad, RawImageAnnotator.dynamicBoxPadding);
-        setSpinnerValueClamped(spinCropPadding, DetectionReportGenerator.trackCropPadding);
-        chkIncludeAiCreativeReportSections.setSelected(DetectionReportGenerator.includeAiCreativeReportSections);
+        boolean wasSuppressed = suppressAutoApply;
+        suppressAutoApply = true;
+        try {
+            visualizationBindings.forEach(ApplicationSettingBinding::load);
+        } finally {
+            suppressAutoApply = wasSuppressed;
+        }
     }
 
     private void runAutoTuner(AutoTuneProfile selectedProfile) {
@@ -1028,14 +1032,17 @@ public class DetectionConfigurationPanel extends JPanel {
         chkEnableVariableStarDetection = addTypedCheckbox(panel, VariableStarsSettings.ENABLE_VARIABLE_STAR_DETECTION);
 
         panel.add(createSectionHeader("Report Presentation"));
-        spinVariableMaxCandidateCards = addRow(panel, "Maximum Detailed Candidate Cards",
+        spinVariableMaxCandidateCards = addApplicationInteger(panel, reportBindings, new ApplicationSetting<>(
+                "variableStarMaxCandidateCards", "Maximum Detailed Candidate Cards", "cards",
                 "Maximum variable-star cards with full light curves and cutouts in the report (default 40).<br>Set 60 for a longer report. The table, field maps and CSVs still include every candidate.",
-                intSpinnerModel(variableStarReportOptions.maxCandidateCards(), 1, VariableStarReportOptions.MAX_CANDIDATE_CARDS, 1));
-        cmbVariableStarSortOrder = new JComboBox<>(VariableStarReportOptions.SortOrder.values());
-        cmbVariableStarSortOrder.setSelectedItem(variableStarReportOptions.sortOrder());
-        addSettingRow(panel, "Candidate Presentation Order",
+                false, Integer.class, () -> variableStarReportOptions.maxCandidateCards(), value -> variableStarReportOptions = new VariableStarReportOptions(value, variableStarReportOptions.sortOrder())),
+                1, VariableStarReportOptions.MAX_CANDIDATE_CARDS, 1);
+        cmbVariableStarSortOrder = addApplicationChoice(panel, reportBindings, new ApplicationSetting<>(
+                "variableStarSortOrder", "Candidate Presentation Order", "",
                 "High confidence first; V numbers stay fixed.<br>Observed changes: up-and-down, dips and peaks, then larger Δmag.<br>Known periods: saved VSX matches; unknown periods last in each tier.",
-                cmbVariableStarSortOrder);
+                false, VariableStarReportOptions.SortOrder.class, () -> variableStarReportOptions.sortOrder(),
+                value -> variableStarReportOptions = new VariableStarReportOptions(variableStarReportOptions.maxCandidateCards(), value)),
+                VariableStarReportOptions.SortOrder.values());
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Candidate Thresholds"));
@@ -1077,6 +1084,8 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Frame Rejection"));
         cmbFrameRejection = new JComboBox<>(new DefaultComboBoxModel<>(FRAME_REJECTION_PRESETS));
         cmbFrameRejection.putClientProperty(SettingRow.PRESET_CHOOSER, true);
+        cmbFrameRejection.putClientProperty(SettingRow.SETTING_ID, "frameRejectionPreset");
+        cmbFrameRejection.putClientProperty(SettingRow.EXPERT_SETTING, false);
         UiStyle.inputWidth(cmbFrameRejection, 110);
         addSettingRow(panel, "Strictness", "How readily frames that differ from the rest of the session are left out. Normal uses the default limits; Lenient keeps more frames, Strict leaves out more.<br>The individual limits are expert settings; changing one shows Custom.", cmbFrameRejection);
 
@@ -1092,11 +1101,11 @@ public class DetectionConfigurationPanel extends JPanel {
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Auto-Tune"));
-        spinAutoTuneMaxCandidateFrames = addRow(
-                panel,
-                "Frames Used by Auto-Tune (both tuners)",
+        spinAutoTuneMaxCandidateFrames = addApplicationInteger(panel, tuningBindings, new ApplicationSetting<>(
+                "autoTuneMaxCandidateFrames", "Frames Used by Auto-Tune (both tuners)", "frames",
                 "Most frames given to Auto-Tune. When the session has more, SpacePixels picks the best-quality, median-quality and evenly spaced frames. More frames give Auto-Tune more measurements on small sensors and a master stack closer to the real run; fewer frames use less memory on large sensors (about 120 MB per frame at 61 megapixels).",
-                intSpinnerModel(autoTuneMaxCandidateFrames, SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES, 5000, 1));
+                true, Integer.class, () -> autoTuneMaxCandidateFrames, value -> autoTuneMaxCandidateFrames = value),
+                SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES, 5000, 1);
 
         return panel;
     }
@@ -1109,25 +1118,57 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createTabIntro("Visualization-only controls for exported reports and review imagery. These settings do not change detection results; they only affect presentation, contrast stretch, and animation cadence."));
 
         panel.add(createSectionHeader("Display Stretch & Animation"));
-        spinAutoBlackSigma = addRow(panel, "Auto Stretch Black Sigma", "Controls how far below the image mean the automatic black point is placed when stretching rendered imagery. Higher values darken the background more aggressively.", doubleSpinnerModel(DisplayImageRenderer.autoStretchBlackSigma, 0.0, 10.0, 0.1));
-        spinAutoWhiteSigma = addRow(panel, "Auto Stretch White Sigma", "Controls how far above the image mean the automatic white point is placed when stretching rendered imagery. Higher values preserve more bright-core detail but can reduce contrast on faint structure.", doubleSpinnerModel(DisplayImageRenderer.autoStretchWhiteSigma, 0.1, 20.0, 0.1));
-        spinGifBlinkSpeed = addRow(panel, "GIF Blink Speed (ms)", "Frame delay used for exported animated GIFs. Lower values blink faster; higher values slow the inspection cadence.", intSpinnerModel(DetectionReportGenerator.gifBlinkSpeedMs, 50, 5000, 10));
+        spinAutoBlackSigma = addApplicationDouble(panel, visualizationBindings, new ApplicationSetting<>(
+                "autoStretchBlackSigma", "Auto Stretch Black Sigma", "sigma",
+                "Controls how far below the image mean the automatic black point is placed when stretching rendered imagery. Higher values darken the background more aggressively.",
+                false, Double.class, () -> DisplayImageRenderer.autoStretchBlackSigma, value -> DisplayImageRenderer.autoStretchBlackSigma = value),
+                0.0, 10.0, 0.1);
+        spinAutoWhiteSigma = addApplicationDouble(panel, visualizationBindings, new ApplicationSetting<>(
+                "autoStretchWhiteSigma", "Auto Stretch White Sigma", "sigma",
+                "Controls how far above the image mean the automatic white point is placed when stretching rendered imagery. Higher values preserve more bright-core detail but can reduce contrast on faint structure.",
+                false, Double.class, () -> DisplayImageRenderer.autoStretchWhiteSigma, value -> DisplayImageRenderer.autoStretchWhiteSigma = value),
+                0.1, 20.0, 0.1);
+        spinGifBlinkSpeed = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
+                "gifBlinkSpeedMs", "GIF Blink Speed (ms)", "ms",
+                "Frame delay used for exported animated GIFs. Lower values blink faster; higher values slow the inspection cadence.",
+                false, Integer.class, () -> DetectionReportGenerator.gifBlinkSpeedMs, value -> DetectionReportGenerator.gifBlinkSpeedMs = value),
+                50, 5000, 10);
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createSectionHeader("Optional Report Sections"));
-        chkIncludeAiCreativeReportSections = addCheckboxRow(
-                panel,
-                "Include AI Creative Report Sections",
+        chkIncludeAiCreativeReportSections = addApplicationCheckbox(panel, visualizationBindings, new ApplicationSetting<>(
+                "includeAiCreativeReportSections", "Include AI Creative Report Sections", "",
                 "These optional reporting sections gave AI agents freedom to visualize the detection data in their own way. You can see the results by enabling them.",
-                DetectionReportGenerator.includeAiCreativeReportSections);
+                false, Boolean.class, () -> DetectionReportGenerator.includeAiCreativeReportSections,
+                value -> DetectionReportGenerator.includeAiCreativeReportSections = value));
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Annotations And Cropping"));
-        spinStreakScale = addRow(panel, "Streak Line Scale Factor", "Visualization-only setting that scales the length of the drawn streak annotation line.", doubleSpinnerModel(RawImageAnnotator.streakLineScaleFactor, 0.1, 20.0, 0.1));
-        spinStreakCentroidRad = addRow(panel, "Streak Centroid Box Radius", "Visualization-only setting that controls the size of the box drawn around a streak centroid.", intSpinnerModel(RawImageAnnotator.streakCentroidBoxRadius, 1, 100, 1));
-        spinPointBoxRad = addRow(panel, "Point Source Min Box Radius", "Visualization-only setting that sets the minimum radius of boxes drawn around point sources.", intSpinnerModel(RawImageAnnotator.pointSourceMinBoxRadius, 1, 50, 1));
-        spinBoxPad = addRow(panel, "Dynamic Box Padding", "Visualization-only setting that adds extra padding around automatically sized annotation boxes.", intSpinnerModel(RawImageAnnotator.dynamicBoxPadding, 0, 50, 1));
-        spinCropPadding = addRow(panel, "Track Crop Border Padding", "Export-only setting that adds extra border around cropped track images.", intSpinnerModel(DetectionReportGenerator.trackCropPadding, 0, 2000, 10));
+        spinStreakScale = addApplicationDouble(panel, visualizationBindings, new ApplicationSetting<>(
+                "streakLineScaleFactor", "Streak Line Scale Factor", "",
+                "Visualization-only setting that scales the length of the drawn streak annotation line.",
+                true, Double.class, () -> RawImageAnnotator.streakLineScaleFactor, value -> RawImageAnnotator.streakLineScaleFactor = value),
+                0.1, 20.0, 0.1);
+        spinStreakCentroidRad = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
+                "streakCentroidBoxRadius", "Streak Centroid Box Radius", "pixels",
+                "Visualization-only setting that controls the size of the box drawn around a streak centroid.",
+                true, Integer.class, () -> RawImageAnnotator.streakCentroidBoxRadius, value -> RawImageAnnotator.streakCentroidBoxRadius = value),
+                1, 100, 1);
+        spinPointBoxRad = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
+                "pointSourceMinBoxRadius", "Point Source Min Box Radius", "pixels",
+                "Visualization-only setting that sets the minimum radius of boxes drawn around point sources.",
+                true, Integer.class, () -> RawImageAnnotator.pointSourceMinBoxRadius, value -> RawImageAnnotator.pointSourceMinBoxRadius = value),
+                1, 50, 1);
+        spinBoxPad = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
+                "dynamicBoxPadding", "Dynamic Box Padding", "pixels",
+                "Visualization-only setting that adds extra padding around automatically sized annotation boxes.",
+                true, Integer.class, () -> RawImageAnnotator.dynamicBoxPadding, value -> RawImageAnnotator.dynamicBoxPadding = value),
+                0, 50, 1);
+        spinCropPadding = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
+                "trackCropPadding", "Track Crop Border Padding", "pixels",
+                "Export-only setting that adds extra border around cropped track images.",
+                true, Integer.class, () -> DetectionReportGenerator.trackCropPadding, value -> DetectionReportGenerator.trackCropPadding = value),
+                0, 2000, 10);
 
         return panel;
     }
@@ -1331,18 +1372,52 @@ public class DetectionConfigurationPanel extends JPanel {
         return spinner;
     }
 
-    private JSpinner addRow(JPanel parent, String title, String description, SpinnerModel model) {
-        JSpinner spinner = createSpinner(model);
-        addSettingRow(parent, title, description, spinner);
-        return spinner;
+    /** Binds an application double with its existing range and explicit runtime or profile owner. */
+    private JSpinner addApplicationDouble(JPanel parent, List<ApplicationSettingBinding<?>> bindings,
+            ApplicationSetting<Double> setting, double min, double max, double step) {
+        JSpinner input = createSpinner(doubleSpinnerModel(setting.read(), min, max, step));
+        addApplicationBinding(parent, bindings, setting, input, () -> ((Number) input.getValue()).doubleValue(),
+                value -> setSpinnerValueClamped(input, value.doubleValue()));
+        return input;
     }
 
-    private JCheckBox addCheckboxRow(JPanel parent, String title, String description, boolean defaultValue) {
-        JCheckBox checkBox = new JCheckBox();
-        checkBox.setSelected(defaultValue);
-        UiStyle.inputWidth(checkBox, 80);
-        addSettingRow(parent, title, description, checkBox);
-        return checkBox;
+    /** Binds an application integer without adding an engine setting or changing its persistence format. */
+    private JSpinner addApplicationInteger(JPanel parent, List<ApplicationSettingBinding<?>> bindings,
+            ApplicationSetting<Integer> setting, int min, int max, int step) {
+        JSpinner input = createSpinner(intSpinnerModel(setting.read(), min, max, step));
+        addApplicationBinding(parent, bindings, setting, input, () -> ((Number) input.getValue()).intValue(),
+                value -> setSpinnerValueClamped(input, value.intValue()));
+        return input;
+    }
+
+    /** Binds a presentation toggle to its application-owned value. */
+    private JCheckBox addApplicationCheckbox(JPanel parent, List<ApplicationSettingBinding<?>> bindings,
+            ApplicationSetting<Boolean> setting) {
+        JCheckBox input = new JCheckBox();
+        input.setSelected(setting.read());
+        UiStyle.inputWidth(input, 80);
+        addApplicationBinding(parent, bindings, setting, input, input::isSelected, input::setSelected);
+        return input;
+    }
+
+    /** Binds a finite set of typed presentation choices without casting the selected item during apply. */
+    private <Value> JComboBox<Value> addApplicationChoice(JPanel parent, List<ApplicationSettingBinding<?>> bindings,
+            ApplicationSetting<Value> setting, Value[] choices) {
+        JComboBox<Value> input = new JComboBox<>(choices);
+        input.setSelectedItem(setting.read());
+        addApplicationBinding(parent, bindings, setting, input,
+                () -> setting.type().cast(input.getSelectedItem()), input::setSelectedItem);
+        return input;
+    }
+
+    /** Registers application identity, disclosure and load/apply at the row that owns the control. */
+    private <Value> void addApplicationBinding(JPanel parent, List<ApplicationSettingBinding<?>> bindings,
+            ApplicationSetting<Value> setting, JComponent input,
+            java.util.function.Supplier<Value> current, java.util.function.Consumer<Value> display) {
+        input.putClientProperty(SettingRow.SETTING_ID, setting.id());
+        input.putClientProperty(SettingRow.EXPERT_SETTING, setting.expert());
+        addSettingRow(parent, setting.title(), setting.help(), input);
+        bindings.add(new ApplicationSettingBinding<>(setting, current, display));
     }
 
     /** Adds a typed boolean row using the same model later shared with the Overview analysis switch. */
@@ -1418,25 +1493,16 @@ public class DetectionConfigurationPanel extends JPanel {
 
             typedBindings.forEach(binding -> binding.applyTo(jTransientConfig));
 
-            autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
+            tuningBindings.forEach(ApplicationSettingBinding::apply);
             SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
             if (mainAppWindow.getSession() != null) {
                 mainAppWindow.getSession().getAutoTune().setMaxCandidateFrames(autoTuneMaxCandidateFrames);
             }
-            variableStarReportOptions = new VariableStarReportOptions(((Number) spinVariableMaxCandidateCards.getValue()).intValue(),
-                    (VariableStarReportOptions.SortOrder) cmbVariableStarSortOrder.getSelectedItem());
+            reportBindings.forEach(ApplicationSettingBinding::apply);
             if (mainAppWindow.getImageProcessing() != null)
                 mainAppWindow.getImageProcessing().getAppConfig().variableStarReportOptions = variableStarReportOptions;
 
-            RawImageAnnotator.streakLineScaleFactor = ((Number) spinStreakScale.getValue()).doubleValue();
-            RawImageAnnotator.streakCentroidBoxRadius = ((Number) spinStreakCentroidRad.getValue()).intValue();
-            RawImageAnnotator.pointSourceMinBoxRadius = ((Number) spinPointBoxRad.getValue()).intValue();
-            RawImageAnnotator.dynamicBoxPadding = ((Number) spinBoxPad.getValue()).intValue();
-            DisplayImageRenderer.autoStretchBlackSigma = ((Number) spinAutoBlackSigma.getValue()).doubleValue();
-            DisplayImageRenderer.autoStretchWhiteSigma = ((Number) spinAutoWhiteSigma.getValue()).doubleValue();
-            DetectionReportGenerator.gifBlinkSpeedMs = ((Number) spinGifBlinkSpeed.getValue()).intValue();
-            DetectionReportGenerator.trackCropPadding = ((Number) spinCropPadding.getValue()).intValue();
-            DetectionReportGenerator.includeAiCreativeReportSections = chkIncludeAiCreativeReportSections != null && chkIncludeAiCreativeReportSections.isSelected();
+            visualizationBindings.forEach(ApplicationSettingBinding::apply);
 
         } catch (Exception ex) {
             System.err.println("Error applying settings to memory: " + ex.getMessage());
@@ -1606,8 +1672,7 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void setSpinnersFromConfig(DetectionConfig config) {
-        setSpinnerValueClamped(spinVariableMaxCandidateCards, variableStarReportOptions.maxCandidateCards());
-        cmbVariableStarSortOrder.setSelectedItem(variableStarReportOptions.sortOrder());
+        reportBindings.forEach(ApplicationSettingBinding::load);
 
         typedBindings.forEach(binding -> binding.loadFrom(config));
 

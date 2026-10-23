@@ -7,17 +7,11 @@ import java.util.Map;
 /**
  * Formats shared JTransient rule identifiers and values for SpacePixels settings feedback.
  * Numeric meanings, applicability and alignment remain in {@link DetectionConfigRules}; this class supplies
- * only application-owned English titles and explanations for the GUI and compatibility adapter.
+ * only application-owned English titles and explanations for settings feedback.
  */
 public final class DetectionSettingsPresentation {
-    private static final Map<String, String> TITLES = Map.ofEntries(
-            Map.entry("growSigmaMultiplier", "Grow Sigma"), Map.entry("detectionSigmaMultiplier", "Detection Sigma"),
-            Map.entry("masterGrowSigmaMultiplier", "Master Grow Sigma"), Map.entry("masterSigmaMultiplier", "Master Sigma"),
-            Map.entry("masterSlowMoverGrowSigmaMultiplier", "Slow-Mover Grow Sigma"), Map.entry("masterSlowMoverSigmaMultiplier", "Slow-Mover Sigma"),
-            Map.entry("slowMoverMinAxisRatio", "Min Axis Ratio"), Map.entry("slowMoverMaxAxisRatio", "Max Axis Ratio"),
-            Map.entry("slowMoverMedianSupportOverlapFraction", "Median Mask Min Overlap"), Map.entry("slowMoverMedianSupportMaxOverlapFraction", "Median Mask Max Overlap"),
-            Map.entry("rhythmStationaryThreshold", "Rhythm Stationary Threshold"), Map.entry("maxJumpPixels", "Max Jump Velocity"),
-            Map.entry("qualityGrowSigmaMultiplier", "Quality Grow Sigma"), Map.entry("qualitySigmaMultiplier", "Quality Sigma"));
+    private static final Map<String, String> TITLES = Map.of(
+            "qualityGrowSigmaMultiplier", "Quality Grow Sigma", "qualitySigmaMultiplier", "Quality Sigma");
 
     /** Prevents instantiation of this stateless presentation utility. */
     private DetectionSettingsPresentation() {}

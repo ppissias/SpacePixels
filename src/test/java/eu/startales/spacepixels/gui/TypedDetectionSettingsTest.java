@@ -72,6 +72,30 @@ public class TypedDetectionSettingsTest {
         });
     }
 
+    /** Application values use typed load/apply without changing the control model or accepting non-finite edits. */
+    @Test public void applicationBindingsKeepTheirOwnerAndRejectNonFiniteValues() throws Exception {
+        EventQueue.invokeAndWait(() -> {
+            var preferences = new eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences();
+            var setting = new ApplicationSetting<>("autoStretchBlackSigma", "Auto Stretch Black Sigma", "sigma",
+                    "Black point below the image mean.", false, Double.class,
+                    () -> preferences.autoStretchBlackSigma, value -> preferences.autoStretchBlackSigma = value);
+            JSpinner input = new JSpinner(new SpinnerNumberModel(1.0, 0.0, 10.0, 0.1));
+            SpinnerModel model = input.getModel();
+            var binding = new ApplicationSettingBinding<>(setting,
+                    () -> ((Number) input.getValue()).doubleValue(), input::setValue);
+            preferences.autoStretchBlackSigma = 2.5;
+            binding.load();
+            assertEquals(2.5, ((Number) input.getValue()).doubleValue(), 0);
+            input.setValue(3.5);
+            binding.apply();
+            assertEquals(3.5, preferences.autoStretchBlackSigma, 0);
+            assertSame(model, input.getModel());
+            assertThrows(IllegalArgumentException.class, () -> setting.write(Double.NaN));
+            assertEquals(3.5, preferences.autoStretchBlackSigma, 0);
+            assertTrue(setting.help().contains("sigma"));
+        });
+    }
+
     /** Compares serialized field changes so accidental cross-field getters/setters cannot pass a round trip. */
     private static <Value> void checkOwnership(DetectionSetting<Value> setting) {
         DetectionConfig config = new DetectionConfig();
