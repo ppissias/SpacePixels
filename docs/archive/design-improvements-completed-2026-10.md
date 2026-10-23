@@ -931,3 +931,55 @@ Viewer controls retain Tab traversal. Mouse activation of ordinary buttons keeps
 **Order.** The JTransient JA-09 observer comes first, with its own byte-identical check, then this slice. At the same time, revisit the report-phase cadence: on short runs the report can finish within one 3 s interval.
 
 Decision: Agreed for slice 2.
+
+## D14: leftover compatibility code removed (2026-10-23)
+
+**Decision.** The maintainer accepted the post-implementation review's list of leftovers as proposed. On release validation: both SpacePixels and JTransient have external users, so the API consumer check runs when the Maven Central bundle is prepared, in both repositories.
+
+**What changed.**
+
+- Deleted, none with a production caller:
+  - the deprecated `DetectionSettingsRules` adapter and its test;
+  - `ImageProcessing.applyWCSHeader`, `onlyStretch`, the one-argument `offerToImportLargestExposureGroup`, `DetectionSummary.confirmReport` and the `Future`-based `solve`;
+  - the code only these reached: `FitsBatchService.applyWCSHeader`, `writeUpdatedFITSFile`, `onlyStretch` and `writeOnlyStretchedFitsFile`, and `PlateSolveService.solve`, `applyWCSHeader`, its write-handler interface and the WCS-card copy helpers.
+- The job session is typed `ProcessingSession` in `JobHandle`, `JobCoordinator`, `SessionOwner` and the window, instead of `Object` "for compatibility".
+- Build: `check` keeps the archive, POM and desktop-ownership checks; `bundleCentralPortal` also runs `apiConsumerTest`. In JTransient, `check` runs the architecture check and `bundleCentralPortal` runs `check` and `apiConsumer`.
+- API.md, DEVELOPER.md, PUBLISHING.md and the release-artifact notes describe this.
+
+**Reviewed and kept** (from the review): job and session ownership, `FitsUploadCopy`, `StagedFile`/`AtomicReportFile`, `verifyApiPublication` and `verifyDesktopArchive`. Noted without change: `SettingsStorage` and `SessionStorage` are near-identical write queues, to be merged only when one changes for another reason; the `RunPreviewScope` `ThreadLocal` is acceptable for one internal consumer.
+
+**Validation.** SpacePixels `check` passed (453 tests, 4 skipped) and `apiConsumerTest` passed; a dry run confirmed that `mavenCentralBundle` runs the consumer check. The GUI mechanics suite, run afterwards with D11 and F10 slice 2 (30 tests), passes.
+
+#### D14 as proposed and decided
+
+**Status: proposed 2026-10-23.** Under the coordinated-development policy, old signatures need not survive. A review of the changes since 18 October found these leftovers; none has a production caller.
+
+| Leftover | Callers today | Proposal |
+|---|---|---|
+| `config.DetectionSettingsRules` (`@Deprecated` adapter over JTransient's rules) | Only `DetectionSettingsRulesTest` | Delete both. |
+| `ImageProcessing.applyWCSHeader` and `onlyStretch` (`@Deprecated`) | None; `onlyStretch` only from `FitsServiceTest` | Delete; the test calls `FitsBatchService`. |
+| One-argument `ImageProcessing.offerToImportLargestExposureGroup` (`@Deprecated`) | None | Delete. |
+| `ImageProcessing.DetectionSummary.confirmReport` (`@Deprecated`) | Only two assertions in `DetectionSummaryTest` | Delete with them. |
+| `ImageProcessing.solve` and `PlateSolveService.solve` (`Future` wrappers) | None; `PlateSolveTask` uses `startSolve` | Delete. |
+| `JobHandle.session`, typed `Object` "for compatibility" | The window always passes a `ProcessingSession` | Type it. |
+
+Update API.md's paragraph on the `ImageProcessing` facade, which still mentions the legacy confirmation and exposure-group signatures. In JTransient, the matching items are in JA-12.
+
+Decision: Please go ahead as proposed. 
+
+**Reviewed and worth keeping.** These were checked for value against complexity:
+
+- Job and session ownership (`JobCoordinator`, `SessionOwner`, `SessionPersistence`). They fixed real late-result and frozen-window problems, and the GUI mechanics tests cover them.
+- `FitsUploadCopy`. Every anonymous Astrometry.net login shares one account, so blanking the site and observer cards protects real privacy.
+- `StagedFile` and `AtomicReportFile`. This is one mechanism, used by 17 writers.
+- `verifyApiPublication` and `verifyDesktopArchive`. Both are cheap and catch real packaging mistakes.
+
+**Noted, no change proposed:**
+
+- `SettingsStorage` and `SessionStorage` are near-identical single-thread write queues. Merge them only when one of them changes for another reason.
+- The F10 `RunPreviewScope` adds a `ThreadLocal`. That is acceptable for one SpacePixels-internal consumer. The engine side of F10 slice 2 must use an explicit observer, not another thread-bound scope.
+
+**Decision needed: is the release validation in proportion?** It is about 770 lines of Gradle and PowerShell: a staged repository, plus an isolated consumer build run with both Gradle and POM-only metadata. `apiConsumerTest` is part of every `check`. That is in proportion if the published API has outside users. If it has none, keep the archive/POM checks and the pinned-version resolution check, and drop the POM-only repeat and the nested consumer build from `check`.
+Decision: Both SpacePixels and JTransient have external users. So please run this check when preparing the mavenCentralBundle, to make sure the API is working on both repos at this stage. 
+
+**Acceptance.** `compileJava compileDesktopJava`, `test`, `guiMechanicsTest` and `check` pass. No behavior changes, so no reference-data run is needed.

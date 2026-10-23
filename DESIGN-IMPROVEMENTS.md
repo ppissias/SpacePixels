@@ -142,40 +142,6 @@ Keep the existing dark theme and restrained primary-action emphasis. Make enable
 
 **Acceptance.** Inspect the empty and loaded main window, core/expert settings, configuration and viewers at representative small/large windows, 100/150/200% scale and a larger base font. Long descriptions and error messages wrap, primary actions remain visible and the workflow strip does not consume the usable frame/table area. Existing screenshots are context, not evidence that these tests have passed.
 
-### D14. Remove leftover compatibility code (post-implementation review)
-
-**Status: proposed 2026-10-23.** Under the coordinated-development policy, old signatures need not survive. A review of the changes since 18 October found these leftovers; none has a production caller.
-
-| Leftover | Callers today | Proposal |
-|---|---|---|
-| `config.DetectionSettingsRules` (`@Deprecated` adapter over JTransient's rules) | Only `DetectionSettingsRulesTest` | Delete both. |
-| `ImageProcessing.applyWCSHeader` and `onlyStretch` (`@Deprecated`) | None; `onlyStretch` only from `FitsServiceTest` | Delete; the test calls `FitsBatchService`. |
-| One-argument `ImageProcessing.offerToImportLargestExposureGroup` (`@Deprecated`) | None | Delete. |
-| `ImageProcessing.DetectionSummary.confirmReport` (`@Deprecated`) | Only two assertions in `DetectionSummaryTest` | Delete with them. |
-| `ImageProcessing.solve` and `PlateSolveService.solve` (`Future` wrappers) | None; `PlateSolveTask` uses `startSolve` | Delete. |
-| `JobHandle.session`, typed `Object` "for compatibility" | The window always passes a `ProcessingSession` | Type it. |
-
-Update API.md's paragraph on the `ImageProcessing` facade, which still mentions the legacy confirmation and exposure-group signatures. In JTransient, the matching items are in JA-12.
-
-Decision: Please go ahead as proposed. 
-
-**Reviewed and worth keeping.** These were checked for value against complexity:
-
-- Job and session ownership (`JobCoordinator`, `SessionOwner`, `SessionPersistence`). They fixed real late-result and frozen-window problems, and the GUI mechanics tests cover them.
-- `FitsUploadCopy`. Every anonymous Astrometry.net login shares one account, so blanking the site and observer cards protects real privacy.
-- `StagedFile` and `AtomicReportFile`. This is one mechanism, used by 17 writers.
-- `verifyApiPublication` and `verifyDesktopArchive`. Both are cheap and catch real packaging mistakes.
-
-**Noted, no change proposed:**
-
-- `SettingsStorage` and `SessionStorage` are near-identical single-thread write queues. Merge them only when one of them changes for another reason.
-- The F10 `RunPreviewScope` adds a `ThreadLocal`. That is acceptable for one SpacePixels-internal consumer. The engine side of F10 slice 2 must use an explicit observer, not another thread-bound scope.
-
-**Decision needed: is the release validation in proportion?** It is about 770 lines of Gradle and PowerShell: a staged repository, plus an isolated consumer build run with both Gradle and POM-only metadata. `apiConsumerTest` is part of every `check`. That is in proportion if the published API has outside users. If it has none, keep the archive/POM checks and the pinned-version resolution check, and drop the POM-only repeat and the nested consumer build from `check`.
-Decision: Both SpacePixels and JTransient have external users. So please run this check when preparing the mavenCentralBundle, to make sure the API is working on both repos at this stage. 
-
-**Acceptance.** `compileJava compileDesktopJava`, `test`, `guiMechanicsTest` and `check` pass. No behavior changes, so no reference-data run is needed.
-
 ### Remaining architecture steps
 
 S14–S16 are parts of D09/D10, not a duplicate backlog. Earlier steps are indexed as implemented at the end.
@@ -390,7 +356,7 @@ Implemented rows are not a second backlog. Partial/deferred rows retain only the
 | D11 | Last run's tracks in Blink, Preview Frame and Manual Transient Inspection | Implemented 2026-10-23 (reduced scope) |
 | D12 | Shared visual/layout rules | In progress |
 | D13 | Keyboard access and viewer focus | Implemented |
-| D14 | Leftover compatibility code (post-implementation review) | Accepted |
+| D14 | Leftover compatibility code (post-implementation review) | Implemented 2026-10-23 |
 | F01 | Slow-mover/per-frame tuning relation | Proposed experiment; engine SM-2 deferred |
 | F02 | Header session summary/multiple-night warning | Deferred |
 | F03 | Viewer magnitude/name controls | Implemented |
