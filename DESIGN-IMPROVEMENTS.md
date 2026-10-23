@@ -102,6 +102,8 @@ Capture resolved catalogue/correction/export context at a documented point. Curr
 
 **Review note (2026-10-23).** S15 is worth finishing: one category descriptor replaces label, prefix and anchor rules that writers, maps, JSON and the report prompt still repeat. S16 and the re-rendering clause in the acceptance pay off only when a saved result can be rendered again. SpacePixels has no such path today: every report is written in the run that measured it. Defer S16 and that clause until D11 step 2 (restoring a saved run) is chosen, rather than building prepared diagnostic states that nothing reads a second time.
 
+Decisions: Please go ahead as proposed in the review note.  
+
 ### D10. Describe settings and engine contracts once, with typed boundaries
 
 **Current foundation.** Residual Analysis's seven visible controls now use typed application definitions for stable field ID, title, units, guidance, expert disclosure and direct getter/setter ownership. Their load/apply bindings are registered with their rows rather than copied in separate lists. Search accepts field IDs, and engine diagnostics use the same identity/title. Shared Overview button models and saved/Auto-Tune state stay intact. Optional setting reflection and silent fallback setters are removed; the pinned compile-time JTransient contract supplies those fields. See the [completion record](docs/archive/design-improvements-completed-2026-10.md#d10-typed-residual-settings-and-pinned-engine-contract-first-slice-2026-10-22).
@@ -125,6 +127,8 @@ The [field and dependency review](docs/detection-settings-rule-review.md#impleme
 - **The typed slice covers 7 of about 110 controls.** `DetectionConfigurationPanel` therefore has two binding mechanisms: typed definitions on Residual Analysis, and separate describe/bind/copy/load code everywhere else. The panel changed in 24 commits since 18 October, so that double cost is paid often. Either finish the migration, one page per mechanical commit, or stop and keep the slice as it is. Finishing is the better choice: the pattern is proven, and the acceptance above holds only once every visible page uses it. Leaving both mechanisms in place indefinitely is the worst outcome.
 - **The `getInstance` → `openProcessor` rename is low value.** `ImageProcessing` is an internal facade (API.md says so), and the rename touches 46 calls in 21 files for a naming gain. Drop it from D10 unless the factory changes for another reason.
 - **Stale text, corrected 2026-10-23.** Two paragraphs here described an engine-version capability adapter and a tuner static that `AutoTunerRunner` changed. Both are gone under the pinned-release policy and JA-04. The paragraph above now states the current position.
+
+Decisions: Please go ahead with the migration of the configuration panel. Please keep openProcessor rename, I would like to have it.  
 
 ### D11. Make the main window a clear analysis workspace
 
@@ -161,6 +165,8 @@ A useful larger idea is a small, persistent **session workspace** connecting fra
 
 **Review note (2026-10-23).** D11 bundles cheap guidance (the session summary, the analysis plan, the normal/iterative memory hint) with the expensive part: restoring a saved run after restart (step 2). Step 2 needs a per-frame replay record, and F09's super report and D09's prepared model need much the same record. Commit only to the guidance and step 1, which shows the last run's findings in the open session by extending `TrackOverlay`/`VariableStarOverlay`. Defer step 2 and the run history until F04 or F09 needs a persisted per-frame record, then design that record once for all three. For a single-session app, a run history adds little over **Open last report** and **Open output folder**.
 
+Decisions: please proceed as per the review note. what would be interesting, is not a fully replay, but to be able to "show tracks" on the blink window and also to add a new button "show tracks" on the "preview frame" and "manual transient inspection", like we see them in the blink window. So after a run, I would like to be able to see the last report tracks on those windows (if there is a last report), like I see them now after a live detection on the blink frame. I do not want any other features implemented, so the rest of the proposed features can be removed.   
+
 ### D12. Use shared visual rules and content-driven layout
 
 **Current foundation.** Detection/application settings now share `SettingsRowPanel`, measured HTML wrapping and `UiStyle` typography/spacing. The fixed `480 × 85` description and configuration text-column heights are removed. Inputs retain native font-dependent height; enabled descriptions, Overview guidance and viewer key hints use readable theme help colors. Layout tests cover narrow/wide forms, larger base fonts and FlatLaf 100/150/200% user scaling. See the [completion record](docs/archive/design-improvements-completed-2026-10.md#d12-settings-layout-and-shared-styles-first-slice-2026-10-22).
@@ -188,6 +194,8 @@ Keep the existing dark theme and restrained primary-action emphasis. Make enable
 
 Update API.md's paragraph on the `ImageProcessing` facade, which still mentions the legacy confirmation and exposure-group signatures. In JTransient, the matching items are in JA-12.
 
+Decision: Please go ahead as proposed. 
+
 **Reviewed and worth keeping.** These were checked for value against complexity:
 
 - Job and session ownership (`JobCoordinator`, `SessionOwner`, `SessionPersistence`). They fixed real late-result and frozen-window problems, and the GUI mechanics tests cover them.
@@ -201,6 +209,7 @@ Update API.md's paragraph on the `ImageProcessing` facade, which still mentions 
 - The F10 `RunPreviewScope` adds a `ThreadLocal`. That is acceptable for one SpacePixels-internal consumer. The engine side of F10 slice 2 must use an explicit observer, not another thread-bound scope.
 
 **Decision needed: is the release validation in proportion?** It is about 770 lines of Gradle and PowerShell: a staged repository, plus an isolated consumer build run with both Gradle and POM-only metadata. `apiConsumerTest` is part of every `check`. That is in proportion if the published API has outside users. If it has none, keep the archive/POM checks and the pinned-version resolution check, and drop the POM-only repeat and the nested consumer build from `check`.
+Decision: Both SpacePixels and JTransient have external users. So please run this check when preparing the mavenCentralBundle, to make sure the API is working on both repos at this stage. 
 
 **Acceptance.** `compileJava compileDesktopJava`, `test`, `guiMechanicsTest` and `check` pass. No behavior changes, so no reference-data run is needed.
 
@@ -243,6 +252,8 @@ Before implementation, decide the initial client/local-file workflow, supported 
 
 **Decision needed.** the initial transport/client preference: local stdio using local folders/profiles and full-analysis jobs/artifacts, or HTTP with remote artifact access. Other independent features proceed while this larger interface decision is pending.
 
+Decision: I propose to have an http interface. But forst we should do a table with the services that we will provide and each service description. After we agree on the services we will proceed with an implementation. 
+
 ### Native platform installers (F06)
 
 Explore a native installer for SpacePixels, starting on Windows. The goal is a normal install, launch, upgrade and uninstall experience. Other platforms can follow after the Windows approach is established.
@@ -254,6 +265,7 @@ Compare packaging options against the existing Gradle distribution and publishin
 **Related bootstrap idea:** investigate optional launcher guidance for installing a suitable OpenJDK through native package managers on Windows/macOS/Linux. Current development uses Java 21; verify package identifiers, platform support, licensing and runtime compatibility when this proposal is taken up. Do not install software silently or treat an unverified package-manager command as a shipped bootstrap feature.
 
 **Decision needed.** whether the per-user Windows installer should bundle Java 21 or require an existing Java 21 installation. Signing and clean-machine install/upgrade/uninstall verification remain release work; no runtime is downloaded or installed as part of the current feature sequence.
+Decision: The per-windows installer should have an exe format and bundle a java runtime. I would follow best practices for the rest of the questions about shortcuts, app updates, etc. Signing would be a second step, we can start with an unsigned release. If there are other decision points that we need before we start, please let me know. I think java already has such a machanism natively (at least partly), please confirm.     
 
 ### Directory-based iterative detection (F09)
 
@@ -270,6 +282,8 @@ The basic directory-based workflow is implemented: independent ordinary runs wit
 - **Support partial runs and bounded memory.** Consolidate usable completed outputs after cancellation or pass failure, explain omissions, and work from saved measurements and on-demand images without retaining every run's pixel buffers.
 
 **Acceptance for the enhancement.** Exercise one finding seen in several passes, distinct nearby objects, split tracks, conflicting measurements, changed/missing inputs, different fields with matching filenames, missing WCS and older summary-only reports. Verify that chosen measurements remain traceable, ambiguous associations remain visible, unique counts are justified, and individual reports stay unchanged. Cross-pass consolidation is not part of the completed basic workflow; its matching and evidence-selection policies need a separate implementation decision.
+
+Decision: Agreed. please also use a similar page layout for the super report (colors , background, ...) as the individual reports. 
 
 ### Live detection preview (F10)
 
@@ -328,6 +342,8 @@ Throttle before expensive snapshot/crop work, render off the EDT and keep only t
 - A GUI test feeds tracks, streaks and variable candidates through a fake observer.
 
 **Order.** The JTransient JA-09 observer comes first, with its own byte-identical check, then this slice. At the same time, revisit the report-phase cadence: on short runs the report can finish within one 3 s interval.
+
+Decision: Agreed for slice 2.
 
 ## Engine and application coordination
 
