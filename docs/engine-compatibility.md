@@ -1,8 +1,20 @@
 # Engine compatibility and Java baseline
 
+## Current policy: one selected release combination
+
+**Clarified 2026-10-23.** SpacePixels, JTransient and JPlateSolve develop together through local composite builds. Update callers directly when library APIs change; backward source/binary compatibility with older library releases is not required. At release time, pin and validate the one chosen application/engine/solver combination. See the [developer policy](../DEVELOPER.md#coordinated-library-and-release-policy) and [implementation review](../../JTransient/DESIGN-IMPROVEMENTS.md#review-of-the-jtransient-changes-under-that-policy).
+
+Keep Java 21, current-version independent consumers, metadata/resource checks, actual resolved-version checks and no-composite release validation. Testing a single application with both old/new engines, or compiling against an old JAR and running against a new one, is no longer required. The script and compatibility adapters described below still exist; they have not been removed in this documentation-only review and should not constrain future API refactoring.
+
+For one selected engine version, the existing per-version command under "Repeatable staged artifact matrix" can run `check` with both composites disabled and an explicit `jTransientVersion`. Repeat `apiConsumerTest` with `-PapiConsumerMetadata=pom` for POM-only metadata. Confirm the chosen JPlateSolve version in `build.gradle`/resolved graph as well. For final publication, use the intended real release repository without `engineCompatibilityRepository`; preserve the ignored development flags. Select the actual version numbers at the release decision rather than interpreting the historical example's `1.0.6` as an instruction to release it.
+
+## Historical implementation still present
+
 SpacePixels and JTransient target **Java 21**. JTransient 1.0.6 adds immutable tuner options, an independent available-sample entry point and shared execution policies/sessions. SpacePixels still defaults to 1.0.5 and discovers the new tuner entry point at one optional-capability boundary. It keeps the old serialized legacy-tuning adapter when the capability is absent. The calibrated tuner, rules, cancellation and existing application behavior remain available with the previous engine source baseline.
 
 ## Repeatable staged artifact matrix
+
+This two-engine procedure reflects the previous compatibility assumption. It remains callable, but replacing its historical-version branches with a one-selected-combination check is pending cleanup, not a release requirement to support old engines.
 
 Configure Java 21 and the machine's tool paths first (consult local `AGENTS.md`/`setpaths.bat`). Supply a separate checkout or source export of the previous JTransient version; do not change the active sibling checkout or the maintainer's in-progress work. From the SpacePixels repository on Windows:
 

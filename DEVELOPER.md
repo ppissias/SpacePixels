@@ -1,6 +1,6 @@
 # Developer overview
 
-An onboarding map for developers and agents: how to run SpacePixels, where responsibilities live, which patterns protect its workflows, and how to validate changes. Current as of 2026-10-22.
+An onboarding map for developers and agents: how to run SpacePixels, where responsibilities live, which patterns protect its workflows, and how to validate changes. Current as of 2026-10-23.
 
 Update this overview in the same change whenever package responsibilities, entry points, ownership, threading, persistence, development commands or design patterns change. Describe implemented behavior here; keep proposals and acceptance criteria in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md). Check the implementation and build files when older design records disagree.
 
@@ -12,7 +12,7 @@ Read any applicable `AGENTS.md` before changing code. Local tool paths, sibling-
 
 Use **Java 21** for development and the checked-in Gradle wrapper (`gradlew.bat` on Windows, `./gradlew` on Linux/macOS). SpacePixels is one Gradle project with headless `main` and application-only `desktop` source sets. Both compile for Java 21. Configure the sibling libraries below before building.
 
-For explicit previous/current engine source-built artifact checks, use the [engine compatibility matrix](docs/engine-compatibility.md). It disables composite substitution per invocation without changing ignored development flags, checks the actual resolved version, and exercises both Gradle/POM metadata. Local staged success is not proof that the same version is available from Maven Central.
+For selected-release artifact checks, use the [engine artifact validation guide](docs/engine-compatibility.md). Disable composite substitution per invocation without changing ignored development flags, verify the actual chosen versions, and exercise Gradle/POM metadata. Local staged success is not proof that the same versions are available from the final release repository. The older two-engine compatibility script remains implemented but is no longer a required release gate.
 
 | Read | For |
 |---|---|
@@ -50,6 +50,18 @@ For example, on Windows:
 Gradle builds the enabled library from its checkout and substitutes it for the published dependency, so changes are available without publishing a jar. The enabled checkout must exist. For a fresh checkout without `gradle.properties`, copy [gradle.properties.example](gradle.properties.example) and change both flags from `false` to `true`. Preserve any existing local configuration. Reload the Gradle project in IntelliJ after changing the flags.
 
 An explicit Gradle property takes precedence over its alternative environment variable. Use `-PuseLocalJTransientBuild=false -PuseLocalJPlateSolveBuild=false` to select both published dependencies even when local flags are enabled. Validate that combination separately before a release.
+
+### Coordinated library and release policy
+
+SpacePixels, JTransient and JPlateSolve are separate repositories developed as a **coordinated source set**, not independently interchangeable runtime versions. During active development, use both local sibling builds and change library APIs plus consuming SpacePixels code together. There is no requirement to retain historical library methods/classes/constructors or to make one SpacePixels release work with multiple old/new JTransient or JPlateSolve versions. Prefer direct calls to the agreed current API over reflection, optional capability probing, duplicate wrappers or fallback implementations added solely for older library releases.
+
+At SpacePixels release time:
+1. Select the exact JTransient and JPlateSolve versions belonging to that application release and pin them in the build/publication metadata. Development version labels are not a compatibility promise or proof of publication.
+2. Publish or otherwise make those selected artifacts available through the intended release repository/distribution mechanism.
+3. With both composites disabled, build/test the exact selected application/engine/solver combination and verify resolved versions, packaged resources, metadata and independent headless API/CLI consumers. For a Central release, also disable the validation-only repository and verify real dependency availability.
+4. Record the selected version combination with the release. An arbitrary older/newer replacement JAR is not a supported drop-in contract.
+
+Keep Java-target, architecture, cancellation/ownership and scientific regression checks. This policy does not authorize silent changes to scientific algorithms, user profiles/session data or saved formats. Current adapters/build tests that were added for historical compatibility remain until coordinated cleanup; the [JTransient implementation review](../JTransient/DESIGN-IMPROVEMENTS.md#review-of-the-jtransient-changes-under-that-policy) identifies them. Documentation of their current behavior is not a requirement to preserve them.
 
 ## Build source sets and artifacts
 
@@ -204,17 +216,17 @@ JTransient's `config.DetectionConfigRules` owns engine-setting metadata, numeric
 
 The Residual Analysis page uses `DetectionSetting<T>` / `ResidualAnalysisSettings` definitions with stable engine IDs, application titles/units/guidance, basic/expert disclosure and typed getter/setters. Definitions verify their identity/type against shared engine metadata. `DetectionSettingBinding` registers control load/apply next to row construction, preserves the existing models and mutates only its declared field. `SettingRow` carries the same ID for search and uses definition-owned visibility independently of page placement; other pages retain section inheritance. Numeric domains/relationships remain `DetectionConfigRules` responsibilities, and finite legacy values keep their existing GUI clamping/persistence behavior. This is an incremental visible-page migration, not a generated engine form.
 
-SpacePixels now requires its pinned engine fields at compile time. Optional field-name reflection with fallback reads or silently ignored setters is removed. Supporting older engines would require an explicit compatibility policy; a local composite build still does not certify Maven Central availability or the release pair (JA-11).
+SpacePixels requires the selected engine fields at compile time. Optional field-name reflection with fallback reads or silently ignored setters is removed. Older engine versions need not be supported; a local composite build still does not certify final artifact availability or the selected release combination (JA-11).
 
 **Review rules…** shows configuration-only diagnostics, not a dataset-readiness verdict. New quality-grow, geometric jitter/jump, photometry-cap and limited-amplitude conflicts are advisory. Its explicit `REVIEWED_CONSISTENCY` choice can lower hidden quality grow or raise the limited amplitude; Keep settings leaves those preferences unchanged. This policy deliberately excludes rhythm/jump, which is not a universal engine invariant after point pruning. It never rewrites jitter, star caps or annulus factors. Keep validation, Save, Revert, defaults and Auto-Tune updates consistent, including hidden values.
 
-The engine and tuners capture their caller's primitive config once at entry and derive private stage copies. This isolates later edits, not simultaneous multi-field writes during capture; callers must synchronize those. SpacePixels uses the new `tuneSnapshot` APIs, whose fallback config is detached. Legacy `tune` entry points intentionally retain the original base reference on unsuccessful results. Global tuning options remain separate JA-04 work.
+The engine and tuners capture their caller's primitive config once at entry and derive private stage copies. This isolates later edits, not simultaneous multi-field writes during capture; callers must synchronize those. SpacePixels uses `tuneSnapshot` APIs, whose fallback config is detached. The engine's same-reference legacy `tune` fallback remains implemented but is not a compatibility obligation. JA-04 now captures immutable tuner options and scoped core diagnostics; static defaults remain adapters pending direct application migration.
 
 JTransient's `PhotometryGeometry.resolve(config, fwhm)` owns effective pixel radii: the 1 px aperture floor, fixed comparison apertures through 2.5 FWHM, inner sky at least 1 px outside the largest aperture and at least 2 px sky width. Selection, measurement, detection/track/slow-mover crossing checks use that geometry. `adjustments(config, fwhm)` exposes structured pixel-radius expansions for diagnostics without changing persisted factors. See the [implemented rule-review decisions](docs/detection-settings-rule-review.md#implementation-decisions-ja-01-2026-10-22).
 
-The calibrated Auto-Tuner is the default; the legacy tuner remains available through `AutoTunerRunner`. Legacy tuning temporarily changes shared JTransient state, so concurrent legacy tuning runs in one JVM are unsupported.
+The calibrated Auto-Tuner is the default; the distinct legacy algorithm remains available through `AutoTunerRunner`. The current `LegacyTunerSupport` adapter uses JTransient 1.0.6's independent available-sample API when present; only its older-engine fallback temporarily changes/restores the static sample count under a lock. This reflective version fallback is unnecessary under the coordinated release policy and is scheduled for removal in favor of a direct current-API call. It has not been removed by this documentation review.
 
-These APIs require the adjacent JA-01 JTransient source (declared `1.0.5`, still unreleased). A published `1.0.5` coordinate alone is not evidence that the required API exists; publish and validate the supported dependency pair before distributing without composite builds.
+Current sibling JTransient sources declare `1.0.6`; SpacePixels's non-composite default still names `1.0.5` and the adapter was written to support the older source baseline. Those are existing build details, not a requirement to maintain two supported combinations. Keep both composites enabled for active development, remove compatibility-only indirection during coordinated cleanup, and choose/pin/validate the actual release versions before distribution. A version label alone is not evidence that a published artifact contains the required APIs.
 
 ## Frame viewers
 
