@@ -9,6 +9,8 @@
  */
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.util.DebugOutput;
+
 import io.github.ppissias.jtransient.execution.CancellationScope;
 
 import eu.startales.spacepixels.jobs.Job;
@@ -46,7 +48,7 @@ public class StarMaskStackTask implements Job<JTransientEngine.MasterStackResult
 
     private JobOutcome<JTransientEngine.MasterStackResult> runCancellable(JobContext context) throws Exception {
         JTransientEngine engine = new JTransientEngine();
-        try {
+        try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
             List<ImageFrame> frames = SessionFrameLoader.loadAll(filesInfo, context::progress, 30);
             JTransientEngine.MasterStackResult result = engine.generateMasterStackWithDetails(frames, config,
                     (percent, message) -> context.progress(30 + (int) (percent * 0.7), message));

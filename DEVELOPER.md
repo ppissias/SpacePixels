@@ -220,7 +220,7 @@ SpacePixels requires the selected engine fields at compile time. Optional field-
 
 **Review rules…** shows configuration-only diagnostics, not a dataset-readiness verdict. New quality-grow, geometric jitter/jump, photometry-cap and limited-amplitude conflicts are advisory. Its explicit `REVIEWED_CONSISTENCY` choice can lower hidden quality grow or raise the limited amplitude; Keep settings leaves those preferences unchanged. This policy deliberately excludes rhythm/jump, which is not a universal engine invariant after point pruning. It never rewrites jitter, star caps or annulus factors. Keep validation, Save, Revert, defaults and Auto-Tune updates consistent, including hidden values.
 
-The engine and tuners capture their caller's primitive config once at entry and derive private stage copies. This isolates later edits, not simultaneous multi-field writes during capture; callers must synchronize those. SpacePixels uses `tuneSnapshot` APIs, whose fallback config is detached. The engine's same-reference legacy `tune` fallback remains implemented but is not a compatibility obligation. JA-04 now captures immutable tuner options and scoped core diagnostics; static defaults remain adapters pending direct application migration.
+The engine and tuners capture their caller's primitive config once at entry and derive private stage copies. This isolates later edits, not simultaneous multi-field writes during capture; callers must synchronize those. SpacePixels uses `tuneSnapshot` APIs, whose fallback config is detached. The engine's same-reference legacy `tune` fallback remains implemented but is not a compatibility obligation. JA-04 uses immutable options from fixed private defaults and one scoped diagnostic policy for core/tuner text; global debug/tuning adapters are removed.
 
 JTransient's `PhotometryGeometry.resolve(config, fwhm)` owns effective pixel radii: the 1 px aperture floor, fixed comparison apertures through 2.5 FWHM, inner sky at least 1 px outside the largest aperture and at least 2 px sky width. Selection, measurement, detection/track/slow-mover crossing checks use that geometry. `adjustments(config, fwhm)` exposes structured pixel-radius expansions for diagnostics without changing persisted factors. See the [implemented rule-review decisions](docs/detection-settings-rule-review.md#implementation-decisions-ja-01-2026-10-22).
 
@@ -301,7 +301,7 @@ Use the Gradle wrapper from the repository root. Tests use **JUnit 4**. The ordi
 
 `-PtestMaxHeap=6g` increases the heap for root Gradle `Test` tasks; it does not configure the nested consumer build or the `realDataTest` JavaExec task. Application and tool launchers normally allow up to 80% of host RAM; `batchDetect` also supports `-PbatchMaxHeap=8g`.
 
-For console diagnostics, use `.\gradlew.bat run -PspacepixelsDebug` or set `-Dspacepixels.debug=true` on the application JVM. `DebugOutput` controls per-frame details, timings and engine debug flags; normal application logging shows warnings and errors. `FailureDialog` offers Copy details with versions and the error.
+For console diagnostics, use `.\gradlew.bat run -PspacepixelsDebug` or set `-Dspacepixels.debug=true` on the application JVM. `DebugOutput` captures per-run core/tuner diagnostic scopes and controls application per-frame details/timings; normal application logging shows warnings and errors. `FailureDialog` offers Copy details with versions and the error.
 
 ## Principles
 

@@ -10,6 +10,8 @@
 
 package eu.startales.spacepixels.gui;
 
+import eu.startales.spacepixels.util.DebugOutput;
+
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
@@ -181,8 +183,8 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
             data = (short[][]) kernel;
         }
         DataArea frameArea = DataArea.ofFrame(data);
-        List<SourceExtractor.DetectedObject> objects = SourceExtractor.extractSources(
-                data, settings.detectionSigmaMultiplier, settings.minDetectionPixels, settings, frameArea, frameArea).objects;
+        List<SourceExtractor.DetectedObject> objects = DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(
+                data, settings.detectionSigmaMultiplier, settings.minDetectionPixels, settings, frameArea, frameArea)).objects;
         int stars = 0;
         int streaks = 0;
         for (SourceExtractor.DetectedObject object : objects) {

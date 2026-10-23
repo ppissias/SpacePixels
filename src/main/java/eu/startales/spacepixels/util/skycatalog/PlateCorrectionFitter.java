@@ -9,6 +9,8 @@
  */
 package eu.startales.spacepixels.util.skycatalog;
 
+import eu.startales.spacepixels.util.DebugOutput;
+
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
@@ -122,8 +124,8 @@ public final class PlateCorrectionFitter {
                 continue;
             }
             DataArea frameArea = DataArea.ofFrame(data);
-            List<SourceExtractor.DetectedObject> objects = SourceExtractor.extractSources(data, 5.0, 5, new DetectionConfig(),
-                    frameArea, frameArea).objects;
+            List<SourceExtractor.DetectedObject> objects = DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(data, 5.0, 5, new DetectionConfig(),
+                    frameArea, frameArea)).objects;
             FramePairs pairs = FramePairs.match(file.getFileName(), stars, header, objects, width, height, file.getObservationTimestamp());
             if (pairs.size() >= MIN_FRAME_PAIRS) {
                 frames.add(pairs);

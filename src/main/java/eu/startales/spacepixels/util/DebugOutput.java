@@ -7,8 +7,8 @@
  */
 package eu.startales.spacepixels.util;
 
-import io.github.ppissias.jtransient.engine.JTransientAutoTuner;
-import io.github.ppissias.jtransient.engine.JTransientEngine;
+import io.github.ppissias.jtransient.execution.DiagnosticContext;
+import io.github.ppissias.jtransient.execution.DiagnosticOptions;
 
 import java.util.Locale;
 import java.util.logging.Handler;
@@ -49,10 +49,16 @@ public final class DebugOutput {
         }
     }
 
-    /** Sets the engine's debug switches to match; the pipeline calls this before each run. */
-    public static void applyToEngine() {
-        JTransientEngine.DEBUG = isEnabled();
-        JTransientAutoTuner.DEBUG = isEnabled();
+    /** Opens per-operation diagnostics, inheriting an explicit caller scope rather than changing global engine state. */
+    public static DiagnosticContext.Scope openEngineDiagnostics() {
+        return DiagnosticContext.openIfAbsent(DiagnosticOptions.standardOutput(isEnabled()));
+    }
+
+    /** Runs standalone scientific work with the application debug policy and restores the caller's scope. */
+    public static <Result> Result withEngineDiagnostics(java.util.function.Supplier<Result> work) {
+        try (var diagnostics = openEngineDiagnostics()) {
+            return work.get();
+        }
     }
 
     /** For the application entry points: the console log shows only warnings and errors unless debugging. */
@@ -63,6 +69,5 @@ public final class DebugOutput {
         for (Handler handler : root.getHandlers()) {
             handler.setLevel(level);
         }
-        applyToEngine();
     }
 }

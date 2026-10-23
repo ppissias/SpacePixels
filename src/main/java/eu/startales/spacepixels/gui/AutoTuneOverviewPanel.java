@@ -1040,7 +1040,7 @@ public class AutoTuneOverviewPanel extends JPanel {
             double frameArea = sessionMegapixels() * sessionFrames;
             switch (columns[column]) {
                 case COL_PROFILE:
-                    return name + "  (≤ " + BigDecimal.valueOf(CalibratedAutoTuner.FALSE_POSITIVE_BUDGET_PER_MPIX_FRAME[profile.ordinal()])
+                    return name + "  (≤ " + BigDecimal.valueOf(CalibratedAutoTuner.Options.defaults().falsePositiveBudgetPerMpixFrame()[profile.ordinal()])
                             .stripTrailingZeros().toPlainString() + ")";
                 case COL_DETECTION:
                     return String.format(Locale.US, "%.2f / %.2f / %d", cand.sigma, cand.growSigma, cand.minPixels);
@@ -1091,7 +1091,7 @@ public class AutoTuneOverviewPanel extends JPanel {
             }
             if (overBudget) {
                 setToolTipText(String.format(Locale.US, "No setting met the %s budget of %.2f noise detections per MPix per frame; the cleanest one was used.",
-                        profileName(profile), CalibratedAutoTuner.FALSE_POSITIVE_BUDGET_PER_MPIX_FRAME[profile.ordinal()]));
+                        profileName(profile), CalibratedAutoTuner.Options.defaults().falsePositiveBudgetPerMpixFrame()[profile.ordinal()]));
             } else {
                 setToolTipText(null);
             }

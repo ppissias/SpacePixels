@@ -39,9 +39,8 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
     @Override
     public SpacePixelsPipelineResult run(SpacePixelsPipelineRequest request) throws SpacePixelsPipelineException {
         Objects.requireNonNull(request, "request");
-        DebugOutput.applyToEngine();
         ImageProcessing imageProcessing = null;
-        try {
+        try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
             DetectionConfig baseConfig = request.getDetectionConfig();
             if (baseConfig == null) {
                 baseConfig = new DetectionConfig();

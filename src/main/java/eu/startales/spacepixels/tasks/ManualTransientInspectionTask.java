@@ -1,5 +1,7 @@
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.util.DebugOutput;
+
 import io.github.ppissias.jtransient.execution.CancellationScope;
 
 import eu.startales.spacepixels.jobs.Job;
@@ -44,7 +46,7 @@ public class ManualTransientInspectionTask implements Job<ManualTransientInspect
 
     private JobOutcome<Result> runCancellable(JobContext context) throws Exception {
         JTransientEngine engine = new JTransientEngine();
-        try {
+        try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
             FitsFileInformation[] filesInfo = preProcessing.getImportedFiles();
             List<ImageFrame> framesForLibrary = SessionFrameLoader.loadAll(filesInfo, context::progress, 20);
 

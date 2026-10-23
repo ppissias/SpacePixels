@@ -263,7 +263,7 @@ try {
 - `FAIL_IF_NOT_READY` is stricter and is best for automated production workflows.
 - `AUTO_PREPARE_TO_16BIT_MONO` is more forgiving and is best when input format may vary.
 - The API returns a defensive copy for exposed configs and FITS metadata arrays.
-- The API prints nothing to the console; problems are thrown or logged as `java.util.logging` warnings. Each run sets JTransient's `JTransientEngine.DEBUG` and `JTransientAutoTuner.DEBUG` from the `spacepixels.debug` system property, so start the JVM with `-Dspacepixels.debug=true` for the per-frame diagnostics on standard output. The Auto-Tune telemetry is in the result (`getAutoTuneTelemetryReport()`), not printed.
+- The API is quiet by default; problems are thrown or logged as `java.util.logging` warnings. Engine/tuner diagnostics capture `spacepixels.debug` per run through a scoped sink; an explicit caller `DiagnosticContext` policy takes precedence. No shared engine/tuner debug flags or mutable tuning defaults are changed.
 - The public artifact currently contains GUI code as well, but GUI classes are not part of the supported API contract.
 - Both tuners use independent per-operation options. Legacy tuning calls the selected engine API directly and never temporarily edits a global sample size. Use the engine/solver versions selected for this SpacePixels release; arbitrary older replacement JARs are not supported.
 

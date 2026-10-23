@@ -9,6 +9,8 @@
  */
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.DebugOutput;
+
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.util.skycatalog.SkyProjection;
@@ -190,8 +192,8 @@ final class FieldDepth {
             crop[y - patch.y0] = Arrays.copyOfRange(data[y], patch.x0, patch.x1 + 1);
         }
         List<double[]> detections = new ArrayList<>();
-        for (SourceExtractor.DetectedObject object : SourceExtractor.extractSources(crop, config.detectionSigmaMultiplier,
-                config.minDetectionPixels, config).objects) {
+        for (SourceExtractor.DetectedObject object : DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(crop, config.detectionSigmaMultiplier,
+                config.minDetectionPixels, config)).objects) {
             if (!object.isStreak) {
                 detections.add(new double[]{object.x + patch.x0, object.y + patch.y0});
             }
