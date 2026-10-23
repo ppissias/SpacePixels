@@ -103,6 +103,24 @@ public class IterativeDetectionRunTest {
         assertFalse(new File(service.getIndexFile().getParentFile(), "7_frames").exists());
     }
 
+    @Test public void eachPassClearsTheLiveViewAndNamesItself() throws Exception {
+        File source = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "live-passes", 9).toFile();
+        List<RunPreview> previews = new ArrayList<>();
+        RunPreviewSink sink = new RunPreviewSink() {
+            @Override public boolean wantsPreview(boolean stageChange) { return true; }
+            @Override public void preview(RunPreview preview) { previews.add(preview); }
+        };
+        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
+                (config, files, app, prompt, progress, output, visualization) -> completed(output));
+        try (RunPreviewScope scope = RunPreviewScope.open(sink)) {
+            service.run(request(source, new DetectionConfig(), new AppConfig(), new IterativeDetectionPlan(5, 3, 8)), null, null);
+        }
+        assertEquals(List.of("Pass 1 of 2 · 5 frames", "Pass 2 of 2 · 8 frames"),
+                previews.stream().map(RunPreview::caption).toList());
+        assertTrue("a pass does not show the previous pass's picture",
+                previews.stream().allMatch(preview -> preview.image() == null && !preview.keepImage()));
+    }
+
     @Test public void aCancelledRunWithNoFinishedPassRemovesTheCopyItConverted() throws Exception {
         File source = SyntheticDatasetFactory.createMono32FloatFitsSequence(folder.getRoot().toPath(), "float-cancel", 9).toFile();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
@@ -231,7 +249,7 @@ public class IterativeDetectionRunTest {
         assertEquals(5, floating.listFiles().length);
     }
 
-    private static void addMovingTargetAndRejectedFrame(File source) throws Exception {
+    static void addMovingTargetAndRejectedFrame(File source) throws Exception {
         File[] frames = FitsFiles.list(source);
         int[][] kernel = {{0, 1, 2, 1, 0}, {1, 3, 5, 3, 1}, {2, 5, 9, 5, 2}, {1, 3, 5, 3, 1}, {0, 1, 2, 1, 0}};
         for (int frameIndex = 0; frameIndex < frames.length; frameIndex++) {

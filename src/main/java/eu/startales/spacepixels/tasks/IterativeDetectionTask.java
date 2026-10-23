@@ -17,6 +17,8 @@ import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.IterativeDetectionRequest;
 import eu.startales.spacepixels.util.IterativeDetectionPipelineService;
+import eu.startales.spacepixels.util.RunPreviewScope;
+import eu.startales.spacepixels.util.RunPreviewSink;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 
 import java.io.File;
@@ -30,6 +32,8 @@ public class IterativeDetectionTask implements Job<File> {
     private final IterativeDetectionPipelineService.ReportPrompt reportPrompt;
     private final ImageProcessing.DetectionSafetyPrompt safetyPrompt;
     private final IterativeDetectionPipelineService pipeline = new IterativeDetectionPipelineService();
+    /** Where the run's live-view pictures go; null makes none. */
+    private RunPreviewSink previews;
 
     /** Creates noninteractive passes that decline individual reports above 50 classified detections. */
     public IterativeDetectionTask(IterativeDetectionRequest request) {
@@ -65,9 +69,16 @@ public class IterativeDetectionTask implements Job<File> {
         this.safetyPrompt = safetyPrompt;
     }
 
+    /** Sends pictures of the work under way to {@code previews}, for the progress dialog's live view. */
+    public IterativeDetectionTask showingPreviews(RunPreviewSink previews) {
+        this.previews = previews;
+        return this;
+    }
+
     @Override
     public JobOutcome<File> run(JobContext context) throws Exception {
-        try (CancellationScope cancellation = CancellationScope.open(context::isCancelled)) {
+        try (CancellationScope cancellation = CancellationScope.open(context::isCancelled);
+             RunPreviewScope preview = previews == null ? null : RunPreviewScope.open(previews)) {
             CancellationScope.check();
             return runCancellable(context);
         }

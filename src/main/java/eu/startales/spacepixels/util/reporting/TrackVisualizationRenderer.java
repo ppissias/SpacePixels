@@ -11,6 +11,9 @@
 package eu.startales.spacepixels.util.reporting;
 
 import eu.startales.spacepixels.util.DisplayImageRenderer;
+import eu.startales.spacepixels.util.PreviewThumbnails;
+import eu.startales.spacepixels.util.RunPreview;
+import eu.startales.spacepixels.util.RunPreviewScope;
 import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.core.TrackLinker;
 
@@ -51,10 +54,28 @@ final class TrackVisualizationRenderer {
         if (!success) {
             throw new IOException("No appropriate PNG writer found in ImageIO.");
         }
+        offerPreview(image, outputFile);
     }
 
     static void saveAnimatedGif(List<BufferedImage> frames, File outputFile, ExportVisualizationSettings settings) throws IOException {
         GifSequenceWriter.saveAnimatedGif(frames, outputFile, settings.getGifBlinkSpeedMs());
+        if (!frames.isEmpty()) {
+            offerPreview(frames.get(0), outputFile);
+        }
+    }
+
+    /**
+     * Offers a written report picture to the live view, captioned from its file name ("moving track 3 object
+     * centric"). Shape and mask diagrams are skipped: they say little at thumbnail size.
+     */
+    private static void offerPreview(BufferedImage image, File outputFile) {
+        String name = outputFile.getName();
+        int extension = name.lastIndexOf('.');
+        String title = (extension > 0 ? name.substring(0, extension) : name).replace('_', ' ');
+        if (title.contains("shape") || title.contains("mask")) {
+            return;
+        }
+        RunPreviewScope.offer(false, () -> RunPreview.of(PreviewThumbnails.fit(image), "Report picture: " + title));
     }
 
     static short[][] robustEdgeAwareCrop(short[][] fullImage, int cx, int cy, int cropWidth, int cropHeight) {

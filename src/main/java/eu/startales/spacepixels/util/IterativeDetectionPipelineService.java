@@ -101,6 +101,7 @@ public final class IterativeDetectionPipelineService {
         int passStart = 10;
         int tuneLimit = Math.min(request.autoTuneFrames(), counts.getLast());
         if (request.autoTuneProfile() != null) {
+            RunPreviewScope.offer(true, () -> RunPreview.cleared("Auto-Tune is choosing the settings for every pass"));
             Tuned tuned = tuner.run(files, config, tuneLimit, request.autoTuneProfile(), progress);
             config = tuned.config();
             tuneReport = tuned.telemetry();
@@ -166,6 +167,9 @@ public final class IterativeDetectionPipelineService {
             String inputManifest = null;
             try {
                 CancellationScope.check();
+                // The previous pass's picture belongs to other frames.
+                String passCaption = "Pass " + (passIndex + 1) + " of " + sizes.size() + " · " + subset.length + " frames";
+                RunPreviewScope.offer(true, () -> RunPreview.cleared(passCaption));
                 inputManifest = IterativeDetectionIndex.writeInputs(root, subset.length, frames(subset));
                 passes.set(passIndex, pass(subset, "RUNNING", null, inputManifest, Map.of(), null));
                 publish(root, source, prepared, plan, tuneProfile, tuneLimit, config, visualization, "RUNNING", passes);

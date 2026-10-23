@@ -148,6 +148,13 @@ The **Legacy** tuner sets only the per-frame detection settings, the mask overla
 
 Click **Detect Moving Targets**, on the Overview or on the Main tab (or press **Ctrl+D**). A progress window shows each stage.
 
+Below the progress bar, the **Live view** shows a small picture of the work under way, at most one new picture every few seconds:
+- a frame as it loads, with its number and observation time;
+- the stationary-sky reference (the median of the kept frames) once the detection has built it;
+- the report's pictures, such as the track map and object crops, as they are written.
+
+While the detection itself runs, the picture from loading stays, marked as such; the text above the picture is the progress. **Hide picture** removes the view and the work of making its pictures, and SpacePixels remembers the choice. **Detect Iteratively** shows the same view and clears it at the start of each pass. The pictures are copies for display only: the detection results and the report are the same with the view shown or hidden.
+
 **Cancel** in the progress window (or closing it) requests that the run stop; the status bar says it was cancelled after its workers finish cleanup. This works for the detection runs, Manual Transient Inspection, Test Star Mask, Auto-Tune, import, Convert to Mono, Batch Stretch and Plate Solve.
 - **A run that doesn't stop.** If it hasn't stopped after a while, the button offers to exit SpacePixels instead.
 - **What can't be cancelled:**

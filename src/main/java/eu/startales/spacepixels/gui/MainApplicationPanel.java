@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.prefs.Preferences;
 
 
 public class MainApplicationPanel extends JPanel {
@@ -188,6 +189,7 @@ public class MainApplicationPanel extends JPanel {
         // --- NEW: PROGRESS DIALOG INITIALIZATION ---
         // Pass the main app frame so the dialog knows who to lock and where to center itself
         this.progressDialog = new ProcessingProgressDialog((JFrame) mainAppWindow.getFrame());
+        restoreLiveViewPreference();
         mainAppWindow.getBlinkFrame().setOnClose(this::blinkWindowClosed);
         mainAppWindow.getJobCoordinator().setListener(new JobCoordinator.Listener() {
             @Override
@@ -205,6 +207,7 @@ public class MainApplicationPanel extends JPanel {
                     return;
                 }
                 setProgressBarWorking();
+                progressDialog.beginPreview(handle.kind() == JobKind.DETECTION || handle.kind() == JobKind.ITERATIVE_DETECTION);
                 progressDialog.offerCancel(handle.kind().cancellable() ? () -> mainAppWindow.getJobCoordinator().cancel() : null);
                 if (texts.indeterminate()) {
                     progressDialog.showIndeterminateProgress(texts.initializing());
@@ -232,6 +235,7 @@ public class MainApplicationPanel extends JPanel {
             @Override
             public void jobEnded(JobHandle handle, JobOutcome<?> outcome) {
                 progressDialog.setVisible(false);
+                progressDialog.endPreview();
                 setProgressBarIdle();
                 enableControlsProcessingFinished();
                 if (!mainAppWindow.isCurrentSession(handle.session())) return;
@@ -465,6 +469,25 @@ public class MainApplicationPanel extends JPanel {
         return previewAction;
     }
 
+    /** Java preference (node of this package) for the progress dialog's Hide/Show picture choice. */
+    static final String LIVE_VIEW_PREFERENCE = "progressDialog.liveView";
+
+    /** Applies the saved Hide/Show picture choice; a change is saved in the background, like the window placement. */
+    private void restoreLiveViewPreference() {
+        Preferences preferences;
+        try {
+            preferences = Preferences.userNodeForPackage(MainApplicationPanel.class);
+        } catch (RuntimeException unavailable) {
+            return;
+        }
+        progressDialog.setPreviewPreference(preferences.getBoolean(LIVE_VIEW_PREFERENCE, true), shown ->
+                mainAppWindow.getSettingsStorage().submit("Live view", () -> {
+                    preferences.putBoolean(LIVE_VIEW_PREFERENCE, shown);
+                    preferences.flush();
+                    return null;
+                }));
+    }
+
     /** Detect Moving Targets, with the detection settings as they are now; a setting with invalid text stops it. */
     private void startDetection() {
         DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Detect Moving Targets did not start.");
@@ -474,7 +497,8 @@ public class MainApplicationPanel extends JPanel {
         ImageProcessing session = mainAppWindow.getImageProcessing();
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
         startJob(JobKind.DETECTION, session, new DetectionTask(session, settings,
-                summary -> reportPrompt.confirm(summary, session.hasPlateSolvedFrame(), 50, null, settings)),
+                summary -> reportPrompt.confirm(summary, session.hasPlateSolvedFrame(), 50, null, settings))
+                        .showingPreviews(progressDialog.previewSink()),
                 this::showDetectionOutcome);
     }
 
@@ -573,7 +597,8 @@ public class MainApplicationPanel extends JPanel {
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
         IterativeDetectionTask task = new IterativeDetectionTask(request, (summary, files, passSettings) ->
                 reportPrompt.confirm(summary, java.util.Arrays.stream(files).anyMatch(FitsFileInformation::isWcsSolved),
-                        50, "Iterative pass: " + files.length + " frames", passSettings));
+                        50, "Iterative pass: " + files.length + " frames", passSettings))
+                .showingPreviews(progressDialog.previewSink());
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.ITERATIVE_DETECTION,
                 mainAppWindow.getSession(), mainAppWindow.sessionJob(task),
                 mainAppWindow.forCurrentSession((handle, outcome) -> showIterativeOutcome(outcome, task)));

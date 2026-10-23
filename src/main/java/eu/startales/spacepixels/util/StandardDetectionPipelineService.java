@@ -126,6 +126,9 @@ final class StandardDetectionPipelineService {
                 long exposure = cachedFileInfo[i].getExposureDurationMillis();
                 framesForLibrary.add(new ImageFrame(i, currentFile.getName(), imageData, timestamp, exposure));
                 rawFramesForExport.add(imageData);
+                int frameNumber = i + 1;
+                RunPreviewScope.offer(frameNumber == 1, () -> RunPreview.of(PreviewThumbnails.frame(imageData),
+                        PreviewThumbnails.frameCaption(frameNumber, numFrames, timestamp)));
             }
         }
 
@@ -140,6 +143,8 @@ final class StandardDetectionPipelineService {
 
         JTransientEngine engine = new JTransientEngine();
         DebugOutput.applyToEngine();
+        // The engine shows no pictures while it works; the picture from loading stays, marked as such.
+        RunPreviewScope.offer(true, () -> RunPreview.captionOnly("Picture from loading · the detection is running"));
 
         PipelineResult result;
         try {
@@ -150,6 +155,11 @@ final class StandardDetectionPipelineService {
             engine.shutdown();
         }
         result = DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain(result);
+        short[][] reference = result.masterStackData;
+        if (reference != null && reference.length > 0) {
+            RunPreviewScope.offer(true, () -> RunPreview.of(PreviewThumbnails.frame(reference),
+                    "Stationary-sky reference: the median of the kept frames"));
+        }
 
         long pipelineDuration = System.currentTimeMillis() - startTime;
         DebugOutput.println("Total Pipeline Time: " + pipelineDuration + "ms");
