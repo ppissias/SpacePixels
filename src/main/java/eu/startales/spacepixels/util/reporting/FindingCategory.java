@@ -3,7 +3,13 @@ package eu.startales.spacepixels.util.reporting;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.ReportInclusion;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.photometry.StarLightCurve;
+import io.github.ppissias.jtransient.photometry.VariabilityTier;
 import java.awt.Color;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /** Authoritative report-category identities and presentation rules; legacy labels, IDs and export options stay stable. */
 public enum FindingCategory {
@@ -72,6 +78,38 @@ public enum FindingCategory {
     public String anchor(int number) {
         String findingId = id(number);
         return this == VARIABLE_STAR ? "variable-v" + number : "finding-" + findingId.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** Preserves the variable-star table fallback when presentation limits omit a detailed card. */
+    public String anchor(int number, boolean hasDetailedCard) {
+        String detailedAnchor = anchor(number);
+        return this == VARIABLE_STAR && !hasDetailedCard ? "variable-candidates" : detailedAnchor;
+    }
+
+    /** Returns the validated one-based ordinal of an ID belonging to this category. */
+    public int number(String id) {
+        if (fromId(id) != this) throw new IllegalArgumentException("Finding belongs to another category: " + id);
+        return Integer.parseInt(id.substring(prefix.length()));
+    }
+
+    /** Resolves an existing ID to its category-owned detailed-card anchor. */
+    public static String anchorForId(String id) {
+        FindingCategory category = fromId(id);
+        return category.anchor(category.number(id));
+    }
+
+    /** Preserves engine candidate order and the two exported variable-star tiers for every consumer. */
+    public static List<StarLightCurve> variableCandidates(List<StarLightCurve> stars) {
+        return stars.stream().filter(star -> star.tier == VariabilityTier.HIGH_CONFIDENCE
+                || star.tier == VariabilityTier.POSSIBLE).toList();
+    }
+
+    /** Fixes V numbers to original engine order independently of card sorting, limits or map/CSV presentation. */
+    public static Map<Integer, Integer> variableNumbers(List<StarLightCurve> stars) {
+        var candidates = variableCandidates(stars);
+        Map<Integer, Integer> numbers = new LinkedHashMap<>();
+        for (int index = 0; index < candidates.size(); index++) numbers.put(candidates.get(index).id, index + 1);
+        return Collections.unmodifiableMap(numbers);
     }
 
     /** Resolves an existing finding ID without confusing the S/ST prefixes or accepting malformed numeric suffixes. */

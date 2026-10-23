@@ -17,6 +17,7 @@ import java.util.*;
 import java.util.regex.Pattern;
 import static org.junit.Assert.*;
 
+/** Protects variable-star identity across card presentation, tabular exports, maps and narrative subsets. */
 public class VariableStarPresentationTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder();
     private final Gson gson = new GsonBuilder().serializeSpecialFloatingPointValues().create();
@@ -104,6 +105,40 @@ public class VariableStarPresentationTest {
             assertTrue(Files.readString(new File(output, VariableStarMapWriter.PREVIEW_FILE).toPath()).contains("data-candidate='V65'"));
         }
         assertEquals(before, gson.toJson(analysis));
+    }
+
+    /** A synthetic external candidate ordering must retain V identities when a narrative omits other tiers. */
+    @Test public void timelineAndNarrativeRetainIdsWhenPossibleCandidatesComeFirst() throws Exception {
+        var possible = star(10, "POSSIBLE", 5, .1, false);
+        var rejected = star(20, "NOT_SCORED", 0, .2, false);
+        var high = star(30, "HIGH_CONFIDENCE", 10, .8, true);
+        var analysis = analysis(List.of(possible, rejected, high));
+        var snapshot = gson.toJsonTree(analysis).getAsJsonObject();
+        snapshot.add("candidates", gson.toJsonTree(List.of(possible, rejected, high)));
+        analysis = gson.fromJson(snapshot, VariableStarAnalysis.class);
+        var files = files(temporary.newFolder());
+        var context = context(temporary.newFolder(), files,
+                new VariableStarReportOptions(1, VariableStarReportOptions.SortOrder.SIGNIFICANCE));
+        var presentation = context.variablePresentation(analysis);
+        assertEquals(List.of(10, 30), presentation.identities.stream().map(star -> star.id).toList());
+        assertEquals("V1", presentation.label(possible));
+        assertEquals("V2", presentation.label(high));
+        assertEquals(Map.of(10, 1, 30, 2), FindingCategory.variableNumbers(analysis.candidates));
+        var telemetry = new PipelineTelemetry();
+        telemetry.photometryTelemetry = analysis.telemetry;
+        telemetry.totalFramesLoaded = 9;
+        telemetry.totalFramesKept = 9;
+        context.data = ReportData.create(context, telemetry, analysis, List.of(), ReportInclusion.all());
+        assertEquals("variable-v2", context.findingAnchor(FindingCategory.VARIABLE_STAR, 2));
+        assertEquals("variable-candidates", context.findingAnchor(FindingCategory.VARIABLE_STAR, 1));
+        var output = new StringWriter();
+        var summary = new DetectionReportSummary(0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0);
+        ClaudePerspectiveSectionWriter.writeSection(new PrintWriter(output), context, telemetry, summary, analysis);
+        String html = output.toString();
+        assertTrue(html.contains("V2 (0.80 mag)"));
+        assertFalse(html.contains("V1 (0.80 mag)"));
+        assertTrue(html.contains("V2 " + PhotometryReportSectionWriter.describeChange(high).toLowerCase(Locale.ROOT)));
+        assertFalse(html.contains("V1 " + PhotometryReportSectionWriter.describeChange(high).toLowerCase(Locale.ROOT)));
     }
 
     private StarLightCurve star(int id, String tier, double score, double amplitude, boolean cycle) {

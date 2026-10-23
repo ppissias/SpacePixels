@@ -8,14 +8,19 @@ import java.util.*;
 /** Shared navigation and presentation helpers for the static report. */
 final class ReportPresentation {
     static String version(String component) { return eu.startales.spacepixels.util.BuildInfo.version(component); }
-    static String anchor(String id) { return id.startsWith("V") ? "variable-v" + id.substring(1) : "finding-" + id.toLowerCase(Locale.ROOT); }
+    /** Delegates every finding anchor to the shared category contract. */
+    static String anchor(String id) { return FindingCategory.anchorForId(id); }
     static String findingLink(String id) { return "<a href='#" + anchor(id) + "'>" + id + "</a>"; }
     /** A title badge that links a finding to the track card it belongs to. */
     static String trackBadge(String text, String id) {
         return " <a class='track-link-badge' href='#" + anchor(id) + "'>" + text + "</a>";
     }
     static String linkLabel(String label, String svg) {
-        if (!label.matches("(?:ST|DS|LR|LC|T|S|A|V)[1-9][0-9]*")) return svg;
+        try {
+            if (!FindingCategory.fromId(label).onDetectionMap()) return svg;
+        } catch (IllegalArgumentException malformed) {
+            return svg;
+        }
         return "<a href='#" + anchor(label) + "'>" + svg + "</a>";
     }
 

@@ -50,8 +50,8 @@ final class AnomalySectionWriter {
         var bounds = new TrackCropGeometry.CropBounds(point, context.settings.getTrackCropPadding());
         String prefix = "anomaly_" + number;
         TrackMatch track = likelyTrack(context, point);
-        report.println("<div class='detection-card anomaly-card' id='finding-a" + number + "'>");
-        report.println("<div class='detection-title'>Anomaly A" + number
+        report.println("<div class='detection-card anomaly-card' id='" + context.findingAnchor(FindingCategory.ANOMALY, number) + "'>");
+        report.println("<div class='detection-title'>Anomaly " + FindingCategory.ANOMALY.id(number)
                 + (track != null ? ReportPresentation.trackBadge("Likely part of " + track.label, track.label) : "") + "</div>"
                 + "<div class='anomaly-subtitle'>Single-frame event</div>");
         if (track != null) {
@@ -112,7 +112,7 @@ final class AnomalySectionWriter {
         for (int i = 0; i < context.movingTargets.size(); i++) {
             double distance = predictionDistance(context.movingTargets.get(i), event, config);
             if (distance <= config.predictionTolerance && (best == null || distance < best.distance)) {
-                best = new TrackMatch("T" + (i + 1), distance, config.predictionTolerance);
+                best = new TrackMatch(context.trackFindings.id(context.movingTargets.get(i)), distance, config.predictionTolerance);
             }
         }
         return best;

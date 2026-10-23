@@ -194,7 +194,7 @@ Session handover and mutable selection/catalogue updates run on the EDT. Workers
 
 **Viewers:** annotations bind to an explicit session catalogue. Reusable Preview Frame/Full Size viewers are closed and cleared on import; Blink is reset. An independent inspection viewer can retain its old session's model and buffers deliberately, but never adopts the new catalogue. Old Star Mask Explorer Apply callbacks cannot edit a replacement session. Viewer buffers/listeners remain viewer-owned, not deep-copied into the session.
 
-The profile IO/report writer's legacy static candidate-limit fallback is unchanged; replacing legacy run-context defaults remains S14. Session tuning measurements and the GUI's session limit are separately owned already.
+S14 captures the candidate limit and rendering/site options before processing; reports and profile diagnostics use those run-owned values. Session tuning measurements and the GUI's session limit remain separately owned.
 
 ## Settings
 
@@ -252,7 +252,7 @@ The coordinated development dependency is JTransient `1.0.6` and JPlateSolve `1.
 
 The report never changes the engine's results. The report's live lookups (SatChecker, JPL) go through a small localhost server, `ReportLookupProxyServer`.
 
-`report-data.json` is a versioned findings summary; its frame numbers are one-based and finding IDs are local to a report. It is not yet a complete replay record. `FindingCategory` owns prefixes, JSON category labels, card-anchor rules, map/legend colors, summary counts/visibility and report-only inclusion. `ReportData`, generator filtering, map legends/category controls and the GUI report prompt share those definitions; existing JSON text and IDs stay compatible. Variables retain the explicit table fallback when no detailed card exists, and artifact groups stay outside the combined detection map. Remaining individual section/CSV identity construction and prepared diagnostics/run context remain D09/S14–S16 work. Report-category selection never changes analyses or filters.
+`report-data.json` is a versioned findings summary; its frame numbers are one-based and finding IDs are local to a report. It is not yet a complete replay record. `FindingCategory` owns prefixes, JSON category labels, card-anchor rules, map/legend colors, summary counts/visibility and report-only inclusion. `ReportData`, section writers, maps, CSVs, overlays and the GUI report prompt share those definitions; existing JSON text, filenames and IDs stay compatible. `TrackFindingIndex` groups tracks once per consumer with identical ordering, borrowing engine objects without changing points. Variable numbering follows exported engine candidate order independently of card sorting/limits and narrative subsets. Variables retain the explicit table fallback when no detailed card exists, and artifact groups stay outside the combined detection map. Prepared diagnostics/re-export remain deferred S16 work; S14 supplies each run's captured input context. Report-category selection never changes analyses or filters.
 
 ## Headless: the API and the command line
 
@@ -341,7 +341,7 @@ For console diagnostics, use `.\gradlew.bat run -PspacepixelsDebug` or set `-Dsp
 The architecture work in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md#remaining-architecture-steps) builds on completed S13's headless utility boundary:
 
 - **S14 is implemented:** `DetectionRunOptions` captures site/rendering/tuning choices at admission. GUI jobs snapshot configuration/options before queuing; API requests use explicit immutable options and built-in defaults; CLI preference loading passes detached values without changing globals. `ReportRunContext` resolves copied FITS metadata, plate correction and catalogue before each ordinary run's pixel loading. Execution data carries that context into reports and variable-star overlays; asynchronous live previews use the captured stretch. Diagnostics write the captured tuning limit and variable-star presentation into `detection_config.json`. Component-level convenience entrypoints may capture defaults once at their own admission boundary.
-- **S15:** consolidate finding labels and category rules.
+- **S15 is implemented:** category descriptors, shared track grouping and variable numbering drive cards, maps, CSVs and viewer overlays. Section anchors resolve through prepared findings; existing report IDs, filenames, counts, colors and JSON schema remain stable.
 - **S16 is deferred:** prepared diagnostic states/re-export wait for a concrete saved-result rendering path.
 
 S7 session ownership and application preferences, S8 background session metadata I/O, S10 FITS service extraction, and S12 shared GUI/API preparation are implemented. The [completed-work archive](docs/archive/design-improvements-completed-2026-10.md) records their validation and historical limitations; earlier review proposals are not the current implementation. Broader features such as run history, saved-result viewing and MCP services remain in the design backlog.

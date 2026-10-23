@@ -41,6 +41,7 @@ final class DetectionReportContext {
     final List<Track> singleStreaks;
     final List<Track> streakTracks;
     final List<Track> movingTargets;
+    final TrackFindingIndex trackFindings;
     ReportData data;
     /** Where every kept frame holds image data; set after construction, null when not measured. */
     DataArea dataArea;
@@ -69,6 +70,16 @@ final class DetectionReportContext {
     int autoTuneMaxCandidateFrames() {
         return runContext == null ? SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES
                 : runContext.options().autoTuneMaxCandidateFrames();
+    }
+
+    /** Resolves a category ordinal through the prepared report model; isolated section callers use the descriptor. */
+    String findingId(FindingCategory category, int number) {
+        return data == null ? category.id(number) : data.finding(category, number).id();
+    }
+
+    /** Uses the prepared anchor, including the variable-star table fallback when no detailed card exists. */
+    String findingAnchor(FindingCategory category, int number) {
+        return data == null ? category.anchor(number) : data.finding(category, number).anchor();
     }
 
     List<Integer> sampleFrames(java.util.Set<Integer> mandatory, int limit) {
@@ -116,5 +127,6 @@ final class DetectionReportContext {
         this.singleStreaks = singleStreaks != null ? singleStreaks : Collections.emptyList();
         this.streakTracks = streakTracks != null ? streakTracks : Collections.emptyList();
         this.movingTargets = movingTargets != null ? movingTargets : Collections.emptyList();
+        this.trackFindings = TrackFindingIndex.fromGroups(this.movingTargets, this.streakTracks, this.singleStreaks);
     }
 }

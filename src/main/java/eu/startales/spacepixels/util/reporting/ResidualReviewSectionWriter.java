@@ -157,8 +157,8 @@ final class ResidualReviewSectionWriter {
         }
 
         String css = String.format(Locale.US, "#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
-        report.println("<div class='detection-card' id='finding-fc" + groupNumber + "' style='border-left-color: " + css + ";'>");
-        report.println("<div class='detection-title' style='color: " + css + ";'>Camera-Fixed Group FC" + groupNumber + "</div>");
+        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.CAMERA_FIXED, groupNumber) + "' style='border-left-color: " + css + ";'>");
+        report.println("<div class='detection-title' style='color: " + css + ";'>Camera-Fixed Group " + FindingCategory.CAMERA_FIXED.id(groupNumber) + "</div>");
         report.printf(Locale.US, "<p class='astro-note'>Stays at one camera position in %d frames while it moved up to %.0f px across "
                 + "the frames: most likely a hot pixel or dust. Set aside before tracking.</p>%n", group.points.size(), spread);
         report.println("<div class='image-container'>");
@@ -271,8 +271,8 @@ final class ResidualReviewSectionWriter {
         boolean gif = !context.rawFrames.isEmpty() && writeCommonMotionGif(context, pictured, color, gifName);
 
         String css = String.format(Locale.US, "#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
-        report.println("<div class='detection-card' id='finding-cm" + groupNumber + "' style='border-left-color: " + css + ";'>");
-        report.println("<div class='detection-title' style='color: " + css + ";'>Common Motion Group CM" + groupNumber + "</div>");
+        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.COMMON_MOTION, groupNumber) + "' style='border-left-color: " + css + ";'>");
+        report.println("<div class='detection-title' style='color: " + css + ";'>Common Motion Group " + FindingCategory.COMMON_MOTION.id(groupNumber) + "</div>");
         report.println("<p class='astro-note'>Most likely noise or a moving artifact; filtered out before local rescue and activity clustering.</p>");
         report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>"
                 + group.sources.size() + " sources, " + group.sharedFrameCount + " shared frames."
@@ -617,8 +617,8 @@ final class ResidualReviewSectionWriter {
         String candidateBadge = buildLocalRescueBadge(candidate.kind);
         String candidateNote = buildLocalRescueNote(candidate.kind);
         ResidualTransientAnalysis.LocalTransientMetrics metrics = candidate.metrics;
-        report.println("<div class='detection-card' id='finding-lr" + counter + "' style='border-left-color: #40e0d0;'>");
-        report.println("<div class='detection-title' style='color: #40e0d0;'>Local Rescue Candidate LR" + counter + candidateBadge + "</div>");
+        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.LOCAL_RESCUE, counter) + "' style='border-left-color: #40e0d0;'>");
+        report.println("<div class='detection-title' style='color: #40e0d0;'>Local Rescue Candidate " + FindingCategory.LOCAL_RESCUE.id(counter) + candidateBadge + "</div>");
         report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>" + candidateNote + "</div>");
         report.println("<div class='image-container'>");
         if (backgroundSource != null) {
@@ -734,8 +734,8 @@ final class ResidualReviewSectionWriter {
         }
 
         ResidualTransientAnalysis.LocalTransientMetrics metrics = cluster.metrics;
-        report.println("<div class='detection-card' id='finding-lc" + counter + "' style='border-left-color: #ffb347;'>");
-        report.println("<div class='detection-title' style='color: #ffb347;'>Local Activity Cluster LC" + counter
+        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.LOCAL_ACTIVITY, counter) + "' style='border-left-color: #ffb347;'>");
+        report.println("<div class='detection-title' style='color: #ffb347;'>Local Activity Cluster " + FindingCategory.LOCAL_ACTIVITY.id(counter)
                 + " <span style='background: #7a4b14; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>"
                 + String.format(Locale.US, "%.0f px Linkage", cluster.linkageRadiusPixels)
                 + "</span></div>");

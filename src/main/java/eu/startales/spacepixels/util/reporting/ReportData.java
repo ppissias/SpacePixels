@@ -28,6 +28,7 @@ final class ReportData {
     private final int totalFrames;
     private final eu.startales.spacepixels.config.VariableStarReportOptions variableStarOptions;
     private final Map<Integer, Finding> variablesByStar;
+    private final Map<String, Finding> findingsById;
 
     private ReportData(DetectionReportContext context, PipelineTelemetry telemetry, VariableStarAnalysis variables,
                        List<ResidualTransientAnalysis.CommonMotionGroup> groups, ReportInclusion inclusion) {
@@ -38,9 +39,9 @@ final class ReportData {
         if (telemetry != null) for (var frame : telemetry.frameQualityStats) if (frame.rejected) rejected.add(frame.frameIndex);
         rejectedFrames = Set.copyOf(rejected);
         List<Finding> output = new ArrayList<>();
-        tracks(output, context, FindingCategory.MOVING_TARGET, context.movingTargets);
-        tracks(output, context, FindingCategory.STREAK_TRACK, context.streakTracks);
-        tracks(output, context, FindingCategory.SINGLE_STREAK, context.singleStreaks);
+        tracks(output, context, context.movingTargets);
+        tracks(output, context, context.streakTracks);
+        tracks(output, context, context.singleStreaks);
         for (int i = 0; i < context.anomalies.size(); i++) {
             var a = context.anomalies.get(i);
             if (a != null && a.object != null) add(output, context, FindingCategory.ANOMALY.id(i + 1), a.object.x, a.object.y, List.of(a.object), null, null);
@@ -70,7 +71,7 @@ final class ReportData {
                     }
                     add(output, context, FindingCategory.VARIABLE_STAR.id(number), star.x, star.y, List.of(), star.id, star.tier.name());
                     Finding f = output.remove(output.size() - 1);
-                    output.add(new Finding(f.id, f.category, presentation.hasCard(star) ? FindingCategory.VARIABLE_STAR.anchor(number) : "variable-candidates",
+                    output.add(new Finding(f.id, f.category, FindingCategory.VARIABLE_STAR.anchor(number, presentation.hasCard(star)),
                             f.x, f.y, f.raDegrees, f.decDegrees, List.copyOf(frames), star.id, f.tier));
                 }
             }
@@ -86,6 +87,8 @@ final class ReportData {
         variablesByStar = new HashMap<>();
         for (var f : output) if (f.starId != null) variablesByStar.put(f.starId, f);
         findings = List.copyOf(output);
+        findingsById = new HashMap<>();
+        for (Finding finding : findings) findingsById.put(finding.id(), finding);
     }
 
     static ReportData create(DetectionReportContext context, PipelineTelemetry telemetry, VariableStarAnalysis variables,
@@ -94,8 +97,8 @@ final class ReportData {
     }
 
     /** Numbers track findings through the shared category contract without changing engine order. */
-    private static void tracks(List<Finding> out, DetectionReportContext context, FindingCategory category, List<Track> tracks) {
-        for (int index = 0; index < tracks.size(); index++) addPoints(out, context, category.id(index + 1), tracks.get(index).points);
+    private static void tracks(List<Finding> out, DetectionReportContext context, List<Track> tracks) {
+        for (Track track : tracks) addPoints(out, context, context.trackFindings.id(track), track.points);
     }
 
     /** Chooses category-owned representative coordinates while keeping frame associations unchanged. */
@@ -119,11 +122,16 @@ final class ReportData {
         }
         List<Integer> frames = points.stream().map(p -> p.sourceFrameIndex + 1).distinct().sorted().toList();
         FindingCategory category = FindingCategory.fromId(id);
-        out.add(new Finding(id, category.label(), category.anchor(Integer.parseInt(id.substring(category.prefix().length()))),
+        out.add(new Finding(id, category.label(), category.anchor(category.number(id)),
                 x, y, ra, dec, frames, starId, tier));
     }
 
     Finding variable(int starId) { return variablesByStar.get(starId); }
+
+    /** Returns a registered finding, detecting a writer/model numbering mismatch instead of emitting a broken link. */
+    Finding finding(FindingCategory category, int number) {
+        return Objects.requireNonNull(findingsById.get(category.id(number)), "Unregistered finding " + category.id(number));
+    }
 
     List<Integer> sample(Set<Integer> mandatory, int limit) {
         List<Integer> kept = new ArrayList<>();

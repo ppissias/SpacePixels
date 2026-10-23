@@ -23,6 +23,13 @@ public class FindingCategoryTest {
         assertEquals("finding-s1", FindingCategory.SINGLE_STREAK.anchor(1));
         assertEquals("variable-v3", FindingCategory.VARIABLE_STAR.anchor(3));
         assertEquals("finding-fc2", FindingCategory.CAMERA_FIXED.anchor(2));
+        assertEquals(12, FindingCategory.STREAK_TRACK.number("ST12"));
+        assertEquals("finding-st12", FindingCategory.anchorForId("ST12"));
+        assertEquals("variable-candidates", FindingCategory.VARIABLE_STAR.anchor(12, false));
+        assertEquals("variable-v12", FindingCategory.VARIABLE_STAR.anchor(12, true));
+        assertThrows(IllegalArgumentException.class, () -> FindingCategory.SINGLE_STREAK.number("ST12"));
+        assertThrows(IllegalArgumentException.class, () -> FindingCategory.anchorForId("V0"));
+        assertThrows(IllegalArgumentException.class, () -> FindingCategory.VARIABLE_STAR.anchor(0, false));
         assertFalse(FindingCategory.CAMERA_FIXED.onDetectionMap());
         assertFalse(FindingCategory.COMMON_MOTION.onDetectionMap());
         assertTrue(FindingCategory.VARIABLE_STAR.onDetectionMap());

@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.util;
 
+import eu.startales.spacepixels.util.reporting.TrackFindingIndex;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 
@@ -17,6 +18,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * The tracks of the last detection run, reduced to what a viewer draws: a label and the position in each frame.
@@ -90,34 +92,17 @@ public final class TrackOverlay {
         return fromTracks(result == null ? null : result.tracks);
     }
 
+    /** Copies linked positions into a viewer overlay using the report's grouping and numbering contract. */
     static TrackOverlay fromTracks(List<io.github.ppissias.jtransient.model.Track> linkedTracks) {
-        List<Track> streakTracks = new ArrayList<>();
-        List<Track> movingTracks = new ArrayList<>();
-        if (linkedTracks != null) {
-            for (io.github.ppissias.jtransient.model.Track track : linkedTracks) {
-                if (track == null || track.points == null || track.points.isEmpty()) {
-                    continue;
-                }
-                Set<Integer> frames = new HashSet<>();
-                List<Point> points = new ArrayList<>();
-                for (DetectedObject point : track.points) {
-                    frames.add(point.sourceFrameIndex);
-                    if (point.sourceFilename != null) {
-                        points.add(new Point(point.sourceFilename, point.x, point.y));
-                    }
-                }
-                if (frames.size() < 2) {
-                    continue;
-                }
-                if (track.isStreakTrack) {
-                    streakTracks.add(new Track("ST" + (streakTracks.size() + 1), true, points));
-                } else {
-                    movingTracks.add(new Track("T" + (movingTracks.size() + 1), false, points));
-                }
+        var index = TrackFindingIndex.of(linkedTracks);
+        List<Track> all = new ArrayList<>();
+        for (var linked : Stream.concat(index.movingTargets().stream(), index.streakTracks().stream()).toList()) {
+            List<Point> points = new ArrayList<>();
+            for (DetectedObject point : linked.points) {
+                if (point.sourceFilename != null) points.add(new Point(point.sourceFilename, point.x, point.y));
             }
+            all.add(new Track(index.id(linked), linked.isStreakTrack, points));
         }
-        List<Track> all = new ArrayList<>(movingTracks);
-        all.addAll(streakTracks);
         return new TrackOverlay(all);
     }
 }

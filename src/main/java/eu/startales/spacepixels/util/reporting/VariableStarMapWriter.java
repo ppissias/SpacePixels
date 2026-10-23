@@ -118,12 +118,12 @@ final class VariableStarMapWriter {
                 if (!onImage(star, width, height)) continue;
                 double radius = curves ? Math.max(6, Math.min(14, width / 500.0)) : Math.max(6, width / 140.0);
                 double font = curves ? 16 : Math.max(12, width / 90.0);
-                String labelText = names.get(i) == null ? "V" + (i + 1) : names.get(i);
+                String labelText = names.get(i) == null ? FindingCategory.VARIABLE_STAR.id(i + 1) : names.get(i);
                 font = Math.min(font, Math.max(9, width / (3.0 * .65 * labelText.length())));
-                out.printf(Locale.US, "<g class='variable-map-marker' data-candidate='V%d'><title>V%d · %s · star #%d · %s</title>"
+                out.printf(Locale.US, "<g class='variable-map-marker' data-candidate='%s'><title>%s · %s · star #%d · %s</title>"
                                 + "<circle cx='%.2f' cy='%.2f' r='%.2f' fill='none' stroke='#000' stroke-width='%s'/>"
                                 + "<circle cx='%.2f' cy='%.2f' r='%.2f' fill='none' stroke='%s' stroke-width='%s'/>",
-                        i + 1, i + 1, DetectionReportGenerator.escapeHtml(labelText), star.id, star.tier == VariabilityTier.HIGH_CONFIDENCE ? "High confidence" : "Possible",
+                        FindingCategory.VARIABLE_STAR.id(i + 1), FindingCategory.VARIABLE_STAR.id(i + 1), DetectionReportGenerator.escapeHtml(labelText), star.id, star.tier == VariabilityTier.HIGH_CONFIDENCE ? "High confidence" : "Possible",
                         star.x + .5, star.y + .5, radius, curves ? "4" : Math.max(3, width / 450.0),
                         star.x + .5, star.y + .5, radius, color(star), curves ? "2" : Math.max(2, width / 1000.0));
                 Rectangle2D.Double label = placeLabel(star, labelText, radius, font, width, height, occupied, labels);
@@ -189,9 +189,9 @@ final class VariableStarMapWriter {
 
     private static void writeCurve(PrintWriter out, VariableStarAnalysis analysis, StarLightCurve star, int number,
                                     String name, Rectangle2D.Double box) {
-        out.printf(Locale.US, "<g class='variable-map-curve' data-candidate='V%d' data-star-id='%d' transform='translate(%.2f %.2f)'>%n",
-                number, star.id, box.x, box.y);
-        out.println("<title>V" + number + (name == null ? "" : " · " + DetectionReportGenerator.escapeHtml(name))
+        out.printf(Locale.US, "<g class='variable-map-curve' data-candidate='%s' data-star-id='%d' transform='translate(%.2f %.2f)'>%n",
+                FindingCategory.VARIABLE_STAR.id(number), star.id, box.x, box.y);
+        out.println("<title>" + FindingCategory.VARIABLE_STAR.id(number) + (name == null ? "" : " · " + DetectionReportGenerator.escapeHtml(name))
                 + " · observed variation (95th–5th percentile); brighter up; individual magnitude scale</title>");
         out.printf(Locale.US, "<rect width='%.2f' height='%.2f' rx='4' fill='#000' fill-opacity='0.18'/>%n",
                 box.width, box.height);
@@ -232,8 +232,8 @@ final class VariableStarMapWriter {
                 double py = 21 + (y[j] - low) / range * plotHeight;
                 path.append(String.format(Locale.US, "%s%.2f %.2f", connected ? "L" : "M", px, py));
                 connected = true;
-                out.printf(Locale.US, "<circle cx='%.2f' cy='%.2f' r='1.5' fill='%s'><title>V%d · frame %d · Δmag %.4f</title></circle>%n",
-                        px, py, color(star), number, analysis.frames.get(j).frameIndex + 1, y[j]);
+                out.printf(Locale.US, "<circle cx='%.2f' cy='%.2f' r='1.5' fill='%s'><title>%s · frame %d · Δmag %.4f</title></circle>%n",
+                        px, py, color(star), FindingCategory.VARIABLE_STAR.id(number), analysis.frames.get(j).frameIndex + 1, y[j]);
             }
             out.printf(Locale.US, "<path class='variable-map-sparkline' d='%s' stroke='%s' stroke-width='1.5' fill='none'/>%n",
                     path, color(star));

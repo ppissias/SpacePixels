@@ -70,7 +70,7 @@ The pattern is close to a modest **model–view–presenter** arrangement: a sta
 | Viewer | Current frame, zoom, playback state, listeners and owned display buffers | Explicitly detached/released on close; shared stretch models retain intentional semantics. |
 | Report lookup | Provider request, report identity and enrichment cache | Independent of detection verdict; bounded work and existing target/path validation remain. |
 
-**Current versus future:** application/session/viewer ownership above is largely implemented by D02/D04/D06/D08. The remaining run-wide capture is S14. Restoring a saved run was dropped from D11 on 2026-10-23; the F09 super report defines what it needs to persist. A saved-run record should include a schema version, supported build identifiers, input identities, effective settings, catalogue/correction provenance, analysis/export inclusion and artifacts. Some of this already exists in `detection_config.json`, versioned `report-data.json`, iterative `run-data.json` and per-pass manifests; extend those rather than writing a conflicting summary. Avoid storing private absolute paths or observing-site data in a shareable manifest by default. A reproducibility record is distinct from retaining all image buffers or promising replay from data that is no longer available.
+**Current versus future:** application/session/viewer ownership above is largely implemented by D02/D04/D06/D08; S14 implements run-wide capture. Restoring a saved run was dropped from D11 on 2026-10-23; the F09 super report defines what it needs to persist. A saved-run record should include a schema version, supported build identifiers, input identities, effective settings, catalogue/correction provenance, analysis/export inclusion and artifacts. Some of this already exists in `detection_config.json`, versioned `report-data.json`, iterative `run-data.json` and per-pass manifests; extend those rather than writing a conflicting summary. Avoid storing private absolute paths or observing-site data in a shareable manifest by default. A reproducibility record is distinct from retaining all image buffers or promising replay from data that is no longer available.
 
 `ApplicationWindow` already starts/stops the localhost lookup proxy; preserve that application-scoped lifetime rather than reopening an ownership task. If a feature expands lookup/server work, define its I/O/cache limits explicitly and preserve provider/target/path validation and atomic caching. This is an implementation guardrail, not an additional queue item or a newly established security defect.
 
@@ -90,7 +90,7 @@ Verification follows the strategy above and [AGENTS.md](AGENTS.md). Import chang
 
 **Current foundation.** `FindingCategory` now owns stable prefixes, JSON category text, detailed-card anchors, marker/legend colors, summary labels/counts, report inclusion, computed-row visibility and representative-coordinate policy. `ReportData`, report-category filtering, detection-map legends/buttons and the GUI report prompt consume it while preserving existing IDs/text/anchors/colors and JSON schema. See the [completion record](docs/archive/design-improvements-completed-2026-10.md#d09-shared-finding-category-descriptors-first-slice-2026-10-22).
 
-**Remaining evidence.** [DetectionReportGenerator](src/main/java/eu/startales/spacepixels/util/reporting/DetectionReportGenerator.java) delegates sections, consumes captured display/site/tuning options, constructs `ReportData` and atomically publishes HTML. S14's `ReportRunContext` resolves copied FITS metadata, plate correction and catalogue before detection; report writers and variable-star overlays share that context. [NightEquipment](src/main/java/eu/startales/spacepixels/util/reporting/NightEquipment.java) and [FieldDepth](src/main/java/eu/startales/spacepixels/util/reporting/FieldDepth.java) still calculate diagnostics during report export, as allowed while S16 is deferred. Some individual section/CSV renderers still construct compatible labels/anchors directly; finish their consolidation in S15.
+**Implemented follow-up (S14/S15, 2026-10-23).** [DetectionReportGenerator](src/main/java/eu/startales/spacepixels/util/reporting/DetectionReportGenerator.java) delegates sections, consumes captured display/site/tuning options, constructs `ReportData` and atomically publishes HTML. S14's `ReportRunContext` resolves copied FITS metadata, plate correction and catalogue before detection; report writers and variable-star overlays share that context. S15 makes `FindingCategory`, shared track grouping/variable numbering and prepared findings authoritative across cards, maps, CSV labels and overlays. Filenames, counts, colors, filtering and JSON schema remain unchanged. See the [S15 completion record](docs/archive/design-improvements-completed-2026-10.md#s15-authoritative-report-and-overlay-identities-2026-10-23). [NightEquipment](src/main/java/eu/startales/spacepixels/util/reporting/NightEquipment.java) and [FieldDepth](src/main/java/eu/startales/spacepixels/util/reporting/FieldDepth.java) still calculate diagnostics during report export, as allowed while S16 is deferred.
 
 **Proposal.** Keep section writers, but prepare a read-only report model once: stable finding IDs, accepted candidates, included categories, rejected frames, coordinates, catalogue snapshot and optional session diagnostics. Extend `ReportData`; do not introduce a competing identity system. A small category descriptor can provide the label, colour, prefix, count, inclusion option and anchor rule for the dialog, legends and maps. Existing report consistency checks are useful protection when consolidating these rules.
 
@@ -100,7 +100,7 @@ Capture resolved catalogue/correction/export context at a documented point. Curr
 
 **Acceptance.** HTML, JSON, maps and CSVs agree on IDs, numbering, counts and exclusions. Re-rendering an existing prepared result with different presentation options does not re-run detection or silently recompute diagnostics against newer catalogue state. Do not retain all raw frames forever merely to enable a later re-export; define what a lightweight saved result supports.
 
-**Review note (2026-10-23).** S15 is worth finishing: one category descriptor replaces label, prefix and anchor rules that writers, maps, JSON and the report prompt still repeat. S16 and the re-rendering clause in the acceptance pay off only when a saved result can be rendered again. SpacePixels has no such path today: every report is written in the run that measured it. Defer S16 and that clause until a saved result can be rendered again (D11's restore step was dropped on 2026-10-23), rather than building prepared diagnostic states that nothing reads a second time.
+**Review decision (2026-10-23).** S15 is implemented: shared descriptors replace parallel label, prefix and anchor rules. S16 and the re-rendering clause in the acceptance pay off only when a saved result can be rendered again. SpacePixels has no such path today: every report is written in the run that measured it. Defer S16 and that clause until a saved result can be rendered again (D11's restore step was dropped on 2026-10-23), rather than building prepared diagnostic states that nothing reads a second time.
 
 Decisions: Please go ahead as proposed in the review note.  
 
@@ -128,11 +128,10 @@ Keep the existing dark theme and restrained primary-action emphasis. Make enable
 
 ### Remaining architecture steps
 
-S15/S16 are parts of D09/D10, not a duplicate backlog. S14 and earlier steps are indexed as implemented at the end.
+S16 is the deferred part of D09, not a duplicate backlog. S14/S15 and earlier steps are indexed as implemented at the end.
 
 | Step | Owner | Remaining implementation and acceptance |
 |---|---|---|
-| S15 | D09 | Make category/identity descriptors authoritative across writers, maps, JSON, inclusion UI and overlays instead of parallel counters/prefix rules. Preserve T/ST/A/V anchors, filenames, counts and filtering. |
 | S16 | D09 | Prepare `FieldDepth`, `NightEquipment` and catalogue/correction snapshots before rendering, with measured/unavailable/failed states and a consistent optional-section failure policy. Re-export must reuse prepared values, not newer live state; inject failures and compare real measurements. |
 
 ## Pending and deferred features
@@ -334,7 +333,7 @@ Implemented rows are not a second backlog. Partial/deferred rows retain only the
 | D06 | Session/service boundaries | Implemented; factory clarity remains D10 |
 | D07 | State-driven commands and availability | Implemented |
 | D08 | Background I/O and preference writes | Implemented |
-| D09 | Prepared report diagnostics and identities | In progress |
+| D09 | Prepared report diagnostics and identities | S14/S15 implemented 2026-10-23; S16 diagnostics/re-export deferred |
 | D10 | Typed settings and explicit run options | Typed bindings, factory naming and S14 implemented 2026-10-23; selected-release validation remains JA-11 |
 | D11 | Last run's tracks in Blink, Preview Frame and Manual Transient Inspection | Implemented 2026-10-23 (reduced scope) |
 | D12 | Shared visual/layout rules | In progress |
@@ -365,6 +364,6 @@ Implemented rows are not a second backlog. Partial/deferred rows retain only the
 | S12 | Shared GUI/API input preparation | Implemented |
 | S13 | Headless util and explicit interactions | Implemented |
 | S14 | Explicit application run context | Implemented 2026-10-23 |
-| S15 | Authoritative finding identities/categories | In progress; D09 |
+| S15 | Authoritative finding identities/categories | Implemented 2026-10-23 |
 | S16 | Prepared diagnostic states/failure policy | Deferred until a saved result can be re-rendered |
 | Library compatibility | Historical API/version fallback machinery | Dropped; coordinated cleanup implemented |

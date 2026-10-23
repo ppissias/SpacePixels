@@ -86,9 +86,7 @@ final class DeepStackReportSectionWriter {
             return;
         }
 
-        List<ReportTrackReference> reportTrackReferences = buildReportTrackReferences(
-                context.streakTracks,
-                context.movingTargets);
+        List<ReportTrackReference> reportTrackReferences = buildReportTrackReferences(context);
 
         report.println("<div class='flex-container'>");
         for (int i = 0; i < context.slowMoverCandidates.size(); i++) {
@@ -201,10 +199,10 @@ final class DeepStackReportSectionWriter {
             GifSequenceWriter.saveAnimatedGif(gifFrames, new File(context.exportDir, gifFileName), context.settings.getGifBlinkSpeedMs());
         }
 
-        report.println("<div class='detection-card' id='finding-ds" + candidateNumber + "' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");
+        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.SLOW_MOVER, candidateNumber) + "' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");
         String trackBadge = matchedTracks.isEmpty() ? "" : ReportPresentation.trackBadge("Already tracked: " + matchedTracks.get(0).label
                 + (matchedTracks.size() > 1 ? " +" + (matchedTracks.size() - 1) : ""), matchedTracks.get(0).label);
-        report.println("<div class='detection-title' style='color: #ff66ff; font-size: 1.1em; margin-bottom: 10px;'>Slow-Mover Candidate DS" + candidateNumber + trackBadge + "</div>");
+        report.println("<div class='detection-title' style='color: #ff66ff; font-size: 1.1em; margin-bottom: 10px;'>Slow-Mover Candidate " + FindingCategory.SLOW_MOVER.id(candidateNumber) + trackBadge + "</div>");
         if (!matchedTracks.isEmpty()) {
             report.println("<div class='track-link-note'><strong>Already reported as track"
                     + (matchedTracks.size() == 1 ? " " : "s ")
@@ -285,19 +283,15 @@ final class DeepStackReportSectionWriter {
         report.println("</div>");
     }
 
-    private static List<ReportTrackReference> buildReportTrackReferences(List<Track> streakTracks,
-                                                                         List<Track> movingTargets) {
+    /** Borrows linked tracks and their shared report IDs without independently re-numbering either category. */
+    private static List<ReportTrackReference> buildReportTrackReferences(DetectionReportContext context) {
         List<ReportTrackReference> references = new ArrayList<>();
-        int streakCounter = 1;
-        for (Track track : streakTracks) {
-            references.add(new ReportTrackReference(track, "ST" + streakCounter, "streak track"));
-            streakCounter++;
+        for (Track track : context.streakTracks) {
+            references.add(new ReportTrackReference(track, context.trackFindings.id(track), "streak track"));
         }
 
-        int movingCounter = 1;
-        for (Track track : movingTargets) {
-            references.add(new ReportTrackReference(track, "T" + movingCounter, "moving object track"));
-            movingCounter++;
+        for (Track track : context.movingTargets) {
+            references.add(new ReportTrackReference(track, context.trackFindings.id(track), "moving object track"));
         }
         return references;
     }

@@ -87,8 +87,8 @@ final class TargetVisualizationSectionWriter {
                     ? " <span style='background: #6b4a20; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>" + partCount + " Parts</span>"
                     : "";
 
-            report.println("<div class='detection-card streak-title' id='finding-s" + counter + "'>");
-            report.println("<div class='detection-title'>Single Streak Event S" + counter + partBadge + "</div>");
+            report.println("<div class='detection-card streak-title' id='" + context.findingAnchor(FindingCategory.SINGLE_STREAK, counter) + "'>");
+            report.println("<div class='detection-title'>Single Streak Event " + FindingCategory.SINGLE_STREAK.id(counter) + partBadge + "</div>");
             report.print(buildSingleFrameEventSummaryHtml(track, context.fitsFiles));
 
             short[][] croppedData = TrackVisualizationRenderer.robustEdgeAwareCrop(
@@ -172,9 +172,9 @@ final class TargetVisualizationSectionWriter {
                     cropBounds.trackBoxWidth,
                     cropBounds.trackBoxHeight);
 
-            report.println("<div class='detection-card streak-title' id='finding-st" + counter + "' style='border-left-color: #ffcc33;'>");
+            report.println("<div class='detection-card streak-title' id='" + context.findingAnchor(FindingCategory.STREAK_TRACK, counter) + "' style='border-left-color: #ffcc33;'>");
             String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
-            report.println("<div class='detection-title' style='color: #ffcc33;'>Confirmed Streak Track ST" + counter + timeBadge + "</div>");
+            report.println("<div class='detection-title' style='color: #ffcc33;'>Confirmed Streak Track " + FindingCategory.STREAK_TRACK.id(counter) + timeBadge + "</div>");
             report.print(DetectionReportGenerator.buildTrackTimingSummaryHtml(track, context.astrometryContext));
             report.print(buildConfirmedStreakFrameFragmentSummaryHtml(track, context.fitsFiles));
 
@@ -257,9 +257,9 @@ final class TargetVisualizationSectionWriter {
                     cropBounds.trackBoxWidth,
                     cropBounds.trackBoxHeight);
 
-            report.println("<div class='detection-card' id='finding-t" + counter + "'>");
+            report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.MOVING_TARGET, counter) + "'>");
             String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
-            report.println("<div class='detection-title'>Moving Target Track T" + counter + timeBadge + "</div>");
+            report.println("<div class='detection-title'>Moving Target Track " + FindingCategory.MOVING_TARGET.id(counter) + timeBadge + "</div>");
             report.print(DetectionReportGenerator.buildTrackTimingSummaryHtml(track, context.astrometryContext));
 
             report.println("<div class='image-container'>");

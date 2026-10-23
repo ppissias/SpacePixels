@@ -192,19 +192,19 @@ final class ClaudePerspectiveSectionWriter {
         svg.append("<line x1='").append(LEFT).append("' x2='").append(WIDTH - RIGHT).append("' y1='").append(eventsTop + eventsHeight / 2)
                 .append("' y2='").append(eventsTop + eventsHeight / 2).append("' stroke='").append(GRID).append("' stroke-width='1'/>");
         int row = 0;
-        row = trackBars(svg, timeline, context.movingTargets, "T", "#4da6ff", "moving-object track", eventsTop, row);
-        trackBars(svg, timeline, context.streakTracks, "ST", "#ffcc33", "streak track", eventsTop, row);
+        row = trackBars(svg, timeline, context.movingTargets, context.trackFindings, "#4da6ff", "moving-object track", eventsTop, row);
+        trackBars(svg, timeline, context.streakTracks, context.trackFindings, "#ffcc33", "streak track", eventsTop, row);
         int counter = 1;
         for (Track track : context.singleStreaks) {
             int frame = track.points.isEmpty() ? -1 : track.points.get(0).sourceFrameIndex;
-            eventMark(svg, timeline, frame, eventsTop, eventsHeight, "#ff9933", "S" + counter, "Single-frame streak S" + counter, true);
+            eventMark(svg, timeline, frame, eventsTop, eventsHeight, "#ff9933", FindingCategory.SINGLE_STREAK.id(counter), "Single-frame streak " + FindingCategory.SINGLE_STREAK.id(counter), true);
             counter++;
         }
         counter = 1;
         for (AnomalyDetection anomaly : context.anomalies) {
             int frame = anomaly.object != null ? anomaly.object.sourceFrameIndex : -1;
-            eventMark(svg, timeline, frame, eventsTop, eventsHeight, "#ff4d6d", context.anomalies.size() <= 8 ? "A" + counter : null,
-                    "Single-frame anomaly A" + counter, false);
+            eventMark(svg, timeline, frame, eventsTop, eventsHeight, "#ff4d6d", context.anomalies.size() <= 8 ? FindingCategory.ANOMALY.id(counter) : null,
+                    "Single-frame anomaly " + FindingCategory.ANOMALY.id(counter), false);
             counter++;
         }
 
@@ -212,7 +212,7 @@ final class ClaudePerspectiveSectionWriter {
         int lane = 0;
         for (StarLightCurve star : shownVariables) {
             int top = variablesTop + lane * (variableHeight + 8);
-            variableLane(svg, timeline, variables, star, lane + 1, top, variableHeight);
+            variableLane(svg, timeline, variables, star, context.variablePresentation(variables).number(star), top, variableHeight);
             lane++;
         }
 
@@ -284,9 +284,8 @@ final class ClaudePerspectiveSectionWriter {
     }
 
     /** Draws each track as a bar from its first to its last frame, stacked in rows above the lane's midline. */
-    private static int trackBars(StringBuilder svg, Timeline timeline, List<Track> tracks, String prefix,
+    private static int trackBars(StringBuilder svg, Timeline timeline, List<Track> tracks, TrackFindingIndex trackFindings,
                                  String color, String kind, int top, int row) {
-        int counter = 1;
         for (Track track : tracks) {
             int first = Integer.MAX_VALUE;
             int last = Integer.MIN_VALUE;
@@ -297,17 +296,15 @@ final class ClaudePerspectiveSectionWriter {
             double t0 = timeline.at(first);
             double t1 = timeline.at(last);
             if (Double.isNaN(t0) || Double.isNaN(t1)) {
-                counter++;
                 continue;
             }
             double x0 = timeline.x(t0);
             double x1 = Math.max(x0 + 4, timeline.x(t1));
             int y = top + 2 + (row % 3) * 7;
-            String tip = prefix + counter + ", " + kind + ": " + timeline.label(t0) + " to " + timeline.label(t1) + ", " + track.points.size() + " detections";
+            String tip = trackFindings.id(track) + ", " + kind + ": " + timeline.label(t0) + " to " + timeline.label(t1) + ", " + track.points.size() + " detections";
             svg.append("<rect x='").append(fmt(x0)).append("' y='").append(y).append("' width='").append(fmt(x1 - x0)).append("' height='5' rx='2' fill='")
                     .append(color).append("'><title>").append(escape(tip)).append("</title></rect>");
             row++;
-            counter++;
         }
         return row;
     }
@@ -335,7 +332,7 @@ final class ClaudePerspectiveSectionWriter {
 
     private static void variableLane(StringBuilder svg, Timeline timeline, VariableStarAnalysis analysis, StarLightCurve star,
                                      int number, int top, int height) {
-        laneLabel(svg, top + height / 2.0, "V" + number + " (" + format(star.amplitude, 2) + " mag)");
+        laneLabel(svg, top + height / 2.0, FindingCategory.VARIABLE_STAR.id(number) + " (" + format(star.amplitude, 2) + " mag)");
         svg.append("<rect x='").append(LEFT).append("' y='").append(top).append("' width='").append(WIDTH - LEFT - RIGHT).append("' height='").append(height)
                 .append("' fill='none' stroke='").append(GRID).append("'/>");
         List<double[]> points = new ArrayList<>();
@@ -364,7 +361,7 @@ final class ClaudePerspectiveSectionWriter {
             path.append(path.length() == 0 ? "M" : " L").append(fmt(timeline.x(p[0]))).append(' ').append(fmt(y));
         }
         svg.append("<path d='").append(path).append("' fill='none' stroke='#4da6ff' stroke-width='1.6' stroke-linejoin='round'><title>")
-                .append(escape("V" + number + ": " + PhotometryReportSectionWriter.describeChange(star).toLowerCase(Locale.ROOT)
+                .append(escape(FindingCategory.VARIABLE_STAR.id(number) + ": " + PhotometryReportSectionWriter.describeChange(star).toLowerCase(Locale.ROOT)
                         + " by " + format(star.amplitude, 3) + " mag (brighter up)"))
                 .append("</title></path>");
     }
@@ -440,7 +437,7 @@ final class ClaudePerspectiveSectionWriter {
             }
             double t = timeline.at(e.getKey());
             List<Integer> codes = e.getValue();
-            String label = codes.size() == 1 ? "S" + codes.get(0) : "S" + codes.get(0) + "–S" + codes.get(codes.size() - 1);
+            String label = codes.size() == 1 ? FindingCategory.SINGLE_STREAK.id(codes.get(0)) : FindingCategory.SINGLE_STREAK.id(codes.get(0)) + "–" + FindingCategory.SINGLE_STREAK.id(codes.get(codes.size() - 1));
             events.add((timeline.timed && !Double.isNaN(t) ? "at " + CLOCK.format(Instant.ofEpochMilli(Math.round(t))) + " UTC " : "")
                     + (codes.size() == 1 ? "something fast cut a streak across a single frame"
                     : countWord(codes.size(), "streak") + " crossed a single frame, probably one object broken into pieces")
@@ -463,7 +460,7 @@ final class ClaudePerspectiveSectionWriter {
         }
 
         // 4. The stars that changed.
-        String stars = variableStory(telemetry, variables);
+        String stars = variableStory(context, telemetry, variables);
         if (stars != null) {
             paragraphs.add(escape(stars));
         }
@@ -530,7 +527,8 @@ final class ClaudePerspectiveSectionWriter {
         return text.toString();
     }
 
-    private static String variableStory(PipelineTelemetry telemetry, VariableStarAnalysis variables) {
+    /** Describes the high-confidence subset using the same V identities as maps, cards, overlays and CSVs. */
+    private static String variableStory(DetectionReportContext context, PipelineTelemetry telemetry, VariableStarAnalysis variables) {
         PipelineTelemetry.PhotometryTelemetry photometry = telemetry.photometryTelemetry;
         if (photometry == null || variables == null) {
             return null;
@@ -557,7 +555,7 @@ final class ClaudePerspectiveSectionWriter {
             StarLightCurve star = high.get(i);
             String shape = PhotometryReportSectionWriter.describeChange(star).toLowerCase(Locale.ROOT);
             String span = Double.isNaN(star.timeSpanMinutes) ? "" : String.format(Locale.US, " over %.0f minutes", star.timeSpanMinutes);
-            parts.add(String.format(Locale.US, "V%d %s by %.2f mag%s", i + 1, shape, star.amplitude, span));
+            parts.add(String.format(Locale.US, "%s %s by %.2f mag%s", context.variablePresentation(variables).label(star), shape, star.amplitude, span));
         }
         text.append(joinAnd(parts)).append('.');
         if (photometry.possible > 0) {

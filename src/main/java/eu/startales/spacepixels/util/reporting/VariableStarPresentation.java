@@ -16,9 +16,8 @@ final class VariableStarPresentation {
     private final Set<Integer> cardIds = new HashSet<>();
 
     VariableStarPresentation(DetectionReportContext context, VariableStarAnalysis analysis) {
-        identities = analysis.candidates.stream().filter(s -> s.tier == VariabilityTier.HIGH_CONFIDENCE
-                || s.tier == VariabilityTier.POSSIBLE).toList();
-        for (int i = 0; i < identities.size(); i++) numbers.put(identities.get(i).id, i + 1);
+        identities = FindingCategory.variableCandidates(analysis.candidates);
+        numbers.putAll(FindingCategory.variableNumbers(analysis.candidates));
         var options = context.settings.getVariableStarReportOptions();
         Map<Integer, Double> periods = new HashMap<>();
         Map<Integer, Integer> changes = new HashMap<>();
@@ -52,6 +51,8 @@ final class VariableStarPresentation {
     }
 
     int number(StarLightCurve star) { return numbers.get(star.id); }
+    /** Returns the category-owned label assigned before presentation sorting or card selection. */
+    String label(StarLightCurve star) { return FindingCategory.VARIABLE_STAR.id(number(star)); }
     boolean hasCard(StarLightCurve star) { return cardIds.contains(star.id); }
     private static double descending(double value) { return Double.isFinite(value) ? -value : Double.POSITIVE_INFINITY; }
 }

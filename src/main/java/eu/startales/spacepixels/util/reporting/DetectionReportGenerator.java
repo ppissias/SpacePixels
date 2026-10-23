@@ -445,6 +445,7 @@ public class DetectionReportGenerator {
     static final Color GLOBAL_MAP_LOCAL_ACTIVITY_COLOR = FindingCategory.LOCAL_ACTIVITY.color();
     static final Color GLOBAL_MAP_DEEP_STACK_COLOR = FindingCategory.SLOW_MOVER.color();
 
+    /** Renders a detached map image using the export context's settings and registered finding identities. */
     static BufferedImage createGlobalTrackMap(short[][] backgroundData,
                                               List<AnomalyDetection> anomalies,
                                               List<Track> singleStreaks,
@@ -452,51 +453,46 @@ public class DetectionReportGenerator {
                                               List<Track> movingTargets,
                                               List<Track> localRescueTracks,
                                               List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters,
-                                              List<DetectedObject> deepStackCandidates, ExportVisualizationSettings settings) {
+                                              List<DetectedObject> deepStackCandidates, DetectionReportContext context) {
+        ExportVisualizationSettings settings = context.settings;
         BufferedImage grayBg = createDisplayImage(backgroundData, settings);
         BufferedImage rgbMap = new BufferedImage(grayBg.getWidth(), grayBg.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
         g2d.drawImage(grayBg, 0, 0, null);
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        int stCounter = 1;
         for (Track t : streakTracks) {
-            drawMultiFrameTrack(g2d, t, GLOBAL_MAP_STREAK_TRACK_COLOR, "ST" + stCounter);
-            stCounter++;
+            drawMultiFrameTrack(g2d, t, GLOBAL_MAP_STREAK_TRACK_COLOR, context.trackFindings.id(t));
         }
-        int tCounter = 1;
         for (Track t : movingTargets) {
-            drawMultiFrameTrack(g2d, t, GLOBAL_MAP_MOVING_TARGET_COLOR, "T" + tCounter);
-            tCounter++;
+            drawMultiFrameTrack(g2d, t, GLOBAL_MAP_MOVING_TARGET_COLOR, context.trackFindings.id(t));
         }
         int lrCounter = 1;
         for (Track t : localRescueTracks) {
-            drawMultiFrameTrack(g2d, t, GLOBAL_MAP_LOCAL_RESCUE_COLOR, "LR" + lrCounter);
+            drawMultiFrameTrack(g2d, t, GLOBAL_MAP_LOCAL_RESCUE_COLOR, context.findingId(FindingCategory.LOCAL_RESCUE, lrCounter));
             lrCounter++;
         }
 
         int lcCounter = 1;
         for (ResidualTransientAnalysis.LocalActivityCluster cluster : localActivityClusters) {
-            drawLocalActivityCluster(g2d, cluster, GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, "LC" + lcCounter);
+            drawLocalActivityCluster(g2d, cluster, GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, context.findingId(FindingCategory.LOCAL_ACTIVITY, lcCounter));
             lcCounter++;
         }
 
         int dsCounter = 1;
         for (DetectedObject candidate : deepStackCandidates) {
-            drawDeepStackCandidate(g2d, candidate, GLOBAL_MAP_DEEP_STACK_COLOR, "DS" + dsCounter);
+            drawDeepStackCandidate(g2d, candidate, GLOBAL_MAP_DEEP_STACK_COLOR, context.findingId(FindingCategory.SLOW_MOVER, dsCounter));
             dsCounter++;
         }
 
         int aCounter = 1;
         for (AnomalyDetection anomaly : anomalies) {
-            drawSingleFindingMarker(g2d, anomaly.object, GLOBAL_MAP_ANOMALY_COLOR, "A" + aCounter, 20);
+            drawSingleFindingMarker(g2d, anomaly.object, GLOBAL_MAP_ANOMALY_COLOR, context.findingId(FindingCategory.ANOMALY, aCounter), 20);
             aCounter++;
         }
 
-        int sCounter = 1;
         for (Track t : singleStreaks) {
-            drawSingleFindingMarker(g2d, t.points.get(0), GLOBAL_MAP_SINGLE_STREAK_COLOR, "S" + sCounter, 20);
-            sCounter++;
+            drawSingleFindingMarker(g2d, t.points.get(0), GLOBAL_MAP_SINGLE_STREAK_COLOR, context.trackFindings.id(t), 20);
         }
         g2d.dispose();
         return rgbMap;
@@ -931,51 +927,11 @@ public class DetectionReportGenerator {
         }
     }
 
-    private static int getTrackDisplayFrameIndex(Track track) {
-        if (track == null || track.points == null || track.points.isEmpty()) {
-            return Integer.MAX_VALUE;
-        }
-
-        int earliestFrameIndex = Integer.MAX_VALUE;
-        for (DetectedObject point : track.points) {
-            if (point == null) {
-                continue;
-            }
-            earliestFrameIndex = Math.min(earliestFrameIndex, point.sourceFrameIndex);
-        }
-        return earliestFrameIndex;
-    }
-
     private static int getAnomalyDisplayFrameIndex(AnomalyDetection anomaly) {
         if (anomaly == null || anomaly.object == null) {
             return Integer.MAX_VALUE;
         }
         return anomaly.object.sourceFrameIndex;
-    }
-
-    private static String getTrackDisplayFileName(Track track) {
-        if (track == null || track.points == null || track.points.isEmpty()) {
-            return "";
-        }
-        DetectedObject firstPoint = track.points.get(0);
-        return firstPoint != null && firstPoint.sourceFilename != null ? firstPoint.sourceFilename : "";
-    }
-
-    private static List<Track> sortTracksForFrameDisplay(List<Track> tracks) {
-        List<Track> ordered = new ArrayList<>();
-        if (tracks != null) {
-            ordered.addAll(tracks);
-        }
-        ordered.sort(Comparator
-                .comparingInt(DetectionReportGenerator::getTrackDisplayFrameIndex)
-                .thenComparing(DetectionReportGenerator::getTrackDisplayFileName)
-                .thenComparingDouble(track -> track != null && track.points != null && !track.points.isEmpty() && track.points.get(0) != null
-                        ? track.points.get(0).x
-                        : Double.POSITIVE_INFINITY)
-                .thenComparingDouble(track -> track != null && track.points != null && !track.points.isEmpty() && track.points.get(0) != null
-                        ? track.points.get(0).y
-                        : Double.POSITIVE_INFINITY));
-        return ordered;
     }
 
     private static List<AnomalyDetection> sortAnomaliesForDisplay(List<AnomalyDetection> anomalies) {
@@ -1356,24 +1312,12 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
                 ? residualTransientAnalysis.commonMotionGroups
                 : java.util.Collections.emptyList();
         DetectionReportAstrometry.Context astrometryContext = runContext.astrometry();
-        List<Track> singleStreaks = new ArrayList<>();
-        List<Track> streakTracks = new ArrayList<>();
-        List<Track> movingTargets = new ArrayList<>();
+        TrackFindingIndex trackIndex = TrackFindingIndex.of(tracks);
+        List<Track> singleStreaks = trackIndex.singleStreaks();
+        List<Track> streakTracks = trackIndex.streakTracks();
+        List<Track> movingTargets = trackIndex.movingTargets();
         List<Track> localRescueTracks = new ArrayList<>();
 
-        for (Track track : tracks) {
-            if (track.points == null || track.points.isEmpty()) continue;
-            java.util.Set<Integer> uniqueFrames = new java.util.HashSet<>();
-            for (DetectedObject pt : track.points) uniqueFrames.add(pt.sourceFrameIndex);
-
-            if (uniqueFrames.size() == 1) {
-                singleStreaks.add(track);
-            } else {
-                if (track.isStreakTrack) streakTracks.add(track);
-                else movingTargets.add(track);
-            }
-        }
-        singleStreaks = sortTracksForFrameDisplay(singleStreaks);
         for (ResidualTransientAnalysis.LocalRescueCandidate candidate : localRescueCandidates) {
             Track residualTrack = ResidualReviewSectionWriter.buildResidualTrack(candidate.points);
             if (residualTrack.points != null && !residualTrack.points.isEmpty()) {

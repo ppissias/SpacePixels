@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util;
 
+import eu.startales.spacepixels.util.reporting.FindingCategory;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogueStore;
 import eu.startales.spacepixels.util.skycatalog.SkyField;
@@ -105,9 +106,12 @@ public final class VariableStarOverlay {
         if (catalogue != null && (catalogue.field == null || !SkyField.of(transformer, width, height).isSameFieldAs(catalogue.field))) {
             catalogue = null;
         }
+        var numbers = FindingCategory.variableNumbers(stars);
         for (StarLightCurve star : stars) {
-            if (star.tier != VariabilityTier.HIGH_CONFIDENCE && star.tier != VariabilityTier.POSSIBLE) continue;
-            candidates.add(new Candidate("V" + (candidates.size() + 1), star, catalogueName(catalogue, transformer, star.x, star.y)));
+            Integer number = numbers.get(star.id);
+            if (number == null) continue;
+            candidates.add(new Candidate(FindingCategory.VARIABLE_STAR.id(number),
+                    star, catalogueName(catalogue, transformer, star.x, star.y)));
         }
         return new VariableStarOverlay(candidates, paths, width, height);
     }

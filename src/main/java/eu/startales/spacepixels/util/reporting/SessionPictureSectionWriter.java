@@ -193,29 +193,29 @@ final class SessionPictureSectionWriter {
         double marker = width / 140.0;
         double offset = width / 160.0;
         int count = 0;
-        count += tracks(svg, context.streakTracks, DetectionReportGenerator.GLOBAL_MAP_STREAK_TRACK_COLOR, "ST", offset);
-        count += tracks(svg, context.movingTargets, DetectionReportGenerator.GLOBAL_MAP_MOVING_TARGET_COLOR, "T", offset);
-        count += tracks(svg, localRescueTracks, DetectionReportGenerator.GLOBAL_MAP_LOCAL_RESCUE_COLOR, "LR", offset);
+        count += tracks(svg, context.streakTracks, DetectionReportGenerator.GLOBAL_MAP_STREAK_TRACK_COLOR, FindingCategory.STREAK_TRACK, context, offset);
+        count += tracks(svg, context.movingTargets, DetectionReportGenerator.GLOBAL_MAP_MOVING_TARGET_COLOR, FindingCategory.MOVING_TARGET, context, offset);
+        count += tracks(svg, localRescueTracks, DetectionReportGenerator.GLOBAL_MAP_LOCAL_RESCUE_COLOR, FindingCategory.LOCAL_RESCUE, context, offset);
         int index = 1;
         for (ResidualTransientAnalysis.LocalActivityCluster cluster : context.localActivityClusters) {
             if (cluster != null && cluster.points != null && !cluster.points.isEmpty()) {
                 double x = cluster.metrics != null ? cluster.metrics.centroidX : cluster.points.get(0).x;
                 double y = cluster.metrics != null ? cluster.metrics.centroidY : cluster.points.get(0).y;
                 double radius = Math.max(marker, (cluster.metrics != null ? cluster.metrics.clusterRadiusPixels : 0) + marker / 2);
-                circle(svg, x, y, radius, DetectionReportGenerator.GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, "LC" + index, true);
+                circle(svg, x, y, radius, DetectionReportGenerator.GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, context.findingId(FindingCategory.LOCAL_ACTIVITY, index), true);
                 count++;
             }
             index++;
         }
         index = 1;
         for (DetectedObject candidate : context.slowMoverCandidates) {
-            circle(svg, candidate.x, candidate.y, marker, DetectionReportGenerator.GLOBAL_MAP_DEEP_STACK_COLOR, "DS" + index++, false);
+            circle(svg, candidate.x, candidate.y, marker, DetectionReportGenerator.GLOBAL_MAP_DEEP_STACK_COLOR, context.findingId(FindingCategory.SLOW_MOVER, index++), false);
             count++;
         }
         index = 1;
         for (AnomalyDetection anomaly : context.anomalies) {
             if (anomaly.object != null) {
-                circle(svg, anomaly.object.x, anomaly.object.y, marker, DetectionReportGenerator.GLOBAL_MAP_ANOMALY_COLOR, "A" + index, false);
+                circle(svg, anomaly.object.x, anomaly.object.y, marker, DetectionReportGenerator.GLOBAL_MAP_ANOMALY_COLOR, context.findingId(FindingCategory.ANOMALY, index), false);
                 count++;
             }
             index++;
@@ -224,7 +224,7 @@ final class SessionPictureSectionWriter {
         for (Track streak : context.singleStreaks) {
             if (streak.points != null && !streak.points.isEmpty()) {
                 DetectedObject point = streak.points.get(0);
-                circle(svg, point.x, point.y, marker, DetectionReportGenerator.GLOBAL_MAP_SINGLE_STREAK_COLOR, "S" + index, false);
+                circle(svg, point.x, point.y, marker, DetectionReportGenerator.GLOBAL_MAP_SINGLE_STREAK_COLOR, context.findingId(FindingCategory.SINGLE_STREAK, index), false);
                 count++;
             }
             index++;
@@ -235,10 +235,11 @@ final class SessionPictureSectionWriter {
         return svgStart("detections", width, height, true) + svg + "</svg>";
     }
 
-    private static int tracks(StringBuilder svg, List<Track> tracks, Color color, String prefix, double offset) {
+    /** Draws borrowed track geometry with IDs resolved from the prepared report rather than a separate prefix rule. */
+    private static int tracks(StringBuilder svg, List<Track> tracks, Color color, FindingCategory category, DetectionReportContext context, double offset) {
         int count = 0;
         int index = 1;
-        svg.append("<g data-category='").append(prefix).append("'>");
+        svg.append("<g data-category='").append(category.prefix()).append("'>");
         for (Track track : tracks) {
             if (track.points == null || track.points.isEmpty()) {
                 index++;
@@ -249,11 +250,11 @@ final class SessionPictureSectionWriter {
                 points.append(String.format(Locale.US, "%.1f,%.1f ", point.x + 0.5, point.y + 0.5));
             }
             String colour = hex(color);
-            svg.append("<a href='#").append(ReportPresentation.anchor(prefix + index)).append("'><polyline points='")
+            svg.append("<a href='#").append(ReportPresentation.anchor(context.findingId(category, index))).append("'><polyline points='")
                     .append(points.toString().trim()).append("' fill='none' stroke='").append(colour)
                     .append("' stroke-width='2' vector-effect='non-scaling-stroke'/></a>");
             DetectedObject first = track.points.get(0);
-            label(svg, first.x + 0.5 + offset, first.y + 0.5 - offset, prefix + index, "#ffffff");
+            label(svg, first.x + 0.5 + offset, first.y + 0.5 - offset, context.findingId(category, index), "#ffffff");
             count++;
             index++;
         }

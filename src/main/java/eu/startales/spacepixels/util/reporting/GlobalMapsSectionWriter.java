@@ -56,7 +56,7 @@ final class GlobalMapsSectionWriter {
                 reportContext.movingTargets,
                 localRescueTracks,
                 reportContext.localActivityClusters,
-                reportContext.slowMoverCandidates, reportContext.settings);
+                reportContext.slowMoverCandidates, reportContext);
         SessionCatalogue sessionCatalogue = SessionCatalogue.of(reportContext);
         int catalogueObjects = CatalogueMapPainter.paint(globalMap, sessionCatalogue.catalogue,
                 reportContext.astrometryContext != null ? reportContext.astrometryContext.getTransformer() : null);

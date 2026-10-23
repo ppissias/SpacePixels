@@ -784,8 +784,8 @@ final class PhotometryReportSectionWriter {
                                            StarLightCurve star, int number, SessionCatalogue sessionCatalogue) throws IOException {
         boolean high = star.tier == VariabilityTier.HIGH_CONFIDENCE;
         String tierColor = high ? PhotometrySvgChart.SERIES_BLUE : PhotometrySvgChart.SERIES_ORANGE;
-        report.println("<div class='detection-card' id='variable-v" + number + "' style='border-left-color:" + tierColor + ";'>");
-        report.println("<div class='detection-title'>V" + number + " &middot; " + tierLabel(star.tier) + " &middot; star #" + star.id + "</div>");
+        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.VARIABLE_STAR, number) + "' style='border-left-color:" + tierColor + ";'>");
+        report.println("<div class='detection-title'>" + FindingCategory.VARIABLE_STAR.id(number) + " &middot; " + tierLabel(star.tier) + " &middot; star #" + star.id + "</div>");
         report.println("<div class='astro-note' style='margin-top:-8px; margin-bottom:8px;'>"
                 + DetectionReportGenerator.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, star.x, star.y))
                 + "</div>");
@@ -915,8 +915,8 @@ final class PhotometryReportSectionWriter {
         VariableStarPresentation presentation = context.variablePresentation(analysis);
         for (StarLightCurve star : candidates) {
             int number = presentation.number(star);
-            String label = "V" + number;
-            String name = presentation.hasCard(star) ? "<a href='#variable-v" + number + "'>" + label + "</a>" : label;
+            String label = FindingCategory.VARIABLE_STAR.id(number);
+            String name = presentation.hasCard(star) ? "<a href='#" + context.findingAnchor(FindingCategory.VARIABLE_STAR, number) + "'>" + label + "</a>" : label;
             boolean high = star.tier == VariabilityTier.HIGH_CONFIDENCE;
             report.print("<tr><td><strong>" + name + "</strong></td>"
                     + "<td style='color:" + (high ? PhotometrySvgChart.SERIES_BLUE : PhotometrySvgChart.SERIES_ORANGE) + ";'>" + tierLabel(star.tier) + "</td>"
@@ -938,7 +938,7 @@ final class PhotometryReportSectionWriter {
                 String fallback = catalogueStarHtml(sessionCatalogue, target);
                 String sidecar = "photometry_v" + number + "_vsx.json";
                 String hidden = DetectionReportAstrometry.buildLiveRenderButtonHtml("vsx", vsxTapUrl(target), "photometry-v" + number + "-vsx-row",
-                        "VSX", sidecar, String.format(Locale.US, "AAVSO VSX within %.0f arcsec of V%d", target.radiusArcsec, number))
+                        "VSX", sidecar, String.format(Locale.US, "AAVSO VSX within %.0f arcsec of %s", target.radiusArcsec, FindingCategory.VARIABLE_STAR.id(number)))
                         .replace("<button ", "<button style='display:none' data-identify-all='1' ");
                 report.print("<td><span data-known-as-sidecar='" + sidecar + "' data-catalogue-star='"
                         + DetectionReportGenerator.escapeHtml(fallback) + "'>" + (fallback.isEmpty() ? "" : fallback + "<br>")
@@ -1189,7 +1189,7 @@ final class PhotometryReportSectionWriter {
         html.append("<div class='id-links'>");
         html.append(DetectionReportAstrometry.buildLiveRenderButtonHtml("vsx", vsxTapUrl(target), slotId,
                 "Check VSX Here", sidecar,
-                String.format(Locale.US, "AAVSO VSX within %.0f arcsec of V%d", target.radiusArcsec, number)));
+                String.format(Locale.US, "AAVSO VSX within %.0f arcsec of %s", target.radiusArcsec, FindingCategory.VARIABLE_STAR.id(number))));
         html.append(vsxBrowserLink(target));
         html.append("</div>");
         html.append(DetectionReportAstrometry.buildLiveRenderContainerHtml(slotId));
@@ -1532,7 +1532,8 @@ final class PhotometryReportSectionWriter {
     private static void writeCsvExports(DetectionReportContext context, VariableStarAnalysis analysis) throws IOException {
         File exportDir = context.exportDir;
         Map<Integer, String> labels = new LinkedHashMap<>();
-        for (StarLightCurve star : analysis.candidates) if (star.tier == VariabilityTier.HIGH_CONFIDENCE || star.tier == VariabilityTier.POSSIBLE) labels.put(star.id, "V" + (labels.size() + 1));
+        var presentation = context.variablePresentation(analysis);
+        for (StarLightCurve star : presentation.identities) labels.put(star.id, presentation.label(star));
         try (AtomicReportFile output = new AtomicReportFile(new File(exportDir, "photometry_stars.csv"))) {
             PrintWriter csv = output.writer();
             csv.println("star_id,x,y,mean_inst_mag,tier,usable_frames,scatter,expected_scatter,excess_scatter,scatter_z,stetson_j,stetson_j_z,amplitude,failed_gates,not_scored_reason,candidate_label,ra_deg,dec_deg,vsx_matches,nearest_vsx_arcsec");
