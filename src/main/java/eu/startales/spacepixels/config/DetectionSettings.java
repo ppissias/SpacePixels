@@ -9,7 +9,8 @@ public final class DetectionSettings {
             ResidualAnalysisSettings.all(),
             StreakDetectionSettings.all(),
             MovingObjectsSettings.all(),
-            AnomalyDetectionSettings.all())
+            AnomalyDetectionSettings.all(),
+            SlowMoversSettings.all())
             .flatMap(List::stream).toList();
 
     /** Prevents constructing the fixed definition registry. */

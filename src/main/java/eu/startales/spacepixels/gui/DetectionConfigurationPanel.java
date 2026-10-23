@@ -20,6 +20,7 @@ import eu.startales.spacepixels.config.SpacePixelsSettingsFiles;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.DetectionSetting;
 import eu.startales.spacepixels.config.ResidualAnalysisSettings;
+import eu.startales.spacepixels.config.SlowMoversSettings;
 import eu.startales.spacepixels.config.AnomalyDetectionSettings;
 import eu.startales.spacepixels.config.MovingObjectsSettings;
 import eu.startales.spacepixels.config.StreakDetectionSettings;
@@ -975,20 +976,20 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createTabIntro("Find elongated shapes in the maximum stack and compare them with sources in the median stack. These are candidates to review, not confirmed moving objects. The sigma, grow and minimum pixels below apply to the stacks, whose noise differs from single frames, so they are set separately from the per-frame detection settings (Auto-Tune does not change them)."));
 
         panel.add(createSectionHeader("Common Settings"));
-        chkEnableSlowMovers = addCheckboxRow(panel, "Enable Slow-Mover Detection", "Look for elongated shapes in the maximum stack after poor-quality frames are removed.<br>Results are candidates for review, not confirmed tracks.", jTransientConfig.enableSlowMoverDetection);
-        spinMasterSlowMoverSigma = addRow(panel, "Slow-Mover Sigma", "A pixel must rise this far above the estimated stack background to start a source.<br>Used on both stacks. Lower values find fainter sources but may add noise.", doubleSpinnerModel(jTransientConfig.masterSlowMoverSigmaMultiplier, 0.5, 15.0, 0.1));
-        spinMasterSlowMoverGrowSigma = addRow(panel, "Slow-Mover Grow Sigma", "Neighboring pixels above this lower brightness threshold join a source.<br>Used on both stacks. Lower values enlarge shapes and may merge sources.<br>Cannot exceed Slow-Mover Sigma.", doubleSpinnerModel(jTransientConfig.masterSlowMoverGrowSigmaMultiplier, 0.1, 15.0, 0.1));
-        spinMasterSlowMoverMinPixels = addRow(panel, "Slow-Mover Min Pixels", "Fewest connected pixels required to keep a source in either stack.<br>Higher values reject small noise spots but may miss small sources.", intSpinnerModel(jTransientConfig.masterSlowMoverMinPixels, 1, 2000, 1));
+        chkEnableSlowMovers = addTypedCheckbox(panel, SlowMoversSettings.ENABLE_SLOW_MOVER_DETECTION);
+        spinMasterSlowMoverSigma = addTypedDouble(panel, SlowMoversSettings.MASTER_SLOW_MOVER_SIGMA_MULTIPLIER, 0.5, 15.0, 0.1);
+        spinMasterSlowMoverGrowSigma = addTypedDouble(panel, SlowMoversSettings.MASTER_SLOW_MOVER_GROW_SIGMA_MULTIPLIER, 0.1, 15.0, 0.1);
+        spinMasterSlowMoverMinPixels = addTypedInteger(panel, SlowMoversSettings.MASTER_SLOW_MOVER_MIN_PIXELS, 1, 2000, 1);
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Shape And Evidence"));
-        spinSlowMoverMinAxisRatio = addRow(panel, "Min Axis Ratio", "Length divided by width of a candidate's detected shape; 1 is roughly round.<br>Raise this to reject rounder sources.", doubleSpinnerModel(jTransientConfig.slowMoverMinAxisRatio, 1.0, 20.0, 0.05));
-        spinSlowMoverMaxAxisRatio = addRow(panel, "Max Axis Ratio", "Largest allowed length-to-width ratio for a candidate.<br>Lower this to reject longer, thinner streaks. Cannot be below Min Axis Ratio.", doubleSpinnerModel(jTransientConfig.slowMoverMaxAxisRatio, 1.0, 20.0, 0.05));
-        spinSlowMoverMinFillFactor = addRow(panel, "Min Fill Factor", "How solid the shape must be inside a rectangle aligned with it.<br>Fill factor is the fraction of that rectangle covered by detected pixels.<br>Higher values reject sparse, bent, or branched shapes. Zero disables it.", doubleSpinnerModel(jTransientConfig.slowMoverMinFillFactor, 0.0, 1.0, 0.01));
-        spinSlowMoverMedianSupportOverlapFraction = addRow(panel, "Median Mask Min Overlap", "Minimum share of candidate pixels also in the median-stack source mask.<br>0.20 requires 20% overlap; 0 does not require overlap.<br>Higher values require more persistence.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportOverlapFraction, 0.0, 1.0, 0.01));
-        spinSlowMoverMedianSupportMaxOverlapFraction = addRow(panel, "Median Mask Max Overlap", "Largest share of candidate pixels allowed in the median-stack source mask.<br>0.80 rejects over 80% overlap. Lower values reject more stationary sources.<br>1 disables this limit.", doubleSpinnerModel(jTransientConfig.slowMoverMedianSupportMaxOverlapFraction, 0.0, 1.0, 0.01));
-        spinSlowMoverMinFrameSupport = addRow(panel, "Min Frame Support (%)", "Minimum share of usable frames with significant signal inside the candidate shape.<br>Raise to require evidence in more frames; zero disables this rejection.<br>Skipped if fewer than two usable frames. This does not confirm motion.", doubleSpinnerModel(jTransientConfig.slowMoverMinFrameSupport, 0.0, 100.0, 1.0));
-        spinSlowMoverMaxStationaryLikelihood = addRow(panel, "Max Stationary Likelihood (%)", "Largest allowed share of supported frame positions clustered near one spot.<br>Lower to reject more stationary-looking candidates; 100 disables it.<br>Skipped if evidence is insufficient. This heuristic is not a probability.", doubleSpinnerModel(jTransientConfig.slowMoverMaxStationaryLikelihood, 0.0, 100.0, 1.0));
+        spinSlowMoverMinAxisRatio = addTypedDouble(panel, SlowMoversSettings.SLOW_MOVER_MIN_AXIS_RATIO, 1.0, 20.0, 0.05);
+        spinSlowMoverMaxAxisRatio = addTypedDouble(panel, SlowMoversSettings.SLOW_MOVER_MAX_AXIS_RATIO, 1.0, 20.0, 0.05);
+        spinSlowMoverMinFillFactor = addTypedDouble(panel, SlowMoversSettings.SLOW_MOVER_MIN_FILL_FACTOR, 0.0, 1.0, 0.01);
+        spinSlowMoverMedianSupportOverlapFraction = addTypedDouble(panel, SlowMoversSettings.SLOW_MOVER_MEDIAN_SUPPORT_OVERLAP_FRACTION, 0.0, 1.0, 0.01);
+        spinSlowMoverMedianSupportMaxOverlapFraction = addTypedDouble(panel, SlowMoversSettings.SLOW_MOVER_MEDIAN_SUPPORT_MAX_OVERLAP_FRACTION, 0.0, 1.0, 0.01);
+        spinSlowMoverMinFrameSupport = addTypedDouble(panel, SlowMoversSettings.SLOW_MOVER_MIN_FRAME_SUPPORT, 0.0, 100.0, 1.0);
+        spinSlowMoverMaxStationaryLikelihood = addTypedDouble(panel, SlowMoversSettings.SLOW_MOVER_MAX_STATIONARY_LIKELIHOOD, 0.0, 100.0, 1.0);
 
         return panel;
     }
@@ -1412,20 +1413,9 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.detectionSigmaMultiplier = ((Number) spinDetectionSigma.getValue()).doubleValue();
             jTransientConfig.growSigmaMultiplier = ((Number) spinGrowSigma.getValue()).doubleValue();
             jTransientConfig.minDetectionPixels = ((Number) spinMinPixels.getValue()).intValue();
-            jTransientConfig.enableSlowMoverDetection = chkEnableSlowMovers.isSelected();
             jTransientConfig.masterSigmaMultiplier = ((Number) spinMasterSigma.getValue()).doubleValue();
             jTransientConfig.masterGrowSigmaMultiplier = ((Number) spinMasterGrowSigma.getValue()).doubleValue();
             jTransientConfig.masterMinDetectionPixels = ((Number) spinMasterMinPix.getValue()).intValue();
-            jTransientConfig.masterSlowMoverSigmaMultiplier = ((Number) spinMasterSlowMoverSigma.getValue()).doubleValue();
-            jTransientConfig.masterSlowMoverGrowSigmaMultiplier = ((Number) spinMasterSlowMoverGrowSigma.getValue()).doubleValue();
-            jTransientConfig.slowMoverMinAxisRatio = ((Number) spinSlowMoverMinAxisRatio.getValue()).doubleValue();
-            jTransientConfig.slowMoverMaxAxisRatio = ((Number) spinSlowMoverMaxAxisRatio.getValue()).doubleValue();
-            jTransientConfig.slowMoverMinFillFactor = ((Number) spinSlowMoverMinFillFactor.getValue()).doubleValue();
-            jTransientConfig.masterSlowMoverMinPixels = ((Number) spinMasterSlowMoverMinPixels.getValue()).intValue();
-            jTransientConfig.slowMoverMedianSupportOverlapFraction = ((Number) spinSlowMoverMedianSupportOverlapFraction.getValue()).doubleValue();
-            jTransientConfig.slowMoverMedianSupportMaxOverlapFraction = ((Number) spinSlowMoverMedianSupportMaxOverlapFraction.getValue()).doubleValue();
-            jTransientConfig.slowMoverMinFrameSupport = ((Number) spinSlowMoverMinFrameSupport.getValue()).doubleValue();
-            jTransientConfig.slowMoverMaxStationaryLikelihood = ((Number) spinSlowMoverMaxStationaryLikelihood.getValue()).doubleValue();
 
             // --- Apply Tracker Settings to the POJO ---
             jTransientConfig.maxStarJitter = ((Number) spinStarJitter.getValue()).doubleValue();
@@ -1673,18 +1663,7 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinMasterGrowSigma, config.masterGrowSigmaMultiplier);
         setSpinnerValueClamped(spinMasterMinPix, config.masterMinDetectionPixels);
         setSpinnerValueClamped(spinMinPixels, config.minDetectionPixels);
-        chkEnableSlowMovers.setSelected(config.enableSlowMoverDetection);
 
-        setSpinnerValueClamped(spinMasterSlowMoverSigma, config.masterSlowMoverSigmaMultiplier);
-        setSpinnerValueClamped(spinMasterSlowMoverGrowSigma, config.masterSlowMoverGrowSigmaMultiplier);
-        setSpinnerValueClamped(spinSlowMoverMinAxisRatio, config.slowMoverMinAxisRatio);
-        setSpinnerValueClamped(spinSlowMoverMaxAxisRatio, config.slowMoverMaxAxisRatio);
-        setSpinnerValueClamped(spinSlowMoverMinFillFactor, config.slowMoverMinFillFactor);
-        setSpinnerValueClamped(spinMasterSlowMoverMinPixels, config.masterSlowMoverMinPixels);
-        setSpinnerValueClamped(spinSlowMoverMedianSupportOverlapFraction, config.slowMoverMedianSupportOverlapFraction);
-        setSpinnerValueClamped(spinSlowMoverMedianSupportMaxOverlapFraction, config.slowMoverMedianSupportMaxOverlapFraction);
-        setSpinnerValueClamped(spinSlowMoverMinFrameSupport, config.slowMoverMinFrameSupport);
-        setSpinnerValueClamped(spinSlowMoverMaxStationaryLikelihood, config.slowMoverMaxStationaryLikelihood);
 
         setSpinnerValueClamped(spinStarJitter, config.maxStarJitter);
         setSpinnerValueClamped(spinMaxMaskOverlapFraction, config.maxMaskOverlapFraction);
