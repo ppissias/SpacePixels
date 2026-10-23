@@ -29,9 +29,9 @@ public class AutoTunerRunnerTest {
     @Test
     public void listenerFailureRemainsAvailable() {
         var failure = new IllegalStateException("listener failed");
-        assertSame(failure, assertThrows(IllegalStateException.class, () -> AutoTunerRunner.run(frames(),
+        assertSame(failure, assertThrows(io.github.ppissias.jtransient.execution.OperationFailedException.class, () -> AutoTunerRunner.run(frames(),
                 new DetectionConfig(), JTransientAutoTuner.AutoTuneProfile.MEDIUM, AutoTunerRunner.Algorithm.LEGACY,
-                (percent, message) -> { throw failure; })));
+                (percent, message) -> { throw failure; })).getCause());
     }
 
     /** Cancellation remains distinct from an unsuccessful scientific tuning result. */

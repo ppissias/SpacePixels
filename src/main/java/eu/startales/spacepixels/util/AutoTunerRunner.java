@@ -69,9 +69,9 @@ public final class AutoTunerRunner {
                                                           TransientEngineProgressListener listener) {
         try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
             if (algorithm == Algorithm.LEGACY) {
-                return JTransientAutoTuner.tuneAvailableSnapshot(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
+                return JTransientAutoTuner.tuneAvailable(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
             }
-            return CalibratedAutoTuner.tuneSnapshot(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
+            return CalibratedAutoTuner.tune(candidateFrames, baseConfig, profile, listener, CancellationScope.current());
         }
     }
 }
