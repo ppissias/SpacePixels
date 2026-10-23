@@ -8,7 +8,8 @@ public final class DetectionSettings {
     private static final List<DetectionSetting<?>> DEFINITIONS = Stream.of(
             ResidualAnalysisSettings.all(),
             StreakDetectionSettings.all(),
-            MovingObjectsSettings.all())
+            MovingObjectsSettings.all(),
+            AnomalyDetectionSettings.all())
             .flatMap(List::stream).toList();
 
     /** Prevents constructing the fixed definition registry. */

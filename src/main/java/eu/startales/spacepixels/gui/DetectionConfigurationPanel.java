@@ -20,6 +20,7 @@ import eu.startales.spacepixels.config.SpacePixelsSettingsFiles;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.DetectionSetting;
 import eu.startales.spacepixels.config.ResidualAnalysisSettings;
+import eu.startales.spacepixels.config.AnomalyDetectionSettings;
 import eu.startales.spacepixels.config.MovingObjectsSettings;
 import eu.startales.spacepixels.config.StreakDetectionSettings;
 import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
@@ -953,15 +954,15 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createTabIntro("Anomalies are either transient high energy events or transient larger but fainter events. Here are the controls for single-frame anomaly rescue. A faint streak through a star can change the star's shape and produce an anomaly; when that anomaly lies on a known streak's path, it becomes part of that streak."));
 
         panel.add(createSectionHeader("Common Settings"));
-        chkEnableAnomalyRescue = addCheckboxRow(panel, "Enable Anomaly Rescue", "Keeps single-frame anomaly rescue active for flashes and fragments that do not become full multi-frame tracks.", jTransientConfig.enableAnomalyRescue);
-        spinAnomalyMinPeakSigma = addRow(panel, "Anomaly Min Peak Sigma", "Minimum peak signal-to-noise required for a single-frame point source to be rescued as an anomaly. Higher values are stricter.", doubleSpinnerModel(jTransientConfig.anomalyMinPeakSigma, 1.0, 50.0, 0.1));
+        chkEnableAnomalyRescue = addTypedCheckbox(panel, AnomalyDetectionSettings.ENABLE_ANOMALY_RESCUE);
+        spinAnomalyMinPeakSigma = addTypedDouble(panel, AnomalyDetectionSettings.ANOMALY_MIN_PEAK_SIGMA, 1.0, 50.0, 0.1);
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Anomaly Thresholds And Grouping"));
-        spinAnomalyMinPixels = addRow(panel, "Anomaly Min Pixels", "Minimum size required for a single-frame point source to be rescued. Higher values reject more hot pixels and cosmic rays.", intSpinnerModel(jTransientConfig.anomalyMinPixels, 1, 2000, 1));
-        spinAnomalyMinIntegratedSigma = addRow(panel, "Anomaly Min Integrated Sigma", "Minimum integrated signal-to-noise required for the broader single-frame anomaly rescue path. Higher values demand stronger total support from faint but larger flashes.", doubleSpinnerModel(jTransientConfig.anomalyMinIntegratedSigma, 1.0, 200.0, 0.5));
-        spinAnomalyMinIntegratedPixels = addRow(panel, "Anomaly Min Integrated Pixels", "Minimum footprint size required for the integrated-sigma anomaly path. Higher values reject small high-energy fragments from the broader rescue branch.", intSpinnerModel(jTransientConfig.anomalyMinIntegratedPixels, 1, 2000, 1));
-        spinAnomalyMinPeakSigmaFloor = addRow(panel, "Anomaly Min Peak Sigma Floor", "Safety floor for diffuse anomaly rescue. Even broader anomalies must retain at least some local prominence to avoid low-contrast mush.", doubleSpinnerModel(jTransientConfig.anomalyMinPeakSigmaFloor, 0.0, 20.0, 0.1));
+        spinAnomalyMinPixels = addTypedInteger(panel, AnomalyDetectionSettings.ANOMALY_MIN_PIXELS, 1, 2000, 1);
+        spinAnomalyMinIntegratedSigma = addTypedDouble(panel, AnomalyDetectionSettings.ANOMALY_MIN_INTEGRATED_SIGMA, 1.0, 200.0, 0.5);
+        spinAnomalyMinIntegratedPixels = addTypedInteger(panel, AnomalyDetectionSettings.ANOMALY_MIN_INTEGRATED_PIXELS, 1, 2000, 1);
+        spinAnomalyMinPeakSigmaFloor = addTypedDouble(panel, AnomalyDetectionSettings.ANOMALY_MIN_PEAK_SIGMA_FLOOR, 0.0, 20.0, 0.1);
 
         return panel;
     }
@@ -1430,12 +1431,6 @@ public class DetectionConfigurationPanel extends JPanel {
             jTransientConfig.maxStarJitter = ((Number) spinStarJitter.getValue()).doubleValue();
             jTransientConfig.maxMaskOverlapFraction = ((Number) spinMaxMaskOverlapFraction.getValue()).doubleValue();
 
-            jTransientConfig.enableAnomalyRescue = chkEnableAnomalyRescue.isSelected();
-            jTransientConfig.anomalyMinPeakSigma = ((Number) spinAnomalyMinPeakSigma.getValue()).doubleValue();
-            jTransientConfig.anomalyMinPixels = ((Number) spinAnomalyMinPixels.getValue()).intValue();
-            jTransientConfig.anomalyMinIntegratedSigma = ((Number) spinAnomalyMinIntegratedSigma.getValue()).doubleValue();
-            jTransientConfig.anomalyMinIntegratedPixels = ((Number) spinAnomalyMinIntegratedPixels.getValue()).intValue();
-            jTransientConfig.anomalyMinPeakSigmaFloor = ((Number) spinAnomalyMinPeakSigmaFloor.getValue()).doubleValue();
             typedBindings.forEach(binding -> binding.applyTo(jTransientConfig));
 
             autoTuneMaxCandidateFrames = ((Number) spinAutoTuneMaxCandidateFrames.getValue()).intValue();
@@ -1695,12 +1690,6 @@ public class DetectionConfigurationPanel extends JPanel {
         setSpinnerValueClamped(spinMaxMaskOverlapFraction, config.maxMaskOverlapFraction);
 
 
-        chkEnableAnomalyRescue.setSelected(config.enableAnomalyRescue);
-        setSpinnerValueClamped(spinAnomalyMinPeakSigma, config.anomalyMinPeakSigma);
-        setSpinnerValueClamped(spinAnomalyMinPixels, config.anomalyMinPixels);
-        setSpinnerValueClamped(spinAnomalyMinIntegratedSigma, config.anomalyMinIntegratedSigma);
-        setSpinnerValueClamped(spinAnomalyMinIntegratedPixels, config.anomalyMinIntegratedPixels);
-        setSpinnerValueClamped(spinAnomalyMinPeakSigmaFloor, config.anomalyMinPeakSigmaFloor);
         typedBindings.forEach(binding -> binding.loadFrom(config));
 
         setSpinnerValueClamped(spinStarCountSigma, config.starCountSigmaDeviation);
