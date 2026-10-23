@@ -10,9 +10,9 @@
 
 package eu.startales.spacepixels.gui;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.engine.FrameTransients;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 
@@ -87,10 +87,10 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
         if (frame == null) {
             return Result.problem("The image data of " + transients.filename + " was not found.");
         }
-        List<SourceExtractor.DetectedObject> objects = transients.transients != null
+        List<DetectedObject> objects = transients.transients != null
                 ? transients.transients : Collections.emptyList();
         int count = 0;
-        for (SourceExtractor.DetectedObject object : objects) {
+        for (DetectedObject object : objects) {
             if (!object.isNoise) {
                 count++;
             }

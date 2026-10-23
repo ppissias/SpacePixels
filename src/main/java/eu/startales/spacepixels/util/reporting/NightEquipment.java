@@ -9,11 +9,11 @@
  */
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.util.skycatalog.SkyProjection;
-import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 
 import java.util.ArrayList;
@@ -170,7 +170,7 @@ final class NightEquipment {
     }
 
     /** Measures the session for the report; empty when it cannot be measured, so the report is still written. */
-    static NightEquipment measure(DetectionReportContext context, PipelineTelemetry telemetry, List<SourceExtractor.DetectedObject> masterStars) {
+    static NightEquipment measure(DetectionReportContext context, PipelineTelemetry telemetry, List<DetectedObject> masterStars) {
         long start = System.currentTimeMillis();
         try {
             List<Integer> kept = new ArrayList<>();
@@ -199,7 +199,7 @@ final class NightEquipment {
     }
 
     static NightEquipment measure(List<short[][]> rawFrames, List<Integer> kept, FitsFileInformation[] files,
-                                  List<SourceExtractor.DetectedObject> masterStars, WcsCoordinateTransformer transformer,
+                                  List<DetectedObject> masterStars, WcsCoordinateTransformer transformer,
                                   SkyCatalogue catalogue) {
         NightEquipment result = new NightEquipment();
         if (rawFrames.isEmpty() || kept.isEmpty() || masterStars == null || masterStars.isEmpty()) {
@@ -213,7 +213,7 @@ final class NightEquipment {
         // The stars: isolated, spread over the field, brightest first.
         double fwhmHint = medianFwhm(masterStars);
         int radius = (int) Math.max(8, Math.min(36, Math.ceil(3.5 * fwhmHint) + 3));
-        List<SourceExtractor.DetectedObject> stars = selectStars(masterStars, result.width, result.height, radius);
+        List<DetectedObject> stars = selectStars(masterStars, result.width, result.height, radius);
         result.starsSelected = stars.size();
         if (stars.size() < 20) {
             result.notes.add("Too few isolated stars to measure.");
@@ -273,7 +273,7 @@ final class NightEquipment {
 
     /** Measures every star of one frame, and its sky background; null when the frame cannot be measured. */
     private FrameWork measureFrame(List<short[][]> rawFrames, int index, FitsFileInformation[] files,
-                                   List<SourceExtractor.DetectedObject> stars, int radius, double fwhmHint, String majoritySide) {
+                                   List<DetectedObject> stars, int radius, double fwhmHint, String majoritySide) {
         short[][] data = rawFrames.get(index);
         if (data == null || data.length != height || data[0].length != width) {
             return null;
@@ -296,7 +296,7 @@ final class NightEquipment {
         double peakMax = 0;
         List<Sample> frameSamples = new ArrayList<>();
         for (int s = 0; s < stars.size(); s++) {
-            SourceExtractor.DetectedObject star = stars.get(s);
+            DetectedObject star = stars.get(s);
             StarShape shape = StarShape.measure(data, star.x, star.y, radius, fwhmHint, APERTURE_FACTOR);
             if (shape == null || shape.snr < FLUX_SNR) {
                 continue;
@@ -482,9 +482,9 @@ final class NightEquipment {
     // STARS
     // ==========================================
 
-    private static double medianFwhm(List<SourceExtractor.DetectedObject> stars) {
+    private static double medianFwhm(List<DetectedObject> stars) {
         List<Double> sizes = new ArrayList<>();
-        for (SourceExtractor.DetectedObject star : stars) {
+        for (DetectedObject star : stars) {
             if (!star.isStreak && !star.isNoise && star.fwhm > 0 && Double.isFinite(star.fwhm)) {
                 sizes.add(star.fwhm);
             }
@@ -493,28 +493,28 @@ final class NightEquipment {
     }
 
     /** Isolated stars away from the edges, the brightest of each part of the field, at most {@link #MAX_STARS}. */
-    private static List<SourceExtractor.DetectedObject> selectStars(List<SourceExtractor.DetectedObject> masterStars,
+    private static List<DetectedObject> selectStars(List<DetectedObject> masterStars,
                                                                     int width, int height, int radius) {
-        List<SourceExtractor.DetectedObject> candidates = new ArrayList<>();
-        for (SourceExtractor.DetectedObject star : masterStars) {
+        List<DetectedObject> candidates = new ArrayList<>();
+        for (DetectedObject star : masterStars) {
             if (!star.isStreak && !star.isNoise && star.totalFlux > 0 && star.x >= radius + 2 && star.y >= radius + 2
                     && star.x < width - radius - 3 && star.y < height - radius - 3) {
                 candidates.add(star);
             }
         }
         double cell = radius + 2;
-        Map<Long, List<SourceExtractor.DetectedObject>> grid = new HashMap<>();
-        for (SourceExtractor.DetectedObject star : masterStars) {
+        Map<Long, List<DetectedObject>> grid = new HashMap<>();
+        for (DetectedObject star : masterStars) {
             grid.computeIfAbsent(key((int) Math.floor(star.x / cell), (int) Math.floor(star.y / cell)), k -> new ArrayList<>()).add(star);
         }
-        List<SourceExtractor.DetectedObject> isolated = new ArrayList<>();
-        for (SourceExtractor.DetectedObject star : candidates) {
+        List<DetectedObject> isolated = new ArrayList<>();
+        for (DetectedObject star : candidates) {
             boolean alone = true;
             int gx = (int) Math.floor(star.x / cell);
             int gy = (int) Math.floor(star.y / cell);
             for (int i = gx - 1; i <= gx + 1 && alone; i++) {
                 for (int j = gy - 1; j <= gy + 1 && alone; j++) {
-                    for (SourceExtractor.DetectedObject other : grid.getOrDefault(key(i, j), List.of())) {
+                    for (DetectedObject other : grid.getOrDefault(key(i, j), List.of())) {
                         if (other != star && Math.hypot(other.x - star.x, other.y - star.y) < cell
                                 && other.totalFlux > 0.01 * star.totalFlux) {
                             alone = false;
@@ -532,8 +532,8 @@ final class NightEquipment {
         int selectColumns = Math.max(4, (int) Math.round(selectRows * width / (double) height));
         int perCell = Math.max(3, (int) Math.ceil(MAX_STARS / (double) (selectRows * selectColumns)));
         int[] counts = new int[selectRows * selectColumns];
-        List<SourceExtractor.DetectedObject> selected = new ArrayList<>();
-        for (SourceExtractor.DetectedObject star : isolated) {
+        List<DetectedObject> selected = new ArrayList<>();
+        for (DetectedObject star : isolated) {
             int c = Math.min(selectColumns - 1, (int) (star.x / width * selectColumns));
             int r = Math.min(selectRows - 1, (int) (star.y / height * selectRows));
             if (counts[r * selectColumns + c] < perCell) {
@@ -599,7 +599,7 @@ final class NightEquipment {
      * Matches the stars with Gaia and fits, per frame, the zero point (with one colour term for the session); checks
      * that the brightness follows Gaia over the magnitudes (linear data); then gives the sky brightness of each frame.
      */
-    private void calibrate(List<Sample> samples, List<SourceExtractor.DetectedObject> stars, SkyCatalogue catalogue,
+    private void calibrate(List<Sample> samples, List<DetectedObject> stars, SkyCatalogue catalogue,
                            WcsCoordinateTransformer transformer, FitsFileInformation[] files, List<Integer> kept) {
         if (catalogue == null || transformer == null || catalogue.stars.isEmpty()) {
             return;
@@ -746,7 +746,7 @@ final class NightEquipment {
     }
 
     /** Each star's Gaia match (or null): the nearest Gaia star, after the local offset is removed, with no bright neighbour. */
-    private static GaiaMatch[] matchGaia(List<SourceExtractor.DetectedObject> stars, SkyCatalogue catalogue,
+    private static GaiaMatch[] matchGaia(List<DetectedObject> stars, SkyCatalogue catalogue,
                                          WcsCoordinateTransformer transformer, long timestamp, int width, int height) {
         List<double[]> gaia = new ArrayList<>(); // x, y, G, BP-RP
         for (SkyCatalogue.Star star : catalogue.stars) {
@@ -767,7 +767,7 @@ final class NightEquipment {
             dxs.add(new ArrayList<>());
             dys.add(new ArrayList<>());
         }
-        for (SourceExtractor.DetectedObject star : stars) {
+        for (DetectedObject star : stars) {
             double[] nearest = nearest(grid, cell, star.x, star.y, 8);
             if (nearest != null) {
                 int part = part(star.x, star.y, width, height);
@@ -783,7 +783,7 @@ final class NightEquipment {
         }
         GaiaMatch[] matches = new GaiaMatch[stars.size()];
         for (int s = 0; s < stars.size(); s++) {
-            SourceExtractor.DetectedObject star = stars.get(s);
+            DetectedObject star = stars.get(s);
             int part = part(star.x, star.y, width, height);
             double x = star.x - offsetX[part];
             double y = star.y - offsetY[part];

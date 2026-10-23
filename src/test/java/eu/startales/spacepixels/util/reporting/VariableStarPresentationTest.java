@@ -62,7 +62,20 @@ public class VariableStarPresentationTest {
         var files = files(temporary.newFolder());
         List<short[][]> frames = new ArrayList<>(); for (int i = 0; i < 9; i++) frames.add(stack());
         var telemetry = new PipelineTelemetry(); telemetry.totalFramesLoaded = 9; telemetry.totalFramesKept = 9; telemetry.photometryTelemetry = analysis.telemetry;
-        var result = new PipelineResult(List.of(), telemetry, frames.get(0), List.of(), null, null, null, List.of(), List.of(), List.of(), List.of(), ResidualTransientAnalysis.empty(), null, List.of(), frames.get(0), analysis);
+        var result = PipelineResult.builder()
+                .tracks(List.of())
+                .telemetry(telemetry)
+                .masterStackData(frames.get(0))
+                .masterStars(List.of())
+                .slowMoverCandidates(List.of())
+                .anomalies(List.of())
+                .allTransients(List.of())
+                .unclassifiedTransients(List.of())
+                .residualTransientAnalysis(ResidualTransientAnalysis.empty())
+                .driftPoints(List.of())
+                .maximumStackData(frames.get(0))
+                .variableStarAnalysis(analysis)
+                .build();
         var config = new DetectionConfig(); config.enableVariableStarDetection = true; config.enableSlowMoverDetection = false;
         Map<String, String> csv = new HashMap<>();
         for (var options : List.of(new VariableStarReportOptions(40, VariableStarReportOptions.SortOrder.SIGNIFICANCE),

@@ -1,9 +1,10 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Pixel;
+import io.github.ppissias.jtransient.model.Track;
 import io.github.ppissias.jtransient.core.SlowMoverCandidateDiagnostics;
 import io.github.ppissias.jtransient.core.SlowMoverCandidateResult;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
@@ -91,7 +92,7 @@ final class DeepStackReportSectionWriter {
 
         report.println("<div class='flex-container'>");
         for (int i = 0; i < context.slowMoverCandidates.size(); i++) {
-            SourceExtractor.DetectedObject detection = context.slowMoverCandidates.get(i);
+            DetectedObject detection = context.slowMoverCandidates.get(i);
             List<SlowMoverTrackMatch> matchedTracks = findMatchingReportedTracks(detection, reportTrackReferences);
             SlowMoverCandidateDiagnostics candidateDiagnostics = resolveCandidateDiagnostics(context, detection, i);
             exportDeepStackDetectionCard(report, context, detection, matchedTracks, candidateDiagnostics, i + 1);
@@ -100,7 +101,7 @@ final class DeepStackReportSectionWriter {
     }
 
     private static SlowMoverCandidateDiagnostics resolveCandidateDiagnostics(DetectionReportContext context,
-                                                                            SourceExtractor.DetectedObject detection,
+                                                                            DetectedObject detection,
                                                                             int candidateIndex) {
         if (candidateIndex >= context.slowMoverCandidateResults.size()) {
             return null;
@@ -115,7 +116,7 @@ final class DeepStackReportSectionWriter {
 
     private static void exportDeepStackDetectionCard(PrintWriter report,
                                                      DetectionReportContext context,
-                                                     SourceExtractor.DetectedObject detection,
+                                                     DetectedObject detection,
                                                      List<SlowMoverTrackMatch> matchedTracks,
                                                      SlowMoverCandidateDiagnostics candidateDiagnostics,
                                                      int candidateNumber) throws IOException {
@@ -284,24 +285,24 @@ final class DeepStackReportSectionWriter {
         report.println("</div>");
     }
 
-    private static List<ReportTrackReference> buildReportTrackReferences(List<TrackLinker.Track> streakTracks,
-                                                                         List<TrackLinker.Track> movingTargets) {
+    private static List<ReportTrackReference> buildReportTrackReferences(List<Track> streakTracks,
+                                                                         List<Track> movingTargets) {
         List<ReportTrackReference> references = new ArrayList<>();
         int streakCounter = 1;
-        for (TrackLinker.Track track : streakTracks) {
+        for (Track track : streakTracks) {
             references.add(new ReportTrackReference(track, "ST" + streakCounter, "streak track"));
             streakCounter++;
         }
 
         int movingCounter = 1;
-        for (TrackLinker.Track track : movingTargets) {
+        for (Track track : movingTargets) {
             references.add(new ReportTrackReference(track, "T" + movingCounter, "moving object track"));
             movingCounter++;
         }
         return references;
     }
 
-    private static List<SlowMoverTrackMatch> findMatchingReportedTracks(SourceExtractor.DetectedObject detection,
+    private static List<SlowMoverTrackMatch> findMatchingReportedTracks(DetectedObject detection,
                                                                         List<ReportTrackReference> trackReferences) {
         List<SlowMoverTrackMatch> matches = new ArrayList<>();
         for (ReportTrackReference trackReference : trackReferences) {
@@ -318,7 +319,7 @@ final class DeepStackReportSectionWriter {
         return matches;
     }
 
-    private static SlowMoverTrackMatch computeSlowMoverTrackMatch(SourceExtractor.DetectedObject detection,
+    private static SlowMoverTrackMatch computeSlowMoverTrackMatch(DetectedObject detection,
                                                                   ReportTrackReference trackReference) {
         if (trackReference.track == null || trackReference.track.points == null || trackReference.track.points.isEmpty()) {
             return null;
@@ -329,7 +330,7 @@ final class DeepStackReportSectionWriter {
         int overlappingTrackPoints = 0;
         double bestDistancePixels = Double.POSITIVE_INFINITY;
 
-        for (SourceExtractor.DetectedObject point : trackReference.track.points) {
+        for (DetectedObject point : trackReference.track.points) {
             if (point == null) {
                 continue;
             }
@@ -351,7 +352,7 @@ final class DeepStackReportSectionWriter {
                 bestDistancePixels);
     }
 
-    private static double computeDetectionFootprintRadius(SourceExtractor.DetectedObject detection) {
+    private static double computeDetectionFootprintRadius(DetectedObject detection) {
         double area = detection.pixelArea > 0.0 ? detection.pixelArea : 0.0;
         if (area <= 0.0 && detection.rawPixels != null && !detection.rawPixels.isEmpty()) {
             area = detection.rawPixels.size();
@@ -362,11 +363,11 @@ final class DeepStackReportSectionWriter {
         return Math.sqrt(area / Math.PI);
     }
 
-    private static double computePointToDetectionDistance(SourceExtractor.DetectedObject point,
-                                                          SourceExtractor.DetectedObject detection) {
+    private static double computePointToDetectionDistance(DetectedObject point,
+                                                          DetectedObject detection) {
         if (detection.rawPixels != null && !detection.rawPixels.isEmpty()) {
             double bestDistancePixels = Double.POSITIVE_INFINITY;
-            for (SourceExtractor.Pixel pixel : detection.rawPixels) {
+            for (Pixel pixel : detection.rawPixels) {
                 double dx = point.x - pixel.x;
                 double dy = point.y - pixel.y;
                 bestDistancePixels = Math.min(bestDistancePixels, Math.hypot(dx, dy));
@@ -497,11 +498,11 @@ final class DeepStackReportSectionWriter {
     }
 
     private static final class ReportTrackReference {
-        private final TrackLinker.Track track;
+        private final Track track;
         private final String label;
         private final String categoryLabel;
 
-        private ReportTrackReference(TrackLinker.Track track, String label, String categoryLabel) {
+        private ReportTrackReference(Track track, String label, String categoryLabel) {
             this.track = track;
             this.label = label;
             this.categoryLabel = categoryLabel;

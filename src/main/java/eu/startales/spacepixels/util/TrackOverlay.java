@@ -9,8 +9,7 @@
  */
 package eu.startales.spacepixels.util;
 
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
+import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 
 import java.util.ArrayList;
@@ -91,17 +90,17 @@ public final class TrackOverlay {
         return fromTracks(result == null ? null : result.tracks);
     }
 
-    static TrackOverlay fromTracks(List<TrackLinker.Track> linkedTracks) {
+    static TrackOverlay fromTracks(List<io.github.ppissias.jtransient.model.Track> linkedTracks) {
         List<Track> streakTracks = new ArrayList<>();
         List<Track> movingTracks = new ArrayList<>();
         if (linkedTracks != null) {
-            for (TrackLinker.Track track : linkedTracks) {
+            for (io.github.ppissias.jtransient.model.Track track : linkedTracks) {
                 if (track == null || track.points == null || track.points.isEmpty()) {
                     continue;
                 }
                 Set<Integer> frames = new HashSet<>();
                 List<Point> points = new ArrayList<>();
-                for (SourceExtractor.DetectedObject point : track.points) {
+                for (DetectedObject point : track.points) {
                     frames.add(point.sourceFrameIndex);
                     if (point.sourceFilename != null) {
                         points.add(new Point(point.sourceFilename, point.x, point.y));

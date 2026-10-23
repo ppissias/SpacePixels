@@ -1,12 +1,12 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.MasterMapGenerator;
 import io.github.ppissias.jtransient.core.PixelEncoding;
 import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
 import io.github.ppissias.jtransient.core.SlowMoverAnalyzer;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import org.junit.Rule;
 import org.junit.Test;
@@ -94,9 +94,9 @@ public class DeepStackReportSectionWriterTest {
         assertEquals(1, analysis.candidates.size());
         assertFalse(render(analysis, config).contains("track-link"));
 
-        TrackLinker.Track track = new TrackLinker.Track();
+        Track track = new Track();
         for (int frame = 0; frame < 3; frame++) {
-            SourceExtractor.DetectedObject point = new SourceExtractor.DetectedObject(59 + frame, 48, 1000, 9);
+            DetectedObject point = new DetectedObject(59 + frame, 48, 1000, 9);
             point.sourceFrameIndex = frame;
             track.points.add(point);
         }
@@ -110,7 +110,7 @@ public class DeepStackReportSectionWriterTest {
         return render(analysis, config, Collections.emptyList());
     }
 
-    private String render(SlowMoverAnalysis analysis, DetectionConfig config, List<TrackLinker.Track> movingTargets) throws Exception {
+    private String render(SlowMoverAnalysis analysis, DetectionConfig config, List<Track> movingTargets) throws Exception {
         DetectionReportContext context = new DetectionReportContext(
                 new ExportVisualizationSettings(3.0, 10.0, 100, 10, 100, false, 12, 1.0f),
                 temporaryFolder.newFolder(),

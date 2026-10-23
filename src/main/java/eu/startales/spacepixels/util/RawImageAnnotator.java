@@ -10,7 +10,8 @@
 
 package eu.startales.spacepixels.util;
 
-import io.github.ppissias.jtransient.core.SourceExtractor;
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Pixel;
 
 import java.awt.image.BufferedImage;
 import java.awt.Graphics2D;
@@ -58,13 +59,13 @@ public class RawImageAnnotator {
     /**
      * Draws anti-aliased colored boxes around stars and lines over streaks natively on the UI canvas.
      */
-    public static void drawDetections(BufferedImage image, List<SourceExtractor.DetectedObject> objects) {
+    public static void drawDetections(BufferedImage image, List<DetectedObject> objects) {
         if (objects == null || objects.isEmpty()) return;
 
         Graphics2D g2d = image.createGraphics();
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        for (SourceExtractor.DetectedObject obj : objects) {
+        for (DetectedObject obj : objects) {
             if (obj.isNoise) continue;
 
             int cx = (int) Math.round(obj.x);
@@ -109,19 +110,19 @@ public class RawImageAnnotator {
      * Tints the exact pixel footprint of detected objects.
      * Streaks are tinted semi-transparent Red, point sources are semi-transparent Green.
      */
-    public static void drawExactBlobs(BufferedImage image, List<SourceExtractor.DetectedObject> objects) {
+    public static void drawExactBlobs(BufferedImage image, List<DetectedObject> objects) {
         // Define our semi-transparent overlay colors (ARGB)
         // Format is (Alpha << 24) | (Red << 16) | (Green << 8) | Blue
         // Increased opacity to ~70% (180 out of 255) for much more vivid visibility
         int streakColor = (180 << 24) | (255 << 16) | (0 << 8) | 0;   // Red
         int pointColor  = (180 << 24) | (0 << 16)   | (255 << 8) | 0; // Green
 
-        for (SourceExtractor.DetectedObject obj : objects) {
+        for (DetectedObject obj : objects) {
             if (obj.isNoise) continue;
 
             int overlayColor = obj.isStreak ? streakColor : pointColor;
 
-            for (SourceExtractor.Pixel p : obj.rawPixels) {
+            for (Pixel p : obj.rawPixels) {
                 // Safety bounds check
                 if (p.x >= 0 && p.x < image.getWidth() && p.y >= 0 && p.y < image.getHeight()) {
 

@@ -1,9 +1,9 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.core.TrackLinker;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -33,7 +33,7 @@ public class ReportSectionFailureTest {
         StringWriter output = new StringWriter();
         try (PrintWriter report = new PrintWriter(output)) {
             // A null track makes the detections layer fail after the images are written.
-            List<TrackLinker.Track> brokenTracks = Collections.singletonList(null);
+            List<Track> brokenTracks = Collections.singletonList(null);
             SessionPictureSectionWriter.write(report, context(exportDir, new short[40][60]), brokenTracks);
         }
         String html = output.toString();

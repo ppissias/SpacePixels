@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
-import io.github.ppissias.jtransient.core.SourceExtractor;
+import io.github.ppissias.jtransient.model.DetectedObject;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -23,7 +23,7 @@ public class NightEquipmentTest {
         header.put("CD2_1", "0"); header.put("CD2_2", "0.00027777778");
         var transformer = eu.startales.spacepixels.util.WcsCoordinateTransformer.fromHeader(header);
         var catalogue = new eu.startales.spacepixels.util.skycatalog.SkyCatalogue();
-        List<SourceExtractor.DetectedObject> stars = masterStars();
+        List<DetectedObject> stars = masterStars();
         for (var star : stars) {
             var position = transformer.pixelToSky(star.x, star.y);
             var entry = new eu.startales.spacepixels.util.skycatalog.SkyCatalogue.Star();
@@ -101,10 +101,10 @@ public class NightEquipmentTest {
         return positions;
     }
 
-    private static List<SourceExtractor.DetectedObject> masterStars() {
-        List<SourceExtractor.DetectedObject> stars = new ArrayList<>();
+    private static List<DetectedObject> masterStars() {
+        List<DetectedObject> stars = new ArrayList<>();
         for (double[] p : starPositions()) {
-            SourceExtractor.DetectedObject star = new SourceExtractor.DetectedObject(p[0], p[1], 40_000, 20);
+            DetectedObject star = new DetectedObject(p[0], p[1], 40_000, 20);
             star.fwhm = 3;
             stars.add(star);
         }

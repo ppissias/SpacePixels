@@ -10,12 +10,12 @@
 
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -165,18 +165,18 @@ final class DetectionReportAstrometry {
     }
 
     static String buildDeepStackIdentificationHtml(Context astrometryContext,
-                                                   SourceExtractor.DetectedObject detection) {
+                                                   DetectedObject detection) {
         return buildDeepStackIdentificationHtml(astrometryContext, detection, null);
     }
 
     static String buildDeepStackIdentificationHtml(Context astrometryContext,
-                                                   SourceExtractor.DetectedObject detection,
+                                                   DetectedObject detection,
                                                    String liveRenderSlotId) {
         return buildDeepStackIdentificationHtml(astrometryContext, detection, liveRenderSlotId, null);
     }
 
     static String buildDeepStackIdentificationHtml(Context astrometryContext,
-                                                   SourceExtractor.DetectedObject detection,
+                                                   DetectedObject detection,
                                                    String liveRenderSlotId,
                                                    String liveRenderSidecarBaseName) {
         SolarSystemQueryTarget queryTarget = SolarSystemQueryTargetFactory.buildSingleDetectionQueryTarget(astrometryContext, detection);
@@ -190,18 +190,18 @@ final class DetectionReportAstrometry {
     }
 
     static String buildTrackSolarSystemIdentificationHtml(Context astrometryContext,
-                                                          TrackLinker.Track track) {
+                                                          Track track) {
         return buildTrackSolarSystemIdentificationHtml(astrometryContext, track, null);
     }
 
     static String buildTrackSolarSystemIdentificationHtml(Context astrometryContext,
-                                                          TrackLinker.Track track,
+                                                          Track track,
                                                           String liveRenderSlotId) {
         return buildTrackSolarSystemIdentificationHtml(astrometryContext, track, liveRenderSlotId, null);
     }
 
     static String buildTrackSolarSystemIdentificationHtml(Context astrometryContext,
-                                                          TrackLinker.Track track,
+                                                          Track track,
                                                           String liveRenderSlotId,
                                                           String liveRenderSidecarBaseName) {
         SolarSystemQueryTarget queryTarget = SolarSystemQueryTargetFactory.buildTrackQueryTarget(astrometryContext, track);
@@ -215,13 +215,13 @@ final class DetectionReportAstrometry {
     }
 
     static String buildMovingTrackSolarSystemIdentificationHtml(Context astrometryContext,
-                                                                TrackLinker.Track track,
+                                                                Track track,
                                                                 String liveRenderSlotId) {
         return buildMovingTrackSolarSystemIdentificationHtml(astrometryContext, track, liveRenderSlotId, null);
     }
 
     static String buildMovingTrackSolarSystemIdentificationHtml(Context astrometryContext,
-                                                                TrackLinker.Track track,
+                                                                Track track,
                                                                 String liveRenderSlotId,
                                                                 String liveRenderSidecarBaseName) {
         SolarSystemQueryTarget queryTarget = SolarSystemQueryTargetFactory.buildTrackQueryTarget(astrometryContext, track);
@@ -235,25 +235,25 @@ final class DetectionReportAstrometry {
     }
 
     static String buildTrackSatCheckerHtml(Context astrometryContext,
-                                           TrackLinker.Track track) {
+                                           Track track) {
         return buildTrackSatCheckerHtml(astrometryContext, track, null, false);
     }
 
     static String buildConfirmedStreakTrackSatCheckerHtml(Context astrometryContext,
-                                                          TrackLinker.Track track,
+                                                          Track track,
                                                           String liveRenderSlotId) {
         return buildConfirmedStreakTrackSatCheckerHtml(astrometryContext, track, liveRenderSlotId, null);
     }
 
     static String buildConfirmedStreakTrackSatCheckerHtml(Context astrometryContext,
-                                                          TrackLinker.Track track,
+                                                          Track track,
                                                           String liveRenderSlotId,
                                                           String liveRenderSidecarFileName) {
         return buildTrackSatCheckerHtml(astrometryContext, track, liveRenderSlotId, liveRenderSidecarFileName, true);
     }
 
     private static String buildTrackSatCheckerHtml(Context astrometryContext,
-                                                   TrackLinker.Track track,
+                                                   Track track,
                                                    String liveRenderSlotId,
                                                    String liveRenderSidecarFileName,
                                                    boolean useSimpleLabels) {
@@ -266,14 +266,14 @@ final class DetectionReportAstrometry {
     }
 
     private static String buildTrackSatCheckerHtml(Context astrometryContext,
-                                                   TrackLinker.Track track,
+                                                   Track track,
                                                    String liveRenderSlotId,
                                                    boolean useSimpleLabels) {
         return buildTrackSatCheckerHtml(astrometryContext, track, liveRenderSlotId, null, useSimpleLabels);
     }
 
     static String buildTrackSkyRateSummaryHtml(Context astrometryContext,
-                                               TrackLinker.Track track) {
+                                               Track track) {
         if (astrometryContext == null || !astrometryContext.hasAstrometricSolution()) {
             return "";
         }
@@ -299,20 +299,20 @@ final class DetectionReportAstrometry {
     }
 
     static String buildSingleFrameSkyViewerHtml(Context astrometryContext,
-                                                SourceExtractor.DetectedObject detection,
+                                                DetectedObject detection,
                                                 String epochLabel) {
         SolarSystemQueryTarget queryTarget = SolarSystemQueryTargetFactory.buildFrameDetectionQueryTarget(astrometryContext, detection);
         return buildSkyViewerLinksHtml(astrometryContext, queryTarget, epochLabel);
     }
 
     static String buildTrackSkyViewerHtml(Context astrometryContext,
-                                          TrackLinker.Track track,
+                                          Track track,
                                           String epochLabel) {
         return buildTrackSkyViewerHtml(astrometryContext, track, epochLabel, null);
     }
 
     static String buildTrackSkyViewerHtml(Context astrometryContext,
-                                          TrackLinker.Track track,
+                                          Track track,
                                           String epochLabel,
                                           Double preferredTightFovDegrees) {
         SolarSystemQueryTarget queryTarget = SolarSystemQueryTargetFactory.buildTrackQueryTarget(astrometryContext, track);
@@ -361,27 +361,27 @@ final class DetectionReportAstrometry {
     }
 
     static long resolveTrackPointStartTimestamp(Context astrometryContext,
-                                                SourceExtractor.DetectedObject point) {
+                                                DetectedObject point) {
         return SatCheckerQueryTargetFactory.resolveTrackPointStartTimestamp(astrometryContext, point);
     }
 
-    static long resolveTrackPointExposureMillis(SourceExtractor.DetectedObject point) {
+    static long resolveTrackPointExposureMillis(DetectedObject point) {
         return SatCheckerQueryTargetFactory.resolveTrackPointExposureMillis(point);
     }
 
-    private static TrackSkyRateSummary resolveTrackSkyRateSummary(TrackLinker.Track track,
+    private static TrackSkyRateSummary resolveTrackSkyRateSummary(Track track,
                                                                   Context astrometryContext) {
         if (track == null || track.points == null || track.points.isEmpty()
                 || astrometryContext == null || !astrometryContext.hasAstrometricSolution()) {
             return null;
         }
 
-        SourceExtractor.DetectedObject earliestPoint = null;
-        SourceExtractor.DetectedObject latestPoint = null;
+        DetectedObject earliestPoint = null;
+        DetectedObject latestPoint = null;
         long earliestMidpointTimestamp = Long.MAX_VALUE;
         long latestMidpointTimestamp = Long.MIN_VALUE;
 
-        for (SourceExtractor.DetectedObject point : track.points) {
+        for (DetectedObject point : track.points) {
             long midpointTimestamp = SatCheckerQueryTargetFactory.resolveTrackPointMidpointTimestamp(astrometryContext, point);
             if (midpointTimestamp <= 0L) {
                 continue;

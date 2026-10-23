@@ -1,8 +1,8 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 /**
  * Builds solar-system lookup targets from detections and tracks without coupling that math to report HTML assembly.
@@ -13,7 +13,7 @@ final class SolarSystemQueryTargetFactory {
     }
 
     static SolarSystemQueryTarget buildSingleDetectionQueryTarget(DetectionReportAstrometry.Context astrometryContext,
-                                                                  SourceExtractor.DetectedObject detection) {
+                                                                  DetectedObject detection) {
         if (astrometryContext == null || detection == null) {
             return null;
         }
@@ -29,7 +29,7 @@ final class SolarSystemQueryTargetFactory {
     }
 
     static SolarSystemQueryTarget buildFrameDetectionQueryTarget(DetectionReportAstrometry.Context astrometryContext,
-                                                                 SourceExtractor.DetectedObject detection) {
+                                                                 DetectedObject detection) {
         if (astrometryContext == null || detection == null) {
             return null;
         }
@@ -49,7 +49,7 @@ final class SolarSystemQueryTargetFactory {
     }
 
     static SolarSystemQueryTarget buildTrackQueryTarget(DetectionReportAstrometry.Context astrometryContext,
-                                                        TrackLinker.Track track) {
+                                                        Track track) {
         if (astrometryContext == null || track == null || track.points == null || track.points.isEmpty()) {
             return null;
         }
@@ -62,7 +62,7 @@ final class SolarSystemQueryTargetFactory {
         long timestampAccumulator = 0L;
         int timestampCount = 0;
 
-        for (SourceExtractor.DetectedObject point : track.points) {
+        for (DetectedObject point : track.points) {
             if (point == null) {
                 continue;
             }

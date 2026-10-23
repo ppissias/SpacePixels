@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.util.skycatalog;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.DebugOutput;
 
 import eu.startales.spacepixels.util.FitsFileInformation;
@@ -124,7 +125,7 @@ public final class PlateCorrectionFitter {
                 continue;
             }
             DataArea frameArea = DataArea.ofFrame(data);
-            List<SourceExtractor.DetectedObject> objects = DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(data, 5.0, 5, new DetectionConfig(),
+            List<DetectedObject> objects = DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(data, 5.0, 5, new DetectionConfig(),
                     frameArea, frameArea)).objects;
             FramePairs pairs = FramePairs.match(file.getFileName(), stars, header, objects, width, height, file.getObservationTimestamp());
             if (pairs.size() >= MIN_FRAME_PAIRS) {
@@ -334,7 +335,7 @@ public final class PlateCorrectionFitter {
          * a similarly bright neighbour are used, and each detection is used once.
          */
         static FramePairs match(String name, List<SkyCatalogue.Star> catalogue, WcsCoordinateTransformer solution,
-                                List<SourceExtractor.DetectedObject> objects, int width, int height, long timestamp) {
+                                List<DetectedObject> objects, int width, int height, long timestamp) {
             FramePairs result = new FramePairs(name);
             double years = timestamp > 0 ? (timestamp - SkyCatalogue.GAIA_EPOCH_MILLIS) / (365.25 * 86_400_000.0) : 0;
             List<double[]> stars = new ArrayList<>(); // x, y, G
@@ -351,7 +352,7 @@ public final class PlateCorrectionFitter {
                 }
             }
             List<double[]> detections = new ArrayList<>(); // x, y, flux
-            for (SourceExtractor.DetectedObject object : objects) {
+            for (DetectedObject object : objects) {
                 if (!object.isNoise && !object.isStreak) {
                     detections.add(new double[]{object.x, object.y, object.totalFlux});
                 }

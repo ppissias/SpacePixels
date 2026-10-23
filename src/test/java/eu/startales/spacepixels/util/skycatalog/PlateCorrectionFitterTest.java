@@ -1,8 +1,8 @@
 package eu.startales.spacepixels.util.skycatalog;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
-import io.github.ppissias.jtransient.core.SourceExtractor;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -34,7 +34,7 @@ public class PlateCorrectionFitterTest {
         List<PlateCorrectionFitter.FramePairs> frames = new ArrayList<>();
         double[][] shifts = {{0.3, -0.2}, {-0.4, 0.1}, {0.0, 0.5}, {0.2, 0.2}};
         for (int f = 0; f < shifts.length; f++) {
-            List<SourceExtractor.DetectedObject> detected = detect(header, stars, shifts[f], random);
+            List<DetectedObject> detected = detect(header, stars, shifts[f], random);
             PlateCorrectionFitter.FramePairs pairs = PlateCorrectionFitter.FramePairs.match("frame" + f, stars, header,
                     detected, WIDTH, HEIGHT, 0);
             assertTrue("frame " + f + " matched " + pairs.size(), pairs.size() > 1500);
@@ -70,13 +70,13 @@ public class PlateCorrectionFitterTest {
         List<SkyCatalogue.Star> stars = stars(header, random, 1500);
         List<PlateCorrectionFitter.FramePairs> frames = new ArrayList<>();
         for (int f = 0; f < 3; f++) {
-            List<SourceExtractor.DetectedObject> detected = new ArrayList<>();
+            List<DetectedObject> detected = new ArrayList<>();
             for (SkyCatalogue.Star star : stars) {
                 double[] p = header.skyToPixel(star.ra, star.dec);
                 // 0.1 % scale error and a 2 px shift.
                 double x = WIDTH / 2.0 + (p[0] - WIDTH / 2.0) * 1.001 + 2 + random.nextGaussian() * 0.1;
                 double y = HEIGHT / 2.0 + (p[1] - HEIGHT / 2.0) * 1.001 - 1 + random.nextGaussian() * 0.1;
-                detected.add(new SourceExtractor.DetectedObject(x, y, Math.pow(10, -0.4 * star.g) * 1e8, 20));
+                detected.add(new DetectedObject(x, y, Math.pow(10, -0.4 * star.g) * 1e8, 20));
             }
             frames.add(PlateCorrectionFitter.FramePairs.match("f" + f, stars, header, detected, WIDTH, HEIGHT, 0));
         }
@@ -143,16 +143,16 @@ public class PlateCorrectionFitterTest {
     }
 
     /** Detections displaced by k r^2 outwards (r = 1 at the left and right edges), with centroid noise per axis. */
-    private static List<SourceExtractor.DetectedObject> detectWithRadialDistortion(WcsCoordinateTransformer header,
+    private static List<DetectedObject> detectWithRadialDistortion(WcsCoordinateTransformer header,
                                                                                    List<SkyCatalogue.Star> stars, double k,
                                                                                    double noise, Random random) {
-        List<SourceExtractor.DetectedObject> detected = new ArrayList<>();
+        List<DetectedObject> detected = new ArrayList<>();
         for (SkyCatalogue.Star star : stars) {
             double[] p = header.skyToPixel(star.ra, star.dec);
             double u = (p[0] - WIDTH / 2.0) / (WIDTH / 2.0);
             double v = (p[1] - HEIGHT / 2.0) / (WIDTH / 2.0);
             double r2 = u * u + v * v;
-            detected.add(new SourceExtractor.DetectedObject(p[0] + k * u * r2 + random.nextGaussian() * noise,
+            detected.add(new DetectedObject(p[0] + k * u * r2 + random.nextGaussian() * noise,
                     p[1] + k * v * r2 + random.nextGaussian() * noise, Math.pow(10, -0.4 * star.g) * 1e8, 20));
         }
         return detected;
@@ -180,12 +180,12 @@ public class PlateCorrectionFitterTest {
         return new double[]{p[0] + 3.0 * u * r2 + 0.8 + shift[0], p[1] + 3.0 * v * r2 - 0.5 + shift[1]};
     }
 
-    private static List<SourceExtractor.DetectedObject> detect(WcsCoordinateTransformer header, List<SkyCatalogue.Star> stars,
+    private static List<DetectedObject> detect(WcsCoordinateTransformer header, List<SkyCatalogue.Star> stars,
                                                                 double[] shift, Random random) {
-        List<SourceExtractor.DetectedObject> detected = new ArrayList<>();
+        List<DetectedObject> detected = new ArrayList<>();
         for (SkyCatalogue.Star star : stars) {
             double[] p = truePosition(header, star, shift);
-            detected.add(new SourceExtractor.DetectedObject(p[0] + random.nextGaussian() * 0.1, p[1] + random.nextGaussian() * 0.1,
+            detected.add(new DetectedObject(p[0] + random.nextGaussian() * 0.1, p[1] + random.nextGaussian() * 0.1,
                     Math.pow(10, -0.4 * star.g) * 1e8, 20));
         }
         return detected;

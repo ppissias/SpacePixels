@@ -1,9 +1,10 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Pixel;
+import io.github.ppissias.jtransient.model.Track;
 import io.github.ppissias.jtransient.core.CameraFixedRejector;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
@@ -143,14 +144,14 @@ final class ResidualReviewSectionWriter {
                                              CameraFixedRejector.Group group,
                                              int groupNumber) throws IOException {
         Color color = COMMON_MOTION_COLORS[(groupNumber - 1) % COMMON_MOTION_COLORS.length];
-        List<List<SourceExtractor.DetectedObject>> pictured = List.of(group.points);
+        List<List<DetectedObject>> pictured = List.of(group.points);
         String trailName = "camera_fixed_" + groupNumber + "_trail.png";
         String gifName = "camera_fixed_" + groupNumber + ".gif";
         boolean trail = background != null && writeCommonMotionTrail(context, background, pictured, color, trailName);
         boolean gif = !context.rawFrames.isEmpty() && writeCommonMotionGif(context, pictured, color, gifName);
         double spread = 0;
-        for (SourceExtractor.DetectedObject a : group.points) {
-            for (SourceExtractor.DetectedObject b : group.points) {
+        for (DetectedObject a : group.points) {
+            for (DetectedObject b : group.points) {
                 spread = Math.max(spread, Math.hypot(a.x - b.x, a.y - b.y));
             }
         }
@@ -172,7 +173,7 @@ final class ResidualReviewSectionWriter {
         report.println("</div>");
         report.println("<details class='foldable-streak-details'><summary>Coordinates</summary><div class='foldable-streak-body'>");
         report.print("<ul class='source-list'><li>");
-        for (SourceExtractor.DetectedObject point : group.points) {
+        for (DetectedObject point : group.points) {
             report.printf(Locale.US, " frame %d (%.1f, %.1f)", point.sourceFrameIndex + 1, point.x, point.y);
         }
         report.println("</li></ul></div></details>");
@@ -232,7 +233,7 @@ final class ResidualReviewSectionWriter {
         int groupNumber = 0;
         for (ResidualTransientAnalysis.CommonMotionGroup group : groups) {
             Color color = COMMON_MOTION_COLORS[groupNumber % COMMON_MOTION_COLORS.length];
-            for (List<SourceExtractor.DetectedObject> source : group.sources) {
+            for (List<DetectedObject> source : group.sources) {
                 drawCommonMotionArrow(g2d, source, scale, arrowFactor, color, scaledW, scaledH);
             }
             groupNumber++;
@@ -263,7 +264,7 @@ final class ResidualReviewSectionWriter {
                                               int groupNumber) throws IOException {
         Color color = COMMON_MOTION_COLORS[(groupNumber - 1) % COMMON_MOTION_COLORS.length];
         int shown = Math.min(COMMON_MOTION_SHOWN_SOURCES, group.sources.size());
-        List<List<SourceExtractor.DetectedObject>> pictured = group.sources.subList(0, shown);
+        List<List<DetectedObject>> pictured = group.sources.subList(0, shown);
         String trailName = "common_motion_" + groupNumber + "_trail.png";
         String gifName = "common_motion_" + groupNumber + ".gif";
         boolean trail = background != null && writeCommonMotionTrail(context, background, pictured, color, trailName);
@@ -292,9 +293,9 @@ final class ResidualReviewSectionWriter {
         report.println("<details class='foldable-streak-details'><summary>Coordinates</summary><div class='foldable-streak-body'>");
         report.println("<ul class='source-list'>");
         int sourceNumber = 1;
-        for (List<SourceExtractor.DetectedObject> source : group.sources) {
+        for (List<DetectedObject> source : group.sources) {
             report.print("<li>Source " + sourceNumber + ":");
-            for (SourceExtractor.DetectedObject point : source) {
+            for (DetectedObject point : source) {
                 report.printf(Locale.US, " frame %d (%.1f, %.1f)", point.sourceFrameIndex + 1, point.x, point.y);
             }
             report.println("</li>");
@@ -306,12 +307,12 @@ final class ResidualReviewSectionWriter {
 
     private static boolean writeCommonMotionTrail(DetectionReportContext context,
                                                   short[][] background,
-                                                  List<List<SourceExtractor.DetectedObject>> sources,
+                                                  List<List<DetectedObject>> sources,
                                                   Color color,
                                                   String fileName) throws IOException {
         List<BufferedImage> panels = new ArrayList<>();
         int index = 1;
-        for (List<SourceExtractor.DetectedObject> source : sources) {
+        for (List<DetectedObject> source : sources) {
             if (source.isEmpty()) {
                 continue;
             }
@@ -322,7 +323,7 @@ final class ResidualReviewSectionWriter {
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int count = source.size();
             for (int i = 0; i < count; i++) {
-                SourceExtractor.DetectedObject point = source.get(i);
+                DetectedObject point = source.get(i);
                 float ratio = count > 1 ? (float) i / (count - 1) : 0f;
                 Color timeColor = Color.getHSBColor(0.66f - (0.66f * ratio), 1.0f, 1.0f);
                 int localX = local(point.x, cx);
@@ -347,12 +348,12 @@ final class ResidualReviewSectionWriter {
     }
 
     private static boolean writeCommonMotionGif(DetectionReportContext context,
-                                                List<List<SourceExtractor.DetectedObject>> sources,
+                                                List<List<DetectedObject>> sources,
                                                 Color color,
                                                 String fileName) throws IOException {
         Set<Integer> mandatory = new HashSet<>();
-        for (List<SourceExtractor.DetectedObject> source : sources) {
-            for (SourceExtractor.DetectedObject point : source) {
+        for (List<DetectedObject> source : sources) {
+            for (DetectedObject point : source) {
                 if (point.sourceFrameIndex >= 0 && point.sourceFrameIndex < context.rawFrames.size()) {
                     mandatory.add(point.sourceFrameIndex);
                 }
@@ -367,7 +368,7 @@ final class ResidualReviewSectionWriter {
             List<BufferedImage> panels = new ArrayList<>();
             int index = 1;
             boolean first = true;
-            for (List<SourceExtractor.DetectedObject> source : sources) {
+            for (List<DetectedObject> source : sources) {
                 if (source.isEmpty()) {
                     continue;
                 }
@@ -376,7 +377,7 @@ final class ResidualReviewSectionWriter {
                 BufferedImage panel = croppedDisplay(context.rawFrames.get(frameIndex), cx, cy, context.settings);
                 Graphics2D g2d = panel.createGraphics();
                 g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                SourceExtractor.DetectedObject hit = pointOnFrame(source, frameIndex);
+                DetectedObject hit = pointOnFrame(source, frameIndex);
                 if (hit != null) {
                     int localX = local(hit.x, cx);
                     int localY = local(hit.y, cy);
@@ -413,12 +414,12 @@ final class ResidualReviewSectionWriter {
     private static double commonMotionArrowFactor(List<ResidualTransientAnalysis.CommonMotionGroup> groups, double scale) {
         List<Double> lengths = new ArrayList<>();
         for (ResidualTransientAnalysis.CommonMotionGroup group : groups) {
-            for (List<SourceExtractor.DetectedObject> source : group.sources) {
+            for (List<DetectedObject> source : group.sources) {
                 if (source.size() < 2) {
                     continue;
                 }
-                SourceExtractor.DetectedObject first = source.get(0);
-                SourceExtractor.DetectedObject last = source.get(source.size() - 1);
+                DetectedObject first = source.get(0);
+                DetectedObject last = source.get(source.size() - 1);
                 lengths.add(Math.hypot((last.x - first.x) * scale, (last.y - first.y) * scale));
             }
         }
@@ -434,7 +435,7 @@ final class ResidualReviewSectionWriter {
     }
 
     private static void drawCommonMotionArrow(Graphics2D g2d,
-                                              List<SourceExtractor.DetectedObject> source,
+                                              List<DetectedObject> source,
                                               double scale,
                                               double arrowFactor,
                                               Color color,
@@ -443,7 +444,7 @@ final class ResidualReviewSectionWriter {
         if (source.isEmpty()) {
             return;
         }
-        SourceExtractor.DetectedObject first = source.get(0);
+        DetectedObject first = source.get(0);
         int x1 = clamp((int) Math.round(first.x * scale), 0, width - 1);
         int y1 = clamp((int) Math.round(first.y * scale), 0, height - 1);
         g2d.setColor(color);
@@ -452,7 +453,7 @@ final class ResidualReviewSectionWriter {
             g2d.drawOval(x1 - 4, y1 - 4, 8, 8);
             return;
         }
-        SourceExtractor.DetectedObject last = source.get(source.size() - 1);
+        DetectedObject last = source.get(source.size() - 1);
         double dx = (last.x - first.x) * scale * arrowFactor;
         double dy = (last.y - first.y) * scale * arrowFactor;
         if (Math.hypot(dx, dy) < 1.5) {
@@ -504,8 +505,8 @@ final class ResidualReviewSectionWriter {
         g2d.drawString(label, 10, 20);
     }
 
-    private static SourceExtractor.DetectedObject pointOnFrame(List<SourceExtractor.DetectedObject> source, int frameIndex) {
-        for (SourceExtractor.DetectedObject point : source) {
+    private static DetectedObject pointOnFrame(List<DetectedObject> source, int frameIndex) {
+        for (DetectedObject point : source) {
             if (point.sourceFrameIndex == frameIndex) {
                 return point;
             }
@@ -513,9 +514,9 @@ final class ResidualReviewSectionWriter {
         return null;
     }
 
-    private static double mean(List<SourceExtractor.DetectedObject> source, boolean horizontal) {
+    private static double mean(List<DetectedObject> source, boolean horizontal) {
         double sum = 0.0;
-        for (SourceExtractor.DetectedObject point : source) {
+        for (DetectedObject point : source) {
             sum += horizontal ? point.x : point.y;
         }
         return sum / source.size();
@@ -529,17 +530,17 @@ final class ResidualReviewSectionWriter {
         return Math.max(low, Math.min(high, value));
     }
 
-    static TrackLinker.Track buildResidualTrack(List<SourceExtractor.DetectedObject> points) {
-        TrackLinker.Track track = new TrackLinker.Track();
+    static Track buildResidualTrack(List<DetectedObject> points) {
+        Track track = new Track();
         if (points == null || points.isEmpty()) {
             return track;
         }
 
-        List<SourceExtractor.DetectedObject> orderedPoints = new ArrayList<>(points);
-        orderedPoints.sort(Comparator.comparingInt((SourceExtractor.DetectedObject point) -> point.sourceFrameIndex)
+        List<DetectedObject> orderedPoints = new ArrayList<>(points);
+        orderedPoints.sort(Comparator.comparingInt((DetectedObject point) -> point.sourceFrameIndex)
                 .thenComparingDouble(point -> point.x)
                 .thenComparingDouble(point -> point.y));
-        for (SourceExtractor.DetectedObject point : orderedPoints) {
+        for (DetectedObject point : orderedPoints) {
             track.addPoint(point);
         }
         return track;
@@ -550,7 +551,7 @@ final class ResidualReviewSectionWriter {
                                                        short[][] referenceBackground,
                                                        ResidualTransientAnalysis.LocalRescueCandidate candidate,
                                                        int counter) throws IOException {
-        TrackLinker.Track track = buildResidualTrack(candidate.points);
+        Track track = buildResidualTrack(candidate.points);
         TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, Math.max(140, context.settings.getTrackCropPadding() / 2));
 
         String prefix = "micro_drift_" + counter;
@@ -593,11 +594,11 @@ final class ResidualReviewSectionWriter {
 
         if (!context.rawFrames.isEmpty()) {
             Set<Integer> mandatoryFrames = collectResidualFrameIndices(track);
-            Map<Integer, SourceExtractor.DetectedObject> pointByFrame = buildPointByFrameMap(track);
+            Map<Integer, DetectedObject> pointByFrame = buildPointByFrameMap(track);
             List<Integer> sampledIndices = context.sampleFrames(mandatoryFrames, 12);
             List<BufferedImage> contextFrames = new ArrayList<>();
             for (int frameIndex : sampledIndices) {
-                SourceExtractor.DetectedObject detectedPoint = pointByFrame.get(frameIndex);
+                DetectedObject detectedPoint = pointByFrame.get(frameIndex);
                 String pointLabel = detectedPoint != null ? "P" + (track.points.indexOf(detectedPoint) + 1) : null;
                 BufferedImage frameImage = TrackVisualizationRenderer.createStarCentricHighlightedFrame(
                         context.rawFrames.get(frameIndex),
@@ -646,7 +647,7 @@ final class ResidualReviewSectionWriter {
 
         report.println("<strong>Detection Coordinates & Frames:</strong><ul class='source-list'>");
         for (int i = 0; i < track.points.size(); i++) {
-            SourceExtractor.DetectedObject point = track.points.get(i);
+            DetectedObject point = track.points.get(i);
             String pointMetrics = buildMicroDriftMetricsText(point, i + 1);
             report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry(
                     "[" + (i + 1) + "] " + point.sourceFilename,
@@ -669,7 +670,7 @@ final class ResidualReviewSectionWriter {
                                                        short[][] referenceBackground,
                                                        ResidualTransientAnalysis.LocalActivityCluster cluster,
                                                        int counter) throws IOException {
-        TrackLinker.Track track = buildResidualTrack(cluster.points);
+        Track track = buildResidualTrack(cluster.points);
         TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, Math.max(180, context.settings.getTrackCropPadding() / 2));
 
         String prefix = "local_activity_" + counter;
@@ -712,11 +713,11 @@ final class ResidualReviewSectionWriter {
 
         if (!context.rawFrames.isEmpty()) {
             Set<Integer> mandatoryFrames = collectResidualFrameIndices(track);
-            Map<Integer, SourceExtractor.DetectedObject> pointByFrame = buildPointByFrameMap(track);
+            Map<Integer, DetectedObject> pointByFrame = buildPointByFrameMap(track);
             List<Integer> sampledIndices = context.sampleFrames(mandatoryFrames, 12);
             List<BufferedImage> contextFrames = new ArrayList<>();
             for (int frameIndex : sampledIndices) {
-                SourceExtractor.DetectedObject detectedPoint = pointByFrame.get(frameIndex);
+                DetectedObject detectedPoint = pointByFrame.get(frameIndex);
                 String pointLabel = detectedPoint != null ? "P" + (track.points.indexOf(detectedPoint) + 1) : null;
                 BufferedImage frameImage = TrackVisualizationRenderer.createStarCentricHighlightedFrame(
                         context.rawFrames.get(frameIndex),
@@ -764,7 +765,7 @@ final class ResidualReviewSectionWriter {
 
         report.println("<strong>Cluster Coordinates & Frames:</strong><ul class='source-list'>");
         for (int i = 0; i < track.points.size(); i++) {
-            SourceExtractor.DetectedObject point = track.points.get(i);
+            DetectedObject point = track.points.get(i);
             String metricsText = buildMicroDriftMetricsText(point, i + 1);
             report.println(DetectionReportAstrometry.buildSourceCoordinateListEntry(
                     "[" + (i + 1) + "] " + point.sourceFilename,
@@ -779,7 +780,7 @@ final class ResidualReviewSectionWriter {
 
     private static short[][] resolveBackgroundSource(short[][] referenceBackground,
                                                      List<short[][]> rawFrames,
-                                                     TrackLinker.Track track) {
+                                                     Track track) {
         if (referenceBackground != null) {
             return referenceBackground;
         }
@@ -790,20 +791,20 @@ final class ResidualReviewSectionWriter {
         return rawFrames.get(fallbackIndex);
     }
 
-    private static Map<Integer, SourceExtractor.DetectedObject> buildPointByFrameMap(TrackLinker.Track track) {
-        Map<Integer, SourceExtractor.DetectedObject> pointByFrame = new HashMap<>();
-        for (SourceExtractor.DetectedObject point : track.points) {
+    private static Map<Integer, DetectedObject> buildPointByFrameMap(Track track) {
+        Map<Integer, DetectedObject> pointByFrame = new HashMap<>();
+        for (DetectedObject point : track.points) {
             pointByFrame.put(point.sourceFrameIndex, point);
         }
         return pointByFrame;
     }
 
-    private static Set<Integer> collectResidualFrameIndices(TrackLinker.Track track) {
+    private static Set<Integer> collectResidualFrameIndices(Track track) {
         Set<Integer> frameIndices = new HashSet<>();
         if (track == null || track.points == null) {
             return frameIndices;
         }
-        for (SourceExtractor.DetectedObject point : track.points) {
+        for (DetectedObject point : track.points) {
             frameIndices.add(point.sourceFrameIndex);
         }
         return frameIndices;
@@ -844,7 +845,7 @@ final class ResidualReviewSectionWriter {
         return "Found among the detections the tracker left unexplained. Not a confirmed track; check it by eye.";
     }
 
-    private static BufferedImage createMicroDriftTrailImage(TrackLinker.Track track,
+    private static BufferedImage createMicroDriftTrailImage(Track track,
                                                             short[][] backgroundData,
                                                             int cropWidth,
                                                             int cropHeight,
@@ -868,14 +869,14 @@ final class ResidualReviewSectionWriter {
 
         int pointCount = track == null || track.points == null ? 0 : track.points.size();
         for (int i = 0; i < pointCount; i++) {
-            SourceExtractor.DetectedObject point = track.points.get(i);
+            DetectedObject point = track.points.get(i);
             float ratio = pointCount > 1 ? (float) i / (pointCount - 1) : 0f;
             Color timeColor = Color.getHSBColor(0.66f - (0.66f * ratio), 1.0f, 1.0f);
             int localX = (int) Math.round(point.x - startX);
             int localY = (int) Math.round(point.y - startY);
 
             if (point.rawPixels != null && !point.rawPixels.isEmpty()) {
-                for (SourceExtractor.Pixel pixel : point.rawPixels) {
+                for (Pixel pixel : point.rawPixels) {
                     int px = pixel.x - startX;
                     int py = pixel.y - startY;
                     if (px >= 0 && px < cropWidth && py >= 0 && py < cropHeight) {
@@ -893,7 +894,7 @@ final class ResidualReviewSectionWriter {
             g2d.drawString(String.valueOf(i + 1), localX + 8, localY - 8);
 
             if (i > 0) {
-                SourceExtractor.DetectedObject previous = track.points.get(i - 1);
+                DetectedObject previous = track.points.get(i - 1);
                 int prevX = (int) Math.round(previous.x - startX);
                 int prevY = (int) Math.round(previous.y - startY);
                 g2d.setColor(new Color(timeColor.getRed(), timeColor.getGreen(), timeColor.getBlue(), 180));
@@ -906,7 +907,7 @@ final class ResidualReviewSectionWriter {
         return output;
     }
 
-    private static String buildMicroDriftMetricsText(SourceExtractor.DetectedObject detection, int sequenceNumber) {
+    private static String buildMicroDriftMetricsText(DetectedObject detection, int sequenceNumber) {
         return String.format(
                 Locale.US,
                 "Point %d, Flux: %.1f, Pixels: %d, Elongation: %.2f, FWHM: %.2f, Peak Sigma: %.2f, Integrated Sigma: %.2f, UTC: %s",

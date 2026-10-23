@@ -9,11 +9,11 @@
  */
 package eu.startales.spacepixels.gui;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.DisplayImageRenderer;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.MasterReferenceAnalyzer;
 import io.github.ppissias.jtransient.core.MasterVetoMask;
-import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.execution.CancellationScope;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
@@ -305,7 +305,7 @@ final class StarMaskExplorerFrame extends JFrame {
     }
 
     private static Object[] computeMask(short[][] stack, DetectionConfig config, Settings settings) {
-        List<SourceExtractor.DetectedObject> stars = MasterReferenceAnalyzer.analyzeFromMasterStack(stack, config).masterStars;
+        List<DetectedObject> stars = MasterReferenceAnalyzer.analyzeFromMasterStack(stack, config).masterStars;
         boolean[][] mask = MasterVetoMask.build(stars, stack[0].length, stack.length, settings.starJitter);
         return new Object[]{statistics(stars, mask), overlayLevels(mask, MASK_COLOR)};
     }
@@ -345,9 +345,9 @@ final class StarMaskExplorerFrame extends JFrame {
         return config;
     }
 
-    static MaskStatistics statistics(List<SourceExtractor.DetectedObject> stars, boolean[][] mask) {
+    static MaskStatistics statistics(List<DetectedObject> stars, boolean[][] mask) {
         int largest = 0;
-        for (SourceExtractor.DetectedObject star : stars) {
+        for (DetectedObject star : stars) {
             if (star.rawPixels != null) {
                 largest = Math.max(largest, star.rawPixels.size());
             }

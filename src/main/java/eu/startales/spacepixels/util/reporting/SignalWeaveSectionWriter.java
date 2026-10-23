@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
-import io.github.ppissias.jtransient.core.SourceExtractor;
+import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -14,8 +14,8 @@ final class SignalWeaveSectionWriter {
     private SignalWeaveSectionWriter() { }
 
     static void write(PrintWriter out, DetectionReportContext context, PipelineTelemetry telemetry,
-                      List<List<SourceExtractor.DetectedObject>> transients,
-                      List<List<SourceExtractor.DetectedObject>> leftovers) throws IOException {
+                      List<List<DetectedObject>> transients,
+                      List<List<DetectedObject>> leftovers) throws IOException {
         short[][] background = context.masterStackData != null ? context.masterStackData
                 : (context.rawFrames.isEmpty() ? null : context.rawFrames.get(0));
         if (background == null) return;

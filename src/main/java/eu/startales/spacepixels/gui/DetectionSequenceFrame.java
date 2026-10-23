@@ -10,6 +10,7 @@
 
 package eu.startales.spacepixels.gui;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.DebugOutput;
 
 import eu.startales.spacepixels.util.BlinkSequence;
@@ -183,11 +184,11 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
             data = (short[][]) kernel;
         }
         DataArea frameArea = DataArea.ofFrame(data);
-        List<SourceExtractor.DetectedObject> objects = DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(
+        List<DetectedObject> objects = DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(
                 data, settings.detectionSigmaMultiplier, settings.minDetectionPixels, settings, frameArea, frameArea)).objects;
         int stars = 0;
         int streaks = 0;
-        for (SourceExtractor.DetectedObject object : objects) {
+        for (DetectedObject object : objects) {
             if (object.isNoise) {
                 continue;
             }

@@ -1,10 +1,12 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.AnomalyDetection;
+import io.github.ppissias.jtransient.model.AnomalyType;
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.DisplayImageRenderer;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -36,15 +38,15 @@ final class AnomalySectionWriter {
                 + "An event where a moving-object track predicts its object, in a frame that track has no detection, "
                 + "is marked as likely part of that track.</p>");
         int number = 1;
-        for (TrackLinker.AnomalyDetection anomaly : context.anomalies) {
+        for (AnomalyDetection anomaly : context.anomalies) {
             context.progress.next();
             writeCard(report, context, anomaly, number++);
         }
     }
 
     private static void writeCard(PrintWriter report, DetectionReportContext context,
-                                  TrackLinker.AnomalyDetection anomaly, int number) throws IOException {
-        SourceExtractor.DetectedObject point = anomaly.object;
+                                  AnomalyDetection anomaly, int number) throws IOException {
+        DetectedObject point = anomaly.object;
         var bounds = new TrackCropGeometry.CropBounds(point, context.settings.getTrackCropPadding());
         String prefix = "anomaly_" + number;
         TrackMatch track = likelyTrack(context, point);
@@ -104,7 +106,7 @@ final class AnomalySectionWriter {
      * linker's prediction tolerance of the event, and has a nearest detection of matching profile (the linker's FWHM
      * and surface-brightness limits). Only frames the track skipped and the frame just before or after it qualify.
      */
-    private static TrackMatch likelyTrack(DetectionReportContext context, SourceExtractor.DetectedObject event) {
+    private static TrackMatch likelyTrack(DetectionReportContext context, DetectedObject event) {
         DetectionConfig config = context.config != null ? context.config : new DetectionConfig();
         TrackMatch best = null;
         for (int i = 0; i < context.movingTargets.size(); i++) {
@@ -117,9 +119,9 @@ final class AnomalySectionWriter {
     }
 
     /** Distance from the track's predicted position at the event's time, or infinity when the track does not apply. */
-    private static double predictionDistance(TrackLinker.Track track, SourceExtractor.DetectedObject event, DetectionConfig config) {
+    private static double predictionDistance(Track track, DetectedObject event, DetectionConfig config) {
         if (track == null || track.points == null || track.points.size() < 2) return Double.POSITIVE_INFINITY;
-        List<SourceExtractor.DetectedObject> points = new ArrayList<>(track.points);
+        List<DetectedObject> points = new ArrayList<>(track.points);
         points.sort(Comparator.comparingInt(p -> p.sourceFrameIndex));
         int frame = event.sourceFrameIndex;
         if (frame < points.get(0).sourceFrameIndex - 1 || frame > points.get(points.size() - 1).sourceFrameIndex + 1) {
@@ -130,24 +132,24 @@ final class AnomalySectionWriter {
         if (next < points.size() && points.get(next).sourceFrameIndex == frame) return Double.POSITIVE_INFINITY;
         // The neighbours on both sides, or the two end points next to an event just outside the track.
         int index = Math.max(1, Math.min(points.size() - 1, next));
-        SourceExtractor.DetectedObject a = points.get(index - 1), b = points.get(index);
+        DetectedObject a = points.get(index - 1), b = points.get(index);
         boolean timed = event.timestamp > 0 && a.timestamp > 0 && b.timestamp > 0;
         double ta = timed ? midExposure(a) : a.sourceFrameIndex;
         double tb = timed ? midExposure(b) : b.sourceFrameIndex;
         double t = timed ? midExposure(event) : frame;
         if (tb == ta) return Double.POSITIVE_INFINITY;
-        SourceExtractor.DetectedObject nearest = Math.abs(frame - a.sourceFrameIndex) <= Math.abs(b.sourceFrameIndex - frame) ? a : b;
+        DetectedObject nearest = Math.abs(frame - a.sourceFrameIndex) <= Math.abs(b.sourceFrameIndex - frame) ? a : b;
         if (!profileMatches(event, nearest, config)) return Double.POSITIVE_INFINITY;
         double f = (t - ta) / (tb - ta);
         return Math.hypot(event.x - (a.x + f * (b.x - a.x)), event.y - (a.y + f * (b.y - a.y)));
     }
 
-    private static double midExposure(SourceExtractor.DetectedObject point) {
+    private static double midExposure(DetectedObject point) {
         return point.timestamp + Math.max(0, point.exposureDuration) / 2.0;
     }
 
     /** The linker's profile check: FWHM and surface-brightness ratios within the configured limits. */
-    private static boolean profileMatches(SourceExtractor.DetectedObject a, SourceExtractor.DetectedObject b, DetectionConfig config) {
+    private static boolean profileMatches(DetectedObject a, DetectedObject b, DetectionConfig config) {
         if (config.maxFwhmRatio > 0) {
             double fa = Math.max(a.fwhm, 0.1), fb = Math.max(b.fwhm, 0.1);
             if (Math.max(fa, fb) / Math.min(fa, fb) > config.maxFwhmRatio) return false;
@@ -159,7 +161,7 @@ final class AnomalySectionWriter {
         return true;
     }
 
-    private static void writeSummary(PrintWriter report, DetectionReportContext context, SourceExtractor.DetectedObject point) {
+    private static void writeSummary(PrintWriter report, DetectionReportContext context, DetectedObject point) {
         long start = startTimestamp(context, point);
         long exposure = exposureMillis(context, point);
         long end = start > 0 && exposure > 0 && start <= Long.MAX_VALUE - exposure ? start + exposure : -1;
@@ -177,7 +179,7 @@ final class AnomalySectionWriter {
     }
 
     private static void writeComparisonFrame(PrintWriter report, DetectionReportContext context,
-                                             SourceExtractor.DetectedObject point, TrackCropGeometry.CropBounds bounds,
+                                             DetectedObject point, TrackCropGeometry.CropBounds bounds,
                                              double[] levels, Integer index, String role, String filename,
                                              List<BufferedImage> animation) throws IOException {
         boolean event = "Event".equals(role);
@@ -219,7 +221,7 @@ final class AnomalySectionWriter {
     }
 
     private static void writeDetails(PrintWriter report, DetectionReportContext context,
-                                     TrackLinker.AnomalyDetection anomaly, TrackCropGeometry.CropBounds bounds,
+                                     AnomalyDetection anomaly, TrackCropGeometry.CropBounds bounds,
                                      String prefix) throws IOException {
         var point = anomaly.object;
         report.println("<details class='foldable-streak-details anomaly-details'><summary>Detection details</summary><div class='foldable-streak-body'>");
@@ -259,15 +261,15 @@ final class AnomalySectionWriter {
                 + filename + "' alt='" + label + "' /></a><figcaption>" + label + "</figcaption></figure>");
     }
 
-    private static String reasonLabel(TrackLinker.AnomalyType type) {
-        if (type == TrackLinker.AnomalyType.PEAK_SIGMA) return "Strong peak signal";
-        if (type == TrackLinker.AnomalyType.INTEGRATED_SIGMA) return "Strong combined signal across the detected pixels";
+    private static String reasonLabel(AnomalyType type) {
+        if (type == AnomalyType.PEAK_SIGMA) return "Strong peak signal";
+        if (type == AnomalyType.INTEGRATED_SIGMA) return "Strong combined signal across the detected pixels";
         return "Retained by the single-frame detection checks";
     }
 
-    private static String reasonExplanation(TrackLinker.AnomalyType type) {
-        if (type == TrackLinker.AnomalyType.PEAK_SIGMA) return "The peak pixel signal passed the configured anomaly threshold above the background noise. This describes detection strength, not the physical cause.";
-        if (type == TrackLinker.AnomalyType.INTEGRATED_SIGMA) return "The combined signal across the detection passed the configured integrated-signal threshold. This describes detection strength, not the physical cause.";
+    private static String reasonExplanation(AnomalyType type) {
+        if (type == AnomalyType.PEAK_SIGMA) return "The peak pixel signal passed the configured anomaly threshold above the background noise. This describes detection strength, not the physical cause.";
+        if (type == AnomalyType.INTEGRATED_SIGMA) return "The combined signal across the detection passed the configured integrated-signal threshold. This describes detection strength, not the physical cause.";
         return "The detection method is unavailable; see Detection details for the recorded measurements.";
     }
 
@@ -275,17 +277,17 @@ final class AnomalySectionWriter {
         return context.fitsFiles != null && index >= 0 && index < context.fitsFiles.length ? context.fitsFiles[index] : null;
     }
 
-    private static long startTimestamp(DetectionReportContext context, SourceExtractor.DetectedObject point) {
+    private static long startTimestamp(DetectionReportContext context, DetectedObject point) {
         FitsFileInformation info = frameInfo(context, point.sourceFrameIndex);
         return point.timestamp > 0 ? point.timestamp : info != null ? info.getObservationTimestamp() : -1;
     }
 
-    private static long exposureMillis(DetectionReportContext context, SourceExtractor.DetectedObject point) {
+    private static long exposureMillis(DetectionReportContext context, DetectedObject point) {
         FitsFileInformation info = frameInfo(context, point.sourceFrameIndex);
         return point.exposureDuration > 0 ? point.exposureDuration : info != null ? info.getExposureDurationMillis() : -1;
     }
 
-    private static long frameTimestamp(DetectionReportContext context, SourceExtractor.DetectedObject point, int index) {
+    private static long frameTimestamp(DetectionReportContext context, DetectedObject point, int index) {
         FitsFileInformation info = frameInfo(context, index);
         return index == point.sourceFrameIndex ? startTimestamp(context, point) : info != null ? info.getObservationTimestamp() : -1;
     }

@@ -7,14 +7,14 @@
  */
 package eu.startales.spacepixels.util;
 
+import io.github.ppissias.jtransient.model.AnomalyDetection;
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
-import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
-import io.github.ppissias.jtransient.core.TrackLinker;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.PipelineResult;
-import io.github.ppissias.jtransient.photometry.VariableStarAnalysis;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 
 import java.time.Instant;
@@ -95,13 +95,13 @@ final class DetectionPipelineSupport {
     }
 
     static ImageProcessing.DetectionSummary summarizeDetections(PipelineResult result) {
-        List<TrackLinker.Track> tracks = result.tracks != null ? result.tracks : Collections.emptyList();
-        List<TrackLinker.AnomalyDetection> anomalies = result.anomalies != null ? result.anomalies : Collections.emptyList();
+        List<Track> tracks = result.tracks != null ? result.tracks : Collections.emptyList();
+        List<AnomalyDetection> anomalies = result.anomalies != null ? result.anomalies : Collections.emptyList();
         int singleStreaks = 0;
         int streakTracks = 0;
         int movingTargets = 0;
 
-        for (TrackLinker.Track track : tracks) {
+        for (Track track : tracks) {
             if (track == null || track.points == null || track.points.isEmpty()) {
                 continue;
             }
@@ -129,7 +129,7 @@ final class DetectionPipelineSupport {
         int anomalyCount = anomalies.size();
         int unclassifiedDetections = 0;
         if (result.unclassifiedTransients != null) {
-            for (List<SourceExtractor.DetectedObject> frame : result.unclassifiedTransients) {
+            for (List<DetectedObject> frame : result.unclassifiedTransients) {
                 if (frame != null) {
                     unclassifiedDetections += frame.size();
                 }
@@ -175,24 +175,21 @@ final class DetectionPipelineSupport {
         result.telemetry.trackerTelemetry = null;
         result.telemetry.slowMoverTelemetry = null;
 
-        return new PipelineResult(
-                Collections.emptyList(),
-                result.telemetry,
-                result.masterStackData,
-                result.masterStars == null ? Collections.emptyList() : result.masterStars,
-                SlowMoverAnalysis.empty(),
-                null,
-                null,
-                Collections.emptyList(),
-                Collections.emptyList(),
-                result.allTransients == null ? Collections.emptyList() : result.allTransients,
-                result.unclassifiedTransients == null ? Collections.emptyList() : result.unclassifiedTransients,
-                ResidualTransientAnalysis.empty(),
-                result.masterVetoMask,
-                result.driftPoints == null ? Collections.emptyList() : result.driftPoints,
-                result.maximumStackData,
-                VariableStarAnalysis.empty(),
-                result.dataArea);
+        return PipelineResult.builder()
+                .tracks(Collections.emptyList())
+                .telemetry(result.telemetry)
+                .masterStackData(result.masterStackData)
+                .masterStars(result.masterStars == null ? Collections.emptyList() : result.masterStars)
+                .slowMoverCandidates(Collections.emptyList())
+                .anomalies(Collections.emptyList())
+                .allTransients(result.allTransients == null ? Collections.emptyList() : result.allTransients)
+                .unclassifiedTransients(result.unclassifiedTransients == null ? Collections.emptyList() : result.unclassifiedTransients)
+                .residualTransientAnalysis(ResidualTransientAnalysis.empty())
+                .masterVetoMask(result.masterVetoMask)
+                .driftPoints(result.driftPoints == null ? Collections.emptyList() : result.driftPoints)
+                .maximumStackData(result.maximumStackData)
+                .dataArea(result.dataArea)
+                .build();
     }
 
     private static String formatTraceTimestamp(long timestampMillis) {

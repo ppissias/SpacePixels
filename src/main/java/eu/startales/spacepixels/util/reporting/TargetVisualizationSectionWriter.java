@@ -1,9 +1,9 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
@@ -60,8 +60,8 @@ final class TargetVisualizationSectionWriter {
         }
     }
 
-    private static List<SourceExtractor.DetectedObject> uniqueFramePoints(TrackLinker.Track track) {
-        Map<Integer, SourceExtractor.DetectedObject> frames = new LinkedHashMap<>();
+    private static List<DetectedObject> uniqueFramePoints(Track track) {
+        Map<Integer, DetectedObject> frames = new LinkedHashMap<>();
         for (var point : track.points) frames.putIfAbsent(point.sourceFrameIndex, point);
         return new ArrayList<>(frames.values());
     }
@@ -77,10 +77,10 @@ final class TargetVisualizationSectionWriter {
                                            DetectionReportContext context) throws IOException {
         report.println("<h3 id='single-streaks' style='color: #ff9933; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single-Frame Streaks</h3>");
         int counter = 1;
-        for (TrackLinker.Track track : context.singleStreaks) {
+        for (Track track : context.singleStreaks) {
             context.progress.next();
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
-            SourceExtractor.DetectedObject point = track.points.get(0);
+            DetectedObject point = track.points.get(0);
             int frameIndex = point.sourceFrameIndex;
             int partCount = track.points.size();
             String partBadge = partCount > 1
@@ -146,10 +146,10 @@ final class TargetVisualizationSectionWriter {
                                           DetectionReportContext context) throws IOException {
         report.println("<h3 id='streak-tracks' style='color: #ffcc33; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Streak Tracks</h3>");
         int counter = 1;
-        for (TrackLinker.Track track : context.streakTracks) {
+        for (Track track : context.streakTracks) {
             context.progress.next();
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
-            List<SourceExtractor.DetectedObject> framePoints = uniqueFramePoints(track);
+            List<DetectedObject> framePoints = uniqueFramePoints(track);
 
             String shapeFileName = "streak_track_" + counter + "_shape.png";
             BufferedImage shapeImage = TrackVisualizationRenderer.createTrackShapeImage(
@@ -216,10 +216,10 @@ final class TargetVisualizationSectionWriter {
                                            DetectionReportContext context) throws IOException {
         report.println("<h3 id='moving-targets' style='color: #4da6ff; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Moving-Object Tracks</h3>");
         int counter = 1;
-        for (TrackLinker.Track track : context.movingTargets) {
+        for (Track track : context.movingTargets) {
             context.progress.next();
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
-            List<SourceExtractor.DetectedObject> framePoints = uniqueFramePoints(track);
+            List<DetectedObject> framePoints = uniqueFramePoints(track);
 
             String shapeFileName = "moving_track_" + counter + "_shape.png";
             BufferedImage shapeImage = TrackVisualizationRenderer.createTrackShapeImage(
@@ -293,7 +293,7 @@ final class TargetVisualizationSectionWriter {
             shapeEvolutionHtml.append("<div style='display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; align-items: flex-end;'>\n");
 
             for (int i = 0; i < track.points.size(); i++) {
-                SourceExtractor.DetectedObject point = track.points.get(i);
+                DetectedObject point = track.points.get(i);
                 double objectRadius = TrackCropGeometry.computeBoundingFootprintRadius(point);
                 int tightCropSize = TrackCropGeometry.computeSquareCropSize(objectRadius, 50, 24);
                 short[][] tightCropData = TrackVisualizationRenderer.robustEdgeAwareCrop(
@@ -348,7 +348,7 @@ final class TargetVisualizationSectionWriter {
         }
     }
 
-    private static String buildStreakMetricsText(SourceExtractor.DetectedObject detection) {
+    private static String buildStreakMetricsText(DetectedObject detection) {
         return String.format(
                 Locale.US,
                 "Flux: %.1f, Pixels: %d, Elongation: %.2f, Angle: %s, Peak Sigma: %.2f",
@@ -359,7 +359,7 @@ final class TargetVisualizationSectionWriter {
                 detection.peakSigma);
     }
 
-    private static String buildMovingTrackMetricsText(SourceExtractor.DetectedObject detection) {
+    private static String buildMovingTrackMetricsText(DetectedObject detection) {
         return String.format(
                 Locale.US,
                 "Flux: %.1f, Pixels: %d, Elongation: %.2f, FWHM: %.2f, Peak Sigma: %.2f, UTC: %s",
@@ -371,7 +371,7 @@ final class TargetVisualizationSectionWriter {
                 formatUtcTimestamp(detection.timestamp));
     }
 
-    private static String buildConfirmedStreakFrameFragmentSummaryHtml(TrackLinker.Track track,
+    private static String buildConfirmedStreakFrameFragmentSummaryHtml(Track track,
                                                                        FitsFileInformation[] fitsFiles) {
         if (track == null || track.points == null || track.points.isEmpty()) {
             return "";
@@ -382,7 +382,7 @@ final class TargetVisualizationSectionWriter {
         LinkedHashMap<Integer, Long> frameToTimestamp = new LinkedHashMap<>();
 
         for (int i = 0; i < track.points.size(); i++) {
-            SourceExtractor.DetectedObject point = track.points.get(i);
+            DetectedObject point = track.points.get(i);
             if (point == null) {
                 continue;
             }
@@ -462,7 +462,7 @@ final class TargetVisualizationSectionWriter {
         return html.toString();
     }
 
-    private static String buildStreakPointEntriesHtml(TrackLinker.Track track,
+    private static String buildStreakPointEntriesHtml(Track track,
                                                       DetectionReportAstrometry.Context astrometryContext,
                                                       boolean usePartLabel) {
         if (track == null || track.points == null || track.points.isEmpty()) {
@@ -472,7 +472,7 @@ final class TargetVisualizationSectionWriter {
         int partCount = track.points.size();
         StringBuilder entries = new StringBuilder();
         for (int i = 0; i < track.points.size(); i++) {
-            SourceExtractor.DetectedObject point = track.points.get(i);
+            DetectedObject point = track.points.get(i);
             String metricsText = buildStreakMetricsText(point);
             String sourceFilename = point.sourceFilename != null ? point.sourceFilename : "Unknown";
             String fileLabel;
@@ -493,7 +493,7 @@ final class TargetVisualizationSectionWriter {
         return entries.toString();
     }
 
-    private static String buildMovingTrackPointEntriesHtml(TrackLinker.Track track,
+    private static String buildMovingTrackPointEntriesHtml(Track track,
                                                            DetectionReportAstrometry.Context astrometryContext) {
         if (track == null || track.points == null || track.points.isEmpty()) {
             return "";
@@ -501,7 +501,7 @@ final class TargetVisualizationSectionWriter {
 
         StringBuilder entries = new StringBuilder();
         for (int i = 0; i < track.points.size(); i++) {
-            SourceExtractor.DetectedObject point = track.points.get(i);
+            DetectedObject point = track.points.get(i);
             String metricsText = buildMovingTrackMetricsText(point);
             String sourceFilename = point.sourceFilename != null ? point.sourceFilename : "Unknown";
             entries.append(DetectionReportAstrometry.buildSourceCoordinateListEntry(
@@ -514,7 +514,7 @@ final class TargetVisualizationSectionWriter {
         return entries.toString();
     }
 
-    private static String buildSingleFrameEventSummaryHtml(TrackLinker.Track track,
+    private static String buildSingleFrameEventSummaryHtml(Track track,
                                                            FitsFileInformation[] fitsFiles) {
         if (track == null || track.points == null || track.points.isEmpty()) {
             return "";
@@ -525,7 +525,7 @@ final class TargetVisualizationSectionWriter {
         long frameTimestamp = -1L;
         long exposureMillis = -1L;
 
-        for (SourceExtractor.DetectedObject point : track.points) {
+        for (DetectedObject point : track.points) {
             if (point == null) {
                 continue;
             }
@@ -639,7 +639,7 @@ final class TargetVisualizationSectionWriter {
                 WcsCoordinateTransformer.formatDec(center.getDecDegrees()));
     }
 
-    private static double[] computeTrackMeanPixelCenter(TrackLinker.Track track) {
+    private static double[] computeTrackMeanPixelCenter(Track track) {
         if (track == null || track.points == null || track.points.isEmpty()) {
             return null;
         }
@@ -647,7 +647,7 @@ final class TargetVisualizationSectionWriter {
         double sumX = 0.0d;
         double sumY = 0.0d;
         int count = 0;
-        for (SourceExtractor.DetectedObject point : track.points) {
+        for (DetectedObject point : track.points) {
             if (point == null) {
                 continue;
             }
@@ -735,7 +735,7 @@ final class TargetVisualizationSectionWriter {
         return formatDecimal(widthDegrees * 60.0d, 1) + "' x " + formatDecimal(heightDegrees * 60.0d, 1) + "'";
     }
 
-    private static long resolveFrameTimestampMillis(SourceExtractor.DetectedObject detection,
+    private static long resolveFrameTimestampMillis(DetectedObject detection,
                                                     FitsFileInformation[] fitsFiles) {
         if (detection == null) {
             return -1L;
@@ -750,7 +750,7 @@ final class TargetVisualizationSectionWriter {
         return frameInfo != null ? frameInfo.getObservationTimestamp() : -1L;
     }
 
-    private static long resolveFrameExposureMillis(SourceExtractor.DetectedObject detection,
+    private static long resolveFrameExposureMillis(DetectedObject detection,
                                                    FitsFileInformation[] fitsFiles) {
         if (detection == null) {
             return -1L;

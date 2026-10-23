@@ -1,8 +1,8 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 import java.util.Locale;
 
@@ -192,7 +192,7 @@ final class AstrometryIdentificationHtmlBuilder {
     }
 
     static String buildTrackSatCheckerHtml(DetectionReportAstrometry.Context astrometryContext,
-                                           TrackLinker.Track track,
+                                           Track track,
                                            String liveRenderSlotId,
                                            String liveRenderSidecarFileName,
                                            boolean useSimpleLabels) {
@@ -302,7 +302,7 @@ final class AstrometryIdentificationHtmlBuilder {
     }
 
     static String buildAnomalySatCheckerHtml(DetectionReportAstrometry.Context context,
-                                             SourceExtractor.DetectedObject point,
+                                             DetectedObject point,
                                              String slotId,
                                              String sidecarFileName) {
         String unavailable = null;

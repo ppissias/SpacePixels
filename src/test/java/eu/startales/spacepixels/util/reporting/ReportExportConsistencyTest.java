@@ -1,5 +1,7 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import com.google.gson.*;
 import eu.startales.spacepixels.util.*;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -40,12 +42,25 @@ public class ReportExportConsistencyTest {
         var readiness = new PhotometricReadiness(); readiness.verdict = PhotometricReadiness.Verdict.READY;
         var analysis = new VariableStarAnalysis(readiness, List.of(star), photo);
         var telemetry = new PipelineTelemetry(); telemetry.totalFramesLoaded = 3; telemetry.totalFramesKept = 3; telemetry.photometryTelemetry = photo;
-        var track = new TrackLinker.Track();
+        var track = new Track();
         for (int i : List.of(0, 2)) {
-            var point = new SourceExtractor.DetectedObject(60 + i * 10, 60, 1000, 10); point.sourceFrameIndex = i;
+            var point = new DetectedObject(60 + i * 10, 60, 1000, 10); point.sourceFrameIndex = i;
             point.timestamp = files[i].getObservationTimestamp(); point.exposureDuration = 120000; track.addPoint(point);
         }
-        var result = new PipelineResult(List.of(track), telemetry, frames.get(0), List.of(), null, null, null, List.of(), List.of(), List.of(), List.of(), ResidualTransientAnalysis.empty(), null, List.of(), frames.get(0), analysis);
+        var result = PipelineResult.builder()
+                .tracks(List.of(track))
+                .telemetry(telemetry)
+                .masterStackData(frames.get(0))
+                .masterStars(List.of())
+                .slowMoverCandidates(List.of())
+                .anomalies(List.of())
+                .allTransients(List.of())
+                .unclassifiedTransients(List.of())
+                .residualTransientAnalysis(ResidualTransientAnalysis.empty())
+                .driftPoints(List.of())
+                .maximumStackData(frames.get(0))
+                .variableStarAnalysis(analysis)
+                .build();
         var config = new DetectionConfig(); config.enableVariableStarDetection = true; config.enableSlowMoverDetection = false;
         boolean creative = DetectionReportGenerator.includeAiCreativeReportSections;
         String measurements = new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(analysis);
@@ -71,7 +86,20 @@ public class ReportExportConsistencyTest {
             assertFalse(html.contains("V1 (0.60 mag)")); assertFalse(html.contains("<section id='variables'>"));
             assertFalse(Files.readString(new File(excluded, "report-data.json").toPath()).contains("Variable-star candidate"));
             File variablesOnly = temporary.newFolder("variables-only");
-            var noTracks = new PipelineResult(List.of(), telemetry, frames.get(0), List.of(), null, null, null, List.of(), List.of(), List.of(), List.of(), ResidualTransientAnalysis.empty(), null, List.of(), frames.get(0), analysis);
+            var noTracks = PipelineResult.builder()
+                    .tracks(List.of())
+                    .telemetry(telemetry)
+                    .masterStackData(frames.get(0))
+                    .masterStars(List.of())
+                    .slowMoverCandidates(List.of())
+                    .anomalies(List.of())
+                    .allTransients(List.of())
+                    .unclassifiedTransients(List.of())
+                    .residualTransientAnalysis(ResidualTransientAnalysis.empty())
+                    .driftPoints(List.of())
+                    .maximumStackData(frames.get(0))
+                    .variableStarAnalysis(analysis)
+                    .build();
             DetectionReportGenerator.exportTrackVisualizations(noTracks, frames, files, variablesOnly, config, null);
             html = Files.readString(new File(variablesOnly, "detection_report.html").toPath());
             assertTrue(html.contains("Map of All Detections"));
@@ -92,10 +120,10 @@ public class ReportExportConsistencyTest {
             for (int y = 0; y < 120; y++) for (int x = 0; x < 160; x++) pixels[y][x] = (short) (-32000 + (x * y) % 100);
             frames.add(pixels);
         }
-        List<SourceExtractor.DetectedObject> rescued = new ArrayList<>(), commonA = new ArrayList<>(), commonB = new ArrayList<>();
+        List<DetectedObject> rescued = new ArrayList<>(), commonA = new ArrayList<>(), commonB = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
             for (var source : List.of(rescued, commonA, commonB)) {
-                var point = new SourceExtractor.DetectedObject(source == rescued ? 70 + 2 * i : source == commonA ? 30 + i : 120 + i,
+                var point = new DetectedObject(source == rescued ? 70 + 2 * i : source == commonA ? 30 + i : 120 + i,
                         source == rescued ? 60 : source == commonA ? 30 : 90, 1000, 10);
                 point.sourceFrameIndex = i; point.timestamp = files[i].getObservationTimestamp(); point.exposureDuration = 120000;
                 source.add(point);
@@ -106,8 +134,20 @@ public class ReportExportConsistencyTest {
         var group = new ResidualTransientAnalysis.CommonMotionGroup(List.of(commonA, commonB), 3);
         var residual = new ResidualTransientAnalysis(List.of(candidate), List.of(), List.of(group));
         var telemetry = new PipelineTelemetry(); telemetry.totalFramesLoaded = 3; telemetry.totalFramesKept = 3;
-        var result = new PipelineResult(List.of(), telemetry, frames.get(0), List.of(), null, null, null,
-                List.of(), List.of(), List.of(), List.of(), residual, null, List.of(), frames.get(0), VariableStarAnalysis.empty());
+        var result = PipelineResult.builder()
+                .tracks(List.of())
+                .telemetry(telemetry)
+                .masterStackData(frames.get(0))
+                .masterStars(List.of())
+                .slowMoverCandidates(List.of())
+                .anomalies(List.of())
+                .allTransients(List.of())
+                .unclassifiedTransients(List.of())
+                .residualTransientAnalysis(residual)
+                .driftPoints(List.of())
+                .maximumStackData(frames.get(0))
+                .variableStarAnalysis(VariableStarAnalysis.empty())
+                .build();
         var config = new DetectionConfig(); config.enableSlowMoverDetection = false;
         String original = new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(residual);
         for (boolean rescue : List.of(false, true)) for (boolean motion : List.of(false, true)) {

@@ -10,8 +10,8 @@
 
 package eu.startales.spacepixels.util.reporting;
 
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 
 /**
  * Computes crop bounds and footprint-driven sizing for per-detection and per-track visualizations.
@@ -29,11 +29,11 @@ final class TrackCropGeometry {
         final int startX;
         final int startY;
 
-        CropBounds(TrackLinker.Track track, int padding) {
+        CropBounds(Track track, int padding) {
             this(resolveTrackCropExtents(track), padding);
         }
 
-        CropBounds(SourceExtractor.DetectedObject detection, int padding) {
+        CropBounds(DetectedObject detection, int padding) {
             this(resolveDetectionCropExtents(detection), padding);
         }
 
@@ -59,7 +59,7 @@ final class TrackCropGeometry {
         return Math.sqrt(effectiveArea / Math.PI);
     }
 
-    static double computeBoundingFootprintRadius(SourceExtractor.DetectedObject detection) {
+    static double computeBoundingFootprintRadius(DetectedObject detection) {
         if (detection == null) {
             return 0.0;
         }
@@ -70,23 +70,23 @@ final class TrackCropGeometry {
         return Math.max(minimumSize, (int) Math.round(footprintRadius * 2.0) + padding);
     }
 
-    private static double[] resolveTrackCropExtents(TrackLinker.Track track) {
+    private static double[] resolveTrackCropExtents(Track track) {
         double[] bounds = new double[]{Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE};
         if (track != null && track.points != null) {
-            for (SourceExtractor.DetectedObject point : track.points) {
+            for (DetectedObject point : track.points) {
                 includeDetectionExtents(bounds, point);
             }
         }
         return normalizeCropExtents(bounds);
     }
 
-    private static double[] resolveDetectionCropExtents(SourceExtractor.DetectedObject detection) {
+    private static double[] resolveDetectionCropExtents(DetectedObject detection) {
         double[] bounds = new double[]{Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE};
         includeDetectionExtents(bounds, detection);
         return normalizeCropExtents(bounds);
     }
 
-    private static void includeDetectionExtents(double[] bounds, SourceExtractor.DetectedObject detection) {
+    private static void includeDetectionExtents(double[] bounds, DetectedObject detection) {
         if (bounds == null || detection == null) {
             return;
         }

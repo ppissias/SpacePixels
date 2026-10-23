@@ -1,8 +1,8 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
@@ -22,8 +22,8 @@ final class GlobalMapsSectionWriter {
 
     static void writeSections(PrintWriter report,
                               DetectionReportContext reportContext,
-                              List<TrackLinker.Track> localRescueTracks,
-                              List<List<SourceExtractor.DetectedObject>> allTransients) throws IOException {
+                              List<Track> localRescueTracks,
+                              List<List<DetectedObject>> allTransients) throws IOException {
         short[][] backgroundData = resolveBackgroundData(reportContext);
         if (backgroundData == null) {
             return;
@@ -36,7 +36,7 @@ final class GlobalMapsSectionWriter {
     private static void writeGlobalTrajectoryMap(PrintWriter report,
                                                  DetectionReportContext reportContext,
                                                  short[][] backgroundData,
-                                                 List<TrackLinker.Track> localRescueTracks) throws IOException {
+                                                 List<Track> localRescueTracks) throws IOException {
         if (reportContext.singleStreaks.isEmpty()
                 && reportContext.streakTracks.isEmpty()
                 && reportContext.movingTargets.isEmpty()
@@ -104,11 +104,11 @@ final class GlobalMapsSectionWriter {
     }
 
     /** The same labels, colours and counts on the overview picture and the full detection map. */
-    static String detectionLegendHtml(DetectionReportContext reportContext, List<TrackLinker.Track> localRescueTracks) {
+    static String detectionLegendHtml(DetectionReportContext reportContext, List<Track> localRescueTracks) {
         return detectionLegendHtml(reportContext, localRescueTracks, false);
     }
 
-    static String detectionLegendHtml(DetectionReportContext reportContext, List<TrackLinker.Track> localRescueTracks,
+    static String detectionLegendHtml(DetectionReportContext reportContext, List<Track> localRescueTracks,
                                       boolean interactive) {
         return buildGlobalTrajectoryLegendHtml(
                 reportContext.movingTargets.size(),
@@ -145,7 +145,7 @@ final class GlobalMapsSectionWriter {
     private static void writeGlobalTransientMaps(PrintWriter report,
                                                  DetectionReportContext reportContext,
                                                  short[][] backgroundData,
-                                                 List<List<SourceExtractor.DetectedObject>> allTransients) throws IOException {
+                                                 List<List<DetectedObject>> allTransients) throws IOException {
         if (allTransients == null || allTransients.isEmpty()) {
             return;
         }

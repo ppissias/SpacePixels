@@ -10,10 +10,11 @@
 
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.AnomalyDetection;
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 import io.github.ppissias.jtransient.photometry.StarLightCurve;
 import io.github.ppissias.jtransient.photometry.VariabilityTier;
 import io.github.ppissias.jtransient.photometry.VariableStarAnalysis;
@@ -194,13 +195,13 @@ final class ClaudePerspectiveSectionWriter {
         row = trackBars(svg, timeline, context.movingTargets, "T", "#4da6ff", "moving-object track", eventsTop, row);
         trackBars(svg, timeline, context.streakTracks, "ST", "#ffcc33", "streak track", eventsTop, row);
         int counter = 1;
-        for (TrackLinker.Track track : context.singleStreaks) {
+        for (Track track : context.singleStreaks) {
             int frame = track.points.isEmpty() ? -1 : track.points.get(0).sourceFrameIndex;
             eventMark(svg, timeline, frame, eventsTop, eventsHeight, "#ff9933", "S" + counter, "Single-frame streak S" + counter, true);
             counter++;
         }
         counter = 1;
-        for (TrackLinker.AnomalyDetection anomaly : context.anomalies) {
+        for (AnomalyDetection anomaly : context.anomalies) {
             int frame = anomaly.object != null ? anomaly.object.sourceFrameIndex : -1;
             eventMark(svg, timeline, frame, eventsTop, eventsHeight, "#ff4d6d", context.anomalies.size() <= 8 ? "A" + counter : null,
                     "Single-frame anomaly A" + counter, false);
@@ -283,13 +284,13 @@ final class ClaudePerspectiveSectionWriter {
     }
 
     /** Draws each track as a bar from its first to its last frame, stacked in rows above the lane's midline. */
-    private static int trackBars(StringBuilder svg, Timeline timeline, List<TrackLinker.Track> tracks, String prefix,
+    private static int trackBars(StringBuilder svg, Timeline timeline, List<Track> tracks, String prefix,
                                  String color, String kind, int top, int row) {
         int counter = 1;
-        for (TrackLinker.Track track : tracks) {
+        for (Track track : tracks) {
             int first = Integer.MAX_VALUE;
             int last = Integer.MIN_VALUE;
-            for (SourceExtractor.DetectedObject point : track.points) {
+            for (DetectedObject point : track.points) {
                 first = Math.min(first, point.sourceFrameIndex);
                 last = Math.max(last, point.sourceFrameIndex);
             }
@@ -426,7 +427,7 @@ final class ClaudePerspectiveSectionWriter {
         // Single-frame streaks grouped by frame: one satellite can be extracted as several streaks.
         Map<Integer, List<Integer>> streaksByFrame = new LinkedHashMap<>();
         int counter = 1;
-        for (TrackLinker.Track track : context.singleStreaks) {
+        for (Track track : context.singleStreaks) {
             int frame = track.points.isEmpty() ? -1 : track.points.get(0).sourceFrameIndex;
             streaksByFrame.computeIfAbsent(frame, k -> new ArrayList<>()).add(counter++);
         }

@@ -1,5 +1,7 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import com.google.gson.GsonBuilder;
 import eu.startales.spacepixels.util.ReportInclusion;
 import io.github.ppissias.jtransient.core.*;
@@ -92,12 +94,12 @@ final class ReportData {
     }
 
     /** Numbers track findings through the shared category contract without changing engine order. */
-    private static void tracks(List<Finding> out, DetectionReportContext context, FindingCategory category, List<TrackLinker.Track> tracks) {
+    private static void tracks(List<Finding> out, DetectionReportContext context, FindingCategory category, List<Track> tracks) {
         for (int index = 0; index < tracks.size(); index++) addPoints(out, context, category.id(index + 1), tracks.get(index).points);
     }
 
     /** Chooses category-owned representative coordinates while keeping frame associations unchanged. */
-    private static void addPoints(List<Finding> out, DetectionReportContext c, String id, List<SourceExtractor.DetectedObject> points) {
+    private static void addPoints(List<Finding> out, DetectionReportContext c, String id, List<DetectedObject> points) {
         if (points == null || points.isEmpty()) return;
         double x = 0, y = 0;
         for (var p : points) { x += p.x; y += p.y; }
@@ -107,7 +109,7 @@ final class ReportData {
 
     /** Adds one finding with category-owned labels/anchors and the export's resolved sky coordinates. */
     private static void add(List<Finding> out, DetectionReportContext c, String id, double x, double y,
-                            List<SourceExtractor.DetectedObject> points, Integer starId, String tier) {
+                            List<DetectedObject> points, Integer starId, String tier) {
         Double ra = null, dec = null;
         if (c.astrometryContext != null && c.astrometryContext.getTransformer() != null) {
             var sky = c.astrometryContext.getTransformer().pixelToSky(x, y);

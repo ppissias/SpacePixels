@@ -1,12 +1,13 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Pixel;
 import eu.startales.spacepixels.util.ReportInclusion;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.CameraFixedRejector;
 import io.github.ppissias.jtransient.core.FrameRegistration;
 import io.github.ppissias.jtransient.core.PixelEncoding;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
-import io.github.ppissias.jtransient.core.SourceExtractor;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -33,10 +34,10 @@ public class UnclassifiedTransientSectionWriterTest {
 
     @Test
     public void remainingDetectionsExcludeLocalRescuePointsAndDuplicateReferences() {
-        SourceExtractor.DetectedObject first = detection(8, 10, 0);
-        SourceExtractor.DetectedObject rescued = detection(20, 22, 1);
-        SourceExtractor.DetectedObject second = detection(30, 32, 1);
-        List<List<SourceExtractor.DetectedObject>> unclassified = Arrays.asList(
+        DetectedObject first = detection(8, 10, 0);
+        DetectedObject rescued = detection(20, 22, 1);
+        DetectedObject second = detection(30, 32, 1);
+        List<List<DetectedObject>> unclassified = Arrays.asList(
                 Arrays.asList(first, first),
                 Arrays.asList(rescued, second));
         ResidualTransientAnalysis.LocalRescueCandidate rescue = new ResidualTransientAnalysis.LocalRescueCandidate(
@@ -45,7 +46,7 @@ public class UnclassifiedTransientSectionWriterTest {
                 null,
                 1.0);
 
-        List<List<SourceExtractor.DetectedObject>> remaining = UnclassifiedTransientSectionWriter.selectRemaining(
+        List<List<DetectedObject>> remaining = UnclassifiedTransientSectionWriter.selectRemaining(
                 unclassified, Collections.singletonList(rescue));
 
         assertEquals(2, remaining.size());
@@ -63,16 +64,16 @@ public class UnclassifiedTransientSectionWriterTest {
             }
         }
 
-        SourceExtractor.DetectedObject classified = detection(8, 10, 0);
-        SourceExtractor.DetectedObject remaining = detection(30, 32, 1);
+        DetectedObject classified = detection(8, 10, 0);
+        DetectedObject remaining = detection(30, 32, 1);
         remaining.sourceFilename = "<script>alert(1)</script>.fits";
         remaining.pixelCount = 0;
         remaining.pixelArea = 3;
         remaining.rawPixels = Arrays.asList(
-                new SourceExtractor.Pixel(35, 32, 1200),
-                new SourceExtractor.Pixel(36, 32, 1200),
-                new SourceExtractor.Pixel(35, 33, 1200));
-        SourceExtractor.DetectedObject rescued = detection(40, 42, 1);
+                new Pixel(35, 32, 1200),
+                new Pixel(36, 32, 1200),
+                new Pixel(35, 33, 1200));
+        DetectedObject rescued = detection(40, 42, 1);
         ResidualTransientAnalysis.LocalRescueCandidate rescue = new ResidualTransientAnalysis.LocalRescueCandidate(
                 ResidualTransientAnalysis.LocalRescueKind.MICRO_DRIFT,
                 Collections.singletonList(rescued),
@@ -99,10 +100,10 @@ public class UnclassifiedTransientSectionWriterTest {
                 Collections.emptyList(),
                 Collections.emptyList(),
                 Collections.emptyList());
-        List<List<SourceExtractor.DetectedObject>> allTransients = Arrays.asList(
+        List<List<DetectedObject>> allTransients = Arrays.asList(
                 Collections.singletonList(classified),
                 Arrays.asList(remaining, rescued));
-        List<List<SourceExtractor.DetectedObject>> unclassified = Arrays.asList(
+        List<List<DetectedObject>> unclassified = Arrays.asList(
                 Collections.emptyList(),
                 Arrays.asList(remaining, rescued));
         StringWriter html = new StringWriter();
@@ -127,12 +128,12 @@ public class UnclassifiedTransientSectionWriterTest {
 
     @Test
     public void groupsLeftOutOfTheReportStayOffTheMapAndAreCounted() throws Exception {
-        SourceExtractor.DetectedObject trackPoint = detection(5, 5, 0);
-        SourceExtractor.DetectedObject commonMotion = detection(10, 30, 1);
-        SourceExtractor.DetectedObject rescued = detection(30, 10, 1);
-        SourceExtractor.DetectedObject left = detection(30, 30, 2);
+        DetectedObject trackPoint = detection(5, 5, 0);
+        DetectedObject commonMotion = detection(10, 30, 1);
+        DetectedObject rescued = detection(30, 10, 1);
+        DetectedObject left = detection(30, 30, 2);
         // A hot pixel at camera x 10 that the dither moves by 5 px per frame.
-        List<List<SourceExtractor.DetectedObject>> hotPixel = Arrays.asList(
+        List<List<DetectedObject>> hotPixel = Arrays.asList(
                 new java.util.ArrayList<>(Collections.singletonList(detection(10, 20, 0))),
                 new java.util.ArrayList<>(Collections.singletonList(detection(15, 20, 1))),
                 new java.util.ArrayList<>(Collections.singletonList(detection(20, 20, 2))));
@@ -150,9 +151,9 @@ public class UnclassifiedTransientSectionWriterTest {
                         Collections.singletonList(Collections.singletonList(commonMotion)), 1)));
         // The engine already took the camera-fixed points out of every list and the common-motion point out of the
         // unclassified list.
-        List<List<SourceExtractor.DetectedObject>> allTransients = Arrays.asList(
+        List<List<DetectedObject>> allTransients = Arrays.asList(
                 Collections.singletonList(trackPoint), Arrays.asList(commonMotion, rescued), Collections.singletonList(left));
-        List<List<SourceExtractor.DetectedObject>> unclassified = Arrays.asList(
+        List<List<DetectedObject>> unclassified = Arrays.asList(
                 Collections.emptyList(), Collections.singletonList(rescued), Collections.singletonList(left));
         ReportInclusion leftOut = new ReportInclusion(true, true, false, true, false, false, true);
 
@@ -176,8 +177,8 @@ public class UnclassifiedTransientSectionWriterTest {
         assertFalse(included.contains("Groups left out"));
     }
 
-    private String inspectorHtml(List<List<SourceExtractor.DetectedObject>> allTransients,
-                                 List<List<SourceExtractor.DetectedObject>> unclassified,
+    private String inspectorHtml(List<List<DetectedObject>> allTransients,
+                                 List<List<DetectedObject>> unclassified,
                                  ResidualTransientAnalysis residual,
                                  List<CameraFixedRejector.Group> cameraFixed,
                                  ReportInclusion inclusion) throws Exception {
@@ -210,13 +211,13 @@ public class UnclassifiedTransientSectionWriterTest {
             }
             rawFrames.add(pixels);
         }
-        SourceExtractor.DetectedObject flash = detection(60, 50, 1);
+        DetectedObject flash = detection(60, 50, 1);
         DetectionReportContext context = new DetectionReportContext(
                 new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, false, 12, 1.0f),
                 exportDirectory, rawFrames, null, new DetectionConfig(), null, rawFrames.get(0), null, null, null, null,
                 Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(),
                 Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
-        List<List<SourceExtractor.DetectedObject>> transients = Arrays.asList(
+        List<List<DetectedObject>> transients = Arrays.asList(
                 Collections.emptyList(), Collections.singletonList(flash), Collections.emptyList(), Collections.emptyList());
         StringWriter html = new StringWriter();
 
@@ -259,7 +260,7 @@ public class UnclassifiedTransientSectionWriterTest {
                     exportDirectory, Collections.singletonList(pixels), null, new DetectionConfig(), null, pixels, null, null, null, null,
                     Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(),
                     Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
-            List<List<SourceExtractor.DetectedObject>> transients = Collections.singletonList(Collections.singletonList(detection(20, 20, 0)));
+            List<List<DetectedObject>> transients = Collections.singletonList(Collections.singletonList(detection(20, 20, 0)));
             StringWriter html = new StringWriter();
 
             UnclassifiedTransientSectionWriter.writeSection(new PrintWriter(html), context, transients, transients);
@@ -271,8 +272,8 @@ public class UnclassifiedTransientSectionWriterTest {
         }
     }
 
-    private static SourceExtractor.DetectedObject detection(double x, double y, int frameIndex) {
-        SourceExtractor.DetectedObject detection = new SourceExtractor.DetectedObject(x, y, 100.0, 4);
+    private static DetectedObject detection(double x, double y, int frameIndex) {
+        DetectedObject detection = new DetectedObject(x, y, 100.0, 4);
         detection.sourceFrameIndex = frameIndex;
         detection.sourceFilename = "frame_" + frameIndex + ".fits";
         return detection;

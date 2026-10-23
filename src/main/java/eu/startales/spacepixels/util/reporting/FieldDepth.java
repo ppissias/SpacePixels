@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.DebugOutput;
 
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
@@ -192,7 +193,7 @@ final class FieldDepth {
             crop[y - patch.y0] = Arrays.copyOfRange(data[y], patch.x0, patch.x1 + 1);
         }
         List<double[]> detections = new ArrayList<>();
-        for (SourceExtractor.DetectedObject object : DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(crop, config.detectionSigmaMultiplier,
+        for (DetectedObject object : DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(crop, config.detectionSigmaMultiplier,
                 config.minDetectionPixels, config)).objects) {
             if (!object.isStreak) {
                 detections.add(new double[]{object.x + patch.x0, object.y + patch.y0});

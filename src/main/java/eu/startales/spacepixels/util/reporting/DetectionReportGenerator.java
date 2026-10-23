@@ -10,6 +10,11 @@
 
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.AnomalyDetection;
+import io.github.ppissias.jtransient.model.AnomalyType;
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Pixel;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.util.DisplayImageRenderer;
@@ -21,8 +26,6 @@ import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
 import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
 import io.github.ppissias.jtransient.core.SlowMoverCandidateResult;
 import io.github.ppissias.jtransient.core.SlowMoverSummaryTelemetry;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
@@ -238,7 +241,7 @@ public class DetectionReportGenerator {
                                                           int cy,
                                                           int cropWidth,
                                                           int cropHeight,
-                                                          SourceExtractor.DetectedObject highlightDetection,
+                                                          DetectedObject highlightDetection,
                                                           Color maskColor) {
         return createCroppedMaskOverlay(
                 backgroundData,
@@ -258,7 +261,7 @@ public class DetectionReportGenerator {
                                                   int cy,
                                                   int cropWidth,
                                                   int cropHeight,
-                                                  SourceExtractor.DetectedObject highlightDetection,
+                                                  DetectedObject highlightDetection,
                                                   Color maskColor,
                                                   ExportVisualizationSettings settings) {
         BufferedImage grayImage = TrackVisualizationRenderer.createCroppedDisplayImage(
@@ -309,7 +312,7 @@ public class DetectionReportGenerator {
                                                                 int cy,
                                                                 int cropWidth,
                                                                 int cropHeight,
-                                                                SourceExtractor.DetectedObject highlightDetection) {
+                                                                DetectedObject highlightDetection) {
         return createCroppedMasterMaskOverlay(
                 masterStackData,
                 masterMask,
@@ -327,7 +330,7 @@ public class DetectionReportGenerator {
                                                                 int cy,
                                                                 int cropWidth,
                                                                 int cropHeight,
-                                                                SourceExtractor.DetectedObject highlightDetection,
+                                                                DetectedObject highlightDetection,
                                                                 ExportVisualizationSettings settings) {
         return createCroppedMaskOverlay(
                 masterStackData,
@@ -361,7 +364,7 @@ public class DetectionReportGenerator {
         return y < masterMask.length && x < masterMask[y].length && masterMask[y][x];
     }
 
-    static MaskOverlapStats computeMaskOverlapStats(SourceExtractor.DetectedObject detection,
+    static MaskOverlapStats computeMaskOverlapStats(DetectedObject detection,
                                                     boolean[][] masterMask,
                                                     int refWidth,
                                                     int refHeight) {
@@ -374,7 +377,7 @@ public class DetectionReportGenerator {
         int totalPixels = 0;
 
         if (detection.rawPixels != null && !detection.rawPixels.isEmpty()) {
-            for (SourceExtractor.Pixel pixel : detection.rawPixels) {
+            for (Pixel pixel : detection.rawPixels) {
                 totalPixels++;
                 if (isMasterMaskSet(masterMask, pixel.x, pixel.y, transposed)) {
                     overlappingPixels++;
@@ -408,7 +411,7 @@ public class DetectionReportGenerator {
         return TrackVisualizationRenderer.robustEdgeAwareCrop(fullImage, cx, cy, cropWidth, cropHeight);
     }
 
-    private static BufferedImage createSingleStreakShapeImage(List<SourceExtractor.DetectedObject> points,
+    private static BufferedImage createSingleStreakShapeImage(List<DetectedObject> points,
                                                               int cropWidth,
                                                               int cropHeight,
                                                               int startX,
@@ -417,7 +420,7 @@ public class DetectionReportGenerator {
         return TrackVisualizationRenderer.createSingleStreakShapeImage(points, cropWidth, cropHeight, startX, startY, drawCentroid);
     }
 
-    private static BufferedImage createTrackShapeImage(TrackLinker.Track track,
+    private static BufferedImage createTrackShapeImage(Track track,
                                                        int cropWidth,
                                                        int cropHeight,
                                                        int startX,
@@ -439,13 +442,13 @@ public class DetectionReportGenerator {
     static final Color GLOBAL_MAP_DEEP_STACK_COLOR = FindingCategory.SLOW_MOVER.color();
 
     static BufferedImage createGlobalTrackMap(short[][] backgroundData,
-                                              List<TrackLinker.AnomalyDetection> anomalies,
-                                              List<TrackLinker.Track> singleStreaks,
-                                              List<TrackLinker.Track> streakTracks,
-                                              List<TrackLinker.Track> movingTargets,
-                                              List<TrackLinker.Track> localRescueTracks,
+                                              List<AnomalyDetection> anomalies,
+                                              List<Track> singleStreaks,
+                                              List<Track> streakTracks,
+                                              List<Track> movingTargets,
+                                              List<Track> localRescueTracks,
                                               List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters,
-                                              List<SourceExtractor.DetectedObject> deepStackCandidates, ExportVisualizationSettings settings) {
+                                              List<DetectedObject> deepStackCandidates, ExportVisualizationSettings settings) {
         BufferedImage grayBg = createDisplayImage(backgroundData, settings);
         BufferedImage rgbMap = new BufferedImage(grayBg.getWidth(), grayBg.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
@@ -453,17 +456,17 @@ public class DetectionReportGenerator {
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
         int stCounter = 1;
-        for (TrackLinker.Track t : streakTracks) {
+        for (Track t : streakTracks) {
             drawMultiFrameTrack(g2d, t, GLOBAL_MAP_STREAK_TRACK_COLOR, "ST" + stCounter);
             stCounter++;
         }
         int tCounter = 1;
-        for (TrackLinker.Track t : movingTargets) {
+        for (Track t : movingTargets) {
             drawMultiFrameTrack(g2d, t, GLOBAL_MAP_MOVING_TARGET_COLOR, "T" + tCounter);
             tCounter++;
         }
         int lrCounter = 1;
-        for (TrackLinker.Track t : localRescueTracks) {
+        for (Track t : localRescueTracks) {
             drawMultiFrameTrack(g2d, t, GLOBAL_MAP_LOCAL_RESCUE_COLOR, "LR" + lrCounter);
             lrCounter++;
         }
@@ -475,19 +478,19 @@ public class DetectionReportGenerator {
         }
 
         int dsCounter = 1;
-        for (SourceExtractor.DetectedObject candidate : deepStackCandidates) {
+        for (DetectedObject candidate : deepStackCandidates) {
             drawDeepStackCandidate(g2d, candidate, GLOBAL_MAP_DEEP_STACK_COLOR, "DS" + dsCounter);
             dsCounter++;
         }
 
         int aCounter = 1;
-        for (TrackLinker.AnomalyDetection anomaly : anomalies) {
+        for (AnomalyDetection anomaly : anomalies) {
             drawSingleFindingMarker(g2d, anomaly.object, GLOBAL_MAP_ANOMALY_COLOR, "A" + aCounter, 20);
             aCounter++;
         }
 
         int sCounter = 1;
-        for (TrackLinker.Track t : singleStreaks) {
+        for (Track t : singleStreaks) {
             drawSingleFindingMarker(g2d, t.points.get(0), GLOBAL_MAP_SINGLE_STREAK_COLOR, "S" + sCounter, 20);
             sCounter++;
         }
@@ -495,7 +498,7 @@ public class DetectionReportGenerator {
         return rgbMap;
     }
 
-    private static void drawSingleFindingMarker(Graphics2D g2d, SourceExtractor.DetectedObject pt, Color color, String label, int radius) {
+    private static void drawSingleFindingMarker(Graphics2D g2d, DetectedObject pt, Color color, String label, int radius) {
         if (pt == null) {
             return;
         }
@@ -505,7 +508,7 @@ public class DetectionReportGenerator {
         g2d.setStroke(new BasicStroke(2.5f));
         g2d.drawOval(cx - radius, cy - radius, radius * 2, radius * 2);
         if (pt.rawPixels != null) {
-            for (SourceExtractor.Pixel pixel : pt.rawPixels) {
+            for (Pixel pixel : pt.rawPixels) {
                 g2d.fillRect(pixel.x - 1, pixel.y - 1, 3, 3);
             }
         }
@@ -514,7 +517,7 @@ public class DetectionReportGenerator {
         g2d.drawString(label, cx + radius + 5, cy - radius - 5);
     }
 
-    private static void drawDeepStackCandidate(Graphics2D g2d, SourceExtractor.DetectedObject candidate, Color color, String label) {
+    private static void drawDeepStackCandidate(Graphics2D g2d, DetectedObject candidate, Color color, String label) {
         if (candidate == null) {
             return;
         }
@@ -543,7 +546,7 @@ public class DetectionReportGenerator {
         g2d.drawOval(cx - radius, cy - radius, radius * 2, radius * 2);
         g2d.setStroke(previousStroke);
 
-        for (SourceExtractor.DetectedObject point : cluster.points) {
+        for (DetectedObject point : cluster.points) {
             int px = (int) Math.round(point.x);
             int py = (int) Math.round(point.y);
             g2d.setColor(color);
@@ -557,15 +560,15 @@ public class DetectionReportGenerator {
         g2d.drawString(label, cx + radius + 6, cy - radius - 6);
     }
 
-    private static void drawMultiFrameTrack(Graphics2D g2d, TrackLinker.Track track, Color lineColor, String label) {
+    private static void drawMultiFrameTrack(Graphics2D g2d, Track track, Color lineColor, String label) {
         g2d.setColor(lineColor); g2d.setStroke(new BasicStroke(2.0f));
         for (int i = 0; i < track.points.size() - 1; i++) {
-            SourceExtractor.DetectedObject p1 = track.points.get(i);
-            SourceExtractor.DetectedObject p2 = track.points.get(i + 1);
+            DetectedObject p1 = track.points.get(i);
+            DetectedObject p2 = track.points.get(i + 1);
             g2d.drawLine((int) Math.round(p1.x), (int) Math.round(p1.y), (int) Math.round(p2.x), (int) Math.round(p2.y));
         }
         g2d.setColor(lineColor);
-        for (SourceExtractor.DetectedObject pt : track.points) {
+        for (DetectedObject pt : track.points) {
             g2d.fillOval((int) Math.round(pt.x) - 4, (int) Math.round(pt.y) - 4, 8, 8);
             g2d.setColor(Color.WHITE);
             g2d.drawOval((int) Math.round(pt.x) - 4, (int) Math.round(pt.y) - 4, 8, 8);
@@ -575,7 +578,7 @@ public class DetectionReportGenerator {
         g2d.drawString(label, (int) Math.round(track.points.get(0).x) + 15, (int) Math.round(track.points.get(0).y) - 15);
     }
 
-    static BufferedImage createDriftMap(List<SourceExtractor.Pixel> path, int outSize) {
+    static BufferedImage createDriftMap(List<Pixel> path, int outSize) {
         BufferedImage img = new BufferedImage(outSize, outSize, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = img.createGraphics();
         g2d.setColor(new Color(35, 35, 35));
@@ -588,7 +591,7 @@ public class DetectionReportGenerator {
 
         int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
         int minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
-        for (SourceExtractor.Pixel p : path) {
+        for (Pixel p : path) {
             if (p.x < minX) minX = p.x;
             if (p.x > maxX) maxX = p.x;
             if (p.y < minY) minY = p.y;
@@ -615,8 +618,8 @@ public class DetectionReportGenerator {
         // Draw Trajectory Path
         g2d.setStroke(new BasicStroke(2.0f));
         for (int i = 0; i < path.size() - 1; i++) {
-            SourceExtractor.Pixel p1 = path.get(i);
-            SourceExtractor.Pixel p2 = path.get(i + 1);
+            Pixel p1 = path.get(i);
+            Pixel p2 = path.get(i + 1);
 
             int x1 = (outSize / 2) + (int) Math.round((p1.x - centerX) * scale);
             int y1 = (outSize / 2) + (int) Math.round((p1.y - centerY) * scale);
@@ -631,13 +634,13 @@ public class DetectionReportGenerator {
         }
 
         // Render Map Points
-        SourceExtractor.Pixel pFirst = path.get(0);
+        Pixel pFirst = path.get(0);
         int xf = (outSize / 2) + (int) Math.round((pFirst.x - centerX) * scale);
         int yf = (outSize / 2) + (int) Math.round((pFirst.y - centerY) * scale);
         g2d.setColor(new Color(80, 150, 255)); // Blue = Start
         g2d.fillOval(xf - 5, yf - 5, 10, 10);
 
-        SourceExtractor.Pixel pLast = path.get(path.size() - 1);
+        Pixel pLast = path.get(path.size() - 1);
         int xl = (outSize / 2) + (int) Math.round((pLast.x - centerX) * scale);
         int yl = (outSize / 2) + (int) Math.round((pLast.y - centerY) * scale);
         g2d.setColor(new Color(255, 80, 80)); // Red = End
@@ -686,7 +689,7 @@ public class DetectionReportGenerator {
     }
 
     // --- GLOBAL TRANSIENT MAP RENDERER ---
-    static BufferedImage createGlobalTransientMap(short[][] backgroundData, List<List<SourceExtractor.DetectedObject>> allTransients, ExportVisualizationSettings settings) {
+    static BufferedImage createGlobalTransientMap(short[][] backgroundData, List<List<DetectedObject>> allTransients, ExportVisualizationSettings settings) {
         int width = backgroundData[0].length;
         int height = backgroundData.length;
 
@@ -705,7 +708,7 @@ public class DetectionReportGenerator {
 
         int totalFrames = allTransients.size();
         for (int i = 0; i < totalFrames; i++) {
-            List<SourceExtractor.DetectedObject> frameTransients = allTransients.get(i);
+            List<DetectedObject> frameTransients = allTransients.get(i);
             if (frameTransients == null || frameTransients.isEmpty()) continue;
 
             // Map time to a color gradient: Blue (Start) -> Green -> Yellow -> Red (End)
@@ -714,10 +717,10 @@ public class DetectionReportGenerator {
             Color timeColor = Color.getHSBColor(0.66f - (0.66f * ratio), 1.0f, 1.0f);
             int timeRgb = timeColor.getRGB();
 
-            for (SourceExtractor.DetectedObject pt : frameTransients) {
+            for (DetectedObject pt : frameTransients) {
                 if (pt.rawPixels != null && !pt.rawPixels.isEmpty()) {
                     // Draw the exact pixel footprint to accurately represent size and shape
-                    for (SourceExtractor.Pixel p : pt.rawPixels) {
+                    for (Pixel p : pt.rawPixels) {
                         if (p.x >= 0 && p.x < width && p.y >= 0 && p.y < height) {
                             rgbMap.setRGB(p.x, p.y, timeRgb);
                         }
@@ -739,7 +742,7 @@ public class DetectionReportGenerator {
     }
 
     // --- NEW: RAINBOW CLUSTER MAP RENDERER ---
-    static BufferedImage createRainbowClusterMap(short[][] backgroundData, List<List<SourceExtractor.DetectedObject>> allTransients) {
+    static BufferedImage createRainbowClusterMap(short[][] backgroundData, List<List<DetectedObject>> allTransients) {
         int imgWidth = backgroundData[0].length;
         int imgHeight = backgroundData.length;
 
@@ -748,9 +751,9 @@ public class DetectionReportGenerator {
         int count = 0;
 
         // 1. Find the exact bounding box of the activity
-        for (List<SourceExtractor.DetectedObject> frameTransients : allTransients) {
+        for (List<DetectedObject> frameTransients : allTransients) {
             if (frameTransients == null) continue;
-            for (SourceExtractor.DetectedObject pt : frameTransients) {
+            for (DetectedObject pt : frameTransients) {
                 int cx = (int) Math.round(pt.x);
                 int cy = (int) Math.round(pt.y);
                 if (cx < minX) minX = cx;
@@ -799,7 +802,7 @@ public class DetectionReportGenerator {
 
         int totalFrames = allTransients.size();
         for (int i = 0; i < totalFrames; i++) {
-            List<SourceExtractor.DetectedObject> frameTransients = allTransients.get(i);
+            List<DetectedObject> frameTransients = allTransients.get(i);
             if (frameTransients == null || frameTransients.isEmpty()) continue;
 
             float ratio = totalFrames > 1 ? (float) i / (totalFrames - 1) : 0f;
@@ -808,7 +811,7 @@ public class DetectionReportGenerator {
             // Create a glowing halo to thicken the line for maximum visibility
             Color haloColor = new Color(timeColor.getRed(), timeColor.getGreen(), timeColor.getBlue(), 80);
 
-            for (SourceExtractor.DetectedObject pt : frameTransients) {
+            for (DetectedObject pt : frameTransients) {
                 int x = (int) Math.round((pt.x - minX) * scale);
                 int y = (int) Math.round((pt.y - minY) * scale);
 
@@ -910,7 +913,7 @@ public class DetectionReportGenerator {
         return formatDecimal(pixelsPerSecond, 2) + " px/s";
     }
 
-    private static int getAnomalyDisplayOrder(TrackLinker.AnomalyDetection anomaly) {
+    private static int getAnomalyDisplayOrder(AnomalyDetection anomaly) {
         if (anomaly == null || anomaly.type == null) {
             return 2;
         }
@@ -924,13 +927,13 @@ public class DetectionReportGenerator {
         }
     }
 
-    private static int getTrackDisplayFrameIndex(TrackLinker.Track track) {
+    private static int getTrackDisplayFrameIndex(Track track) {
         if (track == null || track.points == null || track.points.isEmpty()) {
             return Integer.MAX_VALUE;
         }
 
         int earliestFrameIndex = Integer.MAX_VALUE;
-        for (SourceExtractor.DetectedObject point : track.points) {
+        for (DetectedObject point : track.points) {
             if (point == null) {
                 continue;
             }
@@ -939,23 +942,23 @@ public class DetectionReportGenerator {
         return earliestFrameIndex;
     }
 
-    private static int getAnomalyDisplayFrameIndex(TrackLinker.AnomalyDetection anomaly) {
+    private static int getAnomalyDisplayFrameIndex(AnomalyDetection anomaly) {
         if (anomaly == null || anomaly.object == null) {
             return Integer.MAX_VALUE;
         }
         return anomaly.object.sourceFrameIndex;
     }
 
-    private static String getTrackDisplayFileName(TrackLinker.Track track) {
+    private static String getTrackDisplayFileName(Track track) {
         if (track == null || track.points == null || track.points.isEmpty()) {
             return "";
         }
-        SourceExtractor.DetectedObject firstPoint = track.points.get(0);
+        DetectedObject firstPoint = track.points.get(0);
         return firstPoint != null && firstPoint.sourceFilename != null ? firstPoint.sourceFilename : "";
     }
 
-    private static List<TrackLinker.Track> sortTracksForFrameDisplay(List<TrackLinker.Track> tracks) {
-        List<TrackLinker.Track> ordered = new ArrayList<>();
+    private static List<Track> sortTracksForFrameDisplay(List<Track> tracks) {
+        List<Track> ordered = new ArrayList<>();
         if (tracks != null) {
             ordered.addAll(tracks);
         }
@@ -971,8 +974,8 @@ public class DetectionReportGenerator {
         return ordered;
     }
 
-    private static List<TrackLinker.AnomalyDetection> sortAnomaliesForDisplay(List<TrackLinker.AnomalyDetection> anomalies) {
-        List<TrackLinker.AnomalyDetection> ordered = new ArrayList<>();
+    private static List<AnomalyDetection> sortAnomaliesForDisplay(List<AnomalyDetection> anomalies) {
+        List<AnomalyDetection> ordered = new ArrayList<>();
         if (anomalies != null) {
             ordered.addAll(anomalies);
         }
@@ -991,12 +994,12 @@ public class DetectionReportGenerator {
         return ordered;
     }
 
-    private static int countAnomaliesOfType(List<TrackLinker.AnomalyDetection> anomalies, TrackLinker.AnomalyType type) {
+    private static int countAnomaliesOfType(List<AnomalyDetection> anomalies, AnomalyType type) {
         if (anomalies == null || anomalies.isEmpty()) {
             return 0;
         }
         int count = 0;
-        for (TrackLinker.AnomalyDetection anomaly : anomalies) {
+        for (AnomalyDetection anomaly : anomalies) {
             if (anomaly != null && anomaly.type == type) {
                 count++;
             }
@@ -1004,14 +1007,14 @@ public class DetectionReportGenerator {
         return count;
     }
 
-    static String buildTrackTimingSummaryHtml(TrackLinker.Track track,
+    static String buildTrackTimingSummaryHtml(Track track,
                                               DetectionReportAstrometry.Context astrometryContext) {
         if (track == null || track.points == null || track.points.isEmpty()) {
             return "";
         }
 
-        SourceExtractor.DetectedObject firstPoint = track.points.get(0);
-        SourceExtractor.DetectedObject lastPoint = track.points.get(track.points.size() - 1);
+        DetectedObject firstPoint = track.points.get(0);
+        DetectedObject lastPoint = track.points.get(track.points.size() - 1);
         double dx = lastPoint.x - firstPoint.x;
         double dy = lastPoint.y - firstPoint.y;
         double displacementPixels = Math.hypot(dx, dy);
@@ -1020,9 +1023,9 @@ public class DetectionReportGenerator {
         long lastEndTimestamp = -1L;
         long firstMidpoint = Long.MAX_VALUE;
         long lastMidpoint = Long.MIN_VALUE;
-        SourceExtractor.DetectedObject motionFirst = null;
-        SourceExtractor.DetectedObject motionLast = null;
-        for (SourceExtractor.DetectedObject point : track.points) {
+        DetectedObject motionFirst = null;
+        DetectedObject motionLast = null;
+        for (DetectedObject point : track.points) {
             long startTimestamp = DetectionReportAstrometry.resolveTrackPointStartTimestamp(astrometryContext, point);
             if (startTimestamp <= 0L) {
                 continue;
@@ -1118,15 +1121,15 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
 
     private static DetectionReportSummary buildDetectionReportSummary(PipelineTelemetry pipelineTelemetry,
                                                                       ReportInclusion inclusion,
-                                                                      List<TrackLinker.Track> singleStreaks,
-                                                                      List<TrackLinker.Track> streakTracks,
-                                                                      List<TrackLinker.Track> movingTargets,
-                                                                      List<TrackLinker.AnomalyDetection> anomalies,
-                                                                      List<SourceExtractor.DetectedObject> slowMoverCandidates,
+                                                                      List<Track> singleStreaks,
+                                                                      List<Track> streakTracks,
+                                                                      List<Track> movingTargets,
+                                                                      List<AnomalyDetection> anomalies,
+                                                                      List<DetectedObject> slowMoverCandidates,
                                                                       List<ResidualTransientAnalysis.LocalRescueCandidate> localRescueCandidates,
                                                                       List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters,
-                                                                      List<SourceExtractor.DetectedObject> masterStars,
-                                                                      List<List<SourceExtractor.DetectedObject>> unclassifiedTransients) {
+                                                                      List<DetectedObject> masterStars,
+                                                                      List<List<DetectedObject>> unclassifiedTransients) {
         int slowMoverCandidateCount = slowMoverCandidates == null ? 0 : slowMoverCandidates.size();
         int localRescueCandidateCount = localRescueCandidates.size();
         int localActivityClusterCount = localActivityClusters.size();
@@ -1145,8 +1148,8 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
         int masterMapObjectCount = masterStars == null ? 0 : masterStars.size();
         int anomalyCount = !FindingCategory.ANOMALY.included(inclusion) ? 0
                 : pipelineTelemetry != null ? pipelineTelemetry.totalAnomaliesFound : anomalies.size();
-        int peakSigmaAnomalyCount = countAnomaliesOfType(anomalies, TrackLinker.AnomalyType.PEAK_SIGMA);
-        int integratedSigmaAnomalyCount = countAnomaliesOfType(anomalies, TrackLinker.AnomalyType.INTEGRATED_SIGMA);
+        int peakSigmaAnomalyCount = countAnomaliesOfType(anomalies, AnomalyType.PEAK_SIGMA);
+        int integratedSigmaAnomalyCount = countAnomaliesOfType(anomalies, AnomalyType.INTEGRATED_SIGMA);
         int otherAnomalyCount = Math.max(0, anomalyCount - peakSigmaAnomalyCount - integratedSigmaAnomalyCount);
         int unclassifiedTransientCount = CreativeTributeRenderer.countTotalTransientDetections(unclassifiedTransients);
 
@@ -1273,8 +1276,8 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
         progress.step(0, 2, "preparing");
 
         // Extract variables from the PipelineResult and normalize newer track categories for rendering.
-        List<TrackLinker.Track> tracks = result.tracks != null ? result.tracks : new ArrayList<>();
-        List<TrackLinker.AnomalyDetection> anomalies = FindingCategory.ANOMALY.included(inclusion)
+        List<Track> tracks = result.tracks != null ? result.tracks : new ArrayList<>();
+        List<AnomalyDetection> anomalies = FindingCategory.ANOMALY.included(inclusion)
                 ? sortAnomaliesForDisplay(result.anomalies)
                 : new ArrayList<>();
         PipelineTelemetry pipelineTelemetry = result.telemetry;
@@ -1282,7 +1285,7 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
         short[][] masterStackData = result.masterStackData;
         short[][] maximumStackData = result.maximumStackData;
         boolean[][] masterVetoMask = result.masterVetoMask;
-        List<SourceExtractor.DetectedObject> masterStars = result.masterStars;
+        List<DetectedObject> masterStars = result.masterStars;
         SlowMoverAnalysis slowMoverAnalysis = result.slowMoverAnalysis != null
                 ? result.slowMoverAnalysis
                 : SlowMoverAnalysis.empty();
@@ -1297,7 +1300,7 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
                 : slowMoverAnalysis.candidates != null
                 ? slowMoverAnalysis.candidates
                 : java.util.Collections.emptyList();
-        List<SourceExtractor.DetectedObject> slowMoverCandidates = new ArrayList<>();
+        List<DetectedObject> slowMoverCandidates = new ArrayList<>();
         if (FindingCategory.SLOW_MOVER.included(inclusion) && !slowMoverCandidateResults.isEmpty()) {
             for (SlowMoverCandidateResult candidateResult : slowMoverCandidateResults) {
                 if (candidateResult != null && candidateResult.object != null) {
@@ -1313,8 +1316,8 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
                 : (pipelineTelemetry != null && pipelineTelemetry.slowMoverTelemetry != null
                 ? new SlowMoverSummaryTelemetry(pipelineTelemetry.slowMoverTelemetry)
                 : null);
-        List<List<SourceExtractor.DetectedObject>> allTransients = result.allTransients;
-        List<List<SourceExtractor.DetectedObject>> unclassifiedTransients = result.unclassifiedTransients;
+        List<List<DetectedObject>> allTransients = result.allTransients;
+        List<List<DetectedObject>> unclassifiedTransients = result.unclassifiedTransients;
         ResidualTransientAnalysis residualTransientAnalysis = result.residualTransientAnalysis != null
                 ? result.residualTransientAnalysis
                 : ResidualTransientAnalysis.empty();
@@ -1328,15 +1331,15 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
                 ? residualTransientAnalysis.commonMotionGroups
                 : java.util.Collections.emptyList();
         DetectionReportAstrometry.Context astrometryContext = DetectionReportAstrometry.buildContext(fitsFiles, appConfig);
-        List<TrackLinker.Track> singleStreaks = new ArrayList<>();
-        List<TrackLinker.Track> streakTracks = new ArrayList<>();
-        List<TrackLinker.Track> movingTargets = new ArrayList<>();
-        List<TrackLinker.Track> localRescueTracks = new ArrayList<>();
+        List<Track> singleStreaks = new ArrayList<>();
+        List<Track> streakTracks = new ArrayList<>();
+        List<Track> movingTargets = new ArrayList<>();
+        List<Track> localRescueTracks = new ArrayList<>();
 
-        for (TrackLinker.Track track : tracks) {
+        for (Track track : tracks) {
             if (track.points == null || track.points.isEmpty()) continue;
             java.util.Set<Integer> uniqueFrames = new java.util.HashSet<>();
-            for (SourceExtractor.DetectedObject pt : track.points) uniqueFrames.add(pt.sourceFrameIndex);
+            for (DetectedObject pt : track.points) uniqueFrames.add(pt.sourceFrameIndex);
 
             if (uniqueFrames.size() == 1) {
                 singleStreaks.add(track);
@@ -1347,7 +1350,7 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
         }
         singleStreaks = sortTracksForFrameDisplay(singleStreaks);
         for (ResidualTransientAnalysis.LocalRescueCandidate candidate : localRescueCandidates) {
-            TrackLinker.Track residualTrack = ResidualReviewSectionWriter.buildResidualTrack(candidate.points);
+            Track residualTrack = ResidualReviewSectionWriter.buildResidualTrack(candidate.points);
             if (residualTrack.points != null && !residualTrack.points.isEmpty()) {
                 localRescueTracks.add(residualTrack);
             }

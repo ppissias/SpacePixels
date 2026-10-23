@@ -10,10 +10,10 @@
 
 package eu.startales.spacepixels.gui;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.VariableStarOverlay;
-import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.execution.CancellationScope;
 
 import javax.swing.*;
@@ -38,20 +38,20 @@ abstract class SequenceViewerFrame extends JFrame {
     /** What the window shows for one frame. */
     static final class Result {
         final BlinkSequence.Frame frame;
-        final List<SourceExtractor.DetectedObject> detections;
+        final List<DetectedObject> detections;
         /** Appended to the frame description, for example "812 stars · 2 streaks". */
         final String summary;
         /** Why the frame cannot be shown, or null. */
         final String problem;
 
-        private Result(BlinkSequence.Frame frame, List<SourceExtractor.DetectedObject> detections, String summary, String problem) {
+        private Result(BlinkSequence.Frame frame, List<DetectedObject> detections, String summary, String problem) {
             this.frame = frame;
             this.detections = detections;
             this.summary = summary;
             this.problem = problem;
         }
 
-        static Result of(BlinkSequence.Frame frame, List<SourceExtractor.DetectedObject> detections, String summary) {
+        static Result of(BlinkSequence.Frame frame, List<DetectedObject> detections, String summary) {
             return new Result(frame, detections, summary, null);
         }
 

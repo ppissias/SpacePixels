@@ -66,8 +66,20 @@ public class CatalogueStarReportTest {
         var readiness = new PhotometricReadiness(); readiness.verdict = PhotometricReadiness.Verdict.READY;
         var analysis = new VariableStarAnalysis(readiness, List.of(star), photo);
         var telemetry = new PipelineTelemetry(); telemetry.totalFramesLoaded = 3; telemetry.totalFramesKept = 3; telemetry.photometryTelemetry = photo;
-        var result = new PipelineResult(List.of(), telemetry, frames.get(0), List.of(), null, null, null,
-                List.of(), List.of(), List.of(), List.of(), ResidualTransientAnalysis.empty(), null, List.of(), frames.get(0), analysis);
+        var result = PipelineResult.builder()
+                .tracks(List.of())
+                .telemetry(telemetry)
+                .masterStackData(frames.get(0))
+                .masterStars(List.of())
+                .slowMoverCandidates(List.of())
+                .anomalies(List.of())
+                .allTransients(List.of())
+                .unclassifiedTransients(List.of())
+                .residualTransientAnalysis(ResidualTransientAnalysis.empty())
+                .driftPoints(List.of())
+                .maximumStackData(frames.get(0))
+                .variableStarAnalysis(analysis)
+                .build();
         var config = new DetectionConfig(); config.enableVariableStarDetection = true; config.enableSlowMoverDetection = false;
         Gson gson = new GsonBuilder().serializeSpecialFloatingPointValues().create();
         String measurements = gson.toJson(analysis);

@@ -1,7 +1,7 @@
 package eu.startales.spacepixels.util;
 
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -14,17 +14,17 @@ import static org.junit.Assert.assertTrue;
 
 public class TrackOverlayTest {
 
-    private static SourceExtractor.DetectedObject point(int frame, double x, double y) {
-        SourceExtractor.DetectedObject object = new SourceExtractor.DetectedObject(x, y, 100, 5);
+    private static DetectedObject point(int frame, double x, double y) {
+        DetectedObject object = new DetectedObject(x, y, 100, 5);
         object.sourceFrameIndex = frame;
         object.sourceFilename = "f" + frame + ".fit";
         return object;
     }
 
-    private static TrackLinker.Track track(boolean streak, SourceExtractor.DetectedObject... points) {
-        TrackLinker.Track track = new TrackLinker.Track();
+    private static Track track(boolean streak, DetectedObject... points) {
+        Track track = new Track();
         track.isStreakTrack = streak;
-        for (SourceExtractor.DetectedObject point : points) {
+        for (DetectedObject point : points) {
             track.addPoint(point);
         }
         return track;
@@ -32,7 +32,7 @@ public class TrackOverlayTest {
 
     @Test
     public void tracksAreNumberedAsInTheReport() {
-        List<TrackLinker.Track> tracks = Arrays.asList(
+        List<Track> tracks = Arrays.asList(
                 track(false, point(0, 10, 10), point(1, 12, 11)),
                 track(true, point(0, 50, 50), point(2, 90, 60)),
                 track(false, point(3, 5, 5)),                       // one frame only: not followed

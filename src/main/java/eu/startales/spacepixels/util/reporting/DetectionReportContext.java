@@ -1,5 +1,8 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.AnomalyDetection;
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.CameraFixedRejector;
@@ -7,8 +10,6 @@ import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
 import io.github.ppissias.jtransient.core.SlowMoverCandidateResult;
 import io.github.ppissias.jtransient.core.SlowMoverSummaryTelemetry;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 import java.io.File;
 import java.util.Collections;
@@ -31,14 +32,14 @@ final class DetectionReportContext {
     final short[][] slowMoverStackData;
     final boolean[][] slowMoverMedianVetoMask;
     final List<SlowMoverCandidateResult> slowMoverCandidateResults;
-    final List<SourceExtractor.DetectedObject> slowMoverCandidates;
+    final List<DetectedObject> slowMoverCandidates;
     final SlowMoverSummaryTelemetry slowMoverTelemetry;
     final List<ResidualTransientAnalysis.LocalRescueCandidate> localRescueCandidates;
     final List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters;
-    final List<TrackLinker.AnomalyDetection> anomalies;
-    final List<TrackLinker.Track> singleStreaks;
-    final List<TrackLinker.Track> streakTracks;
-    final List<TrackLinker.Track> movingTargets;
+    final List<AnomalyDetection> anomalies;
+    final List<Track> singleStreaks;
+    final List<Track> streakTracks;
+    final List<Track> movingTargets;
     ReportData data;
     /** Where every kept frame holds image data; set after construction, null when not measured. */
     DataArea dataArea;
@@ -78,14 +79,14 @@ final class DetectionReportContext {
                            short[][] slowMoverStackData,
                            boolean[][] slowMoverMedianVetoMask,
                            List<SlowMoverCandidateResult> slowMoverCandidateResults,
-                           List<SourceExtractor.DetectedObject> slowMoverCandidates,
+                           List<DetectedObject> slowMoverCandidates,
                            SlowMoverSummaryTelemetry slowMoverTelemetry,
                            List<ResidualTransientAnalysis.LocalRescueCandidate> localRescueCandidates,
                            List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters,
-                           List<TrackLinker.AnomalyDetection> anomalies,
-                           List<TrackLinker.Track> singleStreaks,
-                           List<TrackLinker.Track> streakTracks,
-                           List<TrackLinker.Track> movingTargets) {
+                           List<AnomalyDetection> anomalies,
+                           List<Track> singleStreaks,
+                           List<Track> streakTracks,
+                           List<Track> movingTargets) {
         this.settings = settings;
         this.exportDir = exportDir;
         this.rawFrames = rawFrames != null ? rawFrames : Collections.emptyList();

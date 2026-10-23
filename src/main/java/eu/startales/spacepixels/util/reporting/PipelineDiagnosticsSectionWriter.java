@@ -1,11 +1,12 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.Pixel;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import io.github.ppissias.jtransient.telemetry.TrackerTelemetry;
 
@@ -20,7 +21,6 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
-import io.github.ppissias.jtransient.core.TrackLinker;
 import java.util.List;
 import java.util.Locale;
 
@@ -156,7 +156,7 @@ final class PipelineDiagnosticsSectionWriter {
                               DetectionReportContext reportContext,
                               PipelineTelemetry pipelineTelemetry,
                               DetectionReportSummary summary,
-                              List<TrackLinker.Track> localRescueTracks,
+                              List<Track> localRescueTracks,
                               FieldDepth fieldDepth,
                               NightEquipment nightEquipment,
                               int commonMotionGroups,
@@ -297,7 +297,7 @@ final class PipelineDiagnosticsSectionWriter {
                                  PipelineTelemetry pipelineTelemetry,
                                  TrackerTelemetry linkerTelemetry,
                                  DetectionReportSummary summary,
-                                 List<SourceExtractor.Pixel> driftPoints,
+                                 List<Pixel> driftPoints,
                                  FieldDepth fieldDepth) throws IOException {
         report.println("<details class='report-group' id='diagnostics'>");
         report.println("<summary>Diagnostics<span class='summary-note'>Stage timings, astrometry, frame quality control, configuration, star mask, extraction and track linking.</span></summary>");
@@ -682,7 +682,7 @@ final class PipelineDiagnosticsSectionWriter {
 
     private static void writeDriftDiagnostics(PrintWriter report,
                                               DetectionReportContext reportContext,
-                                              List<SourceExtractor.Pixel> driftPoints,
+                                              List<Pixel> driftPoints,
                                               List<Integer> excludedFrames) throws IOException {
         if (reportContext.rawFrames.isEmpty() || driftPoints == null || driftPoints.isEmpty()) {
             return;
@@ -690,8 +690,8 @@ final class PipelineDiagnosticsSectionWriter {
 
         List<BufferedImage> cornerFrames = new ArrayList<>();
         boolean hasDrift = false;
-        SourceExtractor.Pixel firstPoint = driftPoints.get(0);
-        for (SourceExtractor.Pixel point : driftPoints) {
+        Pixel firstPoint = driftPoints.get(0);
+        for (Pixel point : driftPoints) {
             if (point.x != firstPoint.x || point.y != firstPoint.y) {
                 hasDrift = true;
                 break;
@@ -739,7 +739,7 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<div style='min-width: 200px; flex-grow: 1;'><div class='scroll-box' style='max-height: 325px; border-color: #333; padding: 10px;'>");
         report.println("<div class='config-grid' style='grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));'>");
         for (int i = 0; i < driftPoints.size(); i++) {
-            SourceExtractor.Pixel point = driftPoints.get(i);
+            Pixel point = driftPoints.get(i);
             report.println("<div class='config-item'><span style='color: #aaa;'>Frame " + (point.value + 1) + "</span> <span class='val'>" + DetectionReportGenerator.escapeHtml(DetectionReportGenerator.formatPixelCoordinateOnly(point.x, point.y)) + "</span></div>");
         }
         report.println("</div></div></div>");

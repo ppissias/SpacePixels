@@ -241,22 +241,23 @@ public class ImageProcessingTest {
         boolean[][] vetoMask = new boolean[][]{{true}};
         short[][] maximumStack = new short[][]{{2}};
 
-        PipelineResult original = new PipelineResult(
-                Collections.singletonList(null),
-                telemetry,
-                masterStack,
-                Collections.emptyList(),
-                SlowMoverAnalysis.empty(),
-                new short[][]{{3}},
-                new boolean[][]{{false}},
-                Collections.emptyList(),
-                Collections.singletonList(null),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                ResidualTransientAnalysis.empty(),
-                vetoMask,
-                Collections.emptyList(),
-                maximumStack);
+        PipelineResult original = PipelineResult.builder()
+                .tracks(Collections.singletonList(null))
+                .telemetry(telemetry)
+                .masterStackData(masterStack)
+                .masterStars(Collections.emptyList())
+                .slowMoverAnalysis(SlowMoverAnalysis.empty())
+                .slowMoverStackData(new short[][]{{3}})
+                .slowMoverMedianVetoMask(new boolean[][]{{false}})
+                .slowMoverCandidates(Collections.emptyList())
+                .anomalies(Collections.singletonList(null))
+                .allTransients(Collections.emptyList())
+                .unclassifiedTransients(Collections.emptyList())
+                .residualTransientAnalysis(ResidualTransientAnalysis.empty())
+                .masterVetoMask(vetoMask)
+                .driftPoints(Collections.emptyList())
+                .maximumStackData(maximumStack)
+                .build();
 
         PipelineResult sanitized = DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain(original);
 
@@ -282,22 +283,18 @@ public class ImageProcessingTest {
         PipelineTelemetry telemetry = new PipelineTelemetry();
         telemetry.totalFramesKept = 3;
 
-        PipelineResult original = new PipelineResult(
-                Collections.emptyList(),
-                telemetry,
-                null,
-                Collections.emptyList(),
-                SlowMoverAnalysis.empty(),
-                null,
-                null,
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                ResidualTransientAnalysis.empty(),
-                null,
-                Collections.emptyList(),
-                null);
+        PipelineResult original = PipelineResult.builder()
+                .tracks(Collections.emptyList())
+                .telemetry(telemetry)
+                .masterStars(Collections.emptyList())
+                .slowMoverAnalysis(SlowMoverAnalysis.empty())
+                .slowMoverCandidates(Collections.emptyList())
+                .anomalies(Collections.emptyList())
+                .allTransients(Collections.emptyList())
+                .unclassifiedTransients(Collections.emptyList())
+                .residualTransientAnalysis(ResidualTransientAnalysis.empty())
+                .driftPoints(Collections.emptyList())
+                .build();
 
         assertSame(original, DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain(original));
     }

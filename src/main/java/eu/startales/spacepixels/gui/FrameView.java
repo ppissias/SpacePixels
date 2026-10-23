@@ -9,11 +9,12 @@
  */
 package eu.startales.spacepixels.gui;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Pixel;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.RawImageAnnotator;
 import eu.startales.spacepixels.util.TrackOverlay;
 import eu.startales.spacepixels.util.VariableStarOverlay;
-import io.github.ppissias.jtransient.core.SourceExtractor;
 
 import javax.swing.JComponent;
 import javax.swing.UIManager;
@@ -116,7 +117,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private boolean extremeColour;
     private TrackOverlay overlay;
     private boolean overlayVisible;
-    private List<SourceExtractor.DetectedObject> detections;
+    private List<DetectedObject> detections;
     private boolean detectionsVisible = true;
     private List<SkyMark> skyMarks;
     private double skyStarLimit;
@@ -352,7 +353,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     }
 
     /** The detections of the frame shown, or null. */
-    void setDetections(List<SourceExtractor.DetectedObject> detections) {
+    void setDetections(List<DetectedObject> detections) {
         this.detections = detections;
         repaint();
     }
@@ -829,8 +830,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         double left = left(scale);
         double top = top(scale);
         boolean footprints = scale >= 1.0;
-        List<SourceExtractor.DetectedObject> visible = new java.util.ArrayList<>();
-        for (SourceExtractor.DetectedObject object : detections) {
+        List<DetectedObject> visible = new java.util.ArrayList<>();
+        for (DetectedObject object : detections) {
             if (object.isNoise) {
                 continue;
             }
@@ -854,14 +855,14 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             g2.drawString(note, 11, 43);
             return;
         }
-        for (SourceExtractor.DetectedObject object : visible) {
+        for (DetectedObject object : visible) {
             double x = left + (object.x + 0.5) * scale;
             double y = top + (object.y + 0.5) * scale;
             Color color = object.isStreak ? DETECTION_STREAK_COLOR : DETECTION_POINT_COLOR;
             if (footprints && object.rawPixels != null) {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
                 g2.setColor(withAlpha(color, 110));
-                for (SourceExtractor.Pixel pixel : object.rawPixels) {
+                for (Pixel pixel : object.rawPixels) {
                     int x0 = (int) Math.floor(left + pixel.x * scale);
                     int y0 = (int) Math.floor(top + pixel.y * scale);
                     g2.fillRect(x0, y0, (int) Math.floor(left + (pixel.x + 1) * scale) - x0,
@@ -886,7 +887,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     }
 
     /** The box clears the object: its rough radius plus a margin, and is at least the minimum box size. */
-    private static double pointBoxRadius(SourceExtractor.DetectedObject object) {
+    private static double pointBoxRadius(DetectedObject object) {
         int minimum = RawImageAnnotator.pointSourceMinBoxRadius;
         if (object.pixelArea <= 0) {
             return minimum;

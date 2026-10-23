@@ -9,12 +9,13 @@
  */
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.AnomalyDetection;
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.util.skycatalog.SkyProjection;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -56,7 +57,7 @@ final class SessionPictureSectionWriter {
      * Writes the picture with its layers. It is written to the report only once complete; when it fails, a note
      * takes its place and the rest of the report is still written.
      */
-    static void write(PrintWriter report, DetectionReportContext context, List<TrackLinker.Track> localRescueTracks) {
+    static void write(PrintWriter report, DetectionReportContext context, List<Track> localRescueTracks) {
         StringWriter section = new StringWriter();
         try (PrintWriter writer = new PrintWriter(section)) {
             writePicture(writer, context, localRescueTracks);
@@ -69,7 +70,7 @@ final class SessionPictureSectionWriter {
         report.print(section);
     }
 
-    private static void writePicture(PrintWriter report, DetectionReportContext context, List<TrackLinker.Track> localRescueTracks) {
+    private static void writePicture(PrintWriter report, DetectionReportContext context, List<Track> localRescueTracks) {
         short[][] stack = context.masterStackData;
         if (stack == null || stack.length == 0 || stack[0].length == 0) {
             return;
@@ -187,7 +188,7 @@ final class SessionPictureSectionWriter {
     }
 
     /** The detections, with the labels and colours of the detection map; null when there are none. */
-    static String detectionsLayer(DetectionReportContext context, List<TrackLinker.Track> localRescueTracks, int width, int height) {
+    static String detectionsLayer(DetectionReportContext context, List<Track> localRescueTracks, int width, int height) {
         StringBuilder svg = new StringBuilder();
         double marker = width / 140.0;
         double offset = width / 160.0;
@@ -207,12 +208,12 @@ final class SessionPictureSectionWriter {
             index++;
         }
         index = 1;
-        for (SourceExtractor.DetectedObject candidate : context.slowMoverCandidates) {
+        for (DetectedObject candidate : context.slowMoverCandidates) {
             circle(svg, candidate.x, candidate.y, marker, DetectionReportGenerator.GLOBAL_MAP_DEEP_STACK_COLOR, "DS" + index++, false);
             count++;
         }
         index = 1;
-        for (TrackLinker.AnomalyDetection anomaly : context.anomalies) {
+        for (AnomalyDetection anomaly : context.anomalies) {
             if (anomaly.object != null) {
                 circle(svg, anomaly.object.x, anomaly.object.y, marker, DetectionReportGenerator.GLOBAL_MAP_ANOMALY_COLOR, "A" + index, false);
                 count++;
@@ -220,9 +221,9 @@ final class SessionPictureSectionWriter {
             index++;
         }
         index = 1;
-        for (TrackLinker.Track streak : context.singleStreaks) {
+        for (Track streak : context.singleStreaks) {
             if (streak.points != null && !streak.points.isEmpty()) {
-                SourceExtractor.DetectedObject point = streak.points.get(0);
+                DetectedObject point = streak.points.get(0);
                 circle(svg, point.x, point.y, marker, DetectionReportGenerator.GLOBAL_MAP_SINGLE_STREAK_COLOR, "S" + index, false);
                 count++;
             }
@@ -234,24 +235,24 @@ final class SessionPictureSectionWriter {
         return svgStart("detections", width, height, true) + svg + "</svg>";
     }
 
-    private static int tracks(StringBuilder svg, List<TrackLinker.Track> tracks, Color color, String prefix, double offset) {
+    private static int tracks(StringBuilder svg, List<Track> tracks, Color color, String prefix, double offset) {
         int count = 0;
         int index = 1;
         svg.append("<g data-category='").append(prefix).append("'>");
-        for (TrackLinker.Track track : tracks) {
+        for (Track track : tracks) {
             if (track.points == null || track.points.isEmpty()) {
                 index++;
                 continue;
             }
             StringBuilder points = new StringBuilder();
-            for (SourceExtractor.DetectedObject point : track.points) {
+            for (DetectedObject point : track.points) {
                 points.append(String.format(Locale.US, "%.1f,%.1f ", point.x + 0.5, point.y + 0.5));
             }
             String colour = hex(color);
             svg.append("<a href='#").append(ReportPresentation.anchor(prefix + index)).append("'><polyline points='")
                     .append(points.toString().trim()).append("' fill='none' stroke='").append(colour)
                     .append("' stroke-width='2' vector-effect='non-scaling-stroke'/></a>");
-            SourceExtractor.DetectedObject first = track.points.get(0);
+            DetectedObject first = track.points.get(0);
             label(svg, first.x + 0.5 + offset, first.y + 0.5 - offset, prefix + index, "#ffffff");
             count++;
             index++;

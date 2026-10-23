@@ -1,8 +1,8 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 import org.junit.Test;
 import java.time.Instant;
 import static org.junit.Assert.*;
@@ -26,10 +26,10 @@ public class ReportingConsistencyTest {
         return files;
     }
 
-    private static TrackLinker.Track track(FitsFileInformation[] files) {
-        TrackLinker.Track track = new TrackLinker.Track();
+    private static Track track(FitsFileInformation[] files) {
+        Track track = new Track();
         for (int i = 0; i < files.length; i++) {
-            SourceExtractor.DetectedObject point = new SourceExtractor.DetectedObject(100 + 10 * i, 100, 500, 10);
+            DetectedObject point = new DetectedObject(100 + 10 * i, 100, 500, 10);
             point.sourceFrameIndex = i;
             point.timestamp = files[i].getObservationTimestamp();
             point.exposureDuration = files[i].getExposureDurationMillis();

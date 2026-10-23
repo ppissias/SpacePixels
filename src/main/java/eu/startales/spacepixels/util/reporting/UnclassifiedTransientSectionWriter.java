@@ -1,9 +1,10 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Pixel;
 import eu.startales.spacepixels.util.ReportInclusion;
 import io.github.ppissias.jtransient.core.CameraFixedRejector;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
-import io.github.ppissias.jtransient.core.SourceExtractor;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 
 import java.awt.BasicStroke;
@@ -39,14 +40,14 @@ final class UnclassifiedTransientSectionWriter {
     private UnclassifiedTransientSectionWriter() {
     }
 
-    static List<List<SourceExtractor.DetectedObject>> selectRemaining(
-            List<List<SourceExtractor.DetectedObject>> unclassifiedTransients,
+    static List<List<DetectedObject>> selectRemaining(
+            List<List<DetectedObject>> unclassifiedTransients,
             List<ResidualTransientAnalysis.LocalRescueCandidate> localRescueCandidates) {
         if (unclassifiedTransients == null) {
             return Collections.emptyList();
         }
 
-        Set<SourceExtractor.DetectedObject> rescued = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<DetectedObject> rescued = Collections.newSetFromMap(new IdentityHashMap<>());
         if (localRescueCandidates != null) {
             for (ResidualTransientAnalysis.LocalRescueCandidate candidate : localRescueCandidates) {
                 if (candidate != null && candidate.points != null) {
@@ -55,12 +56,12 @@ final class UnclassifiedTransientSectionWriter {
             }
         }
 
-        Set<SourceExtractor.DetectedObject> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        List<List<SourceExtractor.DetectedObject>> remaining = new ArrayList<>(unclassifiedTransients.size());
-        for (List<SourceExtractor.DetectedObject> frame : unclassifiedTransients) {
-            List<SourceExtractor.DetectedObject> kept = new ArrayList<>();
+        Set<DetectedObject> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        List<List<DetectedObject>> remaining = new ArrayList<>(unclassifiedTransients.size());
+        for (List<DetectedObject> frame : unclassifiedTransients) {
+            List<DetectedObject> kept = new ArrayList<>();
             if (frame != null) {
-                for (SourceExtractor.DetectedObject detection : frame) {
+                for (DetectedObject detection : frame) {
                     if (detection != null && !rescued.contains(detection) && seen.add(detection)) {
                         kept.add(detection);
                     }
@@ -84,8 +85,8 @@ final class UnclassifiedTransientSectionWriter {
 
     static void writeSection(PrintWriter report,
                              DetectionReportContext context,
-                             List<List<SourceExtractor.DetectedObject>> allTransients,
-                             List<List<SourceExtractor.DetectedObject>> unclassifiedTransients) throws IOException {
+                             List<List<DetectedObject>> allTransients,
+                             List<List<DetectedObject>> unclassifiedTransients) throws IOException {
         writeSection(report, context, allTransients, unclassifiedTransients, Collections.emptySet(),
                 new ResidualTransientAnalysis(context.localRescueCandidates, context.localActivityClusters),
                 context.cameraFixedGroups, ReportInclusion.all());
@@ -100,13 +101,13 @@ final class UnclassifiedTransientSectionWriter {
      */
     static void writeSection(PrintWriter report,
                              DetectionReportContext context,
-                             List<List<SourceExtractor.DetectedObject>> allTransients,
-                             List<List<SourceExtractor.DetectedObject>> unclassifiedTransients,
+                             List<List<DetectedObject>> allTransients,
+                             List<List<DetectedObject>> unclassifiedTransients,
                              Set<Integer> rejectedFrames,
                              ResidualTransientAnalysis residual,
                              List<CameraFixedRejector.Group> cameraFixedGroups,
                              ReportInclusion inclusion) throws IOException {
-        List<List<SourceExtractor.DetectedObject>> remaining = selectRemaining(
+        List<List<DetectedObject>> remaining = selectRemaining(
                 unclassifiedTransients, residual.localRescueCandidates);
         // Camera-fixed detections left before tracking, so they are not in allTransients.
         int cameraFixedCount = countCameraFixed(cameraFixedGroups);
@@ -229,16 +230,16 @@ final class UnclassifiedTransientSectionWriter {
     }
 
     /** Common-motion points that are no longer in the unclassified list, so they are not on this map. */
-    private static int countRemovedCommonMotion(List<List<SourceExtractor.DetectedObject>> unclassifiedTransients,
+    private static int countRemovedCommonMotion(List<List<DetectedObject>> unclassifiedTransients,
                                                 List<ResidualTransientAnalysis.CommonMotionGroup> groups) {
         if (groups == null || groups.isEmpty()) {
             return 0;
         }
-        Set<SourceExtractor.DetectedObject> stillThere = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<DetectedObject> stillThere = Collections.newSetFromMap(new IdentityHashMap<>());
         if (unclassifiedTransients != null) {
-            for (List<SourceExtractor.DetectedObject> frame : unclassifiedTransients) {
+            for (List<DetectedObject> frame : unclassifiedTransients) {
                 if (frame != null) {
-                    for (SourceExtractor.DetectedObject detection : frame) {
+                    for (DetectedObject detection : frame) {
                         if (detection != null) {
                             stillThere.add(detection);
                         }
@@ -246,17 +247,17 @@ final class UnclassifiedTransientSectionWriter {
                 }
             }
         }
-        Set<SourceExtractor.DetectedObject> counted = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<DetectedObject> counted = Collections.newSetFromMap(new IdentityHashMap<>());
         int removed = 0;
         for (ResidualTransientAnalysis.CommonMotionGroup group : groups) {
             if (group == null || group.sources == null) {
                 continue;
             }
-            for (List<SourceExtractor.DetectedObject> source : group.sources) {
+            for (List<DetectedObject> source : group.sources) {
                 if (source == null) {
                     continue;
                 }
-                for (SourceExtractor.DetectedObject detection : source) {
+                for (DetectedObject detection : source) {
                     if (detection != null && !stillThere.contains(detection) && counted.add(detection)) {
                         removed++;
                     }
@@ -270,7 +271,7 @@ final class UnclassifiedTransientSectionWriter {
         if (groups == null) {
             return 0;
         }
-        Set<SourceExtractor.DetectedObject> points = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<DetectedObject> points = Collections.newSetFromMap(new IdentityHashMap<>());
         for (CameraFixedRejector.Group group : groups) {
             if (group != null && group.points != null) {
                 points.addAll(group.points);
@@ -287,14 +288,14 @@ final class UnclassifiedTransientSectionWriter {
         return "<div class='legend-pill'><strong>" + count + "</strong> " + label + "</div>";
     }
 
-    private static int countDistinct(List<List<SourceExtractor.DetectedObject>> frames) {
+    private static int countDistinct(List<List<DetectedObject>> frames) {
         if (frames == null) {
             return 0;
         }
-        Set<SourceExtractor.DetectedObject> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (List<SourceExtractor.DetectedObject> frame : frames) {
+        Set<DetectedObject> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (List<DetectedObject> frame : frames) {
             if (frame != null) {
-                for (SourceExtractor.DetectedObject detection : frame) {
+                for (DetectedObject detection : frame) {
                     if (detection != null) {
                         seen.add(detection);
                     }
@@ -319,7 +320,7 @@ final class UnclassifiedTransientSectionWriter {
         return muted;
     }
 
-    private static List<Marker> collectMarkers(List<List<SourceExtractor.DetectedObject>> remaining,
+    private static List<Marker> collectMarkers(List<List<DetectedObject>> remaining,
                                                int width,
                                                int height) {
         List<Marker> markers = new ArrayList<>();
@@ -327,7 +328,7 @@ final class UnclassifiedTransientSectionWriter {
         for (int frameIndex = 0; frameIndex < frameCount; frameIndex++) {
             float ratio = frameCount > 1 ? (float) frameIndex / (frameCount - 1) : 0f;
             Color color = Color.getHSBColor(0.66f - 0.66f * ratio, 1f, 1f);
-            for (SourceExtractor.DetectedObject detection : remaining.get(frameIndex)) {
+            for (DetectedObject detection : remaining.get(frameIndex)) {
                 if (Double.isFinite(detection.x) && Double.isFinite(detection.y)
                         && detection.x >= 0 && detection.x < width && detection.y >= 0 && detection.y < height) {
                     markers.add(new Marker(markers.size() + 1, frameIndex, detection, color));
@@ -481,7 +482,7 @@ final class UnclassifiedTransientSectionWriter {
         for (Marker marker : markers) {
             graphics.setColor(marker.color);
             if (marker.detection.rawPixels != null) {
-                for (SourceExtractor.Pixel pixel : marker.detection.rawPixels) {
+                for (Pixel pixel : marker.detection.rawPixels) {
                     if (pixel != null && pixel.x >= 0 && pixel.x < composite.getWidth()
                             && pixel.y >= 0 && pixel.y < composite.getHeight()) {
                         graphics.fillRect(pixel.x, pixel.y, 1, 1);
@@ -494,7 +495,7 @@ final class UnclassifiedTransientSectionWriter {
     }
 
     private static String markerHtml(Marker marker, int radius, int width, int height) {
-        SourceExtractor.DetectedObject detection = marker.detection;
+        DetectedObject detection = marker.detection;
         String color = String.format("#%02x%02x%02x", marker.color.getRed(), marker.color.getGreen(), marker.color.getBlue());
         StringBuilder html = new StringBuilder();
         html.append("<g class='unclassified-source'>");
@@ -532,12 +533,12 @@ final class UnclassifiedTransientSectionWriter {
         return html.toString();
     }
 
-    private static String footprintPath(SourceExtractor.DetectedObject detection, int width, int height) {
+    private static String footprintPath(DetectedObject detection, int width, int height) {
         if (detection.rawPixels == null || detection.rawPixels.isEmpty()) {
             return "";
         }
         StringBuilder path = new StringBuilder();
-        for (SourceExtractor.Pixel pixel : detection.rawPixels) {
+        for (Pixel pixel : detection.rawPixels) {
             if (pixel != null && pixel.x >= 0 && pixel.x < width && pixel.y >= 0 && pixel.y < height) {
                 path.append('M').append(pixel.x).append(' ').append(pixel.y).append("h1v1h-1z");
             }
@@ -545,7 +546,7 @@ final class UnclassifiedTransientSectionWriter {
         return path.toString();
     }
 
-    private static int footprintPixelCount(SourceExtractor.DetectedObject detection) {
+    private static int footprintPixelCount(DetectedObject detection) {
         if (detection.rawPixels != null && !detection.rawPixels.isEmpty()) {
             return detection.rawPixels.size();
         }
@@ -649,7 +650,7 @@ final class UnclassifiedTransientSectionWriter {
     private static final class Marker {
         final int id;
         final int frameIndex;
-        final SourceExtractor.DetectedObject detection;
+        final DetectedObject detection;
         final Color color;
         /** Frame strip of the cutout animation, or null when the detection has none. */
         String stripFile;
@@ -666,7 +667,7 @@ final class UnclassifiedTransientSectionWriter {
             return detection.sourceFrameIndex >= 0 ? detection.sourceFrameIndex : frameIndex;
         }
 
-        Marker(int id, int frameIndex, SourceExtractor.DetectedObject detection, Color color) {
+        Marker(int id, int frameIndex, DetectedObject detection, Color color) {
             this.id = id;
             this.frameIndex = frameIndex;
             this.detection = detection;

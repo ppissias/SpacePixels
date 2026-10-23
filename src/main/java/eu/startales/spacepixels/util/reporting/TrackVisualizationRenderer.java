@@ -10,12 +10,13 @@
 
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Pixel;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.DisplayImageRenderer;
 import eu.startales.spacepixels.util.PreviewThumbnails;
 import eu.startales.spacepixels.util.RunPreview;
 import eu.startales.spacepixels.util.RunPreviewScope;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 import javax.imageio.ImageIO;
 import java.awt.BasicStroke;
@@ -113,7 +114,7 @@ final class TrackVisualizationRenderer {
 
     static BufferedImage createStarCentricHighlightedFrame(short[][] rawImage,
                                                            TrackCropGeometry.CropBounds cropBounds,
-                                                           SourceExtractor.DetectedObject highlightedPoint,
+                                                           DetectedObject highlightedPoint,
                                                            ExportVisualizationSettings settings,
                                                            Color highlightColor,
                                                            String pointLabel,
@@ -124,7 +125,7 @@ final class TrackVisualizationRenderer {
     }
 
     static BufferedImage createStarCentricHighlightedFrame(short[][] rawImage, TrackCropGeometry.CropBounds cropBounds,
-            SourceExtractor.DetectedObject highlightedPoint, ExportVisualizationSettings settings, Color highlightColor,
+            DetectedObject highlightedPoint, ExportVisualizationSettings settings, Color highlightColor,
             String pointLabel, String frameLabel, boolean antiAlias, double[] levels) {
         short[][] crop = robustEdgeAwareCrop(rawImage, cropBounds.fixedCenterX, cropBounds.fixedCenterY, cropBounds.trackBoxWidth, cropBounds.trackBoxHeight);
         BufferedImage frameImage = levels == null ? createDisplayImage(crop, settings)
@@ -161,7 +162,7 @@ final class TrackVisualizationRenderer {
         return "Frame " + (index + 1) + (timestamp > 0 ? " · " + DetectionReportGenerator.formatUtcTimestamp(timestamp) : "");
     }
 
-    static BufferedImage createSingleStreakShapeImage(List<SourceExtractor.DetectedObject> points,
+    static BufferedImage createSingleStreakShapeImage(List<DetectedObject> points,
                                                       int cropWidth,
                                                       int cropHeight,
                                                       int startX,
@@ -173,9 +174,9 @@ final class TrackVisualizationRenderer {
         g2d.setColor(Color.BLACK);
         g2d.fillRect(0, 0, cropWidth, cropHeight);
 
-        for (SourceExtractor.DetectedObject pt : points) {
+        for (DetectedObject pt : points) {
             if (pt.rawPixels != null) {
-                for (SourceExtractor.Pixel p : pt.rawPixels) {
+                for (Pixel p : pt.rawPixels) {
                     int x = p.x - startX;
                     int y = p.y - startY;
                     if (x >= 0 && x < cropWidth && y >= 0 && y < cropHeight) {
@@ -197,7 +198,7 @@ final class TrackVisualizationRenderer {
         return image;
     }
 
-    static BufferedImage createTrackShapeImage(TrackLinker.Track track,
+    static BufferedImage createTrackShapeImage(Track track,
                                                int cropWidth,
                                                int cropHeight,
                                                int startX,
@@ -213,8 +214,8 @@ final class TrackVisualizationRenderer {
         g2d.setStroke(new BasicStroke(2.0f));
 
         for (int i = 0; i < track.points.size() - 1; i++) {
-            SourceExtractor.DetectedObject p1 = track.points.get(i);
-            SourceExtractor.DetectedObject p2 = track.points.get(i + 1);
+            DetectedObject p1 = track.points.get(i);
+            DetectedObject p2 = track.points.get(i + 1);
 
             int x1 = (int) Math.round(p1.x - startX);
             int y1 = (int) Math.round(p1.y - startY);
@@ -225,7 +226,7 @@ final class TrackVisualizationRenderer {
         }
 
         for (int i = 0; i < track.points.size(); i++) {
-            SourceExtractor.DetectedObject p = track.points.get(i);
+            DetectedObject p = track.points.get(i);
             int x = (int) Math.round(p.x - startX);
             int y = (int) Math.round(p.y - startY);
 

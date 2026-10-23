@@ -1,8 +1,8 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.model.DetectedObject;
+import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
-import io.github.ppissias.jtransient.core.SourceExtractor;
-import io.github.ppissias.jtransient.core.TrackLinker;
 
 /**
  * Builds SatChecker lookup targets and resolves the track timing windows that feed those lookups.
@@ -20,7 +20,7 @@ final class SatCheckerQueryTargetFactory {
 
     /** A flash can occur anywhere in its exposure; never shorten this window as for a streak lookup. */
     static SatCheckerQueryTarget buildAnomalySatCheckerQueryTarget(DetectionReportAstrometry.Context context,
-                                                                   SourceExtractor.DetectedObject point) {
+                                                                   DetectedObject point) {
         if (context == null || !context.hasAstrometricSolution() || context.getObserverSite() == null
                 || point == null || !Double.isFinite(point.x) || !Double.isFinite(point.y)) {
             return null;
@@ -38,7 +38,7 @@ final class SatCheckerQueryTargetFactory {
     }
 
     static SatCheckerQueryTarget buildTrackSatCheckerQueryTarget(DetectionReportAstrometry.Context astrometryContext,
-                                                                 TrackLinker.Track track) {
+                                                                 Track track) {
         if (astrometryContext == null || !astrometryContext.hasAstrometricSolution()
                 || astrometryContext.getObserverSite() == null) {
             return null;
@@ -53,7 +53,7 @@ final class SatCheckerQueryTargetFactory {
     }
 
     static long resolveTrackPointStartTimestamp(DetectionReportAstrometry.Context astrometryContext,
-                                                SourceExtractor.DetectedObject point) {
+                                                DetectedObject point) {
         if (point == null) {
             return -1L;
         }
@@ -63,12 +63,12 @@ final class SatCheckerQueryTargetFactory {
         return astrometryContext != null ? astrometryContext.getFrameTimestampMillis(point.sourceFrameIndex) : -1L;
     }
 
-    static long resolveTrackPointExposureMillis(SourceExtractor.DetectedObject point) {
+    static long resolveTrackPointExposureMillis(DetectedObject point) {
         return point != null ? Math.max(point.exposureDuration, 0L) : 0L;
     }
 
     static long resolveTrackPointMidpointTimestamp(DetectionReportAstrometry.Context astrometryContext,
-                                                   SourceExtractor.DetectedObject point) {
+                                                   DetectedObject point) {
         long startTimestamp = resolveTrackPointStartTimestamp(astrometryContext, point);
         if (startTimestamp <= 0L) {
             return -1L;
@@ -104,7 +104,7 @@ final class SatCheckerQueryTargetFactory {
     }
 
     private static TrackTimeWindow resolveTrackTimeWindow(DetectionReportAstrometry.Context astrometryContext,
-                                                          TrackLinker.Track track) {
+                                                          Track track) {
         if (track == null || track.points == null || track.points.isEmpty()) {
             return null;
         }
@@ -112,7 +112,7 @@ final class SatCheckerQueryTargetFactory {
         long earliestStartTimestamp = Long.MAX_VALUE;
         long latestEndTimestamp = Long.MIN_VALUE;
 
-        for (SourceExtractor.DetectedObject point : track.points) {
+        for (DetectedObject point : track.points) {
             long startTimestamp = resolveTrackPointStartTimestamp(astrometryContext, point);
             if (startTimestamp <= 0L) {
                 continue;
@@ -141,7 +141,7 @@ final class SatCheckerQueryTargetFactory {
     }
 
     private static SatCheckerQueryTarget buildTrackCenteredSatCheckerQueryTarget(DetectionReportAstrometry.Context astrometryContext,
-                                                                                 TrackLinker.Track track,
+                                                                                 Track track,
                                                                                  TrackTimeWindow timeWindow) {
         SolarSystemQueryTarget trackQueryTarget = SolarSystemQueryTargetFactory.buildTrackQueryTarget(astrometryContext, track);
         if (trackQueryTarget == null) {
@@ -155,7 +155,7 @@ final class SatCheckerQueryTargetFactory {
         }
 
         double maxTrackSeparationDegrees = 0.0d;
-        for (SourceExtractor.DetectedObject point : track.points) {
+        for (DetectedObject point : track.points) {
             if (point == null) {
                 continue;
             }
