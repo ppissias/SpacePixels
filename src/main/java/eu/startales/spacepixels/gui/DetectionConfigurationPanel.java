@@ -20,6 +20,7 @@ import eu.startales.spacepixels.config.SpacePixelsSettingsFiles;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.DetectionSetting;
 import eu.startales.spacepixels.config.ResidualAnalysisSettings;
+import eu.startales.spacepixels.config.QualitySettings;
 import eu.startales.spacepixels.config.VariableStarsSettings;
 import eu.startales.spacepixels.config.SlowMoversSettings;
 import eu.startales.spacepixels.config.AnomalyDetectionSettings;
@@ -1086,13 +1087,13 @@ public class DetectionConfigurationPanel extends JPanel {
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Session Outlier Rejection (MAD)"));
-        spinStarCountSigma = addRow(panel, "Star Count Drop Sigma", "Rejects frames whose star count falls too far below the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.starCountSigmaDeviation, 0.0, 10.0, 0.1));
-        spinFwhmSigma = addRow(panel, "FWHM Spike Sigma", "Rejects frames whose median FWHM rises too far above the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.fwhmSigmaDeviation, 0.0, 10.0, 0.1));
-        spinEccentricitySigma = addRow(panel, "Eccentricity Spike Sigma", "Rejects frames whose star shapes become too elongated compared with the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.eccentricitySigmaDeviation, 0.0, 10.0, 0.1));
-        chkEnableBrightStarEccentricityFilter = addCheckboxRow(panel, "Enable Bright-Star Eccentricity Filter", "Runs an extra rejection gate using only the brightest quality stars, which is useful for catching tracking error or wind that shows up most clearly on high-SNR stars.", jTransientConfig.enableBrightStarEccentricityFilter);
-        spinBrightStarEccentricitySigma = addRow(panel, "Bright-Star Eccentricity Sigma", "Rejects frames whose bright-star median eccentricity rises too far above the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.brightStarEccentricitySigmaDeviation, 0.0, 10.0, 0.1));
-        spinBackgroundSigma = addRow(panel, "Background Deviation Sigma", "Rejects frames whose background level deviates too much from the session median. Higher values are more tolerant.", doubleSpinnerModel(jTransientConfig.backgroundSigmaDeviation, 0.0, 10.0, 0.1));
-        spinMinBgDevAdu = addRow(panel, "Min Background Deviation (ADU)", "Smallest allowed sky-level shift, in ADU, even when the measured session variation is tiny. The allowed shift is also never smaller than the typical sky noise of one frame.", doubleSpinnerModel(jTransientConfig.minBackgroundDeviationADU, 0.0, 10000.0, 5.0));
+        spinStarCountSigma = addTypedDouble(panel, QualitySettings.STAR_COUNT_SIGMA_DEVIATION, 0.0, 10.0, 0.1);
+        spinFwhmSigma = addTypedDouble(panel, QualitySettings.FWHM_SIGMA_DEVIATION, 0.0, 10.0, 0.1);
+        spinEccentricitySigma = addTypedDouble(panel, QualitySettings.ECCENTRICITY_SIGMA_DEVIATION, 0.0, 10.0, 0.1);
+        chkEnableBrightStarEccentricityFilter = addTypedCheckbox(panel, QualitySettings.ENABLE_BRIGHT_STAR_ECCENTRICITY_FILTER);
+        spinBrightStarEccentricitySigma = addTypedDouble(panel, QualitySettings.BRIGHT_STAR_ECCENTRICITY_SIGMA_DEVIATION, 0.0, 10.0, 0.1);
+        spinBackgroundSigma = addTypedDouble(panel, QualitySettings.BACKGROUND_SIGMA_DEVIATION, 0.0, 10.0, 0.1);
+        spinMinBgDevAdu = addTypedDouble(panel, QualitySettings.MIN_BACKGROUND_DEVIATION_ADU, 0.0, 10000.0, 5.0);
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Auto-Tune"));
@@ -1434,14 +1435,7 @@ public class DetectionConfigurationPanel extends JPanel {
             if (mainAppWindow.getImageProcessing() != null)
                 mainAppWindow.getImageProcessing().getAppConfig().variableStarReportOptions = variableStarReportOptions;
 
-            jTransientConfig.starCountSigmaDeviation = ((Number) spinStarCountSigma.getValue()).doubleValue();
-            jTransientConfig.fwhmSigmaDeviation = ((Number) spinFwhmSigma.getValue()).doubleValue();
-            jTransientConfig.eccentricitySigmaDeviation = ((Number) spinEccentricitySigma.getValue()).doubleValue();
-            jTransientConfig.enableBrightStarEccentricityFilter = chkEnableBrightStarEccentricityFilter.isSelected();
-            jTransientConfig.brightStarEccentricitySigmaDeviation = ((Number) spinBrightStarEccentricitySigma.getValue()).doubleValue();
-            jTransientConfig.backgroundSigmaDeviation = ((Number) spinBackgroundSigma.getValue()).doubleValue();
 
-            jTransientConfig.minBackgroundDeviationADU = ((Number) spinMinBgDevAdu.getValue()).doubleValue();
 
 
 
@@ -1653,13 +1647,6 @@ public class DetectionConfigurationPanel extends JPanel {
 
         typedBindings.forEach(binding -> binding.loadFrom(config));
 
-        setSpinnerValueClamped(spinStarCountSigma, config.starCountSigmaDeviation);
-        setSpinnerValueClamped(spinFwhmSigma, config.fwhmSigmaDeviation);
-        setSpinnerValueClamped(spinEccentricitySigma, config.eccentricitySigmaDeviation);
-        chkEnableBrightStarEccentricityFilter.setSelected(config.enableBrightStarEccentricityFilter);
-        setSpinnerValueClamped(spinBrightStarEccentricitySigma, config.brightStarEccentricitySigmaDeviation);
-        setSpinnerValueClamped(spinBackgroundSigma, config.backgroundSigmaDeviation);
-        setSpinnerValueClamped(spinMinBgDevAdu, config.minBackgroundDeviationADU);
 
     }
 
