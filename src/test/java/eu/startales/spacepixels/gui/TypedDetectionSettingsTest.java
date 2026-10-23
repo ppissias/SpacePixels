@@ -3,6 +3,7 @@ package eu.startales.spacepixels.gui;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import eu.startales.spacepixels.config.DetectionSetting;
+import eu.startales.spacepixels.config.DetectionSettings;
 import eu.startales.spacepixels.config.DetectionSettingsPresentation;
 import eu.startales.spacepixels.config.ResidualAnalysisSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -19,12 +20,12 @@ public class TypedDetectionSettingsTest {
     /** Every definition changes exactly its declared field, preserving hidden configuration and primitive types. */
     @Test public void definitionsMutateOnlyTheirDeclaredField() {
         Set<String> identities = new HashSet<>();
-        for (DetectionSetting<?> setting : ResidualAnalysisSettings.all()) {
+        for (DetectionSetting<?> setting : DetectionSettings.all()) {
             assertTrue(identities.add(setting.id()));
             assertEquals(setting.title(), DetectionSettingsPresentation.title(setting.id()));
             checkOwnership(setting);
         }
-        assertEquals(7, identities.size());
+        assertEquals(14, identities.size());
     }
 
     /** Invalid numeric input is rejected before mutation and the engine remains the source of issue identities. */

@@ -29,7 +29,7 @@ public final class DetectionSettingsPresentation {
      * @return display title or the unchanged identifier
      */
     public static String title(String field) {
-        return ResidualAnalysisSettings.all().stream().filter(setting -> setting.id().equals(field))
+        return DetectionSettings.all().stream().filter(setting -> setting.id().equals(field))
                 .map(DetectionSetting::title).findFirst().orElseGet(() -> TITLES.getOrDefault(field, field));
     }
 

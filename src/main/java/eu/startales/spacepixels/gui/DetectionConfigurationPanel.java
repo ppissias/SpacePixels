@@ -20,6 +20,7 @@ import eu.startales.spacepixels.config.SpacePixelsSettingsFiles;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.DetectionSetting;
 import eu.startales.spacepixels.config.ResidualAnalysisSettings;
+import eu.startales.spacepixels.config.StreakDetectionSettings;
 import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.jobs.JobCoordinator;
@@ -895,23 +896,19 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createTabIntro("Settings for streak detection."));
 
         panel.add(createSectionHeader("Common Settings"));
-        spinSingleStreakMinPeakSigma = addRow(panel, "Single Streak Min Peak Sigma", "Minimum peak signal-to-noise required for a streak seen in only one frame. Helps reject elongated noise and interpolation artifacts.", doubleSpinnerModel(jTransientConfig.singleStreakMinPeakSigma, 0.0, 50.0, 0.1));
+        spinSingleStreakMinPeakSigma = addTypedDouble(panel, StreakDetectionSettings.SINGLE_STREAK_MIN_PEAK_SIGMA, 0.0, 50.0, 0.1);
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Streak Shape And Linking"));
-        spinStreakMinElong = addRow(panel, "Streak Min Elongation", "Minimum elongation required for a detected object to be treated as a streak candidate rather than a point source.", doubleSpinnerModel(jTransientConfig.streakMinElongation, 1.0, 20.0, 0.1));
-        spinStreakMinPix = addRow(panel, "Streak Min Pixels", "Minimum size required for an elongated detection to be accepted as a streak. Higher values reject thin artifacts.", intSpinnerModel(jTransientConfig.streakMinPixels, 1, 2000, 1));
-        spinAngleTol = addRow(panel, "Trajectory Angle Tolerance", "For streak-based tracks, maximum allowed difference between the streak angle and the inferred track direction.", doubleSpinnerModel(jTransientConfig.angleToleranceDegrees, 0.5, 180.0, 0.5));
-        spinStreakTimeConsistencyTolerance = addRow(
-                panel,
-                "Streak Time Consistency Tolerance",
-                "When timestamps are available, this controls how much projected-speed variation the multi-frame streak linker tolerates between sampled frames. Higher values are more permissive for fragmented or faint streak trails.",
-doubleSpinnerModel(jTransientConfig.streakTimeConsistencyTolerance, 0.0, 1.0, 0.01));
+        spinStreakMinElong = addTypedDouble(panel, StreakDetectionSettings.STREAK_MIN_ELONGATION, 1.0, 20.0, 0.1);
+        spinStreakMinPix = addTypedInteger(panel, StreakDetectionSettings.STREAK_MIN_PIXELS, 1, 2000, 1);
+        spinAngleTol = addTypedDouble(panel, StreakDetectionSettings.ANGLE_TOLERANCE_DEGREES, 0.5, 180.0, 0.5);
+        spinStreakTimeConsistencyTolerance = addTypedDouble(panel, StreakDetectionSettings.STREAK_TIME_CONSISTENCY_TOLERANCE, 0.0, 1.0, 0.01);
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Faint Streak Fragments"));
-        chkEnableFaintStreakFragments = addCheckboxRow(panel, "Assemble Faint Streak Fragments", "Joins faint pieces that line up in one frame onto an existing streak, including a connected chain a short way past its ends, and builds a new single-frame streak when elongated pieces line up over a long span. Rounder pieces can fill the gaps between those anchors. Pieces below the normal streak gates are included. The tolerance appears below when this is on.", jTransientConfig.enableFaintStreakFragments);
-        spinFaintStreakLineTolerance = addRow(panel, "Faint Streak Line Tolerance", "How far, in pixels, a piece may sit from the streak line and still be joined. Lower values keep only pieces that sit tightly on the line.", doubleSpinnerModel(jTransientConfig.faintStreakLineTolerance, 0.0, 20.0, 0.1));
+        chkEnableFaintStreakFragments = addTypedCheckbox(panel, StreakDetectionSettings.ENABLE_FAINT_STREAK_FRAGMENTS);
+        spinFaintStreakLineTolerance = addTypedDouble(panel, StreakDetectionSettings.FAINT_STREAK_LINE_TOLERANCE, 0.0, 20.0, 0.1);
 
         return panel;
     }
@@ -1427,18 +1424,11 @@ doubleSpinnerModel(jTransientConfig.streakTimeConsistencyTolerance, 0.0, 1.0, 0.
             jTransientConfig.slowMoverMedianSupportMaxOverlapFraction = ((Number) spinSlowMoverMedianSupportMaxOverlapFraction.getValue()).doubleValue();
             jTransientConfig.slowMoverMinFrameSupport = ((Number) spinSlowMoverMinFrameSupport.getValue()).doubleValue();
             jTransientConfig.slowMoverMaxStationaryLikelihood = ((Number) spinSlowMoverMaxStationaryLikelihood.getValue()).doubleValue();
-            jTransientConfig.streakMinElongation = ((Number) spinStreakMinElong.getValue()).doubleValue();
-            jTransientConfig.streakMinPixels = ((Number) spinStreakMinPix.getValue()).intValue();
-            jTransientConfig.singleStreakMinPeakSigma = ((Number) spinSingleStreakMinPeakSigma.getValue()).doubleValue();
-            jTransientConfig.streakTimeConsistencyTolerance = ((Number) spinStreakTimeConsistencyTolerance.getValue()).doubleValue();
-            jTransientConfig.enableFaintStreakFragments = chkEnableFaintStreakFragments.isSelected();
-            jTransientConfig.faintStreakLineTolerance = ((Number) spinFaintStreakLineTolerance.getValue()).doubleValue();
 
             // --- Apply Tracker Settings to the POJO ---
             jTransientConfig.maxStarJitter = ((Number) spinStarJitter.getValue()).doubleValue();
             jTransientConfig.maxMaskOverlapFraction = ((Number) spinMaxMaskOverlapFraction.getValue()).doubleValue();
             jTransientConfig.predictionTolerance = ((Number) spinPredTol.getValue()).doubleValue();
-            jTransientConfig.angleToleranceDegrees = ((Number) spinAngleTol.getValue()).doubleValue();
             jTransientConfig.maxJumpPixels = ((Number) spinMaxJump.getValue()).doubleValue();
             jTransientConfig.strictExposureKinematics = chkStrictExposureKinematics.isSelected();
             jTransientConfig.enableGeometricTrackLinking = chkEnableGeometricTrackLinking.isSelected();
@@ -1718,7 +1708,6 @@ doubleSpinnerModel(jTransientConfig.streakTimeConsistencyTolerance, 0.0, 1.0, 0.
         setSpinnerValueClamped(spinStarJitter, config.maxStarJitter);
         setSpinnerValueClamped(spinMaxMaskOverlapFraction, config.maxMaskOverlapFraction);
         setSpinnerValueClamped(spinPredTol, config.predictionTolerance);
-        setSpinnerValueClamped(spinAngleTol, config.angleToleranceDegrees);
         setSpinnerValueClamped(spinMaxJump, config.maxJumpPixels);
         setSpinnerValueClamped(spinMaxFwhmRatio, config.maxFwhmRatio);
         setSpinnerValueClamped(spinMaxSurfaceBrightnessRatio, config.maxSurfaceBrightnessRatio);
@@ -1729,12 +1718,6 @@ doubleSpinnerModel(jTransientConfig.streakTimeConsistencyTolerance, 0.0, 1.0, 0.
         setSpinnerValueClamped(spinRhythmStatThresh, config.rhythmStationaryThreshold);
         setSpinnerValueClamped(spinTimeBasedVelocityTolerance, config.timeBasedVelocityTolerance);
 
-        setSpinnerValueClamped(spinStreakMinElong, config.streakMinElongation);
-        setSpinnerValueClamped(spinStreakMinPix, config.streakMinPixels);
-        setSpinnerValueClamped(spinSingleStreakMinPeakSigma, config.singleStreakMinPeakSigma);
-        setSpinnerValueClamped(spinStreakTimeConsistencyTolerance, config.streakTimeConsistencyTolerance);
-        chkEnableFaintStreakFragments.setSelected(config.enableFaintStreakFragments);
-        setSpinnerValueClamped(spinFaintStreakLineTolerance, config.faintStreakLineTolerance);
 
         chkEnableAnomalyRescue.setSelected(config.enableAnomalyRescue);
         setSpinnerValueClamped(spinAnomalyMinPeakSigma, config.anomalyMinPeakSigma);
