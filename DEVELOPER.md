@@ -61,7 +61,7 @@ At SpacePixels release time:
 3. With both composites disabled, build/test the exact selected application/engine/solver combination and verify resolved versions, packaged resources, metadata and independent headless API/CLI consumers. For a Central release, also disable the validation-only repository and verify real dependency availability.
 4. Record the selected version combination with the release. An arbitrary older/newer replacement JAR is not a supported drop-in contract.
 
-Keep Java-target, architecture, cancellation/ownership and scientific regression checks. This policy does not authorize silent changes to scientific algorithms, user profiles/session data or saved formats. Current adapters/build tests that were added for historical compatibility remain until coordinated cleanup; the [JTransient implementation review](../JTransient/DESIGN-IMPROVEMENTS.md#review-of-the-jtransient-changes-under-that-policy) identifies them. Documentation of their current behavior is not a requirement to preserve them.
+Keep Java-target, architecture, cancellation/ownership and scientific regression checks. This policy does not authorize silent changes to scientific algorithms, user profiles/session data or saved formats. Historical-version routing, global diagnostic bridges and duplicate engine snapshot/outcome facades have been removed. The [archived explanatory review](../JTransient/docs/archive/architecture-clarifications-2026-10-23.md) preserves the reasoning; [the active plan](../JTransient/DESIGN-IMPROVEMENTS.md) holds only remaining work.
 
 ## Build source sets and artifacts
 
@@ -337,7 +337,7 @@ For console diagnostics, use `.\gradlew.bat run -PspacepixelsDebug` or set `-Dsp
 
 ## What comes next
 
-The open steps from the architecture review, in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md#open-steps-from-the-architecture-review), build on completed S13's headless utility boundary:
+The open steps from the architecture review, in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md#remaining-architecture-steps), build on completed S13's headless utility boundary:
 
 - **S14:** pass site, rendering options and the Auto-Tune frame limit in an explicit run context.
 - **S15:** consolidate finding labels and category rules.

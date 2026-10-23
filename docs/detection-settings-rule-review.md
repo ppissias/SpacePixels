@@ -2,7 +2,7 @@
 
 Original source review: 2026-10-21 against SpacePixels `4d8da29` and adjacent JTransient `6c3f34d` (declared `1.0.5`, also pinned by SpacePixels). That review alone changed no processing. The implementation decisions and validation below supersede its proposed status; the original evidence/inventory remains historical context, not a description of today's missing features or verification of a published binary.
 
-This document records evidence and resolution for JA-01 and [D10 / shared settings rules](../DESIGN-IMPROVEMENTS.md#d10-describe-settings-and-engine-compatibility-once-with-typed-boundaries). JA-01's shared-rules integration is implemented; D10's typed application bindings and release-pair validation remain separate work.
+This document records evidence and resolution for JA-01 and [D10 / shared settings rules](../DESIGN-IMPROVEMENTS.md#d10-describe-settings-and-engine-contracts-once-with-typed-boundaries). JA-01's shared-rules integration is implemented; D10's typed application bindings and release-pair validation remain separate work.
 
 ## Implementation decisions: JA-01 (2026-10-22)
 

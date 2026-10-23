@@ -108,7 +108,7 @@ Validation for the documentation change checks 92 local links/anchors and 15 uni
 
 ## GUI mechanics planning snapshot (2026-10-22)
 
-The following was removed from the active plan during consistency review. It contains original 2026-10-20/21 decisions, historical pass statements and then-pending suggestions. Current test classes and gaps are described by [the active verification section](../../DESIGN-IMPROVEMENTS.md#gui-mechanics-tests); completed items mentioned here must not be re-proposed.
+The following was removed from the active plan during consistency review. It contains original 2026-10-20/21 decisions, historical pass statements and then-pending suggestions. Current test classes and gaps are described by [the active verification section](../../DESIGN-IMPROVEMENTS.md#gui-interaction-checks); completed items mentioned here must not be re-proposed.
 
 ### Original test plan and review notes
 
