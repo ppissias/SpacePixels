@@ -21,15 +21,11 @@ import eu.startales.spacepixels.session.SessionFrames;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
-import io.github.ppissias.jtransient.core.SourceExtractor;
 
-import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.*;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
 /**
@@ -115,17 +111,6 @@ public class ImageProcessing implements AutoCloseable {
         /** Replaces report-only inclusion choices without mutating detection settings or measured results. */
         public void includeInReport(ReportInclusion inclusion) {
             reportInclusion = Objects.requireNonNull(inclusion);
-        }
-
-        /**
-         * Noninteractive compatibility guard: accepts counts at or below the limit and declines larger reports.
-         * Desktop callers must supply an explicit report prompt instead of relying on a hidden dialog.
-         *
-         * @deprecated use an explicit {@link DetectionSafetyPrompt} for interactive confirmation
-         */
-        @Deprecated
-        public boolean confirmReport(boolean plateSolved, int limit, String heading, DetectionConfig config) {
-            return totalDetections <= limit;
         }
 
         /** A checkbox is offered only for a group the detection ran and that found something. */
@@ -447,14 +432,6 @@ public class ImageProcessing implements AutoCloseable {
         return importService.getFitsfileInformationHeadless();
     }
 
-    /**
-     * Starts plate solving through either ASTAP or astrometry.net using the currently configured
-     * external tooling.
-     */
-    public Future<PlateSolveResult> solve(String fitsFileFullPath, boolean astap, boolean astrometry) throws FitsException, IOException {
-        return plateSolveService.solve(fitsFileFullPath, astap, astrometry);
-    }
-
     public PlateSolveOperation startSolve(String path, boolean astap, boolean astrometry,
             Consumer<PlateSolveOperation.Progress> progress) throws IOException {
         return plateSolveService.startSolve(path, astap, astrometry, progress);
@@ -466,24 +443,6 @@ public class ImageProcessing implements AutoCloseable {
      */
     public String astrometryNetFailure(Throwable failure) {
         return plateSolveService.astrometryNetFailure(failure);
-    }
-
-    /**
-     * Copies WCS keywords from a reference FITS file into every file in the active directory and
-     * optionally emits stretched derivatives alongside the solved outputs.
-     */
-    @Deprecated
-    public void applyWCSHeader(String wcsHeaderFile, int stretchFactor, int iterations, boolean stretch, StretchAlgorithm algo) throws IOException, FitsException {
-        batchService.applyWCSHeader(plateSolveService, wcsHeaderFile, stretchFactor, iterations, stretch, algo);
-    }
-
-    /**
-     * Writes stretched derivatives for every FITS file in the active directory without modifying
-     * headers or running any detection logic.
-     */
-    @Deprecated
-    public void onlyStretch(int stretchFactor, int iterations, StretchAlgorithm algo) throws IOException, FitsException {
-        batchService.onlyStretch(stretchFactor, iterations, algo);
     }
 
     /**
@@ -515,16 +474,6 @@ public class ImageProcessing implements AutoCloseable {
     /** The interactive conversion's negative-value question. */
     static String negativeValueQuestion(FitsPixelConverter.NegativeValueScan scan, int offset) {
         return FitsImportService.negativeValueQuestion(scan, offset);
-    }
-
-    /**
-     * Noninteractive compatibility entry point: declines copying an exposure group without explicit interaction.
-     *
-     * @deprecated supply an explicit FitsImportInteraction to the overload
-     */
-    @Deprecated
-    public static File offerToImportLargestExposureGroup(MixedExposureException mixed) throws IOException {
-        return offerToImportLargestExposureGroup(mixed, null);
     }
 
     /** Offers to copy the largest exposure group; returns null when declined or no interaction is supplied. */

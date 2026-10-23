@@ -1,7 +1,14 @@
 package eu.startales.spacepixels.jobs;
 
+import eu.startales.spacepixels.config.ApplicationSettings;
+import eu.startales.spacepixels.session.ProcessingSession;
+import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.ImageProcessing;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,6 +27,9 @@ import static org.junit.Assert.assertTrue;
  * the UI executor after unlocking the window. The worker executor here holds the work until the test runs it.
  */
 public class JobCoordinatorTest {
+
+    @Rule
+    public TemporaryFolder folder = new TemporaryFolder();
 
     private final List<Runnable> workers = new ArrayList<>();
     private final List<String> calls = new ArrayList<>();
@@ -46,23 +56,27 @@ public class JobCoordinatorTest {
     }
 
     @Test
-    public void aJobLocksTheWindowBeforeItsWorkerRunsAndASecondJobIsRefused() {
-        Object session = new Object();
-        JobCoordinator.Admission first = coordinator.start(JobKind.DETECTION, session, context -> JobOutcome.completed("report"), record());
-        assertTrue(first.admitted());
-        assertSame(session, first.handle().session());
-        assertEquals(List.of("started 1"), calls);
-        assertEquals(1, workers.size());
+    public void aJobLocksTheWindowBeforeItsWorkerRunsAndASecondJobIsRefused() throws Exception {
+        File directory = folder.newFolder("session");
+        FitsFileInformation frame = new FitsFileInformation(new File(directory, "frame.fit").toString(), "frame.fit", true, 10, 10);
+        try (ProcessingSession session = new ProcessingSession(ImageProcessing.getInstance(directory,
+                ApplicationSettings.load(new File(folder.getRoot(), "preferences.json"))), new FitsFileInformation[]{frame}, null)) {
+            JobCoordinator.Admission first = coordinator.start(JobKind.DETECTION, session, context -> JobOutcome.completed("report"), record());
+            assertTrue(first.admitted());
+            assertSame(session, first.handle().session());
+            assertEquals(List.of("started 1"), calls);
+            assertEquals(1, workers.size());
 
-        JobCoordinator.Admission second = coordinator.start(JobKind.STAR_MASK_STACK, session, context -> JobOutcome.completed("stack"), record());
-        assertFalse(second.admitted());
-        assertEquals("Detect Moving Targets is still running.", second.refusal());
-        assertEquals(1, workers.size());
+            JobCoordinator.Admission second = coordinator.start(JobKind.STAR_MASK_STACK, session, context -> JobOutcome.completed("stack"), record());
+            assertFalse(second.admitted());
+            assertEquals("Detect Moving Targets is still running.", second.refusal());
+            assertEquals(1, workers.size());
 
-        workers.remove(0).run();
-        assertEquals(List.of("started 1", "ended 1", "outcome 1 Completed[result=report]"), calls);
-        assertNull(coordinator.current());
-        assertTrue(coordinator.start(JobKind.STAR_MASK_STACK, session, context -> JobOutcome.completed("stack"), record()).admitted());
+            workers.remove(0).run();
+            assertEquals(List.of("started 1", "ended 1", "outcome 1 Completed[result=report]"), calls);
+            assertNull(coordinator.current());
+            assertTrue(coordinator.start(JobKind.STAR_MASK_STACK, session, context -> JobOutcome.completed("stack"), record()).admitted());
+        }
     }
 
     @Test

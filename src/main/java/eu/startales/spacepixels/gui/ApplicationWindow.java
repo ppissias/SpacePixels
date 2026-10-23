@@ -337,7 +337,7 @@ public class ApplicationWindow {
     }
 
     /** The end of an import: installs the imported session, or says why there is none. */
-    private void importFinished(Object expectedSession, JobOutcome<FitsImportTask.Result> outcome) {
+    private void importFinished(ProcessingSession expectedSession, JobOutcome<FitsImportTask.Result> outcome) {
         if (outcome instanceof JobOutcome.Completed<FitsImportTask.Result> completed) {
             ProcessingSession imported = new ProcessingSession(completed.result().processing(),
                     completed.result().files(), completed.result().lastReport(), completed.result().metadata(),
@@ -446,7 +446,7 @@ public class ApplicationWindow {
 
     public ProcessingSession getSession() { return sessions.current(); }
 
-    public boolean isCurrentSession(Object session) { return sessions.isCurrent(session); }
+    public boolean isCurrentSession(ProcessingSession session) { return sessions.isCurrent(session); }
 
     public <R> JobCoordinator.OutcomeHandler<R> forCurrentSession(JobCoordinator.OutcomeHandler<R> handler) {
         return (handle, outcome) -> sessions.applyIfCurrent(handle.session(), () -> handler.handle(handle, outcome));

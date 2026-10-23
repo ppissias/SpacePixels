@@ -22,18 +22,18 @@ public final class SessionOwner implements AutoCloseable {
 
     public ProcessingSession current() { return current; }
 
-    public boolean isCurrent(Object session) {
+    public boolean isCurrent(ProcessingSession session) {
         return !closed && current == session && (current == null || !current.isClosed());
     }
 
-    public boolean applyIfCurrent(Object session, Runnable update) {
+    public boolean applyIfCurrent(ProcessingSession session, Runnable update) {
         if (!isCurrent(session)) return false;
         update.run();
         return true;
     }
 
     /** Transfers ownership only if the import still belongs to the expected previous session. */
-    public boolean replace(Object expected, ProcessingSession replacement) {
+    public boolean replace(ProcessingSession expected, ProcessingSession replacement) {
         Objects.requireNonNull(replacement);
         if (replacement.isClosed()) throw new IllegalArgumentException("Cannot install a closed session.");
         if (!isCurrent(expected)) {

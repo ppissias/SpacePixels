@@ -1508,9 +1508,9 @@ public class MainApplicationPanel extends JPanel {
     }
 
     /** Starts a job under the coordinator; when it cannot start now, the status bar says why. */
-    <R> void startJob(JobKind kind, Object session, Job<R> job, JobCoordinator.OutcomeHandler<R> handler) {
+    <R> void startJob(JobKind kind, ImageProcessing processing, Job<R> job, JobCoordinator.OutcomeHandler<R> handler) {
         ProcessingSession owner = mainAppWindow.getSession();
-        if (owner == null || owner.getProcessing() != session) return;
+        if (owner == null || owner.getProcessing() != processing) return;
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(kind, owner, mainAppWindow.sessionJob(job),
                 mainAppWindow.forCurrentSession(handler));
         if (!admission.admitted()) {

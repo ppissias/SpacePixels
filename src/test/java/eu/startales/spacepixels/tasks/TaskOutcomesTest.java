@@ -186,7 +186,7 @@ public class TaskOutcomesTest {
                 public void jobEnded(eu.startales.spacepixels.jobs.JobHandle handle, JobOutcome<?> outcome) {
                 }
             });
-            coordinator.start(JobKind.DETECTION, processing, job.apply(processing), (handle, outcome) -> outcomes.add(outcome));
+            coordinator.start(JobKind.DETECTION, null, job.apply(processing), (handle, outcome) -> outcomes.add(outcome));
             assertEquals(1, outcomes.size());
             return outcomes.get(0);
         }

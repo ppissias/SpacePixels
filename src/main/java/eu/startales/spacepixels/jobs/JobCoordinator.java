@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.jobs;
 
+import eu.startales.spacepixels.session.ProcessingSession;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.function.BooleanSupplier;
@@ -98,7 +99,7 @@ public final class JobCoordinator {
      *
      * @param session the session the job is for, kept in its handle
      */
-    public <R> Admission start(JobKind kind, Object session, Job<R> job, OutcomeHandler<R> handler) {
+    public <R> Admission start(JobKind kind, ProcessingSession session, Job<R> job, OutcomeHandler<R> handler) {
         Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(job, "job");
         Objects.requireNonNull(handler, "handler");

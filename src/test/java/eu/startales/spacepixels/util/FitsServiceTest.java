@@ -212,9 +212,6 @@ public class FitsServiceTest {
             }
             processing.batchStretch(10, 2, StretchAlgorithm.ASINH, null);
             assertTrue(new File(input, "_stretched/" + stem + "_stretch.fit").isFile());
-            Files.delete(new File(input, "_mono_stretched/" + stem + "_mono_stretch.fit").toPath());
-            processing.onlyStretch(10, 2, StretchAlgorithm.ASINH);
-            assertTrue(new File(input, "_mono_stretched/" + stem + "_mono_stretch.fit").isFile());
         }
         assertArrayEquals(untouched, Files.readAllBytes(original.toPath()));
     }

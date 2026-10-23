@@ -76,7 +76,7 @@ public class AutoTuneJobTest {
                 public void jobEnded(JobHandle handle, JobOutcome<?> outcome) {
                 }
             });
-            coordinator.start(JobKind.AUTO_TUNE, processing, new AutoTuneTask(files, SyntheticDatasetFactory.createSyntheticDetectionConfig(),
+            coordinator.start(JobKind.AUTO_TUNE, null, new AutoTuneTask(files, SyntheticDatasetFactory.createSyntheticDetectionConfig(),
                     FRAME_COUNT, AutoTuneProfile.values()[0]),
                     (handle, outcome) -> outcomes.add(outcome));
             assertEquals(1, outcomes.size());

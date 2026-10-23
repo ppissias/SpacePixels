@@ -39,7 +39,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Future;
 import java.util.logging.Logger;
 
 /**
@@ -47,11 +46,6 @@ import java.util.logging.Logger;
  */
 final class PlateSolveService implements AutoCloseable {
     private static final Logger LOGGER = Logger.getLogger(PlateSolveService.class.getName());
-
-    @FunctionalInterface
-    interface FitsWriteHandler {
-        void write(File fitsFile, Fits fits) throws IOException, FitsException;
-    }
 
     private static final Set<String> FIXED_WCS_HEADER_KEYS = Set.of(
             "WCSAXES",
@@ -70,12 +64,6 @@ final class PlateSolveService implements AutoCloseable {
             "B_DMAX",
             "AP_DMAX",
             "BP_DMAX");
-    private static final String[] APPLY_WCS_HEADER_PREFIXES = {
-            "CTYPE", "CUNIT1", "CUNIT2", "WCSAXES", "IMAGEW", "IMAGEH",
-            "A_ORDER", "B_ORDER", "AP_ORDER", "BP_ORDER",
-            "CRPIX", "CRVAL", "CDELT", "CROTA", "CD1_", "CD2_",
-            "EQUINOX", "LONPOLE", "LATPOLE", "A_", "B_", "AP_", "BP_"
-    };
 
     private final AppConfig appConfig;
     private final Function<String, AstrometryDotNet> astrometryNetClients;
@@ -91,10 +79,6 @@ final class PlateSolveService implements AutoCloseable {
     PlateSolveService(AppConfig appConfig, Function<String, AstrometryDotNet> astrometryNetClients) {
         this.appConfig = appConfig;
         this.astrometryNetClients = astrometryNetClients;
-    }
-
-    public Future<PlateSolveResult> solve(String path, boolean astap, boolean astrometry) throws FitsException, IOException {
-        return startSolve(path, astap, astrometry, null).asFuture(!astap && astrometry);
     }
 
     public PlateSolveOperation startSolve(String path, boolean astap, boolean astrometry,
@@ -161,20 +145,6 @@ final class PlateSolveService implements AutoCloseable {
         astrometryNetClientKey = null;
         if (client != null) {
             client.close();
-        }
-    }
-
-    public void applyWCSHeader(String wcsHeaderFile, File[] fitsFileInformation, FitsWriteHandler writeHandler)
-            throws IOException, FitsException {
-        try (Fits wcsHeaderFits = new Fits(wcsHeaderFile)) {
-            Header wcsHeader = ImageProcessing.getImageHDU(wcsHeaderFits).getHeader();
-            for (File fitsFile : fitsFileInformation) {
-                try (Fits fits = new Fits(fitsFile)) {
-                    Header targetHeader = ImageProcessing.getImageHDU(fits).getHeader();
-                    copyWcsHeaderCards(wcsHeader, targetHeader);
-                    writeHandler.write(fitsFile, fits);
-                }
-            }
         }
     }
 
@@ -269,33 +239,6 @@ final class PlateSolveService implements AutoCloseable {
             }
             return totalBytesRead;
         }
-    }
-
-    private void copyWcsHeaderCards(Header sourceHeader, Header targetHeader) {
-        Cursor<String, HeaderCard> iterator = sourceHeader.iterator();
-        while (iterator.hasNext()) {
-            HeaderCard sourceCard = iterator.next();
-            String key = sourceCard.getKey();
-            if (!shouldCopyWcsHeaderKey(key)) {
-                continue;
-            }
-            if (targetHeader.containsKey(key)) {
-                targetHeader.deleteKey(key);
-            }
-            targetHeader.addLine(sourceCard.copy());
-        }
-    }
-
-    private boolean shouldCopyWcsHeaderKey(String key) {
-        if (key == null) {
-            return false;
-        }
-        for (String prefix : APPLY_WCS_HEADER_PREFIXES) {
-            if (key.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private List<HeaderCard> resolveWcsHeaderCards(Map<String, String> wcsData) throws Exception {

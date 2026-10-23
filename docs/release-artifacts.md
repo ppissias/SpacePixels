@@ -26,4 +26,4 @@ The versions above are development examples, not a release decision. Use `verify
 
 Pin the selected versions in the release build. Verify actual availability through the intended distribution repository with both composites disabled **and without** `releaseValidationRepository`. Central staging rejects that local validation property. Local staging proves integration/packaging, not public availability.
 
-JTransient `check` compiles/runs a current-version independent `apiConsumer` and enforces its adopted bytecode architecture boundaries on Java 21. There is no previous-JAR binary canary or historical-version matrix. Keep scientific reference-data comparisons separate from packaging checks.
+JTransient `check` enforces its adopted bytecode architecture boundaries on Java 21; its `mavenCentralBundle` also compiles and runs the current-version independent `apiConsumer`. There is no previous-JAR binary canary or historical-version matrix. Keep scientific reference-data comparisons separate from packaging checks.

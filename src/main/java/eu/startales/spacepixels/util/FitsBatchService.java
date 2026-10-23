@@ -18,12 +18,6 @@ final class FitsBatchService {
         this.renderer = renderer;
     }
 
-    void applyWCSHeader(PlateSolveService solver, String headerFile, int stretchFactor, int iterations,
-                        boolean stretch, StretchAlgorithm algorithm) throws IOException, FitsException {
-        solver.applyWCSHeader(headerFile, FitsFiles.list(directory),
-                (file, fits) -> writeUpdatedFITSFile(file, fits, stretchFactor, iterations, stretch, algorithm));
-    }
-
     public File batchConvertToMono(boolean stretch, int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
         File[] fitsFileInformation = FitsFiles.list(directory);
         File generatedMonoDirectory = null;
@@ -90,59 +84,6 @@ final class FitsBatchService {
                 writeFitsWithSuffix(originalFits, stretchFilename, "_stretch");
 
             }
-        }
-    }
-
-    void writeUpdatedFITSFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, boolean stretch, StretchAlgorithm algo) throws FitsException, IOException {
-        int naxis = FitsImages.getImageHDU(originalFits).getHeader().getIntValue("NAXIS");
-        boolean isColor = false;
-        if (naxis == 3) {
-            isColor = true;
-        }
-
-        String newFNameSolved = addDirectory(fileInformation, "_solved");
-        writeFitsWithSuffix(originalFits, newFNameSolved, "_wcs");
-
-        Fits monochromeFits = null;
-        if (isColor) {
-            monochromeFits = convertToMono(originalFits);
-            String newFNameSolvedMono = addDirectory(fileInformation, "_solved_mono");
-            writeFitsWithSuffix(monochromeFits, newFNameSolvedMono, "_mono_wcs");
-        }
-
-        if (stretch) {
-            String newFNameSolvedStretched = addDirectory(fileInformation, "_solved_stretched");
-            stretchFITSImage(originalFits, stretchFactor, iterations, algo);
-            writeFitsWithSuffix(originalFits, newFNameSolvedStretched, "_wcs_stretch");
-
-            if (isColor) {
-                String newFNameSolvedMonoStretch = addDirectory(fileInformation, "_solved_mono_stretched");
-                stretchFITSImage(monochromeFits, stretchFactor, iterations, algo);
-                writeFitsWithSuffix(monochromeFits, newFNameSolvedMonoStretch, "_mono_wcs_stretch");
-            }
-        }
-    }
-
-    private void writeOnlyStretchedFitsFile(File fileInformation, Fits originalFits, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException, IOException {
-        int naxis = FitsImages.getImageHDU(originalFits).getHeader().getIntValue("NAXIS");
-        boolean isColor = false;
-        if (naxis == 3) {
-            isColor = true;
-        }
-
-        Fits monochromeFits = null;
-        if (isColor) {
-            monochromeFits = convertToMono(originalFits);
-        }
-
-        String newFNameSolvedStretched = addDirectory(fileInformation, "_stretched");
-        stretchFITSImage(originalFits, stretchFactor, iterations, algo);
-        writeFitsWithSuffix(originalFits, newFNameSolvedStretched, "_stretch");
-
-        if (isColor) {
-            String newFNameSolvedMonoStretch = addDirectory(fileInformation, "_mono_stretched");
-            stretchFITSImage(monochromeFits, stretchFactor, iterations, algo);
-            writeFitsWithSuffix(monochromeFits, newFNameSolvedMonoStretch, "_mono_stretch");
         }
     }
 
@@ -290,12 +231,4 @@ final class FitsBatchService {
         renderer.stretchFitsImage(fitsImage, stretchFactor, iterations, algo);
     }
 
-    public void onlyStretch(int stretchFactor, int iterations, StretchAlgorithm algo) throws IOException, FitsException {
-        File[] fitsFileInformation = FitsFiles.list(directory);
-        for (int fileIndex = 0; fileIndex < fitsFileInformation.length; fileIndex++) {
-            try (Fits fitsFile = new Fits(fitsFileInformation[fileIndex])) {
-                writeOnlyStretchedFitsFile(fitsFileInformation[fileIndex], fitsFile, stretchFactor, iterations, algo);
-            }
-        }
-    }
 }

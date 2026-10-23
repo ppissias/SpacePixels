@@ -23,7 +23,7 @@ Other `eu.startales.spacepixels.*` packages should be treated as internal implem
 - `io.github.ppissias.jtransient.engine.PipelineResult`
 - `eu.startales.spacepixels.util.FitsFileInformation`
 
-The internal `ImageProcessing` compatibility facade no longer creates Swing adapters implicitly (S13). Its existing factories without interaction use strict headless validation; desktop code supplies `FitsImportInteraction` explicitly. Legacy summary confirmation/exposure-group signatures remain noninteractive guards/declines. This does not change the supported pipeline request/result surface, preparation policy or API report behavior; API execution continues without report-size questions.
+The internal `ImageProcessing` facade creates no Swing adapters (S13). Its factories without interaction use strict headless validation; desktop code supplies `FitsImportInteraction` explicitly. This does not change the supported pipeline request/result surface, preparation policy or API report behavior; API execution continues without report-size questions.
 
 ## Dependency
 
@@ -35,11 +35,11 @@ implementation 'eu.startales.spacepixels:spacepixels:<version>'
 
 `spacepixels` is the only Maven publication: the public API plus the headless configuration, session, FITS/preparation, processing, catalogue and reporting implementation/resources it needs. It also includes the `BatchDetectionCli` and `ArtificialStarInjector` command-line entrypoints, usable with a dependency-resolved Java classpath. Matching sources and Javadocs cover the same headless code. It contains no SpacePixels GUI, jobs/tasks, GUI icons or FlatLaf dependency.
 
-JTransient is an `api` dependency because its configuration and result types appear in the supported API. FITS, Gson and JPlateSolve remain `implementation` dependencies: consumers still receive them transitively at runtime, but they are not exposed on the compile classpath. Internal `ImageProcessing` compatibility helpers expose solver types, but are not supported embedding contracts; consumers using those helpers must declare their own compile dependency. Promoting JPlateSolve to `api` would be appropriate only if solver types enter the supported public API.
+JTransient is an `api` dependency because its configuration and result types appear in the supported API. FITS, Gson and JPlateSolve remain `implementation` dependencies: consumers still receive them transitively at runtime, but they are not exposed on the compile classpath. Internal `ImageProcessing` helpers expose solver types, but are not supported embedding contracts; consumers using those helpers must declare their own compile dependency. Promoting JPlateSolve to `api` would be appropriate only if solver types enter the supported public API.
 
 The original coordinate and Java package/signature names are preserved; there is no separate `spacepixels-core` module or publication. The desktop application is still built by `run`/`installDist`, using an unpublished desktop companion JAR and GUI-only dependencies. A Maven API JAR is not a standalone desktop application or a shaded dependency bundle. Headless AWT image/report rendering still requires the JDK's `java.desktop` module; run servers with `-Djava.awt.headless=true` rather than removing that module. Java 21 is the compilation baseline.
 
-F11 prepares this artifact and a local Central bundle; it does not assert that this source version or its JA-01-capable JTransient dependency has been released to Central. Before distribution, verify the actual published dependency pair under JA-11. `gradlew.bat apiConsumerTest` validates a separately resolved headless consumer against a local staging repository, without project/composite substitution; when using local siblings it stages their real binaries/generated POMs as test inputs, not a public-release certification. See [PUBLISHING.md](PUBLISHING.md).
+F11 prepares this artifact and a local Central bundle; it does not assert that this source version or its JA-01-capable JTransient dependency has been released to Central. Before distribution, verify the actual published dependency pair under JA-11. `gradlew.bat apiConsumerTest` (also run by `mavenCentralBundle`) validates a separately resolved headless consumer against a local staging repository, without project/composite substitution; when using local siblings it stages their real binaries/generated POMs as test inputs, not a public-release certification. See [PUBLISHING.md](PUBLISHING.md).
 
 ## What the API does
 

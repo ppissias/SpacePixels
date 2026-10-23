@@ -378,8 +378,8 @@ tasks.named('publishMavenJavaPublicationToCentralStagingRepository') {
 
 tasks.register('bundleCentralPortal', Zip) {
     group = 'publishing'
-    description = 'Builds a signed Central upload bundle locally; never uploads it.'
-    dependsOn tasks.named('check'), tasks.named('publishMavenJavaPublicationToCentralStagingRepository')
+    description = 'Builds a signed Central upload bundle locally after the isolated API consumer check; never uploads it.'
+    dependsOn tasks.named('check'), tasks.named('apiConsumerTest'), tasks.named('publishMavenJavaPublicationToCentralStagingRepository')
     from(stagingRepository) {
         def artifactDirectory = "${project.group.toString().replace('.', '/')}/${artifactName}/${project.version}"
         for (String extension : ['jar', 'pom', 'module']) {
@@ -406,6 +406,7 @@ apply from: 'gradle/api-artifact.gradle'
 apply from: 'gradle/api-consumer.gradle'
 apply from: 'gradle/release-artifacts.gradle'
 
+// The isolated API consumer build runs when the Central bundle is prepared (bundleCentralPortal), not on every check.
 tasks.named('check') {
-    dependsOn tasks.named('verifyApiPublication'), tasks.named('verifyDesktopArchive'), tasks.named('apiConsumerTest')
+    dependsOn tasks.named('verifyApiPublication'), tasks.named('verifyDesktopArchive')
 }

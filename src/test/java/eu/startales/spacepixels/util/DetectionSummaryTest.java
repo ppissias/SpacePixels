@@ -52,8 +52,6 @@ public class DetectionSummaryTest {
     public void compatibilityConfirmationDeclinesLargeReportsWithoutInteraction() {
         ImageProcessing.DetectionSummary summary = new ImageProcessing.DetectionSummary(
                 51, 0, 0, 51, 0, 0, 0, 0, null, 0, 0, 0, 0, 0);
-        assertFalse(summary.confirmReport(false, 50, null, null));
-        assertTrue(summary.confirmReport(false, 51, null, null));
         ReportInclusion selected = new ReportInclusion(false, true, true, true, true, true, true);
         summary.includeInReport(selected);
         org.junit.Assert.assertSame(selected, summary.reportInclusion());
