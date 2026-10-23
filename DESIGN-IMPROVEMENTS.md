@@ -46,9 +46,10 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-14](#sp-14-package-names-that-say-what-they-hold) | Package names that say what they hold | Low | Medium, mechanical |
 | [SP-15](#sp-15-pass-the-live-view-sink-with-the-run) | Pass the live-view sink with the run | Low | Small |
 | [SP-16](#sp-16-check-the-ui-at-larger-display-scaling) | Check the UI at larger display scaling | Low | Small |
+| [SP-17](#sp-17-remove-the-optional-ai-report-sections) | Remove the optional AI report sections (decided) | High | Medium |
 
 **Suggested order.**
-1. Start with the small, safe items: SP-12, SP-03 and SP-10.
+1. Start with SP-17, which the maintainer has decided, and the small, safe items SP-12, SP-03 and SP-10.
 2. Then SP-01 and SP-02, which remove the most machinery.
 3. Then SP-04 together with SP-09, then SP-05 and SP-06.
 4. Then SP-08, then SP-07 and SP-15.
@@ -239,9 +240,21 @@ Debug output itself sometimes goes through `DebugOutput` and sometimes through `
 
 What remains of the earlier visual-rules item. Inspect the empty and loaded main window, the settings pages, the Astrometry Config tab, the viewers and the progress dialog at 100, 150 and 200 % display scaling and with a larger base font. Fix the local widths and font sizes found in the Overview status, the table HTML and the viewer controls. Layout tests cover forms and base fonts; display scaling of the whole window has not been inspected.
 
-## Questions for the maintainer
+### SP-17. Remove the optional AI report sections
 
-- **Optional AI report sections.** `CreativeTributeRenderer`, `ClaudePerspectiveSectionWriter` and `SignalWeaveSectionWriter` are about 2,100 lines. They are optional and well contained. Are they still wanted? If not, removing them is the largest single simplification available. If they are, they stay as they are.
+**Decided** by the maintainer on 2026-10-23: the AI sections are no longer wanted. This is the largest single simplification in this review.
+
+**What goes.**
+- `CreativeTributeRenderer`, `ClaudePerspectiveSectionWriter` and `SignalWeaveSectionWriter` (about 2,070 lines), and the `ai-perspective` section and its navigation entry in `DetectionReportGenerator`.
+- The "Include AI Creative Report Sections" setting: the checkbox in `DetectionConfigurationPanel`, the field in `SpacePixelsVisualizationPreferences` and `ExportVisualizationSettings`, and the static field in `DetectionReportGenerator` (one of the static preferences of SP-02).
+- The test case in `VariableStarPresentationTest` that renders the Claude section, and the setting's use in `SpacePixelsVisualizationPreferencesIOTest` and `ReportExportConsistencyTest`.
+- The manual's "Optional AI sections" part and its picture `ai-night-retold.png`, the README bullet and the entry in HIGH_LEVEL_DESIGN.md. RELEASE_NOTES.md gets a line for the next release.
+
+**What stays.** The report summary counts unclassified transients with `CreativeTributeRenderer.countTotalTransientDetections`. Move that counter next to its user in `DetectionReportGenerator`.
+
+**Saved settings.** Gson ignores unknown fields, so a saved `spacepixels_visualization.json` that still holds `includeAiCreativeReportSections` keeps loading, and the next save drops the field. Add a test for that.
+
+**Verification.** The option is off by default. With it off, the report (HTML, `report-data.json` and CSVs) is identical on the reference datasets.
 
 ## Removed from the previous plan (2026-10-23)
 
