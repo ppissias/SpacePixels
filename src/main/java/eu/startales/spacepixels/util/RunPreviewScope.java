@@ -35,6 +35,34 @@ public final class RunPreviewScope implements AutoCloseable {
         return new RunPreviewScope(sink);
     }
 
+    /** This thread's sink, or null when no live view is open. */
+    public static RunPreviewSink currentSink() {
+        return CURRENT.get();
+    }
+
+    /**
+     * Opens a nested scope whose pictures carry {@code label} before their captions, for example an iterative pass;
+     * returns null, which try-with-resources accepts, when no live view is open.
+     */
+    public static RunPreviewScope labelled(String label) {
+        RunPreviewSink sink = CURRENT.get();
+        if (sink == null) {
+            return null;
+        }
+        String prefix = label + " · ";
+        return open(new RunPreviewSink() {
+            @Override
+            public boolean wantsPreview(boolean stageChange) {
+                return sink.wantsPreview(stageChange);
+            }
+
+            @Override
+            public void preview(RunPreview preview) {
+                sink.preview(preview.withCaptionPrefix(prefix));
+            }
+        });
+    }
+
     /**
      * Makes a picture with {@code maker} and hands it over, only when this thread's sink wants one now. A picture that
      * cannot be made is skipped: a preview never fails or delays the run.

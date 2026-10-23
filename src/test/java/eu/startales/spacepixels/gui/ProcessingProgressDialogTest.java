@@ -87,6 +87,37 @@ public class ProcessingProgressDialogTest {
     }
 
     @Test
+    public void severalFindingsAreShownInTurnUntilTheNextPreview() throws Exception {
+        RunPreviewSink sink = beginJob(true);
+        sink.preview(RunPreview.slides(List.of(picture("Moving-object candidate · provisional"), picture("Streak · provisional"))));
+        settle();
+        assertTrue(caption(), caption().contains("Moving-object candidate"));
+        assertTrue(turning());
+        SwingUtilities.invokeAndWait(() -> dialog.showNextSlide());
+        assertTrue(caption(), caption().contains("Streak"));
+        SwingUtilities.invokeAndWait(() -> dialog.showNextSlide());
+        assertTrue("the slides start again", caption().contains("Moving-object candidate"));
+
+        SwingUtilities.invokeAndWait(this::clickToggle);
+        assertFalse("a hidden picture does not turn", turning());
+        SwingUtilities.invokeAndWait(this::clickToggle);
+        assertTrue("showing it again turns the slides again", turning());
+
+        sink.preview(picture("Report picture: track map"));
+        settle();
+        assertFalse("a single picture replaces the slides", turning());
+        assertTrue(caption().contains("Report picture: track map"));
+        SwingUtilities.invokeAndWait(() -> dialog.endPreview());
+        assertFalse(turning());
+    }
+
+    private boolean turning() throws Exception {
+        AtomicReference<Boolean> running = new AtomicReference<>();
+        SwingUtilities.invokeAndWait(() -> running.set(dialog.slidesTurning()));
+        return running.get();
+    }
+
+    @Test
     public void picturesAreThrottledButAStageChangeIsShownAtOnce() throws Exception {
         RunPreviewSink sink = beginJob(true);
         assertTrue(sink.wantsPreview(false));

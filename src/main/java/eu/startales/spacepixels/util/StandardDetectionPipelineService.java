@@ -142,23 +142,23 @@ final class StandardDetectionPipelineService {
         DetectionConfig effectiveConfig = DetectionPipelineSupport.createEffectiveDetectionConfig(config, framesForLibrary.size());
 
         JTransientEngine engine = new JTransientEngine();
-        // The engine shows no pictures while it works; the picture from loading stays, marked as such.
+        // The picture from loading stays, marked as such, until the engine's first stage finishes.
         RunPreviewScope.offer(true, () -> RunPreview.captionOnly("Picture from loading · the detection is running"));
+        LiveFindings liveFindings = LiveFindings.forCurrentRun(rawFramesForExport);
 
         PipelineResult result;
         try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
             // Loading took 0-20%; the engine reports 0-100%, shown as 20-100%.
             result = engine.runPipeline(framesForLibrary, effectiveConfig, progressListener == null ? null
-                    : (percent, message) -> progressListener.onProgressUpdate(20 + (int) (percent * 0.8), message));
+                    : (percent, message) -> progressListener.onProgressUpdate(20 + (int) (percent * 0.8), message),
+                    null, liveFindings);
         } finally {
             engine.shutdown();
+            if (liveFindings != null) {
+                liveFindings.close();
+            }
         }
         result = DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain(result);
-        short[][] reference = result.masterStackData;
-        if (reference != null && reference.length > 0) {
-            RunPreviewScope.offer(true, () -> RunPreview.of(PreviewThumbnails.frame(reference),
-                    "Stationary-sky reference: the median of the kept frames"));
-        }
 
         long pipelineDuration = System.currentTimeMillis() - startTime;
         DebugOutput.println("Total Pipeline Time: " + pipelineDuration + "ms");

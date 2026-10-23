@@ -175,8 +175,12 @@ public final class IterativeDetectionPipelineService {
                 passes.set(passIndex, pass(subset, "RUNNING", null, inputManifest, Map.of(), null));
                 publish(root, source, prepared, plan, tuneProfile, tuneLimit, config, visualization, "RUNNING", passes);
                 DetectionConfig passConfig = config.clone();
-                StandardDetectionPipelineService.RunResult result = passRunner.run(passConfig, subset, appConfig,
-                        prompt == null ? null : summary -> prompt.confirm(summary, subset, passConfig), passProgress, output, visualization);
+                StandardDetectionPipelineService.RunResult result;
+                // The pass's pictures say which pass they belong to.
+                try (RunPreviewScope passPictures = RunPreviewScope.labelled("Pass " + (passIndex + 1) + " of " + sizes.size())) {
+                    result = passRunner.run(passConfig, subset, appConfig,
+                            prompt == null ? null : summary -> prompt.confirm(summary, subset, passConfig), passProgress, output, visualization);
+                }
                 passes.set(passIndex, pass(subset, result.report() == null ? "REPORT_DECLINED" : "COMPLETED",
                         result.report() == null ? null : subset.length + "_frames/" + result.report().getName(),
                         inputManifest, counts(result.summary()), result.report() == null ? "Detection completed; report declined."

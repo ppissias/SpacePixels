@@ -14,8 +14,8 @@ import org.junit.rules.TemporaryFolder;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
@@ -23,15 +23,18 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-/** A detection run shows its loading, reference and report pictures, and the live view does not change the results. */
+/**
+ * A detection run shows its loading pictures, what the engine has found so far and the report pictures, and the live
+ * view does not change the results.
+ */
 public class LivePreviewPipelineTest {
 
     @Rule
     public TemporaryFolder folder = new TemporaryFolder();
 
-    /** Wants every picture, as a live view with no throttle would. */
+    /** Wants every picture, as a live view with no throttle would; the live findings arrive from their own worker. */
     private static final class EverySink implements RunPreviewSink {
-        final List<RunPreview> received = new ArrayList<>();
+        final List<RunPreview> received = new CopyOnWriteArrayList<>();
 
         @Override
         public boolean wantsPreview(boolean stageChange) {
@@ -74,15 +77,32 @@ public class LivePreviewPipelineTest {
         assertTrue(captions.toString(), captions.get(0).startsWith("Frame 1 of 9"));
         assertTrue(captions.toString(), captions.contains("Frame 9 of 9") || captions.stream().anyMatch(c -> c.startsWith("Frame 9 of 9")));
         int running = captions.indexOf("Picture from loading · the detection is running");
-        int reference = captions.indexOf("Stationary-sky reference: the median of the kept frames");
         assertTrue("the engine stage keeps the last frame, marked", running > 0 && sink.received.get(running).keepImage());
         assertNull(sink.received.get(running).image());
-        assertTrue("the reference follows the detection", reference > running);
-        assertTrue(captions.toString(), captions.stream().skip(reference + 1).anyMatch(c -> c.startsWith("Report picture: ")));
-        assertFalse("shape and mask diagrams are skipped", captions.stream().anyMatch(c -> c.contains("shape") || c.contains("mask")));
+        int firstReport = captions.size();
+        for (int index = 0; index < captions.size(); index++) {
+            if (captions.get(index).startsWith("Report picture: ")) {
+                firstReport = Math.min(firstReport, index);
+            }
+        }
+        assertTrue(captions.toString(), firstReport < captions.size());
+        // The engine's stages hand their pictures to a worker, which finishes them before the report starts.
+        assertTrue(captions.toString(), captions.subList(running + 1, firstReport).stream()
+                .anyMatch(caption -> caption.startsWith("Stationary-sky reference: the median of the kept frames")));
+        for (int index = running + 1; index < firstReport; index++) {
+            String caption = captions.get(index);
+            assertTrue(caption, caption.startsWith("Stationary-sky reference: the median of the kept frames")
+                    || caption.startsWith("Star mask: ") || caption.contains("provisional") || caption.startsWith("No "));
+        }
+        for (String caption : captions.subList(firstReport, captions.size())) {
+            assertTrue("no live finding after the report started: " + caption, caption.startsWith("Report picture: "));
+            assertFalse("shape and mask diagrams are skipped", caption.contains("shape") || caption.contains("mask"));
+        }
         for (RunPreview preview : sink.received) {
-            if (preview.image() != null) {
-                assertTrue(preview.caption(), Math.max(preview.image().getWidth(), preview.image().getHeight()) <= PreviewThumbnails.LONG_SIDE);
+            for (RunPreview picture : preview.slides().isEmpty() ? List.of(preview) : preview.slides()) {
+                if (picture.image() != null) {
+                    assertTrue(picture.caption(), Math.max(picture.image().getWidth(), picture.image().getHeight()) <= PreviewThumbnails.LONG_SIDE);
+                }
             }
         }
 

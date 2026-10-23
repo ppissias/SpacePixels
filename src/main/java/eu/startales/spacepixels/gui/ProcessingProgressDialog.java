@@ -8,6 +8,7 @@ import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -53,6 +54,10 @@ public class ProcessingProgressDialog extends JDialog {
     private long previewGeneration;
     /** Read by the job's thread before it makes a picture: true while a visible live view would show one. */
     private volatile boolean previewWanted;
+    /** The pictures of the latest preview that has several, shown in turn; used on the event thread only. */
+    private List<RunPreview> slides = List.of();
+    private int slideIndex;
+    private final Timer slideTimer = new Timer((int) TimeUnit.NANOSECONDS.toMillis(PREVIEW_INTERVAL_NANOS), e -> showNextSlide());
 
     public ProcessingProgressDialog(JFrame parentWindow) {
         // true makes it Modal (blocks input to the main window)
@@ -300,7 +305,28 @@ public class ProcessingProgressDialog extends JDialog {
         clearPreview(WAITING, " ");
     }
 
+    /** Shows a new preview; one with several slides starts with the first and turns every few seconds. */
     private void showPreview(RunPreview preview) {
+        slideTimer.stop();
+        slides = preview.slides();
+        slideIndex = 0;
+        showPicture(slides.isEmpty() ? preview : slides.get(0));
+        if (slides.size() > 1 && previewShown) {
+            slideTimer.start();
+        }
+    }
+
+    /** Called by the slide timer: the next picture of the shown preview. */
+    void showNextSlide() {
+        if (slides.size() < 2 || !previewPanel.isVisible()) {
+            slideTimer.stop();
+            return;
+        }
+        slideIndex = (slideIndex + 1) % slides.size();
+        showPicture(slides.get(slideIndex));
+    }
+
+    private void showPicture(RunPreview preview) {
         if (preview.image() != null) {
             previewPicture.setIcon(new ImageIcon(fitToBox(preview.image())));
             previewPicture.setText(null);
@@ -314,6 +340,8 @@ public class ProcessingProgressDialog extends JDialog {
     }
 
     private void clearPreview(String pictureText, String caption) {
+        slideTimer.stop();
+        slides = List.of();
         previewPicture.setIcon(null);
         previewPicture.setText(pictureText);
         previewPicture.getAccessibleContext().setAccessibleDescription(null);
@@ -326,6 +354,11 @@ public class ProcessingProgressDialog extends JDialog {
         previewToggle.setText(shown ? "Hide picture" : "Show picture");
         previewToggle.getAccessibleContext().setAccessibleName(shown ? "Hide the live-view picture" : "Show the live-view picture");
         previewWanted = shown && previewPanel.isVisible();
+        if (!shown) {
+            slideTimer.stop();
+        } else if (slides.size() > 1 && previewPanel.isVisible()) {
+            slideTimer.start();
+        }
         if (save) {
             previewPreferenceSaver.accept(shown);
         }
@@ -356,6 +389,11 @@ public class ProcessingProgressDialog extends JDialog {
 
     boolean previewHasPicture() {
         return previewPicture.getIcon() != null;
+    }
+
+    /** Whether the pictures of the shown preview are being shown in turn. */
+    boolean slidesTurning() {
+        return slideTimer.isRunning();
     }
 
     boolean isPreviewAreaShown() {

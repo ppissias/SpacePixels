@@ -857,3 +857,77 @@ Viewer controls retain Tab traversal. Mouse activation of ordinary buttons keeps
 **Validation.** The new GUI mechanics test `LastRunTracksMechanicsTest` uses real key events on a synthetic session. Before a run, Preview Frame's Show tracks is disabled. A job that leaves a track through three frames, as a detection does, enables it while the window stays open. T then shows the tracks, and the frame's accessible description says "Tracks on.". Manual Transient Inspection, started afterwards, offers the same tracks. The drawing is Blink's unchanged `FrameView` code. The full GUI mechanics suite passes (30 tests), as do the unit tests (460, 4 skipped).
 
 **Documentation.** The manual describes Show tracks for both windows; the high-level design describes the shared overlay and when Preview Frame refreshes it.
+
+## F10 second slice: findings while the detection runs (2026-10-23)
+
+**Decision.** The maintainer agreed to the slice-2 specification (kept below): while the engine runs, show what it has found so far, using the JTransient stage observer (JA-09) rather than progress text.
+
+**What changed.**
+
+- `util.LiveFindings` is the engine's `PipelineStageObserver`. `StandardDetectionPipelineService` creates it only when the run's thread has a live-view sink, so API, CLI and headless runs pass no observer. On the engine thread it copies positions, frame numbers, counts and light-curve points, and only while the sink wants a picture. One daemon worker draws the pictures. When the engine returns, the worker finishes the pictures already handed to it, waiting at most 2 s, then stops; so the last stages appear before the report's pictures.
+- Pictures by stage:
+  - the stationary-sky reference with its star count;
+  - slow-mover crops from the maximum stack;
+  - for tracking: the star mask over the reference (tinted in proportion to the masked share of each thumbnail pixel, with the share of the field in the caption), then up to three moving objects, two streaks and the strongest anomalies; a moving object is shown as a strip of its first, middle and last frame;
+  - local-rescue candidates;
+  - variable-star candidates (high confidence first, then possible; rejected stars are left out, as in the report and the viewers), each beside its light curve.
+
+  Each stage keeps at most 8 slides. Captions say "provisional" and give the real counts so far; a stage without findings says so.
+- `util.reporting.LiveFindingPictures` draws the crops with the report's edge-aware crop and automatic stretch.
+- `RunPreview` can carry slides. `ProcessingProgressDialog` shows them in turn every 3 s, stops while the picture is hidden, and replaces them with the next preview.
+- `RunPreviewScope.labelled` puts "Pass n of m" before every caption of an iterative pass.
+- The post-run reference picture of slice 1 is replaced by the observer's reference.
+
+**Validation.**
+
+- Unit tests:
+  - `LiveFindingsTest` feeds tracks, streaks, anomalies, a star mask and variable candidates (one rejected) through the observer, and checks that hidden pictures and switched-off stages do nothing.
+  - `ProcessingProgressDialogTest` covers the slide rotation, hiding and replacement.
+  - `LivePreviewPipelineTest` runs a synthetic detection with and without the live view: the stage pictures come before the report's, and findings, rejected frames, settings and CSVs are identical.
+  - Test totals: 460 unit tests (4 skipped) and 30 GUI mechanics tests pass.
+- Real data. Each dataset was run three times with variable stars on: without a live view, with the picture hidden, and with it shown (3 s throttle, as in the dialog).
+
+  | Dataset | Off | Hidden | Shown | Pictures shown |
+  |---|---|---|---|---|
+  | klangwolke-1 | 30.2 s | 27.9 s | 28.1–29.6 s | 8 previews, 9 slides |
+  | dc-reg | 9.4 s | 8.2 s | 8.3 s | 3 previews, 2 slides |
+  | M81-kumar | 26.6 s | 23.2 s | 24.1 s | 7 previews, 11 slides |
+  | klangwolde-2 | 126.8 s | 121.2 s | 128.0 s | 12 previews, 17 slides |
+
+  On all four, `report-data.json` (apart from its generation time), `detection_config.json` and the CSVs are identical across the three runs. Peak heap was within run-to-run variation (klangwolde-2: 9.8 GB off, 9.8 GB shown).
+- The rendered slides were inspected. Two problems were found and fixed:
+  - pictures of the last stages were dropped when the engine returned;
+  - the star mask tinted the whole field, partly because `getRGB` lightens a grey thumbnail.
+
+**Limitations.** On a large run the report's pictures replace the last stage's slides after 3 s, so most of the variable-star slides are not seen; see the open cadence decision in the plan. Cancel during each stage was not exercised on real data; the observer only copies, and cancellation stays with the job's `CancellationScope`. 150/200 % display scaling was not inspected.
+
+### The specification as agreed
+
+#### Slice 2: findings while the detection runs (specified 2026-10-23)
+
+**Goal (maintainer request, 2026-10-23).** While the engine call runs, show what it has found so far, and the reference and star mask as each stage finishes them. Findings here means moving-object tracks, streaks, anomalies, slow-mover candidates, local-rescue candidates and variable-star candidates. Today the view changes only at the start and end of the engine call: it shows "Picture from loading" until the engine returns with the master stack, and on a long run that wait is most of the time.
+
+**Where the pictures come from.** The engine finishes its stages in this order: median reference, star mask, maximum stack and slow movers, tracking (tracks, streaks, anomalies), common motion, residual analysis, then photometry (variable stars). JTransient JA-09 adds an optional stage observer that receives each stage's finished products (see [JA-09's F10 requirement](../../../JTransient/docs/archive/design-improvements-closed-2026-10.md#ja-09-stage-observer-for-the-live-view-2026-10-23)). No progress text is parsed and no extra computation runs. Without that observer, the only source is SpacePixels' own work after the engine returns, which is slice 1.
+
+**What SpacePixels does with them:**
+
+- **On the engine thread, only copy and hand over.** The observer copies the small facts a picture needs: positions, frame numbers, bounding boxes, scores and light-curve points. It hands them to one preview worker and returns. It never keeps engine objects that a later stage could still change. The large images it hands over by reference are the frames SpacePixels loaded for the run, and the reference/mask once JA-09 documents them as final.
+- **On the preview worker, choose and render.** Pick a few representative findings for each stage, such as the longest track, the brightest streak, the strongest anomaly and the highest-scored variable candidate. Render each one as a crop from the run's frames with a restrained marker. Reuse the report's crop and marker code (`TrackVisualizationRenderer`, `VariableStarPresentation`) so the live pictures match the report.
+- **Show several findings, not just one.** When a stage yields several findings, keep up to 8 thumbnails and rotate through them at the existing 3 s cadence while later stages run; the next stage's set replaces them. A moving object can show a three-crop strip (first, middle and last frame side by side) rather than an animation. A variable star can show its crop beside a small light curve.
+- **Caption with the kind and the evidence.** For example: "Moving-object candidate · 7 frames · provisional", "Streak · frame 12 · provisional", "Variable-star candidate · provisional". A caption may give real counts so far ("3 tracks, 1 streak, 12 anomalies so far"), never an invented figure. A stage with no findings says so, e.g. "No moving-object candidates", instead of leaving an older picture unexplained.
+- **Mark everything provisional.** Common-motion filtering can still remove findings after tracking, and the report applies its own inclusion choices. A picture is "provisional" until the report includes the finding.
+- **Iterative runs.** Clear the set at the start of each pass, and put the pass in the caption.
+
+**Limits.** Keep everything from slice 1: no work while the picture is hidden or in headless/API runs, latest stage wins, and at most 8 thumbnails of at most 420 px retained. Stop the worker and drop every reference before the run releases its frames. A preview that fails is logged at FINE and skipped. The observer can never fail or cancel the run, and its callback only copies and returns; cancellation stays with the job.
+
+**Acceptance:**
+
+- `report-data.json`, the CSVs and the rejected frames are byte-identical with the picture shown, hidden and with no observer attached. Check klangwolke-1, klangwolde-2 and one variable-star dataset.
+- Wall time and peak heap stay within slice 1's overhead.
+- Cancel responds during every stage.
+- Captions say "provisional", nothing is shown after the run ends, and an iterative pass clears the set.
+- A GUI test feeds tracks, streaks and variable candidates through a fake observer.
+
+**Order.** The JTransient JA-09 observer comes first, with its own byte-identical check, then this slice. At the same time, revisit the report-phase cadence: on short runs the report can finish within one 3 s interval.
+
+Decision: Agreed for slice 2.

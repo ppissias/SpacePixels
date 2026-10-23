@@ -149,9 +149,10 @@ Click **Detect Moving Targets**, on the Overview or on the Main tab (or press **
 Below the progress bar, the **Live view** shows a small picture of the work under way, at most one new picture every few seconds:
 - a frame as it loads, with its number and observation time;
 - the stationary-sky reference (the median of the kept frames) once the detection has built it;
+- what the detection has found so far, as each stage finishes: the star mask over the reference, slow-mover candidates, moving objects (their first, middle and last frame side by side), streaks and anomalies, local-rescue candidates, and variable-star candidates beside their light curve. When a stage finds several, up to eight are shown in turn. They are marked **provisional**: later stages and your report choices can still leave a finding out. The caption gives the counts so far, and a stage that finds nothing says so;
 - the report's pictures, such as the track map and object crops, as they are written.
 
-While the detection itself runs, the picture from loading stays, marked as such; the text above the picture is the progress. **Hide picture** removes the view and the work of making its pictures, and SpacePixels remembers the choice. **Detect Iteratively** shows the same view and clears it at the start of each pass. The pictures are copies for display only: the detection results and the report are the same with the view shown or hidden.
+The text above the picture is the progress. **Hide picture** removes the view and the work of making its pictures, and SpacePixels remembers the choice. **Detect Iteratively** shows the same view, clears it at the start of each pass and names the pass in the caption. The pictures are copies for display only: the detection results and the report are the same with the view shown or hidden.
 
 **Cancel** in the progress window (or closing it) requests that the run stop; the status bar says it was cancelled after its workers finish cleanup. This works for the detection runs, Manual Transient Inspection, Test Star Mask, Auto-Tune, import, Convert to Mono, Batch Stretch and Plate Solve.
 - **A run that doesn't stop.** If it hasn't stopped after a while, the button offers to exit SpacePixels instead.
