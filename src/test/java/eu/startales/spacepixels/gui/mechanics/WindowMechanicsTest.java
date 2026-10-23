@@ -21,7 +21,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The first mechanics of the main window. See DESIGN-IMPROVEMENTS.md, "GUI mechanics tests".
+ * The first mechanics of the main window. See DEVELOPER.md, "Testing".
  * Run with {@code ./gradlew guiMechanicsTest}.
  */
 public class WindowMechanicsTest extends MechanicsTestCase {

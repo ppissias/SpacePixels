@@ -15,7 +15,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The boundaries the architecture review set (DESIGN-IMPROVEMENTS, "Architecture adoption review"): the jobs and the
+ * The package boundaries described in DEVELOPER.md ("Principles" and "The packages"): the jobs and the
  * tasks run without the window, so they refer to no Swing and nothing of the {@code gui} package, in imports or in
  * qualified names. A rule is added here as each boundary is reached.
  */

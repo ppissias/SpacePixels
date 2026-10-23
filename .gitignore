@@ -9,7 +9,7 @@ jgoodies-forms-1.8.0-sources.jar
 .project
 .classpath
 gradle.properties
-AGENTS.md
 .idea/
 
-
+# Machine-specific paths for developers and agents (see AGENTS.md)
+LOCAL-ENVIRONMENT.txt
