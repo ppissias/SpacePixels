@@ -50,7 +50,7 @@ The open findings come from the 2026-10-18 review; its [assessment and scope](do
 | F02 | Unranked | Deferred for now | Richer header-derived session summary / multiple-night warning | Owned by D11; not a separate expensive pre-run quality table |
 | F04 | Unranked | Agreed, last in order | MCP access to the existing headless pipeline, then explicitly scoped inspection capabilities | Reuse API and completed S13 headless service boundary |
 | F05 | Unranked | Deferred for now | Revisit reduced Image Stretch preview sampling and small-star visibility | Existing 2400 px preview cap / full-size viewer remain; independent of completed D03 |
-| F06 | Unranked | Agreed, lst in order; Windows first | Native installer and optional runtime/bootstrap distribution | Release-pair gate JA-11; no Java-baseline change approved |
+| F06 | Unranked | Agreed, last in order; Windows first | Native installer and optional runtime/bootstrap distribution | Release-pair gate JA-11; no Java-baseline change approved |
 | F09 | Unranked | deferred for now | Cross-pass findings consolidation into a provenance-preserving super report | Basic iteration is complete; share saved evidence/identities with D09/D11 |
 | F10 | Unranked | In progress: first slice done 2026-10-22 | Engine-stage imagery (reference build, star mask, extraction/linking samples) in the progress dialog's live view | The dialog, loading/reference/report pictures and Hide/Show are [delivered](docs/archive/design-improvements-completed-2026-10.md#f10-first-slice-live-view-in-the-progress-dialog-2026-10-22); engine snapshots need a safe JA-09-compatible observer |
 
