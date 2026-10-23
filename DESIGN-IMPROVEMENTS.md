@@ -47,9 +47,11 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-15](#sp-15-pass-the-live-view-sink-with-the-run) | Pass the live-view sink with the run | Low | Small |
 | [SP-16](#sp-16-check-the-ui-at-larger-display-scaling) | Check the UI at larger display scaling | Low | Small |
 | [SP-17](#sp-17-remove-the-optional-ai-report-sections) | Remove the optional AI report sections (decided) | High | Medium |
+| [SP-18](#sp-18-upgrade-the-dependencies) | Upgrade the dependencies, in all three repositories | Medium | Small, plus a regression |
+| [SP-19](#sp-19-finish-the-common-base-of-the-image-viewers) | Finish the common base of the image viewers | Medium | Medium |
 
 **Suggested order.**
-1. Start with SP-17, which the maintainer has decided, and the small, safe items SP-12, SP-03 and SP-10.
+1. Start with SP-17, which the maintainer has decided, and the small, safe items SP-12, SP-03 and SP-10. SP-18 is independent of the rest and can go at any time, as long as its regression runs on its own.
 2. Then SP-01 and SP-02, which remove the most machinery.
 3. Then SP-04 together with SP-09, then SP-05 and SP-06.
 4. Then SP-08, then SP-07 and SP-15.
@@ -255,6 +257,77 @@ What remains of the earlier visual-rules item. Inspect the empty and loaded main
 **Saved settings.** Gson ignores unknown fields, so a saved `spacepixels_visualization.json` that still holds `includeAiCreativeReportSections` keeps loading, and the next save drops the field. Add a test for that.
 
 **Verification.** The option is off by default. With it off, the report (HTML, `report-data.json` and CSVs) is identical on the reference datasets.
+
+### SP-18. Upgrade the dependencies
+
+**Request (2026-10-23):** move every library, in all three repositories, to its latest version unless there is a reason not to. The versions below were checked on 2026-10-23. JTransient ([JT-08](../JTransient/DESIGN-IMPROVEMENTS.md#jt-08-upgrade-the-dependencies)) and JPlateSolve ([JP-11](../JPlateSolve/DESIGN-IMPROVEMENTS.md#jp-11-upgrade-the-dependencies)) point here.
+
+| Dependency | Used in | Now | Latest | Proposal |
+|---|---|---|---|---|
+| Gradle wrapper | SpacePixels, JTransient | 9.2.1 | 9.8.2 (2026-10-20) | Upgrade. |
+| Gradle wrapper | JPlateSolve | 8.12 | 9.8.2 | Upgrade. Fix the deprecation warnings first (`--warning-mode all`), since Gradle 9 removed deprecated features. |
+| FlatLaf | SpacePixels (desktop) | 3.4 | 3.7.2 (July 2026) | Upgrade. Check the behaviour changes listed in [F12](FEATURE-REQUESTS.md#f12-newer-flatlaf-features). |
+| nom-tam-fits | SpacePixels, JPlateSolve | 1.21.2 | 1.23.0 (2026-09-15) | Upgrade, with the pixel check below. Not 1.23.1-rc1, which is a release candidate. |
+| Gson | all three | 2.13.2 | 2.14.0 (2026-04-23) | Upgrade. |
+| AssertJ Swing (`tokyo.northside`) | SpacePixels tests | 4.0.0-beta-3 | 4.0.0-beta-3 | Already the latest. |
+| JUnit | all three | 4.13.2 | 4.13.2 is the last JUnit 4. JUnit 6 is the current line. | Keep, for the reason below. |
+| Java | all three | 21 | 25 is the current LTS; 27 is the newest release. | Keep the libraries at 21. Decide the application's runtime with F06, as below. |
+
+**Risks found in the release notes:**
+- **Compressed FITS (nom-tam-fits 1.22 to 1.23).** The decoding of compressed images changed, so decoded values of `.fz` frames can differ. The changes cover quantization rounding, ZBLANK, ZQUANTIZ without scaling columns, GZIP buffering, PLIO and SUBTRACTIVE_DITHER_2. SpacePixels converts `.fz` frames at import (`FitsImages`, `FitsPreparationService`).
+  - The notes mention no change to uncompressed images, BSCALE/BZERO or header parsing.
+  - Since 1.22.1, a malformed numeric header value throws `HeaderCardException` or `FitsException` instead of `NumberFormatException`. Check the eight `catch (NumberFormatException …)` blocks, for example in `FitsFileInformation` and `WcsCoordinateTransformer`, for any that guard a nom-tam-fits call.
+  - From 1.22.2 the library needs Java 11, which is no problem here.
+- **Duplicate keys (Gson 2.14.0).** Gson now rejects duplicate keys when the first value is null. Settings files written by SpacePixels have no duplicates, but a hand-edited file could. Unknown fields are still ignored.
+
+**Verification:**
+- Build and run all tests in each repository, and the GUI mechanics suite.
+- Run the real-data regression; the outputs must be byte-identical on the reference datasets.
+- For nom-tam-fits, compare the converted pixels of a few `.fz` frames between 1.21.2 and 1.23.0. No reference dataset is compressed, so compress a reference frame with `fpack` for this.
+- Check that saved settings files load unchanged.
+
+**Java.** JTransient and JPlateSolve should stay at release 21: a library that runs on the older LTS reaches more users, which is a reason not to take the latest. The application could move to Java 25 (LTS) as its runtime, and as the runtime bundled by the installer, since the newest LTS gets security updates longest. Proposal: decide it together with [F06](FEATURE-REQUESTS.md#f06-windows-installer).
+
+**JUnit.** JUnit 4.13.2 is final and still works. Moving 808 tests to JUnit 6 (SpacePixels 508, JTransient 262, JPlateSolve 38) would be a mechanical migration that changes nothing in the application. The GUI mechanics tests would also have to move to AssertJ Swing's Jupiter variant. Proposal: not now. If it is done later, run the JUnit 4 tests on the Vintage engine (deprecated in JUnit 6, but still supported) and migrate test classes as they are touched.
+
+### SP-19. Finish the common base of the image viewers
+
+**Request (2026-10-23):** "I have another idea, related to the preview windows. To create a common base for all of them. Maybe they already have common mechanisms, but please check what we can have once, common for all of them."
+
+**What is shared already.**
+- `SequenceViewerFrame` is the base of Preview Frame, Manual Transient Inspection and the Image Stretch tab's sequence viewer (`StretchedSequenceFrame`). It is a template method that provides the window, stepping through frames, background preparation where the newest request wins, the overlays, and closing and releasing.
+- `FrameView` (zoom, pan, overlays and the cursor readout), `StretchControls` and `ViewerSupport` (key bindings, zoom controls, status bar and cursor readout) are used by those three windows and by Blink.
+
+**What is not shared:**
+
+| Window | Window class | Image component | Closed when the session changes |
+|---|---|---|---|
+| Preview Frame | `SequenceViewerFrame` | `FrameView` | Yes, by the main panel |
+| Manual Transient Inspection | `SequenceViewerFrame` | `FrameView` | **No** |
+| Image Stretch sequence | `SequenceViewerFrame` | `FrameView` | Yes, by the stretch panel |
+| Blink | its own `JFrame` (764 lines) | `FrameView` | Yes, by the main panel |
+| Star Mask Explorer | its own `JFrame` (443 lines) | `ZoomableImageView` | **No**; its Apply button checks the session |
+| Image Stretch tab preview | a panel | `ZoomableImageView` | Not applicable |
+
+**Findings and proposals:**
+1. **Two image components.** `ZoomableImageView` (288 lines) repeats `FrameView`'s zoom, pan and image pyramid (`levelFor` and the halved copies) for the Star Mask Explorer and the Image Stretch tab. Proposal: use `FrameView` everywhere, with an image overlay layer added for the star mask, and remove `ZoomableImageView`. Every image view then has the same keys, cursor readout and fit/100 % toggle.
+2. **Two ways to try settings.**
+   - Preview Frame's spinners edit the Detection Settings directly.
+   - The Star Mask Explorer keeps trial values, with an "Apply to Settings" button.
+
+   Each re-runs 300 ms after a change, with its own spinner code, and F13 would add a third window of this kind. Proposal:
+   - one small trial-settings row, used by all three windows: the spinners, the delayed re-run, the note about invalid text, Enter and Esc, and disabling while a job runs;
+   - one rule for whether a window edits the settings or offers "Apply to Settings". This is a decision point; F13 proposes Apply.
+3. **Each owner closes its own windows.** Preview Frame and Blink are closed by the main panel, and the Image Stretch sequence by the stretch panel. Manual Transient Inspection and the Star Mask Explorer are not closed at all: after a new import they stay open on the old session, and the inspection window keeps that session's frames in memory until it is closed by hand. Proposal: every viewer registers with one owner, the application window's session listeners, which closes them all on a session change and at exit.
+4. **Small duplicates.** `bindStretch` is identical in `SequenceViewerFrame` and `BlinkFrame`, and the session's name (its folder's name) is computed in three places. Move both into `ViewerSupport`.
+5. **Blink stays its own window.** It preloads every frame for smooth playback and has the frame list with its skip boxes, which does not fit the one-frame-at-a-time `SequenceViewerFrame`. Forcing it onto the base would add hooks for a single subclass. Blink keeps using the shared parts by composition, as now, and gains items 3 and 4. The Star Mask Explorer shows a single image and also stays its own window, gaining item 1.
+
+**In short:** the common base exists already. The work is to finish it, not to add another layer.
+
+**Order:**
+1. Item 3 first, since it changes what the user sees.
+2. Then items 1 and 4.
+3. Item 2 together with F13.
 
 ## Removed from the previous plan (2026-10-23)
 
