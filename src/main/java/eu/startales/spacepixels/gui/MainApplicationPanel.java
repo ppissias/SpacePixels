@@ -569,7 +569,7 @@ public class MainApplicationPanel extends JPanel {
                 TransientInspectionFrame frame = new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
                         mainAppWindow.getStretchPanel());
                 frame.setSkyCatalogueModel(skyCatalogue());
-                if (!frame.open()) {
+                if (!frame.open(mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getTrackOverlay())) {
                     JOptionPane.showMessageDialog(null, "The detection kept no frames to inspect.",
                             "Manual Transient Inspection", JOptionPane.INFORMATION_MESSAGE);
                 }
@@ -1473,6 +1473,8 @@ public class MainApplicationPanel extends JPanel {
         refreshWorkflowStatus();
         if (detectionSequenceFrame != null) {
             detectionSequenceFrame.setSettingsEditable(true);
+            // A detection run that just ended may have new tracks and candidates to show.
+            detectionSequenceFrame.showLastRun();
         }
         mainAppWindow.setSessionTabsEnabled(mainAppWindow.getImageProcessing() != null);
     }

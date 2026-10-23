@@ -13,6 +13,7 @@ package eu.startales.spacepixels.gui;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.TrackOverlay;
 import eu.startales.spacepixels.util.VariableStarOverlay;
 import io.github.ppissias.jtransient.execution.CancellationScope;
 
@@ -24,14 +25,17 @@ import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
 /**
  * A window that steps through frames, laid out like the blink window: controls and the shared stretch on top, the
  * zoomable frame in the middle, the frame and cursor in the status bar. Each frame is prepared in the background by
  * the subclass; while it is, the window says so and keeps the previous frame. ← and → step. A window that shows
- * detections has a "Show detections" switch (D). Every window has the Annotate switch (A) for the sky catalogue.
+ * detections has a "Show detections" switch (D), and can show the tracks (T) and variable-star candidates (V) of the
+ * last detection run. Every window has the Annotate switch (A) for the sky catalogue.
  */
 abstract class SequenceViewerFrame extends JFrame {
 
@@ -64,6 +68,7 @@ abstract class SequenceViewerFrame extends JFrame {
     private final JButton previousButton = new JButton("◀");
     private final JButton nextButton = new JButton("▶");
     private final JCheckBox detectionsBox = new JCheckBox("Show detections", true);
+    private final JCheckBox tracksBox = new JCheckBox("Show tracks");
     private final JCheckBox variablesBox = new JCheckBox("Show variable stars", true);
     private final JPanel stretchRow = new JPanel(new BorderLayout());
     private final JPanel controlRows = new JPanel();
@@ -110,7 +115,7 @@ abstract class SequenceViewerFrame extends JFrame {
         setContentPane(contentPane);
         JComponent controls = buildControls();
         JComponent statusBar = ViewerSupport.statusBar(frameLabel, cursorLabel, "← → previous / next frame · "
-                + (showsDetections ? "D detections · " : "") + "A annotate · C correct plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
+                + (showsDetections ? "D detections · T tracks · " : "") + "A annotate · C correct plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
         contentPane.add(controls, BorderLayout.NORTH);
         contentPane.add(view, BorderLayout.CENTER);
         contentPane.add(statusBar, BorderLayout.SOUTH);
@@ -145,6 +150,12 @@ abstract class SequenceViewerFrame extends JFrame {
             updateCursorLabel();
         });
         ViewerSupport.bind(getRootPane(), "C", "correct", sky::toggleCorrection);
+        ViewerSupport.bind(getRootPane(), "T", "tracks", () -> {
+            if (tracksBox.isVisible() && tracksBox.isEnabled()) {
+                tracksBox.setSelected(!tracksBox.isSelected());
+                view.setOverlayVisible(tracksBox.isSelected());
+            }
+        });
         ViewerSupport.bind(getRootPane(), "V", "variables", () -> {
             if (variablesBox.isVisible() && variablesBox.isEnabled()) {
                 variablesBox.setSelected(!variablesBox.isSelected());
@@ -180,6 +191,32 @@ abstract class SequenceViewerFrame extends JFrame {
 
     /** Called when the window closes, to let go of what the subclass holds. */
     protected void released() {
+    }
+
+    /**
+     * Shows the tracks of the last detection run on this session, as Blink does: the positions measured by that run,
+     * drawn on the frames they were measured in. Nothing is detected again. Call it after {@link #openAt}.
+     */
+    protected void setTrackOverlay(TrackOverlay overlay, FitsFileInformation[] files) {
+        Set<String> names = new HashSet<>();
+        if (files != null) {
+            for (FitsFileInformation file : files) {
+                if (file != null && file.getFilePath() != null) {
+                    names.add(new File(file.getFilePath()).getName());
+                }
+            }
+        }
+        boolean available = overlay != null && overlay.coversAnyOf(names);
+        tracksBox.setVisible(true);
+        tracksBox.setEnabled(available);
+        if (!available) {
+            tracksBox.setSelected(false);
+        }
+        tracksBox.setToolTipText(available
+                ? "Draw the tracks of the last detection run, numbered as in the report: T for moving objects, ST for streak tracks (T)."
+                : "Run Detect Moving Targets on this session to see its tracks here.");
+        view.setOverlay(available ? overlay : null);
+        view.setOverlayVisible(tracksBox.isSelected());
     }
 
     /** Preview can show candidates from the last full run, independently of single-frame extraction. */
@@ -302,6 +339,8 @@ abstract class SequenceViewerFrame extends JFrame {
     // ==========================================
 
     private JComponent buildControls() {
+        tracksBox.setVisible(false);
+        tracksBox.addActionListener(e -> view.setOverlayVisible(tracksBox.isSelected()));
         variablesBox.setVisible(false);
         variablesBox.addActionListener(e -> view.setVariableStarsVisible(variablesBox.isSelected()));
         previousButton.setToolTipText("Previous frame (←).");
@@ -318,6 +357,7 @@ abstract class SequenceViewerFrame extends JFrame {
         row.add(Box.createHorizontalStrut(10));
         if (showsDetections) {
             row.add(detectionsBox);
+            row.add(tracksBox);
             row.add(variablesBox);
             row.add(Box.createHorizontalStrut(10));
         }

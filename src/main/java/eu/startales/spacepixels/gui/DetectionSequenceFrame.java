@@ -16,6 +16,7 @@ import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.session.ProcessingSession;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.core.SourceExtractor;
@@ -66,8 +67,17 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
         this.files = files;
         if (mainAppWindow.getSession() != null) setSkyCatalogueModel(mainAppWindow.getSession().getSkyCatalogue());
         openAt(startIndex, stretchPanel, files);
-        setVariableStarOverlay(mainAppWindow.getSession() == null ? null
-                : mainAppWindow.getSession().getVariableStarOverlay(), files);
+        showLastRun();
+    }
+
+    /** Takes the tracks and variable-star candidates of the session's last detection run, for example after a run ends. */
+    void showLastRun() {
+        if (files == null || !isVisible()) {
+            return;
+        }
+        ProcessingSession session = mainAppWindow.getSession();
+        setTrackOverlay(session == null ? null : session.getTrackOverlay(), files);
+        setVariableStarOverlay(session == null ? null : session.getVariableStarOverlay(), files);
     }
 
     /** Whether the thresholds can be changed here: not while a job runs, as on the Detection Settings tab. */

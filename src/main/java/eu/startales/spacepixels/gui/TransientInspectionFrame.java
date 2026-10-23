@@ -13,6 +13,7 @@ package eu.startales.spacepixels.gui;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.TrackOverlay;
 import io.github.ppissias.jtransient.engine.FrameTransients;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 
@@ -53,13 +54,18 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
         this.filesInfo = filesInfo;
     }
 
-    /** Shows the first frame; returns false, showing nothing, when the engine kept no frames. */
-    public boolean open() {
+    /**
+     * Shows the first frame; returns false, showing nothing, when the engine kept no frames.
+     *
+     * @param lastRunTracks the tracks of the session's last detection run, for "Show tracks"; null when none has run
+     */
+    public boolean open(TrackOverlay lastRunTracks) {
         if (allTransients.isEmpty()) {
             dispose();
             return false;
         }
         openAt(0, stretchPanel, filesInfo);
+        setTrackOverlay(lastRunTracks, filesInfo);
         return true;
     }
 

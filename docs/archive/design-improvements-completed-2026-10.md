@@ -841,3 +841,19 @@ Viewer controls retain Tab traversal. Mouse activation of ordinary buttons keeps
 **Limitations.** No picture during the engine call; on short runs the report can finish within the 3 s throttle after the reference, so the reference stays. 150/200 % display scaling of the dialog was not inspected; larger base fonts are covered by `ProcessingProgressDialogTest`. No GUI mechanics case runs a detection in the suite; the dialog is covered by unit tests on the event thread and the scratch harness above.
 
 **Documentation.** The manual's Step 4 describes the live view. The high-level design describes the scope, producers, thumbnails, dialog behaviour and preference. The plan keeps F10 in progress for its second slice and updates D12's progress-dialog evidence.
+
+## D11: the last run's tracks in Preview Frame and Manual Transient Inspection (2026-10-23)
+
+**Decision.** The maintainer reduced D11 to one feature: after a run, see its tracks in Preview Frame and Manual Transient Inspection as Blink shows them, and nothing else. Restoring a saved run, a run history, a unified completed-run inspection mode, the session summary, the analysis plan and the memory hint were dropped.
+
+**What changed.**
+
+- `SequenceViewerFrame`, the base of both windows, has Blink's **Show tracks** switch and its T key, beside Show detections and Show variable stars. `setTrackOverlay(overlay, files)` enables it only when a track of the session's last run is in the window's frames, with Blink's tooltips; it is off by default, as in Blink.
+- Both windows draw the same `TrackOverlay` as Blink (`ProcessingSession.getTrackOverlay()`): the positions that run measured, drawn by `FrameView` by file name. Nothing is detected again and later settings changes do not change it.
+- Preview Frame takes the overlays when it opens and again when a job ends (`DetectionSequenceFrame.showLastRun()`, called from the panel's unlock), so a run that ends while it is open makes its tracks available. Manual Transient Inspection takes them when it opens (`open(TrackOverlay)`).
+- Closing a viewer clears its frame view, which drops the overlay. `TrackOverlay` is immutable and holds no listener, so nothing else has to be released.
+- Like Blink, the switch follows the run's tracks, which `StandardDetectionPipelineService` stores before the report question; a run whose report was declined still offers its tracks. Iterative runs leave the open session's overlays unchanged, as before.
+
+**Validation.** The new GUI mechanics test `LastRunTracksMechanicsTest` uses real key events on a synthetic session. Before a run, Preview Frame's Show tracks is disabled. A job that leaves a track through three frames, as a detection does, enables it while the window stays open. T then shows the tracks, and the frame's accessible description says "Tracks on.". Manual Transient Inspection, started afterwards, offers the same tracks. The drawing is Blink's unchanged `FrameView` code. The full GUI mechanics suite passes (30 tests), as do the unit tests (460, 4 skipped).
+
+**Documentation.** The manual describes Show tracks for both windows; the high-level design describes the shared overlay and when Preview Frame refreshes it.

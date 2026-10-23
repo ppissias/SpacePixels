@@ -174,7 +174,7 @@ If a run finds a very large number of objects, a summary first lists them by kin
 
 ---
 
-After detection, return to **Blink Selected** to check the findings against the actual frame pixels: **Show tracks** (T) overlays the last run’s moving-object tracks, and **Show variable stars** (V) overlays its measured variable candidates. In **Preview Frame**, **Show detections** (D) overlays point sources and streaks extracted with the current per-frame settings, and **Show variable stars** (V) adds the last full run’s variable candidates. Preview does not show the linked moving-object tracks. Zoom to 100 % or more to inspect the detected pixels; use the switches to compare with the unmarked image. These last-run overlays are available in the current session after a run; importing a folder again does not reconstruct them from its saved report.
+After detection, return to **Blink Selected** to check the findings against the actual frame pixels: **Show tracks** (T) overlays the last run’s moving-object tracks, and **Show variable stars** (V) overlays its measured variable candidates. In **Preview Frame**, **Show detections** (D) overlays point sources and streaks extracted with the current per-frame settings, and **Show tracks** (T) and **Show variable stars** (V) add the last full run’s tracks and variable candidates. **Manual Transient Inspection** has **Show tracks** (T) too. Zoom to 100 % or more to inspect the detected pixels; use the switches to compare with the unmarked image. These last-run overlays are available in the current session after a run; importing a folder again does not reconstruct them from its saved report.
 
 ## 4. Reading the report
 
@@ -476,13 +476,13 @@ To try the per-frame settings on the frame itself, use **Detection Sigma**, **Gr
 - Text that is not a valid value is outlined in red, a note says what to enter, and the frame keeps the last valid value.
 - While a job runs, the three fields are locked, like the Detection Settings tab.
 
-After a full detection with variable-star photometry, **Show variable stars** (V) also draws that run's candidates, with the same labels and hover details as Blink. Changing the single-frame preview settings does not change those candidates; run the full detection again to update them.
+After a full detection, **Show tracks** (T) draws that run's tracks as Blink does, and with variable-star photometry **Show variable stars** (V) draws its candidates, with the same labels and hover details as Blink. They are the positions that run measured: changing the single-frame preview settings does not change them, and showing them detects nothing again. Run the full detection again to update them. A run that ends while Preview Frame is open makes its tracks available there at once.
 
 ### Manual Transient Inspection
 
 ![Manual Transient Inspection: the comet is the only transient left in this frame](docs/images/manual/ui-inspection.jpg)
 
-Runs the detection on all frames of the session (not only the selected ones) and shows, frame by frame, every detection left after the star mask: the candidates for moving objects, before they are linked into tracks. Useful to judge the noise, or to find a faint object by eye that did not form a track. Above, at 200 %, the comet is the only transient left in its frame. The frames stay in memory until you close the window.
+Runs the detection on all frames of the session (not only the selected ones) and shows, frame by frame, every detection left after the star mask: the candidates for moving objects, before they are linked into tracks. Useful to judge the noise, or to find a faint object by eye that did not form a track. Above, at 200 %, the comet is the only transient left in its frame. The frames stay in memory until you close the window. After a full detection on the session, **Show tracks** (T) draws that run's tracks over these frames, as in Blink.
 
 Both windows, and **Show full size** on the Image Stretch tab, work like the blink window: the same stretch as the Image Stretch tab, the same zoom (Fit, 100 %, 200 %, 400 %, scroll to zoom, drag to pan, double-click), and the same status bar with the frame, its time since the first frame, and under the cursor the pixel position, value and, on a plate-solved frame, RA and Dec. **Show detections** (D) hides the markers to see the frame underneath. From 100 % zoom the detected pixels are tinted too. When there are too many detections on screen to tell apart, the markers are left out until you zoom in. Esc closes the window.
 

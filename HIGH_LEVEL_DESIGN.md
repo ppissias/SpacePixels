@@ -651,6 +651,8 @@ MainApplicationPanel
 ```
 
 ### Report Export Flow
+**The last run's tracks (D11).** Blink, Preview Frame and Manual Transient Inspection draw the tracks of the session's last Detect Moving Targets run from the same `TrackOverlay` (`ProcessingSession.getTrackOverlay()`), which `StandardDetectionPipelineService` stores when the engine returns. `SequenceViewerFrame.setTrackOverlay` gives the two sequence viewers Blink's **Show tracks** switch (T): it is disabled with a reason when no track of that run is in the window's frames, and `FrameView` draws the positions the run measured, by file name. Nothing is detected again, and changed settings do not change the overlay. Preview Frame takes the overlays when it opens and again when a job ends (`DetectionSequenceFrame.showLastRun`, from the panel's unlock), so a run that ends while it is open shows its tracks. Closing a viewer clears the frame view, which drops the overlay; the overlay itself holds no listeners.
+
 
 ```text
 PipelineResult + raw frames + metadata + config + app config

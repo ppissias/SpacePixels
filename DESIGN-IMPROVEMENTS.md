@@ -79,7 +79,7 @@ The pattern is close to a modest **model–view–presenter** arrangement: a sta
 - **Settings (D10):** reuse extracted persistence/background storage and engine rules; work on typed config/widget/visualization bindings and explicit capabilities. Split page builders only when those boundaries help. Preserve profile formats, hidden values, shared models, migration backups and defaults/revert/auto-apply semantics.
 - **Input preparation:** preserve completed S12/S13/F07 shared preparation, interactive versus API policy and output naming. WCS writeback already has a task/service boundary and JPlateSolve owns unsuccessful-solve cleanup; do not re-propose those as missing. Preserve explicit interaction injection and service-owned loggers.
 - **Reporting (D09):** extract image assets, maps or iterative index helpers when relevant feature work needs them. Preserve stable finding identities, filenames, CSV data and lookup/live-render behavior. `DetectionReportAstrometry` already delegates its query/URL/HTML helpers; it is not a standing extraction project.
-- **Main panel (D11):** preserve the implemented session owner, application preferences, jobs, shared actions and explicit UI interaction adapters from D02/D06/D07/S13. Extract only a remaining result/workflow or UI-decision responsibility justified by the owning outcome; a panel's size is not an extraction order or a reason to rebuild session state.
+- **Main panel:** preserve the implemented session owner, application preferences, jobs, shared actions and explicit UI interaction adapters from D02/D06/D07/S13. Extract only a remaining result/workflow or UI-decision responsibility justified by the owning outcome; a panel's size is not an extraction order or a reason to rebuild session state.
 - **Cohesive renderers:** leave `CreativeTributeRenderer` and target section writers intact unless feature work exposes an independent responsibility. No target line counts or mass static-helper replacement are proposed.
 
 Verification follows the strategy above and [AGENTS.md](AGENTS.md). Import changes cover ready mono FITS, compressed files, signed/scaled and 32-bit conversions, color, XISF, exposure groups and negative-value policy in both GUI and headless modes. Settings changes cover load/save, failed saves, defaults/revert, migration, hidden values, previews and Auto-Tune. Report changes compare equivalent standard/iterative bundles, CSVs, identities, crops/GIFs and offline/live lookup behavior against a baseline. Use disposable settings and inputs.
@@ -129,16 +129,6 @@ The [field and dependency review](docs/detection-settings-rule-review.md#impleme
 - **Stale text, corrected 2026-10-23.** Two paragraphs here described an engine-version capability adapter and a tuner static that `AutoTunerRunner` changed. Both are gone under the pinned-release policy and JA-04. The paragraph above now states the current position.
 
 Decisions: Please go ahead with the migration of the configuration panel. Please keep openProcessor rename, I would like to have it.  
-
-### D11. Show the last run's tracks in the frame viewers
-
-**Scope (decided 2026-10-23).** After a run, the tracks of its report can be shown in Blink, Preview Frame and Manual Transient Inspection, the way Blink shows them today after a detection. Blink already draws the cached `TrackOverlay`; Preview Frame and Manual Transient Inspection get a **Show tracks** button that uses the same overlay. The button is available only when a run of the open session has produced a report, and it draws that run's measured positions without running any detection. This is not a replay of a saved run.
-
-Dropped at the maintainer's request (2026-10-23): restoring a saved run after a restart, a run history, a unified completed-run inspection mode, the session summary, the analysis plan and the normal/iterative memory hint. The workflow strip, **Open last report** and **Open output folder** stay as they are. Earlier reasoning is in the [completion record](docs/archive/design-improvements-completed-2026-10.md#d11-visible-analysis-scope-and-output-folder-first-slice-2026-10-22) and in git history.
-
-**Acceptance.** After a run, the three viewers show the same track markers on the same frames as Blink does today. Changing settings afterwards does not change or recompute them, and showing them starts no engine job. Without a report from the open session, the button is disabled with a reason. Closing a viewer releases the overlay listener.
-
-Decisions: please proceed as per the review note. what would be interesting, is not a fully replay, but to be able to "show tracks" on the blink window and also to add a new button "show tracks" on the "preview frame" and "manual transient inspection", like we see them in the blink window. So after a run, I would like to be able to see the last report tracks on those windows (if there is a last report), like I see them now after a live detection on the blink frame. I do not want any other features implemented, so the rest of the proposed features can be removed.   
 
 ### D12. Use shared visual rules and content-driven layout
 
@@ -426,7 +416,7 @@ Implemented rows are not a second backlog. Partial/deferred rows retain only the
 | D08 | Background I/O and preference writes | Implemented |
 | D09 | Prepared report diagnostics and identities | In progress |
 | D10 | Typed settings and explicit run options | In progress |
-| D11 | Last run's tracks in Blink, Preview Frame and Manual Transient Inspection | Accepted; scope reduced 2026-10-23 |
+| D11 | Last run's tracks in Blink, Preview Frame and Manual Transient Inspection | Implemented 2026-10-23 (reduced scope) |
 | D12 | Shared visual/layout rules | In progress |
 | D13 | Keyboard access and viewer focus | Implemented |
 | D14 | Leftover compatibility code (post-implementation review) | Accepted |
