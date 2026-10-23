@@ -100,6 +100,8 @@ Capture resolved catalogue/correction/export context at a documented point. Curr
 
 **Acceptance.** HTML, JSON, maps and CSVs agree on IDs, numbering, counts and exclusions. Re-rendering an existing prepared result with different presentation options does not re-run detection or silently recompute diagnostics against newer catalogue state. Do not retain all raw frames forever merely to enable a later re-export; define what a lightweight saved result supports.
 
+**Review note (2026-10-23).** S15 is worth finishing: one category descriptor replaces label, prefix and anchor rules that writers, maps, JSON and the report prompt still repeat. S16 and the re-rendering clause in the acceptance pay off only when a saved result can be rendered again. SpacePixels has no such path today: every report is written in the run that measured it. Defer S16 and that clause until D11 step 2 (restoring a saved run) is chosen, rather than building prepared diagnostic states that nothing reads a second time.
+
 ### D10. Describe settings and engine contracts once, with typed boundaries
 
 **Current foundation.** Residual Analysis's seven visible controls now use typed application definitions for stable field ID, title, units, guidance, expert disclosure and direct getter/setter ownership. Their load/apply bindings are registered with their rows rather than copied in separate lists. Search accepts field IDs, and engine diagnostics use the same identity/title. Shared Overview button models and saved/Auto-Tune state stay intact. Optional setting reflection and silent fallback setters are removed; the pinned compile-time JTransient contract supplies those fields. See the [completion record](docs/archive/design-improvements-completed-2026-10.md#d10-typed-residual-settings-and-pinned-engine-contract-first-slice-2026-10-22).
@@ -110,15 +112,19 @@ Capture resolved catalogue/correction/export context at a documented point. Curr
 
 Make side effects clear in new method names. `ImageProcessing.getInstance()` constructs a new processor rather than returning a singleton; a name such as `openProcessor` would convey the actual operation. Preserve compatibility wrappers where public callers depend on existing names; this is gradual clarity work, not a mass rename.
 
-If supporting several engine versions is a real requirement, isolate capability/reflection handling in one adapter and expose unsupported capabilities clearly. Otherwise prefer a pinned compile-time contract over silently ignoring a missing setting. A composite build can use unpublished engine changes; release validation must check an explicit supported SpacePixels/JTransient pair before distribution. Do not treat a local composite compile as proof that a published-dependency build works.
-
-[AutoTunerRunner](src/main/java/eu/startales/spacepixels/util/AutoTunerRunner.java) temporarily changes a legacy engine static, and the API documents a concurrency restriction. Keep that restriction visible in application admission policy. An eventual engine-instance option would be a separate JTransient proposal, not a GUI-only refactor.
+SpacePixels builds against one pinned JTransient, so a missing setting is a compile error, not a capability to probe. A composite build can use unpublished engine changes; release validation (JA-11) checks the selected pair before distribution. Do not treat a local composite compile as proof that a published-dependency build works. [AutoTunerRunner](src/main/java/eu/startales/spacepixels/util/AutoTunerRunner.java) passes per-run tuner options; it no longer changes an engine static (JTransient JA-04).
 
 **Current foundation:** engine rules already own field metadata/validation/alignment; remaining D10 work is typed application bindings, explicit factories/options and ownership, not another rules implementation.
 
 The [field and dependency review](docs/detection-settings-rule-review.md#implementation-decisions-ja-01-2026-10-22) now records implemented decisions: advisory quality-grow, geometric jitter/jump, photometry cap and limited-amplitude findings; explicit reviewed alignment; shared effective pixel geometry; and preservation of independent image thresholds, sentinels and accepted finite profiles. Rhythm/jump remains a legacy GUI policy, not an engine rejection rule. Typed setting bindings, capability handling, richer dataset-readiness feedback and published-pair release validation remain D10/JA-11 work.
 
 **Acceptance.** Moving a setting between existing sections does not require editing unrelated string/index lists. UI and API validation use the intended shared rules, hidden values survive, unsupported settings are not falsely shown as applied, and release builds test the dependency pair they distribute.
+
+**Review note (2026-10-23).**
+
+- **The typed slice covers 7 of about 110 controls.** `DetectionConfigurationPanel` therefore has two binding mechanisms: typed definitions on Residual Analysis, and separate describe/bind/copy/load code everywhere else. The panel changed in 24 commits since 18 October, so that double cost is paid often. Either finish the migration, one page per mechanical commit, or stop and keep the slice as it is. Finishing is the better choice: the pattern is proven, and the acceptance above holds only once every visible page uses it. Leaving both mechanisms in place indefinitely is the worst outcome.
+- **The `getInstance` → `openProcessor` rename is low value.** `ImageProcessing` is an internal facade (API.md says so), and the rename touches 46 calls in 21 files for a naming gain. Drop it from D10 unless the factory changes for another reason.
+- **Stale text, corrected 2026-10-23.** Two paragraphs here described an engine-version capability adapter and a tuner static that `AutoTunerRunner` changed. Both are gone under the pinned-release policy and JA-04. The paragraph above now states the current position.
 
 ### D11. Make the main window a clear analysis workspace
 
@@ -153,6 +159,8 @@ A useful larger idea is a small, persistent **session workspace** connecting fra
 
 **Acceptance.** A new user can tell what will be analysed, which steps are optional, why an action is unavailable, where output goes and how to reopen the result. Cancelling/skipping a report is not presented as a failed detection. Validate these choices with a short task-based usability pass rather than assuming new labels are automatically better.
 
+**Review note (2026-10-23).** D11 bundles cheap guidance (the session summary, the analysis plan, the normal/iterative memory hint) with the expensive part: restoring a saved run after restart (step 2). Step 2 needs a per-frame replay record, and F09's super report and D09's prepared model need much the same record. Commit only to the guidance and step 1, which shows the last run's findings in the open session by extending `TrackOverlay`/`VariableStarOverlay`. Defer step 2 and the run history until F04 or F09 needs a persisted per-frame record, then design that record once for all three. For a single-session app, a run history adds little over **Open last report** and **Open output folder**.
+
 ### D12. Use shared visual rules and content-driven layout
 
 **Current foundation.** Detection/application settings now share `SettingsRowPanel`, measured HTML wrapping and `UiStyle` typography/spacing. The fixed `480 × 85` description and configuration text-column heights are removed. Inputs retain native font-dependent height; enabled descriptions, Overview guidance and viewer key hints use readable theme help colors. Layout tests cover narrow/wide forms, larger base fonts and FlatLaf 100/150/200% user scaling. See the [completion record](docs/archive/design-improvements-completed-2026-10.md#d12-settings-layout-and-shared-styles-first-slice-2026-10-22).
@@ -165,7 +173,36 @@ Keep the existing dark theme and restrained primary-action emphasis. Make enable
 
 **Acceptance.** Inspect the empty and loaded main window, core/expert settings, configuration and viewers at representative small/large windows, 100/150/200% scale and a larger base font. Long descriptions and error messages wrap, primary actions remain visible and the workflow strip does not consume the usable frame/table area. Existing screenshots are context, not evidence that these tests have passed.
 
+### D14. Remove leftover compatibility code (post-implementation review)
 
+**Status: proposed 2026-10-23.** Under the coordinated-development policy, old signatures need not survive. A review of the changes since 18 October found these leftovers; none has a production caller.
+
+| Leftover | Callers today | Proposal |
+|---|---|---|
+| `config.DetectionSettingsRules` (`@Deprecated` adapter over JTransient's rules) | Only `DetectionSettingsRulesTest` | Delete both. |
+| `ImageProcessing.applyWCSHeader` and `onlyStretch` (`@Deprecated`) | None; `onlyStretch` only from `FitsServiceTest` | Delete; the test calls `FitsBatchService`. |
+| One-argument `ImageProcessing.offerToImportLargestExposureGroup` (`@Deprecated`) | None | Delete. |
+| `ImageProcessing.DetectionSummary.confirmReport` (`@Deprecated`) | Only two assertions in `DetectionSummaryTest` | Delete with them. |
+| `ImageProcessing.solve` and `PlateSolveService.solve` (`Future` wrappers) | None; `PlateSolveTask` uses `startSolve` | Delete. |
+| `JobHandle.session`, typed `Object` "for compatibility" | The window always passes a `ProcessingSession` | Type it. |
+
+Update API.md's paragraph on the `ImageProcessing` facade, which still mentions the legacy confirmation and exposure-group signatures. In JTransient, the matching items are in JA-12.
+
+**Reviewed and worth keeping.** These were checked for value against complexity:
+
+- Job and session ownership (`JobCoordinator`, `SessionOwner`, `SessionPersistence`). They fixed real late-result and frozen-window problems, and the GUI mechanics tests cover them.
+- `FitsUploadCopy`. Every anonymous Astrometry.net login shares one account, so blanking the site and observer cards protects real privacy.
+- `StagedFile` and `AtomicReportFile`. This is one mechanism, used by 17 writers.
+- `verifyApiPublication` and `verifyDesktopArchive`. Both are cheap and catch real packaging mistakes.
+
+**Noted, no change proposed:**
+
+- `SettingsStorage` and `SessionStorage` are near-identical single-thread write queues. Merge them only when one of them changes for another reason.
+- The F10 `RunPreviewScope` adds a `ThreadLocal`. That is acceptable for one SpacePixels-internal consumer. The engine side of F10 slice 2 must use an explicit observer, not another thread-bound scope.
+
+**Decision needed: is the release validation in proportion?** It is about 770 lines of Gradle and PowerShell: a staged repository, plus an isolated consumer build run with both Gradle and POM-only metadata. `apiConsumerTest` is part of every `check`. That is in proportion if the published API has outside users. If it has none, keep the archive/POM checks and the pinned-version resolution check, and drop the POM-only repeat and the nested consumer build from `check`.
+
+**Acceptance.** `compileJava compileDesktopJava`, `test`, `guiMechanicsTest` and `check` pass. No behavior changes, so no reference-data run is needed.
 
 ### Remaining architecture steps
 
@@ -261,9 +298,36 @@ Throttle before expensive snapshot/crop work, render off the EDT and keep only t
 
 **Current foundation.** The live view in `ProcessingProgressDialog` shows loading frames, a caption-only "picture from loading" update during the engine call, the master stack after it, report pictures as they are written, and a cleared view per iterative pass. Decisions taken: shown by default with a remembered Hide/Show picture choice; a box of 300 × 200 logical pixels from thumbnails of at most 420 px; at most one picture per 3 s, stage changes at once; the report's automatic stretch. Findings, CSVs and settings are identical with the view on and off, and klangwolke-1 showed no measurable time or memory overhead. See the [completion record](docs/archive/design-improvements-completed-2026-10.md#f10-first-slice-live-view-in-the-progress-dialog-2026-10-22).
 
-**Remaining (second slice).** Pictures during the engine call itself: the reference while it is built, the star mask, extraction and linking samples, labelled as provisional. This needs the explicit, GUI-independent observer described above, delivered with JTransient JA-09 first and checked for byte-identical results on the reference datasets. On short runs the report phase can end within the 3 s throttle, so the reference may stay until the end; revisit the report-phase cadence when the engine stages have pictures.
+**Remaining (second slice).** Findings while the detection runs; see [slice 2](#slice-2-findings-while-the-detection-runs-specified-2026-10-23) below.
 
 **Acceptance.** Compare findings and report measurements with preview enabled and disabled; measure wall time and peak memory on representative large frames and set an acceptable overhead budget before release. Exercise no detections, rejected candidates, missing imagery, long stages, short runs, slow rendering and preview failures. Verify responsive Cancel, bounded queues/buffers, correct provisional/stale captions and no updates after completion. Check iterative pass transitions, cancellation/restart and different source directories, including a run while another session remains open. Confirm hiding/disabling stops preview work, headless runs do not produce previews, and text/progress remain usable with keyboard navigation and larger fonts.
+
+#### Slice 2: findings while the detection runs (specified 2026-10-23)
+
+**Goal (maintainer request, 2026-10-23).** While the engine call runs, show what it has found so far, and the reference and star mask as each stage finishes them. Findings here means moving-object tracks, streaks, anomalies, slow-mover candidates, local-rescue candidates and variable-star candidates. Today the view changes only at the start and end of the engine call: it shows "Picture from loading" until the engine returns with the master stack, and on a long run that wait is most of the time.
+
+**Where the pictures come from.** The engine finishes its stages in this order: median reference, star mask, maximum stack and slow movers, tracking (tracks, streaks, anomalies), common motion, residual analysis, then photometry (variable stars). JTransient JA-09 adds an optional stage observer that receives each stage's finished products (see [JA-09's F10 requirement](../JTransient/DESIGN-IMPROVEMENTS.md#ja-09-make-progress-stage-outcomes-and-diagnostics-consistent)). No progress text is parsed and no extra computation runs. Without that observer, the only source is SpacePixels' own work after the engine returns, which is slice 1.
+
+**What SpacePixels does with them:**
+
+- **On the engine thread, only copy and hand over.** The observer copies the small facts a picture needs: positions, frame numbers, bounding boxes, scores and light-curve points. It hands them to one preview worker and returns. It never keeps engine objects that a later stage could still change. The large images it hands over by reference are the frames SpacePixels loaded for the run, and the reference/mask once JA-09 documents them as final.
+- **On the preview worker, choose and render.** Pick a few representative findings for each stage, such as the longest track, the brightest streak, the strongest anomaly and the highest-scored variable candidate. Render each one as a crop from the run's frames with a restrained marker. Reuse the report's crop and marker code (`TrackVisualizationRenderer`, `VariableStarPresentation`) so the live pictures match the report.
+- **Show several findings, not just one.** When a stage yields several findings, keep up to 8 thumbnails and rotate through them at the existing 3 s cadence while later stages run; the next stage's set replaces them. A moving object can show a three-crop strip (first, middle and last frame side by side) rather than an animation. A variable star can show its crop beside a small light curve.
+- **Caption with the kind and the evidence.** For example: "Moving-object candidate · 7 frames · provisional", "Streak · frame 12 · provisional", "Variable-star candidate · provisional". A caption may give real counts so far ("3 tracks, 1 streak, 12 anomalies so far"), never an invented figure. A stage with no findings says so, e.g. "No moving-object candidates", instead of leaving an older picture unexplained.
+- **Mark everything provisional.** Common-motion filtering can still remove findings after tracking, and the report applies its own inclusion choices. A picture is "provisional" until the report includes the finding.
+- **Iterative runs.** Clear the set at the start of each pass, and put the pass in the caption.
+
+**Limits.** Keep everything from slice 1: no work while the picture is hidden or in headless/API runs, latest stage wins, and at most 8 thumbnails of at most 420 px retained. Stop the worker and drop every reference before the run releases its frames. A preview that fails is logged at FINE and skipped. The observer can never fail or cancel the run, and its callback only copies and returns; cancellation stays with the job.
+
+**Acceptance:**
+
+- `report-data.json`, the CSVs and the rejected frames are byte-identical with the picture shown, hidden and with no observer attached. Check klangwolke-1, klangwolde-2 and one variable-star dataset.
+- Wall time and peak heap stay within slice 1's overhead.
+- Cancel responds during every stage.
+- Captions say "provisional", nothing is shown after the run ends, and an iterative pass clears the set.
+- A GUI test feeds tracks, streaks and variable candidates through a fake observer.
+
+**Order.** The JTransient JA-09 observer comes first, with its own byte-identical check, then this slice. At the same time, revisit the report-phase cadence: on short runs the report can finish within one 3 s interval.
 
 ## Engine and application coordination
 
@@ -273,7 +337,8 @@ Use current sibling APIs directly and update importing callers with library chan
 |---|---|
 | JA-06/07 | Migrate tracking/result models and imports together; preserve scientific identity and shared buffers. |
 | JA-08 | Update Overview/charts/tuning persistence with clarified measurement units and ownership. |
-| JA-09 | Adopt stage events/outcomes without GUI concerns in the engine; preserve maintainer-owned F10 preview behavior. |
+| JA-09 | Adopt stage events/outcomes without GUI concerns in the engine; preserve maintainer-owned F10 preview behavior. F10 slice 2 consumes the stage-products observer. |
+| JA-12 | Remove unused execution surface; SpacePixels only needs its compile and tests to pass. |
 | JA-10 | Use provenance only for actual reference consumers; do not reintroduce removed cross-pass caching to exercise it. |
 | JA-11 | At release, pin one engine/solver combination and validate actual final repository artifacts without composites or the local validation repository. |
 
@@ -335,6 +400,7 @@ Implemented rows are not a second backlog. Partial/deferred rows retain only the
 | D11 | Completed-run workspace/history | In progress |
 | D12 | Shared visual/layout rules | In progress |
 | D13 | Keyboard access and viewer focus | Implemented |
+| D14 | Leftover compatibility code (post-implementation review) | Proposed |
 | F01 | Slow-mover/per-frame tuning relation | Proposed experiment; engine SM-2 deferred |
 | F02 | Header session summary/multiple-night warning | Deferred |
 | F03 | Viewer magnitude/name controls | Implemented |
@@ -344,7 +410,7 @@ Implemented rows are not a second backlog. Partial/deferred rows retain only the
 | F07 | Combined compressed FITS preparation | Implemented |
 | F08 | Variable-star field image | Implemented |
 | F09 | Cross-pass super report | Deferred; basic iteration implemented |
-| F10 | Live detection preview | In progress; maintainer-owned |
+| F10 | Live detection preview | In progress; maintainer-owned; slice 2 (findings during detection) specified, waits on JA-09 |
 | F11 | Headless API/CLI publication | Implemented |
 | S1 | Reliable job terminal events | Implemented |
 | S2 | Job admission/coordinator | Implemented |
