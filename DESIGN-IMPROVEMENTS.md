@@ -70,7 +70,7 @@ The pattern is close to a modest **model–view–presenter** arrangement: a sta
 | Viewer | Current frame, zoom, playback state, listeners and owned display buffers | Explicitly detached/released on close; shared stretch models retain intentional semantics. |
 | Report lookup | Provider request, report identity and enrichment cache | Independent of detection verdict; bounded work and existing target/path validation remain. |
 
-**Current versus future:** application/session/viewer ownership above is largely implemented by D02/D04/D06/D08. The remaining run-wide capture is S14, and richer retained/persisted results belong to D09/D11. A saved-run record should include a schema version, supported build identifiers, input identities, effective settings, catalogue/correction provenance, analysis/export inclusion and artifacts. Some of this already exists in `detection_config.json`, versioned `report-data.json`, iterative `run-data.json` and per-pass manifests; extend those rather than writing a conflicting summary. Avoid storing private absolute paths or observing-site data in a shareable manifest by default. A reproducibility record is distinct from retaining all image buffers or promising replay from data that is no longer available.
+**Current versus future:** application/session/viewer ownership above is largely implemented by D02/D04/D06/D08. The remaining run-wide capture is S14. Restoring a saved run was dropped from D11 on 2026-10-23; the F09 super report defines what it needs to persist. A saved-run record should include a schema version, supported build identifiers, input identities, effective settings, catalogue/correction provenance, analysis/export inclusion and artifacts. Some of this already exists in `detection_config.json`, versioned `report-data.json`, iterative `run-data.json` and per-pass manifests; extend those rather than writing a conflicting summary. Avoid storing private absolute paths or observing-site data in a shareable manifest by default. A reproducibility record is distinct from retaining all image buffers or promising replay from data that is no longer available.
 
 `ApplicationWindow` already starts/stops the localhost lookup proxy; preserve that application-scoped lifetime rather than reopening an ownership task. If a feature expands lookup/server work, define its I/O/cache limits explicitly and preserve provider/target/path validation and atomic caching. This is an implementation guardrail, not an additional queue item or a newly established security defect.
 
@@ -100,7 +100,7 @@ Capture resolved catalogue/correction/export context at a documented point. Curr
 
 **Acceptance.** HTML, JSON, maps and CSVs agree on IDs, numbering, counts and exclusions. Re-rendering an existing prepared result with different presentation options does not re-run detection or silently recompute diagnostics against newer catalogue state. Do not retain all raw frames forever merely to enable a later re-export; define what a lightweight saved result supports.
 
-**Review note (2026-10-23).** S15 is worth finishing: one category descriptor replaces label, prefix and anchor rules that writers, maps, JSON and the report prompt still repeat. S16 and the re-rendering clause in the acceptance pay off only when a saved result can be rendered again. SpacePixels has no such path today: every report is written in the run that measured it. Defer S16 and that clause until D11 step 2 (restoring a saved run) is chosen, rather than building prepared diagnostic states that nothing reads a second time.
+**Review note (2026-10-23).** S15 is worth finishing: one category descriptor replaces label, prefix and anchor rules that writers, maps, JSON and the report prompt still repeat. S16 and the re-rendering clause in the acceptance pay off only when a saved result can be rendered again. SpacePixels has no such path today: every report is written in the run that measured it. Defer S16 and that clause until a saved result can be rendered again (D11's restore step was dropped on 2026-10-23), rather than building prepared diagnostic states that nothing reads a second time.
 
 Decisions: Please go ahead as proposed in the review note.  
 
@@ -130,40 +130,13 @@ The [field and dependency review](docs/detection-settings-rule-review.md#impleme
 
 Decisions: Please go ahead with the migration of the configuration panel. Please keep openProcessor rename, I would like to have it.  
 
-### D11. Make the main window a clear analysis workspace
+### D11. Show the last run's tracks in the frame viewers
 
-**Remaining scope.** The workflow strip, primary action, status explanations, selected-frame preview and active-settings readout already exist. Application-owned ASTAP/site preferences are available before import, survive session replacement, and are backed by `ApplicationSettings`, not a nullable processor; D06/D08 delivered that work. Image Stretch and Detection Settings remain session-dependent, while independent iterative configuration is available before import. **Open last report**, cached track overlays in Blink and cached variable-candidate overlays in Blink/Preview also exist. The 2026-10-22 first slice adds visible frame/analysis scope and **Open output folder**, with [validation evidence](docs/archive/design-improvements-completed-2026-10.md#d11-visible-analysis-scope-and-output-folder-first-slice-2026-10-22). General run history/restoration, unified all-category completed-run inspection and dimension-aware normal/iterative guidance remain. The normal import warning still uses a frame-count threshold; blink already has a dimension-aware memory estimate.
+**Scope (decided 2026-10-23).** After a run, the tracks of its report can be shown in Blink, Preview Frame and Manual Transient Inspection, the way Blink shows them today after a detection. Blink already draws the cached `TrackOverlay`; Preview Frame and Manual Transient Inspection get a **Show tracks** button that uses the same overlay. The button is available only when a run of the open session has produced a report, and it draws that run's measured positions without running any detection. This is not a replay of a saved run.
 
-**Proposal.** Keep the four workflow groups, but make their roles clearer:
+Dropped at the maintainer's request (2026-10-23): restoring a saved run after a restart, a run history, a unified completed-run inspection mode, the session summary, the analysis plan and the normal/iterative memory hint. The workflow strip, **Open last report** and **Open output folder** stay as they are. Earlier reasoning is in the [completion record](docs/archive/design-improvements-completed-2026-10.md#d11-visible-analysis-scope-and-output-folder-first-slice-2026-10-22) and in git history.
 
-- **Current session:** folder display name, frame count, dimensions, mono/colour, timing readiness and solved status in one compact summary. Use text as well as colour. Do not display observing-site details unnecessarily.
-- **Preferences:** preserve the implemented pre-import ASTAP/site settings and stable application ownership. Improve explanations for session-dependent actions where needed; do not reopen D06 or make Detection Settings available before import merely by toggling a tab.
-- **Analysis plan:** show which analyses are enabled and what frames they use. Blink uses the selected frames; Preview opens the sequence at the selected frame; Auto-Tune uses a sufficiently large selection or falls back to the imported sequence; a normal run uses the whole sequence. Make these differences and the Auto-Tune fallback visible before starting.
-- **Run:** consider “Run analysis” or an adjacent explanation when variable stars and diagnostics are included under “Detect Moving Targets”. Keep the familiar wording until a deliberate UI wording decision is made. Clearly distinguish analyses to compute from categories to include in the report; omitting a report category need not disable a filter used by detection.
-- **Results:** next to **Open last report**, add an Open output folder action and a compact local run history. Record when, which session, which profile and the outcome. Do not hold full-resolution frame arrays in run-history entries.
-
-#### Completed-run inspection workspace
-
-Add **View detections from last run** beside **Open last report**, with access from Blink, Preview Frame and Manual Transient Inspection. Display that run's measured positions over the original FITS pixels without running extraction, the star mask or linking again. Show which run is in view and keep its findings separate from the current settings. Trying new thresholds remains an explicit Preview/re-run operation; editing settings must not silently replace or recompute a saved overlay.
-
-**Already available:** `TrackOverlay` and `VariableStarOverlay` retain lightweight last-run display data, and Blink/Preview consume the supported categories without recomputing them. They are not a full saved-run replay model; variable overlays intentionally do not retain light-curve arrays, and Manual Transient Inspection still starts its own transient-analysis operation.
-
-Deliver the remaining work in two steps:
-
-1. Extend/reuse those lightweight overlays through a unified completed-run entry point, adding the missing category/measurement/association data and read-only inspection mode. Retain report labels, confidence and flags; include light curves only through an explicit bounded contract. Do not rebuild existing track/variable overlay support. Read original frames on demand instead of keeping full-resolution arrays alive.
-2. Restore a compatible saved run after reimport or restart. Extend the existing versioned `report-data.json`/run metadata rather than introduce a competing results summary. Today's JSON is a findings summary with representative positions and frame numbers, not a complete replay record. Save the per-frame evidence, input identities (relative file names, dimensions, timestamps and suitable identity checks), rejection information, effective settings and resolved catalogue/WCS provenance needed by the supported viewers. Preserve the report's V/T/ST/A identifiers and anchors.
-
-Validate the selected run against the imported dataset before attaching overlays. Missing or changed frames and older summary-only exports should explain their limits; never substitute a fresh detection silently. A completed run may support viewing even when the current settings differ. Keep exports shareable without private absolute paths or observing-site details. This is read-only result viewing, not a promise to reproduce every processing stage from JSON alone.
-
-Acceptance: compare the displayed markers and light curves with the original completed run in all three viewers; reopen after restart; confirm that changed settings do not alter saved findings and viewing starts no engine job; exercise different datasets with identical file names, missing/changed frames, rejected frames and old JSON versions. Check bounded memory and preserved links/labels. Coordinate this with D06 session ownership, D09 prepared report data and F04 agent services.
-
-Use image dimensions and a conservative estimate of stage buffers to recommend normal versus iterative processing. Reuse the blink preflight pattern; do not label an estimate an exact peak-memory guarantee. Show progress stage and elapsed time; use counts when available, and avoid invented ETA precision.
-
-A useful larger idea is a small, persistent **session workspace** connecting frames, settings and completed results. It can remain a single-session desktop app; it does not require a database, project-file format or dockable-window framework.
-
-**Acceptance.** A new user can tell what will be analysed, which steps are optional, why an action is unavailable, where output goes and how to reopen the result. Cancelling/skipping a report is not presented as a failed detection. Validate these choices with a short task-based usability pass rather than assuming new labels are automatically better.
-
-**Review note (2026-10-23).** D11 bundles cheap guidance (the session summary, the analysis plan, the normal/iterative memory hint) with the expensive part: restoring a saved run after restart (step 2). Step 2 needs a per-frame replay record, and F09's super report and D09's prepared model need much the same record. Commit only to the guidance and step 1, which shows the last run's findings in the open session by extending `TrackOverlay`/`VariableStarOverlay`. Defer step 2 and the run history until F04 or F09 needs a persisted per-frame record, then design that record once for all three. For a single-session app, a run history adds little over **Open last report** and **Open output folder**.
+**Acceptance.** After a run, the three viewers show the same track markers on the same frames as Blink does today. Changing settings afterwards does not change or recompute them, and showing them starts no engine job. Without a report from the open session, the button is disabled with a reason. Closing a viewer releases the overlay listener.
 
 Decisions: please proceed as per the review note. what would be interesting, is not a fully replay, but to be able to "show tracks" on the blink window and also to add a new button "show tracks" on the "preview frame" and "manual transient inspection", like we see them in the blink window. So after a run, I would like to be able to see the last report tracks on those windows (if there is a last report), like I see them now after a live detection on the blink frame. I do not want any other features implemented, so the rest of the proposed features can be removed.   
 
@@ -231,7 +204,7 @@ Proposed investigation only: compare maximum-stack/slow-mover thresholds against
 
 ### Session summary (F02)
 
-Deferred. Richer header-derived session/multiple-night guidance belongs with D11, not a mandatory expensive pre-run quality table. Revisit when workspace guidance is prioritized.
+Deferred. D11's session summary was dropped on 2026-10-23, so nothing schedules this. A multiple-night warning would be a light header check, not an expensive pre-run quality table. Revisit only if asked.
 
 ### Stretch preview visibility (F05)
 
@@ -254,6 +227,29 @@ Before implementation, decide the initial client/local-file workflow, supported 
 
 Decision: I propose to have an http interface. But forst we should do a table with the services that we will provide and each service description. After we agree on the services we will proceed with an implementation. 
 
+#### Proposed services (for agreement, 2026-10-23)
+
+The server is an MCP server on the Streamable HTTP transport, so an agent connects to one URL and calls these services as MCP tools. Report files are served over the same HTTP server, so a client on another machine can read them. Nothing below is implemented yet.
+
+| Service | What it does | Main inputs | Returns | First version? |
+|---|---|---|---|---|
+| `server_info` | Describes the server: SpacePixels, JTransient and JPlateSolve versions, the folders it may read, the memory limit, and whether a job is running. | none | versions, allowed folders, limits, busy/idle | Yes |
+| `get_settings_schema` | Lists every detection setting an agent may change: field ID, title, unit, range, default, and basic or expert. It comes from the same rules the settings panel uses, and hidden settings are not listed. | none | one entry per setting | Yes |
+| `get_default_profile` | Returns the default detection profile, as saved in a profile file. | none | profile JSON | Yes |
+| `inspect_dataset` | Checks a folder without processing it: frame count, size, mono or colour, FITS or XISF, timing, exposure groups, and whether it is ready or needs preparation. Same checks as the import. | folder | readiness, the problems found, and the exposure groups | Yes |
+| `start_analysis` | Starts a full analysis of a folder, the same as the Java API's `run`: optional preparation, optional Auto-Tune, detection, then the report. Only one analysis runs at a time; a second request is refused while one runs. | folder, profile or setting overrides, preparation mode, Auto-Tune profile, report on/off | job ID | Yes |
+| `start_auto_tune` | Runs only Auto-Tune on a folder and returns the tuned settings. Nothing is detected. | folder, profile, Auto-Tune profile, max candidate frames | job ID | Yes |
+| `get_job_status` | Reports a job's state (queued, running, finished, failed or cancelled), its stage and percentage, the last progress message, and the elapsed time. | job ID | status | Yes |
+| `cancel_job` | Asks a running job to stop. The job reports "cancelled" once the work has actually stopped. | job ID | accepted or not running | Yes |
+| `get_analysis_result` | Summarises a finished analysis: the effective settings, Auto-Tune choice, rejected frames, counts per category, and the findings from `report-data.json` (ID, category, position, sky position, frames, variable-star tier). | job ID | structured summary | Yes |
+| `list_artifacts` / artifact URLs | Lists a finished job's files (HTML report, `report-data.json`, CSVs, images) with an HTTP URL for each. The agent or the user opens the report from that URL. | job ID | file list with URLs | Yes |
+| `extract_frame_sources` | Runs source extraction on one frame with given sigma, grow sigma and minimum pixels (or a profile), and returns the detections and an annotated preview. This is extraction on that frame alone, before the stationary-star veto. | folder, frame, settings | detections, preview image URL | Later |
+| `inspect_frame_transients` | Returns the transients left on one frame after the whole dataset's frame selection, median reference, star mask and filtering, with an overlay. Same as Manual Transient Inspection. | folder, frame, settings | transients, overlay image URL | Later |
+
+**Limits that apply to every service.** The server listens on localhost unless configured otherwise, and needs a token when it listens on a network address. It reads only inside configured root folders, and writes only report folders under the dataset (as the Java API does). Results and artifacts leave out observing-site coordinates and absolute paths. Settings files in the user's home folder are never changed.
+
+**Still to decide after this table.** Whether the first version needs `start_auto_tune` as its own service (it could stay an option of `start_analysis`); how long finished jobs and their artifact URLs are kept; and how the server is started (its own launcher, or an option of the desktop application).
+
 ### Native platform installers (F06)
 
 Explore a native installer for SpacePixels, starting on Windows. The goal is a normal install, launch, upgrade and uninstall experience. Other platforms can follow after the Windows approach is established.
@@ -267,9 +263,27 @@ Compare packaging options against the existing Gradle distribution and publishin
 **Decision needed.** whether the per-user Windows installer should bundle Java 21 or require an existing Java 21 installation. Signing and clean-machine install/upgrade/uninstall verification remain release work; no runtime is downloaded or installed as part of the current feature sequence.
 Decision: The per-windows installer should have an exe format and bundle a java runtime. I would follow best practices for the rest of the questions about shortcuts, app updates, etc. Signing would be a second step, we can start with an unsigned release. If there are other decision points that we need before we start, please let me know. I think java already has such a machanism natively (at least partly), please confirm.     
 
+**Answer (2026-10-23).** Yes. The JDK's `jpackage` tool (in JDK 21) builds a Windows `.exe` installer that contains the application and a Java runtime cut down with `jlink`. It needs the WiX Toolset on the build machine (WiX 3 for JDK 21). It covers most of the questions above:
+
+- **Install scope:** `--win-per-user-install` installs under the user's local application folder without administrator rights.
+- **Shortcuts:** a Start menu entry (`--win-menu`, `--win-menu-group`) and an optional desktop shortcut (`--win-shortcut`).
+- **Upgrades:** a fixed `--win-upgrade-uuid` with a higher version replaces the installed version. Settings and profiles stay in the user's home folder, so an upgrade or an uninstall leaves them in place.
+- **Several launchers:** `--add-launcher` can add a console launcher for the batch command-line tool next to the desktop application.
+
+It does not include an automatic updater; a new release is installed by running the new installer. A Gradle plugin (for example the Badass Runtime plugin, which suits a non-modular application) or a plain `jpackage` task can build it from the existing distribution.
+
+**Decision points before starting:**
+
+1. **Installer version number.** Windows installers need a version of the form major.minor.build with major and minor at most 255. `2026.10-04` does not fit. Proposal: the installer uses `26.10.4` for `2026.10-04`, and the application keeps showing its own version.
+2. **Memory.** The launcher keeps today's `-XX:MaxRAMPercentage=80.0 -XX:+UseG1GC`. A user can change it in the launcher's `.cfg` file. Proposal: keep it.
+3. **Command-line tool.** Proposal: also install the batch tool as a console launcher (`spacepixels-batch`), no extra cost.
+4. **Icon.** An `.ico` is needed; proposal: build it from the existing `spacepixels-16`…`256` PNG icons.
+5. **Where the installer is built.** On a Windows machine with WiX: your PC, or a Windows GitHub Actions runner. Proposal: a Gradle task on your PC first; CI can come later.
+6. **Unsigned release.** Windows SmartScreen warns about an unsigned download ("Windows protected your PC" → More info → Run anyway). The manual should say so until signing is added.
+
 ### Directory-based iterative detection (F09)
 
-**Status: deferred.** Basic iteration is available; this pending scope concerns optional cross-pass consolidation, not rebuilding iteration.
+**Status: agreed 2026-10-23.** Basic iteration is available; this pending scope concerns cross-pass consolidation, not rebuilding iteration. The matching and evidence-selection policies are proposed for agreement before implementation.
 
 The basic directory-based workflow is implemented: independent ordinary runs with Start/Increase/Maximum planning, fixed manual settings or one-time Auto-Tune, and an index of per-pass reports. The manual-setting reminder replaces the proposed dedicated sample-import workflow. Implementation decisions and validation are recorded in the [F09 completion record](docs/archive/design-improvements-completed-2026-10.md#f09-directory-based-iterative-detection-2026-10-22); current behavior belongs in the manual and developer/architecture guides.
 
@@ -278,7 +292,7 @@ The basic directory-based workflow is implemented: independent ordinary runs wit
 - **Associate findings across passes.** Use shared input identities, timestamps, sky/pixel positions, motion and category-specific evidence. Report-local T/ST/A/V IDs alone are insufficient. Handle split/merged tracks, missing WCS, ambiguous matches and incompatible datasets explicitly; preserve disagreements instead of forcing a merge.
 - **Combine evidence with provenance.** A finding may have its strongest detection in one pass, a longer track in another, and better astrometry, photometry, crops or animations elsewhere. Define how to select or combine each measurement, and link it to its source pass and report anchor. Repeated use of the same frames is correlated evidence, not an independent confirmation or an automatic confidence increase.
 - **Present a useful combined view.** Show distinct consolidated findings, contributing passes and their frame counts, coverage and confidence/measurement limitations. Provide the best supported visualizations and direct links to all source reports. Treat combined counts separately from per-pass counts.
-- **Persist enough evidence.** The implemented `run-data.json` and per-pass input manifests capture settings, outcomes, selected filenames, dimensions, exposure and timestamps. Today's `report-data.json` is still a findings summary, not a complete per-frame replay record. Determine and version the additional per-frame positions, associations, quality flags, catalogue/WCS provenance or light-curve evidence needed before promising consolidation of every category. Coordinate with D09/D11 instead of introducing another identity or replay format.
+- **Persist enough evidence.** The implemented `run-data.json` and per-pass input manifests capture settings, outcomes, selected filenames, dimensions, exposure and timestamps. Today's `report-data.json` is still a findings summary, not a complete per-frame replay record. Determine and version the additional per-frame positions, associations, quality flags, catalogue/WCS provenance or light-curve evidence needed before promising consolidation of every category. Coordinate with D09 instead of introducing another identity format.
 - **Support partial runs and bounded memory.** Consolidate usable completed outputs after cancellation or pass failure, explain omissions, and work from saved measurements and on-demand images without retaining every run's pixel buffers.
 
 **Acceptance for the enhancement.** Exercise one finding seen in several passes, distinct nearby objects, split tracks, conflicting measurements, changed/missing inputs, different fields with matching filenames, missing WCS and older summary-only reports. Verify that chosen measurements remain traceable, ambiguous associations remain visible, unique counts are justified, and individual reports stay unchanged. Cross-pass consolidation is not part of the completed basic workflow; its matching and evidence-selection policies need a separate implementation decision.
@@ -351,11 +365,11 @@ Use current sibling APIs directly and update importing callers with library chan
 
 | Engine work | Remaining application responsibility |
 |---|---|
-| JA-06/07 | Migrate tracking/result models and imports together; preserve scientific identity and shared buffers. |
-| JA-08 | Update Overview/charts/tuning persistence with clarified measurement units and ownership. |
+| JA-06/07 | Update imports for the top-level `model` types and any changed tracking calls in the same change; preserve scientific identity and shared buffers. |
+| JA-08 | Remove the legacy tuner choice from the GUI, Java API, batch tool and saved state; use the renamed calibrated measurement. |
 | JA-09 | Adopt stage events/outcomes without GUI concerns in the engine; preserve maintainer-owned F10 preview behavior. F10 slice 2 consumes the stage-products observer. |
-| JA-12 | Remove unused execution surface; SpacePixels only needs its compile and tests to pass. |
-| JA-10 | Use provenance only for actual reference consumers; do not reintroduce removed cross-pass caching to exercise it. |
+| JA-12 | Adapt to the reduced execution API (cancellation scope, diagnostics, structured failures); compile and tests pass. |
+| JA-10 | Closed 2026-10-23; nothing to do. |
 | JA-11 | At release, pin one engine/solver combination and validate actual final repository artifacts without composites or the local validation repository. |
 
 Scientific algorithm proposals retain the decisions in [JTransient's plan](../JTransient/DESIGN-IMPROVEMENTS.md). This application plan does not reactivate deferred engine work.
@@ -413,19 +427,19 @@ Implemented rows are not a second backlog. Partial/deferred rows retain only the
 | D08 | Background I/O and preference writes | Implemented |
 | D09 | Prepared report diagnostics and identities | In progress |
 | D10 | Typed settings and explicit run options | In progress |
-| D11 | Completed-run workspace/history | In progress |
+| D11 | Last run's tracks in Blink, Preview Frame and Manual Transient Inspection | Accepted; scope reduced 2026-10-23 |
 | D12 | Shared visual/layout rules | In progress |
 | D13 | Keyboard access and viewer focus | Implemented |
-| D14 | Leftover compatibility code (post-implementation review) | Proposed |
+| D14 | Leftover compatibility code (post-implementation review) | Accepted |
 | F01 | Slow-mover/per-frame tuning relation | Proposed experiment; engine SM-2 deferred |
 | F02 | Header session summary/multiple-night warning | Deferred |
 | F03 | Viewer magnitude/name controls | Implemented |
-| F04 | MCP services over headless API | Agreed / pending; last |
+| F04 | MCP services over headless API | Agreed: HTTP; services table awaits agreement |
 | F05 | Small-star visibility in stretch previews | Deferred |
-| F06 | Native installers/runtime distribution | Agreed / pending; Windows first, last |
+| F06 | Native installers/runtime distribution | Agreed: per-user Windows `.exe` with a bundled runtime; decision points listed |
 | F07 | Combined compressed FITS preparation | Implemented |
 | F08 | Variable-star field image | Implemented |
-| F09 | Cross-pass super report | Deferred; basic iteration implemented |
+| F09 | Cross-pass super report | Agreed; matching policy to be proposed; basic iteration implemented |
 | F10 | Live detection preview | In progress; maintainer-owned; slice 2 (findings during detection) specified, waits on JA-09 |
 | F11 | Headless API/CLI publication | Implemented |
 | S1 | Reliable job terminal events | Implemented |
@@ -443,5 +457,5 @@ Implemented rows are not a second backlog. Partial/deferred rows retain only the
 | S13 | Headless util and explicit interactions | Implemented |
 | S14 | Explicit application run context | In progress; D09/D10 |
 | S15 | Authoritative finding identities/categories | In progress; D09 |
-| S16 | Prepared diagnostic states/failure policy | Pending; D09 |
+| S16 | Prepared diagnostic states/failure policy | Deferred until a saved result can be re-rendered |
 | Library compatibility | Historical API/version fallback machinery | Dropped; coordinated cleanup implemented |
