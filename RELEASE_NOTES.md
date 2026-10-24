@@ -4,6 +4,11 @@
 
 Not released yet.
 
+### Changed
+
+- **Compressed (.fz) frames are decoded more exactly.** nom-tam-fits 1.23.0 fixes the decoding of 32-bit PLIO frames and of quantized floating-point frames: their blank pixels, and the rounding of frames without dithering. Integer frames (RICE, GZIP, HCOMPRESS) decode as before. Frames from 16-bit cameras are unaffected.
+- **Libraries:** nom-tam-fits 1.23.0, Gson 2.14.0 and the Gradle 9.8.2 build. Saved settings files load as before.
+
 ### Removed
 
 - **The AI report sections.** Codex's **Signal Weave**, Claude's **The Night, Retold** and the **Include AI Creative Report Sections** setting are gone. A saved visualization preferences file that still holds the setting loads as before; the next save drops it.
