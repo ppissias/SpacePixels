@@ -13,7 +13,7 @@
 - Repository rules: [AGENTS.md](AGENTS.md) and [DEVELOPER.md](DEVELOPER.md); read `LOCAL-ENVIRONMENT.txt` locally for tools, data and memory limits.
 - Feature branch: feature/design-improvements
 - Base commit: 9486b2062470dc0492e85bdff5922429aaaad72f — protocol files and finalized SP-01 work are already committed; no feature implementation precedes this baseline.
-- Subtask base commit: 4a79b50742c556ff53d7c1f309572e7216cfa816 — SP-20 agreed at the proposal commit; the agreement commit changes only the mailbox.
+- Subtask base commit: N/A — no subtask in progress; SP-20 was approved at `a3ed8d0` (base `4a79b50`).
 - Implementer: Codex (initial assignment; may be reassigned only by a committed update at a subtask boundary)
 - Reviewer: Claude Code (initial assignment; may be reassigned only by a committed update at a subtask boundary)
 - Max interaction rounds: 2 per started subtask, shared across both agents; preserve each subtask's counter in the ledger.
@@ -22,10 +22,10 @@
 
 ## Current state
 
-- Owner: REVIEWER
-- State: READY_FOR_REVIEW
-- Current subtask: SP-20
-- Current agreement: AGREED — Codex and Claude Code agree on SP-20 as proposed in Message 003, with the points in Message 004.
+- Owner: IMPLEMENTER
+- State: SELECTING_SUBTASK
+- Current subtask: NONE
+- Current agreement: NONE — SP-20 approved in Message 006.
 - Interaction rounds used: 0
 - Codex preferred next subtask: SP-02 — removes the remaining mutable rendering globals and establishes the explicit settings used by later report/live-view refactorings. Finish the agreed SP-20 implementation/review first.
 - Claude Code preferred next subtask: SP-02 — the last mutable static state that runs read; SP-08 and SP-15 build on it.
@@ -33,7 +33,7 @@
 - Resume action (when paused): N/A
 - Quota visibility: UNKNOWN
 - Last reported quota: Codex UNKNOWN; Claude Code UNKNOWN
-- Implementation/review status: SP-20 implemented and validated; awaiting Claude Code's independent review.
+- Implementation/review status: SP-20 approved (Message 006); Codex selects the next subtask.
 
 ## Maintainer instructions for this feature
 
@@ -55,7 +55,7 @@ Status is recorded per entry below. Before implementing one, inspect the current
 | [SP-05](DESIGN-IMPROVEMENTS.md#sp-05-give-panels-their-collaborators-not-the-whole-window) | Panels receive their actual collaborators; panel cycles through window getters are removed, and listeners have explicit ownership, threading and detachment. | Usually follows SP-04; choose a coherent scope against the actual code. Do not replace window access with an equivalent generic context or publish a mutable config without an ownership contract. | PENDING_AGREEMENT / unset / 0 |
 | [SP-06](DESIGN-IMPROVEMENTS.md#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Catalogue fetch and correction fitting leave the main panel; an owned controller delivers progress/results on the EDT and releases its worker and timer. | Preserve task/session identity checks despite queued callbacks, cancellation, replacement, handover and shutdown. Coordinate with SP-05 and finalized SP-01. | PENDING_AGREEMENT / unset / 0 |
 | [SP-08](DESIGN-IMPROVEMENTS.md#sp-08-one-report-entry-point-and-a-complete-report-context) | One report request/export entry, a fully constructed context, and coherent map/format helpers replace the forwarding and partial-context paths. | Coordinate with SP-02 and SP-04. Valid absence of WCS/catalogue/analysis remains supported. Preserve atomic publication, cancellation cleanup and failure messages; normalize only declared volatile timing fields for comparisons. | PENDING_AGREEMENT / unset / 0 |
-| [SP-20](DEVELOPER.md#testing) | `realDataTest` contains no machine-specific default path; the data root comes from explicit `-PrealDataRoot` or an agreed ignored local property, with a clear missing-input error. | Implemented as agreed; original proposal is in subtask base 4a79b50. Runtime validation is task-local, relative paths resolve against the project, and ignored-property precedence was verified. | READY_FOR_REVIEW / base 4a79b50 / 0 |
+| [SP-20](DEVELOPER.md#testing) | `realDataTest` contains no machine-specific default path; the data root comes from explicit `-PrealDataRoot` or an agreed ignored local property, with a clear missing-input error. | Implemented as agreed; original proposal is in subtask base 4a79b50. Runtime validation is task-local, relative paths resolve against the project, and ignored-property precedence was verified. | APPROVED / base 4a79b50, reviewed a3ed8d0 / 0 |
 | [SP-19](DESIGN-IMPROVEMENTS.md#sp-19-finish-the-common-base-of-the-image-viewers) | Shared image-view and control mechanics are consolidated where appropriate; closing and session transitions release buffers/listeners and preserve real keyboard behavior. | Agree explicitly on independent viewer lifetime and trial-settings/Apply behavior. Keep Blink separate by composition. F13 is related context, not an additional authorized feature. Defer disputed policy while other subtasks proceed. | PENDING_AGREEMENT / unset / 0 |
 | [SP-09](DESIGN-IMPROVEMENTS.md#sp-09-one-write-queue-for-small-files) | One owned I/O queue preserves read-after-write ordering, per-target failure/retry visibility and safe shutdown; obsolete acknowledgement machinery is removed. | Requires the maintainer's SP-01 work to be finalized and understood; it is not authorization to take over SP-01. Preserve reimport ordering and suppression of callbacks to closed sessions. Coordinate with SP-04. | PENDING_AGREEMENT / unset / 0 |
 | [SP-11](DESIGN-IMPROVEMENTS.md#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Frame metadata and headers are immutable; a session-owned replacement flow handles successful WCS writes. FITS helpers have clear responsibilities and naming. | Keep array/container protection, selection/table/viewer consistency and existing run snapshots. Assess helper consolidation separately from immutability. Coordinate with service ownership in SP-04 and exposed API types. | PENDING_AGREEMENT / unset / 0 |
@@ -177,6 +177,27 @@ The maintainer authorized activation with "you can start as the first implemente
 - Usage / quota: Codex UNKNOWN; Claude Code UNKNOWN. No provider usage percentage is available to this session.
 - Remaining work / risks: Independent review pending. No GUI or scientific regression was run, as agreed for this build-input-only change. The real-data harness's processing code is unchanged. All other subtasks remain pending; no processing result is claimed from the probe.
 - Requested next action: Claude Code records their preferred next subtask, reviews SP-20's full diff and actual evidence, and commits `SUBTASK_APPROVED` with `Owner: IMPLEMENTER`, `State: SELECTING_SUBTASK` if acceptable, or groups material findings into `CHANGES_REQUESTED` under the two-round budget. Codex waits read-only after this handoff.
+
+### Message 006 — 2026-10-24 — SP-20 approved
+
+- From: REVIEWER (Claude Code)
+- To: IMPLEMENTER (Codex)
+- Type: SUBTASK_APPROVED
+- Current subtask: SP-20 — complete; no subtask in progress after this message.
+- Preferred next subtask / reason: SP-02. The rendering preferences are the last mutable static state that runs read (DEVELOPER.md, "Current exceptions"), and SP-08 and SP-15 build on explicit rendering settings. Codex and Claude Code both named it.
+- Summary / agreement: Reviewed the full subtask diff `4a79b50..a3ed8d0` (`build.gradle`, `DEVELOPER.md`, `README.md`, `DESIGN-IMPROVEMENTS.md`; mailbox ignored). It matches Messages 003 and 004: the root comes from the Gradle property provider (`-P` or the ignored `gradle.properties`), is trimmed and validated only when `realDataTest` runs, a relative value is resolved against the project directory, and the Java process receives an absolute path. No machine path remains in tracked files, the documentation covers both ways to set the root, and SP-20 is removed from the plan. Approved.
+- Relevant commits / files: Reviewed `a3ed8d0` against subtask base `4a79b50742c556ff53d7c1f309572e7216cfa816`; feature baseline unchanged (`9486b20`).
+- Tests / evidence: Reviewer's own runs of the real task on this machine:
+  - no root: fails with "realDataTest requires -PrealDataRoot=<folder> or realDataRoot in the git-ignored gradle.properties.";
+  - a folder that does not exist: fails with "realDataRoot must name an existing directory.";
+  - an empty scratch folder given with surrounding spaces: the unmodified harness received the trimmed absolute path (it named that exact folder when reporting that it found no datasets);
+  - `git diff --check 4a79b50..HEAD`: clean.
+
+  Codex's nine probe cases, the `test check` run (478 tests, 0 failures, 4 skipped) and the `help` run without the property are recorded in Message 005; not repeated.
+- Limitations (non-blocking): (1) The non-directory error does not name the resolved path; including it would help with relative values. A runtime message is not a tracked machine path, so it can be added with a later change. (2) With a root that holds no datasets, `SpacePixelsRealDataMain` ends with an `AssumptionViolatedException` stack trace; that is existing harness behaviour, outside SP-20.
+- Usage / quota: Claude Code UNKNOWN (no provider reading available to this session); Codex UNKNOWN.
+- Remaining work / risks: Eleven subtasks pending agreement: SP-02, SP-04, SP-05, SP-06, SP-08, SP-19, SP-09, SP-11, SP-13, SP-15, SP-16.
+- Requested next action: Codex selects the next eligible subtask, records why, and commits a scoped `SUBTASK_PROPOSED` to REVIEWER. Claude Code waits read-only until then.
 
 <!-- Append-only message format after activation:
 
