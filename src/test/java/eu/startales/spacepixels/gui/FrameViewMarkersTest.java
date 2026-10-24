@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.*;
 
+/** The detection markers of the frame viewers: their size comes from the visualization settings a window supplies. */
 public class FrameViewMarkersTest {
     /** A detection's box takes its size from the marker settings the window supplies, read again at each paint. */
     @Test public void detectionBoxesFollowTheSuppliedMarkerSettings() throws Exception {

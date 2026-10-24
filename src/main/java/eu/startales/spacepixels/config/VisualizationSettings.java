@@ -17,7 +17,8 @@ import java.util.function.Consumer;
  * How pictures are drawn: the display stretch, report animations and crops, detection markers and variable-star
  * presentation. None of these values changes a detection result. The value is immutable; {@link #defaults()} holds
  * the built-in values, independent of any window or saved preference, and each {@code with…} method returns a copy
- * with one value replaced.
+ * with one value replaced. Numbers are taken as given, without a range check; the settings page bounds what users
+ * enter.
  */
 public final class VisualizationSettings {
     private static final VisualizationSettings DEFAULTS = new VisualizationSettings(new Values());
@@ -125,59 +126,77 @@ public final class VisualizationSettings {
         return variableStarReportOptions;
     }
 
+    /** A copy with the black point {@code sigma} standard deviations below the image mean. */
     public VisualizationSettings withAutoStretchBlackSigma(double sigma) {
         return with(values -> values.autoStretchBlackSigma = sigma);
     }
 
+    /** A copy with the white point {@code sigma} standard deviations above the image mean. */
     public VisualizationSettings withAutoStretchWhiteSigma(double sigma) {
         return with(values -> values.autoStretchWhiteSigma = sigma);
     }
 
+    /** A copy with this frame delay of exported animated GIFs, in milliseconds. */
     public VisualizationSettings withGifBlinkSpeedMs(int milliseconds) {
         return with(values -> values.gifBlinkSpeedMs = milliseconds);
     }
 
+    /** A copy with this border around cropped track pictures, in pixels. */
     public VisualizationSettings withTrackCropPadding(int pixels) {
         return with(values -> values.trackCropPadding = pixels);
     }
 
+    /** A copy with this side of the object-centred crops of a track, in pixels. */
     public VisualizationSettings withTrackObjectCentricCropSize(int pixels) {
         return with(values -> values.trackObjectCentricCropSize = pixels);
     }
 
+    /** A copy with this radius of the circle around a target in report pictures, in pixels. */
     public VisualizationSettings withTargetCircleRadius(int pixels) {
         return with(values -> values.targetCircleRadius = pixels);
     }
 
+    /** A copy with this line width of the circle around a target in report pictures, in pixels. */
     public VisualizationSettings withTargetCircleStrokeWidth(float width) {
         return with(values -> values.targetCircleStrokeWidth = width);
     }
 
+    /** A copy whose streak lines are {@code factor} times the streak's elongation long. */
     public VisualizationSettings withStreakLineScaleFactor(double factor) {
         return with(values -> values.streakLineScaleFactor = factor);
     }
 
+    /** A copy with this radius of the box at a streak's centroid, in frame pixels. */
     public VisualizationSettings withStreakCentroidBoxRadius(int pixels) {
         return with(values -> values.streakCentroidBoxRadius = pixels);
     }
 
+    /** A copy with this smallest radius of the box around a point source, in frame pixels. */
     public VisualizationSettings withPointSourceMinBoxRadius(int pixels) {
         return with(values -> values.pointSourceMinBoxRadius = pixels);
     }
 
+    /** A copy with this margin added to a point source's rough radius for its box, in frame pixels. */
     public VisualizationSettings withDynamicBoxPadding(int pixels) {
         return with(values -> values.dynamicBoxPadding = pixels);
     }
 
+    /** A copy that animates at most {@code markers} unclassified transients; 0 or less makes no animation. */
     public VisualizationSettings withMaxAnimatedMarkers(int markers) {
         return with(values -> values.maxAnimatedMarkers = markers);
     }
 
+    /**
+     * A copy with this variable-star presentation.
+     *
+     * @throws NullPointerException if {@code options} is null
+     */
     public VisualizationSettings withVariableStarReportOptions(VariableStarReportOptions options) {
         Objects.requireNonNull(options, "options");
         return with(values -> values.variableStarReportOptions = options);
     }
 
+    /** A new value with this one's values, after {@code change} has replaced some of them. */
     private VisualizationSettings with(Consumer<Values> change) {
         Values values = new Values(this);
         change.accept(values);
@@ -248,9 +267,11 @@ public final class VisualizationSettings {
         int maxAnimatedMarkers = 500;
         VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
 
+        /** The built-in values. */
         Values() {
         }
 
+        /** The values of {@code settings}. */
         Values(VisualizationSettings settings) {
             autoStretchBlackSigma = settings.autoStretchBlackSigma;
             autoStretchWhiteSigma = settings.autoStretchWhiteSigma;

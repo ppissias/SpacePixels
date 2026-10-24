@@ -806,8 +806,10 @@ public class DetectionConfigurationPanel extends JPanel {
      */
     VisualizationSettings visualizationSettings() { return visualization; }
 
+    /** The variable-star report presentation in use, part of the visualization settings. */
     private VariableStarReportOptions reportOptions() { return visualization.getVariableStarReportOptions(); }
 
+    /** Replaces the variable-star report presentation in the visualization settings in use. */
     private void setReportOptions(VariableStarReportOptions options) {
         visualization = visualization.withVariableStarReportOptions(options);
     }
