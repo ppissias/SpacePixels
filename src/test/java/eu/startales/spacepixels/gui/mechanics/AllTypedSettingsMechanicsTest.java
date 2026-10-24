@@ -53,7 +53,7 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         importSyntheticSequence();
         window().tabbedPane().selectTab("Detection Settings");
         Map<String, JComponent> inputs = GuiActionRunner.execute(() -> inputs(application().getDetectionConfigurationPanel()));
-        assertEquals("78 engine fields, 12 application fields and the rejection preset", 91, inputs.size());
+        assertEquals("78 engine fields, 11 application fields and the rejection preset", 90, inputs.size());
         for (DetectionSetting<?> setting : DetectionSettings.all()) {
             assertNotNull(setting.id(), inputs.get(setting.id()));
             assertEquals(setting.expert(), inputs.get(setting.id()).getClientProperty("spacepixels.expertSetting"));
