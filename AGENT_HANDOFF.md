@@ -22,18 +22,18 @@
 
 ## Current state
 
-- Owner: REVIEWER
-- State: READY_FOR_REVIEW
-- Current subtask: SP-02
-- Current agreement: AGREED — Codex and Claude Code agree on SP-02 as proposed in Message 007, with the points in Message 008; roles swapped for SP-02.
+- Owner: IMPLEMENTER
+- State: SELECTING_SUBTASK
+- Current subtask: NONE
+- Current agreement: SP-02 APPROVED at `3ee9f07` against base `ec7b5f2`; choose and agree the next subtask before implementation.
 - Interaction rounds used: 1
-- Codex preferred next subtask: SP-09 — after completing SP-02 review, unify the bounded I/O queues while preserving ordered reimport reads, target-specific failures and session callback lifetime; SP-01 is already finalized.
+- Codex preferred next subtask: SP-09 — consolidate the two I/O workers while preserving ordered reimport reads, target-specific failures and session callback lifetime; SP-01 is already finalized. Codex proposes taking implementation and Claude Code review for the next subtask, subject to explicit agreement.
 - Claude Code preferred next subtask: SP-09 after SP-02 — SP-01 is finished, and merging the two write queues is bounded and touches none of SP-02.
 - Resume role (when paused): N/A
 - Resume action (when paused): N/A
 - Quota visibility: UNKNOWN
 - Last reported quota: Codex UNKNOWN; Claude Code UNKNOWN
-- Implementation/review status: SP-20 approved; SP-02 functional review passed at `bbe7e2a`; the documentation correction of Message 010 is made in `3ee9f07` and awaits review (round 1/2).
+- Implementation/review status: SP-20 and SP-02 approved; ten authorized subtasks remain pending agreement. SP-02 completed with one correction round.
 
 ## Maintainer instructions for this feature
 
@@ -50,7 +50,7 @@ Status is recorded per entry below. Before implementing one, inspect the current
 
 | Subtask | Acceptance target | Dependencies and points to resolve | Status / base / rounds |
 |---|---|---|---|
-| [SP-02](HIGH_LEVEL_DESIGN.md#detectionconfigurationpanel) | All rendering preferences reach renderers and runs explicitly; immutable run settings include marker sizes and animated-marker limits. Save, Revert, reload and independent runs retain their contracts. | Preserve live values, saved baselines and run snapshots. Include API/CLI defaults and variable-star report options; no mutable rendering globals. | READY_FOR_REVIEW / base ec7b5f2, corrected 3ee9f07 / 1 |
+| [SP-02](HIGH_LEVEL_DESIGN.md#detectionconfigurationpanel) | All rendering preferences reach renderers and runs explicitly; immutable run settings include marker sizes and animated-marker limits. Save, Revert, reload and independent runs retain their contracts. | Preserve live values, saved baselines and run snapshots. Include API/CLI defaults and variable-star report options; no mutable rendering globals. | APPROVED / base ec7b5f2, reviewed 3ee9f07 / 1 |
 | [SP-04](DESIGN-IMPROVEMENTS.md#sp-04-retire-the-imageprocessing-facade) | Services have explicit owners; session files and overlays have one authoritative owner; the facade and `SessionFrames` are retired in reviewed steps. Headless construction and disposal remain usable. | Account for finalized SP-01 work and SP-02. Preserve completed detection products on report decline, cancellation and failure. Evaluate the few-frame engine-result policy separately from moving code. | PENDING_AGREEMENT / unset / 0 |
 | [SP-05](DESIGN-IMPROVEMENTS.md#sp-05-give-panels-their-collaborators-not-the-whole-window) | Panels receive their actual collaborators; panel cycles through window getters are removed, and listeners have explicit ownership, threading and detachment. | Usually follows SP-04; choose a coherent scope against the actual code. Do not replace window access with an equivalent generic context or publish a mutable config without an ownership contract. | PENDING_AGREEMENT / unset / 0 |
 | [SP-06](DESIGN-IMPROVEMENTS.md#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Catalogue fetch and correction fitting leave the main panel; an owned controller delivers progress/results on the EDT and releases its worker and timer. | Preserve task/session identity checks despite queued callbacks, cancellation, replacement, handover and shutdown. Coordinate with SP-05 and finalized SP-01. | PENDING_AGREEMENT / unset / 0 |
@@ -315,6 +315,21 @@ The maintainer authorized activation with "you can start as the first implemente
 - Usage / quota: Claude Code UNKNOWN (no provider reading available to this session); Codex UNKNOWN.
 - Remaining work / risks: None known.
 - Requested next action: Codex reviews `bbe7e2a..3ee9f07` and commits `SUBTASK_APPROVED` or `CHANGES_REQUESTED`. Claude Code waits read-only until then.
+
+### Message 012 — 2026-10-24 — SP-02 approved
+
+- From: REVIEWER (Codex)
+- To: IMPLEMENTER (Claude Code)
+- Type: SUBTASK_APPROVED
+- Current subtask: SP-02 complete; current selection becomes NONE.
+- Preferred next subtask / reason: SP-09. Both agents selected it, and source inspection confirms that the shared queue must preserve ordered metadata reads as well as writes, target failure/retry state and callback suppression after a session closes. SP-01 is already finalized.
+- Summary / approval: Approved full subtask `ec7b5f2..3ee9f07`. Message 010 records the complete functional review and the explicit acceptance of the two report stretch corrections. The correction diff adds only the requested method/type Javadocs and the related private-helper docs; it does not change executable code. No outstanding finding remains.
+- Relevant commits / files: Implementation `bbe7e2a`, documentation correction `3ee9f07`, latest handoff `b2bb4d6`; subtask base `ec7b5f2af80060a5a2e3cc377f210adbd3606d11`, feature baseline unchanged. SP-20 remains approved.
+- Tests / evidence: Reviewer checked the correction diff and `git diff --check ec7b5f2..HEAD` (clean). The independent 25 focused tests and artifact comparisons in Message 010, plus the implementer's full unit/check, GUI mechanics, consumer and saved-file evidence in Messages 009 and 011, establish the agreed checks. No further test run is warranted by Javadoc-only changes. Limits remain those stated in those messages (shared-desktop real-data runs and live Astrometry.net were not performed).
+- Next-role proposal: At the next clean subtask boundary, Codex is available to implement SP-09 with Claude Code reviewing. This approval does not itself swap roles or agree SP-09's scope. Include the rotation explicitly in the next proposal; the accepting agreement can update the role fields and give Codex IMPLEMENTER ownership.
+- Usage / quota: Codex UNKNOWN; Claude Code UNKNOWN. No provider usage reading is available.
+- Remaining work / risks: Ten authorized subtasks pending agreement: SP-04, SP-05, SP-06, SP-08, SP-19, SP-09, SP-11, SP-13, SP-15, SP-16. Retain SP-02's 1/2 counter in the ledger; reset the current counter only when a new subtask is agreed.
+- Requested next action: Claude Code independently selects and proposes the next eligible subtask, including acceptance checks and any proposed role rotation, then commits the proposal to REVIEWER (Codex) before implementation. Codex waits read-only for that committed proposal. Continue the feature under the sustained-work instruction.
 
 <!-- Append-only message format after activation:
 
