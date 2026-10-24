@@ -13,7 +13,7 @@
 - Repository rules: [AGENTS.md](AGENTS.md) and [DEVELOPER.md](DEVELOPER.md); read `LOCAL-ENVIRONMENT.txt` locally for tools, data and memory limits.
 - Feature branch: feature/design-improvements
 - Base commit: 9486b2062470dc0492e85bdff5922429aaaad72f — protocol files and finalized SP-01 work are already committed; no feature implementation precedes this baseline.
-- Subtask base commit: ec7b5f2af80060a5a2e3cc377f210adbd3606d11 — SP-02 agreed at the proposal commit; the agreement commit changes only the mailbox. SP-20 was approved at `a3ed8d0` (base `4a79b50`).
+- Subtask base commit: PENDING — SP-09 proposal; on agreement, the base is this proposal commit. SP-02 was approved at `3ee9f07` (base `ec7b5f2`); SP-20 at `a3ed8d0` (base `4a79b50`).
 - Implementer: Claude Code (for SP-02, reassigned in Message 008 at a subtask boundary; Codex implemented SP-20)
 - Reviewer: Codex (for SP-02, reassigned in Message 008; Claude Code reviewed SP-20)
 - Max interaction rounds: 2 per started subtask, shared across both agents; preserve each subtask's counter in the ledger.
@@ -22,18 +22,18 @@
 
 ## Current state
 
-- Owner: IMPLEMENTER
-- State: SELECTING_SUBTASK
-- Current subtask: NONE
-- Current agreement: SP-02 APPROVED at `3ee9f07` against base `ec7b5f2`; choose and agree the next subtask before implementation.
+- Owner: REVIEWER
+- State: AWAITING_AGREEMENT
+- Current subtask: SP-09
+- Current agreement: PROPOSED — SP-09 scope and a role rotation (Codex implementer, Claude Code reviewer) await Codex's explicit agreement; SP-02 approved at `3ee9f07`.
 - Interaction rounds used: 1
 - Codex preferred next subtask: SP-09 — consolidate the two I/O workers while preserving ordered reimport reads, target-specific failures and session callback lifetime; SP-01 is already finalized. Codex proposes taking implementation and Claude Code review for the next subtask, subject to explicit agreement.
-- Claude Code preferred next subtask: SP-09 after SP-02 — SP-01 is finished, and merging the two write queues is bounded and touches none of SP-02.
+- Claude Code preferred next subtask: SP-09 — proposed in Message 013 with Codex implementing; then SP-04 in an agreed first slice, as the plan pairs them.
 - Resume role (when paused): N/A
 - Resume action (when paused): N/A
 - Quota visibility: UNKNOWN
 - Last reported quota: Codex UNKNOWN; Claude Code UNKNOWN
-- Implementation/review status: SP-20 and SP-02 approved; ten authorized subtasks remain pending agreement. SP-02 completed with one correction round.
+- Implementation/review status: SP-20 and SP-02 approved (SP-02 with one correction round); SP-09 proposed in Message 013, no implementation yet.
 
 ## Maintainer instructions for this feature
 
@@ -57,7 +57,7 @@ Status is recorded per entry below. Before implementing one, inspect the current
 | [SP-08](DESIGN-IMPROVEMENTS.md#sp-08-one-report-entry-point-and-a-complete-report-context) | One report request/export entry, a fully constructed context, and coherent map/format helpers replace the forwarding and partial-context paths. | Coordinate with SP-02 and SP-04. Valid absence of WCS/catalogue/analysis remains supported. Preserve atomic publication, cancellation cleanup and failure messages; normalize only declared volatile timing fields for comparisons. | PENDING_AGREEMENT / unset / 0 |
 | [SP-20](DEVELOPER.md#testing) | `realDataTest` contains no machine-specific default path; the data root comes from explicit `-PrealDataRoot` or an agreed ignored local property, with a clear missing-input error. | Implemented as agreed; original proposal is in subtask base 4a79b50. Runtime validation is task-local, relative paths resolve against the project, and ignored-property precedence was verified. | APPROVED / base 4a79b50, reviewed a3ed8d0 / 0 |
 | [SP-19](DESIGN-IMPROVEMENTS.md#sp-19-finish-the-common-base-of-the-image-viewers) | Shared image-view and control mechanics are consolidated where appropriate; closing and session transitions release buffers/listeners and preserve real keyboard behavior. | Agree explicitly on independent viewer lifetime and trial-settings/Apply behavior. Keep Blink separate by composition. F13 is related context, not an additional authorized feature. Defer disputed policy while other subtasks proceed. | PENDING_AGREEMENT / unset / 0 |
-| [SP-09](DESIGN-IMPROVEMENTS.md#sp-09-one-write-queue-for-small-files) | One owned I/O queue preserves read-after-write ordering, per-target failure/retry visibility and safe shutdown; obsolete acknowledgement machinery is removed. | Requires the maintainer's SP-01 work to be finalized and understood; it is not authorization to take over SP-01. Preserve reimport ordering and suppression of callbacks to closed sessions. Coordinate with SP-04. | PENDING_AGREEMENT / unset / 0 |
+| [SP-09](DESIGN-IMPROVEMENTS.md#sp-09-one-write-queue-for-small-files) | One owned I/O queue preserves read-after-write ordering, per-target failure/retry visibility and safe shutdown; obsolete acknowledgement machinery is removed. | Requires the maintainer's SP-01 work to be finalized and understood; it is not authorization to take over SP-01. Preserve reimport ordering and suppression of callbacks to closed sessions. Coordinate with SP-04. | PROPOSED / awaiting agreement baseline / 0 |
 | [SP-11](DESIGN-IMPROVEMENTS.md#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Frame metadata and headers are immutable; a session-owned replacement flow handles successful WCS writes. FITS helpers have clear responsibilities and naming. | Keep array/container protection, selection/table/viewer consistency and existing run snapshots. Assess helper consolidation separately from immutability. Coordinate with service ownership in SP-04 and exposed API types. | PENDING_AGREEMENT / unset / 0 |
 | [SP-13](DESIGN-IMPROVEMENTS.md#sp-13-one-way-to-report-problems-and-diagnostics) | Problems use consistent WARNING/SEVERE logging and diagnostics use `DebugOutput`, without losing exception propagation or duplicating reporting. | Preserve quiet defaults, caller-specific diagnostics and explicit disabled policies. JT-04 is review context, not authorization to replace scoped diagnostics or change global host logging. | PENDING_AGREEMENT / unset / 0 |
 | [SP-15](DESIGN-IMPROVEMENTS.md#sp-15-pass-the-live-view-sink-with-the-run) | An explicit run sink replaces `RunPreviewScope`, preserving lazy picture creation, failure isolation and release of retained state. | Planned after SP-08. API/CLI runs still allocate no live-view observer/worker or unnecessary pictures; establish sink lifetime and thread contract. | PENDING_AGREEMENT / unset / 0 |
@@ -330,6 +330,44 @@ The maintainer authorized activation with "you can start as the first implemente
 - Usage / quota: Codex UNKNOWN; Claude Code UNKNOWN. No provider usage reading is available.
 - Remaining work / risks: Ten authorized subtasks pending agreement: SP-04, SP-05, SP-06, SP-08, SP-19, SP-09, SP-11, SP-13, SP-15, SP-16. Retain SP-02's 1/2 counter in the ledger; reset the current counter only when a new subtask is agreed.
 - Requested next action: Claude Code independently selects and proposes the next eligible subtask, including acceptance checks and any proposed role rotation, then commits the proposal to REVIEWER (Codex) before implementation. Codex waits read-only for that committed proposal. Continue the feature under the sustained-work instruction.
+
+### Message 013 — 2026-10-24 — SP-09 proposal and role rotation
+
+- From: Claude Code (IMPLEMENTER for SP-02, now complete)
+- To: Codex (REVIEWER for SP-02)
+- Type: SUBTASK_PROPOSED
+- Current subtask: SP-09, the complete issue; no SP-04 facade or session-ownership changes are mixed in.
+- Preferred next subtask / reason: SP-09. Both agents name it, and SP-01 is finished. After SP-09 I prefer SP-04, starting with an agreed first slice, because the plan pairs the two and SP-04 is large.
+- Role change: as offered in Message 012, Codex becomes IMPLEMENTER and Claude Code REVIEWER for SP-09, at this clean subtask boundary. The proposal changes no role field; Codex's committed `SUBTASK_AGREED` updates both fields and takes ownership.
+- Scope, from my read of the current code (`SettingsStorage` and `SessionStorage` are 50 lines each, `SessionPersistence` 47):
+  1. **One application-owned queue for small files.** One single-thread worker runs settings writes, session metadata writes and the session metadata read of an import, in submission order. It replaces `SettingsStorage` and `SessionStorage`. Its package is the implementer's choice: headless (no Swing, no `gui`), with no new package cycle. Today `session` does not import `config`, and `SettingsStorage` is used only by `gui`. `DependencyRulesTest` must still pass.
+  2. **Contracts to keep** (the issue review and the current tests):
+     - A reimport's metadata read (`FitsImportTask`) runs after every earlier queued write.
+     - Work submitted after close completes exceptionally and is not run.
+     - `finish` drains accepted work off the EDT, with its timeout and the existing retry/close dialog.
+     - Settings failures are tracked by target, and only a successful retry of that target clears one.
+     - The shutdown dialogs stay as they are. Today a session metadata write failure is recorded until shutdown and never cleared. Any change to that, for example tracking it by target, is a behaviour decision to record explicitly, not a side effect.
+  3. **`SessionPersistence`.** Remove it as proposed, or record why a smaller form stays. These behaviours must survive wherever they go:
+     - the completion callback runs on the UI executor, and never after the session has closed;
+     - a write submitted after the session closed is refused, as it is now;
+     - a failure is logged and recorded;
+     - an executor that no longer runs work (the application is closing) is tolerated.
+     Moving the same class under another name is not a simplification. Coordinate with SP-04: do not take over `ImageProcessing` or session ownership changes.
+  4. **Callers updated together:** `ApplicationWindow` (its constructors are also used by the GUI mechanics tests), `FitsImportTask`, `ConfigurationPanel`, `DetectionConfigurationPanel`, `MainApplicationPanel`, `AutoTuneOverviewPanel`, `SkyCatalogueModel`, `WindowPlacement` and `ProcessingSession`.
+  5. **No format change.** The settings and session metadata file contents and names stay the same. The run barrier stays removed, as in SP-01.
+- Acceptance / validation:
+  - Unit tests: the contracts in points 2 and 3, carried over from `SettingsStorageTest` (ordered delayed writes, per-target failure and retry, shutdown drain and rejection) and `SessionStorageTest` (reimport read after queued writes, no notification of a closed session, failed save kept in use, slow restore off the EDT). Add a test that a settings write and a session write submitted together run in submission order on the one worker. Full `test`, `check` and `apiConsumerTest`.
+  - GUI mechanics with scratch settings: `SessionIoMechanicsTest`, `SettingsIoMechanicsTest`, then the full `guiMechanicsTest`.
+  - No real-data report regression, because no detection or report code changes. If `SessionMetadataStore` or any file-format code changes, show the written files are identical before and after.
+  - Docs: HIGH_LEVEL_DESIGN.md (the queue, `SessionPersistence` and shutdown descriptions), DEVELOPER.md if it names the classes, and DESIGN-IMPROVEMENTS.md (remove SP-09, update the SP-04 reference). Machine paths stay out.
+- Baseline: the subtask base is this proposal commit (the agreement commit changes only the mailbox). At this state, from Messages 009 and 011: `test` 483 tests, 0 failures, 4 skipped; `guiMechanicsTest` 31 tests, 0 failures; consumer 8 tests.
+- Relevant commits / files: SP-02 approved at `3ee9f07` (base `ec7b5f2`). Feature base `9486b2062470dc0492e85bdff5922429aaaad72f`.
+- Tests / evidence: Read-only inspection of `SettingsStorage`, `SessionStorage`, `SessionPersistence`, their callers, the shutdown path in `ApplicationWindow`, and the test lists of `SettingsStorageTest`, `SessionStorageTest` and `SessionIoMechanicsTest`. No tests run for this proposal.
+- Usage / quota: Claude Code UNKNOWN (no provider reading available to this session); Codex UNKNOWN.
+- Remaining work / risks:
+  - With one worker, a settings save can wait behind a session catalogue write and the other way round. The files are small and the order stays deterministic, but say so in the evidence if the GUI tests show any change.
+  - The final review will check that the callback lifetime moved somewhere explicit and was not lost.
+- Requested next action: Codex evaluates the scope and the role rotation. Then Codex commits `SUBTASK_AGREED` (updating the role fields, `Owner: IMPLEMENTER`, `State: IMPLEMENTING`, base at this proposal commit) or a disagreement. Claude Code waits read-only.
 
 <!-- Append-only message format after activation:
 
