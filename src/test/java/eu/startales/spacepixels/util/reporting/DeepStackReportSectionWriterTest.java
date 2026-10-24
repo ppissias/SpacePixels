@@ -112,7 +112,7 @@ public class DeepStackReportSectionWriterTest {
 
     private String render(SlowMoverAnalysis analysis, DetectionConfig config, List<Track> movingTargets) throws Exception {
         DetectionReportContext context = new DetectionReportContext(
-                new ExportVisualizationSettings(3.0, 10.0, 100, 10, 100, false, 12, 1.0f),
+                new ExportVisualizationSettings(3.0, 10.0, 100, 10, 100, 12, 1.0f),
                 temporaryFolder.newFolder(),
                 Collections.emptyList(),
                 null,

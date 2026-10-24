@@ -211,7 +211,7 @@ Click the picture for the full-size stack.
 
 The toolbar provides **Previous finding**, **Next finding**, a finding selector, **Pause animations** and **Report data JSON**. Pausing freezes the GIF previews and the inspector animation; their image links still open the original files. Reports honour the browser's reduced-motion preference. Most images below the first picture load as you scroll. Mixed exposures and filters are identified in the session header.
 
-`report-data.json` contains the included findings, their labels and card anchors, pixel/sky positions, and observed frame numbers. Labels are local to this report, not permanent identities across runs. Optional groups left out of the report are also left out of this export and the creative sections. The footer records application/engine versions, export time and report preparation time.
+`report-data.json` contains the included findings, their labels and card anchors, pixel/sky positions, and observed frame numbers. Labels are local to this report, not permanent identities across runs. Optional groups left out of the report are also left out of this export. The footer records application/engine versions, export time and report preparation time.
 
 **Detection Stage Timings**, under Diagnostics, shows the elapsed time and share of engine time for each major detection step. Faint streak fragment assembly is indented under tracking: its time is already included in the tracking total. Parallel steps show elapsed time, not the sum of worker times. Steps that were switched off are omitted. Image loading, Auto-Tune and report generation are outside the engine total.
 
@@ -304,12 +304,6 @@ What the frames say about the night and your equipment. SpacePixels measures up 
 These readings are diagnostic patterns, not a unique diagnosis of a focus, tracking or optical problem. The brightness range describes saturation and detection depth; the Variable Stars readiness verdict remains authoritative for differential photometry. Sky brightness and Gaia-based flat-field readings require a measurable, acceptable linearity slope; inconclusive calibration is not treated as a pass. Field depth uses a ≥ sign when the catalogue sample ends before completeness falls.
 
 The measurement takes a few seconds. Without a plate solution the sizes are in pixels (or in arcseconds from the focal length and pixel size in the FITS header), and without the sky catalogue the sky brightness and the star brightness map are left out.
-
-### Optional AI sections
-
-With **Include AI Creative Report Sections** ticked (Detection Settings, Report Visualization), the report ends with two sections where AI assistants present the session in their own way. Codex's **Signal Weave** draws every detection as one picture. Claude's **The Night, Retold** puts the session back in time order: one timeline with every frame (rejected ones in red), the sky background and seeing through the night, every track, streak and flash at its time and a small light curve per variable star, followed by a short account of the night written from the measured numbers.
-
-![The Night, Retold](docs/images/manual/ai-night-retold.png)
 
 ---
 

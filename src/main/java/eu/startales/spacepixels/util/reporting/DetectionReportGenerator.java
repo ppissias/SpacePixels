@@ -64,7 +64,6 @@ public class DetectionReportGenerator {
     public static int gifBlinkSpeedMs = ExportVisualizationSettings.defaults().getGifBlinkSpeedMs();
     public static int trackCropPadding = ExportVisualizationSettings.defaults().getTrackCropPadding();
     public static int trackObjectCentricCropSize = ExportVisualizationSettings.defaults().getTrackObjectCentricCropSize();
-    public static boolean includeAiCreativeReportSections = ExportVisualizationSettings.defaults().isIncludeAiCreativeReportSections();
 
     // --- Annotation Tools (For GIFs) ---
     public static int targetCircleRadius = ExportVisualizationSettings.defaults().getTargetCircleRadius();
@@ -83,7 +82,6 @@ public class DetectionReportGenerator {
                 gifBlinkSpeedMs,
                 trackCropPadding,
                 trackObjectCentricCropSize,
-                includeAiCreativeReportSections,
                 targetCircleRadius,
                 targetCircleStrokeWidth
         );
@@ -1038,7 +1036,6 @@ public class DetectionReportGenerator {
     private static List<PipelineDiagnosticsSectionWriter.NavItem> buildNavigation(DetectionReportContext context,
                                                                                  PipelineTelemetry pipelineTelemetry,
                                                                                  DetectionReportSummary summary,
-                                                                                 boolean aiSections,
                                                                                  int commonMotionGroupCount,
                                                                                  ReportInclusion inclusion) {
         List<PipelineDiagnosticsSectionWriter.NavItem> items = new ArrayList<>();
@@ -1073,9 +1070,6 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
         }
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("night-equipment", "Night & equipment", null, false));
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("diagnostics", "Diagnostics", null, true));
-        if (aiSections) {
-            items.add(new PipelineDiagnosticsSectionWriter.NavItem("ai-perspective", "AI perspectives", null, true));
-        }
         return items;
     }
 
@@ -1111,7 +1105,7 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
         int peakSigmaAnomalyCount = countAnomaliesOfType(anomalies, AnomalyType.PEAK_SIGMA);
         int integratedSigmaAnomalyCount = countAnomaliesOfType(anomalies, AnomalyType.INTEGRATED_SIGMA);
         int otherAnomalyCount = Math.max(0, anomalyCount - peakSigmaAnomalyCount - integratedSigmaAnomalyCount);
-        int unclassifiedTransientCount = CreativeTributeRenderer.countTotalTransientDetections(unclassifiedTransients);
+        int unclassifiedTransientCount = countTransientDetections(unclassifiedTransients);
 
         return new DetectionReportSummary(
                 slowMoverCandidateCount,
@@ -1131,6 +1125,20 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
                 otherAnomalyCount,
                 unclassifiedTransientCount
         );
+    }
+
+    /** Counts the detections over all frames of a per-frame detection list; a missing list or frame counts zero. */
+    private static int countTransientDetections(List<List<DetectedObject>> transientsPerFrame) {
+        if (transientsPerFrame == null) {
+            return 0;
+        }
+        int total = 0;
+        for (List<DetectedObject> frameTransients : transientsPerFrame) {
+            if (frameTransients != null) {
+                total += frameTransients.size();
+            }
+        }
+        return total;
     }
 
     static String escapeHtml(String value) {
@@ -1377,8 +1385,7 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
             PipelineDiagnosticsSectionWriter.writeSessionHeader(report, reportContext, pipelineTelemetry);
             report.println("<div class='report-toolbar'>");
             PipelineDiagnosticsSectionWriter.writeNavigation(report, buildNavigation(
-                    reportContext, pipelineTelemetry, summary, settings.isIncludeAiCreativeReportSections(),
-                    commonMotionGroups.size(), inclusion));
+                    reportContext, pipelineTelemetry, summary, commonMotionGroups.size(), inclusion));
             ReportPresentation.controls(report, reportContext);
             report.println("</div>");
 
@@ -1448,22 +1455,6 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
                     summary,
                     result.driftPoints,
                     fieldDepth);
-
-            // =================================================================
-            // AI PERSPECTIVES: Codex's Signal Weave, then Claude's The Night, Retold
-            // =================================================================
-            if (settings.isIncludeAiCreativeReportSections()) {
-                report.println("<section id='ai-perspective'>");
-            }
-            if (settings.isIncludeAiCreativeReportSections()) {
-                SignalWeaveSectionWriter.write(report, reportContext, pipelineTelemetry, allTransients, unclassifiedTransients);
-            }
-
-            if (settings.isIncludeAiCreativeReportSections()) {
-                ClaudePerspectiveSectionWriter.writeSection(report, reportContext, pipelineTelemetry, summary,
-                        FindingCategory.VARIABLE_STAR.included(inclusion) ? result.variableStarAnalysis : null);
-                report.println("</section>");
-            }
 
             ReportClientScriptWriter.appendLiveReportRenderingScript(report);
             ReportPresentation.appendScript(report);

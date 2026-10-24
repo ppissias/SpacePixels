@@ -25,7 +25,6 @@ public class SpacePixelsVisualizationPreferences {
     public double autoStretchWhiteSigma = DisplayImageRenderer.autoStretchWhiteSigma;
     public int gifBlinkSpeedMs = DetectionReportGenerator.gifBlinkSpeedMs;
     public int trackCropPadding = DetectionReportGenerator.trackCropPadding;
-    public boolean includeAiCreativeReportSections = DetectionReportGenerator.includeAiCreativeReportSections;
 
     public static SpacePixelsVisualizationPreferences captureCurrent() {
         return new SpacePixelsVisualizationPreferences();
@@ -36,7 +35,7 @@ public class SpacePixelsVisualizationPreferences {
         var defaults = ExportVisualizationSettings.defaults();
         return new ExportVisualizationSettings(autoStretchBlackSigma,
                 autoStretchWhiteSigma, gifBlinkSpeedMs, trackCropPadding, defaults.getTrackObjectCentricCropSize(),
-                includeAiCreativeReportSections, defaults.getTargetCircleRadius(), defaults.getTargetCircleStrokeWidth(), options);
+                defaults.getTargetCircleRadius(), defaults.getTargetCircleStrokeWidth(), options);
     }
 
     public void applyToRuntime() {
@@ -48,6 +47,5 @@ public class SpacePixelsVisualizationPreferences {
         DisplayImageRenderer.autoStretchWhiteSigma = autoStretchWhiteSigma;
         DetectionReportGenerator.gifBlinkSpeedMs = gifBlinkSpeedMs;
         DetectionReportGenerator.trackCropPadding = trackCropPadding;
-        DetectionReportGenerator.includeAiCreativeReportSections = includeAiCreativeReportSections;
     }
 }

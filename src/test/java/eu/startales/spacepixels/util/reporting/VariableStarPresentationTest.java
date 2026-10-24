@@ -107,8 +107,8 @@ public class VariableStarPresentationTest {
         assertEquals(before, gson.toJson(analysis));
     }
 
-    /** A synthetic external candidate ordering must retain V identities when a narrative omits other tiers. */
-    @Test public void timelineAndNarrativeRetainIdsWhenPossibleCandidatesComeFirst() throws Exception {
+    /** A synthetic external candidate ordering must retain V identities in the presentation and the report anchors. */
+    @Test public void presentationRetainsIdsWhenPossibleCandidatesComeFirst() throws Exception {
         var possible = star(10, "POSSIBLE", 5, .1, false);
         var rejected = star(20, "NOT_SCORED", 0, .2, false);
         var high = star(30, "HIGH_CONFIDENCE", 10, .8, true);
@@ -131,14 +131,6 @@ public class VariableStarPresentationTest {
         context.data = ReportData.create(context, telemetry, analysis, List.of(), ReportInclusion.all());
         assertEquals("variable-v2", context.findingAnchor(FindingCategory.VARIABLE_STAR, 2));
         assertEquals("variable-candidates", context.findingAnchor(FindingCategory.VARIABLE_STAR, 1));
-        var output = new StringWriter();
-        var summary = new DetectionReportSummary(0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0);
-        ClaudePerspectiveSectionWriter.writeSection(new PrintWriter(output), context, telemetry, summary, analysis);
-        String html = output.toString();
-        assertTrue(html.contains("V2 (0.80 mag)"));
-        assertFalse(html.contains("V1 (0.80 mag)"));
-        assertTrue(html.contains("V2 " + PhotometryReportSectionWriter.describeChange(high).toLowerCase(Locale.ROOT)));
-        assertFalse(html.contains("V1 " + PhotometryReportSectionWriter.describeChange(high).toLowerCase(Locale.ROOT)));
     }
 
     private StarLightCurve star(int id, String tier, double score, double amplitude, boolean cycle) {
@@ -168,7 +160,7 @@ public class VariableStarPresentationTest {
         } return files;
     }
     private DetectionReportContext context(File output, FitsFileInformation[] files, VariableStarReportOptions options) {
-        return new DetectionReportContext(new ExportVisualizationSettings(3,10,100,10,100,false,12,1,options),output,List.of(),files,
+        return new DetectionReportContext(new ExportVisualizationSettings(3,10,100,10,100,12,1,options),output,List.of(),files,
                 new DetectionConfig(),DetectionReportAstrometry.buildContext(files,null),null,null,null,null,null,List.of(),List.of(),null,List.of(),List.of(),List.of(),List.of(),List.of(),List.of());
     }
     private short[][] stack() { short[][] pixels = new short[120][160]; for (int y=0;y<120;y++)for(int x=0;x<160;x++)pixels[y][x]=(short)(-32000+(x*y)%100);return pixels; }

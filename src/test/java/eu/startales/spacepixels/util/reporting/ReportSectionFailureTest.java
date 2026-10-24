@@ -51,7 +51,7 @@ public class ReportSectionFailureTest {
 
     private static DetectionReportContext context(File exportDir, short[][] masterStack) {
         return new DetectionReportContext(
-                new ExportVisualizationSettings(3.0, 10.0, 100, 10, 100, false, 12, 1.0f),
+                new ExportVisualizationSettings(3.0, 10.0, 100, 10, 100, 12, 1.0f),
                 exportDir,
                 Collections.emptyList(),
                 null,

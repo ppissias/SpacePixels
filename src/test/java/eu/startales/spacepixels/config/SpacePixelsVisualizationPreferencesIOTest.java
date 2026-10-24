@@ -9,7 +9,7 @@ import java.io.StringReader;
 import java.io.StringWriter;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 /**
  * Verifies round-trip persistence for rendering and export preferences that are now stored outside
@@ -28,7 +28,6 @@ public class SpacePixelsVisualizationPreferencesIOTest {
         preferences.autoStretchWhiteSigma = 4.4d;
         preferences.gifBlinkSpeedMs = 180;
         preferences.trackCropPadding = 160;
-        preferences.includeAiCreativeReportSections = true;
 
         StringWriter writer = new StringWriter();
         SpacePixelsVisualizationPreferencesIO.write(writer, preferences);
@@ -36,7 +35,6 @@ public class SpacePixelsVisualizationPreferencesIOTest {
         String json = writer.toString();
         SpacePixelsVisualizationPreferences loadedPreferences = SpacePixelsVisualizationPreferencesIO.load(new StringReader(json));
 
-        assertTrue(json.contains("\"includeAiCreativeReportSections\": true"));
         assertEquals(7.5d, loadedPreferences.streakLineScaleFactor, 0.0d);
         assertEquals(11, loadedPreferences.streakCentroidBoxRadius);
         assertEquals(4, loadedPreferences.pointSourceMinBoxRadius);
@@ -45,7 +43,19 @@ public class SpacePixelsVisualizationPreferencesIOTest {
         assertEquals(4.4d, loadedPreferences.autoStretchWhiteSigma, 0.0d);
         assertEquals(180, loadedPreferences.gifBlinkSpeedMs);
         assertEquals(160, loadedPreferences.trackCropPadding);
-        assertTrue(loadedPreferences.includeAiCreativeReportSections);
+    }
+
+    /** A file saved while the AI report sections existed still loads, and the next save drops their field. */
+    @Test
+    public void removedAiSectionsFieldIsIgnoredOnLoadAndDroppedOnSave() throws Exception {
+        String saved = "{\"gifBlinkSpeedMs\": 180, \"includeAiCreativeReportSections\": true}";
+
+        SpacePixelsVisualizationPreferences loadedPreferences = SpacePixelsVisualizationPreferencesIO.load(new StringReader(saved));
+        StringWriter writer = new StringWriter();
+        SpacePixelsVisualizationPreferencesIO.write(writer, loadedPreferences);
+
+        assertEquals(180, loadedPreferences.gifBlinkSpeedMs);
+        assertFalse(writer.toString().contains("includeAiCreativeReportSections"));
     }
 
     @Test
@@ -58,7 +68,6 @@ public class SpacePixelsVisualizationPreferencesIOTest {
         double originalAutoStretchWhiteSigma = DisplayImageRenderer.autoStretchWhiteSigma;
         int originalGifBlinkSpeedMs = DetectionReportGenerator.gifBlinkSpeedMs;
         int originalTrackCropPadding = DetectionReportGenerator.trackCropPadding;
-        boolean originalIncludeAiCreativeReportSections = DetectionReportGenerator.includeAiCreativeReportSections;
 
         SpacePixelsVisualizationPreferences preferences = new SpacePixelsVisualizationPreferences();
         preferences.streakLineScaleFactor = 6.2d;
@@ -69,7 +78,6 @@ public class SpacePixelsVisualizationPreferencesIOTest {
         preferences.autoStretchWhiteSigma = 3.8d;
         preferences.gifBlinkSpeedMs = 150;
         preferences.trackCropPadding = 140;
-        preferences.includeAiCreativeReportSections = true;
 
         try {
             preferences.applyToRuntime();
@@ -82,7 +90,6 @@ public class SpacePixelsVisualizationPreferencesIOTest {
             assertEquals(3.8d, DisplayImageRenderer.autoStretchWhiteSigma, 0.0d);
             assertEquals(150, DetectionReportGenerator.gifBlinkSpeedMs);
             assertEquals(140, DetectionReportGenerator.trackCropPadding);
-            assertTrue(DetectionReportGenerator.includeAiCreativeReportSections);
         } finally {
             RawImageAnnotator.streakLineScaleFactor = originalStreakLineScaleFactor;
             RawImageAnnotator.streakCentroidBoxRadius = originalStreakCentroidBoxRadius;
@@ -92,7 +99,6 @@ public class SpacePixelsVisualizationPreferencesIOTest {
             DisplayImageRenderer.autoStretchWhiteSigma = originalAutoStretchWhiteSigma;
             DetectionReportGenerator.gifBlinkSpeedMs = originalGifBlinkSpeedMs;
             DetectionReportGenerator.trackCropPadding = originalTrackCropPadding;
-            DetectionReportGenerator.includeAiCreativeReportSections = originalIncludeAiCreativeReportSections;
         }
     }
 }

@@ -80,7 +80,7 @@ public class UnclassifiedTransientSectionWriterTest {
                 null,
                 1.0);
         DetectionReportContext context = new DetectionReportContext(
-                new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, false, 12, 1.0f),
+                new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, 12, 1.0f),
                 exportDirectory,
                 Collections.emptyList(),
                 null,
@@ -184,7 +184,7 @@ public class UnclassifiedTransientSectionWriterTest {
                                  ReportInclusion inclusion) throws Exception {
         short[][] medianStack = new short[40][40];
         DetectionReportContext context = new DetectionReportContext(
-                new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, false, 12, 1.0f),
+                new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, 12, 1.0f),
                 temporaryFolder.newFolder(), Collections.emptyList(), null, new DetectionConfig(), null, medianStack,
                 null, null, null, null, Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(),
                 Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
@@ -213,7 +213,7 @@ public class UnclassifiedTransientSectionWriterTest {
         }
         DetectedObject flash = detection(60, 50, 1);
         DetectionReportContext context = new DetectionReportContext(
-                new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, false, 12, 1.0f),
+                new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, 12, 1.0f),
                 exportDirectory, rawFrames, null, new DetectionConfig(), null, rawFrames.get(0), null, null, null, null,
                 Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(),
                 Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
@@ -256,7 +256,7 @@ public class UnclassifiedTransientSectionWriterTest {
             File exportDirectory = temporaryFolder.newFolder();
             short[][] pixels = new short[40][40];
             DetectionReportContext context = new DetectionReportContext(
-                    new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, false, 12, 1.0f),
+                    new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, 12, 1.0f),
                     exportDirectory, Collections.singletonList(pixels), null, new DetectionConfig(), null, pixels, null, null, null, null,
                     Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(),
                     Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());

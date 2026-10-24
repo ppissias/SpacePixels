@@ -1,5 +1,13 @@
 # SpacePixels Release Notes
 
+## 2026.10-04
+
+Not released yet.
+
+### Removed
+
+- **The AI report sections.** Codex's **Signal Weave**, Claude's **The Night, Retold** and the **Include AI Creative Report Sections** setting are gone. A saved visualization preferences file that still holds the setting loads as before; the next save drops it.
+
 ## 2026.10-03
 
 This release searches each session only where every frame has image data, sets hot pixels and dust aside before tracking, and builds a better star mask on frames with a sky gradient. It also makes SpacePixels safer with your files and settings. Detection engine: **JTransient 1.0.4**.

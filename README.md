@@ -232,9 +232,6 @@ The standard pipeline exports an HTML session report plus PNG and GIF assets. De
 - Interactive unclassified-transient map with time-colored source footprints and markers, metadata, and a zoomed inspection view that animates the detection frame and the two nearest quality-checked frames on either side
 - Variable-star photometry (when enabled): readiness verdict with its reasons, checks and star/frame funnels, noise model, per-frame diagnostics, a candidate table with "Identify all in VSX", candidate light curves, CSV exports
 - Collapsed diagnostics: astrometric context, frame quality control and rejected frames, the detection configuration (values that differ from the defaults highlighted, exported as `detection_config.json`), star mask, dither and drift, extraction, star removal and track linking
-- Optional AI perspective sections: Codex's "Signal Weave" and Claude's "The Night, Retold" (a timeline of the session and a short account of it)
-
-The AI creative sections are controlled by a session-only checkbox in `Detection Settings -> Report Visualization -> Optional Report Sections`. They are off by default and are not persisted with the saved detection profile.
 
 
 ## Command-line utilities

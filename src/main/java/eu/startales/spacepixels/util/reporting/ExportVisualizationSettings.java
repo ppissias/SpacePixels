@@ -16,7 +16,7 @@ import eu.startales.spacepixels.config.VariableStarReportOptions;
  * Immutable snapshot of the visualization settings used while rendering report images and animations.
  */
 public final class ExportVisualizationSettings {
-    private static final ExportVisualizationSettings DEFAULTS = new ExportVisualizationSettings(0.5, 5.0, 300, 200, 200, false, 15, 2.0f);
+    private static final ExportVisualizationSettings DEFAULTS = new ExportVisualizationSettings(0.5, 5.0, 300, 200, 200, 15, 2.0f);
 
     /** Returns built-in rendering defaults independently of mutable desktop preferences. */
     public static ExportVisualizationSettings defaults() {
@@ -28,7 +28,6 @@ public final class ExportVisualizationSettings {
     private final int gifBlinkSpeedMs;
     private final int trackCropPadding;
     private final int trackObjectCentricCropSize;
-    private final boolean includeAiCreativeReportSections;
     private final int targetCircleRadius;
     private final float targetCircleStrokeWidth;
     private final VariableStarReportOptions variableStarReportOptions;
@@ -38,23 +37,20 @@ public final class ExportVisualizationSettings {
                                        int gifBlinkSpeedMs,
                                        int trackCropPadding,
                                        int trackObjectCentricCropSize,
-                                       boolean includeAiCreativeReportSections,
                                        int targetCircleRadius,
                                        float targetCircleStrokeWidth) {
         this(autoStretchBlackSigma, autoStretchWhiteSigma, gifBlinkSpeedMs, trackCropPadding,
-                trackObjectCentricCropSize, includeAiCreativeReportSections, targetCircleRadius,
-                targetCircleStrokeWidth, VariableStarReportOptions.DEFAULT);
+                trackObjectCentricCropSize, targetCircleRadius, targetCircleStrokeWidth, VariableStarReportOptions.DEFAULT);
     }
 
     public ExportVisualizationSettings(double autoStretchBlackSigma, double autoStretchWhiteSigma, int gifBlinkSpeedMs,
-                                       int trackCropPadding, int trackObjectCentricCropSize, boolean includeAiCreativeReportSections,
+                                       int trackCropPadding, int trackObjectCentricCropSize,
                                        int targetCircleRadius, float targetCircleStrokeWidth, VariableStarReportOptions options) {
         this.autoStretchBlackSigma = autoStretchBlackSigma;
         this.autoStretchWhiteSigma = autoStretchWhiteSigma;
         this.gifBlinkSpeedMs = gifBlinkSpeedMs;
         this.trackCropPadding = trackCropPadding;
         this.trackObjectCentricCropSize = trackObjectCentricCropSize;
-        this.includeAiCreativeReportSections = includeAiCreativeReportSections;
         this.targetCircleRadius = targetCircleRadius;
         this.targetCircleStrokeWidth = targetCircleStrokeWidth;
         this.variableStarReportOptions = java.util.Objects.requireNonNull(options, "options");
@@ -65,8 +61,7 @@ public final class ExportVisualizationSettings {
     /** Returns an independent immutable snapshot with the supplied variable-star presentation choices. */
     public ExportVisualizationSettings withVariableStarReportOptions(VariableStarReportOptions options) {
         return new ExportVisualizationSettings(autoStretchBlackSigma, autoStretchWhiteSigma, gifBlinkSpeedMs,
-                trackCropPadding, trackObjectCentricCropSize, includeAiCreativeReportSections, targetCircleRadius,
-                targetCircleStrokeWidth, options);
+                trackCropPadding, trackObjectCentricCropSize, targetCircleRadius, targetCircleStrokeWidth, options);
     }
 
     public double getAutoStretchBlackSigma() {
@@ -87,10 +82,6 @@ public final class ExportVisualizationSettings {
 
     public int getTrackObjectCentricCropSize() {
         return trackObjectCentricCropSize;
-    }
-
-    public boolean isIncludeAiCreativeReportSections() {
-        return includeAiCreativeReportSections;
     }
 
     public int getTargetCircleRadius() {

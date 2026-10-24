@@ -62,52 +62,48 @@ public class ReportExportConsistencyTest {
                 .variableStarAnalysis(analysis)
                 .build();
         var config = new DetectionConfig(); config.enableVariableStarDetection = true; config.enableSlowMoverDetection = false;
-        boolean creative = DetectionReportGenerator.includeAiCreativeReportSections;
         String measurements = new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(analysis);
-        try {
-            DetectionReportGenerator.includeAiCreativeReportSections = true;
-            File included = temporary.newFolder("included");
-            DetectionReportGenerator.exportTrackVisualizations(result, frames, files, included, config, null);
-            String html = Files.readString(new File(included, "detection_report.html").toPath());
-            assertTrue(html.contains("mixed filters")); assertTrue(html.contains("photometry-error-bar"));
-            assertTrue(html.contains("loading='lazy'"));
-            Set<String> ids = new HashSet<>();
-            var matcher = Pattern.compile("(?<![\\w-])id=['\"]([^'\"]+)['\"]").matcher(html);
-            while (matcher.find()) assertTrue("Duplicate id: " + matcher.group(1), ids.add(matcher.group(1)));
-            matcher = Pattern.compile("href=['\"]#([^'\"]+)['\"]").matcher(html);
-            while (matcher.find()) assertTrue("Missing target: " + matcher.group(1), ids.contains(matcher.group(1)));
-            JsonObject data = JsonParser.parseString(Files.readString(new File(included, "report-data.json").toPath())).getAsJsonObject();
-            for (var finding : data.getAsJsonArray("findings")) assertTrue(ids.contains(finding.getAsJsonObject().get("anchor").getAsString()));
-            assertTrue(Files.readString(new File(included, "photometry_stars.csv").toPath()).contains(",candidate_label,ra_deg,dec_deg,vsx_matches,nearest_vsx_arcsec"));
-            assertTrue(new File(included, "moving_track_1_star_centric.gif.poster.png").isFile());
-            File excluded = temporary.newFolder("excluded");
-            DetectionReportGenerator.exportTrackVisualizations(result, frames, files, excluded, config, null, new ReportInclusion(true, false, false, false, false, false, false));
-            html = Files.readString(new File(excluded, "detection_report.html").toPath());
-            assertFalse(html.contains("V1 (0.60 mag)")); assertFalse(html.contains("<section id='variables'>"));
-            assertFalse(Files.readString(new File(excluded, "report-data.json").toPath()).contains("Variable-star candidate"));
-            File variablesOnly = temporary.newFolder("variables-only");
-            var noTracks = PipelineResult.builder()
-                    .tracks(List.of())
-                    .telemetry(telemetry)
-                    .masterStackData(frames.get(0))
-                    .masterStars(List.of())
-                    .slowMoverCandidates(List.of())
-                    .anomalies(List.of())
-                    .allTransients(List.of())
-                    .unclassifiedTransients(List.of())
-                    .residualTransientAnalysis(ResidualTransientAnalysis.empty())
-                    .driftPoints(List.of())
-                    .maximumStackData(frames.get(0))
-                    .variableStarAnalysis(analysis)
-                    .build();
-            DetectionReportGenerator.exportTrackVisualizations(noTracks, frames, files, variablesOnly, config, null);
-            html = Files.readString(new File(variablesOnly, "detection_report.html").toPath());
-            assertTrue(html.contains("Map of All Detections"));
-            assertTrue(html.contains("data-report-category='V'"));
-            assertTrue(html.contains("href='#variable-v1'"));
-            assertTrue(new File(variablesOnly, "global_track_map.png").isFile());
-            assertEquals(measurements, new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(analysis));
-        } finally { DetectionReportGenerator.includeAiCreativeReportSections = creative; }
+        File included = temporary.newFolder("included");
+        DetectionReportGenerator.exportTrackVisualizations(result, frames, files, included, config, null);
+        String html = Files.readString(new File(included, "detection_report.html").toPath());
+        assertTrue(html.contains("mixed filters")); assertTrue(html.contains("photometry-error-bar"));
+        assertTrue(html.contains("loading='lazy'"));
+        Set<String> ids = new HashSet<>();
+        var matcher = Pattern.compile("(?<![\\w-])id=['\"]([^'\"]+)['\"]").matcher(html);
+        while (matcher.find()) assertTrue("Duplicate id: " + matcher.group(1), ids.add(matcher.group(1)));
+        matcher = Pattern.compile("href=['\"]#([^'\"]+)['\"]").matcher(html);
+        while (matcher.find()) assertTrue("Missing target: " + matcher.group(1), ids.contains(matcher.group(1)));
+        JsonObject data = JsonParser.parseString(Files.readString(new File(included, "report-data.json").toPath())).getAsJsonObject();
+        for (var finding : data.getAsJsonArray("findings")) assertTrue(ids.contains(finding.getAsJsonObject().get("anchor").getAsString()));
+        assertTrue(Files.readString(new File(included, "photometry_stars.csv").toPath()).contains(",candidate_label,ra_deg,dec_deg,vsx_matches,nearest_vsx_arcsec"));
+        assertTrue(new File(included, "moving_track_1_star_centric.gif.poster.png").isFile());
+        File excluded = temporary.newFolder("excluded");
+        DetectionReportGenerator.exportTrackVisualizations(result, frames, files, excluded, config, null, new ReportInclusion(true, false, false, false, false, false, false));
+        html = Files.readString(new File(excluded, "detection_report.html").toPath());
+        assertFalse(html.contains("V1 (0.60 mag)")); assertFalse(html.contains("<section id='variables'>"));
+        assertFalse(Files.readString(new File(excluded, "report-data.json").toPath()).contains("Variable-star candidate"));
+        File variablesOnly = temporary.newFolder("variables-only");
+        var noTracks = PipelineResult.builder()
+                .tracks(List.of())
+                .telemetry(telemetry)
+                .masterStackData(frames.get(0))
+                .masterStars(List.of())
+                .slowMoverCandidates(List.of())
+                .anomalies(List.of())
+                .allTransients(List.of())
+                .unclassifiedTransients(List.of())
+                .residualTransientAnalysis(ResidualTransientAnalysis.empty())
+                .driftPoints(List.of())
+                .maximumStackData(frames.get(0))
+                .variableStarAnalysis(analysis)
+                .build();
+        DetectionReportGenerator.exportTrackVisualizations(noTracks, frames, files, variablesOnly, config, null);
+        html = Files.readString(new File(variablesOnly, "detection_report.html").toPath());
+        assertTrue(html.contains("Map of All Detections"));
+        assertTrue(html.contains("data-report-category='V'"));
+        assertTrue(html.contains("href='#variable-v1'"));
+        assertTrue(new File(variablesOnly, "global_track_map.png").isFile());
+        assertEquals(measurements, new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(analysis));
     }
     @Test public void localRescueAndCommonMotionCanBeOmittedIndependentlyWithoutGeneratingTheirAssets() throws Exception {
         FitsFileInformation[] files = new FitsFileInformation[3];

@@ -135,7 +135,7 @@ Blink is the exception: loading the frames is the job, and the blink window then
   - residual-analysis and local-rescue switches;
   - variable-star switch;
   - Reject Camera-Fixed Sources;
-  - report stretch black and white points, GIF speed and the optional AI sections;
+  - report stretch black and white points and GIF speed;
   - the frame-rejection **Strictness** choice.
 - **Expert** sections start with `createExpertSectionHeader`. They are shown only while "Show expert settings" is on, but search and "Show only unsaved changes" always find them. Each page says how many of its expert settings are hidden and how many of those are changed.
 - **Hidden** settings have no row. They stay in `DetectionConfig` and in the profile, keep their loaded values on Apply, and are reset by Load Defaults and Revert. Do not add rows for them without asking the maintainer.

@@ -185,7 +185,7 @@ public class PhotometryReportSectionWriterTest {
 
     private static DetectionReportContext context(DetectionConfig config, List<short[][]> rawFrames, File exportDir, short[][] masterStack) {
         return new DetectionReportContext(
-                new ExportVisualizationSettings(3.0, 10.0, 100, 10, 100, false, 12, 1.0f),
+                new ExportVisualizationSettings(3.0, 10.0, 100, 10, 100, 12, 1.0f),
                 exportDir,
                 rawFrames,
                 null,

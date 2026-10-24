@@ -250,7 +250,6 @@ Supporting groups:
   - `PhotometrySvgChart`
   - `TrackCropGeometry`
   - `GifSequenceWriter`
-  - `CreativeTributeRenderer`
 - astrometry and lookup:
   - `DetectionReportAstrometry`
   - `AstrometryContextFactory`

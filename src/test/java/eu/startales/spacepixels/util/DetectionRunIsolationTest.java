@@ -32,9 +32,9 @@ public class DetectionRunIsolationTest {
         var continueFirst = new java.util.concurrent.CountDownLatch(1);
         var worker = java.util.concurrent.Executors.newSingleThreadExecutor();
         try {
-            var firstVisual = new ExportVisualizationSettings(0.8, 4.2, 170, 21, 80, false, 9, 1.5f,
+            var firstVisual = new ExportVisualizationSettings(0.8, 4.2, 170, 21, 80, 9, 1.5f,
                     new VariableStarReportOptions(13, VariableStarReportOptions.SortOrder.SIGNIFICANCE));
-            var secondVisual = new ExportVisualizationSettings(1.2, 7, 430, 51, 110, false, 17, 2.5f);
+            var secondVisual = new ExportVisualizationSettings(1.2, 7, 430, 51, 110, 17, 2.5f);
             var firstOptions = new DetectionRunOptions("500", "37.5", "23.5", firstVisual, 17);
             var secondOptions = new DetectionRunOptions("J95", "-24", "-70", secondVisual, 29);
             AtomicBoolean changed = new AtomicBoolean();

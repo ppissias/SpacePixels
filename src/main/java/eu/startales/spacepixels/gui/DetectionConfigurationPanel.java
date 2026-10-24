@@ -121,7 +121,6 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private JSpinner spinStreakScale, spinStreakCentroidRad, spinPointBoxRad, spinBoxPad;
     private JSpinner spinAutoBlackSigma, spinAutoWhiteSigma, spinGifBlinkSpeed, spinCropPadding;
-    private JCheckBox chkIncludeAiCreativeReportSections;
 
     /** Client property marking a section header label on a settings page. */
     static final String SECTION_HEADER = "spacepixels.sectionHeader";
@@ -1134,13 +1133,6 @@ public class DetectionConfigurationPanel extends JPanel {
                 false, Integer.class, () -> DetectionReportGenerator.gifBlinkSpeedMs, value -> DetectionReportGenerator.gifBlinkSpeedMs = value),
                 50, 5000, 10);
 
-        panel.add(Box.createVerticalStrut(10));
-        panel.add(createSectionHeader("Optional Report Sections"));
-        chkIncludeAiCreativeReportSections = addApplicationCheckbox(panel, visualizationBindings, new ApplicationSetting<>(
-                "includeAiCreativeReportSections", "Include AI Creative Report Sections", "",
-                "These optional reporting sections gave AI agents freedom to visualize the detection data in their own way. You can see the results by enabling them.",
-                false, Boolean.class, () -> DetectionReportGenerator.includeAiCreativeReportSections,
-                value -> DetectionReportGenerator.includeAiCreativeReportSections = value));
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Annotations And Cropping"));
@@ -1387,16 +1379,6 @@ public class DetectionConfigurationPanel extends JPanel {
         JSpinner input = createSpinner(intSpinnerModel(setting.read(), min, max, step));
         addApplicationBinding(parent, bindings, setting, input, () -> ((Number) input.getValue()).intValue(),
                 value -> setSpinnerValueClamped(input, value.intValue()));
-        return input;
-    }
-
-    /** Binds a presentation toggle to its application-owned value. */
-    private JCheckBox addApplicationCheckbox(JPanel parent, List<ApplicationSettingBinding<?>> bindings,
-            ApplicationSetting<Boolean> setting) {
-        JCheckBox input = new JCheckBox();
-        input.setSelected(setting.read());
-        UiStyle.inputWidth(input, 80);
-        addApplicationBinding(parent, bindings, setting, input, input::isSelected, input::setSelected);
         return input;
     }
 

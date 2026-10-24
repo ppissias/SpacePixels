@@ -106,7 +106,7 @@ public class VariableStarMapWriterTest {
 
     private static String render(File dir, short[][] stack, VariableStarAnalysis analysis, List<StarLightCurve> candidates) throws Exception {
         DetectionReportContext context = new DetectionReportContext(
-                new ExportVisualizationSettings(3, 10, 100, 10, 100, false, 12, 1), dir, List.of(), null,
+                new ExportVisualizationSettings(3, 10, 100, 10, 100, 12, 1), dir, List.of(), null,
                 new DetectionConfig(), null, stack, null, null, null, null, List.of(), List.of(), null,
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
         StringWriter output = new StringWriter();
