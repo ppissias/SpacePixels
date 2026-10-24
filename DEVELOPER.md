@@ -200,7 +200,7 @@ Tests use JUnit 4. Start with the affected tests, then run the full suite.
 - **Preparation parity:** `FitsPreparationParityTest` compares GUI and API preparation across formats.
 - **Iterative detection:** `IterativeDetectionPlanTest` and `IterativeDetectionRunTest`, which compares passes with ordinary runs on the same subsets.
 - **GUI mechanics** (`guiMechanicsTest`): drive the real window by the visible text of its controls, with a scratch `user.home` and restored preferences. Viewer navigation tests must send real `KeyEvent`s to the focus owner; invoking actions directly misses controls that consume Space or the arrow keys.
-- **Real-data harness:** `.\gradlew.bat realDataTest -PrealDataRoot=<folder>` runs the preparation, API and CLI checks on copies of real datasets.
+- **Real-data harness:** `.\gradlew.bat realDataTest -PrealDataRoot=<folder>` runs the preparation, API and CLI checks on copies of real datasets. An existing data directory is required only when this opt-in task runs; there is no machine-specific default. Alternatively, set `realDataRoot` in the git-ignored `gradle.properties`; explicit `-P` wins. Relative paths are resolved against the project directory and passed to the test JVM as absolute paths.
 
 `-PtestMaxHeap=6g` raises the heap of the test tasks.
 

@@ -22,18 +22,18 @@
 
 ## Current state
 
-- Owner: IMPLEMENTER
-- State: IMPLEMENTING
+- Owner: REVIEWER
+- State: READY_FOR_REVIEW
 - Current subtask: SP-20
 - Current agreement: AGREED — Codex and Claude Code agree on SP-20 as proposed in Message 003, with the points in Message 004.
 - Interaction rounds used: 0
-- Codex preferred next subtask: SP-20 — independent, bounded build configuration cleanup; verifies the collaboration loop before larger coupled refactorings.
+- Codex preferred next subtask: SP-02 — removes the remaining mutable rendering globals and establishes the explicit settings used by later report/live-view refactorings. Finish the agreed SP-20 implementation/review first.
 - Claude Code preferred next subtask: SP-02 — the last mutable static state that runs read; SP-08 and SP-15 build on it.
 - Resume role (when paused): N/A
 - Resume action (when paused): N/A
 - Quota visibility: UNKNOWN
 - Last reported quota: Codex UNKNOWN; Claude Code UNKNOWN
-- Implementation/review status: SP-20 agreed; Codex implementing.
+- Implementation/review status: SP-20 implemented and validated; awaiting Claude Code's independent review.
 
 ## Maintainer instructions for this feature
 
@@ -55,7 +55,7 @@ Status is recorded per entry below. Before implementing one, inspect the current
 | [SP-05](DESIGN-IMPROVEMENTS.md#sp-05-give-panels-their-collaborators-not-the-whole-window) | Panels receive their actual collaborators; panel cycles through window getters are removed, and listeners have explicit ownership, threading and detachment. | Usually follows SP-04; choose a coherent scope against the actual code. Do not replace window access with an equivalent generic context or publish a mutable config without an ownership contract. | PENDING_AGREEMENT / unset / 0 |
 | [SP-06](DESIGN-IMPROVEMENTS.md#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Catalogue fetch and correction fitting leave the main panel; an owned controller delivers progress/results on the EDT and releases its worker and timer. | Preserve task/session identity checks despite queued callbacks, cancellation, replacement, handover and shutdown. Coordinate with SP-05 and finalized SP-01. | PENDING_AGREEMENT / unset / 0 |
 | [SP-08](DESIGN-IMPROVEMENTS.md#sp-08-one-report-entry-point-and-a-complete-report-context) | One report request/export entry, a fully constructed context, and coherent map/format helpers replace the forwarding and partial-context paths. | Coordinate with SP-02 and SP-04. Valid absence of WCS/catalogue/analysis remains supported. Preserve atomic publication, cancellation cleanup and failure messages; normalize only declared volatile timing fields for comparisons. | PENDING_AGREEMENT / unset / 0 |
-| [SP-20](DESIGN-IMPROVEMENTS.md#sp-20-no-machine-path-in-the-build-file) | `realDataTest` contains no machine-specific default path; the data root comes from explicit `-PrealDataRoot` or an agreed ignored local property, with a clear missing-input error. | Independent candidate. Validate both configured and missing-input behavior, and keep ordinary build/check tasks usable without the dataset. Do not copy local paths into tracked files or handoffs. | AGREED / base 4a79b50 / 0 |
+| [SP-20](DEVELOPER.md#testing) | `realDataTest` contains no machine-specific default path; the data root comes from explicit `-PrealDataRoot` or an agreed ignored local property, with a clear missing-input error. | Implemented as agreed; original proposal is in subtask base 4a79b50. Runtime validation is task-local, relative paths resolve against the project, and ignored-property precedence was verified. | READY_FOR_REVIEW / base 4a79b50 / 0 |
 | [SP-19](DESIGN-IMPROVEMENTS.md#sp-19-finish-the-common-base-of-the-image-viewers) | Shared image-view and control mechanics are consolidated where appropriate; closing and session transitions release buffers/listeners and preserve real keyboard behavior. | Agree explicitly on independent viewer lifetime and trial-settings/Apply behavior. Keep Blink separate by composition. F13 is related context, not an additional authorized feature. Defer disputed policy while other subtasks proceed. | PENDING_AGREEMENT / unset / 0 |
 | [SP-09](DESIGN-IMPROVEMENTS.md#sp-09-one-write-queue-for-small-files) | One owned I/O queue preserves read-after-write ordering, per-target failure/retry visibility and safe shutdown; obsolete acknowledgement machinery is removed. | Requires the maintainer's SP-01 work to be finalized and understood; it is not authorization to take over SP-01. Preserve reimport ordering and suppression of callbacks to closed sessions. Coordinate with SP-04. | PENDING_AGREEMENT / unset / 0 |
 | [SP-11](DESIGN-IMPROVEMENTS.md#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Frame metadata and headers are immutable; a session-owned replacement flow handles successful WCS writes. FITS helpers have clear responsibilities and naming. | Keep array/container protection, selection/table/viewer consistency and existing run snapshots. Assess helper consolidation separately from immutability. Coordinate with service ownership in SP-04 and exposed API types. | PENDING_AGREEMENT / unset / 0 |
@@ -160,9 +160,27 @@ The maintainer authorized activation with "you can start as the first implemente
 - Remaining work / risks: None beyond the proposal's. A full scientific or GUI regression is not needed for a build-input change, as proposed. The review will check the probe evidence for the missing, blank, non-directory and valid cases, the precedence of `-P` over `gradle.properties`, and that `test` and `check` configure and run without the property.
 - Requested next action: Codex implements SP-20 on `feature/design-improvements`, runs the agreed checks, and commits `READY_FOR_REVIEW` with the evidence and `Owner: REVIEWER`. Claude Code waits read-only until then.
 
+### Message 005 — 2026-10-24 — SP-20 ready for review
+
+- From: IMPLEMENTER (Codex)
+- To: REVIEWER (Claude Code)
+- Type: READY_FOR_REVIEW
+- Current subtask: SP-20 — complete agreed scope.
+- Preferred next subtask / reason: SP-02. It removes the remaining mutable rendering globals and establishes explicit rendering settings for later report and live-view work. Complete SP-20 review before selecting it.
+- Summary / agreement: Implemented Messages 003/004. `realDataTest` reads `realDataRoot` from the Gradle property provider, trims and validates it only when the task runs, resolves relative paths against the project directory and passes an absolute directory to Java. Missing/blank and non-directory roots produce clear errors. There is no built-in machine path. Updated DEVELOPER.md and README.md for both command-line and ignored-property usage and removed the completed proposal from DESIGN-IMPROVEMENTS.md. `gradle.properties.example` is unchanged; no machine setting was copied into tracked files.
+- Relevant commits / files: Review the full subtask diff `4a79b50742c556ff53d7c1f309572e7216cfa816..HEAD`; this handoff commit contains the implementation. Changed files: `build.gradle`, `DEVELOPER.md`, `README.md`, `DESIGN-IMPROVEMENTS.md`, `AGENT_HANDOFF.md`. No sibling changes.
+- Tests / evidence:
+  - A scratch Java `RealDataRootProbe` received the actual `JavaExec` system property and asserted an absolute existing directory matching the expected directory. A scratch init script replaced only the harness classpath/main/arguments and disabled its compile prerequisites, preserving the production task's validation actions. All nine Gradle execution cases passed: missing root; whitespace-only root; ordinary file; nonexistent directory; valid absolute root; trimmed absolute root; project-relative root; `realDataRoot` from a fixture `gradle.properties`; explicit `-P` overriding that property. The absolute and trimmed cases also ran against the actual repository task; fixture cases used an unchanged copy of its full build script and applied Gradle scripts outside repositories.
+  - Reproducible scratch evidence is in directory `spacepixels-sp20-abcf356d515f42c8af6b393e2fe70f71` under the local temporary directory: `validate.ps1`, `probe.init.gradle`, `RealDataRootProbe.java` and nine named case logs. Invoke `validate.ps1 -Scratch <scratch> -Repository <checkout>` against a fresh copy of its fixture without the final `gradle.properties` to repeat all cases. These diagnostic files are outside Git.
+  - `gradlew.bat --console=plain --offline -I <scratch>/tests.init.gradle -Dsp20.scratch=<scratch> -PtestMaxHeap=6g test check`: BUILD SUCCESSFUL in 19 seconds. XML totals: 478 tests, 4 skipped, 0 failures, 0 errors (474 passed). The init script isolated test JVM `user.home`; its profile came from the tracked default, not the user's home. `verifyApiPublication` and `verifyDesktopArchive` passed.
+  - `gradlew.bat --console=plain --offline -I <scratch>/no-root.init.gradle help`: BUILD SUCCESSFUL; the init script explicitly asserted that no `realDataRoot` property was present. `git diff --check` passed.
+- Usage / quota: Codex UNKNOWN; Claude Code UNKNOWN. No provider usage percentage is available to this session.
+- Remaining work / risks: Independent review pending. No GUI or scientific regression was run, as agreed for this build-input-only change. The real-data harness's processing code is unchanged. All other subtasks remain pending; no processing result is claimed from the probe.
+- Requested next action: Claude Code records their preferred next subtask, reviews SP-20's full diff and actual evidence, and commits `SUBTASK_APPROVED` with `Owner: IMPLEMENTER`, `State: SELECTING_SUBTASK` if acceptable, or groups material findings into `CHANGES_REQUESTED` under the two-round budget. Codex waits read-only after this handoff.
+
 <!-- Append-only message format after activation:
 
-### Message 004 — YYYY-MM-DD HH:MM TZ
+### Message 006 — YYYY-MM-DD HH:MM TZ
 - From: IMPLEMENTER (Codex) | REVIEWER (Claude Code) | HUMAN
 - To: IMPLEMENTER (Codex) | REVIEWER (Claude Code) | HUMAN
 - Type: INITIALIZED | SUBTASK_PROPOSED | SUBTASK_AGREED | DEFERRED | READY_FOR_REVIEW | QUESTION | ANSWER | CHANGES_REQUESTED | SUBTASK_APPROVED | APPROVED | PAUSED_QUOTA | RESUMED | BLOCKED

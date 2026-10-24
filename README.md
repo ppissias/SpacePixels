@@ -301,7 +301,7 @@ This utility injects synthetic moving stars into a FITS sequence for testing and
 ## Testing
 
 - `gradlew test` runs the unit tests. `-PtestMaxHeap=6g` gives the test JVM a larger heap for the opt-in real-data diagnostics.
-- `gradlew realDataTest -PrealDataRoot=<folder>` runs the opt-in real-data integration tests against local datasets outside the repository.
+- `gradlew realDataTest -PrealDataRoot=<folder>` runs the opt-in real-data integration tests against local datasets outside the repository. This task requires an existing directory, supplied with `-PrealDataRoot` or `realDataRoot` in the git-ignored `gradle.properties` (`-P` takes precedence). Relative paths are resolved against the project directory; ordinary builds do not require this setting.
 - `AutoTunerRealDataDiagnosticsIT` prints the calibrated auto-tuner's report for one dataset without running the pipeline. It is skipped unless `SPACEPIXELS_TUNER_DATASET` points to an aligned 16-bit FITS folder (optionally `SPACEPIXELS_TUNER_PROFILE` for a base profile and `SPACEPIXELS_TUNER_PREPARE=1` to convert colour or float input first).
 
 ## Publishing
