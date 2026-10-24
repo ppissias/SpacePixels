@@ -10,6 +10,7 @@
 
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Pixel;
 import io.github.ppissias.jtransient.model.Track;
@@ -38,7 +39,7 @@ final class TrackVisualizationRenderer {
     private TrackVisualizationRenderer() {
     }
 
-    static BufferedImage createDisplayImage(short[][] imageData, ExportVisualizationSettings settings) {
+    static BufferedImage createDisplayImage(short[][] imageData, VisualizationSettings settings) {
         return DisplayImageRenderer.createDisplayImage(
                 imageData,
                 settings.getAutoStretchBlackSigma(),
@@ -58,7 +59,7 @@ final class TrackVisualizationRenderer {
         offerPreview(image, outputFile);
     }
 
-    static void saveAnimatedGif(List<BufferedImage> frames, File outputFile, ExportVisualizationSettings settings) throws IOException {
+    static void saveAnimatedGif(List<BufferedImage> frames, File outputFile, VisualizationSettings settings) throws IOException {
         GifSequenceWriter.saveAnimatedGif(frames, outputFile, settings.getGifBlinkSpeedMs());
         if (!frames.isEmpty()) {
             offerPreview(frames.get(0), outputFile);
@@ -107,7 +108,7 @@ final class TrackVisualizationRenderer {
                                                    int cy,
                                                    int cropWidth,
                                                    int cropHeight,
-                                                   ExportVisualizationSettings settings) {
+                                                   VisualizationSettings settings) {
         short[][] croppedData = robustEdgeAwareCrop(fullImage, cx, cy, cropWidth, cropHeight);
         return createDisplayImage(croppedData, settings);
     }
@@ -115,7 +116,7 @@ final class TrackVisualizationRenderer {
     static BufferedImage createStarCentricHighlightedFrame(short[][] rawImage,
                                                            TrackCropGeometry.CropBounds cropBounds,
                                                            DetectedObject highlightedPoint,
-                                                           ExportVisualizationSettings settings,
+                                                           VisualizationSettings settings,
                                                            Color highlightColor,
                                                            String pointLabel,
                                                            String frameLabel,
@@ -125,7 +126,7 @@ final class TrackVisualizationRenderer {
     }
 
     static BufferedImage createStarCentricHighlightedFrame(short[][] rawImage, TrackCropGeometry.CropBounds cropBounds,
-            DetectedObject highlightedPoint, ExportVisualizationSettings settings, Color highlightColor,
+            DetectedObject highlightedPoint, VisualizationSettings settings, Color highlightColor,
             String pointLabel, String frameLabel, boolean antiAlias, double[] levels) {
         short[][] crop = robustEdgeAwareCrop(rawImage, cropBounds.fixedCenterX, cropBounds.fixedCenterY, cropBounds.trackBoxWidth, cropBounds.trackBoxHeight);
         BufferedImage frameImage = levels == null ? createDisplayImage(crop, settings)
@@ -245,7 +246,7 @@ final class TrackVisualizationRenderer {
     private static void drawDetectionHighlight(Graphics2D g2d,
                                                int localX,
                                                int localY,
-                                               ExportVisualizationSettings settings,
+                                               VisualizationSettings settings,
                                                Color highlightColor) {
         g2d.setColor(highlightColor != null ? highlightColor : Color.WHITE);
         g2d.setStroke(new BasicStroke(settings.getTargetCircleStrokeWidth()));

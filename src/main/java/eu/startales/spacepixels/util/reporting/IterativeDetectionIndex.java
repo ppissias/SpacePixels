@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import com.google.gson.GsonBuilder;
 import eu.startales.spacepixels.util.IterativeDetectionPlan;
 import eu.startales.spacepixels.util.StagedFile;
@@ -20,7 +21,7 @@ public final class IterativeDetectionIndex {
                        Map<String, Integer> counts, String detail) {}
     public record Run(int schemaVersion, String sourceDirectory, String preparedDirectory,
                       IterativeDetectionPlan plan, String autoTuneProfile, int autoTuneSampleLimit,
-                      DetectionConfig config, ExportVisualizationSettings visualization, String outcome, List<Pass> passes) {}
+                      DetectionConfig config, VisualizationSettings visualization, String outcome, List<Pass> passes) {}
 
     public static void write(File directory, Run run) throws IOException {
         String json = new GsonBuilder().setPrettyPrinting().serializeNulls().create().toJson(run);

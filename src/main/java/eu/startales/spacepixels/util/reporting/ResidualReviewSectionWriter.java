@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Pixel;
 import io.github.ppissias.jtransient.model.Track;
@@ -471,7 +472,7 @@ final class ResidualReviewSectionWriter {
     }
 
     /** A colour copy of the stretched crop: drawing on the grayscale display image would turn every marker gray. */
-    private static BufferedImage croppedDisplay(short[][] image, int cx, int cy, ExportVisualizationSettings settings) {
+    private static BufferedImage croppedDisplay(short[][] image, int cx, int cy, VisualizationSettings settings) {
         short[][] crop = TrackVisualizationRenderer.robustEdgeAwareCrop(image, cx, cy, COMMON_MOTION_PANEL, COMMON_MOTION_PANEL);
         BufferedImage gray = TrackVisualizationRenderer.createDisplayImage(crop, settings);
         BufferedImage panel = new BufferedImage(gray.getWidth(), gray.getHeight(), BufferedImage.TYPE_INT_RGB);
@@ -850,7 +851,7 @@ final class ResidualReviewSectionWriter {
                                                             int cropWidth,
                                                             int cropHeight,
                                                             int startX,
-                                                            int startY, ExportVisualizationSettings settings) {
+                                                            int startY, VisualizationSettings settings) {
         short[][] croppedBackground = TrackVisualizationRenderer.robustEdgeAwareCrop(
                 backgroundData,
                 startX + (cropWidth / 2),

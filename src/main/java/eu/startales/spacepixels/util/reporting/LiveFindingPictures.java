@@ -9,7 +9,7 @@
  */
 package eu.startales.spacepixels.util.reporting;
 
-import eu.startales.spacepixels.config.VariableStarReportOptions;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.util.DisplayImageRenderer;
 import io.github.ppissias.jtransient.model.DetectedObject;
 
@@ -59,14 +59,11 @@ public final class LiveFindingPictures {
         }
     }
 
-    /** A crop of {@code image} around the spot with a ring, and the frame number when {@code label} is not null. */
-    public static BufferedImage crop(short[][] image, Spot spot, Color ring, String label) {
-        return crop(image, spot, ring, label, DetectionReportGenerator.captureExportSettings(
-                VariableStarReportOptions.DEFAULT));
-    }
-
-    /** Renders a crop using the run's captured stretch settings rather than live desktop defaults. */
-    public static BufferedImage crop(short[][] image, Spot spot, Color ring, String label, ExportVisualizationSettings settings) {
+    /**
+     * A crop of {@code image} around the spot with a ring, and the frame number when {@code label} is not null,
+     * stretched with the run's captured settings.
+     */
+    public static BufferedImage crop(short[][] image, Spot spot, Color ring, String label, VisualizationSettings settings) {
         int size = Math.min(MAX_CROP, Math.max(MIN_CROP, (int) Math.round(spot.radius() * 2) + PADDING));
         int centerX = (int) Math.round(spot.x());
         int centerY = (int) Math.round(spot.y());
@@ -149,14 +146,11 @@ public final class LiveFindingPictures {
         return (red << 16) | (green << 8) | blue;
     }
 
-    /** Crops of the first, a middle and the last spot of a track side by side, each in its own frame. */
-    public static BufferedImage strip(List<short[][]> frames, List<Spot> spots, Color ring) {
-        return strip(frames, spots, ring, DetectionReportGenerator.captureExportSettings(
-                eu.startales.spacepixels.config.VariableStarReportOptions.DEFAULT));
-    }
-
-    /** Uses one captured stretch for every frame in a moving-object preview strip. */
-    public static BufferedImage strip(List<short[][]> frames, List<Spot> spots, Color ring, ExportVisualizationSettings settings) {
+    /**
+     * Crops of the first, a middle and the last spot of a track side by side, each in its own frame, with one
+     * captured stretch for every frame.
+     */
+    public static BufferedImage strip(List<short[][]> frames, List<Spot> spots, Color ring, VisualizationSettings settings) {
         BufferedImage[] crops = new BufferedImage[spots.size()];
         int width = 0;
         int height = 0;

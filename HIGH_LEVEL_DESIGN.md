@@ -83,7 +83,8 @@ Owns:
 - `SpacePixelsAppConfigIO`
 - `SpacePixelsDetectionProfile`
 - `SpacePixelsDetectionProfileIO`
-- `SpacePixelsVisualizationPreferences`
+- `VisualizationSettings` (the immutable value of every rendering choice: display stretch, report animation and crops, detection markers, variable-star presentation; built-in defaults)
+- `SpacePixelsVisualizationPreferences` (the saved form of the visualization page's values)
 - `SpacePixelsVisualizationPreferencesIO`
 - `SpacePixelsSettingsFiles` (Save on the detection settings tab)
 - `SettingsStorage` (application-owned, ordered background preference writes and migration)
@@ -112,7 +113,7 @@ The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker
   - `MainApplicationPanel` gives each such task a sink from `ProcessingProgressDialog.previewSink()` (`DetectionTask.showingPreviews`, `IterativeDetectionTask.showingPreviews`). The task binds it to its thread with `util.RunPreviewScope`, as it binds cancellation.
   - The producers call `RunPreviewScope.offer(stageChange, maker)`. They are the loading loop of `StandardDetectionPipelineService` (each frame), the same service around the engine call (a caption-only "picture from loading" update, then the master stack) and `TrackVisualizationRenderer`'s PNG/GIF writers (report pictures; shape and mask diagrams are skipped). `IterativeDetectionPipelineService` clears the picture at each pass and before its Auto-Tune.
   - The sink answers `wantsPreview` before any picture is made: only while the view is shown, at most every 3 s, with stage changes at once. Without a scope (API, CLI, headless runs) no picture is made. A picture that cannot be made is skipped and never fails the run.
-  - `util.PreviewThumbnails` makes detached thumbnails, at most 420 px on the long side. A frame or stack is block-averaged and stretched with `DisplayImageRenderer`'s levels (the report's automatic stretch), taken from a sample of about 250,000 pixels; report pictures are scaled copies. The pipeline's pixels and the report are not changed.
+  - `util.PreviewThumbnails` makes detached thumbnails, at most 420 px on the long side. A frame or stack is block-averaged and stretched with `DisplayImageRenderer`'s levels (the report's automatic stretch, with the run's sigmas), taken from a sample of about 250,000 pixels; report pictures are scaled copies. The pipeline's pixels and the report are not changed.
   - The dialog keeps only the shown picture and at most the newest pending one, drops a finished job's late pictures by generation, wraps its status and caption text in a reserved two-line height that only grows during a job, uses `UiStyle` spacing and help colour, makes Hide/Show picture an `AccessibleControls` link, and saves the choice as the Java preference `progressDialog.liveView` (node `/eu/startales/spacepixels/gui`) through `SettingsStorage`.
   - During the engine call, `util.LiveFindings` is JTransient's `PipelineStageObserver`. `StandardDetectionPipelineService` creates it only when this thread has a sink (`LiveFindings.forCurrentRun`), so API, CLI and headless runs pass no observer. On the engine thread it only copies positions, frame numbers, counts and light-curve points, and only while the sink wants a picture; one daemon worker renders them. Per stage: the reference (median stack), slow-mover crops from the maximum stack, then for tracking the star mask over the reference followed by up to three moving objects (a strip of their first, middle and last frame), two streaks and the strongest anomalies; local-rescue candidates; and variable-star candidates beside their light curve. At most 8 slides per stage; each caption says "provisional" and gives the real counts so far, and a stage without findings says so. The pictures come from `util.reporting.LiveFindingPictures`, which crops and stretches as the report does. The frames are read where SpacePixels loaded them; the reference, maximum stack and mask by reference, since the engine documents them as final. The worker stops when the engine returns, before the report.
   - A `RunPreview` can carry several slides; the dialog shows them in turn every 3 s (stopped while the picture is hidden) until the next preview replaces them. `RunPreviewScope.labelled` puts "Pass n of m" before every caption of an iterative pass.
@@ -203,7 +204,6 @@ Important classes:
 - `FitsPixelConverter`
 - `FitsVisualizationRenderer`
 - `DisplayImageRenderer`
-- `RawImageAnnotator`
 - `WcsCoordinateTransformer`
 - `WcsSolutionResolver`
 - `XisfImageConverter`
@@ -232,7 +232,6 @@ Supporting groups:
   - `DetectionReportSummary`
   - `ReportData` (stable finding identities and JSON/CSV exports)
   - `AtomicReportFile`
-  - `ExportVisualizationSettings`
   - `DetectionReportDocumentWriter`
   - `ReportClientScriptWriter`
 - section writers:
@@ -329,6 +328,7 @@ Owns:
 - UI binding for JTransient `DetectionConfig`
 - `SpacePixelsDetectionProfile` load/save
 - `SpacePixelsVisualizationPreferences` load/save
+- the live `VisualizationSettings` (the visualization page and the variable-star report presentation), which each Detect and Detect Iteratively job captures when it is created; Preview Frame and Manual Transient Inspection read its marker sizes when they paint
 - current Auto-Tune candidate-frame limit, which each Detect and Auto-Tune job captures when it is created
 - the Overview page (`AutoTuneOverviewPanel`) and the page navigation (`SettingsNavigator`)
 - the saved value of every setting row (`SettingRow`) and of the Overview core settings, taken after loading and after each Save; changes are marked against it
@@ -346,7 +346,7 @@ Design notes:
 
 - detection fields and visualization fields are intentionally stored in separate JSON files even though the same panel edits both.
 - the settings spinners stay owned by `DetectionConfigurationPanel`; `AutoTuneOverviewPanel` only lays out the core ones and talks back through a small `Host` interface.
-- the visualization settings are still static runtime values, applied with each edit and read when the report is written; they are not part of the run's copy.
+- the visualization settings are one immutable `VisualizationSettings` value, replaced with each edit; a run keeps the value it captured, and no renderer reads a global preference.
 
 ### `AutoTuneOverviewPanel`
 
@@ -457,7 +457,6 @@ Report export facade.
 
 Responsibilities:
 
-- snapshot current visualization preferences into `ExportVisualizationSettings`
 - generate PNG/GIF assets
 - build global maps, masks, crops, shape maps, and diagnostic imagery
 - coordinate section writers
@@ -468,7 +467,7 @@ Responsibilities:
 - publish HTML, JSON and CSV text artifacts through `AtomicReportFile` (built on `StagedFile`), checking write errors before replacing final files
 - emit testable `report-lookups.js` and `report-interactions.js` resources; GIF exports include PNG posters for pause/reduced-motion controls
 
-`ReportData` describes report presentation; it never changes the JTransient result. `DetectionReportContext` loads its catalogue once per export. `ExportVisualizationSettings` applies throughout image rendering. Long moving/streak GIFs stream images one at a time. Motion/lookup calculations use exposure midpoint times, while observing-span duration remains a separate metric. Detection-quality rejections are shared by all inspection animations.
+`ReportData` describes report presentation; it never changes the JTransient result. `DetectionReportContext` loads its catalogue once per export. The run's `VisualizationSettings` applies throughout image rendering. Long moving/streak GIFs stream images one at a time. Motion/lookup calculations use exposure midpoint times, while observing-span duration remains a separate metric. Detection-quality rejections are shared by all inspection animations.
 
 The HTML places the results first. After the variable stars, a collapsed Likely Artifacts group holds the camera-fixed groups and then the common-motion groups, in pipeline order; local rescue candidates stay with the results. Diagnostics also starts collapsed, and links into a collapsed group open it. The HTML links maps to object cards, separates measured variable candidates from catalogue layers, and exposes navigation, filters and animation controls. Photometry exports append report labels and sky/catalogue identification columns. Lookup responses are validated before normalization; only successful responses are cached, refresh bypasses saved results, and save failures remain visible.
 
@@ -703,7 +702,7 @@ Common-motion filtering has its own switch and runs before local rescue and acti
 
 - `PhotometryReportSectionWriter` separates the cached in-report VSX lookup from **Research this star** browser links. Coordinate searches target general Gaia DR3 (`I/355/gaiadr3`, without the downloaded magnitude limit), unrestricted VizieR catalogues and SIMBAD. They need a plate solution but no saved catalogue or running proxy; no extra data is fetched or cached during export. Cards show the search radius, and a shared collapsible follow-up note distinguishes candidate confidence and positional associations from confirmed variability or novelty. Measurements, classifications and Known As values are unchanged by external searches.
 
-- `VariableStarReportOptions` stores the card limit (default 40) and presentation order in the SpacePixels profile, separately from JTransient configuration. GUI, API requests and batch profiles pass immutable choices through the application configuration into the export snapshot. `VariableStarPresentation` prepares one order/card selection while retaining the original engine-order V identities. Table/cards and report navigation use the chosen order; maps, comparison payloads, CSVs and live viewer overlays retain the same identities. Unknown catalogue periods sort after known ones within a tier. `ReportData` uses actual selected-card anchors and records the presentation options in JSON. No engine setting or global rendering default is introduced.
+- `VariableStarReportOptions` stores the card limit (default 40) and presentation order in the SpacePixels profile, separately from JTransient configuration. GUI, API requests and batch profiles pass immutable choices in the run's `VisualizationSettings`. `VariableStarPresentation` prepares one order/card selection while retaining the original engine-order V identities. Table/cards and report navigation use the chosen order; maps, comparison payloads, CSVs and live viewer overlays retain the same identities. Unknown catalogue periods sort after known ones within a tier. `ReportData` uses actual selected-card anchors and records the presentation options in JSON. No engine setting or global rendering default is introduced.
 
 ### Shared frame viewers
 
@@ -853,7 +852,6 @@ Accepted current debt:
 - `ImageProcessing` is still broad and stateful.
 - `DetectionConfigurationPanel` and `MainApplicationPanel` still combine Swing view logic and workflow control.
 - `DetectionReportGenerator` still contains substantial static rendering/helper behavior even though major sections have been split into writers.
-- Some visualization settings are static runtime values captured at report-export time.
 
 Preferred refactor direction:
 

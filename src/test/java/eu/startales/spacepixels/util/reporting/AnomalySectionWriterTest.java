@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.AnomalyDetection;
 import io.github.ppissias.jtransient.model.AnomalyType;
 import io.github.ppissias.jtransient.model.DetectedObject;
@@ -209,7 +210,8 @@ public class AnomalySectionWriterTest {
         }
         var astrometry = new DetectionReportAstrometry.Context(files, WcsSolutionResolver.resolveUncorrected(null, files),
                 new DetectionReportAstrometry.ObserverSite(0, 0, 0, "Test location"), null, null, START);
-        return new DetectionReportContext(new ExportVisualizationSettings(3, 10, 300, 90, 100, 12, 1),
+        return new DetectionReportContext(VisualizationSettings.defaults().withAutoStretchBlackSigma(3).withAutoStretchWhiteSigma(10).withTrackCropPadding(90)
+                .withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1),
                 temporary.newFolder(), frames, files, new DetectionConfig(), astrometry, frames.get(0), null,
                 new boolean[120][160], null, null, List.of(), List.of(), null, List.of(), List.of(),
                 List.of(anomaly), List.of(), List.of(), tracks);

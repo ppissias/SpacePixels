@@ -10,6 +10,7 @@
 package eu.startales.spacepixels.gui;
 
 import io.github.ppissias.jtransient.model.DetectedObject;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.util.DisplayImageRenderer;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.MasterReferenceAnalyzer;
@@ -93,13 +94,16 @@ final class StarMaskExplorerFrame extends JFrame {
     private SwingWorker<Object[], Void> worker;
     private boolean closed;
 
+    /** Shows the master stack with the display stretch of {@code visualization}. */
     StarMaskExplorerFrame(Window owner, String sessionName, JTransientEngine.MasterStackResult stackResult,
-                          DetectionConfig baseConfig, Settings initial, Consumer<Settings> apply) {
-        this(owner, sessionName, stackResult, baseConfig, initial, apply, StarMaskExplorerFrame::computeMask);
+                          DetectionConfig baseConfig, VisualizationSettings visualization, Settings initial,
+                          Consumer<Settings> apply) {
+        this(owner, sessionName, stackResult, baseConfig, visualization, initial, apply, StarMaskExplorerFrame::computeMask);
     }
 
     StarMaskExplorerFrame(Window owner, String sessionName, JTransientEngine.MasterStackResult stackResult,
-                          DetectionConfig baseConfig, Settings initial, Consumer<Settings> apply, ComputeMask computeMask) {
+                          DetectionConfig baseConfig, VisualizationSettings visualization, Settings initial,
+                          Consumer<Settings> apply, ComputeMask computeMask) {
         super("Star Mask Explorer · " + sessionName);
         AppIcon.apply(this);
         this.stack = stackResult.masterStack;
@@ -118,7 +122,8 @@ final class StarMaskExplorerFrame extends JFrame {
         view.setPlaceholder("Rendering the master stack…");
         view.setToolTipText("Scroll to zoom down to single pixels, drag to pan, double-click to switch between fit and 100 %.");
         // Full resolution: zooming in shows the real pixels of the master stack.
-        view.setImage(DisplayImageRenderer.createDisplayImage(stack));
+        view.setImage(DisplayImageRenderer.createDisplayImage(stack, visualization.getAutoStretchBlackSigma(),
+                visualization.getAutoStretchWhiteSigma()));
 
         setLayout(new BorderLayout());
         add(view, BorderLayout.CENTER);

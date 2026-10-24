@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.PixelEncoding;
 import io.github.ppissias.jtransient.engine.ImageFrame;
@@ -185,7 +186,8 @@ public class PhotometryReportSectionWriterTest {
 
     private static DetectionReportContext context(DetectionConfig config, List<short[][]> rawFrames, File exportDir, short[][] masterStack) {
         return new DetectionReportContext(
-                new ExportVisualizationSettings(3.0, 10.0, 100, 10, 100, 12, 1.0f),
+                VisualizationSettings.defaults().withAutoStretchBlackSigma(3.0).withAutoStretchWhiteSigma(10.0).withGifBlinkSpeedMs(100)
+                        .withTrackCropPadding(10).withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f),
                 exportDir,
                 rawFrames,
                 null,

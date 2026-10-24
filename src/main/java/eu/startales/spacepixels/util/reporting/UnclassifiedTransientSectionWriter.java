@@ -34,8 +34,6 @@ final class UnclassifiedTransientSectionWriter {
     private static final String FRAMES_DIR = "unclassified_frames";
     /** Frames shown before and after the detection frame in the cutout animation. */
     private static final int ANIMATION_FRAMES_EACH_SIDE = 2;
-    /** Upper bound of animated detections, so very busy sessions keep a moderate report size. */
-    static int maxAnimatedMarkers = 500;
 
     private UnclassifiedTransientSectionWriter() {
     }
@@ -348,6 +346,7 @@ final class UnclassifiedTransientSectionWriter {
     private static int writeFrameStrips(DetectionReportContext context, List<Marker> markers, int width, int height,
                                         Set<Integer> rejectedFrames)
             throws IOException {
+        int maxAnimatedMarkers = context.settings.getMaxAnimatedMarkers();
         if (context.rawFrames.isEmpty() || markers.isEmpty() || maxAnimatedMarkers <= 0) {
             return 0;
         }

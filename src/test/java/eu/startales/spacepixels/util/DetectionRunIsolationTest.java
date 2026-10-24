@@ -3,13 +3,13 @@ package eu.startales.spacepixels.util;
 import com.google.gson.JsonParser;
 import eu.startales.spacepixels.api.DefaultSpacePixelsPipelineApi;
 import eu.startales.spacepixels.api.SpacePixelsPipelineRequest;
+import eu.startales.spacepixels.api.SpacePixelsPipelineResult;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.config.DetectionRunOptions;
-import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -18,21 +18,22 @@ import java.nio.file.Files;
 import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.Assert.*;
 
-/** Exercises real pipeline/export boundaries while progress callbacks change application defaults. */
+/** Exercises real pipeline/export boundaries while runs overlap or callers edit their inputs mid-run. */
 public class DetectionRunIsolationTest {
     @Rule public TemporaryFolder folder = new TemporaryFolder();
 
-    /** An admitted request retains rendering and profile metadata while another request uses its own options. */
-    @Test public void apiRunsUseExplicitOptionsWithoutChangingRuntimeDefaults() throws Exception {
+    /** An admitted request retains rendering and profile metadata while another request runs with its own options. */
+    @Test public void overlappingApiRunsKeepTheirOwnOptions() throws Exception {
         File directory = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "api", 5).toFile();
-        var preferences = SpacePixelsVisualizationPreferences.captureCurrent();
         var admitted = new java.util.concurrent.CountDownLatch(1);
         var continueFirst = new java.util.concurrent.CountDownLatch(1);
         var worker = java.util.concurrent.Executors.newSingleThreadExecutor();
         try {
-            var firstVisual = new ExportVisualizationSettings(0.8, 4.2, 170, 21, 80, 9, 1.5f,
-                    new VariableStarReportOptions(13, VariableStarReportOptions.SortOrder.SIGNIFICANCE));
-            var secondVisual = new ExportVisualizationSettings(1.2, 7, 430, 51, 110, 17, 2.5f);
+            var firstVisual = VisualizationSettings.defaults().withAutoStretchBlackSigma(0.8).withAutoStretchWhiteSigma(4.2).withGifBlinkSpeedMs(170)
+                    .withTrackCropPadding(21).withTrackObjectCentricCropSize(80).withTargetCircleRadius(9).withTargetCircleStrokeWidth(1.5f)
+                    .withVariableStarReportOptions(new VariableStarReportOptions(13, VariableStarReportOptions.SortOrder.SIGNIFICANCE));
+            var secondVisual = VisualizationSettings.defaults().withAutoStretchBlackSigma(1.2).withAutoStretchWhiteSigma(7).withGifBlinkSpeedMs(430)
+                    .withTrackCropPadding(51).withTrackObjectCentricCropSize(110).withTargetCircleRadius(17).withTargetCircleStrokeWidth(2.5f);
             var firstOptions = new DetectionRunOptions("500", "37.5", "23.5", firstVisual, 17);
             var secondOptions = new DetectionRunOptions("J95", "-24", "-70", secondVisual, 29);
             AtomicBoolean changed = new AtomicBoolean();
@@ -40,8 +41,6 @@ public class DetectionRunIsolationTest {
                     .detectionConfig(SyntheticDatasetFactory.createSyntheticDetectionConfig()).runOptions(firstOptions)
                     .progressListener((percent, message) -> {
                         if (changed.compareAndSet(false, true)) {
-                            DisplayImageRenderer.autoStretchBlackSigma = 3;
-                            DisplayImageRenderer.autoStretchWhiteSigma = 12;
                             admitted.countDown();
                             await(continueFirst);
                         }
@@ -58,19 +57,23 @@ public class DetectionRunIsolationTest {
             assertEquals(17, firstProfile.get("autoTuneMaxCandidateFrames").getAsInt());
             assertEquals(29, secondProfile.get("autoTuneMaxCandidateFrames").getAsInt());
             assertEquals(13, firstProfile.get("variableStarMaxCandidateCards").getAsInt());
-            var expectedImage = DisplayImageRenderer.createDisplayImage(first.getPipelineResult().masterStackData, 0.8, 4.2);
-            var actualImage = javax.imageio.ImageIO.read(new File(first.getExportDirectory(), "master_stack.png"));
-            assertArrayEquals(expectedImage.getRGB(0, 0, expectedImage.getWidth(), expectedImage.getHeight(), null, 0, expectedImage.getWidth()),
-                    actualImage.getRGB(0, 0, actualImage.getWidth(), actualImage.getHeight(), null, 0, actualImage.getWidth()));
+            assertStretchedWith(first, 0.8, 4.2);
+            assertStretchedWith(second, 1.2, 7);
             assertEquals(VariableStarReportOptions.SortOrder.SIGNIFICANCE, firstRequest.getVariableStarReportOptions().sortOrder());
-            assertEquals(3, DisplayImageRenderer.autoStretchBlackSigma, 0);
-            assertEquals(12, DisplayImageRenderer.autoStretchWhiteSigma, 0);
-            assertEquals(0.5, SpacePixelsPipelineRequest.builder(directory).build().getRunOptions().visualization().getAutoStretchBlackSigma(), 0);
+            assertEquals(VisualizationSettings.defaults(), SpacePixelsPipelineRequest.builder(directory).build().getRunOptions().visualization());
         } finally {
             continueFirst.countDown();
             worker.shutdownNow();
-            preferences.applyToRuntime();
         }
+    }
+
+    /** The run's master stack picture uses the display stretch of the run's own settings. */
+    private static void assertStretchedWith(SpacePixelsPipelineResult run, double black, double white)
+            throws java.io.IOException {
+        var expected = DisplayImageRenderer.createDisplayImage(run.getPipelineResult().masterStackData, black, white);
+        var actual = javax.imageio.ImageIO.read(new File(run.getExportDirectory(), "master_stack.png"));
+        assertArrayEquals(expected.getRGB(0, 0, expected.getWidth(), expected.getHeight(), null, 0, expected.getWidth()),
+                actual.getRGB(0, 0, actual.getWidth(), actual.getHeight(), null, 0, actual.getWidth()));
     }
 
     /** Waits for a deterministic overlap boundary, failing rather than leaving a hung test worker. */

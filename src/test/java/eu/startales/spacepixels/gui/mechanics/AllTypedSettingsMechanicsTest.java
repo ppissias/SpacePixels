@@ -6,7 +6,6 @@ import eu.startales.spacepixels.config.DetectionSetting;
 import eu.startales.spacepixels.config.DetectionSettings;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
-import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -31,17 +30,6 @@ import static org.junit.Assert.*;
 
 /** Checks every registered control against saved profiles, hidden values, defaults, Revert and startup reload. */
 public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
-    private final SpacePixelsVisualizationPreferences originalVisualization = SpacePixelsVisualizationPreferences.captureCurrent();
-
-    /** Restores process-wide presentation defaults after the fixture has released its window. */
-    @Override protected void onTearDown() throws Exception {
-        try {
-            super.onTearDown();
-        } finally {
-            originalVisualization.applyToRuntime();
-        }
-    }
-
     /** All visible fields save their displayed values while hidden fields survive edits and restore correctly. */
     @Test(timeout = 180_000) public void allPagesSaveRevertLoadDefaultsAndReloadWithoutLosingHiddenFields() throws Exception {
         DetectionConfig seed = new DetectionConfig();

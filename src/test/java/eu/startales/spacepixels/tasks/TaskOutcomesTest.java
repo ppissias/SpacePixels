@@ -1,5 +1,7 @@
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.config.VariableStarReportOptions;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobCoordinator;
@@ -86,7 +88,7 @@ public class TaskOutcomesTest {
         AtomicBoolean asked = new AtomicBoolean();
         try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             DetectionTask task = new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig(),
-                    SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, null, summary -> {
+                    VisualizationSettings.defaults(), SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, null, summary -> {
                 asked.set(true);
                 assertTrue(summary.totalDetections >= 0);
                 return false;
@@ -103,19 +105,49 @@ public class TaskOutcomesTest {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "limit", 5);
         try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             var config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
-            DetectionTask first = new DetectionTask(processing, config, 19, null, summary -> true);
-            DetectionTask next = new DetectionTask(processing, config, 23, null, summary -> true);
+            DetectionTask first = new DetectionTask(processing, config, VisualizationSettings.defaults(), 19, null, summary -> true);
+            DetectionTask next = new DetectionTask(processing, config, VisualizationSettings.defaults(), 23, null, summary -> true);
             assertEquals(19, recordedAutoTuneLimit(outcomeOf(first)));
             assertEquals(23, recordedAutoTuneLimit(outcomeOf(next)));
         }
     }
 
+    /** A detection keeps the visualization settings it was created with: its report shows them, not the next job's. */
+    @Test
+    public void detectionKeepsTheVisualizationSettingsItWasCreatedWith() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "visualization", 5);
+        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
+            var config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
+            var edited = VisualizationSettings.defaults().withAutoStretchWhiteSigma(4.2).withVariableStarReportOptions(
+                    new VariableStarReportOptions(13, VariableStarReportOptions.SortOrder.SIGNIFICANCE));
+            DetectionTask first = new DetectionTask(processing, config, edited, 19, null, summary -> true);
+            DetectionTask next = new DetectionTask(processing, config, VisualizationSettings.defaults(), 19, null, summary -> true);
+            File firstReport = report(outcomeOf(first));
+            File nextReport = report(outcomeOf(next));
+            assertEquals(13, recordedProfile(firstReport).get("variableStarMaxCandidateCards").getAsInt());
+            assertEquals(VariableStarReportOptions.DEFAULT_MAX_CANDIDATE_CARDS,
+                    recordedProfile(nextReport).get("variableStarMaxCandidateCards").getAsInt());
+            assertFalse("the stretch of each run's master stack picture differs", java.util.Arrays.equals(
+                    java.nio.file.Files.readAllBytes(new File(firstReport.getParentFile(), "master_stack.png").toPath()),
+                    java.nio.file.Files.readAllBytes(new File(nextReport.getParentFile(), "master_stack.png").toPath())));
+        }
+    }
+
     /** The Auto-Tune frame limit that a completed detection wrote to its report's detection_config.json. */
     private static int recordedAutoTuneLimit(JobOutcome<File> outcome) throws Exception {
+        return recordedProfile(report(outcome)).get("autoTuneMaxCandidateFrames").getAsInt();
+    }
+
+    /** The report file of a completed detection. */
+    private static File report(JobOutcome<File> outcome) {
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Completed<?>);
-        File report = ((JobOutcome.Completed<File>) outcome).result();
+        return ((JobOutcome.Completed<File>) outcome).result();
+    }
+
+    /** The detection_config.json written beside {@code report}. */
+    private static com.google.gson.JsonObject recordedProfile(File report) throws Exception {
         String profile = java.nio.file.Files.readString(new File(report.getParentFile(), "detection_config.json").toPath());
-        return com.google.gson.JsonParser.parseString(profile).getAsJsonObject().get("autoTuneMaxCandidateFrames").getAsInt();
+        return com.google.gson.JsonParser.parseString(profile).getAsJsonObject();
     }
 
     /** Every independent iterative pass supplies its own subset and effective settings to the injected decision. */
@@ -125,7 +157,7 @@ public class TaskOutcomesTest {
         var config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
         var application = new eu.startales.spacepixels.config.AppConfig();
         var request = new eu.startales.spacepixels.util.IterativeDetectionRequest(sequence.toFile(), config, application,
-                eu.startales.spacepixels.util.reporting.DetectionReportGenerator.captureExportSettings(application.variableStarReportOptions),
+                VisualizationSettings.defaults(),
                 new eu.startales.spacepixels.util.IterativeDetectionPlan(5, 1, 6), null, 5, false, true, 6, null);
         List<Integer> subsets = new ArrayList<>();
         IterativeDetectionTask task = new IterativeDetectionTask(request, (summary, files, settings) -> {
@@ -188,7 +220,7 @@ public class TaskOutcomesTest {
     private static IterativeDetectionTask iterativeTask(File directory) {
         return new IterativeDetectionTask(new eu.startales.spacepixels.util.IterativeDetectionRequest(directory,
                 SyntheticDatasetFactory.createSyntheticDetectionConfig(), new eu.startales.spacepixels.config.AppConfig(),
-                eu.startales.spacepixels.util.reporting.ExportVisualizationSettings.defaults(),
+                VisualizationSettings.defaults(),
                 new eu.startales.spacepixels.util.IterativeDetectionPlan(5, 5, 0), null, 5, false, false, 0, null));
     }
 

@@ -1,12 +1,10 @@
 package eu.startales.spacepixels.config;
 
-import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
-import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import java.util.Objects;
 
 /** Immutable application options captured before processing; site strings retain the existing decimal/cardinal syntax. */
 public record DetectionRunOptions(String observatoryCode, String siteLatitude, String siteLongitude,
-        ExportVisualizationSettings visualization, int autoTuneMaxCandidateFrames) {
+        VisualizationSettings visualization, int autoTuneMaxCandidateFrames) {
     /** Normalizes absent site values and the existing tuning-limit minimum without reading preferences or globals. */
     public DetectionRunOptions {
         observatoryCode = Objects.requireNonNullElse(observatoryCode, "");
@@ -18,15 +16,18 @@ public record DetectionRunOptions(String observatoryCode, String siteLatitude, S
 
     /** Returns deterministic headless defaults with no configured observing site or user-home lookup. */
     public static DetectionRunOptions defaults() {
-        return new DetectionRunOptions("", "", "", ExportVisualizationSettings.defaults(),
+        return new DetectionRunOptions("", "", "", VisualizationSettings.defaults(),
                 SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES);
     }
 
-    /** Captures desktop/CLI preferences once at an admission boundary; subsequent work uses only these values. */
+    /**
+     * Captures the observing site of desktop/CLI preferences once at an admission boundary, with the built-in
+     * visualization settings ({@link #withVisualization} replaces them); subsequent work uses only these values.
+     */
     public static DetectionRunOptions capture(AppConfig application, int tuningLimit) {
         AppConfig snapshot = application == null ? new AppConfig() : application.copy();
         return new DetectionRunOptions(snapshot.observatoryCode, snapshot.siteLat, snapshot.siteLong,
-                DetectionReportGenerator.captureExportSettings(snapshot.variableStarReportOptions), tuningLimit);
+                VisualizationSettings.defaults(), tuningLimit);
     }
 
     /** Returns an independent site/config adapter, excluding solver credentials and private executable paths. */
@@ -35,12 +36,11 @@ public record DetectionRunOptions(String observatoryCode, String siteLatitude, S
         config.observatoryCode = observatoryCode;
         config.siteLat = siteLatitude;
         config.siteLong = siteLongitude;
-        config.variableStarReportOptions = visualization.getVariableStarReportOptions();
         return config;
     }
 
     /** Replaces rendering choices while retaining the captured site and tuning limit. */
-    public DetectionRunOptions withVisualization(ExportVisualizationSettings settings) {
+    public DetectionRunOptions withVisualization(VisualizationSettings settings) {
         return new DetectionRunOptions(observatoryCode, siteLatitude, siteLongitude, settings, autoTuneMaxCandidateFrames);
     }
 

@@ -2,7 +2,7 @@ package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.config.AppConfig;
-import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.config.DetectionConfigRules;
 
@@ -11,7 +11,7 @@ import java.io.File;
 import java.util.Objects;
 
 public record IterativeDetectionRequest(File directory, DetectionConfig config, AppConfig appConfig,
-                                       ExportVisualizationSettings visualization, IterativeDetectionPlan plan,
+                                       VisualizationSettings visualization, IterativeDetectionPlan plan,
                                        AutoTuneProfile autoTuneProfile, int autoTuneFrames,
                                        boolean autoPrepare, boolean keepNegativeValues, int expectedFrameCount,
                                        SkySnapshot sky) {

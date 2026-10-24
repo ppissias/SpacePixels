@@ -3,7 +3,6 @@ package eu.startales.spacepixels.config;
 public class AppConfig {
     public AppConfig copy() {
         AppConfig copy = new AppConfig();
-        copy.variableStarReportOptions = variableStarReportOptions;
         copy.astapExecutablePath = astapExecutablePath;
         copy.astrometryNetUseOwnKey = astrometryNetUseOwnKey;
         copy.astrometryNetApiKey = astrometryNetApiKey;
@@ -18,8 +17,6 @@ public class AppConfig {
         return copy;
     }
 
-    /** Supplied by the detection profile/request; excluded from the separate astrometry configuration file. */
-    public transient VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
     public String astapExecutablePath = "";
     /** False (the default): Astrometry.net solves log in anonymously. True: with {@link #astrometryNetApiKey}. */
     public boolean astrometryNetUseOwnKey = false;

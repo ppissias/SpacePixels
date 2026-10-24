@@ -32,7 +32,6 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
-| [SP-02](#sp-02-rendering-preferences-as-a-value-not-static-fields) | Rendering preferences as a value, not static fields | High | Medium |
 | [SP-04](#sp-04-retire-the-imageprocessing-facade) | Retire the `ImageProcessing` facade; the session owns its services and data | Medium | Large |
 | [SP-05](#sp-05-give-panels-their-collaborators-not-the-whole-window) | Give panels their collaborators, not the whole window | Medium | Medium |
 | [SP-06](#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Move the sky-catalogue workflow out of the main panel | Medium | Small |
@@ -50,37 +49,11 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 **Suggested order.**
 1. SP-10 and SP-18 are done apart from their follow-ups: evaluate SP-10's differing variants as a numerical decision, and take SP-18's follow-ups when nom-tam-fits 1.23.1 is out. Keep both separate from refactorings.
-2. Then SP-02, which removes the static rendering preferences.
-3. Then SP-04 together with SP-09, then SP-05 and SP-06.
-4. Then SP-08, then SP-07 and SP-15.
-5. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
+2. Then SP-04 together with SP-09, then SP-05 and SP-06.
+3. Then SP-08, then SP-07 and SP-15.
+4. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
 Refactorings are intended to preserve behaviour. Evaluate the exceptions raised by the issue reviews, including SP-19's viewer lifetime and settings policy, as explicit behaviour decisions. Check implementation changes with the relevant unit and GUI mechanics tests. Items that touch detection or reports also need byte-identical deterministic `report-data.json`, `detection_config.json` and CSV content on the reference datasets, using the normalization and comparison method in DEVELOPER.md.
-
-### SP-02. Rendering preferences as a value, not static fields
-
-**Problem.** The rendering and export preferences live in public static mutable fields of the classes that render:
-- `DetectionReportGenerator`: `gifBlinkSpeedMs`, `trackCropPadding`, `trackObjectCentricCropSize`, `targetCircleRadius`, `targetCircleStrokeWidth`;
-- `DisplayImageRenderer`: `autoStretchBlackSigma`, `autoStretchWhiteSigma`;
-- `RawImageAnnotator`: four marker sizes;
-- `UnclassifiedTransientSectionWriter`: `maxAnimatedMarkers`.
-
-`SpacePixelsVisualizationPreferences.apply()` writes them, the settings panel's `ApplicationSetting` bindings read and write them, and `DetectionReportGenerator.captureExportSettings` copies them into an `ExportVisualizationSettings` when a run starts. So the `config` package depends on the report generator. The same values exist both as globals and as a captured copy, and the capture step exists only because of the globals.
-
-The variable-star report options travel the same way. They are held in a `transient` field of `AppConfig` (the solver and site preferences), in `ExportVisualizationSettings`, in `DetectionRunOptions`, in `SpacePixelsDetectionProfile` and in fields of the settings panel.
-
-**Proposal.**
-- One immutable `VisualizationSettings` value, which `ExportVisualizationSettings` can become, owned by the window together with the detection profile, and carried by each run in `DetectionRunOptions`.
-- Renderers receive it as a parameter. Delete the static fields, `captureExportSettings` and `SpacePixelsVisualizationPreferences.apply()`.
-- Remove `variableStarReportOptions` from `AppConfig`.
-
-**Benefit.** No global mutable state in rendering. `config` no longer depends on `util.reporting`. One way for a preference to reach a picture.
-
-**Verification.** Unit tests for the renderers with explicit settings. Save, Revert and startup reload of the visualization page in the GUI mechanics tests. Byte-identical reports with default and changed settings.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- The direction is sound. Include every listed rendering preference in the explicit value; the current `ExportVisualizationSettings` does not contain all marker sizes and the animated-marker limit.
-- Preserve separate live preferences, saved baselines and immutable run values. Removing globals does not remove the need for capture at admission. Keep API defaults independent of a window or user-home files, and check two runs with different settings as well as Save/Revert/reload.
 
 ### SP-04. Retire the ImageProcessing facade
 
@@ -140,18 +113,18 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 
 **Problem.**
 - `DetectionSettingBinding` (engine fields) and `ApplicationSettingBinding` (application values) are two records of the same shape. With them come `ApplicationSetting`, client-property identity tags and three binding groups for twelve controls.
-- `applySettingsToMemory` catches every `Exception`, prints it with `System.err` and continues. It also writes into `mainAppWindow.getImageProcessing().getAppConfig()` (see SP-02).
+- `applySettingsToMemory` catches every `Exception`, prints it with `System.err` and continues.
 
-**Proposal.** After SP-02, the application values are fields of plain value objects. Use one generic `SettingBinding<V>`, with a read and write of the model and a read and write of the control, for both kinds. Let a binding failure surface as an error instead of being swallowed.
+**Proposal.** The application values are now plain values (`VisualizationSettings` and the Auto-Tune limit). Use one generic `SettingBinding<V>`, with a read and write of the model and a read and write of the control, for both kinds. Let a binding failure surface as an error instead of being swallowed.
 
 **Issue review (2026-10-24; evaluate before implementation).**
-- Consolidate only the genuinely shared binding behaviour after SP-02 establishes the model. Preserve the typed `DetectionSetting` tables, hidden values, range checks and pair-alignment policy.
+- Consolidate only the genuinely shared binding behaviour, on the value model that SP-02 established. Preserve the typed `DetectionSetting` tables, hidden values, range checks and pair-alignment policy.
 - Define what happens when applying a binding fails: surface the failure and prevent a run or save from proceeding with a partly applied configuration. Check that invalid text, changed markers and saved baselines retain their current meaning. A more general framework is not justified merely to eliminate two small records.
 
 ### SP-08. One report entry point and a complete report context
 
 **Problem.**
-- `DetectionReportGenerator` (1,523 lines) is an all-static class that holds global settings (SP-02), data types, image rendering (mask overlays, global maps, drift map, mosaics, cluster maps), text formatting and the export orchestration. 27 classes call its static helpers.
+- `DetectionReportGenerator` (1,523 lines) is an all-static class that holds data types, image rendering (mask overlays, global maps, drift map, mosaics, cluster maps), text formatting and the export orchestration. 27 classes call its static helpers.
 - The export has one entry, `exportTrackVisualizations`, with eight positional parameters. The API and the GUI reach it through two forwarding layers: `ImageProcessing` (`detectObjects`, `runDetectionPipeline`, `exportDetectionReport`) and `StandardDetectionPipelineService`.
 - `DetectionReportContext` takes 20 constructor parameters, copied one by one from the `PipelineResult`. Six more fields are set after construction.
 - The context also has fallback branches "for isolated section callers": `data == null ? category.id(..) : data.finding(..)` and `runContext == null ? defaults`. That is production code kept only so tests can build sections without a full context.

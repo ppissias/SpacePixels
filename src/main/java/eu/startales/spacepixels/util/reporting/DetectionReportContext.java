@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import io.github.ppissias.jtransient.model.AnomalyDetection;
 import io.github.ppissias.jtransient.model.DetectedObject;
@@ -21,7 +22,7 @@ import java.util.List;
  */
 final class DetectionReportContext {
 
-    final ExportVisualizationSettings settings;
+    final VisualizationSettings settings;
     final File exportDir;
     final List<short[][]> rawFrames;
     final FitsFileInformation[] fitsFiles;
@@ -87,7 +88,7 @@ final class DetectionReportContext {
                 : DetectionReportGenerator.getRepresentativeSequence(rawFrames.size(), mandatory, limit);
     }
 
-    DetectionReportContext(ExportVisualizationSettings settings,
+    DetectionReportContext(VisualizationSettings settings,
                            File exportDir,
                            List<short[][]> rawFrames,
                            FitsFileInformation[] fitsFiles,

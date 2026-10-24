@@ -9,10 +9,15 @@ Not released yet.
 - **Compressed (.fz) frames are decoded more exactly.** nom-tam-fits 1.23.0 fixes the decoding of 32-bit PLIO frames and of quantized floating-point frames: their blank pixels, and the rounding of frames without dithering. Integer frames (RICE, GZIP, HCOMPRESS) decode as before. Frames from 16-bit cameras are unaffected.
 - **A dataset folder that cannot be written.** When the plate-solution correction or the sky catalogue cannot be saved there, for example in a read-only folder, it stays in use until SpacePixels closes, in the viewers and in the reports, and the window says it was not saved. Before, a correction that could not be saved was switched back, and a catalogue that could not be saved was missing from the reports. A detection also no longer waits for a pending save before it starts.
 - **Libraries:** FlatLaf 3.7.2, nom-tam-fits 1.23.0, Gson 2.14.0 and the Gradle 9.8.2 build. Saved settings files load as before. FlatLaf 3.7.2 shows brighter text in the dark theme and rounded scroll bars on Windows; number fields keep the caret where you click, as before.
+- **Every report picture uses the run's display stretch.** The corner mosaic of the pipeline diagnostics and the rainbow cluster map used the built-in stretch in reports from the batch command, even when the saved visualization preferences changed it. They now use the run's stretch, like the other pictures. Reports made in the window look as before.
 
 ### Removed
 
 - **The AI report sections.** Codex's **Signal Weave**, Claude's **The Night, Retold** and the **Include AI Creative Report Sections** setting are gone. A saved visualization preferences file that still holds the setting loads as before; the next save drops it.
+
+### Upgrading and API changes
+
+- **API change: `VisualizationSettings`.** `ExportVisualizationSettings` (package `util.reporting`) is replaced by `eu.startales.spacepixels.config.VisualizationSettings`, which `DetectionRunOptions` now carries. It also holds the detection marker sizes and the most animated detections of the report. Start from `VisualizationSettings.defaults()` and change values with its `with…` methods; the positional constructors are gone. `DetectionRunOptions.capture(AppConfig, int)` takes only the observing site and uses the built-in visualization settings, and `AppConfig` no longer has `variableStarReportOptions`. See [Run options and isolation](API.md#run-options-and-isolation).
 
 ## 2026.10-03
 

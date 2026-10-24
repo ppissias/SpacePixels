@@ -3,7 +3,7 @@ package eu.startales.spacepixels.util;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Rule;
 import org.junit.Test;
@@ -51,7 +51,7 @@ public class ReportFailureMessagesTest {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", FRAME_COUNT);
         DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
         var request = new IterativeDetectionRequest(sequence.toFile(), config, new AppConfig(),
-                ExportVisualizationSettings.defaults(), new IterativeDetectionPlan(5, 5, 0), null, 5, false, false, 0, null);
+                VisualizationSettings.defaults(), new IterativeDetectionPlan(5, 5, 0), null, 5, false, false, 0, null);
         // Before the pass writes its report: a file takes the place of the pass's folder.
         File index = new IterativeDetectionPipelineService().run(request, (summary, files, settings) -> {
             File[] passes = sequence.toFile().listFiles(file -> file.getName().startsWith("iterative_detections_"));

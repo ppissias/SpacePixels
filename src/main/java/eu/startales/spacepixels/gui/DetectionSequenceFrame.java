@@ -57,6 +57,7 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
     public DetectionSequenceFrame(ApplicationWindow mainAppWindow) {
         super("Preview Frame", "detecting…", false, true);
         this.mainAppWindow = mainAppWindow;
+        setMarkerSettings(() -> mainAppWindow.getDetectionConfigurationPanel().visualizationSettings());
         redetect.setRepeats(false);
         addControlRow(buildSettingsRow(mainAppWindow.getDetectionConfigurationPanel().perFrameDetectionSettings()));
         setLocationRelativeTo(mainAppWindow.getFrame());

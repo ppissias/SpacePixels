@@ -3,7 +3,6 @@ package eu.startales.spacepixels.gui.mechanics;
 import eu.startales.spacepixels.config.SettingsStorage;
 import eu.startales.spacepixels.config.SpacePixelsAppConfigIO;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
-import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.session.SessionStorage;
@@ -36,7 +35,6 @@ import static org.junit.Assert.*;
 public class SettingsIoMechanicsTest extends MechanicsTestCase {
     private SettingsStorage storage;
     private CountDownLatch release;
-    private final SpacePixelsVisualizationPreferences originalVisualization = SpacePixelsVisualizationPreferences.captureCurrent();
 
     @Override protected ApplicationWindow createApplicationWindow() {
         storage = new SettingsStorage();
@@ -48,11 +46,7 @@ public class SettingsIoMechanicsTest extends MechanicsTestCase {
         try {
             storage.finish();
         } finally {
-            try {
-                super.onTearDown();
-            } finally {
-                originalVisualization.applyToRuntime();
-            }
+            super.onTearDown();
         }
     }
 

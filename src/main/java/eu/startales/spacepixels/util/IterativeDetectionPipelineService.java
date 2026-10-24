@@ -2,7 +2,7 @@ package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.session.SessionFrames;
-import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.util.reporting.IterativeDetectionIndex;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.config.DetectionConfigRules;
@@ -118,7 +118,7 @@ public final class IterativeDetectionPipelineService {
                            File source, File prepared, AutoTuneProfile tuneProfile,
                            int tuneLimit, String tuneReport, ReportPrompt prompt,
                            TransientEngineProgressListener progress, int passStart) throws Exception {
-        ExportVisualizationSettings visualization = options.visualization();
+        VisualizationSettings visualization = options.visualization();
         List<Integer> sizes = plan.frameCounts(files.length);
         long[] timestamps = Arrays.stream(files).mapToLong(FitsFileInformation::getObservationTimestamp).toArray();
         boolean timed = Arrays.stream(timestamps).allMatch(timestamp -> timestamp >= 0);
@@ -193,7 +193,7 @@ public final class IterativeDetectionPipelineService {
 
     private void publish(File root, File source, File prepared, IterativeDetectionPlan plan,
                          AutoTuneProfile tuneProfile, int tuneLimit, DetectionConfig config,
-                         ExportVisualizationSettings visualization, String outcome,
+                         VisualizationSettings visualization, String outcome,
                          List<IterativeDetectionIndex.Pass> passes) throws IOException {
         IterativeDetectionIndex.write(root, new IterativeDetectionIndex.Run(1, source.getName(), prepared.getName(),
                 plan, tuneProfile == null ? null : tuneProfile.name(), tuneProfile == null ? 0 : tuneLimit,

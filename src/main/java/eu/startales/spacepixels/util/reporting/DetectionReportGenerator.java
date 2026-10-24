@@ -10,7 +10,7 @@
 
 package eu.startales.spacepixels.util.reporting;
 
-import eu.startales.spacepixels.config.VariableStarReportOptions;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.AnomalyDetection;
 import io.github.ppissias.jtransient.model.AnomalyType;
 import io.github.ppissias.jtransient.model.DetectedObject;
@@ -18,7 +18,6 @@ import io.github.ppissias.jtransient.model.Pixel;
 import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.DebugOutput;
-import eu.startales.spacepixels.util.DisplayImageRenderer;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ReportInclusion;
 import eu.startales.spacepixels.util.ImageProcessing;
@@ -52,36 +51,7 @@ import java.util.Set;
  */
 public class DetectionReportGenerator {
 
-    // =================================================================
-    // CONFIGURATION PARAMETERS
-    // =================================================================
-
-    // --- Export & Cropping Parameters ---
-    public static int gifBlinkSpeedMs = ExportVisualizationSettings.defaults().getGifBlinkSpeedMs();
-    public static int trackCropPadding = ExportVisualizationSettings.defaults().getTrackCropPadding();
-    public static int trackObjectCentricCropSize = ExportVisualizationSettings.defaults().getTrackObjectCentricCropSize();
-
-    // --- Annotation Tools (For GIFs) ---
-    public static int targetCircleRadius = ExportVisualizationSettings.defaults().getTargetCircleRadius();
-    public static float targetCircleStrokeWidth = ExportVisualizationSettings.defaults().getTargetCircleStrokeWidth();
-
     public static final String detectionReportName = "detection_report.html";
-
-    public static ExportVisualizationSettings captureExportSettings(VariableStarReportOptions options) {
-        return snapshotCurrentExportVisualizationSettings().withVariableStarReportOptions(options);
-    }
-
-    private static ExportVisualizationSettings snapshotCurrentExportVisualizationSettings() {
-        return new ExportVisualizationSettings(
-                DisplayImageRenderer.autoStretchBlackSigma,
-                DisplayImageRenderer.autoStretchWhiteSigma,
-                gifBlinkSpeedMs,
-                trackCropPadding,
-                trackObjectCentricCropSize,
-                targetCircleRadius,
-                targetCircleStrokeWidth
-        );
-    }
 
     // =================================================================
     // DATA MODELS
@@ -176,12 +146,8 @@ public class DetectionReportGenerator {
     // IMAGE RENDERING & CROPPING
     // =================================================================
 
-    public static BufferedImage createDisplayImage(short[][] imageData) {
-        return DisplayImageRenderer.createDisplayImage(imageData);
-    }
-
     private static BufferedImage createDisplayImage(short[][] imageData,
-                                                    ExportVisualizationSettings settings) {
+                                                    VisualizationSettings settings) {
         return TrackVisualizationRenderer.createDisplayImage(imageData, settings);
     }
 
@@ -233,26 +199,6 @@ public class DetectionReportGenerator {
         return image;
     }
 
-    private static BufferedImage createCroppedMaskOverlay(short[][] backgroundData,
-                                                          boolean[][] mask,
-                                                          int cx,
-                                                          int cy,
-                                                          int cropWidth,
-                                                          int cropHeight,
-                                                          DetectedObject highlightDetection,
-                                                          Color maskColor) {
-        return createCroppedMaskOverlay(
-                backgroundData,
-                mask,
-                cx,
-                cy,
-                cropWidth,
-                cropHeight,
-                highlightDetection,
-                maskColor,
-                snapshotCurrentExportVisualizationSettings());
-    }
-
     static BufferedImage createCroppedMaskOverlay(short[][] backgroundData,
                                                   boolean[][] mask,
                                                   int cx,
@@ -261,7 +207,7 @@ public class DetectionReportGenerator {
                                                   int cropHeight,
                                                   DetectedObject highlightDetection,
                                                   Color maskColor,
-                                                  ExportVisualizationSettings settings) {
+                                                  VisualizationSettings settings) {
         BufferedImage grayImage = TrackVisualizationRenderer.createCroppedDisplayImage(
                 backgroundData,
                 cx,
@@ -302,44 +248,6 @@ public class DetectionReportGenerator {
 
         g2d.dispose();
         return image;
-    }
-
-    private static BufferedImage createCroppedMasterMaskOverlay(short[][] masterStackData,
-                                                                boolean[][] masterMask,
-                                                                int cx,
-                                                                int cy,
-                                                                int cropWidth,
-                                                                int cropHeight,
-                                                                DetectedObject highlightDetection) {
-        return createCroppedMasterMaskOverlay(
-                masterStackData,
-                masterMask,
-                cx,
-                cy,
-                cropWidth,
-                cropHeight,
-                highlightDetection,
-                snapshotCurrentExportVisualizationSettings());
-    }
-
-    private static BufferedImage createCroppedMasterMaskOverlay(short[][] masterStackData,
-                                                                boolean[][] masterMask,
-                                                                int cx,
-                                                                int cy,
-                                                                int cropWidth,
-                                                                int cropHeight,
-                                                                DetectedObject highlightDetection,
-                                                                ExportVisualizationSettings settings) {
-        return createCroppedMaskOverlay(
-                masterStackData,
-                masterMask,
-                cx,
-                cy,
-                cropWidth,
-                cropHeight,
-                highlightDetection,
-                new Color(255, 32, 32),
-                settings);
     }
 
     private static boolean isMasterMaskTransposed(boolean[][] masterMask, int refWidth, int refHeight) {
@@ -426,7 +334,7 @@ public class DetectionReportGenerator {
         return TrackVisualizationRenderer.createTrackShapeImage(track, cropWidth, cropHeight, startX, startY);
     }
 
-    private static void saveAnimatedGif(List<BufferedImage> frames, File outputFile, ExportVisualizationSettings settings) throws IOException {
+    private static void saveAnimatedGif(List<BufferedImage> frames, File outputFile, VisualizationSettings settings) throws IOException {
         TrackVisualizationRenderer.saveAnimatedGif(frames, outputFile, settings);
     }
 
@@ -448,7 +356,7 @@ public class DetectionReportGenerator {
                                               List<Track> localRescueTracks,
                                               List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters,
                                               List<DetectedObject> deepStackCandidates, DetectionReportContext context) {
-        ExportVisualizationSettings settings = context.settings;
+        VisualizationSettings settings = context.settings;
         BufferedImage grayBg = createDisplayImage(backgroundData, settings);
         BufferedImage rgbMap = new BufferedImage(grayBg.getWidth(), grayBg.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
@@ -649,7 +557,7 @@ public class DetectionReportGenerator {
         return img;
     }
 
-    static BufferedImage createFourCornerMosaic(short[][] frame, int targetCropSize) {
+    static BufferedImage createFourCornerMosaic(short[][] frame, int targetCropSize, VisualizationSettings settings) {
         int height = frame.length;
         int width = frame[0].length;
         int cropX = Math.min(targetCropSize, width / 2);
@@ -660,10 +568,10 @@ public class DetectionReportGenerator {
         short[][] bl = robustEdgeAwareCrop(frame, cropX / 2, height - (cropY / 2), cropX, cropY);
         short[][] br = robustEdgeAwareCrop(frame, width - (cropX / 2), height - (cropY / 2), cropX, cropY);
 
-        BufferedImage imgTL = createDisplayImage(tl);
-        BufferedImage imgTR = createDisplayImage(tr);
-        BufferedImage imgBL = createDisplayImage(bl);
-        BufferedImage imgBR = createDisplayImage(br);
+        BufferedImage imgTL = createDisplayImage(tl, settings);
+        BufferedImage imgTR = createDisplayImage(tr, settings);
+        BufferedImage imgBL = createDisplayImage(bl, settings);
+        BufferedImage imgBR = createDisplayImage(br, settings);
 
         BufferedImage out = new BufferedImage(cropX * 2, cropY * 2, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = out.createGraphics();
@@ -683,7 +591,7 @@ public class DetectionReportGenerator {
     }
 
     // --- GLOBAL TRANSIENT MAP RENDERER ---
-    static BufferedImage createGlobalTransientMap(short[][] backgroundData, List<List<DetectedObject>> allTransients, ExportVisualizationSettings settings) {
+    static BufferedImage createGlobalTransientMap(short[][] backgroundData, List<List<DetectedObject>> allTransients, VisualizationSettings settings) {
         int width = backgroundData[0].length;
         int height = backgroundData.length;
 
@@ -736,7 +644,8 @@ public class DetectionReportGenerator {
     }
 
     // --- NEW: RAINBOW CLUSTER MAP RENDERER ---
-    static BufferedImage createRainbowClusterMap(short[][] backgroundData, List<List<DetectedObject>> allTransients) {
+    static BufferedImage createRainbowClusterMap(short[][] backgroundData, List<List<DetectedObject>> allTransients,
+                                                 VisualizationSettings settings) {
         int imgWidth = backgroundData[0].length;
         int imgHeight = backgroundData.length;
 
@@ -782,7 +691,7 @@ public class DetectionReportGenerator {
 
         // Extract and softly scale the background
         short[][] croppedBg = robustEdgeAwareCrop(backgroundData, minX + (cropW / 2), minY + (cropH / 2), cropW, cropH);
-        BufferedImage grayBg = createDisplayImage(croppedBg);
+        BufferedImage grayBg = createDisplayImage(croppedBg, settings);
 
         BufferedImage rgbMap = new BufferedImage(scaledW, scaledH, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
@@ -1191,7 +1100,7 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
     /** Emits a report from a single resolved run context without reading live application preferences. */
     private static void exportTrackVisualizationsInternal(PipelineResult result, List<short[][]> rawFrames,
             FitsFileInformation[] fitsFiles, File exportDir, DetectionConfig config, AppConfig appConfig,
-            ReportInclusion inclusion, ReportProgress progress, ExportVisualizationSettings settings,
+            ReportInclusion inclusion, ReportProgress progress, VisualizationSettings settings,
             ReportRunContext runContext) throws IOException {
         progress.step(0, 2, "preparing");
 

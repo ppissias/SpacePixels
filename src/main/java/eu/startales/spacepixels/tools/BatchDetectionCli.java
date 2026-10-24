@@ -10,8 +10,7 @@ package eu.startales.spacepixels.tools;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.config.ApplicationSettings;
-import eu.startales.spacepixels.config.VariableStarReportOptions;
-import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.api.DefaultSpacePixelsPipelineApi;
 import eu.startales.spacepixels.api.InputPreparationMode;
 import eu.startales.spacepixels.api.SpacePixelsPipelineApi;
@@ -20,7 +19,6 @@ import eu.startales.spacepixels.api.SpacePixelsPipelineResult;
 import eu.startales.spacepixels.api.SpacePixelsProgressListener;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
-import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import eu.startales.spacepixels.util.DebugOutput;
@@ -134,19 +132,18 @@ public class BatchDetectionCli {
         }
     }
 
-    /** Reads CLI rendering preferences once without modifying process-wide display or report defaults. */
-    private static ExportVisualizationSettings loadVisualizationPreferences(PrintStream err) {
+    /** Reads the saved visualization preferences once, over the built-in visualization settings. */
+    private static VisualizationSettings loadVisualizationPreferences(PrintStream err) {
         File visualizationPreferencesFile = new File(System.getProperty("user.home"), SpacePixelsVisualizationPreferencesIO.DEFAULT_FILENAME);
         if (!visualizationPreferencesFile.exists()) {
-            return ExportVisualizationSettings.defaults();
+            return VisualizationSettings.defaults();
         }
 
         try (FileReader reader = new FileReader(visualizationPreferencesFile)) {
-            SpacePixelsVisualizationPreferences preferences = SpacePixelsVisualizationPreferencesIO.load(reader);
-            return preferences.exportSettings(VariableStarReportOptions.DEFAULT);
+            return SpacePixelsVisualizationPreferencesIO.load(reader).applyTo(VisualizationSettings.defaults());
         } catch (IOException e) {
             err.println("Failed to load visualization preferences: " + e.getMessage());
-            return eu.startales.spacepixels.util.reporting.ExportVisualizationSettings.defaults();
+            return VisualizationSettings.defaults();
         }
     }
 

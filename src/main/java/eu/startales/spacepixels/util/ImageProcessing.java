@@ -10,6 +10,7 @@
 package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.util.reporting.ReportRunContext;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jplatesolve.PlateSolveOperation;
@@ -296,11 +297,11 @@ public class ImageProcessing implements AutoCloseable {
     // =========================================================================
 
     /**
-     * Captures application options, with the Auto-Tune frame limit of the detection settings, before a desktop job
-     * is queued; no file access or image copying occurs.
+     * Captures application options, with the visualization settings and the Auto-Tune frame limit of the detection
+     * settings, before a desktop job is queued; no file access or image copying occurs.
      */
-    public DetectionRunOptions captureRunOptions(int autoTuneMaxCandidateFrames) {
-        return DetectionRunOptions.capture(appConfig, autoTuneMaxCandidateFrames);
+    public DetectionRunOptions captureRunOptions(VisualizationSettings visualization, int autoTuneMaxCandidateFrames) {
+        return DetectionRunOptions.capture(appConfig, autoTuneMaxCandidateFrames).withVisualization(visualization);
     }
 
     /**

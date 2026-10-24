@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
@@ -51,7 +52,8 @@ public class ReportSectionFailureTest {
 
     private static DetectionReportContext context(File exportDir, short[][] masterStack) {
         return new DetectionReportContext(
-                new ExportVisualizationSettings(3.0, 10.0, 100, 10, 100, 12, 1.0f),
+                VisualizationSettings.defaults().withAutoStretchBlackSigma(3.0).withAutoStretchWhiteSigma(10.0).withGifBlinkSpeedMs(100)
+                        .withTrackCropPadding(10).withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f),
                 exportDir,
                 Collections.emptyList(),
                 null,

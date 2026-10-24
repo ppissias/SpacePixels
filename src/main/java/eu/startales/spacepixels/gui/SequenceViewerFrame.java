@@ -10,6 +10,7 @@
 
 package eu.startales.spacepixels.gui;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
@@ -260,6 +261,11 @@ abstract class SequenceViewerFrame extends JFrame {
     /** Shows the window at this frame. {@code files} are the frames of the session, which can share a plate solution. */
     public void setSkyCatalogueModel(eu.startales.spacepixels.session.SkyCatalogueModel model) {
         sky.bind(model);
+    }
+
+    /** Draws detection markers with the sizes {@code settings} gives at each paint: the settings page's values. */
+    void setMarkerSettings(java.util.function.Supplier<VisualizationSettings> settings) {
+        view.setMarkerSettings(settings);
     }
 
     void closeForSessionChange() {

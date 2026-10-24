@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Pixel;
 import eu.startales.spacepixels.util.ReportInclusion;
@@ -80,7 +81,8 @@ public class UnclassifiedTransientSectionWriterTest {
                 null,
                 1.0);
         DetectionReportContext context = new DetectionReportContext(
-                new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, 12, 1.0f),
+                VisualizationSettings.defaults().withGifBlinkSpeedMs(100).withTrackCropPadding(10).withTrackObjectCentricCropSize(100)
+                        .withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f),
                 exportDirectory,
                 Collections.emptyList(),
                 null,
@@ -184,7 +186,8 @@ public class UnclassifiedTransientSectionWriterTest {
                                  ReportInclusion inclusion) throws Exception {
         short[][] medianStack = new short[40][40];
         DetectionReportContext context = new DetectionReportContext(
-                new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, 12, 1.0f),
+                VisualizationSettings.defaults().withGifBlinkSpeedMs(100).withTrackCropPadding(10).withTrackObjectCentricCropSize(100)
+                        .withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f),
                 temporaryFolder.newFolder(), Collections.emptyList(), null, new DetectionConfig(), null, medianStack,
                 null, null, null, null, Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(),
                 Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
@@ -213,7 +216,8 @@ public class UnclassifiedTransientSectionWriterTest {
         }
         DetectedObject flash = detection(60, 50, 1);
         DetectionReportContext context = new DetectionReportContext(
-                new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, 12, 1.0f),
+                VisualizationSettings.defaults().withGifBlinkSpeedMs(100).withTrackCropPadding(10).withTrackObjectCentricCropSize(100)
+                        .withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f),
                 exportDirectory, rawFrames, null, new DetectionConfig(), null, rawFrames.get(0), null, null, null, null,
                 Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(),
                 Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
@@ -250,26 +254,22 @@ public class UnclassifiedTransientSectionWriterTest {
 
     @Test
     public void detectionsBeyondTheAnimationLimitShowTheStaticCutout() throws Exception {
-        int originalLimit = UnclassifiedTransientSectionWriter.maxAnimatedMarkers;
-        UnclassifiedTransientSectionWriter.maxAnimatedMarkers = 0;
-        try {
-            File exportDirectory = temporaryFolder.newFolder();
-            short[][] pixels = new short[40][40];
-            DetectionReportContext context = new DetectionReportContext(
-                    new ExportVisualizationSettings(0.5, 5.0, 100, 10, 100, 12, 1.0f),
-                    exportDirectory, Collections.singletonList(pixels), null, new DetectionConfig(), null, pixels, null, null, null, null,
-                    Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(),
-                    Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
-            List<List<DetectedObject>> transients = Collections.singletonList(Collections.singletonList(detection(20, 20, 0)));
-            StringWriter html = new StringWriter();
+        File exportDirectory = temporaryFolder.newFolder();
+        short[][] pixels = new short[40][40];
+        DetectionReportContext context = new DetectionReportContext(
+                VisualizationSettings.defaults().withGifBlinkSpeedMs(100).withTrackCropPadding(10)
+                        .withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f)
+                        .withMaxAnimatedMarkers(0),
+                exportDirectory, Collections.singletonList(pixels), null, new DetectionConfig(), null, pixels, null, null, null, null,
+                Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(),
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+        List<List<DetectedObject>> transients = Collections.singletonList(Collections.singletonList(detection(20, 20, 0)));
+        StringWriter html = new StringWriter();
 
-            UnclassifiedTransientSectionWriter.writeSection(new PrintWriter(html), context, transients, transients);
+        UnclassifiedTransientSectionWriter.writeSection(new PrintWriter(html), context, transients, transients);
 
-            assertFalse(new File(exportDirectory, "unclassified_frames").exists());
-            assertFalse(html.toString().contains("data-strip="));
-        } finally {
-            UnclassifiedTransientSectionWriter.maxAnimatedMarkers = originalLimit;
-        }
+        assertFalse(new File(exportDirectory, "unclassified_frames").exists());
+        assertFalse(html.toString().contains("data-strip="));
     }
 
     private static DetectedObject detection(double x, double y, int frameIndex) {

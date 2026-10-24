@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ReportInclusion;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -11,7 +12,8 @@ import static org.junit.Assert.*;
 
 public class ReportDataTest {
     private DetectionReportContext context() {
-        return new DetectionReportContext(new ExportVisualizationSettings(3, 10, 100, 10, 100, 12, 1), new File("."),
+        return new DetectionReportContext(VisualizationSettings.defaults().withAutoStretchBlackSigma(3).withAutoStretchWhiteSigma(10).withGifBlinkSpeedMs(100)
+                .withTrackCropPadding(10).withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1), new File("."),
                 Collections.nCopies(20, new short[20][30]), new FitsFileInformation[0], new DetectionConfig(), null,
                 null, null, null, null, null, List.of(), List.of(), null, List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
     }

@@ -54,6 +54,12 @@ public class DependencyRulesTest {
         }
     }
 
+    /** Settings are values and their files; the renderers take them as parameters, so settings need no report code. */
+    @Test
+    public void settingsDoNotDependOnReporting() throws IOException {
+        assertNoReferences("config", "eu.startales.spacepixels.util.reporting.");
+    }
+
     /** Keeps all processing and reporting utilities window-free while allowing headless AWT rendering. */
     @Test
     public void processingUtilitiesDoNotDependOnSwingOrTheWindow() throws IOException {

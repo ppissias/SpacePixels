@@ -7,45 +7,45 @@
  */
 package eu.startales.spacepixels.config;
 
-import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
-import eu.startales.spacepixels.util.DisplayImageRenderer;
-import eu.startales.spacepixels.util.RawImageAnnotator;
-import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
-
 /**
- * User-level rendering and export preferences that do not affect detection results.
+ * The saved form of the visualization preferences: the values of {@link VisualizationSettings} that the settings
+ * page edits, as written to the visualization file. A value missing from a file keeps its built-in default.
  */
 public class SpacePixelsVisualizationPreferences {
+    private static final VisualizationSettings DEFAULTS = VisualizationSettings.defaults();
 
-    public double streakLineScaleFactor = RawImageAnnotator.streakLineScaleFactor;
-    public int streakCentroidBoxRadius = RawImageAnnotator.streakCentroidBoxRadius;
-    public int pointSourceMinBoxRadius = RawImageAnnotator.pointSourceMinBoxRadius;
-    public int dynamicBoxPadding = RawImageAnnotator.dynamicBoxPadding;
-    public double autoStretchBlackSigma = DisplayImageRenderer.autoStretchBlackSigma;
-    public double autoStretchWhiteSigma = DisplayImageRenderer.autoStretchWhiteSigma;
-    public int gifBlinkSpeedMs = DetectionReportGenerator.gifBlinkSpeedMs;
-    public int trackCropPadding = DetectionReportGenerator.trackCropPadding;
+    public double streakLineScaleFactor = DEFAULTS.getStreakLineScaleFactor();
+    public int streakCentroidBoxRadius = DEFAULTS.getStreakCentroidBoxRadius();
+    public int pointSourceMinBoxRadius = DEFAULTS.getPointSourceMinBoxRadius();
+    public int dynamicBoxPadding = DEFAULTS.getDynamicBoxPadding();
+    public double autoStretchBlackSigma = DEFAULTS.getAutoStretchBlackSigma();
+    public double autoStretchWhiteSigma = DEFAULTS.getAutoStretchWhiteSigma();
+    public int gifBlinkSpeedMs = DEFAULTS.getGifBlinkSpeedMs();
+    public int trackCropPadding = DEFAULTS.getTrackCropPadding();
 
-    public static SpacePixelsVisualizationPreferences captureCurrent() {
-        return new SpacePixelsVisualizationPreferences();
+    /** The saved form of {@code settings}. */
+    public static SpacePixelsVisualizationPreferences of(VisualizationSettings settings) {
+        SpacePixelsVisualizationPreferences preferences = new SpacePixelsVisualizationPreferences();
+        preferences.streakLineScaleFactor = settings.getStreakLineScaleFactor();
+        preferences.streakCentroidBoxRadius = settings.getStreakCentroidBoxRadius();
+        preferences.pointSourceMinBoxRadius = settings.getPointSourceMinBoxRadius();
+        preferences.dynamicBoxPadding = settings.getDynamicBoxPadding();
+        preferences.autoStretchBlackSigma = settings.getAutoStretchBlackSigma();
+        preferences.autoStretchWhiteSigma = settings.getAutoStretchWhiteSigma();
+        preferences.gifBlinkSpeedMs = settings.getGifBlinkSpeedMs();
+        preferences.trackCropPadding = settings.getTrackCropPadding();
+        return preferences;
     }
 
-    /** Converts this detached preference snapshot into explicit export options without writing runtime statics. */
-    public ExportVisualizationSettings exportSettings(VariableStarReportOptions options) {
-        var defaults = ExportVisualizationSettings.defaults();
-        return new ExportVisualizationSettings(autoStretchBlackSigma,
-                autoStretchWhiteSigma, gifBlinkSpeedMs, trackCropPadding, defaults.getTrackObjectCentricCropSize(),
-                defaults.getTargetCircleRadius(), defaults.getTargetCircleStrokeWidth(), options);
-    }
-
-    public void applyToRuntime() {
-        RawImageAnnotator.streakLineScaleFactor = streakLineScaleFactor;
-        RawImageAnnotator.streakCentroidBoxRadius = streakCentroidBoxRadius;
-        RawImageAnnotator.pointSourceMinBoxRadius = pointSourceMinBoxRadius;
-        RawImageAnnotator.dynamicBoxPadding = dynamicBoxPadding;
-        DisplayImageRenderer.autoStretchBlackSigma = autoStretchBlackSigma;
-        DisplayImageRenderer.autoStretchWhiteSigma = autoStretchWhiteSigma;
-        DetectionReportGenerator.gifBlinkSpeedMs = gifBlinkSpeedMs;
-        DetectionReportGenerator.trackCropPadding = trackCropPadding;
+    /** {@code base} with these saved values; the values the file does not hold stay as in {@code base}. */
+    public VisualizationSettings applyTo(VisualizationSettings base) {
+        return base.withStreakLineScaleFactor(streakLineScaleFactor)
+                .withStreakCentroidBoxRadius(streakCentroidBoxRadius)
+                .withPointSourceMinBoxRadius(pointSourceMinBoxRadius)
+                .withDynamicBoxPadding(dynamicBoxPadding)
+                .withAutoStretchBlackSigma(autoStretchBlackSigma)
+                .withAutoStretchWhiteSigma(autoStretchWhiteSigma)
+                .withGifBlinkSpeedMs(gifBlinkSpeedMs)
+                .withTrackCropPadding(trackCropPadding);
     }
 }

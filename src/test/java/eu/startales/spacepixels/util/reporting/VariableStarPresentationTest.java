@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import com.google.gson.*;
 import eu.startales.spacepixels.config.*;
 import eu.startales.spacepixels.util.*;
@@ -81,9 +82,10 @@ public class VariableStarPresentationTest {
         Map<String, String> csv = new HashMap<>();
         for (var options : List.of(new VariableStarReportOptions(40, VariableStarReportOptions.SortOrder.SIGNIFICANCE),
                 new VariableStarReportOptions(60, VariableStarReportOptions.SortOrder.LARGEST_VARIATION))) {
-            File output = temporary.newFolder(); var app = new AppConfig(); app.variableStarReportOptions = options;
+            File output = temporary.newFolder(); var app = new AppConfig();
             DetectionReportGenerator.exportTrackVisualizations(result, frames, files, output, config,
-                    ReportRunContext.capture(DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES), files),
+                    ReportRunContext.capture(DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES)
+                            .withVariableStarReportOptions(options), files),
                     ReportInclusion.all(), null);
             String html = Files.readString(new File(output, "detection_report.html").toPath());
             assertEquals(options.maxCandidateCards(), count(html, "id='variable-v[0-9]+'"));
@@ -162,7 +164,9 @@ public class VariableStarPresentationTest {
         } return files;
     }
     private DetectionReportContext context(File output, FitsFileInformation[] files, VariableStarReportOptions options) {
-        return new DetectionReportContext(new ExportVisualizationSettings(3,10,100,10,100,12,1,options),output,List.of(),files,
+        return new DetectionReportContext(VisualizationSettings.defaults().withAutoStretchBlackSigma(3).withAutoStretchWhiteSigma(10).withGifBlinkSpeedMs(100)
+                .withTrackCropPadding(10).withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1)
+                .withVariableStarReportOptions(options),output,List.of(),files,
                 new DetectionConfig(),AstrometryContextFactory.buildContext(files, null, null),null,null,null,null,null,List.of(),List.of(),null,List.of(),List.of(),List.of(),List.of(),List.of(),List.of());
     }
     private short[][] stack() { short[][] pixels = new short[120][160]; for (int y=0;y<120;y++)for(int x=0;x<160;x++)pixels[y][x]=(short)(-32000+(x*y)%100);return pixels; }

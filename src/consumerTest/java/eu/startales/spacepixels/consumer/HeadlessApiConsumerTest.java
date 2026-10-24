@@ -5,6 +5,9 @@ import eu.startales.spacepixels.api.InputPreparationMode;
 import eu.startales.spacepixels.api.SpacePixelsPipelineException;
 import eu.startales.spacepixels.api.SpacePixelsPipelineRequest;
 import eu.startales.spacepixels.api.SpacePixelsPipelineResult;
+import eu.startales.spacepixels.config.DetectionRunOptions;
+import eu.startales.spacepixels.config.VariableStarReportOptions;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.BuildInfo;
 import eu.startales.spacepixels.tools.BatchDetectionCli;
@@ -71,6 +74,25 @@ public class HeadlessApiConsumerTest {
             Path image = files.filter(path -> path.getFileName().toString().endsWith(".png")).findFirst().orElseThrow();
             assertNotNull(ImageIO.read(image.toFile()));
         }
+    }
+
+    /** A consumer's own visualization settings travel in the run options into the report. */
+    @Test
+    public void visualizationSettingsReachTheReport() throws Exception {
+        Path input = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "visualization", 5);
+        VisualizationSettings visualization = VisualizationSettings.defaults().withAutoStretchWhiteSigma(4.0)
+                .withGifBlinkSpeedMs(200).withVariableStarReportOptions(
+                        new VariableStarReportOptions(13, VariableStarReportOptions.SortOrder.SIGNIFICANCE));
+        SpacePixelsPipelineRequest request = SpacePixelsPipelineRequest.builder(input.toFile())
+                .detectionConfig(SyntheticDatasetFactory.createSyntheticDetectionConfig())
+                .runOptions(DetectionRunOptions.defaults().withVisualization(visualization))
+                .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
+                .generateReport(true)
+                .build();
+        assertEquals(visualization, request.getRunOptions().visualization());
+        SpacePixelsPipelineResult result = new DefaultSpacePixelsPipelineApi().run(request);
+        String profile = Files.readString(result.getExportDirectory().toPath().resolve("detection_config.json"));
+        assertTrue(profile, profile.matches("(?s).*\"variableStarMaxCandidateCards\"\\s*:\\s*13\\b.*"));
     }
 
     /** Strict preparation refuses floating-point inputs without writing conversions or report folders. */

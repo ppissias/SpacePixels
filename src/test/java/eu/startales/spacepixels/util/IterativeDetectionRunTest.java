@@ -6,8 +6,8 @@ import com.google.gson.JsonParser;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import org.junit.Rule;
@@ -202,7 +202,7 @@ public class IterativeDetectionRunTest {
         DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
         AppConfig app = new AppConfig();
         IterativeDetectionRequest request = new IterativeDetectionRequest(source, config, app,
-                DetectionReportGenerator.captureExportSettings(app.variableStarReportOptions), new IterativeDetectionPlan(5, 3, 8),
+                VisualizationSettings.defaults(), new IterativeDetectionPlan(5, 3, 8),
                 io.github.ppissias.jtransient.engine.AutoTuneProfile.LOW, 5, true, true, 9, null);
         List<String> passSettings = new ArrayList<>();
         List<String> messages = new ArrayList<>();
@@ -246,7 +246,7 @@ public class IterativeDetectionRunTest {
         File floating = SyntheticDatasetFactory.createMono32FloatFitsSequence(folder.getRoot().toPath(), "strict", 5).toFile();
         AppConfig app = new AppConfig();
         IterativeDetectionRequest strict = new IterativeDetectionRequest(floating, new DetectionConfig(), app,
-                DetectionReportGenerator.captureExportSettings(app.variableStarReportOptions), new IterativeDetectionPlan(5, 5, 5),
+                VisualizationSettings.defaults(), new IterativeDetectionPlan(5, 5, 5),
                 null, 5, false, true, 5, null);
         Exception refusal = assertThrows(Exception.class, () -> service.run(strict, null, null));
         assertTrue(refusal.getMessage(), refusal.getMessage().contains("BITPIX=-32"));
@@ -276,7 +276,7 @@ public class IterativeDetectionRunTest {
 
     private IterativeDetectionRequest request(File source, DetectionConfig config, AppConfig app, IterativeDetectionPlan plan) {
         return new IterativeDetectionRequest(source, config, app,
-                DetectionReportGenerator.captureExportSettings(app.variableStarReportOptions), plan, null, 30, true, true, 9, null);
+                VisualizationSettings.defaults(), plan, null, 30, true, true, 9, null);
     }
 
     private static StandardDetectionPipelineService.RunResult completed(File output) throws IOException {

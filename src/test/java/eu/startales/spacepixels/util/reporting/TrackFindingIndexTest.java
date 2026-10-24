@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ReportInclusion;
 import eu.startales.spacepixels.util.TrackOverlay;
@@ -44,7 +45,7 @@ public class TrackFindingIndexTest {
 
         var overlay = TrackOverlay.from(PipelineResult.builder().tracks(input).build());
         assertEquals(List.of("T1", "T2", "ST1"), overlay.getTracks().stream().map(track -> track.label).toList());
-        var context = new DetectionReportContext(ExportVisualizationSettings.defaults(), new File("."), List.of(),
+        var context = new DetectionReportContext(VisualizationSettings.defaults(), new File("."), List.of(),
                 new FitsFileInformation[0], new DetectionConfig(), AstrometryContextFactory.buildContext(new FitsFileInformation[0], null, null),
                 null, null, null, null, null, List.of(), List.of(), null, List.of(), List.of(), List.of(),
                 index.singleStreaks(), index.streakTracks(), index.movingTargets());

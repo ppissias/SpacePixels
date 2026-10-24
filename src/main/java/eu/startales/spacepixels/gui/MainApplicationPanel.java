@@ -15,7 +15,6 @@ import eu.startales.spacepixels.session.SkyCatalogueModel;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.IterativeDetectionRequest;
-import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
@@ -499,7 +498,8 @@ public class MainApplicationPanel extends JPanel {
         ProcessingSession owner = mainAppWindow.getSession();
         if (owner == null || owner.getProcessing() != session) return;
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
-        startJob(JobKind.DETECTION, session, new DetectionTask(session, settings, configuration.autoTuneMaxCandidateFrames(),
+        startJob(JobKind.DETECTION, session, new DetectionTask(session, settings, configuration.visualizationSettings(),
+                configuration.autoTuneMaxCandidateFrames(),
                 owner.getSkyCatalogue().snapshot(),
                 summary -> reportPrompt.confirm(summary, session.hasPlateSolvedFrame(), 50, null, settings))
                         .showingPreviews(progressDialog.previewSink()),
@@ -573,6 +573,7 @@ public class MainApplicationPanel extends JPanel {
                 TransientInspectionFrame frame = new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
                         mainAppWindow.getStretchPanel());
                 frame.setSkyCatalogueModel(skyCatalogue());
+                frame.setMarkerSettings(() -> mainAppWindow.getDetectionConfigurationPanel().visualizationSettings());
                 if (!frame.open(mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getTrackOverlay())) {
                     JOptionPane.showMessageDialog(null, "The detection kept no frames to inspect.",
                             "Manual Transient Inspection", JOptionPane.INFORMATION_MESSAGE);
@@ -594,9 +595,8 @@ public class MainApplicationPanel extends JPanel {
         DetectionConfig settings = configuration.checkedSettings("Detect Iteratively did not start.");
         if (settings == null) return;
         AppConfig application = mainAppWindow.getApplicationSettings().getConfig().copy();
-        application.variableStarReportOptions = configuration.reportOptions();
         IterativeDetectionRequest request = new IterativeDetectionRequest(selected.directory(), settings, application,
-                DetectionReportGenerator.captureExportSettings(application.variableStarReportOptions), selected.plan(),
+                configuration.visualizationSettings(), selected.plan(),
                 selected.autoTuneProfile(), selected.autoTuneFrames(), selected.autoPrepare(), selected.keepNegative(), selected.availableFrames(),
                 mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getSkyCatalogue().snapshot());
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());

@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.gui;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
@@ -27,7 +28,7 @@ public final class StarMaskLifecycleProbe {
 
     public StarMaskLifecycleProbe(Window owner, JTransientEngine.MasterStackResult stack) {
         DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
-        viewer = new StarMaskExplorerFrame(owner, "Lifecycle test", stack, config,
+        viewer = new StarMaskExplorerFrame(owner, "Lifecycle test", stack, config, VisualizationSettings.defaults(),
                 new StarMaskExplorerFrame.Settings(config.masterSigmaMultiplier, config.masterGrowSigmaMultiplier,
                         config.masterMinDetectionPixels, config.maxStarJitter), settings -> { },
                 (pixels, settings, maskSettings) -> {

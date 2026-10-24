@@ -9,10 +9,10 @@
  */
 package eu.startales.spacepixels.gui;
 
+import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Pixel;
 import eu.startales.spacepixels.util.BlinkSequence;
-import eu.startales.spacepixels.util.RawImageAnnotator;
 import eu.startales.spacepixels.util.TrackOverlay;
 import eu.startales.spacepixels.util.VariableStarOverlay;
 
@@ -37,6 +37,7 @@ import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Supplier;
 
 /**
  * Shows one frame from its 16-bit data through the stretch tables, drawing only the part on screen (from a reduced
@@ -119,6 +120,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private boolean overlayVisible;
     private List<DetectedObject> detections;
     private boolean detectionsVisible = true;
+    /** The marker sizes of detections, read at each paint so they follow the settings page. */
+    private Supplier<VisualizationSettings> markerSettings = VisualizationSettings::defaults;
     private List<SkyMark> skyMarks;
     private double skyStarLimit;
     private boolean skyStars = true;
@@ -355,6 +358,12 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     /** The detections of the frame shown, or null. */
     void setDetections(List<DetectedObject> detections) {
         this.detections = detections;
+        repaint();
+    }
+
+    /** Where the marker sizes of detections come from; the built-in sizes until a window sets it. */
+    void setMarkerSettings(Supplier<VisualizationSettings> settings) {
+        markerSettings = java.util.Objects.requireNonNull(settings);
         repaint();
     }
 
@@ -819,13 +828,14 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     }
 
     /**
-     * Green boxes around point sources and red lines along streaks, sized in frame pixels by the marker settings of
-     * {@link RawImageAnnotator} (the visualization preferences). From 100 % zoom the exact pixels of each detection
-     * are tinted too. Only detections on screen are drawn.
+     * Green boxes around point sources and red lines along streaks, sized in frame pixels by the marker settings
+     * (the visualization preferences). From 100 % zoom the exact pixels of each detection are tinted too. Only
+     * detections on screen are drawn.
      */
     private void drawDetections(Graphics2D g2) {
-        double streakLineScale = RawImageAnnotator.streakLineScaleFactor;
-        double streakBoxRadius = RawImageAnnotator.streakCentroidBoxRadius;
+        VisualizationSettings markers = markerSettings.get();
+        double streakLineScale = markers.getStreakLineScaleFactor();
+        double streakBoxRadius = markers.getStreakCentroidBoxRadius();
         double scale = scale();
         double left = left(scale);
         double top = top(scale);
@@ -837,7 +847,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             }
             double reach = object.isStreak
                     ? Math.max(streakBoxRadius, object.elongation * streakLineScale)
-                    : pointBoxRadius(object);
+                    : pointBoxRadius(object, markers);
             double x = left + (object.x + 0.5) * scale;
             double y = top + (object.y + 0.5) * scale;
             double screenReach = Math.max(MIN_MARKER_RADIUS, reach * scale) + 2;
@@ -880,19 +890,19 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                 double box = Math.max(3, streakBoxRadius * scale);
                 g2.draw(new java.awt.geom.Rectangle2D.Double(x - box, y - box, 2 * box, 2 * box));
             } else {
-                double box = Math.max(MIN_MARKER_RADIUS, pointBoxRadius(object) * scale);
+                double box = Math.max(MIN_MARKER_RADIUS, pointBoxRadius(object, markers) * scale);
                 g2.draw(new java.awt.geom.Rectangle2D.Double(x - box, y - box, 2 * box, 2 * box));
             }
         }
     }
 
     /** The box clears the object: its rough radius plus a margin, and is at least the minimum box size. */
-    private static double pointBoxRadius(DetectedObject object) {
-        int minimum = RawImageAnnotator.pointSourceMinBoxRadius;
+    private static double pointBoxRadius(DetectedObject object, VisualizationSettings markers) {
+        int minimum = markers.getPointSourceMinBoxRadius();
         if (object.pixelArea <= 0) {
             return minimum;
         }
-        return Math.max(minimum, Math.round(Math.sqrt(object.pixelArea / Math.PI)) + RawImageAnnotator.dynamicBoxPadding);
+        return Math.max(minimum, Math.round(Math.sqrt(object.pixelArea / Math.PI)) + markers.getDynamicBoxPadding());
     }
 
     private static Color withAlpha(Color color, int alpha) {

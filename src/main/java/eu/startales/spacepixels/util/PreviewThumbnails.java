@@ -31,11 +31,6 @@ public final class PreviewThumbnails {
     private PreviewThumbnails() {
     }
 
-    /** A frame or stack with the report's current stretch settings. */
-    public static BufferedImage frame(short[][] pixels) {
-        return frame(pixels, DisplayImageRenderer.autoStretchBlackSigma, DisplayImageRenderer.autoStretchWhiteSigma);
-    }
-
     /** A frame or stack, reduced by averaging blocks of pixels and stretched with the levels of the full image. */
     public static BufferedImage frame(short[][] pixels, double blackSigma, double whiteSigma) {
         int height = pixels.length;

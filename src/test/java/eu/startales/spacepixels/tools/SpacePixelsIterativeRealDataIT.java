@@ -8,7 +8,7 @@ import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.IterativeDetectionPipelineService;
 import eu.startales.spacepixels.util.IterativeDetectionPlan;
 import eu.startales.spacepixels.util.IterativeDetectionRequest;
-import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Assume;
 import org.junit.Test;
@@ -70,7 +70,7 @@ public class SpacePixelsIterativeRealDataIT {
 
             File iterativeIndex = new IterativeDetectionPipelineService().run(new IterativeDetectionRequest(
                     preparedDirectory.getPreparedInputDirectory(), detectionConfig, new AppConfig(),
-                    ExportVisualizationSettings.defaults(),
+                    VisualizationSettings.defaults(),
                     new IterativeDetectionPlan(5, 5, maxFrames > 0 ? Math.max(5, maxFrames) : 0),
                     null, 5, false, false, 0, null), null, null);
 

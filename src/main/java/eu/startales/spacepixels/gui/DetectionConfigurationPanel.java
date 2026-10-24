@@ -18,6 +18,7 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
 import eu.startales.spacepixels.config.SpacePixelsSettingsFiles;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.config.DetectionSetting;
 import eu.startales.spacepixels.config.ResidualAnalysisSettings;
 import eu.startales.spacepixels.config.CoreDetectionSettings;
@@ -39,7 +40,6 @@ import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import eu.startales.spacepixels.util.*;
-import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -61,8 +61,9 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private volatile DetectionConfig jTransientConfig;
     private volatile int autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
-    private VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
-    private VariableStarReportOptions savedVariableStarReportOptions;
+    // The visualization settings in use: the values of the visualization page and the variable-star report
+    // presentation, which is saved with the detection profile. Runs capture it when they start; viewers draw with it.
+    private VisualizationSettings visualization = VisualizationSettings.defaults();
     private final File detectionProfileFile = new File(System.getProperty("user.home"), SpacePixelsDetectionProfileIO.DEFAULT_FILENAME);
     private final File legacyDetectionProfileFile = new File(System.getProperty("user.home"), SpacePixelsDetectionProfileIO.LEGACY_FILENAME);
     private final File visualizationPreferencesFile = new File(System.getProperty("user.home"), SpacePixelsVisualizationPreferencesIO.DEFAULT_FILENAME);
@@ -154,7 +155,7 @@ public class DetectionConfigurationPanel extends JPanel {
     // Last saved state, for the unsaved-changes indicator and Revert.
     private DetectionConfig savedConfig;
     private int savedAutoTuneMaxCandidateFrames;
-    private SpacePixelsVisualizationPreferences savedVisualization;
+    private VisualizationSettings savedVisualization;
     private String savedSnapshot;
     private boolean suppressAutoApply;
 
@@ -396,7 +397,8 @@ public class DetectionConfigurationPanel extends JPanel {
         StarMaskExplorerFrame.Settings current = new StarMaskExplorerFrame.Settings(
                 config.masterSigmaMultiplier, config.masterGrowSigmaMultiplier, config.masterMinDetectionPixels, config.maxStarJitter);
         ProcessingSession owner = mainAppWindow.getSession();
-        new StarMaskExplorerFrame(mainAppWindow.getFrame(), sessionName, owner.getMasterStack(masterStackKey(config)), config, current,
+        new StarMaskExplorerFrame(mainAppWindow.getFrame(), sessionName, owner.getMasterStack(masterStackKey(config)), config,
+                visualization, current,
                 settings -> {
                     if (mainAppWindow.isCurrentSession(owner)) applyStarMaskSettings(settings);
                 }).setVisible(true);
@@ -525,30 +527,30 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void rememberSavedState() {
-        rememberSavedState(new SpacePixelsDetectionProfile(jTransientConfig.clone(), autoTuneMaxCandidateFrames, variableStarReportOptions),
-                SpacePixelsVisualizationPreferences.captureCurrent(), navigator.captureSavedState());
+        rememberSavedState(new SpacePixelsDetectionProfile(jTransientConfig.clone(), autoTuneMaxCandidateFrames, reportOptions()),
+                SpacePixelsVisualizationPreferences.of(visualization), navigator.captureSavedState());
     }
 
-    private void rememberSavedState(SpacePixelsDetectionProfile profile, SpacePixelsVisualizationPreferences visualization,
+    private void rememberSavedState(SpacePixelsDetectionProfile profile, SpacePixelsVisualizationPreferences preferences,
                                     Runnable savedRows) {
         savedConfig = profile.getDetectionConfig().clone();
         savedAutoTuneMaxCandidateFrames = profile.getAutoTuneMaxCandidateFrames();
-        savedVariableStarReportOptions = profile.getVariableStarReportOptions();
-        savedVisualization = visualization;
-        savedSnapshot = snapshot(profile, visualization);
+        savedVisualization = preferences.applyTo(VisualizationSettings.defaults())
+                .withVariableStarReportOptions(profile.getVariableStarReportOptions());
+        savedSnapshot = snapshot(profile, preferences);
         savedRows.run();
         overviewPanel.setSavedValues(this::savedCoreValue);
     }
 
     private String currentSnapshot() {
-        return snapshot(new SpacePixelsDetectionProfile(jTransientConfig, autoTuneMaxCandidateFrames, variableStarReportOptions),
-                SpacePixelsVisualizationPreferences.captureCurrent());
+        return snapshot(new SpacePixelsDetectionProfile(jTransientConfig, autoTuneMaxCandidateFrames, reportOptions()),
+                SpacePixelsVisualizationPreferences.of(visualization));
     }
 
-    private static String snapshot(SpacePixelsDetectionProfile profile, SpacePixelsVisualizationPreferences visualization) {
+    private static String snapshot(SpacePixelsDetectionProfile profile, SpacePixelsVisualizationPreferences preferences) {
         StringWriter writer = new StringWriter();
         SpacePixelsDetectionProfileIO.write(writer, profile);
-        SpacePixelsVisualizationPreferencesIO.write(writer, visualization);
+        SpacePixelsVisualizationPreferencesIO.write(writer, preferences);
         return writer.toString();
     }
 
@@ -576,10 +578,10 @@ public class DetectionConfigurationPanel extends JPanel {
             return;
         }
         jTransientConfig = savedConfig.clone();
-        variableStarReportOptions = savedVariableStarReportOptions;
+        visualization = savedVisualization;
+        // The visualization controls first: applying the detection settings applies every control.
+        updateVisualizationSpinners();
         updateSpinnersFromConfig(jTransientConfig);
-        savedVisualization.applyToRuntime();
-        updateVisualizationSpinnersFromRuntime();
         setSpinnerValueClamped(spinAutoTuneMaxCandidateFrames, savedAutoTuneMaxCandidateFrames);
         applySettingsToMemory();
         overviewPanel.forgetTunedValues();
@@ -588,7 +590,7 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     /** Reloads rendering controls as one EDT update so a partial reload cannot overwrite restored preferences. */
-    private void updateVisualizationSpinnersFromRuntime() {
+    private void updateVisualizationSpinners() {
         boolean wasSuppressed = suppressAutoApply;
         suppressAutoApply = true;
         try {
@@ -644,11 +646,11 @@ public class DetectionConfigurationPanel extends JPanel {
                 SpacePixelsDetectionProfile detectionProfile = SpacePixelsDetectionProfileIO.load(reader);
                 jTransientConfig = detectionProfile.getDetectionConfig();
                 autoTuneMaxCandidateFrames = detectionProfile.getAutoTuneMaxCandidateFrames();
-                variableStarReportOptions = detectionProfile.getVariableStarReportOptions();
+                visualization = visualization.withVariableStarReportOptions(detectionProfile.getVariableStarReportOptions());
                 try (FileReader migrationReader = new FileReader(profileToLoad)) {
                     if (SpacePixelsDetectionProfileIO.needsMigration(migrationReader)) {
                         SpacePixelsDetectionProfile migrationProfile = new SpacePixelsDetectionProfile(jTransientConfig.clone(),
-                                autoTuneMaxCandidateFrames, variableStarReportOptions);
+                                autoTuneMaxCandidateFrames, reportOptions());
                         SwingUtilities.invokeLater(() -> offerDetectionProfileMigration(profileToLoad, migrationProfile));
                     }
                 } catch (Exception e) {
@@ -661,7 +663,7 @@ public class DetectionConfigurationPanel extends JPanel {
         }
         jTransientConfig = new DetectionConfig();
         autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
-        variableStarReportOptions = VariableStarReportOptions.DEFAULT;
+        visualization = visualization.withVariableStarReportOptions(VariableStarReportOptions.DEFAULT);
     }
 
     private void offerDetectionProfileMigration(File profileToLoad, SpacePixelsDetectionProfile detectionProfile) {
@@ -707,8 +709,7 @@ public class DetectionConfigurationPanel extends JPanel {
         }
 
         try (FileReader reader = new FileReader(visualizationPreferencesFile)) {
-            SpacePixelsVisualizationPreferences preferences = SpacePixelsVisualizationPreferencesIO.load(reader);
-            preferences.applyToRuntime();
+            visualization = SpacePixelsVisualizationPreferencesIO.load(reader).applyTo(visualization);
         } catch (Exception e) {
             System.err.println("Failed to load visualization preferences, falling back to defaults: " + e.getMessage());
         }
@@ -721,15 +722,15 @@ public class DetectionConfigurationPanel extends JPanel {
             return;
         }
 
-        SpacePixelsDetectionProfile profile = new SpacePixelsDetectionProfile(settings, autoTuneMaxCandidateFrames, variableStarReportOptions);
-        SpacePixelsVisualizationPreferences visualization = SpacePixelsVisualizationPreferences.captureCurrent();
+        SpacePixelsDetectionProfile profile = new SpacePixelsDetectionProfile(settings, autoTuneMaxCandidateFrames, reportOptions());
+        SpacePixelsVisualizationPreferences preferences = SpacePixelsVisualizationPreferences.of(visualization);
         Runnable savedRows = navigator.captureSavedState();
         ProcessingSession expectedSession = mainAppWindow.getSession();
         saveButton.setEnabled(false);
         showFooterNote("Saving settings...");
         mainAppWindow.getSettingsStorage().submit("Detection settings", () -> {
             SpacePixelsSettingsFiles.save(
-                    detectionProfileFile, profile, visualizationPreferencesFile, visualization);
+                    detectionProfileFile, profile, visualizationPreferencesFile, preferences);
             return null;
         }).whenComplete((ignored, failure) -> EventQueue.invokeLater(() -> {
             if (mainAppWindow.isClosing()) return;
@@ -739,7 +740,7 @@ public class DetectionConfigurationPanel extends JPanel {
                 JOptionPane.showMessageDialog(this, "Could not save the settings.\n" + failure.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
-            rememberSavedState(profile, visualization, savedRows);
+            rememberSavedState(profile, preferences, savedRows);
             boolean unchanged = savedSnapshot.equals(currentSnapshot());
             if (unchanged && mainAppWindow.getSession() == expectedSession) overviewPanel.clearTunedMarkers();
             updateSavedState();
@@ -752,7 +753,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private void loadDetectionDefaults() {
         jTransientConfig = new DetectionConfig();
-        variableStarReportOptions = VariableStarReportOptions.DEFAULT;
+        visualization = visualization.withVariableStarReportOptions(VariableStarReportOptions.DEFAULT);
         updateSpinnersFromConfig(jTransientConfig);
         overviewPanel.forgetTunedValues();
         updateSavedState();
@@ -799,7 +800,17 @@ public class DetectionConfigurationPanel extends JPanel {
         return jTransientConfig.clone();
     }
 
-    VariableStarReportOptions reportOptions() { return variableStarReportOptions; }
+    /**
+     * The visualization settings as last applied, for a job to capture when it is created (read it after
+     * {@link #checkedSettings}) and for the viewers to draw detections with.
+     */
+    VisualizationSettings visualizationSettings() { return visualization; }
+
+    private VariableStarReportOptions reportOptions() { return visualization.getVariableStarReportOptions(); }
+
+    private void setReportOptions(VariableStarReportOptions options) {
+        visualization = visualization.withVariableStarReportOptions(options);
+    }
 
     /**
      * The Auto-Tune frame limit as last applied, for a job to capture when it is created; read it after
@@ -1039,13 +1050,13 @@ public class DetectionConfigurationPanel extends JPanel {
         spinVariableMaxCandidateCards = addApplicationInteger(panel, reportBindings, new ApplicationSetting<>(
                 "variableStarMaxCandidateCards", "Maximum Detailed Candidate Cards", "cards",
                 "Maximum variable-star cards with full light curves and cutouts in the report (default 40).<br>Set 60 for a longer report. The table, field maps and CSVs still include every candidate.",
-                false, Integer.class, () -> variableStarReportOptions.maxCandidateCards(), value -> variableStarReportOptions = new VariableStarReportOptions(value, variableStarReportOptions.sortOrder())),
+                false, Integer.class, () -> reportOptions().maxCandidateCards(), value -> setReportOptions(new VariableStarReportOptions(value, reportOptions().sortOrder()))),
                 1, VariableStarReportOptions.MAX_CANDIDATE_CARDS, 1);
         cmbVariableStarSortOrder = addApplicationChoice(panel, reportBindings, new ApplicationSetting<>(
                 "variableStarSortOrder", "Candidate Presentation Order", "",
                 "High confidence first; V numbers stay fixed.<br>Observed changes: up-and-down, dips and peaks, then larger Δmag.<br>Known periods: saved VSX matches; unknown periods last in each tier.",
-                false, VariableStarReportOptions.SortOrder.class, () -> variableStarReportOptions.sortOrder(),
-                value -> variableStarReportOptions = new VariableStarReportOptions(variableStarReportOptions.maxCandidateCards(), value)),
+                false, VariableStarReportOptions.SortOrder.class, () -> reportOptions().sortOrder(),
+                value -> setReportOptions(new VariableStarReportOptions(reportOptions().maxCandidateCards(), value))),
                 VariableStarReportOptions.SortOrder.values());
 
         panel.add(Box.createVerticalStrut(10));
@@ -1125,17 +1136,17 @@ public class DetectionConfigurationPanel extends JPanel {
         spinAutoBlackSigma = addApplicationDouble(panel, visualizationBindings, new ApplicationSetting<>(
                 "autoStretchBlackSigma", "Auto Stretch Black Sigma", "sigma",
                 "Controls how far below the image mean the automatic black point is placed when stretching rendered imagery. Higher values darken the background more aggressively.",
-                false, Double.class, () -> DisplayImageRenderer.autoStretchBlackSigma, value -> DisplayImageRenderer.autoStretchBlackSigma = value),
+                false, Double.class, () -> visualization.getAutoStretchBlackSigma(), value -> visualization = visualization.withAutoStretchBlackSigma(value)),
                 0.0, 10.0, 0.1);
         spinAutoWhiteSigma = addApplicationDouble(panel, visualizationBindings, new ApplicationSetting<>(
                 "autoStretchWhiteSigma", "Auto Stretch White Sigma", "sigma",
                 "Controls how far above the image mean the automatic white point is placed when stretching rendered imagery. Higher values preserve more bright-core detail but can reduce contrast on faint structure.",
-                false, Double.class, () -> DisplayImageRenderer.autoStretchWhiteSigma, value -> DisplayImageRenderer.autoStretchWhiteSigma = value),
+                false, Double.class, () -> visualization.getAutoStretchWhiteSigma(), value -> visualization = visualization.withAutoStretchWhiteSigma(value)),
                 0.1, 20.0, 0.1);
         spinGifBlinkSpeed = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
                 "gifBlinkSpeedMs", "GIF Blink Speed (ms)", "ms",
                 "Frame delay used for exported animated GIFs. Lower values blink faster; higher values slow the inspection cadence.",
-                false, Integer.class, () -> DetectionReportGenerator.gifBlinkSpeedMs, value -> DetectionReportGenerator.gifBlinkSpeedMs = value),
+                false, Integer.class, () -> visualization.getGifBlinkSpeedMs(), value -> visualization = visualization.withGifBlinkSpeedMs(value)),
                 50, 5000, 10);
 
 
@@ -1144,27 +1155,27 @@ public class DetectionConfigurationPanel extends JPanel {
         spinStreakScale = addApplicationDouble(panel, visualizationBindings, new ApplicationSetting<>(
                 "streakLineScaleFactor", "Streak Line Scale Factor", "",
                 "Visualization-only setting that scales the length of the drawn streak annotation line.",
-                true, Double.class, () -> RawImageAnnotator.streakLineScaleFactor, value -> RawImageAnnotator.streakLineScaleFactor = value),
+                true, Double.class, () -> visualization.getStreakLineScaleFactor(), value -> visualization = visualization.withStreakLineScaleFactor(value)),
                 0.1, 20.0, 0.1);
         spinStreakCentroidRad = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
                 "streakCentroidBoxRadius", "Streak Centroid Box Radius", "pixels",
                 "Visualization-only setting that controls the size of the box drawn around a streak centroid.",
-                true, Integer.class, () -> RawImageAnnotator.streakCentroidBoxRadius, value -> RawImageAnnotator.streakCentroidBoxRadius = value),
+                true, Integer.class, () -> visualization.getStreakCentroidBoxRadius(), value -> visualization = visualization.withStreakCentroidBoxRadius(value)),
                 1, 100, 1);
         spinPointBoxRad = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
                 "pointSourceMinBoxRadius", "Point Source Min Box Radius", "pixels",
                 "Visualization-only setting that sets the minimum radius of boxes drawn around point sources.",
-                true, Integer.class, () -> RawImageAnnotator.pointSourceMinBoxRadius, value -> RawImageAnnotator.pointSourceMinBoxRadius = value),
+                true, Integer.class, () -> visualization.getPointSourceMinBoxRadius(), value -> visualization = visualization.withPointSourceMinBoxRadius(value)),
                 1, 50, 1);
         spinBoxPad = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
                 "dynamicBoxPadding", "Dynamic Box Padding", "pixels",
                 "Visualization-only setting that adds extra padding around automatically sized annotation boxes.",
-                true, Integer.class, () -> RawImageAnnotator.dynamicBoxPadding, value -> RawImageAnnotator.dynamicBoxPadding = value),
+                true, Integer.class, () -> visualization.getDynamicBoxPadding(), value -> visualization = visualization.withDynamicBoxPadding(value)),
                 0, 50, 1);
         spinCropPadding = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
                 "trackCropPadding", "Track Crop Border Padding", "pixels",
                 "Export-only setting that adds extra border around cropped track images.",
-                true, Integer.class, () -> DetectionReportGenerator.trackCropPadding, value -> DetectionReportGenerator.trackCropPadding = value),
+                true, Integer.class, () -> visualization.getTrackCropPadding(), value -> visualization = visualization.withTrackCropPadding(value)),
                 0, 2000, 10);
 
         return panel;
@@ -1482,9 +1493,6 @@ public class DetectionConfigurationPanel extends JPanel {
 
             tuningBindings.forEach(ApplicationSettingBinding::apply);
             reportBindings.forEach(ApplicationSettingBinding::apply);
-            if (mainAppWindow.getImageProcessing() != null)
-                mainAppWindow.getImageProcessing().getAppConfig().variableStarReportOptions = variableStarReportOptions;
-
             visualizationBindings.forEach(ApplicationSettingBinding::apply);
 
         } catch (Exception ex) {
@@ -1585,8 +1593,6 @@ public class DetectionConfigurationPanel extends JPanel {
 
     /** A new session, or none: the Overview shows it, and the master stack of the last one is dropped. */
     void sessionChanged(FitsFileInformation[] filesInfo) {
-        if (mainAppWindow.getImageProcessing() != null)
-            mainAppWindow.getImageProcessing().getAppConfig().variableStarReportOptions = variableStarReportOptions;
         if (filesInfo.length == 0) {
             overviewPanel.setSession(mainAppWindow.getSession(), null, 0, 0, 0, false, null, new ArrayList<>());
             return;

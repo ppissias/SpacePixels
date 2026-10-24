@@ -10,23 +10,16 @@
 
 package eu.startales.spacepixels.util;
 
-import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
 
 /**
- * Generic grayscale display renderer shared by UI previews and report export paths.
+ * Generic grayscale display renderer shared by UI previews and report export paths; the stretch sigmas come from the
+ * caller's {@link eu.startales.spacepixels.config.VisualizationSettings}.
  */
 public final class DisplayImageRenderer {
 
-    public static double autoStretchBlackSigma = ExportVisualizationSettings.defaults().getAutoStretchBlackSigma();
-    public static double autoStretchWhiteSigma = ExportVisualizationSettings.defaults().getAutoStretchWhiteSigma();
-
     private DisplayImageRenderer() {
-    }
-
-    public static BufferedImage createDisplayImage(short[][] imageData) {
-        return createDisplayImage(imageData, autoStretchBlackSigma, autoStretchWhiteSigma);
     }
 
     public static BufferedImage createDisplayImage(short[][] imageData,

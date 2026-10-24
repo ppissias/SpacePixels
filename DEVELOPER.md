@@ -35,7 +35,7 @@ The design rules that follow from them:
 - **Logic is testable without the window.** The GUI mechanics tests drive the real window separately.
 - **The three repositories are one coordinated source set.** SpacePixels, JTransient and JPlateSolve change together; there is no promise to keep old library signatures, and no reflection or fallback code for older library versions. Changes to exposed API types still need an explicit compatibility decision, updated consumer checks and release documentation; updating sibling callers does not update external consumers.
 
-**Current exceptions.** Run inputs are not yet entirely explicit: rendering preferences include mutable static state (SP-02). `DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain` also rewrites engine results and telemetry after detection when fewer than three frames remain. These are existing implementation facts, not examples to copy; their evaluation is recorded with SP-04 in DESIGN-IMPROVEMENTS.md. Package dependency tests enforce selected structural boundaries, not runtime thread confinement or every ownership rule.
+**Current exceptions.** `DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain` rewrites engine results and telemetry after detection when fewer than three frames remain. This is an existing implementation fact, not an example to copy; its evaluation is recorded with SP-04 in DESIGN-IMPROVEMENTS.md. Package dependency tests enforce selected structural boundaries, not runtime thread confinement or every ownership rule.
 
 **Avoid:** rewriting the Swing UI in another toolkit to fix state problems; splitting classes by line count; replacing a large panel with an equally large controller; generic jobs with untyped results; making every object observable; keeping large image buffers for later convenience; changing the viewers' focus rules without real keyboard tests.
 
@@ -91,7 +91,7 @@ All packages are under `eu.startales.spacepixels`.
 | `jobs` | Runs long operations one at a time; no Swing | `JobCoordinator`, `Job`, `JobOutcome`, `JobKind` |
 | `tasks` | The long operations, one class per job | `FitsImportTask`, `DetectionTask`, `PlateSolveTask`, `AutoTuneTask`, … |
 | `session` | The imported dataset: identity, owned state and handover; no Swing | `ProcessingSession`, `SessionOwner`, `SkyCatalogueModel`, `AutoTuneState` |
-| `config` | Application settings, detection profiles, visualization preferences and their files; the typed setting definitions | `ApplicationSettings`, `AppConfig`, `SpacePixelsDetectionProfileIO`, `DetectionSetting`, `DetectionRunOptions` |
+| `config` | Application settings, detection profiles, visualization settings and their files; the typed setting definitions | `ApplicationSettings`, `AppConfig`, `SpacePixelsDetectionProfileIO`, `DetectionSetting`, `DetectionRunOptions`, `VisualizationSettings` |
 | `util` | The processing services: import and preparation, FITS and XISF, WCS, the detection pipelines, plate solving | `ImageProcessing`, `FitsImportService`, `StandardDetectionPipelineService`, `IterativeDetectionPipelineService`, `PlateSolveService`, `StagedFile` |
 | `util.reporting` | The HTML report, its model, section writers and the live lookup proxy | `DetectionReportGenerator`, `ReportData`, `FindingCategory`, the `…SectionWriter` classes |
 | `util.skycatalog` | Fetching and storing the sky catalogue; the plate-solution correction fit | `SkyCatalogueClient`, `SkyCatalogueStore`, `PlateCorrectionFitter` |

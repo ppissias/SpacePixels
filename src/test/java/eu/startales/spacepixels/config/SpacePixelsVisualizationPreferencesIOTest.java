@@ -1,12 +1,11 @@
 package eu.startales.spacepixels.config;
 
-import eu.startales.spacepixels.util.DisplayImageRenderer;
-import eu.startales.spacepixels.util.RawImageAnnotator;
-import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
+import com.google.gson.JsonParser;
 import org.junit.Test;
 
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -58,47 +57,42 @@ public class SpacePixelsVisualizationPreferencesIOTest {
         assertFalse(writer.toString().contains("includeAiCreativeReportSections"));
     }
 
+    /** The file holds the eight values the settings page edits, under the names older files use. */
     @Test
-    public void applyToRuntimeUpdatesVisualizationStatics() {
-        double originalStreakLineScaleFactor = RawImageAnnotator.streakLineScaleFactor;
-        int originalStreakCentroidBoxRadius = RawImageAnnotator.streakCentroidBoxRadius;
-        int originalPointSourceMinBoxRadius = RawImageAnnotator.pointSourceMinBoxRadius;
-        int originalDynamicBoxPadding = RawImageAnnotator.dynamicBoxPadding;
-        double originalAutoStretchBlackSigma = DisplayImageRenderer.autoStretchBlackSigma;
-        double originalAutoStretchWhiteSigma = DisplayImageRenderer.autoStretchWhiteSigma;
-        int originalGifBlinkSpeedMs = DetectionReportGenerator.gifBlinkSpeedMs;
-        int originalTrackCropPadding = DetectionReportGenerator.trackCropPadding;
+    public void savedFormKeepsItsFieldNames() {
+        StringWriter writer = new StringWriter();
+        SpacePixelsVisualizationPreferencesIO.write(writer, SpacePixelsVisualizationPreferences.of(VisualizationSettings.defaults()));
 
-        SpacePixelsVisualizationPreferences preferences = new SpacePixelsVisualizationPreferences();
-        preferences.streakLineScaleFactor = 6.2d;
-        preferences.streakCentroidBoxRadius = 8;
-        preferences.pointSourceMinBoxRadius = 5;
-        preferences.dynamicBoxPadding = 7;
-        preferences.autoStretchBlackSigma = 0.6d;
-        preferences.autoStretchWhiteSigma = 3.8d;
-        preferences.gifBlinkSpeedMs = 150;
-        preferences.trackCropPadding = 140;
+        assertEquals(List.of("streakLineScaleFactor", "streakCentroidBoxRadius", "pointSourceMinBoxRadius", "dynamicBoxPadding",
+                        "autoStretchBlackSigma", "autoStretchWhiteSigma", "gifBlinkSpeedMs", "trackCropPadding"),
+                List.copyOf(JsonParser.parseString(writer.toString()).getAsJsonObject().keySet()));
+    }
 
-        try {
-            preferences.applyToRuntime();
+    /** Saving and loading carries the edited values; the values the file does not hold come from the base value. */
+    @Test
+    public void savedValuesApplyToABaseValue() throws Exception {
+        VariableStarReportOptions options = new VariableStarReportOptions(60, VariableStarReportOptions.SortOrder.SIGNIFICANCE);
+        VisualizationSettings base = VisualizationSettings.defaults().withMaxAnimatedMarkers(7).withVariableStarReportOptions(options);
+        VisualizationSettings edited = base.withStreakLineScaleFactor(6.2).withStreakCentroidBoxRadius(8)
+                .withPointSourceMinBoxRadius(5).withDynamicBoxPadding(7).withAutoStretchBlackSigma(0.6)
+                .withAutoStretchWhiteSigma(3.8).withGifBlinkSpeedMs(150).withTrackCropPadding(140);
+        StringWriter writer = new StringWriter();
+        SpacePixelsVisualizationPreferencesIO.write(writer, SpacePixelsVisualizationPreferences.of(edited));
 
-            assertEquals(6.2d, RawImageAnnotator.streakLineScaleFactor, 0.0d);
-            assertEquals(8, RawImageAnnotator.streakCentroidBoxRadius);
-            assertEquals(5, RawImageAnnotator.pointSourceMinBoxRadius);
-            assertEquals(7, RawImageAnnotator.dynamicBoxPadding);
-            assertEquals(0.6d, DisplayImageRenderer.autoStretchBlackSigma, 0.0d);
-            assertEquals(3.8d, DisplayImageRenderer.autoStretchWhiteSigma, 0.0d);
-            assertEquals(150, DetectionReportGenerator.gifBlinkSpeedMs);
-            assertEquals(140, DetectionReportGenerator.trackCropPadding);
-        } finally {
-            RawImageAnnotator.streakLineScaleFactor = originalStreakLineScaleFactor;
-            RawImageAnnotator.streakCentroidBoxRadius = originalStreakCentroidBoxRadius;
-            RawImageAnnotator.pointSourceMinBoxRadius = originalPointSourceMinBoxRadius;
-            RawImageAnnotator.dynamicBoxPadding = originalDynamicBoxPadding;
-            DisplayImageRenderer.autoStretchBlackSigma = originalAutoStretchBlackSigma;
-            DisplayImageRenderer.autoStretchWhiteSigma = originalAutoStretchWhiteSigma;
-            DetectionReportGenerator.gifBlinkSpeedMs = originalGifBlinkSpeedMs;
-            DetectionReportGenerator.trackCropPadding = originalTrackCropPadding;
-        }
+        SpacePixelsVisualizationPreferences loaded = SpacePixelsVisualizationPreferencesIO.load(new StringReader(writer.toString()));
+
+        assertEquals(edited, loaded.applyTo(base));
+        assertEquals(VisualizationSettings.defaults().withStreakLineScaleFactor(6.2).withStreakCentroidBoxRadius(8)
+                        .withPointSourceMinBoxRadius(5).withDynamicBoxPadding(7).withAutoStretchBlackSigma(0.6)
+                        .withAutoStretchWhiteSigma(3.8).withGifBlinkSpeedMs(150).withTrackCropPadding(140),
+                loaded.applyTo(VisualizationSettings.defaults()));
+    }
+
+    /** A value missing from an older or edited file keeps its built-in default. */
+    @Test
+    public void missingValuesKeepTheBuiltInDefaults() throws Exception {
+        SpacePixelsVisualizationPreferences loaded = SpacePixelsVisualizationPreferencesIO.load(new StringReader("{\"gifBlinkSpeedMs\": 180}"));
+
+        assertEquals(VisualizationSettings.defaults().withGifBlinkSpeedMs(180), loaded.applyTo(VisualizationSettings.defaults()));
     }
 }

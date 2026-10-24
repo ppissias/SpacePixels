@@ -699,7 +699,7 @@ final class PipelineDiagnosticsSectionWriter {
                 15);
 
         for (int idx : sampledCornerIndices) {
-            cornerFrames.add(DetectionReportGenerator.createFourCornerMosaic(reportContext.rawFrames.get(idx), 150));
+            cornerFrames.add(DetectionReportGenerator.createFourCornerMosaic(reportContext.rawFrames.get(idx), 150, reportContext.settings));
         }
 
         BufferedImage driftImg = DetectionReportGenerator.createDriftMap(driftPoints, 300);

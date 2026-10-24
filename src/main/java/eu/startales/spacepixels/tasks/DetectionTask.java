@@ -11,6 +11,7 @@
 package eu.startales.spacepixels.tasks;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import io.github.ppissias.jtransient.config.DetectionConfigRules;
 import io.github.ppissias.jtransient.execution.CancellationScope;
@@ -43,23 +44,25 @@ public class DetectionTask implements Job<File> {
      * classified detections.
      */
     public DetectionTask(ImageProcessing preProcessing, DetectionConfig config) {
-        this(preProcessing, config, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, null,
+        this(preProcessing, config, VisualizationSettings.defaults(), SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, null,
                 summary -> summary.totalDetections <= 50);
     }
 
     /**
-     * Captures a job's settings, application options, Auto-Tune frame limit, the session's sky data and report
-     * decision when the job is created; a null {@code sky} reads the frames' folder. A missing processor retains the
-     * existing execution-time failure.
+     * Captures a job's settings, application options, visualization settings, Auto-Tune frame limit, the session's
+     * sky data and report decision when the job is created; a null {@code sky} reads the frames' folder. A missing
+     * processor retains the existing execution-time failure.
      */
-    public DetectionTask(ImageProcessing preProcessing, DetectionConfig config, int autoTuneMaxCandidateFrames,
-                         SkySnapshot sky, ImageProcessing.DetectionSafetyPrompt safetyPrompt) {
+    public DetectionTask(ImageProcessing preProcessing, DetectionConfig config, VisualizationSettings visualization,
+                         int autoTuneMaxCandidateFrames, SkySnapshot sky,
+                         ImageProcessing.DetectionSafetyPrompt safetyPrompt) {
         this.preProcessing = preProcessing;
         this.config = DetectionConfigRules.snapshot(config,
                 DetectionConfigRules.Operation.CONFIGURATION);
         this.options = preProcessing == null
                 ? DetectionRunOptions.defaults().withAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames)
-                : preProcessing.captureRunOptions(autoTuneMaxCandidateFrames);
+                        .withVisualization(visualization)
+                : preProcessing.captureRunOptions(visualization, autoTuneMaxCandidateFrames);
         this.sky = sky;
         this.safetyPrompt = safetyPrompt;
     }
