@@ -1,6 +1,6 @@
 # Developer guide
 
-How SpacePixels is built, how its code is organised, the principles it follows, and how to change it safely. This guide is for developers and coding agents. It describes the code as it is; planned design work is in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md) and planned functionality in [FEATURE-REQUESTS.md](FEATURE-REQUESTS.md).
+How SpacePixels is built, how its code is organised, the principles it follows, and how to change it safely. This guide is for developers and coding agents. The implementation sections describe the current code; the principles guide changes, with current exceptions identified below. Planned design work is in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md) and planned functionality in [FEATURE-REQUESTS.md](FEATURE-REQUESTS.md).
 
 | Read | For |
 |---|---|
@@ -16,24 +16,26 @@ Machine-specific paths (tools, test datasets, scratch folders, memory limits) ar
 
 ## Principles
 
-The maintainer's goals for the code, in order:
+Scientific correctness and preservation of valid results constrain every design change. Within that constraint, the maintainer's goals for the code, in order:
 
 1. **Readable code.** A reader should understand a class from its name, its Javadoc and its fields. Prefer plain, direct code over clever generality.
-2. **A clear application design with clear boundaries.** Each piece of state has one owner. Each package has one job, and its dependencies point one way.
-3. **A few chosen design patterns, applied consistently.** They are listed in the [table below](#design-patterns-in-use). Reuse them before introducing a new one.
-4. **No abstraction or engineering without a real need.** An interface needs two implementations or a test seam that is actually used. A layer needs a responsibility of its own. A compatibility path needs a caller that still uses it. When in doubt, delete rather than wrap.
+2. **A clear application design with clear boundaries.** Each piece of mutable state has one authoritative owner. Each package has one job, and its dependencies point one way.
+3. **No abstraction or engineering without a real need.** An interface normally needs two implementations or a test seam that is actually used; an explicit listener or ownership boundary can also justify one. A layer needs a responsibility of its own. A compatibility path needs a caller that still uses it. Remove unused machinery after identifying the contracts it protects. Fewer classes or files alone do not make a design simpler.
+4. **A few chosen design patterns, applied consistently.** They are listed in the [table below](#design-patterns-in-use). Reuse them when their responsibilities fit; consistency does not justify an unnecessary abstraction.
 
 The design rules that follow from them:
 
 - **JTransient owns detection.** SpacePixels prepares data, runs the work and presents results; it never changes detection behaviour. Engine changes belong in JTransient.
-- **One owner per piece of state, passed explicitly.** A run receives everything it uses (settings, options, correction, catalogue) when it is admitted, and never reads live controls, globals or files that another component may be rewriting. No mutable static state.
+- **One authoritative mutable owner, with explicit snapshots.** A run receives everything it uses (settings, options, correction, catalogue) when it is admitted, and never reads live controls, globals or files that another component may be rewriting. Live values, immutable run snapshots and saved baselines have distinct responsibilities; multiple representations are not by themselves duplicate ownership. Immutability of an element does not make its containing array immutable. No mutable static application state.
 - **Constructor injection and explicit listeners.** No service locator, no global event bus, no DI framework.
 - **The EDT is for the window.** Swing is touched only on the event dispatch thread; file, network and processing work run on owned workers. `DependencyRulesTest` enforces the package boundaries.
-- **Every job ends exactly once,** with its result or a reason, and no failure leaves the window locked.
+- **Every job ends exactly once,** with its result or a reason, and no failure leaves the window locked. Cancellation does not retract queued UI callbacks: delivery still checks the job and session identity. Preserve completed detection products separately from the outcome of report export.
 - **Files are replaced only when complete** (`StagedFile`, `AtomicReportFile`).
 - **The console shows only problems.** Diagnostics go through `DebugOutput` and appear with `-Dspacepixels.debug=true`.
 - **Logic is testable without the window.** The GUI mechanics tests drive the real window separately.
-- **The three repositories are one coordinated source set.** SpacePixels, JTransient and JPlateSolve change together; there is no promise to keep old library signatures, and no reflection or fallback code for older library versions.
+- **The three repositories are one coordinated source set.** SpacePixels, JTransient and JPlateSolve change together; there is no promise to keep old library signatures, and no reflection or fallback code for older library versions. Changes to exposed API types still need an explicit compatibility decision, updated consumer checks and release documentation; updating sibling callers does not update external consumers.
+
+**Current exceptions.** Run inputs are not yet entirely explicit: correction and catalogue snapshots still load from disk, and rendering preferences include mutable static state (SP-01, SP-02). `DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain` also rewrites engine results and telemetry after detection when fewer than three frames remain. These are existing implementation facts, not examples to copy; their evaluation is recorded with SP-04 in DESIGN-IMPROVEMENTS.md. Package dependency tests enforce selected structural boundaries, not runtime thread confinement or every ownership rule.
 
 **Avoid:** rewriting the Swing UI in another toolkit to fix state problems; splitting classes by line count; replacing a large panel with an equally large controller; generic jobs with untyped results; making every object observable; keeping large image buffers for later convenience; changing the viewers' focus rules without real keyboard tests.
 
@@ -44,6 +46,7 @@ These apply to everyone, including coding agents.
 - **Never overwrite the user's saved settings:** `spacepixels_app.json`, `spacepixels_detection_profile.json` and `spacepixels_visualization.json` in the user's home folder. To run anything that loads or saves settings, start the JVM with `-Duser.home=<scratch folder>` and copy a profile there.
 - **Java preferences** under node `/eu/startales/spacepixels` hold the window placement, the stretch values, `blink.frameMillis`, `gui/showExpertSettings` and `gui/progressDialog.liveView`. A tool or test that changes them must back them up and restore them; isolating `user.home` does not isolate preferences. The GUI mechanics tests do this with `PreferenceSnapshot`.
 - **Discuss a fix before implementing it**, and show its effect on real data (see [Real-data regression](#real-data-regression)). Engine fixes go one at a time.
+- **Separate refactoring from behavior changes.** Changes to accepted inputs, save-failure behavior, viewer lifetime or public contracts need an explicit decision even when proposed in a design issue. Consider and evaluate each issue's review comments before implementation, and record the decision and relevant checks with the change.
 - **Remove the observing site** (coordinates, site names) from images, reports and screenshots before publishing them.
 - **Commits:** code commits have descriptive messages, with the validation in the body. Documentation-only commits use a generic message such as "Update docs". Never put private details or locations in a commit message. Don't rewrite history. Stage only your own changes, and leave unrelated working-tree edits alone.
 - **Refer to the maintainer and other people as they/them.**
@@ -214,7 +217,7 @@ Any change that can affect detection, preparation, reports or numeric diagnostic
 To check a change:
 
 1. Run every relevant dataset with `batchDetect` on the base commit and on the change, with the same profile and a scratch `user.home`.
-2. Compare the rejected frames, the tracks and anomalies, the variable-star verdicts and candidates star by star, and the timings. For a pure refactoring, `report-data.json` (apart from its generation time), `detection_config.json` and the CSVs must be identical.
+2. Compare the rejected frames, the tracks and anomalies, the variable-star verdicts and candidates star by star, and the timings. For a pure refactoring, `report-data.json` (apart from its generation time), `detection_config.json` and the CSVs must be identical. When comparing full report folders, normalize only explicitly listed volatile fields, including the HTML's measured engine and stage durations; compare deterministic content and rendered assets exactly. Measure performance separately rather than requiring identical elapsed times.
 3. Report the differences to the maintainer before committing.
 
 Run large datasets one at a time; the memory available per JVM is in `LOCAL-ENVIRONMENT.txt`.

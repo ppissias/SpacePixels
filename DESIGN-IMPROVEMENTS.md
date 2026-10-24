@@ -4,6 +4,8 @@ This file lists design, refactoring and code-quality work for SpacePixels: chang
 
 Every item here is a proposal until the maintainer decides on it. When an item is done, describe the result in DEVELOPER.md or HIGH_LEVEL_DESIGN.md and remove it from this file; git history keeps the record.
 
+**How to use the issue reviews (2026-10-24).** Before implementing an item, consider and evaluate the review comments at its end against the current code. Record which comments are accepted, adjusted or rejected, why, and the relevant verification with the change. They are review input, not authorization to implement the proposal or automatic proof of a current bug. The review was static; no runtime or real-data checks were run. Recheck references and caller counts as other work lands.
+
 ## Code review of 2026-10-23
 
 A fresh review of the whole application (about 50,000 lines of main code and 17,000 of tests), against the principles in [DEVELOPER.md](DEVELOPER.md#principles): readable code, a clear design with clear boundaries, and a few chosen patterns applied consistently, with no abstraction that lacks a real need.
@@ -48,13 +50,13 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-19](#sp-19-finish-the-common-base-of-the-image-viewers) | Finish the common base of the image viewers | Medium | Medium |
 
 **Suggested order.**
-1. Start with the small, safe item SP-10. SP-18 is independent of the rest and can go at any time, as long as its regression runs on its own.
+1. Evaluate SP-10's differing numerical contracts before scheduling it as a small refactoring. SP-18 is independent of the rest and can go at any time, as long as its regression runs on its own.
 2. Then SP-01 and SP-02, which remove the most machinery.
 3. Then SP-04 together with SP-09, then SP-05 and SP-06.
 4. Then SP-08, then SP-07 and SP-15.
 5. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
-Every item preserves behaviour. Check each one with the unit tests and the GUI mechanics tests. Items that touch detection or reports also need byte-identical `report-data.json`, `detection_config.json` and CSVs on the reference datasets, using the method in DEVELOPER.md.
+Refactorings are intended to preserve behaviour. Evaluate the exceptions raised by the issue reviews, including SP-01's save-failure policy and SP-19's viewer lifetime and settings policy, as explicit behaviour decisions. Check implementation changes with the relevant unit and GUI mechanics tests. Items that touch detection or reports also need byte-identical deterministic `report-data.json`, `detection_config.json` and CSV content on the reference datasets, using the normalization and comparison method in DEVELOPER.md.
 
 ### SP-01. One owner for the plate-solution correction
 
@@ -77,6 +79,11 @@ Because runs read the disk, every job waits for pending session writes first (`A
 
 **Verification.** Toggle the correction (C), then start a detection at once: the report uses the toggled state. Inject a failing write: a warning appears and the value stays in use. Reports stay byte-identical on a plate-solved reference dataset.
 
+**Issue review (2026-10-24; evaluate before implementation).**
+- **High: capture the catalogue too.** `ReportRunContext` loads both correction and catalogue from disk (`SessionCatalogue.load`). Passing only the correction from memory leaves a race with a pending or failed catalogue save after the barrier is removed. Capture both at admission, including an explicitly absent catalogue, with immutable or detached data; neither model is currently deeply immutable.
+- Define the API/CLI admission path as well: it has no GUI session and must load persisted metadata once before processing. Preserve field/solution compatibility checks and run isolation.
+- Test immediate Detect after a fetch or correction toggle with a blocked and a failing save, later model edits during a run, and headless loading. Keeping an unsaved correction active changes the current rollback policy; decide and document that behaviour, including what the user sees after reimport or restart.
+
 ### SP-02. Rendering preferences as a value, not static fields
 
 **Problem.** The rendering and export preferences live in public static mutable fields of the classes that render:
@@ -98,6 +105,10 @@ The variable-star report options travel the same way. They are held in a `transi
 
 **Verification.** Unit tests for the renderers with explicit settings. Save, Revert and startup reload of the visualization page in the GUI mechanics tests. Byte-identical reports with default and changed settings.
 
+**Issue review (2026-10-24; evaluate before implementation).**
+- The direction is sound. Include every listed rendering preference in the explicit value; the current `ExportVisualizationSettings` does not contain all marker sizes and the animated-marker limit.
+- Preserve separate live preferences, saved baselines and immutable run values. Removing globals does not remove the need for capture at admission. Keep API defaults independent of a window or user-home files, and check two runs with different settings as well as Save/Revert/reload.
+
 ### SP-04. Retire the ImageProcessing facade
 
 **Problem.** `ImageProcessing` (562 lines) began as the old monolith. It is now mostly a pass-through over `FitsImportService`, `FitsBatchService`, `PlateSolveService`, `StandardDetectionPipelineService`, `IterativeDetectionPipelineService` and `FitsVisualizationRenderer`. It also carries:
@@ -117,6 +128,11 @@ Its Javadoc says it keeps "the public processing API stable", but API.md marks i
 
 **Verification.** All tests, the GUI mechanics suite, and byte-identical reports on the reference datasets. This is the largest item. Do it in steps, one service at a time.
 
+**Issue review (2026-10-24; evaluate before implementation).**
+- **Preserve detection products independently of export.** `StandardDetectionPipelineService.run` installs overlays before the report prompt and export. They survive a declined report or export failure. Only `JobOutcome.Completed` currently carries a result, so returning overlays only on normal completion would lose that behaviour. Specify their delivery on report decline, cancellation and failure, guarded by session identity, and test those paths.
+- Give headless service construction and disposal an explicit owner too; the API currently closes its processor without creating a GUI session. Avoid replacing the facade with a holder that simply recreates its forwarding responsibilities. Migrate one service at a time.
+- **Evaluate an existing engine-boundary exception.** `DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain` rewrites `PipelineResult` and telemetry after engine execution. Assess this with JTransient against the rule that detection belongs to the engine. Do not silently delete or relocate this policy during the facade refactor; establish the intended few-frame result contract and compare real results separately.
+
 ### SP-05. Give panels their collaborators, not the whole window
 
 **Problem.** Every panel receives the whole `ApplicationWindow` and reaches through its getters:
@@ -133,11 +149,19 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 
 **Benefit.** Each panel's dependencies are visible in its constructor. There are no cycles between panels, and smaller parts can be tested.
 
+**Issue review (2026-10-24; evaluate before implementation).**
+- Prefer collaborators and listeners with specific responsibilities; replacing the window parameter with a generic context exposing the same getters would preserve the coupling.
+- A published `DetectionConfig` is mutable. Define whether listeners receive a snapshot or a borrowed read-only view, keep UI notifications on the EDT, and specify listener detachment. A session supplier is appropriate for UI commands, but admitted workers must retain their captured session and settings.
+
 ### SP-06. Move the sky-catalogue workflow out of the main panel
 
 **Problem.** `MainApplicationPanel` holds about 300 lines of the sky-catalogue and correction workflow. They manage a raw `Thread` through a one-element array, check identity by thread and session, and run their own progress timer. `ProcessingSession` has three methods only for that thread (`ownSkyCatalogueWorker`, `ownsSkyCatalogueWorker`, `releaseSkyCatalogueWorker`). This is a second background-work mechanism inside a view.
 
 **Proposal.** A `SkyCatalogueController` in `gui` with one `ExecutorService` and a `Future` per session: start, cancel, and progress and results delivered on the EDT. Closing the session cancels the future. The panel only shows status.
+
+**Issue review (2026-10-24; evaluate before implementation).**
+- Cancelling a `Future` does not retract EDT callbacks already queued. Preserve the task/session checks currently in `showSkyFetchStage`, `skyFetchFinished` and `correctionFinished`, including replacement work within the same session.
+- Specify who owns and shuts down the executor, stops its progress timer and detaches listeners. Check cancellation, task replacement, session handover and shutdown with a delayed result. A GUI controller must not introduce a dependency from the headless `session` package back to `gui`.
 
 ### SP-07. One binding type for settings rows
 
@@ -146,6 +170,10 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 - `applySettingsToMemory` catches every `Exception`, prints it with `System.err` and continues. It also writes into `mainAppWindow.getImageProcessing().getAppConfig()` (see SP-02).
 
 **Proposal.** After SP-02, the application values are fields of plain value objects. Use one generic `SettingBinding<V>`, with a read and write of the model and a read and write of the control, for both kinds. Let a binding failure surface as an error instead of being swallowed.
+
+**Issue review (2026-10-24; evaluate before implementation).**
+- Consolidate only the genuinely shared binding behaviour after SP-02 establishes the model. Preserve the typed `DetectionSetting` tables, hidden values, range checks and pair-alignment policy.
+- Define what happens when applying a binding fails: surface the failure and prevent a run or save from proceeding with a partly applied configuration. Check that invalid text, changed markers and saved baselines retain their current meaning. A more general framework is not justified merely to eliminate two small records.
 
 ### SP-08. One report entry point and a complete report context
 
@@ -164,11 +192,21 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 
 **Verification.** Byte-identical report folders, minus the generation time, on the reference datasets.
 
+**Issue review (2026-10-24; evaluate before implementation).**
+- A complete context should distinguish valid absence (no WCS, catalogue or optional analysis) from an uninitialized context. Keep no-WCS, empty-result and partial-inclusion cases covered when deleting test-only fallback construction paths.
+- **Clarify byte comparison.** `PipelineDiagnosticsSectionWriter.writeStageTimings` writes measured engine and stage durations into HTML. Excluding generation time alone cannot make independent report folders byte-identical. List and normalize volatile timing fields, compare deterministic outputs and rendered assets exactly, and assess performance separately, as in DEVELOPER.md.
+- Preserve cancellation cleanup, atomic HTML publication and report-failure messages when replacing the overloads; coordinate completed detection products with SP-04.
+
 ### SP-09. One write queue for small files
 
 **Problem.** `SettingsStorage` and `SessionStorage` are two near-identical single-thread write queues. `SessionPersistence` adds a per-session acknowledgement layer on top (see SP-01).
 
 **Proposal.** After SP-01, keep one application-owned background writer for preferences and session files. Keep its drain-on-close behaviour. Remove `SessionPersistence`.
+
+**Issue review (2026-10-24; evaluate before implementation).**
+- `SessionStorage` orders reads behind writes, including a reimport of the same folder; it is not just a write queue. Preserve this ordering when merging it with `SettingsStorage`.
+- Preserve rejection of new work after close, draining accepted writes off the EDT, suppression of callbacks to closed sessions, and visibility of unsaved changes. `SettingsStorage` also tracks failures by target and clears them after a successful retry; retain that distinction.
+- Use the existing delayed-write/reimport and shutdown tests as contract evidence. Removing the run barrier in SP-01 does not make all persistence coordination redundant.
 
 ### SP-10. One place for sky-math and statistics helpers
 
@@ -180,6 +218,10 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 - `isJplCompatibleObservatoryCode` and `normalizeLongitudeDegrees`, in both `DetectionReportAstrometry` and `JplSbIdentUrlBuilder`.
 
 **Proposal.** One `SkyMath` class and one `Statistics` class in `util`, with unit tests. Replace the copies.
+
+**Issue review (2026-10-24; evaluate before implementation).**
+- **The median implementations differ.** `PlateCorrectionFitter.median` uses the upper middle value and returns `Double.MAX_VALUE` for empty input; `NightEquipment.median` averages the middle pair and returns `NaN`; the photometry helper filters `NaN` values. Unifying them without preserving these contracts can change correction selection and diagnostics.
+- Inventory units, finite-value handling, empty inputs, angular wrapping and numerical stability before replacing helpers. Use distinct names for distinct operations. Test odd/even samples, empty/NaN inputs and sky-coordinate boundary cases. Changing mathematical policy is a separate scientific change, so this item is not yet an automatically safe starter task.
 
 ### SP-11. Fewer FITS helper classes; immutable frame metadata
 
@@ -193,6 +235,11 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 - Name static helpers consistently, and keep "Service" for instances.
 - Make `FitsFileInformation` immutable, with timestamps normalised when it is built. The defensive copies can then go.
 
+**Issue review (2026-10-24; evaluate before implementation).**
+- **Keep container protection.** Immutable frame objects eliminate deep metadata copying, but callers can still replace or reorder elements of a returned array. Keep array copies or expose immutable collections; freeze the header map too.
+- `MainApplicationPanel.showWcsWriteOutcome` currently updates a frame's header in place. Define a session-owned metadata replacement operation that updates the table, selection and dependent viewers after a successful WCS write. Test that existing runs keep their snapshots while new work sees the new solution.
+- Separate metadata immutability from helper consolidation. Discovery, HDU decoding and sequence validation have different responsibilities; merge them only if the resulting dependency structure is clearer, not because there are several small files.
+
 ### SP-13. One way to report problems and diagnostics
 
 **Problem.** Problems are reported in four ways:
@@ -203,11 +250,19 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 
 **Proposal.** Report problems with `java.util.logging` (WARNING or SEVERE), and send diagnostics only through `DebugOutput`. If JTransient adopts JT-04, diagnostics can become `java.util.logging` at FINE too, and `DebugOutput` shrinks to setting that level.
 
+**Issue review (2026-10-24; evaluate before implementation).**
+- Consolidating problem logging is reasonable, but logging must not replace propagation of a failure that the caller needs to handle or cause the same error to be reported at every layer.
+- Evaluate JT-04 before depending on it. Per-operation diagnostics and explicit disabled policies are documented API behaviour and are tested with independent concurrent engines. A process-wide logger level is not an equivalent replacement simply because the desktop admits one job. Preserve caller isolation or explicitly decide and document the contract change.
+
 ### SP-14. Package names that say what they hold
 
 **Problem.** `util` (49 classes) is the application's core, not a set of utilities. It holds the services and the facade, domain types (`PlateSolutionCorrection`, `TrackOverlay`, `VariableStarOverlay`, `ExposureGroup`, `BlinkSequence`), FITS input/output and WCS. `util.reporting` (56 classes) is a subsystem, not a utility.
 
 **Proposal.** Domain-named packages: `fits` (input, preparation, conversion, WCS), `detection` (pipeline services, run options, overlays), `platesolve`, `report` (with a `report.lookup` subpackage for the SatChecker/JPL/SkyBoT proxy and builders) and `skycatalog`. Do it last, as a mechanical move, and keep `DependencyRulesTest` in step.
+
+**Issue review (2026-10-24; evaluate before implementation).**
+- Update `build.gradle` source-set and resource include patterns as well as Java imports and `DependencyRulesTest`; the headless artifact currently explicitly includes `util/**`.
+- `FitsFileInformation` and visualization/run-option types are exposed through public request/result signatures. Moving them changes consumer APIs even if the implementation move is mechanical. Identify those breaks, update API examples and release documentation, and run `check` plus the isolated `apiConsumerTest` against the staged artifact.
 
 ### SP-15. Pass the live-view sink with the run
 
@@ -215,9 +270,17 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 
 **Proposal.** After SP-08, carry the sink in the run request, an empty sink for API and CLI runs, and remove the `ThreadLocal` scope. Low priority: the scope is small and contained.
 
+**Issue review (2026-10-24; evaluate before implementation).**
+- Preserve lazy rendering: `RunPreviewSink.wantsPreview` is checked before constructing a picture, and `LiveFindings` currently creates no observer/worker for an absent sink. An empty sink must retain that no-work behaviour for API/CLI runs.
+- Specify the sink's lifetime, worker-thread calls and failure isolation, and ensure completed requests do not retain windows or frame buffers. Keep this change narrow and low priority.
+
 ### SP-16. Check the UI at larger display scaling
 
 What remains of the earlier visual-rules item. Inspect the empty and loaded main window, the settings pages, the Astrometry Config tab, the viewers and the progress dialog at 100, 150 and 200 % display scaling and with a larger base font. Fix the local widths and font sizes found in the Overview status, the table HTML and the viewer controls. Layout tests cover forms and base fonts; display scaling of the whole window has not been inspected.
+
+**Issue review (2026-10-24; evaluate before implementation).**
+- No additional architectural blocker was identified. Retain the real keyboard/focus checks while inspecting clipping, wrapping, scroll access and controls at each scale; visual consolidation must not alter the existing text-field and viewer-key rules.
+- Keep local layout fixes separate from changing viewer settings policy in SP-19, so their effects can be assessed independently.
 
 ### SP-18. Upgrade the dependencies
 
@@ -250,6 +313,10 @@ What remains of the earlier visual-rules item. Inspect the empty and loaded main
 **Java.** JTransient and JPlateSolve should stay at release 21: a library that runs on the older LTS reaches more users, which is a reason not to take the latest. The application could move to Java 25 (LTS) as its runtime, and as the runtime bundled by the installer, since the newest LTS gets security updates longest. Proposal: decide it together with [F06](FEATURE-REQUESTS.md#f06-windows-installer).
 
 **JUnit.** JUnit 4.13.2 is final and still works. Moving 808 tests to JUnit 6 (SpacePixels 508, JTransient 262, JPlateSolve 38) would be a mechanical migration that changes nothing in the application. The GUI mechanics tests would also have to move to AssertJ Swing's Jupiter variant. Proposal: not now. If it is done later, run the JUnit 4 tests on the Vintage engine (deprecated in JUnit 6, but still supported) and migrate test classes as they are touched.
+
+**Issue review (2026-10-24; evaluate before implementation).**
+- **Expand compressed-FITS coverage.** Compressing one reference frame tests only its pixel type and selected compression settings. Include representative quantized floating-point data, blank values, dithering and relevant compression paths, with independently established expected decoded pixels. The [nom-tam-fits 1.23.0 release notes](https://github.com/nom-tam-fits/nom-tam-fits/releases/tag/1.23.0) identify corrections to these paths; equality with the old decoder cannot be the only oracle where it was wrong.
+- Preserve exact deterministic outputs for unchanged reference inputs, but evaluate intentional decoder fixes separately. Normalize volatile report timings as in SP-08. Recheck release versions and notes at implementation time, and keep dependency upgrades separate from structural refactoring so differences are attributable.
 
 ### SP-19. Finish the common base of the image viewers
 
@@ -289,6 +356,11 @@ What remains of the earlier visual-rules item. Inspect the empty and loaded main
 1. Item 3 first, since it changes what the user sees.
 2. Then items 1 and 4.
 3. Item 2 together with F13.
+
+**Issue review (2026-10-24; evaluate before implementation).**
+- **Viewer lifetime is a product decision.** DEVELOPER.md deliberately permits independent inspection windows to retain the old session's data. Closing every viewer on import changes that workflow; decide the desired policy explicitly and update the manual and lifecycle tests. Do not describe the existing choice as an accidental leak solely because buffers remain while a window is open.
+- The Preview Frame live-edit versus Apply policy is also a behaviour decision. Keep it separate from sharing image components and controls, and preserve real key/focus tests for each viewer.
+- A central viewer owner must unregister disposed windows and preserve cancellation, buffer release and listener detachment. Merely hiding all windows does not establish resource release. Keeping Blink separate by composition remains appropriate.
 
 ## Removed from the previous plan (2026-10-23)
 
