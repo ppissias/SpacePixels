@@ -409,7 +409,7 @@ final class StarMaskExplorerFrame extends JFrame {
     // ==========================================
 
     private JSpinner spinner(SpinnerNumberModel model) {
-        JSpinner spinner = new JSpinner(model);
+        JSpinner spinner = UiStyle.spinner(model);
         spinner.setPreferredSize(new Dimension(90, 26));
         spinner.addChangeListener(e -> debounce.restart());
         return spinner;

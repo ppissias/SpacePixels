@@ -67,7 +67,7 @@ public class ConfigurationPanel extends JPanel {
     private final JLabel longStatus = statusLabel();
     private final JLabel footerStateLabel = new JLabel(" ");
     private final JLabel footerMessageLabel = new JLabel(" ");
-    private final JSpinner starDepthSpinner = new JSpinner(new SpinnerNumberModel(
+    private final JSpinner starDepthSpinner = UiStyle.spinner(new SpinnerNumberModel(
             AppConfig.DEFAULT_SKY_CATALOGUE_STAR_MAGNITUDE, AppConfig.MIN_SKY_CATALOGUE_STAR_MAGNITUDE,
             AppConfig.MAX_SKY_CATALOGUE_STAR_MAGNITUDE, 0.5));
     private final JLabel starDepthStatus = statusLabel();

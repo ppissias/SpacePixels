@@ -1360,7 +1360,7 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private JSpinner createSpinner(SpinnerModel model) {
-        JSpinner spinner = new JSpinner(model);
+        JSpinner spinner = UiStyle.spinner(model);
         if (model instanceof SpinnerNumberModel) {
             configureSpinnerEditor(spinner);
             spinner.addChangeListener(e -> configureSpinnerEditor(spinner));

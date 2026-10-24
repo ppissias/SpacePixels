@@ -46,11 +46,11 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-14](#sp-14-package-names-that-say-what-they-hold) | Package names that say what they hold | Low | Medium, mechanical |
 | [SP-15](#sp-15-pass-the-live-view-sink-with-the-run) | Pass the live-view sink with the run | Low | Small |
 | [SP-16](#sp-16-check-the-ui-at-larger-display-scaling) | Check the UI at larger display scaling | Low | Small |
-| [SP-18](#sp-18-upgrade-the-dependencies) | Upgrade the dependencies, in all three repositories | Medium | Small, plus a regression |
+| [SP-18](#sp-18-upgrade-the-dependencies) | Upgrade the dependencies: done; follow-ups for nom-tam-fits 1.23.1 and Gson 2.15.0 | Low | Small |
 | [SP-19](#sp-19-finish-the-common-base-of-the-image-viewers) | Finish the common base of the image viewers | Medium | Medium |
 
 **Suggested order.**
-1. Evaluate SP-10's differing numerical contracts before scheduling it as a small refactoring. SP-18 is independent of the rest and can go at any time, as long as its regression runs on its own.
+1. Evaluate SP-10's differing numerical contracts before scheduling it as a small refactoring. SP-18's follow-ups are independent of the rest; keep their regression separate from refactorings.
 2. Then SP-01 and SP-02, which remove the most machinery.
 3. Then SP-04 together with SP-09, then SP-05 and SP-06.
 4. Then SP-08, then SP-07 and SP-15.
@@ -284,39 +284,13 @@ What remains of the earlier visual-rules item. Inspect the empty and loaded main
 
 ### SP-18. Upgrade the dependencies
 
-**Request (2026-10-23):** move every library, in all three repositories, to its latest version unless there is a reason not to. The versions below were checked on 2026-10-23. JTransient ([JT-08](../JTransient/DESIGN-IMPROVEMENTS.md#jt-08-upgrade-the-dependencies)) and JPlateSolve ([JP-11](../JPlateSolve/DESIGN-IMPROVEMENTS.md#jp-11-upgrade-the-dependencies)) point here.
+**Done (2026-10-24)** in all three repositories: Gradle 9.8.2, nom-tam-fits 1.23.0, Gson 2.14.0 and FlatLaf 3.7.2. The reference outputs stayed byte-identical, saved settings files load unchanged, and compressed frames were checked against cfitsio (through astropy). Spinners keep the caret when they gain the focus, as before 3.6 (`UiStyle.spinner`). Each commit message holds its checks. What remains:
 
-| Dependency | Used in | Now | Latest | Proposal |
-|---|---|---|---|---|
-| Gradle wrapper | SpacePixels, JTransient | 9.2.1 | 9.8.2 (2026-10-20) | Upgrade. |
-| Gradle wrapper | JPlateSolve | 8.12 | 9.8.2 | Upgrade. Fix the deprecation warnings first (`--warning-mode all`), since Gradle 9 removed deprecated features. |
-| FlatLaf | SpacePixels (desktop) | 3.4 | 3.7.2 (July 2026) | Upgrade. Check the behaviour changes listed in [F12](FEATURE-REQUESTS.md#f12-newer-flatlaf-features). |
-| nom-tam-fits | SpacePixels, JPlateSolve | 1.21.2 | 1.23.0 (2026-09-15) | Upgrade, with the pixel check below. Not 1.23.1-rc1, which is a release candidate. |
-| Gson | all three | 2.13.2 | 2.14.0 (2026-04-23) | Upgrade. |
-| AssertJ Swing (`tokyo.northside`) | SpacePixels tests | 4.0.0-beta-3 | 4.0.0-beta-3 | Already the latest. |
-| JUnit | all three | 4.13.2 | 4.13.2 is the last JUnit 4. JUnit 6 is the current line. | Keep, for the reason below. |
-| Java | all three | 21 | 25 is the current LTS; 27 is the newest release. | Keep the libraries at 21. Decide the application's runtime with F06, as below. |
-
-**Risks found in the release notes:**
-- **Compressed FITS (nom-tam-fits 1.22 to 1.23).** The decoding of compressed images changed, so decoded values of `.fz` frames can differ. The changes cover quantization rounding, ZBLANK, ZQUANTIZ without scaling columns, GZIP buffering, PLIO and SUBTRACTIVE_DITHER_2. SpacePixels converts `.fz` frames at import (`FitsImages`, `FitsPreparationService`).
-  - The notes mention no change to uncompressed images, BSCALE/BZERO or header parsing.
-  - Since 1.22.1, a malformed numeric header value throws `HeaderCardException` or `FitsException` instead of `NumberFormatException`. Check the eight `catch (NumberFormatException …)` blocks, for example in `FitsFileInformation` and `WcsCoordinateTransformer`, for any that guard a nom-tam-fits call.
-  - From 1.22.2 the library needs Java 11, which is no problem here.
-- **Duplicate keys (Gson 2.14.0).** Gson now rejects duplicate keys when the first value is null. Settings files written by SpacePixels have no duplicates, but a hand-edited file could. Unknown fields are still ignored.
-
-**Verification:**
-- Build and run all tests in each repository, and the GUI mechanics suite.
-- Run the real-data regression; the outputs must be byte-identical on the reference datasets.
-- For nom-tam-fits, compare the converted pixels of a few `.fz` frames between 1.21.2 and 1.23.0. No reference dataset is compressed, so compress a reference frame with `fpack` for this.
-- Check that saved settings files load unchanged.
-
-**Java.** JTransient and JPlateSolve should stay at release 21: a library that runs on the older LTS reaches more users, which is a reason not to take the latest. The application could move to Java 25 (LTS) as its runtime, and as the runtime bundled by the installer, since the newest LTS gets security updates longest. Proposal: decide it together with [F06](FEATURE-REQUESTS.md#f06-windows-installer).
-
-**JUnit.** JUnit 4.13.2 is final and still works. Moving 808 tests to JUnit 6 (SpacePixels 508, JTransient 262, JPlateSolve 38) would be a mechanical migration that changes nothing in the application. The GUI mechanics tests would also have to move to AssertJ Swing's Jupiter variant. Proposal: not now. If it is done later, run the JUnit 4 tests on the Vintage engine (deprecated in JUnit 6, but still supported) and migrate test classes as they are touched.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- **Expand compressed-FITS coverage.** Compressing one reference frame tests only its pixel type and selected compression settings. Include representative quantized floating-point data, blank values, dithering and relevant compression paths, with independently established expected decoded pixels. The [nom-tam-fits 1.23.0 release notes](https://github.com/nom-tam-fits/nom-tam-fits/releases/tag/1.23.0) identify corrections to these paths; equality with the old decoder cannot be the only oracle where it was wrong.
-- Preserve exact deterministic outputs for unchanged reference inputs, but evaluate intentional decoder fixes separately. Normalize volatile report timings as in SP-08. Recheck release versions and notes at implementation time, and keep dependency upgrades separate from structural refactoring so differences are attributable.
+- **nom-tam-fits 1.23.1** (expected around 2026-12-15) fixes the dither sequence at blank and zero pixels (#908). With 1.23.0, dithered floating-point `.fz` frames still differ from cfitsio by about one quantization step in tiles that contain blank or zero pixels: 1 ADU after SpacePixels' 16-bit conversion, on a few hundred pixels of a frame. Integer frames are exact. Upgrade when it is released, and repeat the comparison with cfitsio.
+- **Gson 2.15.0** was published on 2026-10-24, hours before the upgrade, and changes the default `Map` type to `LinkedHashMap`. Take it at the next upgrade, with the round trip of saved settings files.
+- **`FitsFactory.hduFactory(Object)`** is deprecated since nom-tam-fits 1.22 and used in `FitsPixelConverter`, `XisfImageConverter` and `ArtificialStarInjector`. Replace it before a release removes it.
+- **Java.** JTransient and JPlateSolve stay at release 21: a library that runs on the older LTS reaches more users. The application could move to Java 25 (LTS) as its runtime, and as the runtime bundled by the installer, since the newest LTS gets security updates longest. Decide it with [F06](FEATURE-REQUESTS.md#f06-windows-installer).
+- **JUnit** stays at 4.13.2, the last JUnit 4. Moving the tests to JUnit 6 would change nothing in the application, and the GUI mechanics tests would have to move to AssertJ Swing's Jupiter variant. If it is done later, run the JUnit 4 tests on the Vintage engine and migrate test classes as they are touched.
 
 ### SP-19. Finish the common base of the image viewers
 

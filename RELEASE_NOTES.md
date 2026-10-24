@@ -7,7 +7,7 @@ Not released yet.
 ### Changed
 
 - **Compressed (.fz) frames are decoded more exactly.** nom-tam-fits 1.23.0 fixes the decoding of 32-bit PLIO frames and of quantized floating-point frames: their blank pixels, and the rounding of frames without dithering. Integer frames (RICE, GZIP, HCOMPRESS) decode as before. Frames from 16-bit cameras are unaffected.
-- **Libraries:** nom-tam-fits 1.23.0, Gson 2.14.0 and the Gradle 9.8.2 build. Saved settings files load as before.
+- **Libraries:** FlatLaf 3.7.2, nom-tam-fits 1.23.0, Gson 2.14.0 and the Gradle 9.8.2 build. Saved settings files load as before. FlatLaf 3.7.2 shows brighter text in the dark theme and rounded scroll bars on Windows; number fields keep the caret where you click, as before.
 
 ### Removed
 

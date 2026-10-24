@@ -203,8 +203,8 @@ final class SkyAnnotations {
 
     /** Edits independent catalogue limits in a dialog so numeric keys belong to its editors, not navigation. */
     private void editMagnitudeLimits() {
-        JSpinner stars = new JSpinner(new SpinnerNumberModel(preferences.faintestStar(), -10, 99, 0.5));
-        JSpinner variables = new JSpinner(new SpinnerNumberModel(preferences.faintestVariable(), -10, 99, 0.5));
+        JSpinner stars = UiStyle.spinner(new SpinnerNumberModel(preferences.faintestStar(), -10, 99, 0.5));
+        JSpinner variables = UiStyle.spinner(new SpinnerNumberModel(preferences.faintestVariable(), -10, 99, 0.5));
         JPanel fields = new JPanel(new GridLayout(0, 2, 12, 8));
         JLabel starLabel = new JLabel("Faintest star (Gaia G / named-star V):");
         starLabel.setLabelFor(stars);

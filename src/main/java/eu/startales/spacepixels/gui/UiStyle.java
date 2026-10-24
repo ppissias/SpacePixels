@@ -1,8 +1,11 @@
 package eu.startales.spacepixels.gui;
 
+import com.formdev.flatlaf.FlatClientProperties;
 import com.formdev.flatlaf.util.UIScale;
 import javax.swing.UIManager;
 import javax.swing.JComponent;
+import javax.swing.JSpinner;
+import javax.swing.SpinnerModel;
 import javax.swing.JTextField;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -41,5 +44,16 @@ final class UiStyle {
         Dimension natural = control.getPreferredSize();
         if (control instanceof JTextField field) field.setColumns(0);
         control.setPreferredSize(new Dimension(Math.max(space(logicalWidth), natural.width), natural.height));
+    }
+
+    /**
+     * A spinner whose text keeps the caret where the user puts it when it gains the focus. Since FlatLaf 3.6, focusing
+     * a spinner by Tab or by a click selects its whole value; SpacePixels keeps the earlier behaviour.
+     */
+    static JSpinner spinner(SpinnerModel model) {
+        JSpinner spinner = new JSpinner(model);
+        spinner.putClientProperty(FlatClientProperties.SELECT_ALL_ON_FOCUS_POLICY,
+                FlatClientProperties.SELECT_ALL_ON_FOCUS_POLICY_NEVER);
+        return spinner;
     }
 }

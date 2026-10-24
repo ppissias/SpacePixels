@@ -91,7 +91,7 @@ dependencies {
     implementation 'gov.nasa.gsfc.heasarc:nom-tam-fits:1.23.0'
     implementation 'com.google.code.gson:gson:2.14.0'
     implementation "io.github.ppissias.jplatesolve:jplatesolve:${providers.gradleProperty('jPlateSolveVersion').getOrElse('1.0.1')}"
-    desktopImplementation 'com.formdev:flatlaf:3.4'
+    desktopImplementation 'com.formdev:flatlaf:3.7.2'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'tokyo.northside:assertj-swing-junit:4.0.0-beta-3'
 }

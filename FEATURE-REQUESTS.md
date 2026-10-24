@@ -11,7 +11,7 @@ A request is a proposal until the maintainer decides on it. Decisions are record
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Agreed. The matching policy is to be proposed. |
 | [F10](#f10-live-view-pictures-of-the-running-phase) | Live view: pictures of the running phase, one every 3 s | Direction decided. Design proposed. |
 | [F11](#f11-animation-speed-control-in-the-report) | Animation speed control in the report | Proposed. Decision points listed. |
-| [F12](#f12-newer-flatlaf-features) | Newer FlatLaf features | Proposed, after the upgrade (DESIGN-IMPROVEMENTS SP-18) |
+| [F12](#f12-newer-flatlaf-features) | Newer FlatLaf features | Proposed; FlatLaf 3.7.2 is in use |
 | [F13](#f13-manual-transient-inspection-with-trial-per-frame-settings) | Manual Transient Inspection with trial per-frame settings | Proposed. Decision points listed. |
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
 | [F02](#f02-session-summary-and-multiple-night-warning) | Session summary and multiple-night warning | Deferred |
@@ -172,22 +172,22 @@ This settles the earlier open question about the report phase: the report is one
 
 **Request (2026-10-23):** explore what the newer versions of the libraries offer, "especially flatlaf".
 
-SpacePixels uses FlatLaf 3.4 (`FlatDarkLaf`). The latest release is 3.7.2 (July 2026), and it still needs only Java 8. The upgrade itself is [SP-18](DESIGN-IMPROVEMENTS.md#sp-18-upgrade-the-dependencies). SpacePixels already uses `FlatLaf.style`, the clear button and placeholder text of text fields, and `JComponent.outline`.
+SpacePixels uses FlatLaf 3.7.2 (`FlatDarkLaf`) since the upgrade of [SP-18](DESIGN-IMPROVEMENTS.md#sp-18-upgrade-the-dependencies). SpacePixels already uses `FlatLaf.style`, the clear button and placeholder text of text fields, and `JComponent.outline`.
 
 **Worth using, most valuable first:**
 1. **Native file dialogs** (`SystemFileChooser`, 3.7). The three `JFileChooser`s would open the Windows Explorer dialog, with its recent places, quick access and search. They choose the import folder, the folder for iterative detection and the ASTAP executable. Glob filters arrived in 3.7.1.
 2. **Text styles instead of local font sizes.** SpacePixels derives fonts in 57 places (`deriveFont`, `new Font`). FlatLaf's style classes (`h1` to `h4`, `large`, `medium`, `small` and `mini`, set with `FlatLaf.styleClass`) follow the base font and the display scaling, which is what [SP-16](DESIGN-IMPROVEMENTS.md#sp-16-check-the-ui-at-larger-display-scaling) needs. Since 3.7, the check-box and radio-button icons scale with them too.
 3. **The zooming API** (3.7, FlatLaf PR #1051). It could give a zoom in and zoom out (Ctrl + and Ctrl –) for the whole window, useful on small or high-resolution screens and at the telescope. The changelog gives no details, so check the API before planning on it.
-4. **Readability** (3.6). FlatLaf Dark's text is brighter, and scroll-bar thumbs are rounded on Windows. Both come with the upgrade.
+4. **Readability** (3.6). FlatLaf Dark's text is brighter, and scroll-bar thumbs are rounded on Windows. Both came with the upgrade.
 5. **Row highlighting.** Rounded table selection (3.5), and alternate row colours (tables already had them; lists and trees since 3.6), for the frame table and Blink's frame list.
 6. **A green outline** (`JComponent.outline = success`, 3.6), for example for a value that Auto-Tune set. It would sit next to the red outline already used for invalid text.
 
 **Not useful now.** The title-bar height option, icon-only tabs, JIDE tabs, and the macOS and Linux items. FlatLaf does not follow the Windows light or dark theme. SpacePixels stays dark, which suits night use.
 
-**Behaviour changes to check during the upgrade:**
-- **Selection on focus** (3.6): the select-all-on-focus option behaves differently in spinners. Check the settings spinners and `CheckedNumberEditor`.
-- **Progress bars** (3.5): FlatLaf logs a warning when an indeterminate progress bar changes off the Swing thread.
-- **Rendering on Windows** (3.5.2): FlatLaf turns off Direct3D on-screen rendering. Compare the viewers' redraw speed on a 61-MPix frame.
+**Behaviour changes checked during the upgrade (2026-10-24):**
+- **Selection on focus** (3.6): FlatLaf selects a spinner's whole value when it gains the focus, by Tab or by a click. The maintainer kept the earlier behaviour, where the caret stays where the user puts it: `UiStyle.spinner` sets the select-all policy to never. Selecting the value on focus remains an option.
+- **Progress bars** (3.5): FlatLaf would log a warning when an indeterminate progress bar changes off the Swing thread. The GUI mechanics suite, which runs imports and detections, logs none.
+- **Rendering on Windows** (3.5.2): FlatLaf turns off Direct3D on-screen rendering, against ghosting on some graphics drivers. A full redraw of a viewer showing a 61-MPix frame in a 1600 × 1000 window takes about 4.8 ms instead of 4.3 ms, which is not noticeable.
 
 ## F13. Manual Transient Inspection with trial per-frame settings
 

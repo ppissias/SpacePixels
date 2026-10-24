@@ -18,12 +18,12 @@ final class IterativeDetectionDialog extends JDialog {
                      int autoTuneFrames, boolean autoPrepare, boolean keepNegative, int availableFrames) {}
 
     private final JTextField directory = new JTextField(36);
-    private final JSpinner start = new JSpinner(new SpinnerNumberModel(5, 5, Integer.MAX_VALUE, 1));
-    private final JSpinner increase = new JSpinner(new SpinnerNumberModel(5, 1, Integer.MAX_VALUE, 1));
-    private final JSpinner maximum = new JSpinner(new SpinnerNumberModel(50, 0, Integer.MAX_VALUE, 1));
+    private final JSpinner start = UiStyle.spinner(new SpinnerNumberModel(5, 5, Integer.MAX_VALUE, 1));
+    private final JSpinner increase = UiStyle.spinner(new SpinnerNumberModel(5, 1, Integer.MAX_VALUE, 1));
+    private final JSpinner maximum = UiStyle.spinner(new SpinnerNumberModel(50, 0, Integer.MAX_VALUE, 1));
     private final JCheckBox autoTune = new JCheckBox("Auto-Tune once before the passes (calibrated)");
     private final JComboBox<AutoTuneProfile> profile = new JComboBox<>(AutoTuneProfile.values());
-    private final JSpinner tuneFrames = new JSpinner(new SpinnerNumberModel(30, 5, Integer.MAX_VALUE, 1));
+    private final JSpinner tuneFrames = UiStyle.spinner(new SpinnerNumberModel(30, 5, Integer.MAX_VALUE, 1));
     private final JCheckBox prepare = new JCheckBox("Prepare non-ready inputs as 16-bit monochrome copies", true);
     private final JCheckBox keepNegative = new JCheckBox("Keep negative pixel values by adding an offset", true);
     private final JLabel preview = new JLabel("Choose a source directory.");

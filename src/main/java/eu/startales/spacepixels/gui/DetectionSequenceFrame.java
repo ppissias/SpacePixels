@@ -98,7 +98,7 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
     private JComponent buildSettingsRow(List<DetectionConfigurationPanel.SharedSetting> settings) {
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         for (DetectionConfigurationPanel.SharedSetting setting : settings) {
-            JSpinner spinner = new JSpinner(setting.model());
+            JSpinner spinner = UiStyle.spinner(setting.model());
             CheckedNumberEditor editor = new CheckedNumberEditor(spinner,
                     setting.model().getValue() instanceof Integer ? "#0" : "#0.0", this::showSettingsNote);
             spinner.setEditor(editor);
