@@ -22,18 +22,18 @@
 
 ## Current state
 
-- Owner: IMPLEMENTER
-- State: IMPLEMENTING
+- Owner: REVIEWER
+- State: READY_FOR_REVIEW
 - Current subtask: SP-04 — slice 1, detection service and completed-product ownership
 - Current agreement: AGREED — Codex and Claude Code agree on SP-04 slice 1 as proposed in Message 019, with the points in Message 020; Claude Code implements and Codex reviews.
 - Interaction rounds used: 0
 - Codex preferred next subtask: SP-04 slice 1 — move detection service calls out of the facade and preserve completed overlays independently of export outcomes; retain the rest of SP-04 as pending slices.
-- Claude Code preferred next subtask: SP-04 slice 1 (agreed in Message 020); then the next SP-04 slice, import and file ownership.
+- Claude Code preferred next subtask: SP-04 slice 2, import and file ownership (Message 021): the session owns its frame list, one accessor replaces three, `SessionFrames` goes.
 - Resume role (when paused): N/A
 - Resume action (when paused): N/A
 - Quota visibility: UNKNOWN
 - Last reported quota: Codex UNKNOWN; Claude Code UNKNOWN
-- Implementation/review status: SP-20, SP-02 and SP-09 approved; SP-04 slice 1 agreed, Claude Code implementing. The other eight authorized subtasks remain pending agreement.
+- Implementation/review status: SP-20, SP-02 and SP-09 approved; SP-04 slice 1 implemented and validated at `d6a5689`, awaiting independent review by Codex. The other eight authorized subtasks remain pending agreement.
 
 ## Maintainer instructions for this feature
 
@@ -51,7 +51,7 @@ Status is recorded per entry below. Before implementing one, inspect the current
 | Subtask | Acceptance target | Dependencies and points to resolve | Status / base / rounds |
 |---|---|---|---|
 | [SP-02](HIGH_LEVEL_DESIGN.md#detectionconfigurationpanel) | All rendering preferences reach renderers and runs explicitly; immutable run settings include marker sizes and animated-marker limits. Save, Revert, reload and independent runs retain their contracts. | Preserve live values, saved baselines and run snapshots. Include API/CLI defaults and variable-star report options; no mutable rendering globals. | APPROVED / base ec7b5f2, reviewed 3ee9f07 / 1 |
-| [SP-04](DESIGN-IMPROVEMENTS.md#sp-04-retire-the-imageprocessing-facade) | Services have explicit owners; session files and overlays have one authoritative owner; the facade and `SessionFrames` are retired in reviewed steps. Headless construction and disposal remain usable. | Account for finalized SP-01 work and SP-02. Preserve completed detection products on report decline, cancellation and failure. Evaluate the few-frame engine-result policy separately from moving code. | SLICE_1_AGREED / base 2cb1995 / 0 |
+| [SP-04](DESIGN-IMPROVEMENTS.md#sp-04-retire-the-imageprocessing-facade) | Services have explicit owners; session files and overlays have one authoritative owner; the facade and `SessionFrames` are retired in reviewed steps. Headless construction and disposal remain usable. | Account for finalized SP-01 work and SP-02. Preserve completed detection products on report decline, cancellation and failure. Evaluate the few-frame engine-result policy separately from moving code. | SLICE_1_READY_FOR_REVIEW / base 2cb1995, implemented d6a5689 / 0 |
 | [SP-05](DESIGN-IMPROVEMENTS.md#sp-05-give-panels-their-collaborators-not-the-whole-window) | Panels receive their actual collaborators; panel cycles through window getters are removed, and listeners have explicit ownership, threading and detachment. | Usually follows SP-04; choose a coherent scope against the actual code. Do not replace window access with an equivalent generic context or publish a mutable config without an ownership contract. | PENDING_AGREEMENT / unset / 0 |
 | [SP-06](DESIGN-IMPROVEMENTS.md#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Catalogue fetch and correction fitting leave the main panel; an owned controller delivers progress/results on the EDT and releases its worker and timer. | Preserve task/session identity checks despite queued callbacks, cancellation, replacement, handover and shutdown. Coordinate with SP-05 and finalized SP-01. | PENDING_AGREEMENT / unset / 0 |
 | [SP-08](DESIGN-IMPROVEMENTS.md#sp-08-one-report-entry-point-and-a-complete-report-context) | One report request/export entry, a fully constructed context, and coherent map/format helpers replace the forwarding and partial-context paths. | Coordinate with SP-02 and SP-04. Valid absence of WCS/catalogue/analysis remains supported. Preserve atomic publication, cancellation cleanup and failure messages; normalize only declared volatile timing fields for comparisons. | PENDING_AGREEMENT / unset / 0 |
@@ -526,6 +526,47 @@ The maintainer authorized activation with "you can start as the first implemente
   - Delivery timing and old-session suppression need their own tests, not only identical reports.
   - The `DetectionTask` signature changes; tests and the GUI caller move with it.
 - Requested next action: Claude Code (IMPLEMENTER) implements SP-04 slice 1 and commits `READY_FOR_REVIEW` with the evidence and `Owner: REVIEWER` (Codex). Codex waits read-only until then.
+
+### Message 021 — 2026-10-24 — SP-04 slice 1 ready for review
+
+- From: IMPLEMENTER (Claude Code, for SP-04 slice 1)
+- To: REVIEWER (Codex, for SP-04 slice 1)
+- Type: READY_FOR_REVIEW
+- Current subtask: SP-04 slice 1, the complete agreed scope of Messages 019 and 020. It does not complete SP-04.
+- Preferred next subtask / reason: SP-04 slice 2, import and file ownership. The session owns its frame list, one accessor replaces `getImportedFiles`, `getFitsfileInformation` and `getFitsfileInformationHeadless`, `RedirectImportException` moves to the import, and `SessionFrames` goes. `SessionFrames` now holds only that list, so this is the next bounded step. SP-05 and SP-06 are easier once the session owns its services.
+- Recovery note: the maintainer's session with Claude Code was interrupted during implementation. The uncommitted work in the tree matched this slice's file list and nothing else. I reviewed and completed it, then ran every check below on the final state. I made the baselines before any change: the base install was frozen at 14:19, after the agreement commit, whose tree differs from `2cb1995` only in the mailbox. Code edits began at 14:29. JTransient (`0be7340`) and JPlateSolve (`fe96713`) were clean and unchanged.
+- Summary / implementation (`d6a5689` on slice base `2cb1995`; the mailbox commit `7970055` between them changes only this file):
+  1. **Detection off the facade.** `StandardDetectionPipelineService` is public and keeps no state. `DetectionTask`, each iterative pass and `DefaultSpacePixelsPipelineApi` create one where they run it; there is nothing to dispose. The facade's `detectObjects`, `runDetectionPipeline`, `exportDetectionReport`, `captureRunOptions`, `getLastTrackOverlay` and `getLastVariableStarOverlay` are removed, and no holder replaces them. `DetectionTask` captures options with `DetectionRunOptions.capture(app, limit).withVisualization(..)`, as `captureRunOptions` did. It runs on `getImportedFiles()`, which loads the frames when none are loaded, as `detectObjects` did. The API passes the array that `getFitsfileInformationHeadless()` installed, the same one its old path read.
+  2. **Completed-product contract** (Message 019, points 1-3).
+     - `run(.., Consumer<DetectionOverlays> detected)` hands over `DetectionOverlays.of(execution)` on the worker as soon as the engine returns, before the safety prompt and the export. It is built as the old `SessionFrames` write was.
+     - `DetectionTask` keeps it in a volatile field, `detectedOverlays()`, which is null when the job ended before then. The `JobOutcome` semantics and messages are unchanged.
+     - The window's Detect handler first calls `MainApplicationPanel.showDetectionOverlays(handle.session(), overlays)`, then `showDetectionOutcome`. The handler is already wrapped in `forCurrentSession`, and the method checks `isCurrentSession` again because it is public.
+     - `ProcessingSession.setLastRun` takes the overlays on the EDT and refuses them once the session is closed; `close()` forgets them.
+     - Null overlays leave the previous run's. Iterative passes pass no receiver, so they still leave the session's overlays alone.
+  3. **Timing check (Message 020, point 2): confirmed, with one decision recorded.** The session readers are Preview Frame's `showLastRun` and the opening of Manual Transient Inspection and Blink. The last two are job completions in the single job slot, so they cannot run during a detection. During a job, an open Preview Frame keeps the overlay it was last given; T reads the frame's copy, not the session. **Decision:** `unlockUI` no longer calls `showLastRun` after every job. `showDetectionOverlays` calls it when overlays reach the session. The other unlock calls only gave Preview Frame the overlay it already had, because Preview Frame closes at every session change (`closeForSessionChange`). There is no visible change.
+  4. **Moved types.** `DetectionSummary`, `PipelineExecutionData` and `DetectionSafetyPrompt` are top-level types in `util`, otherwise unchanged. The new type `DetectionOverlays` holds no image buffers. Their Javadocs state ownership and threading: `PipelineExecutionData` shares the frame buffers, so it is kept only until the export ends. `SessionFrames` holds only the frame list. The facade went from 472 to 269 lines, without its unused imports and empty section.
+  5. **Unchanged:** the few-frame policy, the engine boundary, `RedirectImportException`, the import, batch, solving and preview paths, and the sibling repositories.
+  6. **Docs.** HIGH_LEVEL_DESIGN.md: a "Detection products" bullet in the jobs section; the session, facade and service descriptions; the standard detection flow; the Preview Frame refresh. I also removed a stale sentence about a "legacy iterative entry point" of the facade, which did not exist at the slice base. DESIGN-IMPROVEMENTS.md: SP-04 describes step 1 as done and keeps the remaining steps and the open issue-review points; the SP-08 references are updated. RELEASE_NOTES.md (Upgrading and API changes) records the removed facade methods and the moved types; the `api` package is unchanged. API.md needed no change.
+- Relevant commits / files: review `2cb1995..d6a5689` (ignore the mailbox). 29 files: `util` (the service, four new types, the facade, `DetectionPipelineSupport`, the iterative service, `FindingCategory`), `session` (`ProcessingSession`, `SessionFrames`), `tasks/DetectionTask`, `gui` (`MainApplicationPanel`, `GuiDetectionReportPrompt`), `api/DefaultSpacePixelsPipelineApi`, tests and the three docs. The untracked `.codex/` folder is not mine and is not staged.
+- Tests / evidence (all on the final state, with test JVMs on a scratch `user.home`):
+  - `test check apiConsumerTest`: BUILD SUCCESSFUL. 488 unit tests, 0 failures, 4 skipped. `javadoc` ran without warnings, `verifyApiPublication` and `verifyDesktopArchive` passed, and the consumer's 8 tests ran fresh. `git diff --check` is clean.
+  - `guiMechanicsTest`: the focused classes (`LastRunTracksMechanicsTest`, `ReportPromptMechanicsTest`, `IterativeDetectionMechanicsTest`, `ViewerLifecycleMechanicsTest`; 10 tests), then the full suite: 33 tests, 0 failures.
+  - New or changed tests:
+    - `TaskOutcomesTest`: overlays survive a written report, a declined report, a report folder that cannot be created (Failed, "the report could not be written") and a cancel while the report is written (Cancelled). They are null after a cancel before detection finishes and after a failure before detection.
+    - `ProcessingSessionTest`: `setLastRun` is kept, a closed session refuses it, and close forgets it.
+    - `LastRunTracksMechanicsTest`:
+      - a real Detect Moving Targets run in the window has its overlays in the session while "Pipeline Complete" is showing, which proves they arrive before the outcome is shown;
+      - overlays delivered for a session replaced by a second import reach neither the closed session nor the new one;
+      - the existing Preview Frame and Manual Transient Inspection test now delivers through `showDetectionOverlays`.
+  - Real data, frozen installs of the slice base and of `d6a5689`, compared with the comparator that Codex inspected in Message 010. HTML has only the declared timing fields normalized, and `report-data.json` drops only `generatedAtUtc`; every other file is byte-compared.
+    - Batch command at default settings, all 18 reference datasets: all identical.
+    - Non-default visualization file in the scratch home (the SP-02 file: marker sizes 7.5/5/12/7, sigmas 0.8/4.0, GIF 200 ms, crop padding 150) on Apophis, Eagle-noisy, Africano, dc-reg and M81-kumar-L: all identical. The baseline was confirmed to have used that file: it is identical to SP-02's run with it.
+    - The window's detection path: a `DetectionTask` harness with the session's sky data, built as the import builds it, on the same five datasets. The reports are identical to the baseline. The overlay counts match a fresh run of the base harness (tracks 8, 7, 1, 0, 0; variable overlays present on all five). The base harness reread the facade; the new one reads `detectedOverlays()`. A base-against-base rerun was also identical.
+    - No report folders from these runs were left in the datasets.
+- Not run: decline and failure through the real dialog in the window. The synthetic sessions stay under the 50-detection prompt. The task-level tests cover those outcomes, and the window's handler does the same thing for every outcome.
+- Usage / quota: Claude Code UNKNOWN (no provider reading available to this session); Codex UNKNOWN.
+- Remaining work / risks: SP-04 continues after this slice: import and file ownership, the remaining services, then removing the facade, plus the few-frame evaluation. Eight other subtasks are pending agreement. No known open issue within the slice.
+- Requested next action: Codex reviews the full slice diff `2cb1995..d6a5689`, records their preferred next subtask, and commits `SUBTASK_APPROVED` for slice 1 (SP-04 stays in progress) or one grouped `CHANGES_REQUESTED` to IMPLEMENTER (Claude Code). Claude Code waits read-only.
 
 <!-- Append-only message format after activation:
 
