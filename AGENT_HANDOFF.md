@@ -22,18 +22,18 @@
 
 ## Current state
 
-- Owner: REVIEWER
-- State: READY_FOR_REVIEW
+- Owner: IMPLEMENTER
+- State: CHANGES_REQUESTED
 - Current subtask: SP-02
 - Current agreement: AGREED — Codex and Claude Code agree on SP-02 as proposed in Message 007, with the points in Message 008; roles swapped for SP-02.
-- Interaction rounds used: 0
-- Codex preferred next subtask: SP-02 — SP-20 is approved; explicit rendering settings remove the remaining globals and support the later report/live-view changes.
+- Interaction rounds used: 1
+- Codex preferred next subtask: SP-09 — after completing SP-02 review, unify the bounded I/O queues while preserving ordered reimport reads, target-specific failures and session callback lifetime; SP-01 is already finalized.
 - Claude Code preferred next subtask: SP-09 after SP-02 — SP-01 is finished, and merging the two write queues is bounded and touches none of SP-02.
 - Resume role (when paused): N/A
 - Resume action (when paused): N/A
 - Quota visibility: UNKNOWN
 - Last reported quota: Codex UNKNOWN; Claude Code UNKNOWN
-- Implementation/review status: SP-20 approved; SP-02 implemented and validated in `bbe7e2a`, awaiting Codex's independent review.
+- Implementation/review status: SP-20 approved; SP-02 functional review passed at `bbe7e2a`; one documentation correction requested in Message 010 (round 1/2).
 
 ## Maintainer instructions for this feature
 
@@ -50,7 +50,7 @@ Status is recorded per entry below. Before implementing one, inspect the current
 
 | Subtask | Acceptance target | Dependencies and points to resolve | Status / base / rounds |
 |---|---|---|---|
-| [SP-02](DESIGN-IMPROVEMENTS.md#sp-02-rendering-preferences-as-a-value-not-static-fields) | All rendering preferences reach renderers and runs explicitly; immutable run settings include marker sizes and animated-marker limits. Save, Revert, reload and independent runs retain their contracts. | Preserve live values, saved baselines and run snapshots. Include API/CLI defaults and variable-star report options; no mutable rendering globals. | READY_FOR_REVIEW / base ec7b5f2, implemented bbe7e2a / 0 |
+| [SP-02](HIGH_LEVEL_DESIGN.md#detectionconfigurationpanel) | All rendering preferences reach renderers and runs explicitly; immutable run settings include marker sizes and animated-marker limits. Save, Revert, reload and independent runs retain their contracts. | Preserve live values, saved baselines and run snapshots. Include API/CLI defaults and variable-star report options; no mutable rendering globals. | CHANGES_REQUESTED / base ec7b5f2, reviewed bbe7e2a / 1 |
 | [SP-04](DESIGN-IMPROVEMENTS.md#sp-04-retire-the-imageprocessing-facade) | Services have explicit owners; session files and overlays have one authoritative owner; the facade and `SessionFrames` are retired in reviewed steps. Headless construction and disposal remain usable. | Account for finalized SP-01 work and SP-02. Preserve completed detection products on report decline, cancellation and failure. Evaluate the few-frame engine-result policy separately from moving code. | PENDING_AGREEMENT / unset / 0 |
 | [SP-05](DESIGN-IMPROVEMENTS.md#sp-05-give-panels-their-collaborators-not-the-whole-window) | Panels receive their actual collaborators; panel cycles through window getters are removed, and listeners have explicit ownership, threading and detachment. | Usually follows SP-04; choose a coherent scope against the actual code. Do not replace window access with an equivalent generic context or publish a mutable config without an ownership contract. | PENDING_AGREEMENT / unset / 0 |
 | [SP-06](DESIGN-IMPROVEMENTS.md#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Catalogue fetch and correction fitting leave the main panel; an owned controller delivers progress/results on the EDT and releases its worker and timer. | Preserve task/session identity checks despite queued callbacks, cancellation, replacement, handover and shutdown. Coordinate with SP-05 and finalized SP-01. | PENDING_AGREEMENT / unset / 0 |
@@ -273,6 +273,26 @@ The maintainer authorized activation with "you can start as the first implemente
 - Usage / quota: Claude Code UNKNOWN (no provider reading available to this session); Codex UNKNOWN.
 - Remaining work / risks: None known within the agreed scope.
 - Requested next action: Codex reviews the full subtask diff `ec7b5f2..bbe7e2a` and commits `SUBTASK_APPROVED` or `CHANGES_REQUESTED` with `Owner: IMPLEMENTER` (Claude Code). Claude Code waits read-only until then.
+
+### Message 010 — 2026-10-24 — SP-02 review
+
+- From: REVIEWER (Codex)
+- To: IMPLEMENTER (Claude Code)
+- Type: CHANGES_REQUESTED
+- Current subtask: SP-02; existing agreement and baseline retained.
+- Preferred next subtask / reason: SP-09. The finalized SP-01 state makes the bounded I/O-queue consolidation eligible; preserve ordered reimport reads, per-target failure/retry state and session callback lifetime.
+- Summary / review: Reviewed the full implementation diff `ec7b5f2..bbe7e2a`, including caller migration, saved forms, UI admission/revert, renderer paths, tests and API/design/release documentation. No functional blocker found. The settings page is the live owner, saved baselines remain distinct, and runs retain immutable settings without reading mutable rendering globals. The new dependency direction is appropriate.
+- Required correction (one grouped documentation item): `VisualizationSettings` introduces thirteen public `with…` methods without method Javadocs, and the new `FrameViewMarkersTest` lacks a type Javadoc. DEVELOPER.md explicitly requires new Java types and methods to document their responsibility/contracts. Add short method contracts that say a copy is returned and identify units where useful; document the null rejection of variable-star options and retain the existing range behavior. Add the test type's responsibility. No behavior change or new tests are requested for this correction; run Javadoc/diff checks, then return for approval.
+- Behavior decision: Accept the explicitly reported corner-mosaic/rainbow-map stretch correction as part of passing the admitted settings to all renderers. The arithmetic is unchanged, default output is preserved, and the two previously global paths now use the same settings as other report pictures. RELEASE_NOTES.md discloses the non-default CLI change. No wider rendering/detection change is accepted by this decision.
+- Relevant commits / files: Reviewed implementation `bbe7e2a`, handoff `6f49dcc`; subtask base `ec7b5f2af80060a5a2e3cc377f210adbd3606d11`, feature baseline unchanged. This response changes only the mailbox.
+- Tests / evidence from this reviewer:
+  - Focused unit tests for visualization preference IO, overlapping API run isolation, task outcomes, frame markers and animation limits: 25 tests, no failures/errors/skips; scratch `user.home`.
+  - `apiConsumerTest`: successful; staged publication/runtime verification executed, the eight consumer tests were up-to-date from the implementation's successful run.
+  - Inspected the regression comparator and reran it on both frozen report trees: all 18 default datasets identical; the five non-default comparisons differ only in the declared corner GIF/poster and rainbow-map assets; the four default-sigma control comparisons are identical. HTML normalization covers only declared elapsed/generation timing fields; report JSON ignores only `generatedAtUtc`; all other files are byte-compared. This rechecks existing artifacts, not newly generated real-data runs.
+  - `git diff --check ec7b5f2..HEAD`: clean. Reviewed the implementer's full unit/check, GUI mechanics and saved-file round-trip evidence; did not rerun shared-desktop tests or generate another full real-data set without a functional concern.
+- Usage / quota: Codex UNKNOWN; Claude Code UNKNOWN. No provider usage percentage is available.
+- Remaining work / risks: SP-02 awaits the documentation correction and final approval (round 1/2). SP-20 remains approved; ten other authorized subtasks remain pending agreement. No new functional risk found.
+- Requested next action: Claude Code makes the documentation correction, commits it with a `READY_FOR_REVIEW` mailbox response to REVIEWER (Codex), and stops writing after that handoff. Keep the existing baseline and round count. Codex waits read-only.
 
 <!-- Append-only message format after activation:
 
