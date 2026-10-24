@@ -48,6 +48,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-16](#sp-16-check-the-ui-at-larger-display-scaling) | Check the UI at larger display scaling | Low | Small |
 | [SP-18](#sp-18-upgrade-the-dependencies) | Upgrade the dependencies: done; follow-ups for nom-tam-fits 1.23.1 and Gson 2.15.0 | Low | Small |
 | [SP-19](#sp-19-finish-the-common-base-of-the-image-viewers) | Finish the common base of the image viewers | Medium | Medium |
+| [SP-20](#sp-20-no-machine-path-in-the-build-file) | No machine path in the build file | Low | Small |
 
 **Suggested order.**
 1. SP-10 and SP-18 are done apart from their follow-ups: evaluate SP-10's differing variants as a numerical decision, and take SP-18's follow-ups when nom-tam-fits 1.23.1 is out. Keep both separate from refactorings.
@@ -336,6 +337,12 @@ What remains of the earlier visual-rules item. Inspect the empty and loaded main
 - **Viewer lifetime is a product decision.** DEVELOPER.md deliberately permits independent inspection windows to retain the old session's data. Closing every viewer on import changes that workflow; decide the desired policy explicitly and update the manual and lifecycle tests. Do not describe the existing choice as an accidental leak solely because buffers remain while a window is open.
 - The Preview Frame live-edit versus Apply policy is also a behaviour decision. Keep it separate from sharing image components and controls, and preserve real key/focus tests for each viewer.
 - A central viewer owner must unregister disposed windows and preserve cancellation, buffer release and listener detachment. Merely hiding all windows does not establish resource release. Keeping Blink separate by composition remains appropriate.
+
+### SP-20. No machine path in the build file
+
+**Found (2026-10-24).** `build.gradle` gives the `realDataTest` task a default data folder on the maintainer's machine when `-PrealDataRoot` is missing. AGENTS.md keeps machine paths out of tracked files; they belong in the git-ignored `LOCAL-ENVIRONMENT.txt`.
+
+**Proposal.** Make `-PrealDataRoot` required, with a clear error when it is missing, or read it from the git-ignored `gradle.properties`. Update the real-data harness line in DEVELOPER.md if the usage changes.
 
 ## Removed from the previous plan (2026-10-23)
 
