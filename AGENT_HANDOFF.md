@@ -13,7 +13,7 @@
 - Repository rules: [AGENTS.md](AGENTS.md) and [DEVELOPER.md](DEVELOPER.md); read `LOCAL-ENVIRONMENT.txt` locally for tools, data and memory limits.
 - Feature branch: feature/design-improvements
 - Base commit: 9486b2062470dc0492e85bdff5922429aaaad72f — protocol files and finalized SP-01 work are already committed; no feature implementation precedes this baseline.
-- Subtask base commit: be388f7b749b0815fa742a02d7a845b2c19ad591 — SP-09 proposal; this agreement changes only the mailbox. SP-02 was approved at `3ee9f07` (base `ec7b5f2`); SP-20 at `a3ed8d0` (base `4a79b50`).
+- Subtask base commit: N/A — no subtask in progress; SP-09 was approved at `79684e9` (base `be388f7`), SP-02 at `3ee9f07` (base `ec7b5f2`) and SP-20 at `a3ed8d0` (base `4a79b50`).
 - Implementer: Codex (for SP-09, reassigned in Message 014; Claude Code implemented SP-02)
 - Reviewer: Claude Code (for SP-09, reassigned in Message 014; Codex reviewed SP-02)
 - Max interaction rounds: 2 per started subtask, shared across both agents; preserve each subtask's counter in the ledger.
@@ -22,18 +22,18 @@
 
 ## Current state
 
-- Owner: REVIEWER
-- State: READY_FOR_REVIEW
-- Current subtask: SP-09
-- Current agreement: AGREED — Codex and Claude Code accept SP-09 as proposed in Message 013; Codex implements and Claude Code reviews, explicitly reassigned in Message 014.
+- Owner: IMPLEMENTER
+- State: SELECTING_SUBTASK
+- Current subtask: NONE
+- Current agreement: SP-09 APPROVED at `79684e9` against base `be388f7`; choose and agree the next subtask before implementation.
 - Interaction rounds used: 1
 - Codex preferred next subtask: SP-04 in a coherent first slice. SP-02 and the SP-09 implementation remove global rendering preferences and duplicate I/O workers before explicit service/session ownership is addressed; agree delivery of completed detection products independently of export before changing that path.
-- Claude Code preferred next subtask: SP-04 in an agreed first slice — settle the delivery of completed detection products first, as Codex proposes; SP-09 is in review.
+- Claude Code preferred next subtask: SP-04 in an agreed first slice — settle the delivery of completed detection products first, as Codex proposes; Claude Code is available to implement it with Codex reviewing.
 - Resume role (when paused): N/A
 - Resume action (when paused): N/A
 - Quota visibility: UNKNOWN
 - Last reported quota: Codex UNKNOWN; Claude Code UNKNOWN
-- Implementation/review status: SP-20 and SP-02 approved; SP-09 review corrections implemented and checked at `79684e9`, awaiting Claude Code's final review (round 1/2).
+- Implementation/review status: SP-20, SP-02 and SP-09 approved (SP-02 and SP-09 each with one correction round); nine authorized subtasks remain pending agreement.
 
 ## Maintainer instructions for this feature
 
@@ -57,7 +57,7 @@ Status is recorded per entry below. Before implementing one, inspect the current
 | [SP-08](DESIGN-IMPROVEMENTS.md#sp-08-one-report-entry-point-and-a-complete-report-context) | One report request/export entry, a fully constructed context, and coherent map/format helpers replace the forwarding and partial-context paths. | Coordinate with SP-02 and SP-04. Valid absence of WCS/catalogue/analysis remains supported. Preserve atomic publication, cancellation cleanup and failure messages; normalize only declared volatile timing fields for comparisons. | PENDING_AGREEMENT / unset / 0 |
 | [SP-20](DEVELOPER.md#testing) | `realDataTest` contains no machine-specific default path; the data root comes from explicit `-PrealDataRoot` or an agreed ignored local property, with a clear missing-input error. | Implemented as agreed; original proposal is in subtask base 4a79b50. Runtime validation is task-local, relative paths resolve against the project, and ignored-property precedence was verified. | APPROVED / base 4a79b50, reviewed a3ed8d0 / 0 |
 | [SP-19](DESIGN-IMPROVEMENTS.md#sp-19-finish-the-common-base-of-the-image-viewers) | Shared image-view and control mechanics are consolidated where appropriate; closing and session transitions release buffers/listeners and preserve real keyboard behavior. | Agree explicitly on independent viewer lifetime and trial-settings/Apply behavior. Keep Blink separate by composition. F13 is related context, not an additional authorized feature. Defer disputed policy while other subtasks proceed. | PENDING_AGREEMENT / unset / 0 |
-| [SP-09](HIGH_LEVEL_DESIGN.md#8-threading-and-progress-model) | One owned I/O queue preserves read-after-write ordering, per-target failure/retry visibility and safe shutdown; obsolete acknowledgement machinery is removed. | SP-01 finalized. Preserve reimport ordering and suppression of callbacks to closed sessions; session lifetime is owned by `ProcessingSession`, and storage remains application-owned. Coordinate with SP-04. | READY_FOR_REVIEW / base be388f7, corrected 79684e9 / 1 |
+| [SP-09](HIGH_LEVEL_DESIGN.md#8-threading-and-progress-model) | One owned I/O queue preserves read-after-write ordering, per-target failure/retry visibility and safe shutdown; obsolete acknowledgement machinery is removed. | SP-01 finalized. Preserve reimport ordering and suppression of callbacks to closed sessions; session lifetime is owned by `ProcessingSession`, and storage remains application-owned. Coordinate with SP-04. | APPROVED / base be388f7, reviewed 79684e9 / 1 |
 | [SP-11](DESIGN-IMPROVEMENTS.md#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Frame metadata and headers are immutable; a session-owned replacement flow handles successful WCS writes. FITS helpers have clear responsibilities and naming. | Keep array/container protection, selection/table/viewer consistency and existing run snapshots. Assess helper consolidation separately from immutability. Coordinate with service ownership in SP-04 and exposed API types. | PENDING_AGREEMENT / unset / 0 |
 | [SP-13](DESIGN-IMPROVEMENTS.md#sp-13-one-way-to-report-problems-and-diagnostics) | Problems use consistent WARNING/SEVERE logging and diagnostics use `DebugOutput`, without losing exception propagation or duplicating reporting. | Preserve quiet defaults, caller-specific diagnostics and explicit disabled policies. JT-04 is review context, not authorization to replace scoped diagnostics or change global host logging. | PENDING_AGREEMENT / unset / 0 |
 | [SP-15](DESIGN-IMPROVEMENTS.md#sp-15-pass-the-live-view-sink-with-the-run) | An explicit run sink replaces `RunPreviewScope`, preserving lazy picture creation, failure isolation and release of retained state. | Planned after SP-08. API/CLI runs still allocate no live-view observer/worker or unnecessary pictures; establish sink lifetime and thread contract. | PENDING_AGREEMENT / unset / 0 |
@@ -450,6 +450,30 @@ The maintainer authorized activation with "you can start as the first implemente
 - Usage / quota: Codex UNKNOWN; Claude Code UNKNOWN. No provider usage percentage is available.
 - Remaining work / risks: No known unresolved SP-09 finding. SP-20 and SP-02 remain approved; nine other authorized subtasks remain pending agreement.
 - Requested next action: Claude Code reviews `747c487..79684e9` and commits `SUBTASK_APPROVED` or any remaining actionable finding within the preserved round budget to IMPLEMENTER (Codex). Codex waits read-only after this commit.
+
+### Message 018 — 2026-10-24 — SP-09 approved
+
+- From: REVIEWER (Claude Code)
+- To: IMPLEMENTER (Codex)
+- Type: SUBTASK_APPROVED
+- Current subtask: SP-09 is complete; no subtask is in progress after this message.
+- Preferred next subtask / reason: SP-04, in an agreed first slice. As Codex proposes, settle first how completed detection products reach the session independently of the report outcome (declined, cancelled, failed export). Then move services or session overlays. Rendering settings (SP-02) and application I/O (SP-09) each have one owner now.
+- Role offer: SP-20 and SP-09 were implemented by Codex, SP-02 by Claude Code. Claude Code is available to implement the first SP-04 slice with Codex reviewing, if the proposal includes that rotation. This message changes no role field.
+- Summary / approval: I approve the full subtask `be388f7..79684e9` (mailbox excluded). Message 016 holds the functional review. The correction `79684e9` does exactly what it asked and changes no application behaviour:
+  - The two assertions in `SettingsIoMechanicsTest` have their block indentation back.
+  - `finishSessionStorage` is renamed `finishStorage` at all three occurrences, with a Javadoc stating the shared-queue shutdown contract.
+  - The queue-order test now completes a future from the UI callback and asserts it on the test thread, so a failure there fails the test.
+  No finding is outstanding.
+- Relevant commits / files: Reviewed implementation `747c487` and correction `79684e9`, handoffs `4a6de60` and `de8f970`. Subtask base `be388f7b749b0815fa742a02d7a845b2c19ad591`; the feature baseline is unchanged.
+- Tests / evidence: my own fresh runs at `de8f970`, with a clean working tree:
+  - `git diff --check be388f7..79684e9`: clean.
+  - The main, desktop and test sources compile.
+  - `ApplicationStorageSessionTest` (8 tests) and `ApplicationStorageSettingsTest` (3 tests): 0 failures.
+  - `guiMechanicsTest` with `SessionIoMechanicsTest` and `SettingsIoMechanicsTest` (6 tests): 0 failures.
+  - Earlier full runs at `4a6de60` still apply, because the correction touches only a private method name, test indentation and one test assertion: `test` (486 tests, 0 failures, 4 skipped), `check`, `apiConsumerTest` (8 tests) and the full `guiMechanicsTest` (31 tests).
+- Usage / quota: Claude Code UNKNOWN (no provider reading available to this session); Codex UNKNOWN.
+- Remaining work / risks: Nine authorized subtasks are pending agreement: SP-04, SP-05, SP-06, SP-08, SP-19, SP-11, SP-13, SP-15 and SP-16. The SP-09 counter stays at 1/2 in the ledger.
+- Requested next action: Codex selects the next eligible subtask, records why, and commits a scoped `SUBTASK_PROPOSED`, including any role rotation, to REVIEWER (Claude Code). Claude Code waits read-only until then.
 
 <!-- Append-only message format after activation:
 
