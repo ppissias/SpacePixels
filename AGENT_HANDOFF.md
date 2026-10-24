@@ -1,18 +1,18 @@
 # Agent Handoff — Design improvements
 
-> **Prepared setup; collaboration is not active.** Read [AGENT_COLLABORATION.md](AGENT_COLLABORATION.md), especially sections 3 and 13. The maintainer is working in parallel. Do not create or switch a branch, stage or commit this draft, or start implementation yet. Only committed mailbox updates transfer ownership after activation. Existing staged template versions do not activate this feature.
+> **Active feature.** Read [AGENT_COLLABORATION.md](AGENT_COLLABORATION.md), especially sections 3 and 13, and read the committed version of this mailbox before acting. The maintainer authorized Codex to start as first implementer on 2026-10-24. Only the committed `Owner` may write; implementation of a subtask still requires `SUBTASK_AGREED` from both agents.
 
 ## Configuration
 
 - Task: Design improvements
 - Mode: FEATURE_WITH_SUBTASKS
 - Primary repository: SpacePixels
-- Feature scope: One feature containing the twelve SP subtasks below, with one eventual feature branch, one feature baseline and final review of the complete feature.
+- Feature scope: One feature containing the twelve SP subtasks below, with one feature branch, one feature baseline and final review of the complete feature.
 - Authorized subtasks: SP-02, SP-04, SP-05, SP-06, SP-08, SP-20, SP-19, SP-09, SP-11, SP-13, SP-15, SP-16
 - Specification: [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md), including each selected item's issue review; acceptance targets below.
 - Repository rules: [AGENTS.md](AGENTS.md) and [DEVELOPER.md](DEVELOPER.md); read `LOCAL-ENVIRONMENT.txt` locally for tools, data and memory limits.
-- Feature branch: PENDING — create only as the last preparatory step after the maintainer's parallel work is reconciled and activation is authorized.
-- Base commit: PENDING — capture the actual feature baseline at activation after committing the protocol files, before any feature implementation. The setup snapshot below is not this baseline.
+- Feature branch: feature/design-improvements
+- Base commit: 9486b2062470dc0492e85bdff5922429aaaad72f — protocol files and finalized SP-01 work are already committed; no feature implementation precedes this baseline.
 - Subtask base commit: N/A — no subtask has been proposed or agreed.
 - Implementer: Codex (initial assignment; may be reassigned only by a committed update at a subtask boundary)
 - Reviewer: Claude Code (initial assignment; may be reassigned only by a committed update at a subtask boundary)
@@ -22,8 +22,8 @@
 
 ## Current state
 
-- Owner: HUMAN
-- State: SETUP_REQUIRED
+- Owner: IMPLEMENTER
+- State: SELECTING_SUBTASK
 - Current subtask: NONE
 - Current agreement: NONE
 - Interaction rounds used: 0
@@ -33,7 +33,7 @@
 - Resume action (when paused): N/A
 - Quota visibility: UNKNOWN
 - Last reported quota: Codex UNKNOWN; Claude Code UNKNOWN
-- Implementation/review status: Not started; preparation only.
+- Implementation/review status: Activated; no subtask implementation has started.
 
 ## Maintainer instructions for this feature
 
@@ -41,7 +41,7 @@
 2. **Both agents should work completely until the feature is done or close to an applicable quota limit.** Continue across subtask approvals and committed handoffs; do not stop after one item or an arbitrary number of turns while useful authorized work remains. While waiting, poll committed handoffs read-only as supported by the interactive session. At 80% measured usage, prefer bounded work and prepare a checkpoint; at 90%, safely checkpoint to `PAUSED_QUOTA`, `Owner: HUMAN`. Never invent usage readings or confuse context utilization with provider quota.
 3. **At the start of every owned turn, each agent picks the subtask they think should go next and records why.** Both agents evaluate prerequisites and the current code independently. Resolve an already-assigned review, answer or correction before switching implementation to the next subtask. A next preference does not grant implementation ownership.
 4. **Agree on scope and checks before starting a subtask.** Use `SUBTASK_PROPOSED` and `SUBTASK_AGREED` as described in section 13 of the protocol. If the agents cannot agree before starting, record `DEFERRED` and move to another eligible subtask. Keep the reason and both positions; reconsider only when the disagreement can be addressed. Do not spend the feature on repeated argument or stop for a decision while other authorized subtasks can proceed.
-5. **Branch creation comes last in setup.** The maintainer's current work and staging belong to them. This request authorizes preparation of these two Markdown files only, with `Owner: HUMAN` and `State: SETUP_REQUIRED`; it does not activate implementation. Do not stage, commit, stash, incorporate or revert their parallel edits.
+5. **Branch creation came last in setup.** The earlier preparation-only restriction was lifted by the maintainer's explicit start instruction on 2026-10-24. Clean working trees and committed SP-01 work were verified before creating `feature/design-improvements`. Preserve any subsequent maintainer changes; do not stage, commit, stash, incorporate or revert unrelated edits.
 6. **Preserve independent review and single-writer ownership.** These are the existing Codex and Claude Code sessions sharing one working tree, not concurrent implementation workers. The reviewer changes only the mailbox. Handoffs take effect only when committed, and the sender stops writing after transferring ownership.
 
 ## Subtask ledger and acceptance targets
@@ -86,7 +86,9 @@ Observed during setup on 2026-10-24; recheck everything at activation because th
 
 None of these observed SHAs is an agreed implementation baseline. Do not stage or commit unrelated work to make the tree appear ready, or rely on this snapshot as proof that a prerequisite has been finished.
 
-## Activation checklist — deferred until the maintainer is ready
+## Activation checklist — completed on 2026-10-24
+
+The maintainer authorized activation with "you can start as the first implementer and then we proceed as per the agent collaboration." SpacePixels was clean at `9486b2062470dc0492e85bdff5922429aaaad72f`, which already includes the protocol files and the finalized SP-01 work (`64cc9b9`, `ad1c78d`). JTransient and JPlateSolve were also clean at the SHAs in the informational snapshot. The dedicated feature branch was created only after these checks. The checklist below is retained as the initialization procedure; it is not an instruction to repeat branch creation or reset the baseline.
 
 1. The maintainer finishes or otherwise reconciles their parallel work and authorizes activation. Re-read both collaboration files, repository guidance, current plans, branches, index and working trees. Account for the completed SP-01 result and any changed proposals without adopting unrelated edits.
 2. Confirm the single feature scope, acceptance targets, initial role assignments and quota visibility. Finalize setup documentation and resolve repository ownership/readiness first. Leave the first subtask unselected so the first owner makes a fresh choice.
@@ -110,9 +112,23 @@ None of these observed SHAs is an agreed implementation baseline. Do not stage o
 - Remaining work / risks: Maintainer's parallel changes are active; feature branch and actual baselines remain unset. Some subtasks depend on the finalized SP-01 work or an explicit behaviour/API decision.
 - Requested next action: Keep `Owner: HUMAN`, `State: SETUP_REQUIRED` during parallel work. When ready, authorize activation and follow the deferred checklist, creating the branch last in preparation. This uncommitted entry is not an `INITIALIZED` handoff.
 
+### Message 002 — 2026-10-24 — activation
+
+- From: HUMAN (explicit start authorization), recorded by IMPLEMENTER (Codex)
+- To: IMPLEMENTER (Codex)
+- Type: INITIALIZED
+- Current subtask: NONE
+- Preferred next subtask / reason: Selection follows this activation commit; no implementation starts without agreement.
+- Summary / agreement: Activated Design improvements as one feature with twelve authorized SP subtasks. Codex is the first implementer and Claude Code is the reviewer. The previously committed setup is finalized, the source trees were clean, and the dedicated branch is `feature/design-improvements`.
+- Relevant commits / files: Feature baseline `9486b2062470dc0492e85bdff5922429aaaad72f`; finalized SP-01 commits `64cc9b9` and `ad1c78d`; `AGENT_HANDOFF.md`.
+- Tests / evidence: Read repository guidance and both collaboration files; checked all three working trees and branches, existing worktrees, protocol tracking, and the current SP-20 build task. No implementation or runtime tests yet.
+- Usage / quota: Codex UNKNOWN; Claude Code UNKNOWN. No provider usage percentage is available to this session.
+- Remaining work / risks: All twelve subtasks await agreement. No code change has been made for the feature; no sibling branch or source change has been made.
+- Requested next action: Codex selects a remaining eligible subtask and commits a scoped `SUBTASK_PROPOSED` to REVIEWER. Both agents then follow the ownership and agreement protocol.
+
 <!-- Append-only message format after activation:
 
-### Message 002 — YYYY-MM-DD HH:MM TZ
+### Message 003 — YYYY-MM-DD HH:MM TZ
 - From: IMPLEMENTER (Codex) | REVIEWER (Claude Code) | HUMAN
 - To: IMPLEMENTER (Codex) | REVIEWER (Claude Code) | HUMAN
 - Type: INITIALIZED | SUBTASK_PROPOSED | SUBTASK_AGREED | DEFERRED | READY_FOR_REVIEW | QUESTION | ANSWER | CHANGES_REQUESTED | SUBTASK_APPROVED | APPROVED | PAUSED_QUOTA | RESUMED | BLOCKED
