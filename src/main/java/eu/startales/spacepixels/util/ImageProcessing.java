@@ -10,7 +10,6 @@
 package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
-import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.util.reporting.ReportRunContext;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jplatesolve.PlateSolveOperation;
@@ -296,10 +295,12 @@ public class ImageProcessing implements AutoCloseable {
     // THE MULTI-THREADED DETECTION PIPELINE
     // =========================================================================
 
-    /** Captures application options before a desktop job is queued; no file access or image copying occurs. */
-    public DetectionRunOptions captureRunOptions() {
-        return DetectionRunOptions.capture(appConfig,
-                SpacePixelsDetectionProfileIO.getActiveAutoTuneMaxCandidateFrames());
+    /**
+     * Captures application options, with the Auto-Tune frame limit of the detection settings, before a desktop job
+     * is queued; no file access or image copying occurs.
+     */
+    public DetectionRunOptions captureRunOptions(int autoTuneMaxCandidateFrames) {
+        return DetectionRunOptions.capture(appConfig, autoTuneMaxCandidateFrames);
     }
 
     /**

@@ -6,7 +6,6 @@ import eu.startales.spacepixels.api.SpacePixelsPipelineRequest;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.config.DetectionRunOptions;
-import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
@@ -27,7 +26,6 @@ public class DetectionRunIsolationTest {
     @Test public void apiRunsUseExplicitOptionsWithoutChangingRuntimeDefaults() throws Exception {
         File directory = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "api", 5).toFile();
         var preferences = SpacePixelsVisualizationPreferences.captureCurrent();
-        int originalLimit = SpacePixelsDetectionProfileIO.getActiveAutoTuneMaxCandidateFrames();
         var admitted = new java.util.concurrent.CountDownLatch(1);
         var continueFirst = new java.util.concurrent.CountDownLatch(1);
         var worker = java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -44,7 +42,6 @@ public class DetectionRunIsolationTest {
                         if (changed.compareAndSet(false, true)) {
                             DisplayImageRenderer.autoStretchBlackSigma = 3;
                             DisplayImageRenderer.autoStretchWhiteSigma = 12;
-                            SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(111);
                             admitted.countDown();
                             await(continueFirst);
                         }
@@ -68,13 +65,11 @@ public class DetectionRunIsolationTest {
             assertEquals(VariableStarReportOptions.SortOrder.SIGNIFICANCE, firstRequest.getVariableStarReportOptions().sortOrder());
             assertEquals(3, DisplayImageRenderer.autoStretchBlackSigma, 0);
             assertEquals(12, DisplayImageRenderer.autoStretchWhiteSigma, 0);
-            assertEquals(111, SpacePixelsDetectionProfileIO.getActiveAutoTuneMaxCandidateFrames());
             assertEquals(0.5, SpacePixelsPipelineRequest.builder(directory).build().getRunOptions().visualization().getAutoStretchBlackSigma(), 0);
         } finally {
             continueFirst.countDown();
             worker.shutdownNow();
             preferences.applyToRuntime();
-            SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(originalLimit);
         }
     }
 

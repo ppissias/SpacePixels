@@ -70,10 +70,6 @@ public class ProcessingSessionTest {
             first.setSelection(first.getFiles());
             assertTrue(second.getSelection().isEmpty());
             assertThrows(IllegalArgumentException.class, () -> second.setSelection(first.getFiles()));
-            first.getAutoTune().setMaxCandidateFrames(12);
-            second.getAutoTune().setMaxCandidateFrames(24);
-            assertEquals(12, first.getAutoTune().getMaxCandidateFrames());
-            assertEquals(24, second.getAutoTune().getMaxCandidateFrames());
             AutoTunerResult result = new AutoTunerResult();
             first.getAutoTune().remember(new AutoTuneState.Run(result, Instant.now(), 7, null));
             assertSame(result, first.getAutoTune().result());

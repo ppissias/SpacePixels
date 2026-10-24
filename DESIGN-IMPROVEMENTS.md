@@ -10,7 +10,7 @@ A fresh review of the whole application (about 50,000 lines of main code and 17,
 
 **Overall.** The architecture is sound. Jobs, commands, the session handover, the viewers and the public API are small, well-bounded and consistent, and should stay as they are. The over-engineering the maintainer suspected is real, but it is concentrated in three kinds of place:
 
-1. **State with more than one owner.** The plate-solution correction, the rendering preferences, the Auto-Tune frame limit and the session's frame list each live in two or three places. Each copy then needs machinery to stay in step: write barriers, version checks, rollback, static caches and "capture" steps. Giving each piece of state one owner removes that machinery rather than adding to it.
+1. **State with more than one owner.** The plate-solution correction, the rendering preferences and the session's frame list each live in two or three places. Each copy then needs machinery to stay in step: write barriers, version checks, rollback, static caches and "capture" steps. Giving each piece of state one owner removes that machinery rather than adding to it.
 2. **Layers kept for compatibility after compatibility stopped mattering.** The libraries are now developed together with the application, and old signatures need not survive. Still left over are the `ImageProcessing` facade, which mostly forwards calls, and chains of overloads that exist for older callers.
 3. **Mechanisms heavier than their use.** Examples are two near-identical write queues and an acknowledgement barrier for three small JSON files, and a binding framework whose application side writes to global static fields.
 
@@ -32,7 +32,6 @@ Line counts alone are not a problem. Large report section writers and panels are
 |---|---|---|---|
 | [SP-01](#sp-01-one-owner-for-the-plate-solution-correction) | One owner for the plate-solution correction | High | Medium |
 | [SP-02](#sp-02-rendering-preferences-as-a-value-not-static-fields) | Rendering preferences as a value, not static fields | High | Medium |
-| [SP-03](#sp-03-remove-the-static-active-auto-tune-limit) | Remove the static "active" Auto-Tune limit | High | Small |
 | [SP-04](#sp-04-retire-the-imageprocessing-facade) | Retire the `ImageProcessing` facade; the session owns its services and data | Medium | Large |
 | [SP-05](#sp-05-give-panels-their-collaborators-not-the-whole-window) | Give panels their collaborators, not the whole window | Medium | Medium |
 | [SP-06](#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Move the sky-catalogue workflow out of the main panel | Medium | Small |
@@ -49,7 +48,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-19](#sp-19-finish-the-common-base-of-the-image-viewers) | Finish the common base of the image viewers | Medium | Medium |
 
 **Suggested order.**
-1. Start with the small, safe items SP-03 and SP-10. SP-18 is independent of the rest and can go at any time, as long as its regression runs on its own.
+1. Start with the small, safe item SP-10. SP-18 is independent of the rest and can go at any time, as long as its regression runs on its own.
 2. Then SP-01 and SP-02, which remove the most machinery.
 3. Then SP-04 together with SP-09, then SP-05 and SP-06.
 4. Then SP-08, then SP-07 and SP-15.
@@ -98,12 +97,6 @@ The variable-star report options travel the same way. They are held in a `transi
 **Benefit.** No global mutable state in rendering. `config` no longer depends on `util.reporting`. One way for a preference to reach a picture.
 
 **Verification.** Unit tests for the renderers with explicit settings. Save, Revert and startup reload of the visualization page in the GUI mechanics tests. Byte-identical reports with default and changed settings.
-
-### SP-03. Remove the static "active" Auto-Tune limit
-
-**Problem.** `SpacePixelsDetectionProfileIO` holds a `static volatile int activeAutoTuneMaxCandidateFrames`. The settings panel and the profile loader set it, and `ImageProcessing.captureRunOptions` reads it for GUI detection runs. The same value is also in `AutoTuneState` and `DetectionRunOptions`. This back channel contradicts the rule that a run uses only the options it captured.
-
-**Proposal.** Delete the static. GUI jobs take the limit from the session's `AutoTuneState` when the job is created. The API and the CLI pass it in the request, as they already can.
 
 ### SP-04. Retire the ImageProcessing facade
 

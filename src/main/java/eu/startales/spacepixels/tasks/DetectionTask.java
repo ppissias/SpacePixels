@@ -11,6 +11,7 @@
 package eu.startales.spacepixels.tasks;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import io.github.ppissias.jtransient.config.DetectionConfigRules;
 import io.github.ppissias.jtransient.execution.CancellationScope;
 
@@ -35,18 +36,27 @@ public class DetectionTask implements Job<File> {
     /** Where the run's live-view pictures go; null makes none. */
     private RunPreviewSink previews;
 
-    /** Creates a noninteractive job that declines report export above 50 classified detections. */
+    /**
+     * Creates a noninteractive job with the default Auto-Tune frame limit that declines report export above 50
+     * classified detections.
+     */
     public DetectionTask(ImageProcessing preProcessing, DetectionConfig config) {
-        this(preProcessing, config, summary -> summary.totalDetections <= 50);
+        this(preProcessing, config, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES,
+                summary -> summary.totalDetections <= 50);
     }
 
-    /** Captures a job's settings and report decision; a missing processor retains the existing execution-time failure. */
-    public DetectionTask(ImageProcessing preProcessing, DetectionConfig config,
+    /**
+     * Captures a job's settings, application options, Auto-Tune frame limit and report decision when the job is
+     * created; a missing processor retains the existing execution-time failure.
+     */
+    public DetectionTask(ImageProcessing preProcessing, DetectionConfig config, int autoTuneMaxCandidateFrames,
                          ImageProcessing.DetectionSafetyPrompt safetyPrompt) {
         this.preProcessing = preProcessing;
         this.config = DetectionConfigRules.snapshot(config,
                 DetectionConfigRules.Operation.CONFIGURATION);
-        this.options = preProcessing == null ? DetectionRunOptions.defaults() : preProcessing.captureRunOptions();
+        this.options = preProcessing == null
+                ? DetectionRunOptions.defaults().withAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames)
+                : preProcessing.captureRunOptions(autoTuneMaxCandidateFrames);
         this.safetyPrompt = safetyPrompt;
     }
 

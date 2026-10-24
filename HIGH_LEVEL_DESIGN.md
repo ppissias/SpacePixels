@@ -329,7 +329,7 @@ Owns:
 - UI binding for JTransient `DetectionConfig`
 - `SpacePixelsDetectionProfile` load/save
 - `SpacePixelsVisualizationPreferences` load/save
-- current Auto-Tune candidate-frame limit
+- current Auto-Tune candidate-frame limit, which each Detect and Auto-Tune job captures when it is created
 - the Overview page (`AutoTuneOverviewPanel`) and the page navigation (`SettingsNavigator`)
 - the saved value of every setting row (`SettingRow`) and of the Overview core settings, taken after loading and after each Save; changes are marked against it
 - the Overview's Preview Frame button, which opens the Main tab's Preview Frame (`DetectionSequenceFrame`)

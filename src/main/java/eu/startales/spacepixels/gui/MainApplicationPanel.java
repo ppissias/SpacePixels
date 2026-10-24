@@ -490,13 +490,14 @@ public class MainApplicationPanel extends JPanel {
 
     /** Detect Moving Targets, with the detection settings as they are now; a setting with invalid text stops it. */
     private void startDetection() {
-        DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Detect Moving Targets did not start.");
+        DetectionConfigurationPanel configuration = mainAppWindow.getDetectionConfigurationPanel();
+        DetectionConfig settings = configuration.checkedSettings("Detect Moving Targets did not start.");
         if (settings == null) {
             return;
         }
         ImageProcessing session = mainAppWindow.getImageProcessing();
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
-        startJob(JobKind.DETECTION, session, new DetectionTask(session, settings,
+        startJob(JobKind.DETECTION, session, new DetectionTask(session, settings, configuration.autoTuneMaxCandidateFrames(),
                 summary -> reportPrompt.confirm(summary, session.hasPlateSolvedFrame(), 50, null, settings))
                         .showingPreviews(progressDialog.previewSink()),
                 this::showDetectionOutcome);

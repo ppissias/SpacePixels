@@ -44,8 +44,6 @@ public final class SpacePixelsDetectionProfileIO {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    private static volatile int activeAutoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
-
     private SpacePixelsDetectionProfileIO() {
     }
 
@@ -83,7 +81,6 @@ public final class SpacePixelsDetectionProfileIO {
         } catch (RuntimeException e) {
             throw new IOException("Invalid variable-star report presentation settings.", e);
         }
-        setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
         return new SpacePixelsDetectionProfile(detectionConfig, autoTuneMaxCandidateFrames, options);
     }
 
@@ -143,14 +140,6 @@ public final class SpacePixelsDetectionProfileIO {
         root.addProperty(VARIABLE_CARD_LIMIT_FIELD, options.maxCandidateCards());
         root.addProperty(VARIABLE_SORT_ORDER_FIELD, options.sortOrder().name());
         GSON.toJson(root, writer);
-    }
-
-    public static int getActiveAutoTuneMaxCandidateFrames() {
-        return activeAutoTuneMaxCandidateFrames;
-    }
-
-    public static void setActiveAutoTuneMaxCandidateFrames(int autoTuneMaxCandidateFrames) {
-        activeAutoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.normalizeAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
     }
 
     private static JsonObject readRoot(Reader reader) throws IOException {

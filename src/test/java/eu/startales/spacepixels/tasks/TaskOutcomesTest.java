@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
@@ -84,7 +85,8 @@ public class TaskOutcomesTest {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "prompt", 5);
         AtomicBoolean asked = new AtomicBoolean();
         try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            DetectionTask task = new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig(), summary -> {
+            DetectionTask task = new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig(),
+                    SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, summary -> {
                 asked.set(true);
                 assertTrue(summary.totalDetections >= 0);
                 return false;
@@ -93,6 +95,27 @@ public class TaskOutcomesTest {
         }
         assertTrue(asked.get());
         assertEquals(0, foldersStartingWith(sequence, "detections_").length);
+    }
+
+    /** A detection keeps the Auto-Tune frame limit it was created with; a later change reaches only the next job. */
+    @Test
+    public void detectionKeepsTheAutoTuneLimitItWasCreatedWith() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "limit", 5);
+        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
+            var config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
+            DetectionTask first = new DetectionTask(processing, config, 19, summary -> true);
+            DetectionTask next = new DetectionTask(processing, config, 23, summary -> true);
+            assertEquals(19, recordedAutoTuneLimit(outcomeOf(first)));
+            assertEquals(23, recordedAutoTuneLimit(outcomeOf(next)));
+        }
+    }
+
+    /** The Auto-Tune frame limit that a completed detection wrote to its report's detection_config.json. */
+    private static int recordedAutoTuneLimit(JobOutcome<File> outcome) throws Exception {
+        assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Completed<?>);
+        File report = ((JobOutcome.Completed<File>) outcome).result();
+        String profile = java.nio.file.Files.readString(new File(report.getParentFile(), "detection_config.json").toPath());
+        return com.google.gson.JsonParser.parseString(profile).getAsJsonObject().get("autoTuneMaxCandidateFrames").getAsInt();
     }
 
     /** Every independent iterative pass supplies its own subset and effective settings to the injected decision. */

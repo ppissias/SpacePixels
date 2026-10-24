@@ -662,7 +662,6 @@ public class DetectionConfigurationPanel extends JPanel {
         jTransientConfig = new DetectionConfig();
         autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
         variableStarReportOptions = VariableStarReportOptions.DEFAULT;
-        SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
     }
 
     private void offerDetectionProfileMigration(File profileToLoad, SpacePixelsDetectionProfile detectionProfile) {
@@ -801,6 +800,12 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     VariableStarReportOptions reportOptions() { return variableStarReportOptions; }
+
+    /**
+     * The Auto-Tune frame limit as last applied, for a job to capture when it is created; read it after
+     * {@link #checkedSettings} so the field's current text is included.
+     */
+    int autoTuneMaxCandidateFrames() { return autoTuneMaxCandidateFrames; }
 
     // ==========================================
     // INVALID TEXT AND THE FOOTER MESSAGE
@@ -1476,10 +1481,6 @@ public class DetectionConfigurationPanel extends JPanel {
             typedBindings.forEach(binding -> binding.applyTo(jTransientConfig));
 
             tuningBindings.forEach(ApplicationSettingBinding::apply);
-            SpacePixelsDetectionProfileIO.setActiveAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
-            if (mainAppWindow.getSession() != null) {
-                mainAppWindow.getSession().getAutoTune().setMaxCandidateFrames(autoTuneMaxCandidateFrames);
-            }
             reportBindings.forEach(ApplicationSettingBinding::apply);
             if (mainAppWindow.getImageProcessing() != null)
                 mainAppWindow.getImageProcessing().getAppConfig().variableStarReportOptions = variableStarReportOptions;
@@ -1586,9 +1587,6 @@ public class DetectionConfigurationPanel extends JPanel {
     void sessionChanged(FitsFileInformation[] filesInfo) {
         if (mainAppWindow.getImageProcessing() != null)
             mainAppWindow.getImageProcessing().getAppConfig().variableStarReportOptions = variableStarReportOptions;
-        if (mainAppWindow.getSession() != null) {
-            mainAppWindow.getSession().getAutoTune().setMaxCandidateFrames(autoTuneMaxCandidateFrames);
-        }
         if (filesInfo.length == 0) {
             overviewPanel.setSession(mainAppWindow.getSession(), null, 0, 0, 0, false, null, new ArrayList<>());
             return;
