@@ -37,7 +37,7 @@ public class FitsPreparationParityTest {
                     write(input, "earlier.fit", pixels, 0, 1, "2026-10-22T01:00:01", false);
                     assertParity(input, keepNegative);
                     try (Fits source = new Fits(original)) {
-                        assertEquals(0, ImageProcessing.getImageHDU(source).getHeader().getDoubleValue("BZERO"), 0);
+                        assertEquals(0, FitsImages.getImageHDU(source).getHeader().getDoubleValue("BZERO"), 0);
                     }
                 }
             }
@@ -49,8 +49,8 @@ public class FitsPreparationParityTest {
             File interactive = assertParity(input, keepNegative);
             try (Fits later = new Fits(new File(interactive, "later_16bit.fit"));
                  Fits earlier = new Fits(new File(interactive, "earlier_16bit.fit"))) {
-                BasicHDU<?> laterImage = ImageProcessing.getImageHDU(later);
-                BasicHDU<?> earlierImage = ImageProcessing.getImageHDU(earlier);
+                BasicHDU<?> laterImage = FitsImages.getImageHDU(later);
+                BasicHDU<?> earlierImage = FitsImages.getImageHDU(earlier);
                 int expectedOffset = keepNegative ? 100 : 0;
                 assertEquals(expectedOffset, laterImage.getHeader().getIntValue("SPOFFSET", 0));
                 assertEquals(expectedOffset, earlierImage.getHeader().getIntValue("SPOFFSET", 0));
@@ -69,7 +69,7 @@ public class FitsPreparationParityTest {
         File decompressed = assertParity(ready, true);
         assertEquals("_uncompressed", decompressed.getName());
         try (Fits result = new Fits(new File(decompressed, "frame.fit"))) {
-            assertRows(unsigned, (short[][]) ImageProcessing.getImageHDU(result).getKernel());
+            assertRows(unsigned, (short[][]) FitsImages.getImageHDU(result).getKernel());
         }
 
         File integer = folder.newFolder();
@@ -139,8 +139,8 @@ public class FitsPreparationParityTest {
         File output = assertParity(input, true);
         try (Fits later = new Fits(new File(output, "later_16bit.fit"));
              Fits earlier = new Fits(new File(output, "earlier_16bit.fit"))) {
-            BasicHDU<?> laterImage = ImageProcessing.getImageHDU(later);
-            BasicHDU<?> earlierImage = ImageProcessing.getImageHDU(earlier);
+            BasicHDU<?> laterImage = FitsImages.getImageHDU(later);
+            BasicHDU<?> earlierImage = FitsImages.getImageHDU(earlier);
             assertEquals(20, laterImage.getHeader().getIntValue("SPOFFSET"));
             assertEquals(20, earlierImage.getHeader().getIntValue("SPOFFSET"));
             assertEquals(10, ((short[][]) laterImage.getKernel())[0][1] + 32768);
@@ -161,8 +161,8 @@ public class FitsPreparationParityTest {
     /** Compares final pixels and relevant headers, including all color channels and the sequence offset. */
     private static void assertSamePreparedImage(File expected, File actual) throws Exception {
         try (Fits baseline = new Fits(expected); Fits combined = new Fits(actual)) {
-            BasicHDU<?> baselineImage = ImageProcessing.getImageHDU(baseline);
-            BasicHDU<?> combinedImage = ImageProcessing.getImageHDU(combined);
+            BasicHDU<?> baselineImage = FitsImages.getImageHDU(baseline);
+            BasicHDU<?> combinedImage = FitsImages.getImageHDU(combined);
             if (baselineImage.getKernel() instanceof short[][][] baselineColor) {
                 short[][][] combinedColor = (short[][][]) combinedImage.getKernel();
                 assertEquals(baselineColor.length, combinedColor.length);
@@ -263,8 +263,8 @@ public class FitsPreparationParityTest {
             assertEquals(gui.getObservationTimestamp(), api.getObservationTimestamp());
             assertEquals(gui.getExposureDurationMillis(), api.getExposureDurationMillis());
             try (Fits guiFits = new Fits(gui.getFilePath()); Fits apiFits = new Fits(api.getFilePath())) {
-                BasicHDU<?> guiImage = ImageProcessing.getImageHDU(guiFits);
-                BasicHDU<?> apiImage = ImageProcessing.getImageHDU(apiFits);
+                BasicHDU<?> guiImage = FitsImages.getImageHDU(guiFits);
+                BasicHDU<?> apiImage = FitsImages.getImageHDU(apiFits);
                 assertRows((short[][]) guiImage.getKernel(), (short[][]) apiImage.getKernel());
                 for (String key : List.of("OBJECT", "CRVAL1", "CRVAL2", "DATE-OBS", "EXPTIME", "BZERO", "BSCALE", "SPOFFSET")) {
                     assertEquals(key, gui.getFitsHeader().get(key), api.getFitsHeader().get(key));

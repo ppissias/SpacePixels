@@ -5,7 +5,7 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.util.DetectionInputPreparation;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsImportService;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import io.github.ppissias.jtransient.engine.AutoTunerResult;
@@ -54,7 +54,7 @@ public class AutoTunerRealDataDiagnosticsIT {
             System.out.println("Prepared input directory: " + directory.getAbsolutePath());
         }
 
-        FitsFileInformation[] files = ImageProcessing.openProcessor(directory).readFiles();
+        FitsFileInformation[] files = new FitsImportService(directory, null).readFiles();
         List<ImageFrame> pool = AutoTuneCandidatePoolBuilder.buildCandidatePool(files, base, poolSize, (p, m) -> { });
 
         long start = System.currentTimeMillis();

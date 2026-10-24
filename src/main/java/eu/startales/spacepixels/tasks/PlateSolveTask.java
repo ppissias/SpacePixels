@@ -13,7 +13,7 @@ package eu.startales.spacepixels.tasks;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.PlateSolveService;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 
 import io.github.ppissias.jplatesolve.PlateSolveOperation;
@@ -29,13 +29,14 @@ import java.util.concurrent.atomic.AtomicReference;
  * frame was solved; an error before the solver answers fails the job with its reason.
  */
 public class PlateSolveTask implements Job<PlateSolveResult> {
-    private final ImageProcessing preProcessing;
+    private final PlateSolveService solver;
     private final String filePath;
     private final boolean useAstap;
     private final boolean useAstrometryNet;
 
-    public PlateSolveTask(ImageProcessing preProcessing, String filePath, boolean useAstap, boolean useAstrometryNet) {
-        this.preProcessing = preProcessing;
+    /** Solves with the session's solver, captured when the job is created; null fails when it runs. */
+    public PlateSolveTask(PlateSolveService solver, String filePath, boolean useAstap, boolean useAstrometryNet) {
+        this.solver = solver;
         this.filePath = filePath;
         this.useAstap = useAstap;
         this.useAstrometryNet = useAstrometryNet;
@@ -45,7 +46,7 @@ public class PlateSolveTask implements Job<PlateSolveResult> {
     public JobOutcome<PlateSolveResult> run(JobContext context) throws Exception {
         if (context.isCancelled()) return JobOutcome.cancelled();
         AtomicReference<PlateSolveOperation.Progress> progress = new AtomicReference<>();
-        PlateSolveOperation operation = preProcessing.startSolve(filePath, useAstap, useAstrometryNet, progress::set);
+        PlateSolveOperation operation = solver.startSolve(filePath, useAstap, useAstrometryNet, progress::set);
         if (useAstap || !useAstrometryNet) {
             return awaitSolve(operation, context, progress);
         }
@@ -53,7 +54,7 @@ public class PlateSolveTask implements Job<PlateSolveResult> {
             return awaitSolve(operation, context, progress);
         } catch (Exception failure) {
             // A lost connection often has no message, and a refused login depends on the account: say which.
-            throw new IOException(preProcessing.astrometryNetFailure(failure), failure);
+            throw new IOException(solver.astrometryNetFailure(failure), failure);
         }
     }
 

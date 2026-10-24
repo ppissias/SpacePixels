@@ -1,11 +1,7 @@
 package eu.startales.spacepixels.util;
 
-import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
-import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
-import io.github.ppissias.jtransient.engine.PipelineResult;
+import eu.startales.spacepixels.config.AppConfig;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
-import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
-import io.github.ppissias.jtransient.telemetry.TrackerTelemetry;
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
@@ -28,12 +24,11 @@ import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-public class ImageProcessingTest {
+/** Writing a plate solution into a frame's header and removing the solvers' side files. */
+public class PlateSolveServiceWcsTest {
 
     @Test
     public void updateFitsHeaderWithWcsImportsDownloadedHeaderWithoutLegacySummaryPersistence() throws Exception {
@@ -63,8 +58,8 @@ public class ImageProcessingTest {
         remoteWcsHeader.put("CD2_2", -0.000467862222d);
         writeFitsFile(remoteWcsPath, 2, 2, remoteWcsHeader);
 
-        ImageProcessing imageProcessing = ImageProcessing.openProcessor(tempDirectory.toFile());
-        Map<String, String> updatedHeader = imageProcessing.updateFitsHeaderWithWCS(
+        PlateSolveService solver = new PlateSolveService(new AppConfig());
+        Map<String, String> updatedHeader = solver.updateFitsHeaderWithWCS(
                 fitsPath.toString(),
                 createAstrometrySolveInfo(remoteWcsPath.toUri().toString().replace(":", "\\:")));
 
@@ -78,7 +73,7 @@ public class ImageProcessingTest {
         assertFalse(updatedHeader.containsKey("WCS_LINK"));
 
         try (Fits updatedFits = new Fits(fitsPath.toFile())) {
-            Header header = ImageProcessing.getImageHDU(updatedFits).getHeader();
+            Header header = FitsImages.getImageHDU(updatedFits).getHeader();
 
             assertEquals(2, header.getIntValue("WCSAXES"));
             assertEquals(42.25d, header.getDoubleValue("CRPIX1"), 1.0e-9);
@@ -104,11 +99,11 @@ public class ImageProcessingTest {
 
         writeFitsFile(fitsPath, 100, 80, new HashMap<>());
 
-        ImageProcessing imageProcessing = ImageProcessing.openProcessor(tempDirectory.toFile());
-        imageProcessing.updateFitsHeaderWithWCS(fitsPath.toString(), createStandardWcsSolveInfo());
+        PlateSolveService solver = new PlateSolveService(new AppConfig());
+        solver.updateFitsHeaderWithWCS(fitsPath.toString(), createStandardWcsSolveInfo());
 
         try (Fits updatedFits = new Fits(fitsPath.toFile())) {
-            BasicHDU<?> hdu = ImageProcessing.getImageHDU(updatedFits);
+            BasicHDU<?> hdu = FitsImages.getImageHDU(updatedFits);
             Header header = hdu.getHeader();
 
             assertEquals(2, header.getIntValue("WCSAXES"));
@@ -133,16 +128,16 @@ public class ImageProcessingTest {
         originalHeader.put("OBJECT", "M81");
         writeFitsFile(fitsPath, 100, 80, originalHeader);
 
-        ImageProcessing imageProcessing = ImageProcessing.openProcessor(tempDirectory.toFile());
+        PlateSolveService solver = new PlateSolveService(new AppConfig());
         try (FileInputStream heldOpen = new FileInputStream(fitsPath.toFile())) {
-            imageProcessing.updateFitsHeaderWithWCS(fitsPath.toString(), createStandardWcsSolveInfo());
+            solver.updateFitsHeaderWithWCS(fitsPath.toString(), createStandardWcsSolveInfo());
             fail("Expected the replacement of an open file to fail.");
         } catch (IOException ex) {
             assertTrue(ex.getMessage(), ex.getMessage().startsWith("Cannot replace sample.fit"));
         }
 
         try (Fits unchangedFits = new Fits(fitsPath.toFile())) {
-            Header header = ImageProcessing.getImageHDU(unchangedFits).getHeader();
+            Header header = FitsImages.getImageHDU(unchangedFits).getHeader();
             assertEquals("M81", header.getStringValue("OBJECT"));
             assertFalse(header.containsKey("CTYPE1"));
         }
@@ -176,17 +171,17 @@ public class ImageProcessingTest {
 
         writeFitsFile(fitsPath, 100, 80, new HashMap<>());
 
-        ImageProcessing imageProcessing = ImageProcessing.openProcessor(tempDirectory.toFile());
+        PlateSolveService solver = new PlateSolveService(new AppConfig());
 
         try {
-            imageProcessing.updateFitsHeaderWithWCS(fitsPath.toString(), createAstrometrySolveInfo(null));
+            solver.updateFitsHeaderWithWCS(fitsPath.toString(), createAstrometrySolveInfo(null));
             fail("Expected updateFitsHeaderWithWCS to reject summary-only solve metadata.");
         } catch (IOException ex) {
             assertTrue(ex.getMessage().contains("usable WCS header"));
         }
 
         try (Fits unchangedFits = new Fits(fitsPath.toFile())) {
-            Header header = ImageProcessing.getImageHDU(unchangedFits).getHeader();
+            Header header = FitsImages.getImageHDU(unchangedFits).getHeader();
             assertFalse(header.containsKey("CTYPE1"));
             assertFalse(header.containsKey("CRVAL1"));
         }
@@ -215,8 +210,8 @@ public class ImageProcessingTest {
         solveInfo.put("wcs_link", temporaryWcsPath.toString());
         solveInfo.put("annotated_image_link", temporaryPreviewPath.toString());
 
-        ImageProcessing imageProcessing = ImageProcessing.openProcessor(tempDirectory.toFile());
-        imageProcessing.cleanupSolveArtifacts(
+        PlateSolveService solver = new PlateSolveService(new AppConfig());
+        solver.cleanupSolveArtifacts(
                 fitsPath.toString(),
                 new PlateSolveResult(true, "", "", solveInfo));
 
@@ -226,77 +221,6 @@ public class ImageProcessingTest {
         assertFalse(Files.exists(legacyAstapIniPath));
         assertFalse(Files.exists(temporaryWcsPath));
         assertFalse(Files.exists(temporaryPreviewPath));
-    }
-
-    @Test
-    public void suppressesLatePhaseOutputsWhenFewerThanThreeFramesSurviveQualityControl() {
-        PipelineTelemetry telemetry = new PipelineTelemetry();
-        telemetry.totalFramesKept = 2;
-        telemetry.totalTracksFound = 4;
-        telemetry.totalAnomaliesFound = 2;
-        telemetry.trackerTelemetry = new TrackerTelemetry();
-        telemetry.slowMoverTelemetry = new PipelineTelemetry.SlowMoverTelemetry();
-
-        short[][] masterStack = new short[][]{{1}};
-        boolean[][] vetoMask = new boolean[][]{{true}};
-        short[][] maximumStack = new short[][]{{2}};
-
-        PipelineResult original = PipelineResult.builder()
-                .tracks(Collections.singletonList(null))
-                .telemetry(telemetry)
-                .masterStackData(masterStack)
-                .masterStars(Collections.emptyList())
-                .slowMoverAnalysis(SlowMoverAnalysis.empty())
-                .slowMoverStackData(new short[][]{{3}})
-                .slowMoverMedianVetoMask(new boolean[][]{{false}})
-                .slowMoverCandidates(Collections.emptyList())
-                .anomalies(Collections.singletonList(null))
-                .allTransients(Collections.emptyList())
-                .unclassifiedTransients(Collections.emptyList())
-                .residualTransientAnalysis(ResidualTransientAnalysis.empty())
-                .masterVetoMask(vetoMask)
-                .driftPoints(Collections.emptyList())
-                .maximumStackData(maximumStack)
-                .build();
-
-        PipelineResult sanitized = DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain(original);
-
-        assertTrue(sanitized.tracks.isEmpty());
-        assertTrue(sanitized.anomalies.isEmpty());
-        assertTrue(sanitized.slowMoverCandidates.isEmpty());
-        assertTrue(sanitized.slowMoverAnalysis.candidates.isEmpty());
-        assertNull(sanitized.slowMoverStackData);
-        assertNull(sanitized.slowMoverMedianVetoMask);
-        assertTrue(sanitized.residualTransientAnalysis.localRescueCandidates.isEmpty());
-        assertTrue(sanitized.residualTransientAnalysis.localActivityClusters.isEmpty());
-        assertNull(sanitized.telemetry.trackerTelemetry);
-        assertNull(sanitized.telemetry.slowMoverTelemetry);
-        assertEquals(0, sanitized.telemetry.totalTracksFound);
-        assertEquals(0, sanitized.telemetry.totalAnomaliesFound);
-        assertSame(masterStack, sanitized.masterStackData);
-        assertSame(vetoMask, sanitized.masterVetoMask);
-        assertSame(maximumStack, sanitized.maximumStackData);
-    }
-
-    @Test
-    public void keepsLatePhaseOutputsWhenEnoughFramesSurviveQualityControl() {
-        PipelineTelemetry telemetry = new PipelineTelemetry();
-        telemetry.totalFramesKept = 3;
-
-        PipelineResult original = PipelineResult.builder()
-                .tracks(Collections.emptyList())
-                .telemetry(telemetry)
-                .masterStars(Collections.emptyList())
-                .slowMoverAnalysis(SlowMoverAnalysis.empty())
-                .slowMoverCandidates(Collections.emptyList())
-                .anomalies(Collections.emptyList())
-                .allTransients(Collections.emptyList())
-                .unclassifiedTransients(Collections.emptyList())
-                .residualTransientAnalysis(ResidualTransientAnalysis.empty())
-                .driftPoints(Collections.emptyList())
-                .build();
-
-        assertSame(original, DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain(original));
     }
 
     private static Map<String, String> createStandardWcsSolveInfo() {

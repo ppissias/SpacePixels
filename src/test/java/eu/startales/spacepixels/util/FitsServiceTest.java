@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.util;
 
-import eu.startales.spacepixels.config.ApplicationSettings;
+import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import io.github.ppissias.jplatesolve.astrometrydotnet.AstrometryDotNet;
@@ -25,9 +25,9 @@ public class FitsServiceTest {
         Interaction interaction = new Interaction();
         FitsBatchService batch = new FitsBatchService(input, new FitsVisualizationRenderer());
         try (FitsImportService importer = new FitsImportService(input, batch, interaction);
-             ImageProcessing processing = ImageProcessing.openProcessor(input, settings())) {
+             FitsImportService strict = new FitsImportService(input, null)) {
             FitsFileInformation[] interactive = importer.readFiles();
-            FitsFileInformation[] headless = processing.readFiles();
+            FitsFileInformation[] headless = strict.readFiles();
             assertEquals(3, interactive.length);
             FitsFileInformation[] reread = importer.readFiles();
             assertNotSame(interactive, reread);
@@ -38,7 +38,7 @@ public class FitsServiceTest {
                 assertEquals(headless[index].getObservationTimestamp(), interactive[index].getObservationTimestamp());
             }
             assertEquals(0, interaction.questions.size());
-            ProcessingSession session = new ProcessingSession(processing, headless, null);
+            ProcessingSession session = new ProcessingSession(new PlateSolveService(new AppConfig()), headless, null);
             FitsFileInformation first = headless[0];
             headless[0] = null;
             assertSame(first, session.getFiles()[0]);
@@ -47,7 +47,7 @@ public class FitsServiceTest {
             assertSame(first, session.getFiles()[0]);
             first.getFitsHeader().put("OBJECT", "shared");
             assertEquals("shared", session.getFiles()[0].getFitsHeader().get("OBJECT"));
-            assertNotEquals("the facade retains no metadata", "shared", processing.readFiles()[0].getFitsHeader().get("OBJECT"));
+            assertNotEquals("the importer retains no metadata", "shared", strict.readFiles()[0].getFitsHeader().get("OBJECT"));
             assertTrue(session.hasPlateSolvedFrame());
             session.close();
             assertEquals(0, session.getFiles().length);
@@ -55,24 +55,56 @@ public class FitsServiceTest {
         }
     }
 
-    /** The session releases its own metadata even when the processor cannot confirm solver shutdown. */
+    /**
+     * The session releases its own metadata even when its solver cannot confirm its shutdown. The solver's client
+     * factory supplies the failing client, as a first online solve would make one.
+     */
     @Test
-    public void sessionForgetsFramesWhenProcessorCloseFails() throws Exception {
+    public void sessionForgetsFramesWhenSolverCloseFails() throws Exception {
         File input = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "close-fails", 3).toFile();
-        ImageProcessing processing = ImageProcessing.openProcessor(input, settings());
-        ProcessingSession session = new ProcessingSession(processing, processing.readFiles(), null);
-        java.lang.reflect.Field serviceField = ImageProcessing.class.getDeclaredField("plateSolveService");
-        serviceField.setAccessible(true);
-        java.lang.reflect.Field clientField = PlateSolveService.class.getDeclaredField("astrometryNetInterface");
-        clientField.setAccessible(true);
-        clientField.set(serviceField.get(processing), new FailingCloseClient());
-        try {
-            assertThrows(IllegalStateException.class, session::close);
-            assertTrue(session.isClosed());
-            assertEquals(0, session.getFiles().length);
-            session.close();
-        } finally {
-            processing.close();
+        FitsFileInformation[] files;
+        try (FitsImportService importer = new FitsImportService(input, null)) {
+            files = importer.readFiles();
+        }
+        PlateSolveService solver = new PlateSolveService(new AppConfig(), key -> new FailingCloseClient());
+        solver.astrometryNetClient("");
+        ProcessingSession session = new ProcessingSession(solver, files, null);
+        assertThrows(IllegalStateException.class, session::close);
+        assertTrue(session.isClosed());
+        assertEquals(0, session.getFiles().length);
+        session.close();
+    }
+
+    /** Closing a session closes its solver's online client once, however often the session is closed. */
+    @Test
+    public void closingASessionClosesItsSolverOnce() throws Exception {
+        File input = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "close-once", 3).toFile();
+        FitsFileInformation[] files;
+        try (FitsImportService importer = new FitsImportService(input, null)) {
+            files = importer.readFiles();
+        }
+        CountingCloseClient client = new CountingCloseClient();
+        PlateSolveService solver = new PlateSolveService(new AppConfig(), key -> client);
+        solver.astrometryNetClient("");
+        ProcessingSession session = new ProcessingSession(solver, files, null);
+        assertSame(solver, session.getPlateSolveService());
+        assertNotNull("the session owns the batch operations on its folder", session.getBatchService());
+        session.close();
+        session.close();
+        assertEquals(1, client.closes);
+    }
+
+    /** Counts its closes; it releases the real client's resources each time. No network. */
+    private static final class CountingCloseClient extends AstrometryDotNet {
+        private int closes;
+
+        /** Creates an unused anonymous client solely to count closes. */
+        private CountingCloseClient() { super(""); }
+
+        /** Frees the client and counts the call. */
+        @Override public void close() {
+            super.close();
+            closes++;
         }
     }
 
@@ -88,16 +120,16 @@ public class FitsServiceTest {
         }
     }
 
-    /** The facade delegates conversions to the caller's interaction rather than constructing Swing adapters. */
+    /** The import delegates conversions to the caller's interaction rather than constructing Swing adapters. */
     @Test
-    public void facadeUsesExplicitInteractionForConversionAndRedirect() throws Exception {
+    public void importUsesExplicitInteractionForConversionAndRedirect() throws Exception {
         File input = folder.newFolder("facade-float");
         write(input, "float.fit", new float[][]{{1, 2}, {3, 4}}, false);
         Interaction interaction = new Interaction();
         File converted;
-        try (ImageProcessing processing = ImageProcessing.openProcessor(input, settings(), interaction)) {
+        try (FitsImportService importer = new FitsImportService(input, interaction)) {
             try {
-                processing.readFiles();
+                importer.readFiles();
                 throw new AssertionError("Expected the accepted conversion to redirect import");
             } catch (RedirectImportException redirect) {
                 converted = redirect.getNewDirectory();
@@ -105,8 +137,8 @@ public class FitsServiceTest {
         }
         assertEquals(List.of("Format Conversion Required", "Success"), interaction.questions);
         assertEquals(0, interaction.openProgress);
-        try (ImageProcessing processing = ImageProcessing.openProcessor(converted, settings())) {
-            assertEquals(1, processing.readFiles().length);
+        try (FitsImportService importer = new FitsImportService(converted, null)) {
+            assertEquals(1, importer.readFiles().length);
         }
     }
 
@@ -115,8 +147,8 @@ public class FitsServiceTest {
     public void facadeWithoutInteractionRejectsFloatInputWithoutWritingDerivatives() throws Exception {
         File input = folder.newFolder("headless-float");
         write(input, "float.fit", new float[][]{{1, 2}, {3, 4}}, false);
-        try (ImageProcessing processing = ImageProcessing.openProcessor(input, settings())) {
-            Exception failure = assertThrows(nom.tam.fits.FitsException.class, processing::readFiles);
+        try (FitsImportService importer = new FitsImportService(input, null)) {
+            Exception failure = assertThrows(nom.tam.fits.FitsException.class, importer::readFiles);
             assertTrue(failure.getMessage(), failure.getMessage().contains("BITPIX=-32"));
         }
         assertEquals(1, input.listFiles().length);
@@ -137,8 +169,8 @@ public class FitsServiceTest {
         assertTrue(interaction.questions.contains("Pixel Values Below Zero"));
         File converted = new File(input, "_16bit_converted/sample_16bit.fit");
         try (Fits source = new Fits(original); Fits result = new Fits(converted)) {
-            BasicHDU<?> before = ImageProcessing.getImageHDU(source);
-            BasicHDU<?> after = ImageProcessing.getImageHDU(result);
+            BasicHDU<?> before = FitsImages.getImageHDU(source);
+            BasicHDU<?> after = FitsImages.getImageHDU(result);
             assertRows(FitsPixelConverter.standardizeTo16BitMono(before.getKernel(), before.getHeader(), offset),
                     (short[][]) after.getKernel());
             assertEquals(offset, after.getHeader().getIntValue("SPOFFSET"));
@@ -161,8 +193,8 @@ public class FitsServiceTest {
             assertThrows(RedirectImportException.class, importer::readFiles);
         }
         try (Fits source = new Fits(original); Fits result = new Fits(new File(input, "_16bit_converted/sample_16bit.fit"))) {
-            BasicHDU<?> before = ImageProcessing.getImageHDU(source);
-            BasicHDU<?> after = ImageProcessing.getImageHDU(result);
+            BasicHDU<?> before = FitsImages.getImageHDU(source);
+            BasicHDU<?> after = FitsImages.getImageHDU(result);
             assertRows(FitsPixelConverter.standardizeTo16BitMono(before.getKernel(), before.getHeader(), 0),
                     (short[][]) after.getKernel());
             assertEquals(0, after.getHeader().getIntValue("SPOFFSET", 0));
@@ -195,11 +227,11 @@ public class FitsServiceTest {
             try (Fits source = new Fits(original);
                  Fits color = new Fits(new File(input, "_16bit_color/" + stem + "_16bit_color.fit"));
                  Fits mono = new Fits(new File(input, "_16bit_mono/" + stem + "_16bit_mono.fit"))) {
-                BasicHDU<?> image = ImageProcessing.getImageHDU(source);
+                BasicHDU<?> image = FitsImages.getImageHDU(source);
                 short[][][] expected = FitsPixelConverter.standardizeTo16BitColor(image.getKernel(), image.getHeader(), 0);
-                short[][][] actual = (short[][][]) ImageProcessing.getImageHDU(color).getKernel();
+                short[][][] actual = (short[][][]) FitsImages.getImageHDU(color).getKernel();
                 for (int channel = 0; channel < expected.length; channel++) assertRows(expected[channel], actual[channel]);
-                assertRows(FitsPixelConverter.extractLuminance(expected), (short[][]) ImageProcessing.getImageHDU(mono).getKernel());
+                assertRows(FitsPixelConverter.extractLuminance(expected), (short[][]) FitsImages.getImageHDU(mono).getKernel());
             }
         }
     }
@@ -223,48 +255,43 @@ public class FitsServiceTest {
             assertEquals("_uncompressed", redirect.getNewDirectory().getName());
         }
         try (Fits converted = new Fits(new File(input, "_uncompressed/sample.fit"))) {
-            assertRows(pixels, (short[][]) ImageProcessing.getImageHDU(converted).getKernel());
+            assertRows(pixels, (short[][]) FitsImages.getImageHDU(converted).getKernel());
         }
-        try (ImageProcessing processing = ImageProcessing.openProcessor(new File(input, "_uncompressed"), settings())) {
-            assertEquals(1, processing.readFiles().length);
+        try (FitsImportService importer = new FitsImportService(new File(input, "_uncompressed"), null)) {
+            assertEquals(1, importer.readFiles().length);
         }
     }
 
     @Test
-    public void facadeMonoAndStretchKeepPixelsOriginalsAndLegacyOutputNames() throws Exception {
+    public void batchMonoAndStretchKeepPixelsOriginalsAndLegacyOutputNames() throws Exception {
         File input = SyntheticDatasetFactory.createColor16FitsSequence(folder.getRoot().toPath(), "batch", 2).toFile();
         File original = FitsFiles.list(input)[0];
         byte[] untouched = Files.readAllBytes(original.toPath());
-        try (ImageProcessing processing = ImageProcessing.openProcessor(input, settings())) {
-            File generated = processing.batchConvertToMono(true, 10, 2, StretchAlgorithm.ASINH, null);
-            assertEquals("_mono", generated.getName());
-            String stem = original.getName().replace(".fit", "");
-            try (Fits source = new Fits(original);
-                 Fits mono = new Fits(new File(input, "_mono/" + stem + "_mono.fit"));
-                 Fits stretched = new Fits(new File(input, "_mono_stretched/" + stem + "_mono_stretch.fit"))) {
-                BasicHDU<?> image = ImageProcessing.getImageHDU(source);
-                short[][] expected = FitsPixelConverter.extractLuminance(
-                        FitsPixelConverter.standardizeTo16BitColor(image.getKernel(), image.getHeader()));
-                assertRows(expected, (short[][]) ImageProcessing.getImageHDU(mono).getKernel());
-                try (Fits expectedFits = FitsPixelConverter.createFitsFromData(expected, image.getHeader())) {
-                    new FitsVisualizationRenderer().stretchFitsImage(expectedFits, 10, 2, StretchAlgorithm.ASINH);
-                    assertRows((short[][]) ImageProcessing.getImageHDU(expectedFits).getKernel(),
-                            (short[][]) ImageProcessing.getImageHDU(stretched).getKernel());
-                }
+        FitsBatchService batch = new FitsBatchService(input, new FitsVisualizationRenderer());
+        File generated = batch.batchConvertToMono(true, 10, 2, StretchAlgorithm.ASINH, null);
+        assertEquals("_mono", generated.getName());
+        String stem = original.getName().replace(".fit", "");
+        try (Fits source = new Fits(original);
+             Fits mono = new Fits(new File(input, "_mono/" + stem + "_mono.fit"));
+             Fits stretched = new Fits(new File(input, "_mono_stretched/" + stem + "_mono_stretch.fit"))) {
+            BasicHDU<?> image = FitsImages.getImageHDU(source);
+            short[][] expected = FitsPixelConverter.extractLuminance(
+                    FitsPixelConverter.standardizeTo16BitColor(image.getKernel(), image.getHeader()));
+            assertRows(expected, (short[][]) FitsImages.getImageHDU(mono).getKernel());
+            try (Fits expectedFits = FitsPixelConverter.createFitsFromData(expected, image.getHeader())) {
+                new FitsVisualizationRenderer().stretchFitsImage(expectedFits, 10, 2, StretchAlgorithm.ASINH);
+                assertRows((short[][]) FitsImages.getImageHDU(expectedFits).getKernel(),
+                        (short[][]) FitsImages.getImageHDU(stretched).getKernel());
             }
-            processing.batchStretch(10, 2, StretchAlgorithm.ASINH, null);
-            assertTrue(new File(input, "_stretched/" + stem + "_stretch.fit").isFile());
         }
+        batch.batchStretch(10, 2, StretchAlgorithm.ASINH, null);
+        assertTrue(new File(input, "_stretched/" + stem + "_stretch.fit").isFile());
         assertArrayEquals(untouched, Files.readAllBytes(original.toPath()));
     }
 
     private FitsImportService importer(File input, Interaction interaction) {
         return new FitsImportService(input,
                 new FitsBatchService(input, new FitsVisualizationRenderer()), interaction);
-    }
-
-    private ApplicationSettings settings() {
-        return ApplicationSettings.load(new File(folder.getRoot(), "preferences.json"));
     }
 
     private static File write(File directory, String name, Object pixels, boolean unsigned) throws Exception {

@@ -11,8 +11,9 @@
 package eu.startales.spacepixels.tasks;
 
 import nom.tam.fits.Fits;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsVisualizationRenderer;
 import eu.startales.spacepixels.util.StretchAlgorithm;
+import eu.startales.spacepixels.util.FitsImages;
 
 import java.awt.image.BufferedImage;
 import java.util.concurrent.Callable;
@@ -22,21 +23,23 @@ import java.util.concurrent.Callable;
  * own worker, one frame at a time, and shows a result only while it is the newest one asked for.
  */
 public class GeneratePreviewsTask implements Callable<BufferedImage[]> {
-    private final ImageProcessing preProcessing;
+    private final FitsVisualizationRenderer renderer;
     private final String filePath;
     private final int stretchFactor;
     private final int iterations;
     private final StretchAlgorithm algo;
     private final boolean stretchEnabled;
 
-    public GeneratePreviewsTask(ImageProcessing preProcessing, String filePath,
+    /** Renders both previews of {@code filePath} with the stretch applied. */
+    public GeneratePreviewsTask(FitsVisualizationRenderer renderer, String filePath,
                                 int stretchFactor, int iterations, StretchAlgorithm algo) {
-        this(preProcessing, filePath, stretchFactor, iterations, algo, true);
+        this(renderer, filePath, stretchFactor, iterations, algo, true);
     }
 
-    public GeneratePreviewsTask(ImageProcessing preProcessing, String filePath,
+    /** Renders the previews with {@code renderer}; without {@code stretchEnabled} both show the linear frame. */
+    public GeneratePreviewsTask(FitsVisualizationRenderer renderer, String filePath,
                                 int stretchFactor, int iterations, StretchAlgorithm algo, boolean stretchEnabled) {
-        this.preProcessing = preProcessing;
+        this.renderer = renderer;
         this.filePath = filePath;
         this.stretchFactor = stretchFactor;
         this.iterations = iterations;
@@ -50,7 +53,7 @@ public class GeneratePreviewsTask implements Callable<BufferedImage[]> {
     @Override
     public BufferedImage[] call() throws Exception {
         try (Fits fitsImage = new Fits(filePath)) {
-            Object kernelData = ImageProcessing.getImageHDU(fitsImage).getKernel();
+            Object kernelData = FitsImages.getImageHDU(fitsImage).getKernel();
 
             // The whole frame, reduced to display size; the stretch statistics then cover the whole frame too.
             Object previewData = reduce(kernelData, MAX_PREVIEW_SIDE);
@@ -58,12 +61,12 @@ public class GeneratePreviewsTask implements Callable<BufferedImage[]> {
                 int[] size = size(previewData);
                 BufferedImage linear = linearImage(previewData);
                 return new BufferedImage[]{linear, stretchEnabled
-                        ? preProcessing.getStretchedImageFullSize(previewData, size[0], size[1], stretchFactor, iterations, algo)
+                        ? renderer.getStretchedImageFullSize(previewData, size[0], size[1], stretchFactor, iterations, algo)
                         : linear};
             }
-            BufferedImage original = preProcessing.getImagePreview(kernelData);
+            BufferedImage original = renderer.getImagePreview(kernelData);
             return new BufferedImage[]{original, stretchEnabled
-                    ? preProcessing.getStretchedImagePreview(kernelData, stretchFactor, iterations, algo) : original};
+                    ? renderer.getStretchedImagePreview(kernelData, stretchFactor, iterations, algo) : original};
         }
     }
 

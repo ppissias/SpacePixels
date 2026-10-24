@@ -1,8 +1,10 @@
 package eu.startales.spacepixels.session;
 
 import eu.startales.spacepixels.util.DetectionOverlays;
+import eu.startales.spacepixels.util.FitsBatchService;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsVisualizationRenderer;
+import eu.startales.spacepixels.util.PlateSolveService;
 import eu.startales.spacepixels.util.TrackOverlay;
 import eu.startales.spacepixels.util.VariableStarOverlay;
 import eu.startales.spacepixels.util.AutoTuneSessionStore;
@@ -18,12 +20,16 @@ import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 /**
- * Imported-session identity, owned state and metadata-save callback lifetime. Closing drops later UI completions
- * without cancelling accepted writes on the application's shared storage. Frame data is shared, not deep-copied.
+ * Imported-session identity, owned state, services and metadata-save callback lifetime. The session owns its plate
+ * solver and the batch operations on its folder, and closes the solver with itself. Closing drops later UI
+ * completions without cancelling accepted writes on the application's shared storage. Frame data is shared, not
+ * deep-copied.
  */
 public final class ProcessingSession implements AutoCloseable {
     private final UUID id = UUID.randomUUID();
-    private final ImageProcessing processing;
+    private final PlateSolveService plateSolver;
+    /** Batch operations on the session's folder; null for a session without frames. */
+    private final FitsBatchService batch;
     private final SkyCatalogueModel skyCatalogue = new SkyCatalogueModel();
     private final AutoTuneState autoTune = new AutoTuneState();
     private final SessionMetadata metadata;
@@ -41,20 +47,25 @@ public final class ProcessingSession implements AutoCloseable {
     private Thread skyCatalogueWorker;
     private volatile boolean closed;
 
-    public ProcessingSession(ImageProcessing processing, FitsFileInformation[] files, File lastReport) {
-        this(processing, files, lastReport, SessionMetadata.empty(), null, null);
+    /** A session without application storage, for headless use and tests; it owns and closes {@code plateSolver}. */
+    public ProcessingSession(PlateSolveService plateSolver, FitsFileInformation[] files, File lastReport) {
+        this(plateSolver, files, lastReport, SessionMetadata.empty(), null, null);
     }
 
-    /** Owns imported state and UI callback lifetime; the application retains and closes the shared storage. */
-    public ProcessingSession(ImageProcessing processing, FitsFileInformation[] files, File lastReport,
+    /**
+     * Owns imported state, {@code plateSolver} and UI callback lifetime; the application retains and closes the
+     * shared storage, and keeps the settings the solver reads.
+     */
+    public ProcessingSession(PlateSolveService plateSolver, FitsFileInformation[] files, File lastReport,
                              SessionMetadata metadata, ApplicationStorage storage, Executor ui) {
         this.metadata = Objects.requireNonNull(metadata);
         this.storage = storage;
         this.ui = storage == null ? null : Objects.requireNonNull(ui);
-        this.processing = Objects.requireNonNull(processing);
+        this.plateSolver = Objects.requireNonNull(plateSolver);
         this.files = Objects.requireNonNull(files).clone();
         this.lastReport = lastReport;
         folder = files.length == 0 ? null : new File(files[0].getFilePath()).getParentFile();
+        batch = folder == null ? null : new FitsBatchService(folder, new FitsVisualizationRenderer());
         skyCatalogue.setSessionFolder(folder);
         if (storage != null) skyCatalogue.setCorrectionWriter((correction, finished) ->
                 saveMetadata(() -> storage.store().saveCorrection(folder, correction), finished));
@@ -108,7 +119,13 @@ public final class ProcessingSession implements AutoCloseable {
     }
 
     public UUID getId() { return id; }
-    public ImageProcessing getProcessing() { return processing; }
+
+    /** The plate solver of this session's frames; the session closes it. */
+    public PlateSolveService getPlateSolveService() { return plateSolver; }
+
+    /** Batch conversion and stretching of this session's folder; null for a session without frames. */
+    public FitsBatchService getBatchService() { return batch; }
+
     /** Returns a copy of the owned frame array, sharing its metadata objects; empty after close. */
     public FitsFileInformation[] getFiles() { return files.clone(); }
 
@@ -194,7 +211,7 @@ public final class ProcessingSession implements AutoCloseable {
             skyCatalogueWorker = null;
         }
         try {
-            processing.close();
+            plateSolver.close();
         } finally {
             masterStack = null;
             masterStackKey = null;

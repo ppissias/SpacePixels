@@ -147,7 +147,7 @@ public final class AutoTuneCandidatePoolBuilder {
 
             FitsFileInformation info = filesInfo[i];
             try (Fits fitsFile = new Fits(info.getFilePath())) {
-                BasicHDU<?> hdu = ImageProcessing.getImageHDU(fitsFile);
+                BasicHDU<?> hdu = FitsImages.getImageHDU(fitsFile);
                 Object kernel = hdu.getKernel();
                 if (!(kernel instanceof short[][])) {
                     throw new IOException("FITS file is not 16-bit monochrome: " + info.getFileName());
@@ -188,7 +188,7 @@ public final class AutoTuneCandidatePoolBuilder {
                     progressPrefix + " " + (i + 1) + " of " + orderedIndices.size() + "...");
 
             try (Fits fitsFile = new Fits(info.getFilePath())) {
-                BasicHDU<?> hdu = ImageProcessing.getImageHDU(fitsFile);
+                BasicHDU<?> hdu = FitsImages.getImageHDU(fitsFile);
                 Object kernel = hdu.getKernel();
                 if (!(kernel instanceof short[][])) {
                     throw new IOException("FITS file is not 16-bit monochrome: " + info.getFileName());

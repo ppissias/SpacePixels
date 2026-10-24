@@ -1,11 +1,13 @@
 package eu.startales.spacepixels.tasks;
 
+import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsImages;
+import eu.startales.spacepixels.util.PlateSolveService;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import nom.tam.fits.Fits;
 import nom.tam.fits.Header;
@@ -35,14 +37,14 @@ public class WriteWcsJobTest {
     public void theSolutionIsWrittenIntoTheFrameAndTheSolverFilesAreRemoved() throws Exception {
         File frame = frame();
         File sidecar = sidecarOf(frame);
-        try (ImageProcessing processing = ImageProcessing.openProcessor(frame.getParentFile())) {
-            JobOutcome<Map<String, String>> outcome = outcomeOf(new WriteWcsTask(processing, frame.getAbsolutePath(),
+        try (PlateSolveService solver = new PlateSolveService(new AppConfig())) {
+            JobOutcome<Map<String, String>> outcome = outcomeOf(new WriteWcsTask(solver, frame.getAbsolutePath(),
                     new PlateSolveResult(true, "", "", solution())));
             assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Completed<?>);
             assertEquals("50.5", ((JobOutcome.Completed<Map<String, String>>) outcome).result().get("CRPIX1"));
         }
         try (Fits fits = new Fits(frame)) {
-            Header header = ImageProcessing.getImageHDU(fits).getHeader();
+            Header header = FitsImages.getImageHDU(fits).getHeader();
             assertEquals("RA---TAN", header.getStringValue("CTYPE1"));
         }
         assertFalse(sidecar.exists());
@@ -53,8 +55,8 @@ public class WriteWcsJobTest {
         File frame = frame();
         File sidecar = sidecarOf(frame);
         byte[] before = Files.readAllBytes(frame.toPath());
-        try (ImageProcessing processing = ImageProcessing.openProcessor(frame.getParentFile())) {
-            JobOutcome<Map<String, String>> outcome = outcomeOf(new WriteWcsTask(processing, frame.getAbsolutePath(),
+        try (PlateSolveService solver = new PlateSolveService(new AppConfig())) {
+            JobOutcome<Map<String, String>> outcome = outcomeOf(new WriteWcsTask(solver, frame.getAbsolutePath(),
                     new PlateSolveResult(true, "", "", new LinkedHashMap<>())));
             assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Failed<?> failed
                     && failed.reason().equals("No WCS solution metadata was provided."));

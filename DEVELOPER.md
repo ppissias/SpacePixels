@@ -92,7 +92,7 @@ All packages are under `eu.startales.spacepixels`.
 | `tasks` | The long operations, one class per job | `FitsImportTask`, `DetectionTask`, `PlateSolveTask`, `AutoTuneTask`, … |
 | `session` | The imported dataset: identity, owned state and handover; the application I/O queue; no Swing | `ProcessingSession`, `SessionOwner`, `SkyCatalogueModel`, `AutoTuneState`, `ApplicationStorage` |
 | `config` | Application settings, detection profiles, visualization settings and their files; the typed setting definitions | `ApplicationSettings`, `AppConfig`, `SpacePixelsDetectionProfileIO`, `DetectionSetting`, `DetectionRunOptions`, `VisualizationSettings` |
-| `util` | The processing services: import and preparation, FITS and XISF, WCS, the detection pipelines, plate solving | `ImageProcessing`, `FitsImportService`, `StandardDetectionPipelineService`, `IterativeDetectionPipelineService`, `PlateSolveService`, `StagedFile` |
+| `util` | The processing services: import and preparation, FITS and XISF, WCS, the detection pipelines, plate solving | `FitsImportService`, `FitsBatchService`, `StandardDetectionPipelineService`, `IterativeDetectionPipelineService`, `PlateSolveService`, `StagedFile` |
 | `util.reporting` | The HTML report, its model, section writers and the live lookup proxy | `DetectionReportGenerator`, `ReportData`, `FindingCategory`, the `…SectionWriter` classes |
 | `util.skycatalog` | Fetching and storing the sky catalogue; the plate-solution correction fit | `SkyCatalogueClient`, `SkyCatalogueStore`, `PlateCorrectionFitter` |
 | `api`, `tools` | The public Java API and the command-line tools | `DefaultSpacePixelsPipelineApi`, `SpacePixelsPipelineRequest`, `BatchDetectionCli` |
@@ -104,7 +104,7 @@ The main paths through the code:
 - **GUI:** a `gui` command → `JobCoordinator` runs a `tasks` job → `util` services → JTransient or JPlateSolve.
 - **Headless:** `api` and `tools` → `util` services → JTransient.
 
-**Input contract.** Detection consumes aligned, equally sized monochrome frames with unsigned-16-bit pixels (`BZERO=32768`, `BSCALE=1`) in `short[][]` buffers. `FitsFileInformation` carries each frame's metadata and timing. Compressed FITS can have an empty primary HDU, so use the HDU helper (`ImageProcessing.getImageHDU`). Preparation keeps timing and WCS headers, the registration padding, and the sequence-wide offset recorded in `SPOFFSET`.
+**Input contract.** Detection consumes aligned, equally sized monochrome frames with unsigned-16-bit pixels (`BZERO=32768`, `BSCALE=1`) in `short[][]` buffers. `FitsFileInformation` carries each frame's metadata and timing. Compressed FITS can have an empty primary HDU, so use the HDU helper (`FitsImages.getImageHDU`). Preparation keeps timing and WCS headers, the registration padding, and the sequence-wide offset recorded in `SPOFFSET`.
 
 ## How a user action runs
 
@@ -119,13 +119,13 @@ Blink is the exception: loading the frames is the job, and the blink window then
 
 ## The session
 
-`SessionOwner` holds the current `ProcessingSession`. A session has a UUID and owns its frame metadata, selection, sky catalogue and correction (`SkyCatalogueModel`), Auto-Tune state, master-stack cache, last report and last run's overlays. Large image buffers are shared by ownership, never deep-copied.
+`SessionOwner` holds the current `ProcessingSession`. A session has a UUID and owns its frame metadata, selection, sky catalogue and correction (`SkyCatalogueModel`), Auto-Tune state, master-stack cache, last report and last run's overlays, and the services that work on its frames: its plate solver (`PlateSolveService`) and the batch operations on its folder (`FitsBatchService`). Large image buffers are shared by ownership, never deep-copied.
 
-- **Handover.** `FitsImportTask` prepares a processor and the saved session data (catalogue, correction, Auto-Tune results) on a worker. Only a completed import is installed, through `SessionOwner.replace(expected, candidate)`, which rejects a stale import and closes it. A failed, declined or cancelled import keeps the current session.
-- **Closing a session** stops its catalogue worker, closes its processor and releases its caches and selection. Reusable viewers are cleared at handover; an independent inspection window may keep the old session's data deliberately, but never adopts the new catalogue.
+- **Handover.** `FitsImportTask` reads the frames and the saved session data (catalogue, correction, Auto-Tune results) on a worker; each attempt closes its `FitsImportService` before it returns, so the result holds no resources. The window builds the session from that result. Only a completed import is installed, through `SessionOwner.replace(expected, candidate)`, which rejects a stale import and closes it. A failed, declined or cancelled import keeps the current session.
+- **Closing a session** stops its catalogue worker, closes its plate solver and releases its frames, caches and selection, also when the solver cannot confirm its shutdown. Reusable viewers are cleared at handover; an independent inspection window may keep the old session's data deliberately, but never adopts the new catalogue.
 - **Session files** (`sky_catalogue.json`, `plate_correction.json`, `auto_tune.json`) are written on the window's session writer. They are restored at import only if they match the frames (field, plate solution, frame count and size).
 - **A run never reads the session files.** Detect and Detect Iteratively take the session's catalogue and correction when they are admitted (`SkyCatalogueModel.snapshot`, a `SkySnapshot`); an iterative pass on a prepared copy in another folder, and every headless run, read that folder's files once, at the start (`ReportRunContext.capture`). Jobs therefore never wait for session writes. When a save fails, the value stays in use until SpacePixels closes, in the viewers and in the reports, and the window says it was not saved.
-- **Application settings** (`ApplicationSettings`, the Astrometry Config tab) are loaded once by the window, before any import, and shared with each session's processor. An import never reloads them, so unsaved edits survive.
+- **Application settings** (`ApplicationSettings`, the Astrometry Config tab) are loaded once by the window, before any import. Each session's plate solver reads that one live object, so unsaved edits reach the next solve; an import never reads or reloads them.
 
 ## Settings
 
@@ -176,7 +176,7 @@ The report never changes the engine's results. Its live lookups (SatChecker, JPL
 
 ## Headless: the API and the command line
 
-`DefaultSpacePixelsPipelineApi.run(request)` prepares the input according to the request's policy (no questions), validates the frames strictly, optionally runs Auto-Tune, detects, and optionally writes the report. It is synchronous, closes its processor, and never touches a GUI session. `BatchDetectionCli` is a thin client of it. The supported surface is the `api` package and the types it exposes ([API.md](API.md)); everything else is internal.
+`DefaultSpacePixelsPipelineApi.run(request)` prepares the input according to the request's policy (no questions), validates the frames strictly, optionally runs Auto-Tune, detects, and optionally writes the report. It is synchronous, reads the frames with its own `FitsImportService`, which it closes, and never touches a GUI session or creates a plate solver. `BatchDetectionCli` is a thin client of it. The supported surface is the `api` package and the types it exposes ([API.md](API.md)); everything else is internal.
 
 ## Persistence and outputs
 

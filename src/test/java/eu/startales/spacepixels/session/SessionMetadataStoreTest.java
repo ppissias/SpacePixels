@@ -1,6 +1,5 @@
 package eu.startales.spacepixels.session;
 
-import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.*;
 import eu.startales.spacepixels.util.skycatalog.*;
@@ -17,9 +16,8 @@ public class SessionMetadataStoreTest {
     @Test
     public void preparationRestoresOnlyMetadataThatBelongsToTheImportedFrames() throws Exception {
         File directory = SyntheticDatasetFactory.createSolvedMono16FitsSequence(folder.getRoot().toPath(), "frames", 3).toFile();
-        try (ImageProcessing processing = ImageProcessing.openProcessor(directory,
-                ApplicationSettings.load(new File(folder.getRoot(), "preferences.json")))) {
-            FitsFileInformation[] frames = processing.readFiles();
+        try (FitsImportService importer = new FitsImportService(directory, null)) {
+            FitsFileInformation[] frames = importer.readFiles();
             var solution = WcsSolutionResolver.resolveUncorrected(null, frames);
             SkyCatalogue catalogue = new SkyCatalogue();
             catalogue.field = SkyField.of(solution.getTransformer(), frames[0].getSizeWidth(), frames[0].getSizeHeight());
@@ -56,9 +54,8 @@ public class SessionMetadataStoreTest {
     @Test
     public void suppliedWcsCorrectionDoesNotConsultOrOverrideTheSavedFile() throws Exception {
         File directory = SyntheticDatasetFactory.createSolvedMono16FitsSequence(folder.getRoot().toPath(), "wcs", 3).toFile();
-        try (ImageProcessing processing = ImageProcessing.openProcessor(directory,
-                ApplicationSettings.load(new File(folder.getRoot(), "preferences.json")))) {
-            FitsFileInformation[] frames = processing.readFiles();
+        try (FitsImportService importer = new FitsImportService(directory, null)) {
+            FitsFileInformation[] frames = importer.readFiles();
             var header = WcsSolutionResolver.resolveUncorrected(null, frames).getTransformer();
             PlateSolutionCorrection correction = new PlateSolutionCorrection();
             correction.solutionKey = header.solutionKey();

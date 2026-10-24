@@ -1,6 +1,7 @@
 package eu.startales.spacepixels.tasks;
 
 import eu.startales.spacepixels.config.VariableStarReportOptions;
+import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
@@ -11,7 +12,8 @@ import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsImportService;
+import eu.startales.spacepixels.util.PlateSolveService;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.AutoTuneProfile;
@@ -46,10 +48,11 @@ public class TaskOutcomesTest {
 
     @Test
     public void aFailedPlateSolveCarriesItsReasonWithoutOpeningADialog() throws Exception {
-        try (ImageProcessing processing = ImageProcessing.openProcessor(folder.newFolder("session"))) {
-            // In memory only: the saved application config is not touched.
-            processing.getAppConfig().astapExecutablePath = new File(folder.getRoot(), "missing-astap.exe").getAbsolutePath();
-            JobOutcome<?> solved = outcomeOf(new PlateSolveTask(processing, missingFrame().getFilePath(), true, false));
+        // In memory only: the saved application config is not touched.
+        AppConfig config = new AppConfig();
+        config.astapExecutablePath = new File(folder.getRoot(), "missing-astap.exe").getAbsolutePath();
+        try (PlateSolveService solver = new PlateSolveService(config)) {
+            JobOutcome<?> solved = outcomeOf(new PlateSolveTask(solver, missingFrame().getFilePath(), true, false));
             assertTrue(String.valueOf(solved), solved instanceof JobOutcome.Failed<?> failed
                     && failed.reason().startsWith("ASTAP executable path is not correct"));
         }
@@ -73,8 +76,8 @@ public class TaskOutcomesTest {
     @Test
     public void blinkLoadsEveryFrameAndStopsWhenAsked() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 3);
-        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            FitsFileInformation[] files = processing.readFiles();
+        try (FitsImportService importer = new FitsImportService(sequence.toFile(), null)) {
+            FitsFileInformation[] files = importer.readFiles();
             List<String> reads = new ArrayList<>();
             JobOutcome<BlinkSequence> loaded = outcomeOf(new BlinkImagesTask(files, new AtomicBoolean(),
                     (read, total) -> reads.add(read + "/" + total)));
@@ -93,9 +96,9 @@ public class TaskOutcomesTest {
     public void detectionUsesTheSuppliedReportDecision() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "prompt", 5);
         AtomicBoolean asked = new AtomicBoolean();
-        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            DetectionTask task = new DetectionTask(processing.readFiles(), SyntheticDatasetFactory.createSyntheticDetectionConfig(),
-                    DetectionRunOptions.capture(processing.getAppConfig(), SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES), null, summary -> {
+        try (FitsImportService importer = new FitsImportService(sequence.toFile(), null)) {
+            DetectionTask task = new DetectionTask(importer.readFiles(), SyntheticDatasetFactory.createSyntheticDetectionConfig(),
+                    DetectionRunOptions.capture(new AppConfig(), SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES), null, summary -> {
                 asked.set(true);
                 assertTrue(summary.totalDetections >= 0);
                 return false;
@@ -110,11 +113,11 @@ public class TaskOutcomesTest {
     @Test
     public void detectionKeepsTheAutoTuneLimitItWasCreatedWith() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "limit", 5);
-        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
+        try (FitsImportService importer = new FitsImportService(sequence.toFile(), null)) {
             var config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
-            FitsFileInformation[] files = processing.readFiles();
-            DetectionTask first = new DetectionTask(files, config, DetectionRunOptions.capture(processing.getAppConfig(), 19), null, summary -> true);
-            DetectionTask next = new DetectionTask(files, config, DetectionRunOptions.capture(processing.getAppConfig(), 23), null, summary -> true);
+            FitsFileInformation[] files = importer.readFiles();
+            DetectionTask first = new DetectionTask(files, config, DetectionRunOptions.capture(new AppConfig(), 19), null, summary -> true);
+            DetectionTask next = new DetectionTask(files, config, DetectionRunOptions.capture(new AppConfig(), 23), null, summary -> true);
             assertEquals(19, recordedAutoTuneLimit(outcomeOf(first)));
             assertEquals(23, recordedAutoTuneLimit(outcomeOf(next)));
         }
@@ -124,12 +127,12 @@ public class TaskOutcomesTest {
     @Test
     public void detectionKeepsTheVisualizationSettingsItWasCreatedWith() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "visualization", 5);
-        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
+        try (FitsImportService importer = new FitsImportService(sequence.toFile(), null)) {
             var config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
             var edited = VisualizationSettings.defaults().withAutoStretchWhiteSigma(4.2).withVariableStarReportOptions(
                     new VariableStarReportOptions(13, VariableStarReportOptions.SortOrder.SIGNIFICANCE));
-            FitsFileInformation[] files = processing.readFiles();
-            DetectionRunOptions options = DetectionRunOptions.capture(processing.getAppConfig(), 19);
+            FitsFileInformation[] files = importer.readFiles();
+            DetectionRunOptions options = DetectionRunOptions.capture(new AppConfig(), 19);
             DetectionTask first = new DetectionTask(files, config, options.withVisualization(edited), null, summary -> true);
             DetectionTask next = new DetectionTask(files, config, options, null, summary -> true);
             File firstReport = report(outcomeOf(first));
@@ -147,8 +150,8 @@ public class TaskOutcomesTest {
     @Test
     public void detectionAndInspectionKeepTheirAdmittedFrames() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "admitted", 5);
-        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            FitsFileInformation[] admitted = java.util.Arrays.copyOf(processing.readFiles(), 3);
+        try (FitsImportService importer = new FitsImportService(sequence.toFile(), null)) {
+            FitsFileInformation[] admitted = java.util.Arrays.copyOf(importer.readFiles(), 3);
             FitsFileInformation first = admitted[0];
             DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
             DetectionTask detection = new DetectionTask(admitted, config, DetectionRunOptions.defaults(), null, summary -> true);
@@ -217,23 +220,23 @@ public class TaskOutcomesTest {
     public void aFinishedDetectionKeepsItsOverlaysWhateverBecomesOfTheReport() throws Exception {
         DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
         Path written = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "written", 5);
-        try (ImageProcessing processing = ImageProcessing.openProcessor(written.toFile())) {
-            DetectionTask task = new DetectionTask(processing.readFiles(), config, DetectionRunOptions.capture(processing.getAppConfig(), 19), null, summary -> true);
+        try (FitsImportService importer = new FitsImportService(written.toFile(), null)) {
+            DetectionTask task = new DetectionTask(importer.readFiles(), config, DetectionRunOptions.capture(new AppConfig(), 19), null, summary -> true);
             assertTrue(outcomeOf(task) instanceof JobOutcome.Completed<?>);
             assertNotNull(task.detectedOverlays());
             assertNotNull(task.detectedOverlays().tracks());
             assertNotNull(task.detectedOverlays().variables());
         }
         Path declined = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "declined", 5);
-        try (ImageProcessing processing = ImageProcessing.openProcessor(declined.toFile())) {
-            DetectionTask task = new DetectionTask(processing.readFiles(), config, DetectionRunOptions.capture(processing.getAppConfig(), 19), null, summary -> false);
+        try (FitsImportService importer = new FitsImportService(declined.toFile(), null)) {
+            DetectionTask task = new DetectionTask(importer.readFiles(), config, DetectionRunOptions.capture(new AppConfig(), 19), null, summary -> false);
             assertTrue(outcomeOf(task) instanceof JobOutcome.Declined<?>);
             assertNotNull("a declined report leaves the run's overlays", task.detectedOverlays());
         }
         Path unwritable = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "unwritable", 5);
-        try (ImageProcessing processing = ImageProcessing.openProcessor(unwritable.toFile())) {
+        try (FitsImportService importer = new FitsImportService(unwritable.toFile(), null)) {
             // After the detection, before the report: the session folder becomes a file, so no report folder fits in it.
-            DetectionTask task = new DetectionTask(processing.readFiles(), config, DetectionRunOptions.capture(processing.getAppConfig(), 19), null, summary -> {
+            DetectionTask task = new DetectionTask(importer.readFiles(), config, DetectionRunOptions.capture(new AppConfig(), 19), null, summary -> {
                 replaceFolderWithFile(unwritable.toFile());
                 return true;
             });
@@ -244,8 +247,8 @@ public class TaskOutcomesTest {
         }
         Path cancelled = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "cancelled", 5);
         AtomicReference<DetectionTask> task = new AtomicReference<>();
-        JobOutcome<File> outcome = runCancelledAt(cancelled, "Writing the report: unclassified transients", (processing, files) -> {
-            task.set(new DetectionTask(files, config, DetectionRunOptions.capture(processing.getAppConfig(), 19), null, summary -> true));
+        JobOutcome<File> outcome = runCancelledAt(cancelled, "Writing the report: unclassified transients", files -> {
+            task.set(new DetectionTask(files, config, DetectionRunOptions.capture(new AppConfig(), 19), null, summary -> true));
             return task.get();
         }, new ArrayList<>());
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
@@ -257,7 +260,7 @@ public class TaskOutcomesTest {
     public void aDetectionThatStopsBeforeItFinishesLeavesNoOverlays() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "stopped", 5);
         AtomicReference<DetectionTask> cancelled = new AtomicReference<>();
-        JobOutcome<File> outcome = runCancelledAt(sequence, "", (processing, files) -> {
+        JobOutcome<File> outcome = runCancelledAt(sequence, "", files -> {
             cancelled.set(new DetectionTask(files, SyntheticDatasetFactory.createSyntheticDetectionConfig()));
             return cancelled.get();
         }, new ArrayList<>());
@@ -273,7 +276,7 @@ public class TaskOutcomesTest {
     public void aDetectionCancelledWhileItRunsStopsBeforeWritingAReport() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 5);
         // The user cancels as soon as the first progress appears.
-        JobOutcome<File> outcome = runCancelledAt(sequence, "", (processing, files) ->
+        JobOutcome<File> outcome = runCancelledAt(sequence, "", files ->
                 new DetectionTask(files, SyntheticDatasetFactory.createSyntheticDetectionConfig()), new ArrayList<>());
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
         assertEquals(0, foldersStartingWith(sequence, "detections_").length);
@@ -283,7 +286,7 @@ public class TaskOutcomesTest {
     public void aDetectionCancelledWhileItWritesItsReportRemovesTheUnfinishedFolder() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 5);
         List<String> messages = new ArrayList<>();
-        JobOutcome<File> outcome = runCancelledAt(sequence, "Writing the report: unclassified transients", (processing, files) ->
+        JobOutcome<File> outcome = runCancelledAt(sequence, "Writing the report: unclassified transients", files ->
                 new DetectionTask(files, SyntheticDatasetFactory.createSyntheticDetectionConfig()), messages);
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
         assertTrue("the report reports its steps: " + messages, messages.contains("Writing the report: maps..."));
@@ -293,7 +296,7 @@ public class TaskOutcomesTest {
     @Test
     public void anIterativeRunCancelledDuringItsSecondPassKeepsTheFirstWithAnIndex() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 10);
-        JobOutcome<File> outcome = runCancelledAt(sequence, "Pass 10 frames: Writing the report", (processing, files) ->
+        JobOutcome<File> outcome = runCancelledAt(sequence, "Pass 10 frames: Writing the report", files ->
                 iterativeTask(sequence.toFile()), new ArrayList<>());
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
         File[] runs = foldersStartingWith(sequence, "iterative_detections_");
@@ -307,7 +310,7 @@ public class TaskOutcomesTest {
     @Test
     public void anIterativeRunCancelledBeforeAnyPassFinishedLeavesNoFolder() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 10);
-        JobOutcome<File> outcome = runCancelledAt(sequence, "Pass 5 frames: Loading", (processing, files) ->
+        JobOutcome<File> outcome = runCancelledAt(sequence, "Pass 5 frames: Loading", files ->
                 iterativeTask(sequence.toFile()), new ArrayList<>());
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
         assertEquals(0, foldersStartingWith(sequence, "iterative_detections_").length);
@@ -323,10 +326,10 @@ public class TaskOutcomesTest {
 
     /** Runs the job on the sequence and cancels it at the first progress message starting with {@code cancelAt}. */
     private static JobOutcome<File> runCancelledAt(Path sequence, String cancelAt,
-                                                   java.util.function.BiFunction<ImageProcessing, FitsFileInformation[], Job<File>> job,
+                                                   java.util.function.Function<FitsFileInformation[], Job<File>> job,
                                                    List<String> messages) throws Exception {
-        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            FitsFileInformation[] files = processing.readFiles();
+        try (FitsImportService importer = new FitsImportService(sequence.toFile(), null)) {
+            FitsFileInformation[] files = importer.readFiles();
             List<JobOutcome<File>> outcomes = new ArrayList<>();
             JobCoordinator coordinator = new JobCoordinator(Runnable::run, Runnable::run, () -> false);
             coordinator.setListener(new JobCoordinator.Listener() {
@@ -346,7 +349,7 @@ public class TaskOutcomesTest {
                 public void jobEnded(eu.startales.spacepixels.jobs.JobHandle handle, JobOutcome<?> outcome) {
                 }
             });
-            coordinator.start(JobKind.DETECTION, null, job.apply(processing, files), (handle, outcome) -> outcomes.add(outcome));
+            coordinator.start(JobKind.DETECTION, null, job.apply(files), (handle, outcome) -> outcomes.add(outcome));
             assertEquals(1, outcomes.size());
             return outcomes.get(0);
         }

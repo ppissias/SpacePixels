@@ -30,7 +30,7 @@ public class FitsFormatChecker {
      */
     public static FitsFormat checkFormat(File fitsFile) {
         try (Fits fits = new Fits(fitsFile)) {
-            BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
+            BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
             if (hdu == null) return FitsFormat.UNSUPPORTED;
 
             Header header = hdu.getHeader();

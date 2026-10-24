@@ -45,6 +45,21 @@ final class OutputFolders {
         return folder;
     }
 
+    /**
+     * Creates a new timestamped {@code detections_} folder beside {@code anyFitsFile} (in the working directory when
+     * the file has no parent) and returns it. It is never the folder of another run, even when two runs start in the
+     * same second.
+     */
+    static File createDetectionsDirectory(File anyFitsFile) {
+        File parentDir = anyFitsFile.getParentFile();
+        if (parentDir == null) {
+            parentDir = new File(System.getProperty("user.dir"));
+        }
+        File detectionsDir = createNew(parentDir, "detections_");
+        DebugOutput.println("Created new export directory at: " + detectionsDir.getAbsolutePath());
+        return detectionsDir;
+    }
+
     /** Removes a folder a stopped run created and did not finish, with everything in it. A failure is only reported. */
     static void deleteUnfinished(File folder) {
         if (folder == null || !folder.isDirectory()) {

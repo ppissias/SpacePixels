@@ -121,7 +121,7 @@ The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker
 - **The last report:** `util.SessionReports.latest(...)` finds the newest finished report beside the frames when a session is imported (in the import job); a completed detection replaces it. The Main tab's Detect group offers it as **Open last report**.
 - **Failures:** an exception or `Error` becomes a failure. Running out of memory leaves the worker for the application's uncaught-exception handler. The handler marks it in `JobFailures`, and every other running job then stops at its next progress report while SpacePixels closes.
 
-Each `JobHandle` carries its explicit `ProcessingSession`, which has a UUID and owns its frame array, selection, catalogue/correction, tuning state, the master-stack cache, last report, the last detection run's overlays (`DetectionOverlays`, set on the EDT and refused once closed) and processing facade. `SessionOwner` guards handover and callback admission independently of Swing. Only a successful import replaces the current session; stale callbacks and stale imports cannot modify its replacement. A session whose close fails, for example a plate-solve client that cannot confirm its shutdown within 10 s, is logged, so neither the handover nor closing the window stops; `ProcessingSession.close` forgets its frames in a `finally` block even when processor cleanup fails. The window loads `ApplicationSettings` once and injects it into each processor, preserving unsaved preferences across imports. Import returns a fresh frame array and keeps no metadata cache. The session copies that array and returns copies from `getFiles`; metadata objects remain shared for the existing in-place WCS updates. Detection and inspection jobs copy their admitted arrays instead of reading a processor on the worker. `ImageProcessing` remains an internal facade over import, batch operations, rendering and solving; detection does not pass through it.
+Each `JobHandle` carries its explicit `ProcessingSession`, which has a UUID and owns its frame array, selection, catalogue/correction, tuning state, the master-stack cache, last report, the last detection run's overlays (`DetectionOverlays`, set on the EDT and refused once closed), and the services that work on its frames: its `PlateSolveService` and the `FitsBatchService` of its folder. `SessionOwner` guards handover and callback admission independently of Swing. Only a successful import replaces the current session; stale callbacks and stale imports cannot modify its replacement. A session whose close fails, for example a plate-solve client that cannot confirm its shutdown within 10 s, is logged, so neither the handover nor closing the window stops; `ProcessingSession.close` closes its solver and forgets its frames in a `finally` block, also when the solver's close fails. The window loads `ApplicationSettings` once and builds each session's `PlateSolveService` on that live `AppConfig`, so unsaved preferences survive imports and reach the next solve; an import never reads them. Import returns a fresh frame array and keeps no metadata cache. The session copies that array and returns copies from `getFiles`; metadata objects remain shared for the existing in-place WCS updates. Detection and inspection jobs copy their admitted arrays instead of reading frames on the worker. The other jobs receive the session's services or immutable inputs when they are created: Convert to Mono and Batch Stretch its `FitsBatchService`, plate solving and the WCS write its `PlateSolveService`, and the Image Stretch previews a stateless `FitsVisualizationRenderer`. Job admission compares the captured `ProcessingSession` with the current one.
 
 ### `eu.startales.spacepixels.session`
 
@@ -193,11 +193,10 @@ Current tools:
 
 ### `eu.startales.spacepixels.util`
 
-Internal backend facade and processing services.
+Internal processing services.
 
 Important classes:
 
-- `ImageProcessing`
 - `FitsImportService`, `FitsPreparationService`, `FitsBatchService`, `FitsFiles`, `FitsImages`
 - `FitsImportInteraction` (decisions/progress; implemented on the EDT by `gui.GuiFitsImportInteraction`)
 - `DetectionInputPreparation`
@@ -217,11 +216,11 @@ Important classes:
 - `XisfImageConverter`
 - `StagedFile` (safe replacement of a file; see section 7)
 
-`ImageProcessing` is an internal facade over the import, conversion, rendering and solving services; the detection services are called directly (DESIGN-IMPROVEMENTS.md SP-04 proposes retiring the rest). All `util` sources, including reporting/catalogue helpers, have no Swing/GUI dependencies; headless AWT image rendering remains permitted. Shared HDU discovery and directory listing are separate helpers. Import owns its bounded pool, closed by the facade. Solver/converter services own their loggers rather than loading the application window.
+Callers use these services directly; there is no forwarding facade. All `util` sources, including reporting/catalogue helpers, have no Swing/GUI dependencies; headless AWT image rendering remains permitted. Shared HDU discovery and directory listing are separate helpers. Each `FitsImportService` owns its bounded pool for one import attempt, and its caller closes it. Solver/converter services own their loggers rather than loading the application window.
 
 Compressed 32-bit and signed/scaled 16-bit import selects combined preparation using the actual decompressed image HDU metadata. The existing batch standardizer reads compressed pixels through `FitsPreparationService`, writes final unsigned mono/color copies directly and preserves the shared sequence-wide offset/zero-padding policy. Already-standard unsigned 16-bit compressed input retains decompression-only behavior. GUI decisions stay in `FitsImportInteraction`; strict headless import continues to refuse non-ready input.
 
-The window explicitly injects `gui.GuiFitsImportInteraction` through `FitsImportTask` into the facade's interaction-taking factory and exposure-group decisions. Factories without interaction validate strictly and never create dialogs. `MainApplicationPanel` injects `gui.GuiDetectionReportPrompt` callbacks into normal/iterative jobs; only this GUI adapter builds the report-size question on the EDT. The threshold remains 50, and iterative callbacks use each pass's subset/WCS and effective config. Accepted choices replace only the summary's `ReportInclusion`, consumed by export, not the measurements/config. Default task constructors are noninteractive threshold guards; explicit null report callbacks permit export without asking. A declined import preserves the current session. These boundaries are protected by recursive dependency tests and dialog/job tests.
+The window explicitly injects `gui.GuiFitsImportInteraction` through `FitsImportTask` into `FitsImportService` and its exposure-group decision (`FitsImportService.offerToImportLargestExposureGroup`). An importer without interaction validates strictly and never creates dialogs. `MainApplicationPanel` injects `gui.GuiDetectionReportPrompt` callbacks into normal/iterative jobs; only this GUI adapter builds the report-size question on the EDT. The threshold remains 50, and iterative callbacks use each pass's subset/WCS and effective config. Accepted choices replace only the summary's `ReportInclusion`, consumed by export, not the measurements/config. Default task constructors are noninteractive threshold guards; explicit null report callbacks permit export without asking. A declined import preserves the current session. These boundaries are protected by recursive dependency tests and dialog/job tests.
 
 The build publishes only `eu.startales.spacepixels:spacepixels`: the headless API/config/session/util implementation, CLI tools and reporting resources, with matching sources/Javadocs. There is no separate core project or desktop Maven publication. An unpublished `desktopJar` owns GUI/jobs/tasks and GUI icons; `run` and distributions combine it with the API and desktop-only FlatLaf. CLI launchers need only the API/runtime graph. Package names and source paths stay stable through complementary source sets. Binary/source/Javadoc and dependency-metadata checks plus an isolated Maven-resolved consumer protect this boundary. JTransient is compile/API-scoped for exposed DTOs; JPlateSolve/FITS/Gson remain runtime-transitive implementation dependencies. Headless graphics still require `java.desktop`. See [the developer guide](DEVELOPER.md#build-and-run) and [publishing](PUBLISHING.md).
 
@@ -282,7 +281,7 @@ Owns:
 - `BlinkFrame`
 - the `JobCoordinator` and the session listeners
 - the shared `ApplicationStorage` queue and its background shutdown drain
-- current `ImageProcessing` instance after import
+- the current `ProcessingSession` (through `SessionOwner`), built from each completed import with a `PlateSolveService` on the window's settings
 - `ReportLookupProxyServer` lifecycle
 
 Responsibilities:
@@ -392,26 +391,20 @@ Expert sections are found from the header labels that `DetectionConfigurationPan
 
 `SettingRow` is one setting on a page: its input, its saved value and a `Reset` button. It marks itself when its value differs from the saved configuration and tells the navigator to refresh the filters and counts.
 
-### `ImageProcessing`
+### `FitsImportService`
 
-Internal backend facade for a selected/imported sequence directory.
+Reads one folder's frames for one import attempt. The caller owns it and closes it, which stops its bounded metadata pool.
 
 Owns or coordinates:
 
-- sequence metadata loading through one `readFiles()` operation, returning a fresh caller-owned array without caching it
-- GUI import-time FITS validation and prompting
-- decompression and 32-bit/color conversion helpers
-- XISF import redirection through `XisfImageConverter`
-- batch mono conversion and batch stretch
-- plate solving through `PlateSolveService`
-- application config load/save
+- sequence metadata loading through `readFiles()`, which returns a fresh caller-owned array and keeps nothing
+- GUI import-time FITS validation and prompting, through an explicit `FitsImportInteraction`
+- decompression and 32-bit/color conversion through `FitsBatchService`, and the redirect to the converted folder (`RedirectImportException`, handled by the import task's loop)
+- the offer to import the largest exposure group
 
-Detection does not pass through it: `DetectionTask` (on frames admitted from `ProcessingSession.getFiles()`), each iterative pass and `DefaultSpacePixelsPipelineApi` run `StandardDetectionPipelineService` themselves. Headless callers read metadata once and retain the returned array. Without interaction, readiness is checked before sequence consistency, preserving the API/CLI error order; interactive import checks consistency before offering preparation. `RedirectImportException` is a top-level `util` type used by the import task's redirect loop.
+Without interaction, readiness is checked before sequence consistency, preserving the API/CLI error order; interactive import checks consistency before offering preparation. `FitsImportTask` converts XISF input with `XisfImageConverter` before it reads the folder.
 
-Design note:
-
-- `ImageProcessing.openProcessor(directory)` binds processing state to the active imported directory.
-- For new backend behavior, prefer a focused helper/service and delegate from `ImageProcessing`.
+The other services have their own owners. A desktop `ProcessingSession` owns its `PlateSolveService` and the `FitsBatchService` of its folder; `FitsVisualizationRenderer` keeps no state. Detection runs `StandardDetectionPipelineService` directly: `DetectionTask` on frames admitted from `ProcessingSession.getFiles()`, each iterative pass, and `DefaultSpacePixelsPipelineApi`. Headless callers read the metadata once and keep the returned array.
 
 ### `StandardDetectionPipelineService`
 
@@ -520,9 +513,9 @@ The report remains a static disk artifact; this server only supports live enrich
 ApplicationWindow
 -> FitsImportTask
 -> XisfImageConverter.prepareDirectoryForFitsImport(...)
--> ImageProcessing.openProcessor(importDirectory, applicationSettings)
--> ImageProcessing.readFiles()
--> JobOutcome (Completed with the session, Declined, Cancelled or Failed)
+-> FitsImportService(importDirectory, interaction).readFiles(), closed before the task goes on
+-> JobOutcome (Completed with the frames, the last report and the saved session data; Declined, Cancelled or Failed)
+-> ApplicationWindow builds the ProcessingSession, with a PlateSolveService on its settings
 -> ApplicationWindow.installSession(...) and the SessionListeners
 ```
 
@@ -548,8 +541,7 @@ The engine receives unsigned-16-bit-equivalent pixels (`BZERO` 32768, `BSCALE` 1
 ```text
 DefaultSpacePixelsPipelineApi
 -> DetectionInputPreparation.prepareInputDirectory(...)
--> ImageProcessing.openProcessor(preparedDirectory)
--> ImageProcessing.readFiles()
+-> FitsImportService(preparedDirectory, null).readFiles(), closed at once
 ```
 
 `FAIL_IF_NOT_READY` keeps the original directory and requires detection-ready files.
@@ -609,16 +601,15 @@ Each pass builds its own master and preserves the normal configured analyses, in
 
 ```text
 MainApplicationPanel
--> PlateSolveTask
--> ImageProcessing.solve(...)
--> PlateSolveService
+-> PlateSolveTask, with the session's PlateSolveService
+-> PlateSolveService.startSolve(...)
 -> JPlateSolve
--> (the user agrees to write the solution) WriteWcsTask
--> ImageProcessing.updateFitsHeaderWithWCS(...)
+-> (the user agrees to write the solution) WriteWcsTask, with the same service
+-> PlateSolveService.updateFitsHeaderWithWCS(...)
 -> WCS-aware viewers and reports
 ```
 
-An online solve logs in with the account chosen on the Astrometry Config tab. It uploads a temporary copy made by `util.FitsUploadCopy`, named `spacepixels-solve-*.fits`, deleted when the operation completes or fails to start. In every header of that copy the site and observer cards (`FitsUploadCopy.PRIVATE_KEYWORDS`) are blanked, and `CHECKSUM` too where a card was blanked. Pixels and all other cards, the pointing hints included, are copied byte for byte. The anonymous login is one account shared by every anonymous user. `PlateSolveService` keeps one Astrometry.net client for the account in use, made at the first online solve. It replaces (and closes) the client when the key changes, and `ImageProcessing.close` closes it with the session. **Check** (`AstrometryNetAccount.checkLogin`) needs no imported session: it logs in with a short-lived client on a `SwingWorker`, uploads nothing, is cancelled when the panel closes, and ignores its answer if the account changed meanwhile. `PlateSolveTask` words a failed online solve through `AstrometryNetAccount.failureMessage`: a lost connection, a time-out, an unknown key for the account in use, and any other refused login with Astrometry.net's own reason.
+An online solve logs in with the account chosen on the Astrometry Config tab. It uploads a temporary copy made by `util.FitsUploadCopy`, named `spacepixels-solve-*.fits`, deleted when the operation completes or fails to start. In every header of that copy the site and observer cards (`FitsUploadCopy.PRIVATE_KEYWORDS`) are blanked, and `CHECKSUM` too where a card was blanked. Pixels and all other cards, the pointing hints included, are copied byte for byte. The anonymous login is one account shared by every anonymous user. `PlateSolveService` keeps one Astrometry.net client for the account in use, made at the first online solve. It replaces (and closes) the client when the key changes, and `ProcessingSession.close` closes it with the session. **Check** (`AstrometryNetAccount.checkLogin`) needs no imported session: it logs in with a short-lived client on a `SwingWorker`, uploads nothing, is cancelled when the panel closes, and ignores its answer if the account changed meanwhile. `PlateSolveTask` words a failed online solve through `AstrometryNetAccount.failureMessage`: a lost connection, a time-out, an unknown key for the account in use, and any other refused login with Astrometry.net's own reason.
 
 Writing a solution into a frame changes the user's own file:
 - **Safe replacement:** `PlateSolveService` writes the updated frame to a temporary file beside it. It reads the copy back to check the image size and that all of its data is present, and only then replaces the original in one step. A failure leaves the original unchanged.
@@ -847,7 +838,7 @@ JTransient:
 - Treat non-API packages as internal implementation details.
 - Keep JTransient algorithm details in JTransient; do not fork detector behavior into SpacePixels.
 - Keep report generation as rendering and aggregation over `PipelineResult`.
-- Prefer focused services behind `ImageProcessing` for new backend capabilities.
+- Add backend capabilities as focused services with explicit owners; do not reintroduce a forwarding facade.
 - Keep detection config and visualization preferences separate.
 - Keep GUI-only prompting out of headless/API paths.
 - Keep `jobs` and `tasks` free of Swing and the `gui` package; `DependencyRulesTest` checks this.
@@ -859,13 +850,12 @@ JTransient:
 
 Accepted current debt:
 
-- `ImageProcessing` is still broad and stateful.
 - `DetectionConfigurationPanel` and `MainApplicationPanel` still combine Swing view logic and workflow control.
 - `DetectionReportGenerator` still contains substantial static rendering/helper behavior even though major sections have been split into writers.
 
 Preferred refactor direction:
 
-- extract behavior behind existing facades first
+- extract behavior into focused services first
 - avoid changing user workflows while moving internals
 - preserve `SpacePixelsPipelineApi` request/result semantics
 - preserve report output shape unless the change is explicitly user-facing

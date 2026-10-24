@@ -9,7 +9,7 @@
 package eu.startales.spacepixels.tools;
 
 import eu.startales.spacepixels.util.DebugOutput;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsImages;
 import nom.tam.fits.*;
 import nom.tam.util.Cursor;
 
@@ -107,7 +107,7 @@ public class ArtificialStarInjector {
         // 2. Read the first frame to get dimensions
         int width, height;
         try (Fits firstFits = new Fits(fitsFiles[0])) {
-            BasicHDU<?> hdu = ImageProcessing.getImageHDU(firstFits);
+            BasicHDU<?> hdu = FitsImages.getImageHDU(firstFits);
             int[] axes = hdu.getAxes();
             if (axes.length != 2) {
                 throw new IllegalArgumentException("Expected 2D monochrome 16-bit FITS files. Found " + axes.length + " axes.");
@@ -166,7 +166,7 @@ public class ArtificialStarInjector {
             DebugOutput.printf("Processing frame [%d/%d]: %s\n", (i + 1), numFrames, inFile.getName());
 
             try (Fits fits = new Fits(inFile)) {
-                BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
+                BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
                 Object kernel = hdu.getKernel();
 
                 if (!(kernel instanceof short[][])) {

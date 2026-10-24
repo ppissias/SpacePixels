@@ -25,11 +25,13 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Shared runtime helpers used by both standard and iterative pipeline orchestration services.
+ * Shared runtime helpers used by both standard and iterative pipeline orchestration services. Only the minimum
+ * frame count is public, for the report sections that explain it.
  */
-final class DetectionPipelineSupport {
+public final class DetectionPipelineSupport {
 
-    static final int MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS = 3;
+    /** The fewest frames that survive quality control for the multi-frame analyses to run. */
+    public static final int MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS = 3;
 
     private static final DateTimeFormatter TRACE_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS 'UTC'").withZone(ZoneOffset.UTC);

@@ -42,9 +42,10 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 /**
- * Handles plate-solving execution together with WCS header import and solve-artifact cleanup.
+ * Handles plate-solving execution together with WCS header import and solve-artifact cleanup. Each desktop session
+ * owns one and closes it with the session; it makes its Astrometry.net client at the first online solve.
  */
-final class PlateSolveService implements AutoCloseable {
+public final class PlateSolveService implements AutoCloseable {
     private static final Logger LOGGER = Logger.getLogger(PlateSolveService.class.getName());
 
     private static final Set<String> FIXED_WCS_HEADER_KEYS = Set.of(
@@ -71,7 +72,11 @@ final class PlateSolveService implements AutoCloseable {
     private AstrometryDotNet astrometryNetInterface;
     private String astrometryNetClientKey;
 
-    PlateSolveService(AppConfig appConfig) {
+    /**
+     * Solves with the application's live settings: the ASTAP path and the Astrometry.net key are read when a solve
+     * starts, so edits on the Astrometry Config tab reach the next solve.
+     */
+    public PlateSolveService(AppConfig appConfig) {
         this(appConfig, AstrometryNetAccount::newClient);
     }
 
@@ -81,6 +86,10 @@ final class PlateSolveService implements AutoCloseable {
         this.astrometryNetClients = astrometryNetClients;
     }
 
+    /**
+     * Starts solving one frame with ASTAP, or with Astrometry.net on a copy without the observing site and the
+     * observer, reporting phases to {@code progress}. The returned operation can be cancelled and joined.
+     */
     public PlateSolveOperation startSolve(String path, boolean astap, boolean astrometry,
                                           Consumer<PlateSolveOperation.Progress> progress) throws IOException {
         if (astap) {
@@ -132,8 +141,11 @@ final class PlateSolveService implements AutoCloseable {
         return astrometryNetInterface;
     }
 
-    /** What to tell the user when an online solve fails, for the account in use. */
-    String astrometryNetFailure(Throwable failure) {
+    /**
+     * What to tell the user when an online solve fails: a lost connection and a refused login are named, for the
+     * Astrometry.net account in use.
+     */
+    public String astrometryNetFailure(Throwable failure) {
         return AstrometryNetAccount.failureMessage(failure, !appConfig.astrometryNetApiKeyInUse().isEmpty());
     }
 
@@ -148,6 +160,10 @@ final class PlateSolveService implements AutoCloseable {
         }
     }
 
+    /**
+     * Writes the solution's WCS cards into the frame's FITS header, replacing the file only when the new one is
+     * complete and reads back, and returns the header values written.
+     */
     public Map<String, String> updateFitsHeaderWithWCS(String fitsFileFullPath, Map<String, String> wcsData)
             throws Exception {
         if (wcsData == null || wcsData.isEmpty()) {
@@ -161,7 +177,7 @@ final class PlateSolveService implements AutoCloseable {
         try (StagedFile staged = new StagedFile(originalFile)) {
             int[] axes;
             try (Fits fits = new Fits(originalFile)) {
-                BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
+                BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
                 if (hdu == null || hdu.getHeader() == null) {
                     throw new IOException("Could not locate an image header in " + originalFile.getName());
                 }
@@ -190,7 +206,7 @@ final class PlateSolveService implements AutoCloseable {
     /** Fails unless the written copy holds an image of the expected size with all of its data present. */
     static void checkReadsBack(File written, int[] expectedAxes, String name) throws IOException, FitsException {
         try (Fits fits = new Fits(written)) {
-            BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
+            BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
             boolean complete = hdu != null
                     && Arrays.equals(hdu.getAxes(), expectedAxes)
                     && hdu.getData().getFileOffset() + hdu.getData().getSize() <= written.length();
@@ -200,6 +216,7 @@ final class PlateSolveService implements AutoCloseable {
         }
     }
 
+    /** Deletes the solver's side files for this frame (result, WCS and ini files); a failure is only logged. */
     public void cleanupSolveArtifacts(String fitsFileFullPath, PlateSolveResult result) {
         if (fitsFileFullPath == null || fitsFileFullPath.isEmpty()) {
             return;
@@ -294,7 +311,7 @@ final class PlateSolveService implements AutoCloseable {
 
     private List<HeaderCard> readWcsHeaderCards(File wcsFitsFile) throws Exception {
         try (Fits wcsFits = new Fits(wcsFitsFile)) {
-            BasicHDU<?> hdu = ImageProcessing.getImageHDU(wcsFits);
+            BasicHDU<?> hdu = FitsImages.getImageHDU(wcsFits);
             if (hdu == null || hdu.getHeader() == null) {
                 return Collections.emptyList();
             }

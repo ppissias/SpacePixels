@@ -14,7 +14,6 @@ import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.SkyCatalogueModel;
 import eu.startales.spacepixels.util.DetectionOverlays;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.IterativeDetectionRequest;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.DetectionRunOptions;
@@ -496,18 +495,17 @@ public class MainApplicationPanel extends JPanel {
         if (settings == null) {
             return;
         }
-        ImageProcessing session = mainAppWindow.getImageProcessing();
         ProcessingSession owner = mainAppWindow.getSession();
-        if (owner == null || owner.getProcessing() != session) return;
+        if (owner == null) return;
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
         DetectionTask detection = new DetectionTask(owner.getFiles(), settings,
-                DetectionRunOptions.capture(session.getAppConfig(), configuration.autoTuneMaxCandidateFrames())
+                DetectionRunOptions.capture(mainAppWindow.getApplicationSettings().getConfig(), configuration.autoTuneMaxCandidateFrames())
                         .withVisualization(configuration.visualizationSettings()),
                 owner.getSkyCatalogue().snapshot(),
                 summary -> reportPrompt.confirm(summary, owner.hasPlateSolvedFrame(), 50, null, settings))
                         .showingPreviews(progressDialog.previewSink());
         // The overlays first: they belong to the session whatever became of the report.
-        startJob(JobKind.DETECTION, session, detection, (handle, outcome) -> {
+        startJob(JobKind.DETECTION, owner, detection, (handle, outcome) -> {
             showDetectionOverlays(handle.session(), detection.detectedOverlays());
             showDetectionOutcome(handle, outcome);
         });
@@ -551,9 +549,11 @@ public class MainApplicationPanel extends JPanel {
         boolean stretchEnabled = mainAppWindow.getStretchPanel().isStretchEnabled();
         StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-        ImageProcessing session = mainAppWindow.getImageProcessing();
-        startJob(JobKind.CONVERT_TO_MONO, session,
-                new BatchConvertMonoTask(session, stretchEnabled, stretchFactor, iterations, algo), this::showConversionOutcome);
+        ProcessingSession owner = mainAppWindow.getSession();
+        if (owner == null) return;
+        startJob(JobKind.CONVERT_TO_MONO, owner,
+                new BatchConvertMonoTask(owner.getBatchService(), stretchEnabled, stretchFactor, iterations, algo),
+                this::showConversionOutcome);
     }
 
     /** Writes stretched copies of every frame, with the Image Stretch tab's stretch. */
@@ -562,8 +562,9 @@ public class MainApplicationPanel extends JPanel {
         int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
         StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
 
-        ImageProcessing session = mainAppWindow.getImageProcessing();
-        startJob(JobKind.BATCH_STRETCH, session, new BatchStretchTask(session, stretchFactor, iterations, algo),
+        ProcessingSession owner = mainAppWindow.getSession();
+        if (owner == null) return;
+        startJob(JobKind.BATCH_STRETCH, owner, new BatchStretchTask(owner.getBatchService(), stretchFactor, iterations, algo),
                 this::showStretchOutcome);
     }
 
@@ -573,10 +574,9 @@ public class MainApplicationPanel extends JPanel {
         if (settings == null) {
             return;
         }
-        ImageProcessing session = mainAppWindow.getImageProcessing();
         ProcessingSession owner = mainAppWindow.getSession();
         if (owner == null) return;
-        startJob(JobKind.TRANSIENT_INSPECTION, session, new ManualTransientInspectionTask(owner.getFiles(), settings), (handle, outcome) -> {
+        startJob(JobKind.TRANSIENT_INSPECTION, owner, new ManualTransientInspectionTask(owner.getFiles(), settings), (handle, outcome) -> {
             if (outcome instanceof JobOutcome.Completed<ManualTransientInspectionTask.Result> completed) {
                 ManualTransientInspectionTask.Result result = completed.result();
                 TransientInspectionFrame frame = new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
@@ -644,8 +644,9 @@ public class MainApplicationPanel extends JPanel {
         if (selectedFile == null) {
             return;
         }
-        ImageProcessing session = mainAppWindow.getImageProcessing();
-        startJob(JobKind.PLATE_SOLVE, session, new PlateSolveTask(session, selectedFile.getFilePath(),
+        ProcessingSession owner = mainAppWindow.getSession();
+        if (owner == null) return;
+        startJob(JobKind.PLATE_SOLVE, owner, new PlateSolveTask(owner.getPlateSolveService(), selectedFile.getFilePath(),
                         astapSolveRadio.isSelected(), astrometryNetSolveRadio.isSelected()),
                 (handle, outcome) -> showSolveOutcome(selectedFile, outcome));
     }
@@ -1105,7 +1106,7 @@ public class MainApplicationPanel extends JPanel {
             return;
         }
         SkyField field = SkyField.of(solution.getTransformer(), files[0].getSizeWidth(), files[0].getSizeHeight());
-        double depth = mainAppWindow.getImageProcessing().getAppConfig().skyCatalogueStarMagnitude();
+        double depth = mainAppWindow.getApplicationSettings().getConfig().skyCatalogueStarMagnitude();
         skyFetchProblem = null;
         correctionProblem = null;
         statusLabel.setText("Fetching the sky catalogue (" + field.sizeText() + " field)…");
@@ -1337,8 +1338,8 @@ public class MainApplicationPanel extends JPanel {
                     .append(String.format(Locale.US, "<br>Stars to Gaia G %.1f", catalogue.starMagnitudeLimit))
                     .append(catalogue.starSource == null ? "" : " from " + catalogue.starSource)
                     .append(catalogue.fetchedAtUtc == null ? "" : ", fetched " + fetchedText(catalogue.fetchedAtUtc));
-            double depth = mainAppWindow.getImageProcessing() == null ? catalogue.starMagnitudeLimit
-                    : mainAppWindow.getImageProcessing().getAppConfig().skyCatalogueStarMagnitude();
+            double depth = mainAppWindow.getSession() == null ? catalogue.starMagnitudeLimit
+                    : mainAppWindow.getApplicationSettings().getConfig().skyCatalogueStarMagnitude();
             if (Math.abs(depth - catalogue.starMagnitudeLimit) > 0.01) {
                 text.append(String.format(Locale.US, "<br><i>The star depth is now set to %.1f: fetch again to use it.</i>", depth));
             }
@@ -1488,7 +1489,7 @@ public class MainApplicationPanel extends JPanel {
         if (detectionSequenceFrame != null) {
             detectionSequenceFrame.setSettingsEditable(true);
         }
-        mainAppWindow.setSessionTabsEnabled(mainAppWindow.getImageProcessing() != null);
+        mainAppWindow.setSessionTabsEnabled(mainAppWindow.getSession() != null);
     }
 
     /** While a job runs (or a blink plays), the window's controls and the session tabs are locked. */
@@ -1521,10 +1522,12 @@ public class MainApplicationPanel extends JPanel {
         return uiLocked;
     }
 
-    /** Starts a job under the coordinator; when it cannot start now, the status bar says why. */
-    <R> void startJob(JobKind kind, ImageProcessing processing, Job<R> job, JobCoordinator.OutcomeHandler<R> handler) {
-        ProcessingSession owner = mainAppWindow.getSession();
-        if (owner == null || owner.getProcessing() != processing) return;
+    /**
+     * Starts a job of {@code owner}, the session it was built from, under the coordinator; nothing starts when that
+     * session is no longer the current one. When it cannot start now, the status bar says why.
+     */
+    <R> void startJob(JobKind kind, ProcessingSession owner, Job<R> job, JobCoordinator.OutcomeHandler<R> handler) {
+        if (owner == null || !mainAppWindow.isCurrentSession(owner)) return;
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(kind, owner, job,
                 mainAppWindow.forCurrentSession(handler));
         if (!admission.admitted()) {
@@ -1773,9 +1776,9 @@ public class MainApplicationPanel extends JPanel {
 
             if (choice == JOptionPane.YES_OPTION) {
                 // Writing rewrites the whole frame, which takes a while for a large one: it is a job, off this thread.
-                ImageProcessing session = mainAppWindow.getImageProcessing();
-                JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.WRITE_WCS, mainAppWindow.getSession(),
-                        new WriteWcsTask(session, fileInfo.getFilePath(), result),
+                ProcessingSession owner = mainAppWindow.getSession();
+                JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.WRITE_WCS, owner,
+                        new WriteWcsTask(owner.getPlateSolveService(), fileInfo.getFilePath(), result),
                         mainAppWindow.forCurrentSession((handle, written) -> showWcsWriteOutcome(fileInfo, written)));
                 if (admission.admitted()) {
                     return;
@@ -1784,7 +1787,7 @@ public class MainApplicationPanel extends JPanel {
             } else {
                 statusLabel.setText("Plate solve completed; WCS was not written to the FITS header");
             }
-            mainAppWindow.getImageProcessing().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
+            mainAppWindow.getSession().getPlateSolveService().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
         } else {
             String errorMsg = result != null ? result.getFailureReason() + " " + result.getWarning()
                     : outcome instanceof JobOutcome.Failed<PlateSolveResult> failed ? failed.reason() : "Internal Error";

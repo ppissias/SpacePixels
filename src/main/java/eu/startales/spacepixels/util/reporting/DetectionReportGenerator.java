@@ -20,7 +20,7 @@ import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ReportInclusion;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.DetectionPipelineSupport;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
 import io.github.ppissias.jtransient.core.SlowMoverAnalysis;
@@ -997,7 +997,7 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
         int movingTargetCount = movingTargets.size();
         int confirmedLinkedTrackCount = movingTargetCount + streakTrackCount;
         boolean insufficientFramesAfterQuality = pipelineTelemetry != null
-                && pipelineTelemetry.totalFramesKept < ImageProcessing.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS;
+                && pipelineTelemetry.totalFramesKept < DetectionPipelineSupport.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS;
         int returnedTrackCount = pipelineTelemetry != null
                 ? pipelineTelemetry.totalTracksFound
                 : singleStreakCount + confirmedLinkedTrackCount;

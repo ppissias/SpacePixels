@@ -166,8 +166,8 @@ public class IterativeDetectionRunTest {
         for (int passIndex = 0; passIndex < passes.size(); passIndex++) {
             JsonObject pass = passes.get(passIndex).getAsJsonObject();
             List<FitsFileInformation> subset = new ArrayList<>();
-            try (ImageProcessing processing = ImageProcessing.openProcessor(source)) {
-                FitsFileInformation[] all = processing.readFiles();
+            try (FitsImportService importer = new FitsImportService(source, null)) {
+                FitsFileInformation[] all = importer.readFiles();
                 for (var frame : inputs(index, pass)) {
                     String filename = frame.getAsJsonObject().get("filename").getAsString();
                     subset.add(Arrays.stream(all).filter(file -> file.getFileName().equals(filename)).findFirst().orElseThrow());
@@ -259,7 +259,7 @@ public class IterativeDetectionRunTest {
         for (int frameIndex = 0; frameIndex < frames.length; frameIndex++) {
             nom.tam.fits.Fits converted;
             try (nom.tam.fits.Fits original = new nom.tam.fits.Fits(frames[frameIndex])) {
-                var image = ImageProcessing.getImageHDU(original);
+                var image = FitsImages.getImageHDU(original);
                 short[][] pixels = (short[][]) image.getKernel();
                 if (frameIndex == 4) for (short[] row : pixels) Arrays.fill(row, (short) 640);
                 int center = 15 + frameIndex * 6;

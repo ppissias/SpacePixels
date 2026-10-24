@@ -115,7 +115,7 @@ public final class StandardDetectionPipelineService {
 
             File currentFile = new File(cachedFileInfo[i].getFilePath());
             try (Fits fitsFile = new Fits(currentFile)) {
-                BasicHDU<?> hdu = ImageProcessing.getImageHDU(fitsFile);
+                BasicHDU<?> hdu = FitsImages.getImageHDU(fitsFile);
                 Object kernel = hdu.getKernel();
 
                 if (!(kernel instanceof short[][])) {
@@ -188,7 +188,7 @@ public final class StandardDetectionPipelineService {
         }
 
         File exportDir = outputDirectory == null
-                ? ImageProcessing.createDetectionsDirectory(new File(filesInformation[0].getFilePath())) : outputDirectory;
+                ? OutputFolders.createDetectionsDirectory(new File(filesInformation[0].getFilePath())) : outputDirectory;
         java.nio.file.Files.createDirectories(exportDir.toPath());
         try {
             DetectionReportGenerator.exportTrackVisualizations(

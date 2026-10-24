@@ -15,7 +15,7 @@ import eu.startales.spacepixels.util.DebugOutput;
 
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsImages;
 import eu.startales.spacepixels.session.ProcessingSession;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.DataArea;
@@ -187,7 +187,7 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
         DetectionConfig settings = config;
         short[][] data;
         try (Fits fits = new Fits(new File(info.getFilePath()))) {
-            Object kernel = ImageProcessing.getImageHDU(fits).getKernel();
+            Object kernel = FitsImages.getImageHDU(fits).getKernel();
             if (!(kernel instanceof short[][])) {
                 return Result.problem("The detection needs 16-bit monochrome frames. Convert 32-bit, compressed or XISF "
                         + "frames when you import them, and colour frames with Convert to Mono.");

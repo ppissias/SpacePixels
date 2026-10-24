@@ -31,12 +31,8 @@ public class ImportJobTest {
         JobOutcome<FitsImportTask.Result> outcome = outcomeOf(new FitsImportTask(sequence.toFile()));
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Completed<?>);
         FitsImportTask.Result session = ((JobOutcome.Completed<FitsImportTask.Result>) outcome).result();
-        try {
-            assertNotNull(session.processing());
-            assertEquals(FRAME_COUNT, session.files().length);
-        } finally {
-            session.processing().close();
-        }
+        assertEquals(FRAME_COUNT, session.files().length);
+        assertNotNull(session.metadata());
     }
 
     @Test

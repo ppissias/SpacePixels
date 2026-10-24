@@ -6,11 +6,15 @@ import nom.tam.fits.FitsException;
 import nom.tam.image.compression.hdu.CompressedImageHDU;
 import java.io.IOException;
 
-/** HDU discovery shared by import, conversion and compatibility entry points. */
-final class FitsImages {
+/** HDU discovery shared by import, conversion, rendering, plate solving and the tools. */
+public final class FitsImages {
     private FitsImages() {}
 
-    static BasicHDU<?> getImageHDU(Fits fits) throws FitsException, IOException {
+    /**
+     * Finds the image HDU of a FITS file: the first compressed (.fz) image HDU, decompressed, or the first HDU with
+     * at least two non-empty axes, so an empty primary HDU is skipped. Without either, the first HDU is returned.
+     */
+    public static BasicHDU<?> getImageHDU(Fits fits) throws FitsException, IOException {
         BasicHDU<?> hdu;
         BasicHDU<?> fallback = null;
 

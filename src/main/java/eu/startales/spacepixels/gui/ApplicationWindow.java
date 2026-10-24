@@ -24,7 +24,7 @@ import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.tasks.FitsImportTask;
 import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.PlateSolveService;
 import eu.startales.spacepixels.util.reporting.ReportLookupProxyServer;
 
 import javax.swing.*;
@@ -310,7 +310,7 @@ public class ApplicationWindow {
     public void importFolder(File folder) {
         if (folder != null && folder.isDirectory()) {
             JobCoordinator.Admission admission = jobCoordinator.start(JobKind.IMPORT, sessions.current(),
-                    new FitsImportTask(folder, applicationSettings, storage, new GuiFitsImportInteraction()),
+                    new FitsImportTask(folder, storage, new GuiFitsImportInteraction()),
                     (handle, outcome) -> importFinished(handle.session(), outcome));
             if (!admission.admitted()) {
                 mainApplicationPanel.showStatus(admission.refusal());
@@ -332,7 +332,8 @@ public class ApplicationWindow {
     /** The end of an import: installs the imported session, or says why there is none. */
     private void importFinished(ProcessingSession expectedSession, JobOutcome<FitsImportTask.Result> outcome) {
         if (outcome instanceof JobOutcome.Completed<FitsImportTask.Result> completed) {
-            ProcessingSession imported = new ProcessingSession(completed.result().processing(),
+            // The session's solver reads the window's settings, so Astrometry Config edits reach the next solve.
+            ProcessingSession imported = new ProcessingSession(new PlateSolveService(applicationSettings.getConfig()),
                     completed.result().files(), completed.result().lastReport(), completed.result().metadata(),
                     storage, EventQueue::invokeLater);
             if (sessions.replace(expectedSession, imported)) {
@@ -444,11 +445,6 @@ public class ApplicationWindow {
 
     public <R> JobCoordinator.OutcomeHandler<R> forCurrentSession(JobCoordinator.OutcomeHandler<R> handler) {
         return (handle, outcome) -> sessions.applyIfCurrent(handle.session(), () -> handler.handle(handle, outcome));
-    }
-
-    public ImageProcessing getImageProcessing() {
-        ProcessingSession session = sessions.current();
-        return session == null ? null : session.getProcessing();
     }
 
     public FitsFileInformation getSelectedFile() {

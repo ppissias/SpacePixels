@@ -5,7 +5,8 @@ import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsBatchService;
+import eu.startales.spacepixels.util.FitsVisualizationRenderer;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import org.junit.Rule;
 import org.junit.Test;
@@ -31,25 +32,23 @@ public class BatchJobsTest {
     @Test
     public void convertToMonoReturnsTheFolderOfTheMonoFrames() throws Exception {
         Path sequence = SyntheticDatasetFactory.createColor16FitsSequence(folder.getRoot().toPath(), "color16", FRAME_COUNT);
-        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            JobOutcome<File> outcome = outcomeOf(new BatchConvertMonoTask(processing, false, 1, 1, StretchAlgorithm.values()[0]));
-            File mono = ((JobOutcome.Completed<File>) outcome).result();
-            assertNotNull(mono);
-            assertEquals(FRAME_COUNT, mono.listFiles().length);
-        }
+        FitsBatchService batch = new FitsBatchService(sequence.toFile(), new FitsVisualizationRenderer());
+        JobOutcome<File> outcome = outcomeOf(new BatchConvertMonoTask(batch, false, 1, 1, StretchAlgorithm.values()[0]));
+        File mono = ((JobOutcome.Completed<File>) outcome).result();
+        assertNotNull(mono);
+        assertEquals(FRAME_COUNT, mono.listFiles().length);
     }
 
     @Test
     public void batchStretchWritesAStretchedCopyOfEveryFrame() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", FRAME_COUNT);
-        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            JobOutcome<Void> outcome = outcomeOf(new BatchStretchTask(processing, 1, 1, StretchAlgorithm.values()[0]));
-            assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Completed<Void>);
-            File[] stretched = sequence.toFile().listFiles(file -> file.isDirectory() && file.getName().contains("stretched"));
-            assertNotNull(stretched);
-            assertEquals(1, stretched.length);
-            assertEquals(FRAME_COUNT, stretched[0].listFiles().length);
-        }
+        FitsBatchService batch = new FitsBatchService(sequence.toFile(), new FitsVisualizationRenderer());
+        JobOutcome<Void> outcome = outcomeOf(new BatchStretchTask(batch, 1, 1, StretchAlgorithm.values()[0]));
+        assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Completed<Void>);
+        File[] stretched = sequence.toFile().listFiles(file -> file.isDirectory() && file.getName().contains("stretched"));
+        assertNotNull(stretched);
+        assertEquals(1, stretched.length);
+        assertEquals(FRAME_COUNT, stretched[0].listFiles().length);
     }
 
     /** Runs the job under a coordinator that works on the calling thread, and returns its one outcome. */

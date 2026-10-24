@@ -27,6 +27,7 @@ import eu.startales.spacepixels.util.StandardDetectionPipelineService;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 
 import java.io.File;
+import java.util.Objects;
 
 /**
  * Runs the detection on the whole session and writes the report; the result is the report file. The run's overlays
@@ -63,7 +64,7 @@ public class DetectionTask implements Job<File> {
         this.files = files == null ? null : files.clone();
         this.config = DetectionConfigRules.snapshot(config,
                 DetectionConfigRules.Operation.CONFIGURATION);
-        this.options = java.util.Objects.requireNonNull(options);
+        this.options = Objects.requireNonNull(options);
         this.sky = sky;
         this.safetyPrompt = safetyPrompt;
     }
@@ -92,7 +93,7 @@ public class DetectionTask implements Job<File> {
     }
 
     private JobOutcome<File> runCancellable(JobContext context) throws Exception {
-        File exportDir = new StandardDetectionPipelineService().run(config, java.util.Objects.requireNonNull(files, "frames"), safetyPrompt,
+        File exportDir = new StandardDetectionPipelineService().run(config, Objects.requireNonNull(files, "frames"), safetyPrompt,
                 context::progress, null, options, sky, overlays -> detected = overlays).report();
         if (exportDir == null) {
             return JobOutcome.declined("Report generation aborted by user due to high track count. Try raising your thresholds.");

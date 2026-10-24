@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.session;
 
-import eu.startales.spacepixels.config.ApplicationSettings;
+import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobHandle;
 import eu.startales.spacepixels.jobs.JobOutcome;
@@ -8,8 +8,9 @@ import eu.startales.spacepixels.tasks.FitsImportTask;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.AutoTuneSessionStore;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsImportService;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
+import eu.startales.spacepixels.util.PlateSolveService;
 import eu.startales.spacepixels.util.SkySnapshot;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import org.junit.Rule;
@@ -49,8 +50,7 @@ public class ApplicationStorageSessionTest {
         ExecutorService importer = Executors.newSingleThreadExecutor();
         Future<JobOutcome<FitsImportTask.Result>> imported = null;
         try {
-            imported = importer.submit(() -> new FitsImportTask(input,
-                    ApplicationSettings.load(new File(folder.getRoot(), "preferences.json")), storage).run(context()));
+            imported = importer.submit(() -> new FitsImportTask(input, storage).run(context()));
             assertTrue(entered.await(5, TimeUnit.SECONDS));
             assertFalse(imported.isDone());
             exerciseEdt();
@@ -58,7 +58,7 @@ public class ApplicationStorageSessionTest {
             var outcome = imported.get(5, TimeUnit.SECONDS);
             assertTrue(outcome instanceof JobOutcome.Completed<?>);
             var result = ((JobOutcome.Completed<FitsImportTask.Result>) outcome).result();
-            try (var session = new ProcessingSession(result.processing(), result.files(), result.lastReport(),
+            try (var session = new ProcessingSession(new PlateSolveService(new AppConfig()), result.files(), result.lastReport(),
                     result.metadata(), storage, EventQueue::invokeLater)) {
                 assertSame(catalogue, session.getSkyCatalogue().get());
                 assertSame(metadata, session.getMetadata());
@@ -290,9 +290,11 @@ public class ApplicationStorageSessionTest {
     /** Opens small scratch frames without reading user-home preferences or queuing an import. */
     private ProcessingSession session(ApplicationStorage storage, Executor ui) throws Exception {
         File directory = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "metadata-owner", 3).toFile();
-        ImageProcessing processing = ImageProcessing.openProcessor(directory,
-                ApplicationSettings.load(new File(folder.getRoot(), "preferences.json")));
-        return new ProcessingSession(processing, processing.readFiles(), null,
+        FitsFileInformation[] files;
+        try (FitsImportService importer = new FitsImportService(directory, null)) {
+            files = importer.readFiles();
+        }
+        return new ProcessingSession(new PlateSolveService(new AppConfig()), files, null,
                 SessionMetadata.empty(), storage, ui);
     }
 

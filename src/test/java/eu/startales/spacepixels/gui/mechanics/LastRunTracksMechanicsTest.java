@@ -33,6 +33,7 @@ import java.io.File;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.*;
 
@@ -60,8 +61,7 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
         focus(image);
         robot().pressAndReleaseKeys(KeyEvent.VK_T);
         waitFor("T shows the tracks", () -> previewTracks.target().isSelected());
-        String previewDescription = GuiActionRunner.execute(() -> image.getAccessibleContext().getAccessibleDescription());
-        assertTrue(previewDescription, previewDescription.contains("Tracks on."));
+        waitForDescription(image, "Tracks on.", "Preview Frame describes its tracks");
         robot().pressAndReleaseKeys(KeyEvent.VK_ESCAPE);
         waitFor("Escape on the image closes Preview Frame", () -> !preview.target().isShowing());
 
@@ -72,8 +72,7 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
         assertTrue("The last run's tracks are offered here too", inspectionTracks.target().isEnabled());
         inspectionTracks.check();
         JComponent inspected = image(inspection, "Manual Transient Inspection image");
-        String inspectionDescription = GuiActionRunner.execute(() -> inspected.getAccessibleContext().getAccessibleDescription());
-        assertTrue(inspectionDescription, inspectionDescription.contains("Tracks on."));
+        waitForDescription(inspected, "Tracks on.", "Manual Transient Inspection describes its tracks");
         focus(inspected);
         robot().pressAndReleaseKeys(KeyEvent.VK_ESCAPE);
         waitFor("Escape on the image closes the inspection", () -> !inspection.target().isShowing());
@@ -121,6 +120,22 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
                 new DetectionOverlays(late, null)));
         assertNull("the closed session takes nothing", first.getTrackOverlay());
         assertNull("the new session keeps its own (none)", second.getTrackOverlay());
+    }
+
+    /**
+     * Waits until the frame view's accessible description contains {@code text}; the view describes its tracks only
+     * once its frame is prepared. On failure the message gives the last description seen.
+     */
+    private void waitForDescription(JComponent view, String text, String what) {
+        AtomicReference<String> seen = new AtomicReference<>();
+        try {
+            waitFor(what, () -> {
+                seen.set(GuiActionRunner.execute(() -> view.getAccessibleContext().getAccessibleDescription()));
+                return seen.get() != null && seen.get().contains(text);
+            });
+        } catch (AssertionError failure) {
+            throw new AssertionError(what + "; last description: " + seen.get(), failure);
+        }
     }
 
     /** The showing dialog with this title, or null. */

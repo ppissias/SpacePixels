@@ -15,6 +15,7 @@ import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 
 import java.util.List;
+import java.util.Objects;
 
 /** Runs the engine on all frames of the session, for the inspection window that the window opens with the result. */
 public class ManualTransientInspectionTask implements Job<ManualTransientInspectionTask.Result> {
@@ -46,7 +47,7 @@ public class ManualTransientInspectionTask implements Job<ManualTransientInspect
     private JobOutcome<Result> runCancellable(JobContext context) throws Exception {
         JTransientEngine engine = new JTransientEngine();
         try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
-            FitsFileInformation[] filesInfo = java.util.Objects.requireNonNull(files, "frames");
+            FitsFileInformation[] filesInfo = Objects.requireNonNull(files, "frames");
             List<ImageFrame> framesForLibrary = SessionFrameLoader.loadAll(filesInfo, context::progress, 20);
 
             TransientEngineProgressListener progressListener =

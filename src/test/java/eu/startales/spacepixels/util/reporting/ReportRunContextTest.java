@@ -1,11 +1,10 @@
 package eu.startales.spacepixels.util.reporting;
 
 import eu.startales.spacepixels.config.AppConfig;
-import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsImportService;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.SkySnapshot;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
@@ -26,8 +25,8 @@ public class ReportRunContextTest {
     @Test public void resolvedContextKeepsMetadataCatalogueAndCorrectionUntilTheRunEnds() throws Exception {
         File directory = SyntheticDatasetFactory.createSolvedMono16FitsSequence(folder.getRoot().toPath(), "frames", 5).toFile();
         FitsFileInformation[] files;
-        try (ImageProcessing processor = ImageProcessing.openProcessor(directory, ApplicationSettings.inMemory(new AppConfig()))) {
-            files = processor.readFiles();
+        try (FitsImportService importer = new FitsImportService(directory, null)) {
+            files = importer.readFiles();
         }
         for (FitsFileInformation file : files) {
             for (String key : new String[]{"SITELAT", "SITELONG", "SITELON", "OBSGEO-B", "OBSGEO-L", "LAT-OBS", "LONG-OBS", "LON-OBS"}) {
@@ -124,8 +123,8 @@ public class ReportRunContextTest {
     }
 
     private static FitsFileInformation[] solvedFiles(File directory) throws Exception {
-        try (ImageProcessing processor = ImageProcessing.openProcessor(directory, ApplicationSettings.inMemory(new AppConfig()))) {
-            return processor.readFiles();
+        try (FitsImportService importer = new FitsImportService(directory, null)) {
+            return importer.readFiles();
         }
     }
 

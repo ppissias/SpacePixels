@@ -13,7 +13,7 @@ package eu.startales.spacepixels.tasks;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.PlateSolveService;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 
 import java.util.Map;
@@ -24,12 +24,13 @@ import java.util.Map;
  * complete, so a failure leaves it unchanged.
  */
 public class WriteWcsTask implements Job<Map<String, String>> {
-    private final ImageProcessing preProcessing;
+    private final PlateSolveService solver;
     private final String filePath;
     private final PlateSolveResult result;
 
-    public WriteWcsTask(ImageProcessing preProcessing, String filePath, PlateSolveResult result) {
-        this.preProcessing = preProcessing;
+    /** Writes with the session's solver, captured when the job is created; null fails when it runs. */
+    public WriteWcsTask(PlateSolveService solver, String filePath, PlateSolveResult result) {
+        this.solver = solver;
         this.filePath = filePath;
         this.result = result;
     }
@@ -37,9 +38,9 @@ public class WriteWcsTask implements Job<Map<String, String>> {
     @Override
     public JobOutcome<Map<String, String>> run(JobContext context) throws Exception {
         try {
-            return JobOutcome.completed(preProcessing.updateFitsHeaderWithWCS(filePath, result.getSolveInformation()));
+            return JobOutcome.completed(solver.updateFitsHeaderWithWCS(filePath, result.getSolveInformation()));
         } finally {
-            preProcessing.cleanupSolveArtifacts(filePath, result);
+            solver.cleanupSolveArtifacts(filePath, result);
         }
     }
 }

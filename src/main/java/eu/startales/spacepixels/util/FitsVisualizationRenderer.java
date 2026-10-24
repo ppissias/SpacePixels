@@ -16,13 +16,15 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 
 /**
- * Renders previews and applies stretch algorithms to FITS image kernels.
+ * Renders previews and applies stretch algorithms to FITS image kernels. It keeps no state, so one instance can serve
+ * several threads.
  */
-final class FitsVisualizationRenderer {
+public final class FitsVisualizationRenderer {
 
+    /** Stretches the image data of an opened FITS file in place, as Batch Stretch does. */
     public void stretchFitsImage(Fits fitsImage, int stretchFactor, int iterations, StretchAlgorithm algo)
             throws FitsException, IOException {
-        BasicHDU<?> hdu = ImageProcessing.getImageHDU(fitsImage);
+        BasicHDU<?> hdu = FitsImages.getImageHDU(fitsImage);
         Object kernelData = hdu.getKernel();
 
         if (kernelData instanceof short[][]) {
@@ -80,6 +82,7 @@ final class FitsVisualizationRenderer {
         }
     }
 
+    /** A quick-look picture of raw FITS kernel data, at most 350 by 350 pixels, without a stretch. */
     public BufferedImage getImagePreview(Object kernelData) throws FitsException {
         BufferedImage ret = new BufferedImage(350, 350, BufferedImage.TYPE_INT_ARGB);
 
@@ -144,6 +147,7 @@ final class FitsVisualizationRenderer {
         return ret;
     }
 
+    /** A 350 by 350 stretched picture of FITS kernel data. */
     public BufferedImage getStretchedImagePreview(
             Object kernelData,
             int stretchFactor,
@@ -152,6 +156,7 @@ final class FitsVisualizationRenderer {
         return getStretchedImage(kernelData, 350, 350, stretchFactor, iterations, algo);
     }
 
+    /** A stretched picture of FITS kernel data at the requested size. */
     public BufferedImage getStretchedImageFullSize(
             Object kernelData,
             int width,

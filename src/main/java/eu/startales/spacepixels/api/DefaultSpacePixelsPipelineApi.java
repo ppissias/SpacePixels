@@ -7,14 +7,13 @@
  */
 package eu.startales.spacepixels.api;
 
-import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.util.AutoTunerRunner;
 import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.util.DetectionInputPreparation;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsImportService;
 import eu.startales.spacepixels.util.PipelineExecutionData;
 import eu.startales.spacepixels.util.StandardDetectionPipelineService;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -43,7 +42,6 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
     @Override
     public SpacePixelsPipelineResult run(SpacePixelsPipelineRequest request) throws SpacePixelsPipelineException {
         Objects.requireNonNull(request, "request");
-        ImageProcessing imageProcessing = null;
         try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
             DetectionConfig baseConfig = request.getDetectionConfig();
             if (baseConfig == null) {
@@ -59,9 +57,10 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
                     (percentage, message) -> emitScaledProgress(progressListener, 0, 15, percentage, message));
 
             emitProgress(progressListener, 15, "Validating FITS metadata for pipeline execution...");
-            imageProcessing = ImageProcessing.openProcessor(preparedDirectory.getPreparedInputDirectory(),
-                    ApplicationSettings.inMemory(runOptions.applicationConfig()));
-            FitsFileInformation[] filesInfo = imageProcessing.readFiles();
+            FitsFileInformation[] filesInfo;
+            try (FitsImportService importer = new FitsImportService(preparedDirectory.getPreparedInputDirectory(), null)) {
+                filesInfo = importer.readFiles();
+            }
 
             AutoTunerResult autoTuneResult = null;
             int pipelineStartPercent = 15;
@@ -120,10 +119,6 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
             throw e;
         } catch (Exception e) {
             throw new SpacePixelsPipelineException("SpacePixels pipeline execution failed: " + e.getMessage(), e);
-        } finally {
-            if (imageProcessing != null) {
-                imageProcessing.close();
-            }
         }
     }
 

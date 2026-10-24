@@ -225,7 +225,7 @@ final class FitsPixelConverter {
                 progress.accept((int) Math.round(100.0 * i / files.length));
             }
             try (Fits fits = new Fits(files[i])) {
-                BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
+                BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
                 if (hdu == null || !canHoldNegativeValues(hdu.getHeader())) {
                     continue;
                 }

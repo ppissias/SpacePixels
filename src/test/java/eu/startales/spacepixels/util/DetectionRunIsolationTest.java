@@ -5,7 +5,6 @@ import eu.startales.spacepixels.api.DefaultSpacePixelsPipelineApi;
 import eu.startales.spacepixels.api.SpacePixelsPipelineRequest;
 import eu.startales.spacepixels.api.SpacePixelsPipelineResult;
 import eu.startales.spacepixels.config.AppConfig;
-import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
@@ -95,11 +94,11 @@ public class DetectionRunIsolationTest {
         var config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
         double admittedSigma = config.detectionSigmaMultiplier;
         var options = DetectionRunOptions.defaults().withAutoTuneMaxCandidateFrames(19);
-        try (ImageProcessing processor = ImageProcessing.openProcessor(directory, ApplicationSettings.inMemory(application))) {
+        try (FitsImportService importer = new FitsImportService(directory, null)) {
             var detection = new StandardDetectionPipelineService();
-            var execution = detection.runDetectionPipeline(config, processor.readFiles(), (percent, message) -> {
+            var execution = detection.runDetectionPipeline(config, importer.readFiles(), (percent, message) -> {
                 config.detectionSigmaMultiplier = 20;
-                processor.getAppConfig().siteLat = "-24";
+                application.siteLat = "-24";
             }, options, null);
             assertEquals(admittedSigma, execution.getEffectiveConfig().detectionSigmaMultiplier, 0);
             assertSame(options, execution.getReportContext().options());

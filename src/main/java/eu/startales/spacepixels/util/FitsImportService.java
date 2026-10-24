@@ -9,8 +9,11 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.logging.Logger;
 
-/** Interactive and strict headless metadata loading; decisions are supplied separately from file operations. */
-final class FitsImportService implements AutoCloseable {
+/**
+ * Interactive and strict headless metadata loading; decisions are supplied separately from file operations. The
+ * caller owns it for one import attempt and closes it to stop its metadata-reading workers.
+ */
+public final class FitsImportService implements AutoCloseable {
     private static final Logger LOGGER = Logger.getLogger(FitsImportService.class.getName());
     private static final DateTimeFormatter TRACE_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS 'UTC'").withZone(ZoneOffset.UTC);
@@ -19,6 +22,14 @@ final class FitsImportService implements AutoCloseable {
     private final FitsImportInteraction interaction;
     private final ExecutorService executor = Executors.newFixedThreadPool(
             Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors())));
+
+    /**
+     * Reads {@code directory}. With {@code interaction} it may offer conversions and redirect the import
+     * ({@link RedirectImportException}); null rejects input that is not detection-ready, without dialogs or copies.
+     */
+    public FitsImportService(File directory, FitsImportInteraction interaction) {
+        this(directory, new FitsBatchService(directory, new FitsVisualizationRenderer()), interaction);
+    }
 
     /** Owns metadata-reading workers; returned frame arrays belong to the caller and are never retained here. */
     FitsImportService(File directory, FitsBatchService batch, FitsImportInteraction interaction) {
@@ -202,7 +213,15 @@ final class FitsImportService implements AutoCloseable {
                         + "too low. With the sky at zero, detection can fail.");
     }
 
-    static File offerToImportLargestExposureGroup(MixedExposureException mixed, FitsImportInteraction interaction) throws IOException {
+    /**
+     * Offers to copy the largest exposure group into a subfolder and returns it, or null when declined or when there
+     * is no interaction to ask.
+     */
+    public static File offerToImportLargestExposureGroup(MixedExposureException mixed, FitsImportInteraction interaction)
+            throws IOException {
+        if (interaction == null) {
+            return null;
+        }
         ExposureGroup largest = mixed.getLargestGroup();
         String[] options = {"Import the " + largest.describe(), "Cancel"};
         int choice = interaction.choose(mixedExposureQuestion(mixed), "Different Exposure Times", options);

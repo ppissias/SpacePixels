@@ -12,6 +12,7 @@ package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.tasks.GeneratePreviewsTask;
 import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.FitsVisualizationRenderer;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 
 import javax.swing.*;
@@ -55,6 +56,8 @@ public class StretchPanel extends JPanel {
 
     private final Timer previewDebounceTimer;
     private final StretchPreviewRenderer renderer = new StretchPreviewRenderer(StretchPanel::render, this::showPreviews);
+    /** Draws the preview pictures; it keeps no state, so one serves every request. */
+    private final FitsVisualizationRenderer previewPictures = new FitsVisualizationRenderer();
     /** True from a change of frame or stretch until its previews are shown; the frame label then says "rendering…". */
     private boolean rendering;
     private final Preferences preferences = preferences();
@@ -360,19 +363,19 @@ public class StretchPanel extends JPanel {
 
     private void executePreviewTask() {
         FitsFileInformation selected = mainAppWindow.getMainApplicationPanel().getSelectedFileInformation();
-        if (selected == null || mainAppWindow.getImageProcessing() == null) {
+        if (selected == null || mainAppWindow.getSession() == null) {
             clearPreviews("Import frames and select one to preview it");
             return;
         }
         originalView.setPlaceholder("Rendering…");
         stretchedView.setPlaceholder("Rendering…");
-        renderer.request(new StretchPreviewRenderer.Request(mainAppWindow.getImageProcessing(), selected.getFilePath(),
+        renderer.request(new StretchPreviewRenderer.Request(previewPictures, selected.getFilePath(),
                 getStretchAlgorithm(), stretchSlider.getValue(), stretchIterationsSlider.getValue(), isDisplayStretchEnabled()));
     }
 
     /** Renders both previews and their histograms, on the renderer's worker thread. */
     private static StretchPreviewRenderer.Previews render(StretchPreviewRenderer.Request request) throws Exception {
-        BufferedImage[] images = new GeneratePreviewsTask(request.session, request.filePath, request.strength,
+        BufferedImage[] images = new GeneratePreviewsTask(request.renderer, request.filePath, request.strength,
                 request.iterations, request.algorithm, request.stretchEnabled).call();
         return new StretchPreviewRenderer.Previews(request, images[0], images[1],
                 HistogramView.luminanceHistogram(images[0]), HistogramView.luminanceHistogram(images[1]));

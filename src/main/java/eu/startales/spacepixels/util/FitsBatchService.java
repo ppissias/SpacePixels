@@ -7,17 +7,25 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.logging.Logger;
 
-/** FITS derivative operations; no window, dialogs, preferences or session cache. */
-final class FitsBatchService {
+/**
+ * FITS derivative operations on one folder of frames; no window, dialogs, preferences or session cache. A desktop
+ * session owns the one for its folder.
+ */
+public final class FitsBatchService {
     private static final Logger LOGGER = Logger.getLogger(FitsBatchService.class.getName());
     private final File directory;
     private final FitsVisualizationRenderer renderer;
 
-    FitsBatchService(File directory, FitsVisualizationRenderer renderer) {
+    /** Works on the frames in {@code directory}, stretching with {@code renderer}. */
+    public FitsBatchService(File directory, FitsVisualizationRenderer renderer) {
         this.directory = directory;
         this.renderer = renderer;
     }
 
+    /**
+     * Converts all color images in the folder to monochrome and returns the generated mono directory, so the window
+     * can offer to import it. With {@code stretch}, stretched mono derivatives are written beside the mono copies.
+     */
     public File batchConvertToMono(boolean stretch, int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
         File[] fitsFileInformation = FitsFiles.list(directory);
         File generatedMonoDirectory = null;
@@ -61,6 +69,7 @@ final class FitsBatchService {
         return generatedMonoDirectory;
     }
 
+    /** Writes stretched copies of all images in the folder, color or mono. */
     public void batchStretch(int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
         File[] fitsFileInformation = FitsFiles.list(directory);
 
@@ -227,7 +236,8 @@ final class FitsBatchService {
         }
     }
 
-    public void stretchFITSImage(Fits fitsImage, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException, IOException {
+    /** Stretches one opened image in place with this service's renderer. */
+    void stretchFITSImage(Fits fitsImage, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException, IOException {
         renderer.stretchFitsImage(fitsImage, stretchFactor, iterations, algo);
     }
 

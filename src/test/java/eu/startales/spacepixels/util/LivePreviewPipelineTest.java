@@ -58,8 +58,8 @@ public class LivePreviewPipelineTest {
         config.starCountSigmaDeviation = 1.5;
         AppConfig app = new AppConfig();
         FitsFileInformation[] files;
-        try (ImageProcessing processing = ImageProcessing.openProcessor(source)) {
-            files = processing.readFiles();
+        try (FitsImportService importer = new FitsImportService(source, null)) {
+            files = importer.readFiles();
         }
 
         File plain = folder.newFolder("without");

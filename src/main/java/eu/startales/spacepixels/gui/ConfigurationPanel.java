@@ -362,7 +362,7 @@ public class ConfigurationPanel extends JPanel {
     private String headerNote(String[] keys, String fieldText) {
         String[] header = headerValue(keys);
         if (header == null) {
-            if (mainAppWindow.getImageProcessing() == null) {
+            if (mainAppWindow.getSession() == null) {
                 return " ";
             }
             return fieldText.isEmpty() ? "Not set, and no site in the FITS headers." : "✓ Used for this session (no site in the FITS headers).";

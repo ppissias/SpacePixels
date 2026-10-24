@@ -5,8 +5,8 @@ import io.github.ppissias.jtransient.model.Pixel;
 import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
+import eu.startales.spacepixels.util.DetectionPipelineSupport;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import io.github.ppissias.jtransient.telemetry.TrackerTelemetry;
@@ -283,7 +283,7 @@ final class PipelineDiagnosticsSectionWriter {
         if (summary.insufficientFramesAfterQuality) {
             report.println("<div class='panel'>");
             report.println("<h2>Too Few Frames After Quality Control</h2>");
-            report.println("<p>Only <strong>" + pipelineTelemetry.totalFramesKept + "</strong> frames remained after quality control. SpacePixels needs at least <strong>" + ImageProcessing.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS + "</strong> usable frames before multi-frame tracking and maximum-stack candidate review are meaningful, so those sections were skipped for this run.</p>");
+            report.println("<p>Only <strong>" + pipelineTelemetry.totalFramesKept + "</strong> frames remained after quality control. SpacePixels needs at least <strong>" + DetectionPipelineSupport.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS + "</strong> usable frames before multi-frame tracking and maximum-stack candidate review are meaningful, so those sections were skipped for this run.</p>");
             report.println("<div class='astro-note'>The quality-control tables under Diagnostics show which frames were rejected and why.</div>");
             report.println("</div>");
         }

@@ -35,13 +35,29 @@ public class SessionMechanicsTest extends MechanicsTestCase {
         GuiActionRunner.execute(() -> application().getTabbedPane().setSelectedComponent(application().getMainApplicationPanel()));
         importFreshSession();
         ProcessingSession first = GuiActionRunner.execute(() -> application().getSession());
-        assertSame(settings.getConfig(), first.getProcessing().getAppConfig());
-        assertEquals("37.9838", first.getProcessing().getAppConfig().siteLat);
+        assertEquals("the import did not reload the settings", "37.9838", settings.getConfig().siteLat);
         importFreshSession();
         ProcessingSession second = GuiActionRunner.execute(() -> application().getSession());
         assertNotSame(first, second);
         assertTrue(first.isClosed());
-        assertEquals("37.9838", second.getProcessing().getAppConfig().siteLat);
+        assertEquals("37.9838", settings.getConfig().siteLat);
+        // The session's solver reads the window's live settings: an unsaved key is the one a refused login names.
+        java.io.IOException refused = new java.io.IOException("bad apikey");
+        assertTrue(second.getPlateSolveService().astrometryNetFailure(refused).contains("anonymous login"));
+        boolean usedOwnKey = GuiActionRunner.execute(() -> settings.getConfig().astrometryNetUseOwnKey);
+        String ownKey = GuiActionRunner.execute(() -> settings.getConfig().astrometryNetApiKey);
+        GuiActionRunner.execute(() -> {
+            settings.getConfig().astrometryNetUseOwnKey = true;
+            settings.getConfig().astrometryNetApiKey = "unsaved-test-key";
+        });
+        try {
+            assertTrue(second.getPlateSolveService().astrometryNetFailure(refused).contains("rejected the API key"));
+        } finally {
+            GuiActionRunner.execute(() -> {
+                settings.getConfig().astrometryNetUseOwnKey = usedOwnKey;
+                settings.getConfig().astrometryNetApiKey = ownKey;
+            });
+        }
         assertFalse(new java.io.File(System.getProperty("user.home"), "spacepixels_app.json").exists());
         GuiActionRunner.execute(() -> application().getTabbedPane().setSelectedComponent(application().getConfigurationApplicationPanel()));
         window().label(VisibleText.labelContaining("Unsaved")).requireVisible();

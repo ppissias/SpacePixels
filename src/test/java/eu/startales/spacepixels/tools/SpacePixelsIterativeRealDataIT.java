@@ -4,7 +4,7 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.util.DetectionInputPreparation;
 import eu.startales.spacepixels.config.AppConfig;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsImportService;
 import eu.startales.spacepixels.util.IterativeDetectionPipelineService;
 import eu.startales.spacepixels.util.IterativeDetectionPlan;
 import eu.startales.spacepixels.util.IterativeDetectionRequest;
@@ -62,8 +62,10 @@ public class SpacePixelsIterativeRealDataIT {
                     null);
             assertTrue(preparedDirectory.getPreparedInputDirectory().isDirectory());
 
-            ImageProcessing imageProcessing = ImageProcessing.openProcessor(preparedDirectory.getPreparedInputDirectory());
-            int frameCount = imageProcessing.readFiles().length;
+            int frameCount;
+            try (FitsImportService importer = new FitsImportService(preparedDirectory.getPreparedInputDirectory(), null)) {
+                frameCount = importer.readFiles().length;
+            }
             assertTrue(frameCount >= 5);
             int maxFrames = resolveConfiguredMaxFrames();
             int effectiveMaxFrames = resolveEffectiveMaxFrames(maxFrames, frameCount);

@@ -10,8 +10,6 @@
 
 package eu.startales.spacepixels.tasks;
 
-import eu.startales.spacepixels.config.ApplicationSettings;
-
 import eu.startales.spacepixels.session.SessionMetadata;
 import eu.startales.spacepixels.session.SessionMetadataStore;
 import eu.startales.spacepixels.session.ApplicationStorage;
@@ -20,7 +18,7 @@ import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.FitsImportInteraction;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsImportService;
 import eu.startales.spacepixels.util.MixedExposureException;
 import eu.startales.spacepixels.util.RedirectImportException;
 import eu.startales.spacepixels.util.SessionReports;
@@ -31,53 +29,44 @@ import java.util.logging.Logger;
 
 /**
  * Imports a folder of aligned frames. A conversion that writes a new folder, or the choice of one exposure time,
- * continues the import with that folder. The result is the new session processor, which the window then owns, and
- * its frames; the import is declined when no frames were loaded, for example because a conversion was declined.
+ * continues the import with that folder. The result is the frames, the newest report beside them and the saved session
+ * data that match them; the window builds the session from it. Each attempt closes its metadata readers before it
+ * returns or redirects, so a result holds no resources. The import is declined when no frames were loaded, for example
+ * because a conversion was declined.
  */
 public class FitsImportTask implements Job<FitsImportTask.Result> {
 
-    /** The imported session: its processor, its frames, and the newest report beside them (or null). */
-    public record Result(ImageProcessing processing, FitsFileInformation[] files, File lastReport, SessionMetadata metadata) {
-        public Result(ImageProcessing processing, FitsFileInformation[] files, File lastReport) {
-            this(processing, files, lastReport, SessionMetadata.empty());
-        }
+    /** The imported frames, the newest report beside them (or null) and the saved session data that match them. */
+    public record Result(FitsFileInformation[] files, File lastReport, SessionMetadata metadata) {
     }
 
     private static final Logger LOGGER = Logger.getLogger(FitsImportTask.class.getName());
 
     private final File directory;
-    private final ApplicationSettings settings;
     private final ApplicationStorage storage;
     private final FitsImportInteraction interaction;
 
+    /** A strict headless import that reads the saved session data directly from the folder. */
     public FitsImportTask(File directory) {
         this(directory, null);
     }
 
-    public FitsImportTask(File directory, ApplicationSettings settings) {
-        this(directory, settings, null);
-    }
-
-    public FitsImportTask(File directory, ApplicationSettings settings, ApplicationStorage storage) {
-        this(directory, settings, storage, null);
+    /** A strict headless import; saved session data is read on {@code storage}, or directly when it is null. */
+    public FitsImportTask(File directory, ApplicationStorage storage) {
+        this(directory, storage, null);
     }
 
     /** Imports with explicit conversion and exposure-group decisions; null uses strict headless validation. */
-    public FitsImportTask(File directory, ApplicationSettings settings, ApplicationStorage storage,
-                          FitsImportInteraction interaction) {
+    public FitsImportTask(File directory, ApplicationStorage storage, FitsImportInteraction interaction) {
         this.directory = directory;
-        this.settings = settings;
         this.storage = storage;
         this.interaction = interaction;
     }
 
     @Override
     public JobOutcome<Result> run(JobContext context) throws Exception {
-        ApplicationSettings preferences = settings == null ? ApplicationSettings.loadDefault() : settings;
         File folder = directory;
         while (true) {
-            ImageProcessing imgProcessing = null;
-            boolean ownershipTransferred = false;
             try {
                 File importDirectory = XisfImageConverter.prepareDirectoryForFitsImport(folder, context::progress);
                 if (!folder.equals(importDirectory)) {
@@ -85,8 +74,10 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
                     context.progress(90, "Loading generated FITS metadata...");
                 }
 
-                imgProcessing = ImageProcessing.openProcessor(importDirectory, preferences, interaction);
-                FitsFileInformation[] filesInfo = imgProcessing.readFiles();
+                FitsFileInformation[] filesInfo;
+                try (FitsImportService importer = new FitsImportService(importDirectory, interaction)) {
+                    filesInfo = importer.readFiles();
+                }
                 context.progress(90, "FITS metadata loaded.");
                 if (filesInfo.length == 0) {
                     return JobOutcome.declined("No frames were imported.");
@@ -98,8 +89,7 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
                         ? SessionMetadataStore.filesystem().load(sessionFolder, filesInfo)
                         : storage.submit(() -> storage.store().load(sessionFolder, filesInfo)).get();
                 context.progress(100, "Import complete.");
-                ownershipTransferred = true;
-                return JobOutcome.completed(new Result(imgProcessing, filesInfo, lastReport, metadata));
+                return JobOutcome.completed(new Result(filesInfo, lastReport, metadata));
 
             } catch (RedirectImportException e) {
                 // The user opted to automatically load the newly converted directory!
@@ -110,16 +100,12 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
                 if (interaction == null || !e.canImportLargestGroup()) {
                     throw e;
                 }
-                File largestGroup = ImageProcessing.offerToImportLargestExposureGroup(e, interaction);
+                File largestGroup = FitsImportService.offerToImportLargestExposureGroup(e, interaction);
                 if (largestGroup == null) {
                     return JobOutcome.declined("The import was cancelled.");
                 }
                 LOGGER.info("Redirecting import to the images of one exposure time: " + largestGroup.getAbsolutePath());
                 folder = largestGroup;
-            } finally {
-                if (!ownershipTransferred && imgProcessing != null) {
-                    imgProcessing.close();
-                }
             }
         }
     }

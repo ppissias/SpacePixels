@@ -2,7 +2,8 @@ package eu.startales.spacepixels.tools;
 
 import eu.startales.spacepixels.util.Cancellation;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsImportService;
+import eu.startales.spacepixels.util.FitsImages;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.GsonBuilder;
@@ -118,13 +119,13 @@ public class EngineCancellationRealDataIT {
         scratchHome = Files.createTempDirectory("spacepixels-cancellation-home-");
         try {
             System.setProperty("user.home", scratchHome.toString());
-            try (ImageProcessing processing = ImageProcessing.openProcessor(new File(dataset))) {
-                FitsFileInformation[] files = processing.readFiles();
+            try (FitsImportService importer = new FitsImportService(new File(dataset), null)) {
+                FitsFileInformation[] files = importer.readFiles();
                 frames = new ArrayList<>();
                 for (int index = 0; index < files.length; index++) {
                     FitsFileInformation info = files[index];
                     try (Fits fits = new Fits(info.getFilePath())) {
-                        Object pixels = ImageProcessing.getImageHDU(fits).getKernel();
+                        Object pixels = FitsImages.getImageHDU(fits).getKernel();
                         assertTrue("Use a prepared 16-bit monochrome dataset.", pixels instanceof short[][]);
                         frames.add(new ImageFrame(index, info.getFileName(), (short[][]) pixels,
                                 info.getObservationTimestamp(), info.getExposureDurationMillis()));

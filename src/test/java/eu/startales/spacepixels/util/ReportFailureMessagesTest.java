@@ -35,8 +35,8 @@ public class ReportFailureMessagesTest {
     public void aReportThatCannotBeWrittenFailsWithItsReason() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", FRAME_COUNT);
         DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
-        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            FitsFileInformation[] files = processing.readFiles();
+        try (FitsImportService importer = new FitsImportService(sequence.toFile(), null)) {
+            FitsFileInformation[] files = importer.readFiles();
             // After the detection, before the report: the session folder becomes a file, so no report folder fits in it.
             IOException failure = assertThrows(IOException.class, () -> new StandardDetectionPipelineService().run(config,
                     files, summary -> {

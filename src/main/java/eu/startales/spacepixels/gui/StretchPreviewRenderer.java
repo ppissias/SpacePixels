@@ -9,7 +9,7 @@
  */
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsVisualizationRenderer;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 
 import javax.swing.*;
@@ -28,19 +28,21 @@ final class StretchPreviewRenderer {
 
     /** What to preview: a frame of a session and a stretch. Every request is a new object; only the newest is shown. */
     static final class Request {
-        final ImageProcessing session;
+        /** Draws the previews; it keeps no state. */
+        final FitsVisualizationRenderer renderer;
         final String filePath;
         final StretchAlgorithm algorithm;
         final int strength;
         final int iterations;
         final boolean stretchEnabled;
 
-        Request(ImageProcessing session, String filePath, StretchAlgorithm algorithm, int strength, int iterations) {
-            this(session, filePath, algorithm, strength, iterations, true);
+        Request(FitsVisualizationRenderer renderer, String filePath, StretchAlgorithm algorithm, int strength, int iterations) {
+            this(renderer, filePath, algorithm, strength, iterations, true);
         }
 
-        Request(ImageProcessing session, String filePath, StretchAlgorithm algorithm, int strength, int iterations, boolean stretchEnabled) {
-            this.session = session;
+        Request(FitsVisualizationRenderer renderer, String filePath, StretchAlgorithm algorithm, int strength, int iterations,
+                boolean stretchEnabled) {
+            this.renderer = renderer;
             this.filePath = filePath;
             this.algorithm = algorithm;
             this.strength = strength;

@@ -14,10 +14,10 @@ import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.DebugOutput;
 
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
+import eu.startales.spacepixels.util.FitsImages;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.core.SourceExtractor;
@@ -287,7 +287,7 @@ public final class PlateCorrectionFitter {
     /** The frame's 16-bit data; for a colour frame its middle plane. Null for other data. */
     static short[][] readMono(File file) throws IOException {
         try (Fits fits = new Fits(file)) {
-            Object kernel = ImageProcessing.getImageHDU(fits).getKernel();
+            Object kernel = FitsImages.getImageHDU(fits).getKernel();
             if (kernel instanceof short[][]) {
                 return (short[][]) kernel;
             }

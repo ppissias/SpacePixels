@@ -7,8 +7,8 @@ import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.DetectionOverlays;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
+import eu.startales.spacepixels.util.PlateSolveService;
 import eu.startales.spacepixels.util.TrackOverlay;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import io.github.ppissias.jtransient.engine.AutoTunerResult;
@@ -17,6 +17,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -30,24 +31,33 @@ public class ProcessingSessionTest {
     private ProcessingSession session(String name, ApplicationSettings settings) throws Exception {
         File directory = folder.newFolder(name);
         FitsFileInformation frame = new FitsFileInformation(new File(directory, "frame.fit").toString(), "frame.fit", true, 10, 10);
-        return new ProcessingSession(ImageProcessing.openProcessor(directory, settings), new FitsFileInformation[]{frame}, null);
+        return new ProcessingSession(new PlateSolveService(settings.getConfig()), new FitsFileInformation[]{frame}, null);
     }
 
     private ApplicationSettings settings() {
         return ApplicationSettings.load(new File(folder.getRoot(), "preferences.json"));
     }
 
+    /**
+     * Sessions solve with the window's one live settings object, as the window builds them: an unsaved edit reaches
+     * every open session's solver at once, and a new session never reloads the settings file.
+     */
     @Test
     public void applicationPreferencesSurviveImportsWithoutReloadingOrLosingUnsavedEdits() throws Exception {
         File file = new File(folder.getRoot(), SpacePixelsAppConfigIO.DEFAULT_FILENAME);
         Files.writeString(file.toPath(), "{\"siteLat\":\"12\"}");
         ApplicationSettings settings = ApplicationSettings.load(file);
         settings.getConfig().siteLat = "34";
+        IOException refused = new IOException("bad apikey");
         try (ProcessingSession first = session("first", settings)) {
             Files.writeString(file.toPath(), "{\"siteLat\":\"56\"}");
             try (ProcessingSession second = session("second", settings)) {
-                assertSame(first.getProcessing().getAppConfig(), second.getProcessing().getAppConfig());
-                assertEquals("34", second.getProcessing().getAppConfig().siteLat);
+                assertTrue(second.getPlateSolveService().astrometryNetFailure(refused).contains("anonymous login"));
+                settings.getConfig().astrometryNetUseOwnKey = true;
+                settings.getConfig().astrometryNetApiKey = "unsaved";
+                assertTrue(first.getPlateSolveService().astrometryNetFailure(refused).contains("rejected the API key"));
+                assertTrue(second.getPlateSolveService().astrometryNetFailure(refused).contains("rejected the API key"));
+                assertEquals("34", settings.getConfig().siteLat);
                 settings.save();
                 assertEquals("34", SpacePixelsAppConfigIO.load(file).siteLat);
                 assertNotEquals(first.getId(), second.getId());

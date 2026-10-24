@@ -53,7 +53,7 @@ public class XisfImageConverterTest {
         assertTrue(Files.exists(outputFits));
 
         try (Fits fits = new Fits(outputFits.toFile())) {
-            BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
+            BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
             Header header = hdu.getHeader();
             short[][] data = (short[][]) hdu.getKernel();
 
@@ -96,7 +96,7 @@ public class XisfImageConverterTest {
         assertTrue(Files.exists(outputFits));
 
         try (Fits fits = new Fits(outputFits.toFile())) {
-            BasicHDU<?> hdu = ImageProcessing.getImageHDU(fits);
+            BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
             Header header = hdu.getHeader();
             short[][] data = (short[][]) hdu.getKernel();
 
