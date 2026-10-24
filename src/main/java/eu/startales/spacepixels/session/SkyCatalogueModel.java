@@ -17,6 +17,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * The sky catalogue of the imported session and its plate-solution correction, shared by the main window (which
@@ -32,11 +34,14 @@ public final class SkyCatalogueModel {
     private SkyCatalogue catalogue;
     private PlateSolutionCorrection correction;
     private File sessionFolder;
-    private SessionPersistence persistence;
+    private BiConsumer<PlateSolutionCorrection, Consumer<Throwable>> correctionWriter;
     private Throwable saveFailure;
     private boolean closed;
 
-    public void setPersistence(SessionPersistence persistence) { this.persistence = persistence; }
+    /** The session owner's asynchronous writer; it receives a detached correction and suppresses late completion. */
+    void setCorrectionWriter(BiConsumer<PlateSolutionCorrection, Consumer<Throwable>> writer) {
+        correctionWriter = writer;
+    }
     public Throwable getSaveFailure() { return saveFailure; }
     public boolean isClosed() { return closed; }
     public void close() { closed = true; }
@@ -93,13 +98,13 @@ public final class SkyCatalogueModel {
     public void saveCorrection(PlateSolutionCorrection updated) throws IOException {
         if (closed) throw new IOException("This session is closed.");
         PlateSolutionCorrection snapshot = updated.copy();
-        if (persistence == null) {
+        if (correctionWriter == null) {
             PlateSolutionCorrection.save(sessionFolder, snapshot);
             setCorrection(updated);
             return;
         }
         correction = updated;
-        persistence.save(() -> persistence.storage().store().saveCorrection(sessionFolder, snapshot), failure -> {
+        correctionWriter.accept(snapshot, failure -> {
             saveFailure = failure;
             fireCorrectionChanged();
         });

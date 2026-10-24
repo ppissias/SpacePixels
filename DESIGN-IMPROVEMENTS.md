@@ -37,7 +37,6 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-06](#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Move the sky-catalogue workflow out of the main panel | Medium | Small |
 | [SP-07](#sp-07-one-binding-type-for-settings-rows) | One binding type for settings rows | Low | Small |
 | [SP-08](#sp-08-one-report-entry-point-and-a-complete-report-context) | One report entry point and a complete report context | Medium | Medium |
-| [SP-09](#sp-09-one-write-queue-for-small-files) | One write queue for small files | Low | Small |
 | [SP-10](#sp-10-one-place-for-sky-math-and-statistics-helpers) | One place for sky-math and statistics helpers: done; evaluate the differing variants | Low | Small |
 | [SP-11](#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Fewer FITS helper classes; immutable frame metadata | Low | Medium |
 | [SP-13](#sp-13-one-way-to-report-problems-and-diagnostics) | One way to report problems and diagnostics | Low | Small |
@@ -49,7 +48,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 **Suggested order.**
 1. SP-10 and SP-18 are done apart from their follow-ups: evaluate SP-10's differing variants as a numerical decision, and take SP-18's follow-ups when nom-tam-fits 1.23.1 is out. Keep both separate from refactorings.
-2. Then SP-04 together with SP-09, then SP-05 and SP-06.
+2. Then SP-04, then SP-05 and SP-06. The shared application I/O queue (SP-09) is in place.
 3. Then SP-08, then SP-07 and SP-15.
 4. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
@@ -142,17 +141,6 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 - A complete context should distinguish valid absence (no WCS, catalogue or optional analysis) from an uninitialized context. Keep no-WCS, empty-result and partial-inclusion cases covered when deleting test-only fallback construction paths.
 - **Clarify byte comparison.** `PipelineDiagnosticsSectionWriter.writeStageTimings` writes measured engine and stage durations into HTML. Excluding generation time alone cannot make independent report folders byte-identical. List and normalize volatile timing fields, compare deterministic outputs and rendered assets exactly, and assess performance separately, as in DEVELOPER.md.
 - Preserve cancellation cleanup, atomic HTML publication and report-failure messages when replacing the overloads; coordinate completed detection products with SP-04.
-
-### SP-09. One write queue for small files
-
-**Problem.** `SettingsStorage` and `SessionStorage` are two near-identical single-thread write queues. `SessionPersistence` adds a thin per-session layer on top: it runs a session's writes and drops their callbacks once the session has closed.
-
-**Proposal.** Keep one application-owned background writer for preferences and session files. Keep its drain-on-close behaviour. Remove `SessionPersistence`.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- `SessionStorage` orders reads behind writes, including a reimport of the same folder; it is not just a write queue. Preserve this ordering when merging it with `SettingsStorage`.
-- Preserve rejection of new work after close, draining accepted writes off the EDT, suppression of callbacks to closed sessions, and visibility of unsaved changes. `SettingsStorage` also tracks failures by target and clears them after a successful retry; retain that distinction.
-- Use the existing delayed-write/reimport and shutdown tests as contract evidence. Removing the run barrier (done with SP-01) does not make all persistence coordination redundant.
 
 ### SP-10. One place for sky-math and statistics helpers
 

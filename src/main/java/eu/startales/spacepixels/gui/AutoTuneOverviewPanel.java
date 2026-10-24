@@ -560,11 +560,10 @@ public class AutoTuneOverviewPanel extends JPanel {
             return;
         }
         ProcessingSession owner = session;
-        if (owner == null || owner.getPersistence() == null) return;
+        if (owner == null || !owner.hasStorage()) return;
         AutoTuneSessionStore.Document snapshot = AutoTuneSessionStore.snapshot(currentDocument());
         if (snapshot == null) return;
-        File folder = sessionFolder;
-        owner.getPersistence().save(() -> owner.getPersistence().storage().store().saveAutoTune(folder, snapshot), failure -> {
+        owner.saveAutoTune(snapshot, failure -> {
             if (session == owner && failure != null) {
                 statusLabel.setText(statusLabel.getText()
                         + " It could not be saved (" + failure.getMessage() + "); it lasts until SpacePixels closes.");

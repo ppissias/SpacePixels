@@ -440,7 +440,7 @@ public class ConfigurationPanel extends JPanel {
         saveButton.setEnabled(false);
         footerMessageLabel.setText("Saving application defaults...");
         starDepthStatus.setText("Saving...");
-        mainAppWindow.getSettingsStorage().submit("Application defaults", () -> {
+        mainAppWindow.getStorage().submit("Application defaults", () -> {
             mainAppWindow.getApplicationSettings().save(snapshot);
             return null;
         }).whenComplete((ignored, failure) -> EventQueue.invokeLater(() -> {

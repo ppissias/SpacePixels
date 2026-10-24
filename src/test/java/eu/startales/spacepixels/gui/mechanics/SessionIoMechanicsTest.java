@@ -20,7 +20,7 @@ public class SessionIoMechanicsTest extends MechanicsTestCase {
     private final CountDownLatch saveStarted = new CountDownLatch(1);
     private final CountDownLatch saveRelease = new CountDownLatch(1);
     private final SessionMetadataStore files = SessionMetadataStore.filesystem();
-    private final SessionStorage storage = new SessionStorage(new SessionMetadataStore() {
+    private final ApplicationStorage storage = new ApplicationStorage(new SessionMetadataStore() {
         @Override public SessionMetadata load(File directory, FitsFileInformation[] frames) throws IOException {
             loadStarted.countDown();
             await(loadRelease);

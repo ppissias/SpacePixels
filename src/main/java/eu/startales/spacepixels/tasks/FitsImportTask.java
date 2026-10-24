@@ -14,7 +14,7 @@ import eu.startales.spacepixels.config.ApplicationSettings;
 
 import eu.startales.spacepixels.session.SessionMetadata;
 import eu.startales.spacepixels.session.SessionMetadataStore;
-import eu.startales.spacepixels.session.SessionStorage;
+import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
@@ -46,7 +46,7 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
 
     private final File directory;
     private final ApplicationSettings settings;
-    private final SessionStorage storage;
+    private final ApplicationStorage storage;
     private final FitsImportInteraction interaction;
 
     public FitsImportTask(File directory) {
@@ -57,12 +57,12 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
         this(directory, settings, null);
     }
 
-    public FitsImportTask(File directory, ApplicationSettings settings, SessionStorage storage) {
+    public FitsImportTask(File directory, ApplicationSettings settings, ApplicationStorage storage) {
         this(directory, settings, storage, null);
     }
 
     /** Imports with explicit conversion and exposure-group decisions; null uses strict headless validation. */
-    public FitsImportTask(File directory, ApplicationSettings settings, SessionStorage storage,
+    public FitsImportTask(File directory, ApplicationSettings settings, ApplicationStorage storage,
                           FitsImportInteraction interaction) {
         this.directory = directory;
         this.settings = settings;

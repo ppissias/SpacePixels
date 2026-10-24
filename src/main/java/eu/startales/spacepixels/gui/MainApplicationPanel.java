@@ -480,7 +480,7 @@ public class MainApplicationPanel extends JPanel {
             return;
         }
         progressDialog.setPreviewPreference(preferences.getBoolean(LIVE_VIEW_PREFERENCE, true), shown ->
-                mainAppWindow.getSettingsStorage().submit("Live view", () -> {
+                mainAppWindow.getStorage().submit("Live view", () -> {
                     preferences.putBoolean(LIVE_VIEW_PREFERENCE, shown);
                     preferences.flush();
                     return null;
@@ -1200,7 +1200,7 @@ public class MainApplicationPanel extends JPanel {
             statusLabel.setText("Sky catalogue: nothing could be fetched");
         } else {
             skyFetchProblem = result.problems.isEmpty() ? null : String.join("\n", result.problems);
-            owner.getPersistence().save(() -> owner.getPersistence().storage().store().saveCatalogue(folder, result), problem -> {
+            owner.saveCatalogue(result, problem -> {
                 if (problem != null && mainAppWindow.isCurrentSession(owner) && owner.getSkyCatalogue().get() == result) {
                     ApplicationWindow.logger.log(java.util.logging.Level.WARNING, "Cannot save the sky catalogue in " + folder, problem);
                     skyFetchProblem = "The catalogue could not be saved (" + problem.getMessage() + "); it lasts until SpacePixels closes.";

@@ -8,6 +8,7 @@ import eu.startales.spacepixels.tasks.FitsImportTask;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.AutoTuneSessionStore;
 import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.SkySnapshot;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
@@ -25,7 +26,8 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
 
-public class SessionStorageTest {
+/** Ordered session metadata I/O and callback lifetime on the shared application queue. */
+public class ApplicationStorageSessionTest {
     @Rule public TemporaryFolder folder = new TemporaryFolder();
 
     @Test(timeout = 15000)
@@ -43,7 +45,7 @@ public class SessionStorageTest {
                 return metadata;
             }
         };
-        SessionStorage storage = new SessionStorage(store);
+        ApplicationStorage storage = new ApplicationStorage(store);
         ExecutorService importer = Executors.newSingleThreadExecutor();
         Future<JobOutcome<FitsImportTask.Result>> imported = null;
         try {
@@ -57,7 +59,7 @@ public class SessionStorageTest {
             assertTrue(outcome instanceof JobOutcome.Completed<?>);
             var result = ((JobOutcome.Completed<FitsImportTask.Result>) outcome).result();
             try (var session = new ProcessingSession(result.processing(), result.files(), result.lastReport(),
-                    result.metadata(), new SessionPersistence(storage, EventQueue::invokeLater))) {
+                    result.metadata(), storage, EventQueue::invokeLater)) {
                 assertSame(catalogue, session.getSkyCatalogue().get());
                 assertSame(metadata, session.getMetadata());
                 assertEquals(3, session.getFiles().length);
@@ -76,7 +78,7 @@ public class SessionStorageTest {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         List<Boolean> saved = new CopyOnWriteArrayList<>();
-        SessionStorage storage = new SessionStorage(new Store() {
+        ApplicationStorage storage = new ApplicationStorage(new Store() {
             @Override public void saveCorrection(File directory, PlateSolutionCorrection correction) throws IOException {
                 assertFalse(EventQueue.isDispatchThread());
                 entered.countDown();
@@ -85,15 +87,15 @@ public class SessionStorageTest {
             }
         });
         BlockingQueue<Runnable> callbacks = new LinkedBlockingQueue<>();
-        SessionPersistence persistence = new SessionPersistence(storage, callbacks::add);
-        SkyCatalogueModel model = model(persistence);
+        ProcessingSession session = session(storage, callbacks::add);
+        SkyCatalogueModel model = model(session);
         try {
             EventQueue.invokeAndWait(() -> toggle(model, true));
             assertTrue(entered.await(5, TimeUnit.SECONDS));
             exerciseEdt();
             SkySnapshot admitted = model.snapshot();
             assertTrue("a run admitted before the save finishes takes the toggle", admitted.correction().enabled);
-            assertTrue(admitted.belongsTo(folder.getRoot()));
+            assertTrue(admitted.belongsTo(new File(session.getFiles()[0].getFilePath()).getParentFile()));
             model.getCorrection().enabled = false;
             assertTrue("a later change in memory does not reach the admitted run", admitted.correction().enabled);
             release.countDown();
@@ -103,7 +105,7 @@ public class SessionStorageTest {
         } finally {
             release.countDown();
             storage.finish();
-            persistence.close();
+            session.close();
         }
     }
 
@@ -112,26 +114,30 @@ public class SessionStorageTest {
     public void aFailedSaveKeepsTheCorrectionInUseUntilALaterSaveSucceeds() throws Exception {
         AtomicInteger attempts = new AtomicInteger();
         BlockingQueue<Runnable> callbacks = new LinkedBlockingQueue<>();
-        SessionStorage storage = new SessionStorage(new Store() {
+        ApplicationStorage storage = new ApplicationStorage(new Store() {
             @Override public void saveCorrection(File directory, PlateSolutionCorrection correction) throws IOException {
                 if (attempts.incrementAndGet() == 1) throw new IOException("read only");
             }
         });
-        SessionPersistence persistence = new SessionPersistence(storage, callbacks::add);
-        SkyCatalogueModel model = model(persistence);
+        ProcessingSession session = session(storage, callbacks::add);
+        SkyCatalogueModel model = model(session);
         try {
             EventQueue.invokeAndWait(() -> toggle(model, true));
             EventQueue.invokeAndWait(callbacks.poll(5, TimeUnit.SECONDS));
             assertTrue(model.isCorrectionEnabled());
             assertEquals(Boolean.TRUE, model.getCorrection().userEnabled);
             assertNotNull(model.getSaveFailure());
+            Throwable recordedFailure = storage.getSessionWriteFailure();
+            assertEquals("read only", recordedFailure.getMessage());
             assertTrue("a run uses the correction that could not be saved", model.snapshot().correction().enabled);
             EventQueue.invokeAndWait(() -> toggle(model, false));
             EventQueue.invokeAndWait(callbacks.poll(5, TimeUnit.SECONDS));
             assertFalse(model.isCorrectionEnabled());
             assertNull(model.getSaveFailure());
+            assertSame("shutdown still reports a session write failure after a successful retry",
+                    recordedFailure, storage.getSessionWriteFailure());
         } finally {
-            persistence.close();
+            session.close();
             storage.finish();
         }
     }
@@ -142,7 +148,7 @@ public class SessionStorageTest {
         CountDownLatch release = new CountDownLatch(1);
         List<String> events = new CopyOnWriteArrayList<>();
         AtomicInteger notices = new AtomicInteger();
-        SessionStorage storage = new SessionStorage(new Store() {
+        ApplicationStorage storage = new ApplicationStorage(new Store() {
             @Override public void saveCatalogue(File directory, SkyCatalogue catalogue) throws IOException {
                 entered.countDown();
                 await(release);
@@ -153,17 +159,17 @@ public class SessionStorageTest {
                 return SessionMetadata.empty();
             }
         });
-        SessionPersistence persistence = new SessionPersistence(storage, EventQueue::invokeLater);
+        ProcessingSession session = session(storage, EventQueue::invokeLater);
         try {
-            persistence.save(() -> storage.store().saveCatalogue(folder.getRoot(), new SkyCatalogue()),
+            session.saveCatalogue(new SkyCatalogue(),
                     failure -> notices.incrementAndGet());
             assertTrue(entered.await(5, TimeUnit.SECONDS));
             var imported = storage.submit(() -> storage.store().load(folder.getRoot(), new FitsFileInformation[0]));
-            persistence.close();
+            session.close();
             storage.close();
             exerciseEdt();
             assertFalse(imported.isDone());
-            assertThrows(IllegalStateException.class, () -> persistence.save(() -> {}, failure -> {}));
+            assertThrows(IllegalStateException.class, () -> session.saveCatalogue(new SkyCatalogue(), failure -> {}));
             release.countDown();
             storage.finish();
             imported.get(5, TimeUnit.SECONDS);
@@ -172,6 +178,87 @@ public class SessionStorageTest {
             assertEquals(0, notices.get());
         } finally {
             release.countDown();
+            storage.finish();
+        }
+    }
+
+    /** Settings writes, session saves and import reads use one FIFO worker, rather than two independent queues. */
+    @Test(timeout = 15000)
+    public void settingsAndSessionWorkShareSubmissionOrderAndWorker() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        List<String> events = new CopyOnWriteArrayList<>();
+        List<Thread> workers = new CopyOnWriteArrayList<>();
+        ApplicationStorage storage = new ApplicationStorage(new Store() {
+            @Override public void saveCatalogue(File directory, SkyCatalogue catalogue) {
+                events.add("session");
+                workers.add(Thread.currentThread());
+            }
+            @Override public SessionMetadata load(File directory, FitsFileInformation[] files) {
+                events.add("read");
+                workers.add(Thread.currentThread());
+                return SessionMetadata.empty();
+            }
+        });
+        try (ProcessingSession session = session(storage, EventQueue::invokeLater)) {
+            storage.submit("Application defaults", () -> {
+                entered.countDown();
+                await(release);
+                events.add("settings");
+                workers.add(Thread.currentThread());
+                return null;
+            });
+            assertTrue(entered.await(5, TimeUnit.SECONDS));
+            session.saveCatalogue(new SkyCatalogue(), failure -> assertNull(failure));
+            var read = storage.submit(() -> storage.store().load(folder.getRoot(), new FitsFileInformation[0]));
+            assertFalse(read.isDone());
+            exerciseEdt();
+            release.countDown();
+            read.get(5, TimeUnit.SECONDS);
+            assertEquals(List.of("settings", "session", "read"), events);
+            assertEquals(3, workers.size());
+            assertSame(workers.get(0), workers.get(1));
+            assertSame(workers.get(0), workers.get(2));
+        } finally {
+            release.countDown();
+            storage.finish();
+        }
+    }
+
+    /** Closing the owner also suppresses a completion that was already queued for UI delivery. */
+    @Test(timeout = 15000)
+    public void closingDropsAlreadyQueuedUiCompletionAndRefusesNewSessionWrites() throws Exception {
+        ApplicationStorage storage = new ApplicationStorage(new Store());
+        BlockingQueue<Runnable> callbacks = new LinkedBlockingQueue<>();
+        AtomicInteger notices = new AtomicInteger();
+        try (ProcessingSession session = session(storage, callbacks::add)) {
+            session.saveCatalogue(new SkyCatalogue(), failure -> notices.incrementAndGet());
+            Runnable callback = callbacks.poll(5, TimeUnit.SECONDS);
+            assertNotNull(callback);
+            session.close();
+            EventQueue.invokeAndWait(callback);
+            assertEquals(0, notices.get());
+            assertThrows(IllegalStateException.class, () -> session.saveCatalogue(new SkyCatalogue(), failure -> {}));
+            assertThrows(IllegalStateException.class, () -> session.saveAutoTune(new AutoTuneSessionStore.Document(), failure -> {}));
+        } finally {
+            storage.finish();
+        }
+    }
+
+    /** A stopped UI executor cannot prevent accepted writes from finishing or poison the application I/O worker. */
+    @Test(timeout = 15000)
+    public void rejectedUiCompletionDoesNotStopTheWriter() throws Exception {
+        ApplicationStorage storage = new ApplicationStorage(new Store());
+        AtomicInteger deliveries = new AtomicInteger();
+        try (ProcessingSession session = session(storage, action -> {
+            deliveries.incrementAndGet();
+            throw new RejectedExecutionException("window closed");
+        })) {
+            session.saveCatalogue(new SkyCatalogue(), failure -> fail("the stopped executor cannot deliver"));
+            storage.submit(() -> null).get(5, TimeUnit.SECONDS);
+            assertEquals(1, deliveries.get());
+            assertNull(storage.getSessionWriteFailure());
+        } finally {
             storage.finish();
         }
     }
@@ -191,12 +278,20 @@ public class SessionStorageTest {
         assertTrue(copied.notes.isEmpty());
     }
 
-    private SkyCatalogueModel model(SessionPersistence persistence) {
-        SkyCatalogueModel model = new SkyCatalogueModel();
-        model.setSessionFolder(folder.getRoot());
-        model.setPersistence(persistence);
+    /** A real session supplies the correction writer and owns its completion lifetime. */
+    private SkyCatalogueModel model(ProcessingSession session) {
+        SkyCatalogueModel model = session.getSkyCatalogue();
         model.setCorrection(correction());
         return model;
+    }
+
+    /** Opens small scratch frames without reading user-home preferences or queuing an import. */
+    private ProcessingSession session(ApplicationStorage storage, Executor ui) throws Exception {
+        File directory = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "metadata-owner", 3).toFile();
+        ImageProcessing processing = ImageProcessing.openProcessor(directory,
+                ApplicationSettings.load(new File(folder.getRoot(), "preferences.json")));
+        return new ProcessingSession(processing, processing.getFitsfileInformation(), null,
+                SessionMetadata.empty(), storage, ui);
     }
 
     private static PlateSolutionCorrection correction() {

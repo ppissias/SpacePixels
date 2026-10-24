@@ -1,4 +1,8 @@
-package eu.startales.spacepixels.config;
+package eu.startales.spacepixels.session;
+
+import eu.startales.spacepixels.config.ApplicationSettings;
+import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.SpacePixelsAppConfigIO;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -18,14 +22,15 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.*;
 
-public class SettingsStorageTest {
+/** Settings snapshots, target-specific failures and shutdown on the shared application I/O queue. */
+public class ApplicationStorageSettingsTest {
     @Rule public TemporaryFolder folder = new TemporaryFolder();
 
     @Test(timeout = 15_000)
     public void delayedWritesAreOrderedAndUseTheCapturedApplicationDefaults() throws Exception {
         File file = new File(folder.getRoot(), "app.json");
         ApplicationSettings settings = ApplicationSettings.load(file);
-        SettingsStorage storage = new SettingsStorage();
+        ApplicationStorage storage = new ApplicationStorage();
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         List<String> writes = new ArrayList<>();
@@ -66,7 +71,7 @@ public class SettingsStorageTest {
             assertEquals(List.of("10", "20"), writes);
             assertEquals("20", SpacePixelsAppConfigIO.load(file).siteLat);
             assertEquals("30", settings.getConfig().siteLat);
-            assertTrue(storage.getFailures().isEmpty());
+            assertTrue(storage.getSettingsFailures().isEmpty());
         } finally {
             release.countDown();
             storage.finish();
@@ -75,17 +80,17 @@ public class SettingsStorageTest {
 
     @Test(timeout = 15_000)
     public void failuresAreReportedAndOnlyASuccessfulRetryOfThatTargetClearsThem() throws Exception {
-        SettingsStorage storage = new SettingsStorage();
+        ApplicationStorage storage = new ApplicationStorage();
         try {
             IOException unavailable = new IOException("disk unavailable");
             ExecutionException failure = assertThrows(ExecutionException.class,
                     () -> storage.submit("Application defaults", () -> { throw unavailable; }).get(5, TimeUnit.SECONDS));
             assertSame(unavailable, failure.getCause());
-            assertSame(unavailable, storage.getFailures().get("Application defaults"));
+            assertSame(unavailable, storage.getSettingsFailures().get("Application defaults"));
             storage.submit("Detection settings", () -> null).get(5, TimeUnit.SECONDS);
-            assertSame(unavailable, storage.getFailures().get("Application defaults"));
+            assertSame(unavailable, storage.getSettingsFailures().get("Application defaults"));
             storage.submit("Application defaults", () -> null).get(5, TimeUnit.SECONDS);
-            assertTrue(storage.getFailures().isEmpty());
+            assertTrue(storage.getSettingsFailures().isEmpty());
         } finally {
             storage.finish();
         }
@@ -93,7 +98,7 @@ public class SettingsStorageTest {
 
     @Test(timeout = 15_000)
     public void shutdownDrainsAcceptedWritesWithoutBlockingTheEdtAndRejectsNewWrites() throws Exception {
-        SettingsStorage storage = new SettingsStorage();
+        ApplicationStorage storage = new ApplicationStorage();
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         CompletableFuture<String> saved = storage.submit("Application defaults", () -> {
@@ -110,7 +115,7 @@ public class SettingsStorageTest {
             assertEquals("saved", saved.get(5, TimeUnit.SECONDS));
             assertThrows(ExecutionException.class, () ->
                     storage.submit("Late write", () -> null).get(5, TimeUnit.SECONDS));
-            assertTrue(storage.getFailures().containsKey("Late write"));
+            assertTrue(storage.getSettingsFailures().containsKey("Late write"));
         } finally {
             release.countDown();
             storage.finish();

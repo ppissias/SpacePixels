@@ -39,10 +39,9 @@ public class DependencyRulesTest {
     }
 
     @Test
-    public void settingsStorageDoesNotDependOnSwingOrTheWindow() throws IOException {
-        for (String file : List.of("SettingsStorage", "ApplicationSettings")) {
-            assertNoReferences("config/" + file + ".java", "eu.startales.spacepixels.gui.", "javax.swing.", "java.awt.");
-        }
+    public void applicationStorageAndSettingsDoNotDependOnSwingOrTheWindow() throws IOException {
+        assertNoReferences("session/ApplicationStorage.java", "eu.startales.spacepixels.gui.", "javax.swing.", "java.awt.");
+        assertNoReferences("config/ApplicationSettings.java", "eu.startales.spacepixels.gui.", "javax.swing.", "java.awt.");
     }
 
     @Test

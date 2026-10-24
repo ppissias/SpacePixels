@@ -684,7 +684,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
         saveButton.setEnabled(false);
         showFooterNote("Migrating detection profile...");
-        mainAppWindow.getSettingsStorage().submit("Detection settings", () ->
+        mainAppWindow.getStorage().submit("Detection settings", () ->
                 SpacePixelsDetectionProfileIO.migrate(profileToLoad, detectionProfileFile, detectionProfile))
                 .whenComplete((backup, failure) -> EventQueue.invokeLater(() -> {
                     if (mainAppWindow.isClosing()) return;
@@ -728,7 +728,7 @@ public class DetectionConfigurationPanel extends JPanel {
         ProcessingSession expectedSession = mainAppWindow.getSession();
         saveButton.setEnabled(false);
         showFooterNote("Saving settings...");
-        mainAppWindow.getSettingsStorage().submit("Detection settings", () -> {
+        mainAppWindow.getStorage().submit("Detection settings", () -> {
             SpacePixelsSettingsFiles.save(
                     detectionProfileFile, profile, visualizationPreferencesFile, preferences);
             return null;

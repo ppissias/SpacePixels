@@ -4,21 +4,31 @@ import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.TrackOverlay;
 import eu.startales.spacepixels.util.VariableStarOverlay;
+import eu.startales.spacepixels.util.AutoTuneSessionStore;
+import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import java.io.File;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
-/** Imported-session identity and owned state; frame data is shared by reference, not deep-copied. */
+/**
+ * Imported-session identity, owned state and metadata-save callback lifetime. Closing drops later UI completions
+ * without cancelling accepted writes on the application's shared storage. Frame data is shared, not deep-copied.
+ */
 public final class ProcessingSession implements AutoCloseable {
     private final UUID id = UUID.randomUUID();
     private final ImageProcessing processing;
     private final SkyCatalogueModel skyCatalogue = new SkyCatalogueModel();
     private final AutoTuneState autoTune = new AutoTuneState();
     private final SessionMetadata metadata;
-    private final SessionPersistence persistence;
+    private final ApplicationStorage storage;
+    private final Executor ui;
+    private final File folder;
     private final SessionFrames frames;
     private List<FitsFileInformation> selection = List.of();
     private File lastReport;
@@ -28,25 +38,71 @@ public final class ProcessingSession implements AutoCloseable {
     private volatile boolean closed;
 
     public ProcessingSession(ImageProcessing processing, FitsFileInformation[] files, File lastReport) {
-        this(processing, files, lastReport, SessionMetadata.empty(), null);
+        this(processing, files, lastReport, SessionMetadata.empty(), null, null);
     }
 
+    /** Owns imported state and UI callback lifetime; the application retains and closes the shared storage. */
     public ProcessingSession(ImageProcessing processing, FitsFileInformation[] files, File lastReport,
-                             SessionMetadata metadata, SessionPersistence persistence) {
+                             SessionMetadata metadata, ApplicationStorage storage, Executor ui) {
         this.metadata = Objects.requireNonNull(metadata);
-        this.persistence = persistence;
+        this.storage = storage;
+        this.ui = storage == null ? null : Objects.requireNonNull(ui);
         this.processing = Objects.requireNonNull(processing);
         this.frames = processing.getSessionFrames();
         frames.setFiles(Objects.requireNonNull(files).clone());
         this.lastReport = lastReport;
-        skyCatalogue.setSessionFolder(files.length == 0 ? null : new File(files[0].getFilePath()).getParentFile());
-        skyCatalogue.setPersistence(persistence);
+        folder = files.length == 0 ? null : new File(files[0].getFilePath()).getParentFile();
+        skyCatalogue.setSessionFolder(folder);
+        if (storage != null) skyCatalogue.setCorrectionWriter((correction, finished) ->
+                saveMetadata(() -> storage.store().saveCorrection(folder, correction), finished));
         skyCatalogue.set(metadata.catalogue());
         skyCatalogue.setCorrection(metadata.correction());
     }
 
     public SessionMetadata getMetadata() { return metadata; }
-    public SessionPersistence getPersistence() { return persistence; }
+
+    /** Whether this desktop session can queue metadata writes on the application's storage. */
+    public boolean hasStorage() { return storage != null; }
+
+    /** Saves this session's already captured catalogue; completion is delivered only while this session is open. */
+    public void saveCatalogue(SkyCatalogue catalogue, Consumer<Throwable> finished) {
+        saveMetadata(() -> storage.store().saveCatalogue(folder, catalogue), finished);
+    }
+
+    /** Saves this session's detached tuning document; completion is delivered only while this session is open. */
+    public void saveAutoTune(AutoTuneSessionStore.Document document, Consumer<Throwable> finished) {
+        saveMetadata(() -> storage.store().saveAutoTune(folder, document), finished);
+    }
+
+    /** One captured metadata write; its contents are not read again from live state. */
+    @FunctionalInterface
+    private interface Write {
+        /** Writes the captured metadata on the application I/O worker. */
+        void run() throws IOException;
+    }
+
+    /**
+     * Queues a write without waiting. Failures remain logged/recorded even after close, but completion checks this
+     * session's identity/lifetime on the UI executor. A UI executor that has stopped accepting work is tolerated.
+     */
+    private void saveMetadata(Write write, Consumer<Throwable> finished) {
+        requireOpen();
+        if (storage == null) throw new IllegalStateException("This session has no application storage.");
+        storage.submit(() -> { write.run(); return null; }).whenComplete((ignored, failure) -> {
+            if (failure != null) {
+                storage.recordSessionWriteFailure(failure);
+                java.util.logging.Logger.getLogger(ProcessingSession.class.getName()).log(
+                        java.util.logging.Level.WARNING, "Could not save session metadata", failure);
+            }
+            try {
+                ui.execute(() -> {
+                    if (!closed) finished.accept(failure);
+                });
+            } catch (RuntimeException windowGone) {
+                // The application has stopped accepting UI callbacks.
+            }
+        });
+    }
 
     public UUID getId() { return id; }
     public ImageProcessing getProcessing() { return processing; }
@@ -102,7 +158,6 @@ public final class ProcessingSession implements AutoCloseable {
         if (closed) return;
         closed = true;
         skyCatalogue.close();
-        if (persistence != null) persistence.close();
         if (skyCatalogueWorker != null) {
             skyCatalogueWorker.interrupt();
             skyCatalogueWorker = null;

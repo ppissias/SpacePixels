@@ -17,6 +17,8 @@ Not released yet.
 
 ### Upgrading and API changes
 
+- **Desktop storage construction.** The internal `SettingsStorage`, `SessionStorage` and `SessionPersistence` classes are replaced by `session.ApplicationStorage` and the existing `ProcessingSession` lifetime. Embedders constructing desktop/session infrastructure pass the shared storage to `ApplicationWindow` or `FitsImportTask`, and storage plus a UI executor to the metadata-aware `ProcessingSession` constructor. Metadata saving uses `ProcessingSession.saveCatalogue` and `saveAutoTune`.
+
 - **API change: `VisualizationSettings`.** `ExportVisualizationSettings` (package `util.reporting`) is replaced by `eu.startales.spacepixels.config.VisualizationSettings`, which `DetectionRunOptions` now carries. It also holds the detection marker sizes and the most animated detections of the report. Start from `VisualizationSettings.defaults()` and change values with its `with…` methods; the positional constructors are gone. `DetectionRunOptions.capture(AppConfig, int)` takes only the observing site and uses the built-in visualization settings, and `AppConfig` no longer has `variableStarReportOptions`. See [Run options and isolation](API.md#run-options-and-isolation).
 
 ## 2026.10-03

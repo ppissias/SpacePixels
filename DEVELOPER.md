@@ -90,7 +90,7 @@ All packages are under `eu.startales.spacepixels`.
 | `gui` | Swing views, shared commands and their availability, settings pages, frame viewers | `ApplicationWindow`, `MainApplicationPanel`, `DetectionConfigurationPanel`, `CommandAction`, `CommandAvailability`, `SequenceViewerFrame`, `BlinkFrame` |
 | `jobs` | Runs long operations one at a time; no Swing | `JobCoordinator`, `Job`, `JobOutcome`, `JobKind` |
 | `tasks` | The long operations, one class per job | `FitsImportTask`, `DetectionTask`, `PlateSolveTask`, `AutoTuneTask`, … |
-| `session` | The imported dataset: identity, owned state and handover; no Swing | `ProcessingSession`, `SessionOwner`, `SkyCatalogueModel`, `AutoTuneState` |
+| `session` | The imported dataset: identity, owned state and handover; the application I/O queue; no Swing | `ProcessingSession`, `SessionOwner`, `SkyCatalogueModel`, `AutoTuneState`, `ApplicationStorage` |
 | `config` | Application settings, detection profiles, visualization settings and their files; the typed setting definitions | `ApplicationSettings`, `AppConfig`, `SpacePixelsDetectionProfileIO`, `DetectionSetting`, `DetectionRunOptions`, `VisualizationSettings` |
 | `util` | The processing services: import and preparation, FITS and XISF, WCS, the detection pipelines, plate solving | `ImageProcessing`, `FitsImportService`, `StandardDetectionPipelineService`, `IterativeDetectionPipelineService`, `PlateSolveService`, `StagedFile` |
 | `util.reporting` | The HTML report, its model, section writers and the live lookup proxy | `DetectionReportGenerator`, `ReportData`, `FindingCategory`, the `…SectionWriter` classes |
@@ -195,7 +195,7 @@ Saving the profile and the visualization preferences stages both files, but repl
 
 Tests use JUnit 4. Start with the affected tests, then run the full suite.
 
-- **Boundaries and ownership:** `DependencyRulesTest` (no GUI in jobs, tasks or `util`; no AWT in session state), `JobCoordinatorTest`, `ProcessingSessionTest`, `SessionStorageTest`, `SettingsStorageTest`.
+- **Boundaries and ownership:** `DependencyRulesTest` (no GUI in jobs, tasks or `util`; no AWT in session state), `JobCoordinatorTest`, `ProcessingSessionTest`, `ApplicationStorageSessionTest`, `ApplicationStorageSettingsTest`. The storage tests cover one queue's settings/session order, reimport reads behind writes, target failures and retries, shutdown drain, and session completions already queued when their owner closes.
 - **Synthetic data:** `SyntheticDatasetFactory` builds disposable FITS datasets.
 - **Preparation parity:** `FitsPreparationParityTest` compares GUI and API preparation across formats.
 - **Iterative detection:** `IterativeDetectionPlanTest` and `IterativeDetectionRunTest`, which compares passes with ordinary runs on the same subsets.

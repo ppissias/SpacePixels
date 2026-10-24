@@ -15,11 +15,9 @@ import com.google.gson.JsonParser;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.config.ApplicationSettings;
-import eu.startales.spacepixels.config.SettingsStorage;
+import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.SessionOwner;
-import eu.startales.spacepixels.session.SessionStorage;
-import eu.startales.spacepixels.session.SessionPersistence;
 import eu.startales.spacepixels.jobs.JobFailures;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
@@ -70,8 +68,7 @@ public class ApplicationWindow {
 
     private final ApplicationSettings applicationSettings = ApplicationSettings.loadDefault();
     private final SessionOwner sessions = new SessionOwner();
-    private final SessionStorage sessionStorage;
-    private final SettingsStorage settingsStorage;
+    private final ApplicationStorage storage;
     private boolean closing;
 
     private volatile MainApplicationPanel mainApplicationPanel;
@@ -146,17 +143,14 @@ public class ApplicationWindow {
         });
     }
 
+    /** Creates a window with one application-owned queue for settings and session files. */
     public ApplicationWindow() {
-        this(new SessionStorage());
+        this(new ApplicationStorage());
     }
 
-    public ApplicationWindow(SessionStorage sessionStorage) {
-        this(sessionStorage, new SettingsStorage());
-    }
-
-    public ApplicationWindow(SessionStorage sessionStorage, SettingsStorage settingsStorage) {
-        this.sessionStorage = sessionStorage;
-        this.settingsStorage = settingsStorage;
+    /** Uses the application-owned queue, also allowing delayed stores in GUI mechanics tests. */
+    public ApplicationWindow(ApplicationStorage storage) {
+        this.storage = java.util.Objects.requireNonNull(storage);
         initialize();
     }
 
@@ -168,7 +162,7 @@ public class ApplicationWindow {
         frmIpodImage.setTitle("SpacePixels" + " " + version);
         AppIcon.apply(frmIpodImage);
         // Resizable, sized to the screen or restored from the last session.
-        WindowPlacement.install(frmIpodImage, settingsStorage);
+        WindowPlacement.install(frmIpodImage, storage);
         frmIpodImage.setResizable(true);
         frmIpodImage.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frmIpodImage.addWindowListener(new WindowAdapter() {
@@ -258,26 +252,24 @@ public class ApplicationWindow {
         if (configurationApplicationPanel != null) configurationApplicationPanel.close();
         if (mainApplicationPanel != null) mainApplicationPanel.closeSessionViews();
         sessions.close();
-        sessionStorage.close();
-        settingsStorage.close();
+        storage.close();
         ReportLookupProxyServer.getInstance().stop();
     }
 
     private void finishSessionStorage(boolean exit) {
         new Thread(() -> {
             try {
-                sessionStorage.finish();
-                settingsStorage.finish();
+                storage.finish();
                 EventQueue.invokeLater(() -> {
-                    if (sessionStorage.getWriteFailure() != null) {
+                    if (storage.getSessionWriteFailure() != null) {
                         JOptionPane.showMessageDialog(frmIpodImage,
                                 "A session metadata write failed. Some edits may not have been saved.\n"
-                                        + sessionStorage.getWriteFailure().getMessage(),
+                                        + storage.getSessionWriteFailure().getMessage(),
                                 "Session save error", JOptionPane.WARNING_MESSAGE);
                     }
-                    if (!settingsStorage.getFailures().isEmpty()) {
+                    if (!storage.getSettingsFailures().isEmpty()) {
                         StringBuilder details = new StringBuilder("Some application defaults may not have been saved.\n");
-                        settingsStorage.getFailures().forEach((target, failure) ->
+                        storage.getSettingsFailures().forEach((target, failure) ->
                                 details.append(target).append(": ").append(failure.getMessage()).append('\n'));
                         JOptionPane.showMessageDialog(frmIpodImage, details.toString(),
                                 "Settings save error", JOptionPane.WARNING_MESSAGE);
@@ -317,7 +309,7 @@ public class ApplicationWindow {
     public void importFolder(File folder) {
         if (folder != null && folder.isDirectory()) {
             JobCoordinator.Admission admission = jobCoordinator.start(JobKind.IMPORT, sessions.current(),
-                    new FitsImportTask(folder, applicationSettings, sessionStorage, new GuiFitsImportInteraction()),
+                    new FitsImportTask(folder, applicationSettings, storage, new GuiFitsImportInteraction()),
                     (handle, outcome) -> importFinished(handle.session(), outcome));
             if (!admission.admitted()) {
                 mainApplicationPanel.showStatus(admission.refusal());
@@ -341,7 +333,7 @@ public class ApplicationWindow {
         if (outcome instanceof JobOutcome.Completed<FitsImportTask.Result> completed) {
             ProcessingSession imported = new ProcessingSession(completed.result().processing(),
                     completed.result().files(), completed.result().lastReport(), completed.result().metadata(),
-                    new SessionPersistence(sessionStorage, EventQueue::invokeLater));
+                    storage, EventQueue::invokeLater);
             if (sessions.replace(expectedSession, imported)) {
                 installSession(imported);
                 mainApplicationPanel.showLastReport(imported.getLastReport());
@@ -440,7 +432,8 @@ public class ApplicationWindow {
 
     public ApplicationSettings getApplicationSettings() { return applicationSettings; }
 
-    public SettingsStorage getSettingsStorage() { return settingsStorage; }
+    /** The single application queue for settings writes and ordered session I/O. */
+    public ApplicationStorage getStorage() { return storage; }
 
     boolean isClosing() { return closing; }
 

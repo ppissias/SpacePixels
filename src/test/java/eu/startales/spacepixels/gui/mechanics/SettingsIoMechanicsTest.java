@@ -1,11 +1,10 @@
 package eu.startales.spacepixels.gui.mechanics;
 
-import eu.startales.spacepixels.config.SettingsStorage;
+import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.config.SpacePixelsAppConfigIO;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.gui.ApplicationWindow;
-import eu.startales.spacepixels.session.SessionStorage;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import org.assertj.swing.edt.GuiActionRunner;
 import org.junit.Test;
@@ -33,12 +32,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.Assert.*;
 
 public class SettingsIoMechanicsTest extends MechanicsTestCase {
-    private SettingsStorage storage;
+    private ApplicationStorage storage;
     private CountDownLatch release;
 
     @Override protected ApplicationWindow createApplicationWindow() {
-        storage = new SettingsStorage();
-        return new ApplicationWindow(new SessionStorage(), storage);
+        storage = new ApplicationStorage();
+        return new ApplicationWindow(storage);
     }
 
     @Override protected void onTearDown() throws Exception {
@@ -133,7 +132,7 @@ public class SettingsIoMechanicsTest extends MechanicsTestCase {
             assertEquals("10", application().getApplicationSettings().getConfig().siteLat);
             assertEquals(16.0, application().getApplicationSettings().getConfig().skyCatalogueStarMagnitude, 0.0);
         });
-        assertTrue(storage.getFailures().containsKey("Application defaults"));
+        assertTrue(storage.getSettingsFailures().containsKey("Application defaults"));
         Files.delete(child.toPath());
         Files.delete(applicationFile.toPath());
         GuiActionRunner.execute(() -> field(panel, "saveButton", JButton.class).doClick());
@@ -141,7 +140,7 @@ public class SettingsIoMechanicsTest extends MechanicsTestCase {
                 field(panel, "saveButton", JButton.class).isEnabled()
                         && field(panel, "footerStateLabel", JLabel.class).getText().contains("Saved settings")));
         assertEquals("10", SpacePixelsAppConfigIO.load(applicationFile).siteLat);
-        assertTrue(storage.getFailures().isEmpty());
+        assertTrue(storage.getSettingsFailures().isEmpty());
     }
 
     @Test(timeout = 120_000)
@@ -176,14 +175,14 @@ public class SettingsIoMechanicsTest extends MechanicsTestCase {
                 assertTrue(field(panel, "footerStateLabel", JLabel.class).getText().contains("Unsaved changes"));
                 assertEquals(3.8, ((Number) spinner(panel, "spinDetectionSigma").getValue()).doubleValue(), 0.0);
             });
-            assertTrue(storage.getFailures().containsKey("Detection settings"));
+        assertTrue(storage.getSettingsFailures().containsKey("Detection settings"));
             Files.delete(child.toPath());
             Files.delete(preferences.toPath());
             GuiActionRunner.execute(() -> field(panel, "saveButton", JButton.class).doClick());
             waitFor("a retry marks the settings saved", () -> GuiActionRunner.execute(() ->
                     field(panel, "saveButton", JButton.class).isEnabled()
                             && field(panel, "footerStateLabel", JLabel.class).getText().contains("Saved settings")));
-            assertTrue(storage.getFailures().isEmpty());
+        assertTrue(storage.getSettingsFailures().isEmpty());
         } finally {
             GuiActionRunner.execute(dismiss::stop);
         }

@@ -9,7 +9,7 @@
  */
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.config.SettingsStorage;
+import eu.startales.spacepixels.session.ApplicationStorage;
 
 import javax.swing.JFrame;
 import java.awt.Frame;
@@ -45,7 +45,7 @@ final class WindowPlacement {
     }
 
     /** Applies the restored or default placement and saves the placement when the window closes. */
-    static void install(JFrame frame, SettingsStorage storage) {
+    static void install(JFrame frame, ApplicationStorage storage) {
         Preferences preferences = preferences();
         Rectangle usable = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
         frame.setMinimumSize(new java.awt.Dimension(Math.min(MIN_WIDTH, usable.width), Math.min(MIN_HEIGHT, usable.height)));
