@@ -173,7 +173,7 @@ public class ApplicationWindow {
                 if (closing) return;
                 closing = true;
                 closeSessionResources();
-                finishSessionStorage(closeOperation == JFrame.EXIT_ON_CLOSE);
+                finishStorage(closeOperation == JFrame.EXIT_ON_CLOSE);
             }
 
             @Override
@@ -256,7 +256,8 @@ public class ApplicationWindow {
         ReportLookupProxyServer.getInstance().stop();
     }
 
-    private void finishSessionStorage(boolean exit) {
+    /** Drains the shared queue on a shutdown worker, then reports unsaved data and closes on the EDT. */
+    private void finishStorage(boolean exit) {
         new Thread(() -> {
             try {
                 storage.finish();
@@ -284,7 +285,7 @@ public class ApplicationWindow {
                             "Session metadata or settings have not finished saving. Wait and try closing again?\n" + failure.getMessage(),
                             "Pending writes", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
                     if (answer == JOptionPane.YES_OPTION) {
-                        finishSessionStorage(exit);
+                        finishStorage(exit);
                     } else {
                         frmIpodImage.dispose();
                         if (exit) System.exit(1);

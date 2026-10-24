@@ -175,14 +175,14 @@ public class SettingsIoMechanicsTest extends MechanicsTestCase {
                 assertTrue(field(panel, "footerStateLabel", JLabel.class).getText().contains("Unsaved changes"));
                 assertEquals(3.8, ((Number) spinner(panel, "spinDetectionSigma").getValue()).doubleValue(), 0.0);
             });
-        assertTrue(storage.getSettingsFailures().containsKey("Detection settings"));
+            assertTrue(storage.getSettingsFailures().containsKey("Detection settings"));
             Files.delete(child.toPath());
             Files.delete(preferences.toPath());
             GuiActionRunner.execute(() -> field(panel, "saveButton", JButton.class).doClick());
             waitFor("a retry marks the settings saved", () -> GuiActionRunner.execute(() ->
                     field(panel, "saveButton", JButton.class).isEnabled()
                             && field(panel, "footerStateLabel", JLabel.class).getText().contains("Saved settings")));
-        assertTrue(storage.getSettingsFailures().isEmpty());
+            assertTrue(storage.getSettingsFailures().isEmpty());
         } finally {
             GuiActionRunner.execute(dismiss::stop);
         }

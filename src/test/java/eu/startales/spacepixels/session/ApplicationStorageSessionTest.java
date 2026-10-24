@@ -209,12 +209,14 @@ public class ApplicationStorageSessionTest {
                 return null;
             });
             assertTrue(entered.await(5, TimeUnit.SECONDS));
-            session.saveCatalogue(new SkyCatalogue(), failure -> assertNull(failure));
+            CompletableFuture<Throwable> completion = new CompletableFuture<>();
+            session.saveCatalogue(new SkyCatalogue(), completion::complete);
             var read = storage.submit(() -> storage.store().load(folder.getRoot(), new FitsFileInformation[0]));
             assertFalse(read.isDone());
             exerciseEdt();
             release.countDown();
             read.get(5, TimeUnit.SECONDS);
+            assertNull(completion.get(5, TimeUnit.SECONDS));
             assertEquals(List.of("settings", "session", "read"), events);
             assertEquals(3, workers.size());
             assertSame(workers.get(0), workers.get(1));
