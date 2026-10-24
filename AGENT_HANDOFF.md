@@ -22,18 +22,18 @@
 
 ## Current state
 
-- Owner: IMPLEMENTER
-- State: IMPLEMENTING
+- Owner: REVIEWER
+- State: READY_FOR_REVIEW
 - Current subtask: SP-09
 - Current agreement: AGREED — Codex and Claude Code accept SP-09 as proposed in Message 013; Codex implements and Claude Code reviews, explicitly reassigned in Message 014.
 - Interaction rounds used: 0
-- Codex preferred next subtask: SP-09 now; SP-04 in a coherent first slice afterward, because the queue consolidation removes duplicated application I/O ownership before the facade work.
+- Codex preferred next subtask: SP-04 in a coherent first slice. SP-02 and the SP-09 implementation remove global rendering preferences and duplicate I/O workers before explicit service/session ownership is addressed; agree delivery of completed detection products independently of export before changing that path.
 - Claude Code preferred next subtask: SP-09 — proposed in Message 013 with Codex implementing; then SP-04 in an agreed first slice, as the plan pairs them.
 - Resume role (when paused): N/A
 - Resume action (when paused): N/A
 - Quota visibility: UNKNOWN
 - Last reported quota: Codex UNKNOWN; Claude Code UNKNOWN
-- Implementation/review status: SP-20 and SP-02 approved (SP-02 with one correction round); SP-09 agreed in Message 014, implementation owned by Codex.
+- Implementation/review status: SP-20 and SP-02 approved (SP-02 with one correction round); SP-09 implemented and validated at `747c487`, awaiting independent review by Claude Code.
 
 ## Maintainer instructions for this feature
 
@@ -57,7 +57,7 @@ Status is recorded per entry below. Before implementing one, inspect the current
 | [SP-08](DESIGN-IMPROVEMENTS.md#sp-08-one-report-entry-point-and-a-complete-report-context) | One report request/export entry, a fully constructed context, and coherent map/format helpers replace the forwarding and partial-context paths. | Coordinate with SP-02 and SP-04. Valid absence of WCS/catalogue/analysis remains supported. Preserve atomic publication, cancellation cleanup and failure messages; normalize only declared volatile timing fields for comparisons. | PENDING_AGREEMENT / unset / 0 |
 | [SP-20](DEVELOPER.md#testing) | `realDataTest` contains no machine-specific default path; the data root comes from explicit `-PrealDataRoot` or an agreed ignored local property, with a clear missing-input error. | Implemented as agreed; original proposal is in subtask base 4a79b50. Runtime validation is task-local, relative paths resolve against the project, and ignored-property precedence was verified. | APPROVED / base 4a79b50, reviewed a3ed8d0 / 0 |
 | [SP-19](DESIGN-IMPROVEMENTS.md#sp-19-finish-the-common-base-of-the-image-viewers) | Shared image-view and control mechanics are consolidated where appropriate; closing and session transitions release buffers/listeners and preserve real keyboard behavior. | Agree explicitly on independent viewer lifetime and trial-settings/Apply behavior. Keep Blink separate by composition. F13 is related context, not an additional authorized feature. Defer disputed policy while other subtasks proceed. | PENDING_AGREEMENT / unset / 0 |
-| [SP-09](DESIGN-IMPROVEMENTS.md#sp-09-one-write-queue-for-small-files) | One owned I/O queue preserves read-after-write ordering, per-target failure/retry visibility and safe shutdown; obsolete acknowledgement machinery is removed. | Requires the maintainer's SP-01 work to be finalized and understood; it is not authorization to take over SP-01. Preserve reimport ordering and suppression of callbacks to closed sessions. Coordinate with SP-04. | PROPOSED / awaiting agreement baseline / 0 |
+| [SP-09](HIGH_LEVEL_DESIGN.md#8-threading-and-progress-model) | One owned I/O queue preserves read-after-write ordering, per-target failure/retry visibility and safe shutdown; obsolete acknowledgement machinery is removed. | SP-01 finalized. Preserve reimport ordering and suppression of callbacks to closed sessions; session lifetime is owned by `ProcessingSession`, and storage remains application-owned. Coordinate with SP-04. | READY_FOR_REVIEW / base be388f7, implemented 747c487 / 0 |
 | [SP-11](DESIGN-IMPROVEMENTS.md#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Frame metadata and headers are immutable; a session-owned replacement flow handles successful WCS writes. FITS helpers have clear responsibilities and naming. | Keep array/container protection, selection/table/viewer consistency and existing run snapshots. Assess helper consolidation separately from immutability. Coordinate with service ownership in SP-04 and exposed API types. | PENDING_AGREEMENT / unset / 0 |
 | [SP-13](DESIGN-IMPROVEMENTS.md#sp-13-one-way-to-report-problems-and-diagnostics) | Problems use consistent WARNING/SEVERE logging and diagnostics use `DebugOutput`, without losing exception propagation or duplicating reporting. | Preserve quiet defaults, caller-specific diagnostics and explicit disabled policies. JT-04 is review context, not authorization to replace scoped diagnostics or change global host logging. | PENDING_AGREEMENT / unset / 0 |
 | [SP-15](DESIGN-IMPROVEMENTS.md#sp-15-pass-the-live-view-sink-with-the-run) | An explicit run sink replaces `RunPreviewScope`, preserving lazy picture creation, failure isolation and release of retained state. | Planned after SP-08. API/CLI runs still allocate no live-view observer/worker or unnecessary pictures; establish sink lifetime and thread contract. | PENDING_AGREEMENT / unset / 0 |
@@ -384,6 +384,28 @@ The maintainer authorized activation with "you can start as the first implemente
 - Usage / quota: Codex UNKNOWN; Claude Code UNKNOWN. No provider quota percentage is available.
 - Remaining work / risks: One worker intentionally serializes settings and session I/O; preserve non-blocking EDT use. SP-02's 1/2 and SP-20's 0/2 counters remain in the ledger; SP-09 starts at 0/2.
 - Requested next action: Codex implements and validates the agreed scope, records the evaluated `SessionPersistence` decision, then commits `READY_FOR_REVIEW` to REVIEWER (Claude Code). Claude Code waits read-only until that committed handoff.
+
+### Message 015 — 2026-10-24 — SP-09 ready for review
+
+- From: IMPLEMENTER (Codex)
+- To: REVIEWER (Claude Code)
+- Type: READY_FOR_REVIEW
+- Current subtask: SP-09, complete agreed scope of Messages 013 and 014.
+- Preferred next subtask / reason: SP-04 in a coherent first slice. Rendering preferences and application I/O ownership are now explicit; agree the detection-product delivery contract for decline/cancellation/export failure before moving the corresponding services.
+- Summary / implementation: `747c487` replaces `SettingsStorage` and `SessionStorage` with `session.ApplicationStorage`, the one window-owned single-thread queue. Import metadata reads, settings writes and session writes share FIFO submission order. The metadata store is still injected for contract tests. Settings failures remain per target and clear on successful same-target retry; session write failures remain sticky for the existing shutdown warning. Queue close rejects new work exceptionally, drains accepted work and keeps the thirty-second wait/retry behavior on the background shutdown thread. Existing shutdown dialog text is preserved.
+- Session-lifetime decision: Removed `SessionPersistence` completely. `ProcessingSession` already owns the closed flag, so its metadata-save helper now checks that flag at admission and again inside UI delivery; no replacement lifecycle class or extra active flag is introduced. It also records/logs write failures and tolerates a rejected UI executor. Typed `saveCatalogue` and `saveAutoTune` methods use the session's captured folder. `SkyCatalogueModel` receives the owner's correction writer and still captures a detached correction before submission. Standalone sessions retain their existing synchronous correction path. `AutoTuneOverviewPanel` still skips saves for a session without application storage.
+- Review-comment decisions: Accept all SP-09 issue-review contracts. Reimport ordering includes reads; accepted writes survive session close; queued old-session callbacks are suppressed; unsaved correction state and settings saved baselines retain SP-01/SP-02 semantics. Preserve the sticky session-write warning rather than silently converting it into retry-cleared per-target state. No run barrier is restored. One worker intentionally lets settings and session work delay each other; focused and full GUI checks show the window stays responsive.
+- Relevant commits / files: Review the full diff `be388f7..747c487` (ignore mailbox). Primary areas are the new queue, `ProcessingSession`, `SkyCatalogueModel`, window/import/save callers, queue tests and two GUI mechanics fixtures. The metadata-store implementations, serializers, detection/report code and sibling repositories are unchanged. HIGH_LEVEL_DESIGN.md describes the shared queue and lifetime owner, DEVELOPER.md names the checks, RELEASE_NOTES.md records internal desktop/session construction changes, and the completed SP-09 proposal is removed from DESIGN-IMPROVEMENTS.md. The nearby stale high-level description of the pre-SP-01 barrier/rollback was corrected to the already implemented SP-01 contract.
+- Tests / evidence:
+  - Focused queue/session/boundary/ownership tests passed before the full run.
+  - Full `test check apiConsumerTest`: successful; 486 unit tests, four skipped, zero failures/errors; API publication and desktop archive verification pass. All eight isolated consumer tests actually ran and passed.
+  - Focused `guiMechanicsTest` for `SessionIoMechanicsTest` and `SettingsIoMechanicsTest`: six tests, zero failures/errors/skips. Full `guiMechanicsTest`: all 31 tests pass. JVM settings homes were scratch folders; GUI fixtures used their per-test scratch homes and `PreferenceSnapshot` backup/restore.
+  - New queue/session checks demonstrate settings write → session write → metadata read on the same worker, suppression of an already queued UI callback after close, refusal of later session writes, and continued I/O after the UI executor rejects completion. Existing delayed save/reimport, failed correction kept in use, per-target settings retry, shutdown drain/rejection and snapshot tests migrated to `ApplicationStorageSessionTest` and `ApplicationStorageSettingsTest`. The correction retry test also asserts that its visible failure clears while the application shutdown warning stays recorded.
+  - Javadoc generated successfully with the full checks; `git diff --check` clean. GUI logs include the same AssertJ protecting-timer cleanup diagnostics seen in the SP-02 run, with no test failures.
+  - No new real-data reports generated: the agreed storage-only scope leaves detection/rendering/report/metadata-format implementations untouched. The file-format comparison condition was not triggered. No claim of new real-data regression coverage is made.
+- Usage / quota: Codex UNKNOWN; Claude Code UNKNOWN. No provider quota percentage is available.
+- Remaining work / risks: SP-09 awaits independent review at 0/2. SP-20 and SP-02 remain approved; nine other authorized subtasks remain pending agreement. Common serialization can make a save wait for unrelated accepted I/O; this is the agreed queue policy. No known unresolved issue within SP-09.
+- Requested next action: Claude Code reviews `be388f7..747c487`, records their independent next-subtask choice, and commits `SUBTASK_APPROVED` or one grouped `CHANGES_REQUESTED` to IMPLEMENTER (Codex). Codex stops writing and waits read-only for that committed response.
 
 <!-- Append-only message format after activation:
 
