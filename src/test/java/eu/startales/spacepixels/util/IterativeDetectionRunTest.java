@@ -41,7 +41,7 @@ public class IterativeDetectionRunTest {
         List<Integer> sizes = new ArrayList<>();
         List<String> progressMessages = new ArrayList<>();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
-                (settings, files, options, prompt, progress, output) -> {
+                (settings, files, options, sky, prompt, progress, output) -> {
                     sizes.add(files.length);
                     assertTrue(settings.enableVariableStarDetection);
                     assertEquals("37", options.siteLatitude());
@@ -67,7 +67,7 @@ public class IterativeDetectionRunTest {
     @Test public void declinedAndFailedPassesAreRecordedAndLaterPassesStillRun() throws Exception {
         File source = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "outcomes", 9).toFile();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
-                (config, files, options, prompt, progress, output) -> {
+                (config, files, options, sky, prompt, progress, output) -> {
                     if (files.length == 5) return new StandardDetectionPipelineService.RunResult(null, summary());
                     if (files.length == 7) throw new IOException("export <failed>");
                     return completed(output);
@@ -86,7 +86,7 @@ public class IterativeDetectionRunTest {
     @Test public void cancellationRetainsCompletedReportsAndMarksRemainingPasses() throws Exception {
         File source = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "cancel", 9).toFile();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
-                (config, files, options, prompt, progress, output) -> {
+                (config, files, options, sky, prompt, progress, output) -> {
                     if (files.length == 7) {
                         Files.createDirectories(output.toPath());
                         Files.writeString(new File(output, "partial.txt").toPath(), "partial");
@@ -114,7 +114,7 @@ public class IterativeDetectionRunTest {
             @Override public void preview(RunPreview preview) { previews.add(preview); }
         };
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
-                (config, files, options, prompt, progress, output) -> completed(output));
+                (config, files, options, sky, prompt, progress, output) -> completed(output));
         try (RunPreviewScope scope = RunPreviewScope.open(sink)) {
             service.run(request(source, new DetectionConfig(), new AppConfig(), new IterativeDetectionPlan(5, 3, 8)), null, null);
         }
@@ -127,7 +127,7 @@ public class IterativeDetectionRunTest {
     @Test public void aCancelledRunWithNoFinishedPassRemovesTheCopyItConverted() throws Exception {
         File source = SyntheticDatasetFactory.createMono32FloatFitsSequence(folder.getRoot().toPath(), "float-cancel", 9).toFile();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
-                (config, files, options, prompt, progress, output) -> {
+                (config, files, options, sky, prompt, progress, output) -> {
                     throw new CancellationException();
                 });
         assertThrows(CancellationException.class, () -> service.run(
@@ -139,7 +139,7 @@ public class IterativeDetectionRunTest {
     @Test public void aCancelledRunThatPublishedAnIndexKeepsTheCopyItLinks() throws Exception {
         File source = SyntheticDatasetFactory.createMono32FloatFitsSequence(folder.getRoot().toPath(), "float-keep", 9).toFile();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
-                (config, files, options, prompt, progress, output) -> {
+                (config, files, options, sky, prompt, progress, output) -> {
                     if (files.length == 7) throw new CancellationException();
                     return completed(output);
                 });
@@ -176,7 +176,7 @@ public class IterativeDetectionRunTest {
             File normal = folder.newFolder("normal" + passIndex);
             new StandardDetectionPipelineService(new eu.startales.spacepixels.session.SessionFrames())
                     .run(config.clone(), subset.toArray(FitsFileInformation[]::new), null, null, normal,
-                            DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES).withVisualization(request.visualization()));
+                            DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES).withVisualization(request.visualization()), null);
             File actual = new File(index.getParentFile(), pass.get("frameCount").getAsInt() + "_frames");
             JsonObject iterativeData = json(new File(actual, "report-data.json"));
             JsonObject normalData = json(new File(normal, "report-data.json"));
@@ -203,12 +203,12 @@ public class IterativeDetectionRunTest {
         AppConfig app = new AppConfig();
         IterativeDetectionRequest request = new IterativeDetectionRequest(source, config, app,
                 DetectionReportGenerator.captureExportSettings(app.variableStarReportOptions), new IterativeDetectionPlan(5, 3, 8),
-                io.github.ppissias.jtransient.engine.AutoTuneProfile.LOW, 5, true, true, 9);
+                io.github.ppissias.jtransient.engine.AutoTuneProfile.LOW, 5, true, true, 9, null);
         List<String> passSettings = new ArrayList<>();
         List<String> messages = new ArrayList<>();
         java.util.concurrent.atomic.AtomicInteger tuningCalls = new java.util.concurrent.atomic.AtomicInteger();
         IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
-                (settings, files, options, prompt, progress, output) -> {
+                (settings, files, options, sky, prompt, progress, output) -> {
                     passSettings.add(new com.google.gson.Gson().toJson(settings));
                     assertFalse(messages.isEmpty());
                     progress.onProgressUpdate(10, "run");
@@ -247,7 +247,7 @@ public class IterativeDetectionRunTest {
         AppConfig app = new AppConfig();
         IterativeDetectionRequest strict = new IterativeDetectionRequest(floating, new DetectionConfig(), app,
                 DetectionReportGenerator.captureExportSettings(app.variableStarReportOptions), new IterativeDetectionPlan(5, 5, 5),
-                null, 5, false, true, 5);
+                null, 5, false, true, 5, null);
         Exception refusal = assertThrows(Exception.class, () -> service.run(strict, null, null));
         assertTrue(refusal.getMessage(), refusal.getMessage().contains("BITPIX=-32"));
         assertEquals(5, floating.listFiles().length);
@@ -276,7 +276,7 @@ public class IterativeDetectionRunTest {
 
     private IterativeDetectionRequest request(File source, DetectionConfig config, AppConfig app, IterativeDetectionPlan plan) {
         return new IterativeDetectionRequest(source, config, app,
-                DetectionReportGenerator.captureExportSettings(app.variableStarReportOptions), plan, null, 30, true, true, 9);
+                DetectionReportGenerator.captureExportSettings(app.variableStarReportOptions), plan, null, 30, true, true, 9, null);
     }
 
     private static StandardDetectionPipelineService.RunResult completed(File output) throws IOException {

@@ -792,7 +792,7 @@ Detection report output:
 - `detections_YYYYMMDD_HHMMSS/detection_report.html`
 - image and GIF assets beside the report
 - effective settings in `detection_config.json`, stable finding data in `report-data.json` and CSV exports
-- session catalogue/correction files (`sky_catalogue.json`, `plate_correction.json`) in the imported dataset folder, guarded by field and plate-solution identity
+- session catalogue/correction files (`sky_catalogue.json`, `plate_correction.json`) in the imported dataset folder, guarded by field and plate-solution identity; a GUI run takes them from the session when it is admitted (`SkySnapshot`), a headless run reads them once at its start
 - iterative root directory containing per-pass report directories, `index.html`, versioned `run-data.json`, per-pass `<count>_inputs.json` and optional `auto_tune.txt`; manifests use filenames rather than private absolute paths and do not store observing-site coordinates
 
 Replacing files:

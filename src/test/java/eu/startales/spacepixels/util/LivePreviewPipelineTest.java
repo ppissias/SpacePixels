@@ -65,13 +65,13 @@ public class LivePreviewPipelineTest {
 
         File plain = folder.newFolder("without");
         new StandardDetectionPipelineService(new SessionFrames()).run(config.clone(), files, null, null, plain,
-                DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES));
+                DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES), null);
 
         EverySink sink = new EverySink();
         File withPreview = folder.newFolder("with");
         try (RunPreviewScope scope = RunPreviewScope.open(sink)) {
             new StandardDetectionPipelineService(new SessionFrames()).run(config.clone(), files, null, null, withPreview,
-                    DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES));
+                    DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES), null);
         }
 
         List<String> captions = sink.received.stream().map(RunPreview::caption).toList();

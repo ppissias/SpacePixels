@@ -12,9 +12,9 @@ A fresh review of the whole application (about 50,000 lines of main code and 17,
 
 **Overall.** The architecture is sound. Jobs, commands, the session handover, the viewers and the public API are small, well-bounded and consistent, and should stay as they are. The over-engineering the maintainer suspected is real, but it is concentrated in three kinds of place:
 
-1. **State with more than one owner.** The plate-solution correction, the rendering preferences and the session's frame list each live in two or three places. Each copy then needs machinery to stay in step: write barriers, version checks, rollback, static caches and "capture" steps. Giving each piece of state one owner removes that machinery rather than adding to it.
+1. **State with more than one owner.** The rendering preferences and the session's frame list each live in two or three places. Each copy then needs machinery to stay in step: write barriers, version checks, rollback, static caches and "capture" steps. Giving each piece of state one owner removes that machinery rather than adding to it.
 2. **Layers kept for compatibility after compatibility stopped mattering.** The libraries are now developed together with the application, and old signatures need not survive. Still left over are the `ImageProcessing` facade, which mostly forwards calls, and chains of overloads that exist for older callers.
-3. **Mechanisms heavier than their use.** Examples are two near-identical write queues and an acknowledgement barrier for three small JSON files, and a binding framework whose application side writes to global static fields.
+3. **Mechanisms heavier than their use.** Examples are two near-identical write queues for small JSON files, and a binding framework whose application side writes to global static fields.
 
 Line counts alone are not a problem. Large report section writers and panels are acceptable when they read top to bottom as one responsibility.
 
@@ -32,7 +32,6 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
-| [SP-01](#sp-01-one-owner-for-the-plate-solution-correction) | One owner for the plate-solution correction | High | Medium |
 | [SP-02](#sp-02-rendering-preferences-as-a-value-not-static-fields) | Rendering preferences as a value, not static fields | High | Medium |
 | [SP-04](#sp-04-retire-the-imageprocessing-facade) | Retire the `ImageProcessing` facade; the session owns its services and data | Medium | Large |
 | [SP-05](#sp-05-give-panels-their-collaborators-not-the-whole-window) | Give panels their collaborators, not the whole window | Medium | Medium |
@@ -52,38 +51,12 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 **Suggested order.**
 1. SP-10 and SP-18 are done apart from their follow-ups: evaluate SP-10's differing variants as a numerical decision, and take SP-18's follow-ups when nom-tam-fits 1.23.1 is out. Keep both separate from refactorings.
-2. Then SP-01 and SP-02, which remove the most machinery.
+2. Then SP-02, which removes the static rendering preferences.
 3. Then SP-04 together with SP-09, then SP-05 and SP-06.
 4. Then SP-08, then SP-07 and SP-15.
 5. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
-Refactorings are intended to preserve behaviour. Evaluate the exceptions raised by the issue reviews, including SP-01's save-failure policy and SP-19's viewer lifetime and settings policy, as explicit behaviour decisions. Check implementation changes with the relevant unit and GUI mechanics tests. Items that touch detection or reports also need byte-identical deterministic `report-data.json`, `detection_config.json` and CSV content on the reference datasets, using the normalization and comparison method in DEVELOPER.md.
-
-### SP-01. One owner for the plate-solution correction
-
-**Problem.** The correction has three sources of truth:
-- `SkyCatalogueModel` in memory;
-- `plate_correction.json` on disk;
-- a static cache in `PlateSolutionCorrection`, keyed by folder and file time (`CACHE`, `activeIn`, `forget`).
-
-`WcsSolutionResolver.resolve(info, files)` reads the correction from disk through that static cache, without the caller knowing. This happens in `ViewerSupport`, `VariableStarOverlay` and `AstrometryContextFactory`. `SkyAnnotations`, by contrast, passes the model's correction explicitly. `ReportRunContext` loads the correction from disk again.
-
-Because runs read the disk, every job waits for pending session writes first (`ApplicationWindow.sessionJob` → `SessionPersistence.awaitWrites`, a barrier that polls every 100 ms). `SkyCatalogueModel` also keeps a saved copy and a revision number, so it can roll the in-memory toggle back when a write fails. The catalogue is saved by `MainApplicationPanel` through `owner.getPersistence().save(() -> owner.getPersistence().storage().store().saveCatalogue(...))`, and the correction by `SkyCatalogueModel`: two save paths for the same session folder.
-
-**Proposal.**
-- The session's `SkyCatalogueModel` is the only source. Runs, reports and viewers receive the correction explicitly: `ReportRunContext` takes it from the session at admission, and `WcsSolutionResolver.resolve` always takes it as a parameter.
-- Saving is fire-and-forget on the background writer. A failure shows a warning and leaves the in-memory value in use.
-- Delete the static cache with `activeIn` and `forget`, the `awaitWrites` barrier, the acknowledgement set in `SessionPersistence`, the revision and rollback in `SkyCatalogueModel`, and the job wrapper in `ApplicationWindow.sessionJob`.
-- Save catalogue and correction through one session method each.
-
-**Benefit.** About 150–200 lines of synchronisation code go away. A viewer and a report can no longer disagree about which correction is in use.
-
-**Verification.** Toggle the correction (C), then start a detection at once: the report uses the toggled state. Inject a failing write: a warning appears and the value stays in use. Reports stay byte-identical on a plate-solved reference dataset.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- **High: capture the catalogue too.** `ReportRunContext` loads both correction and catalogue from disk (`SessionCatalogue.load`). Passing only the correction from memory leaves a race with a pending or failed catalogue save after the barrier is removed. Capture both at admission, including an explicitly absent catalogue, with immutable or detached data; neither model is currently deeply immutable.
-- Define the API/CLI admission path as well: it has no GUI session and must load persisted metadata once before processing. Preserve field/solution compatibility checks and run isolation.
-- Test immediate Detect after a fetch or correction toggle with a blocked and a failing save, later model edits during a run, and headless loading. Keeping an unsaved correction active changes the current rollback policy; decide and document that behaviour, including what the user sees after reimport or restart.
+Refactorings are intended to preserve behaviour. Evaluate the exceptions raised by the issue reviews, including SP-19's viewer lifetime and settings policy, as explicit behaviour decisions. Check implementation changes with the relevant unit and GUI mechanics tests. Items that touch detection or reports also need byte-identical deterministic `report-data.json`, `detection_config.json` and CSV content on the reference datasets, using the normalization and comparison method in DEVELOPER.md.
 
 ### SP-02. Rendering preferences as a value, not static fields
 
@@ -200,14 +173,14 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 
 ### SP-09. One write queue for small files
 
-**Problem.** `SettingsStorage` and `SessionStorage` are two near-identical single-thread write queues. `SessionPersistence` adds a per-session acknowledgement layer on top (see SP-01).
+**Problem.** `SettingsStorage` and `SessionStorage` are two near-identical single-thread write queues. `SessionPersistence` adds a thin per-session layer on top: it runs a session's writes and drops their callbacks once the session has closed.
 
-**Proposal.** After SP-01, keep one application-owned background writer for preferences and session files. Keep its drain-on-close behaviour. Remove `SessionPersistence`.
+**Proposal.** Keep one application-owned background writer for preferences and session files. Keep its drain-on-close behaviour. Remove `SessionPersistence`.
 
 **Issue review (2026-10-24; evaluate before implementation).**
 - `SessionStorage` orders reads behind writes, including a reimport of the same folder; it is not just a write queue. Preserve this ordering when merging it with `SettingsStorage`.
 - Preserve rejection of new work after close, draining accepted writes off the EDT, suppression of callbacks to closed sessions, and visibility of unsaved changes. `SettingsStorage` also tracks failures by target and clears them after a successful retry; retain that distinction.
-- Use the existing delayed-write/reimport and shutdown tests as contract evidence. Removing the run barrier in SP-01 does not make all persistence coordination redundant.
+- Use the existing delayed-write/reimport and shutdown tests as contract evidence. Removing the run barrier (done with SP-01) does not make all persistence coordination redundant.
 
 ### SP-10. One place for sky-math and statistics helpers
 

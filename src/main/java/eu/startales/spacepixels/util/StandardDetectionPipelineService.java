@@ -45,10 +45,10 @@ final class StandardDetectionPipelineService {
     /** Executes load/detect/export using one options snapshot for the entire run. */
     RunResult run(DetectionConfig config, FitsFileInformation[] cachedFileInfo,
                   ImageProcessing.DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener,
-                  File outputDirectory, DetectionRunOptions options) throws Exception {
+                  File outputDirectory, DetectionRunOptions options, SkySnapshot sky) throws Exception {
         // Detection takes 0-90% of the bar; exporting the report the rest.
         ImageProcessing.PipelineExecutionData executionData = runDetectionPipeline(config, cachedFileInfo,
-                progressListener == null ? null : (percent, message) -> progressListener.onProgressUpdate((int) (percent * 0.9), message), options);
+                progressListener == null ? null : (percent, message) -> progressListener.onProgressUpdate((int) (percent * 0.9), message), options, sky);
         state.setOverlays(TrackOverlay.from(executionData.getPipelineResult()),
                 executionData.getReportContext().variableStarOverlay(executionData.getPipelineResult()));
 
@@ -89,11 +89,14 @@ final class StandardDetectionPipelineService {
         return new RunResult(reportFile, detectionSummary);
     }
 
-    /** Freezes configuration, metadata, WCS and catalogue before the first progress callback or FITS read. */
+    /**
+     * Freezes configuration, metadata, WCS and catalogue before the first progress callback or FITS read. {@code sky}
+     * is the session's correction and catalogue; null reads them from the frames' folder.
+     */
     ImageProcessing.PipelineExecutionData runDetectionPipeline(DetectionConfig config,
             FitsFileInformation[] cachedFileInfo, TransientEngineProgressListener progressListener,
-            DetectionRunOptions options) throws Exception {
-        ReportRunContext reportContext = ReportRunContext.capture(options, cachedFileInfo);
+            DetectionRunOptions options, SkySnapshot sky) throws Exception {
+        ReportRunContext reportContext = ReportRunContext.capture(options, cachedFileInfo, sky);
         cachedFileInfo = reportContext.filesInformation();
         DetectionConfig capturedConfig = config == null ? null : config.clone();
         long startTime = System.currentTimeMillis();

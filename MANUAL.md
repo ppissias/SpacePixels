@@ -506,7 +506,7 @@ If a viewer is open when the catalogue arrives, the frame does not change: the *
 
 Stars are moved from the Gaia epoch (2016) to the date of each frame. Only the sky coordinates of the field are sent to the services (at CDS in Strasbourg, and the ESA Gaia archive if CDS does not answer), never your observing site.
 
-Session metadata is loaded during background import. Catalogue, correction and Auto-Tune saves run in an ordered background queue, so slower storage does not freeze the window. A new detection waits for pending saves. If a correction setting cannot be saved, the viewers revert to the last saved setting and show a warning; catalogue/Auto-Tune save failures are also reported. Closing SpacePixels waits for queued writes without blocking repainting. An independent viewer left open after another folder is imported cannot edit the closed session's correction.
+Session metadata is loaded during background import. Catalogue, correction and Auto-Tune saves run in an ordered background queue, so slower storage does not freeze the window. A detection uses the catalogue and correction as the window shows them when it starts, without waiting for a save. If the catalogue or the correction cannot be saved, for example because the dataset folder is read-only, it stays in use until SpacePixels closes, in the viewers and in the reports, and a warning says it was not saved; Auto-Tune save failures are also reported. Closing SpacePixels waits for queued writes without blocking repainting. An independent viewer left open after another folder is imported cannot edit the closed session's correction.
 
 #### Correct plate solution
 

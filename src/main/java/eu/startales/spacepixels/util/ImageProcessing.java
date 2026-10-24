@@ -305,12 +305,13 @@ public class ImageProcessing implements AutoCloseable {
 
     /**
      * Runs the standard detection pipeline on the full cached frame set with the request's captured application
-     * options, and exports the HTML session report plus associated visualizations.
+     * options and the session's sky data ({@code sky}; null reads the frames' folder), and exports the HTML session
+     * report plus associated visualizations.
      */
     public File detectObjects(DetectionConfig config, DetectionSafetyPrompt safetyPrompt,
-            TransientEngineProgressListener progressListener, DetectionRunOptions options) throws Exception {
+            TransientEngineProgressListener progressListener, DetectionRunOptions options, SkySnapshot sky) throws Exception {
         if (sessionFrames.getFiles() == null) getFitsfileInformation();
-        return standardDetectionPipelineService.run(config, sessionFrames.getFiles(), safetyPrompt, progressListener, null, options).report();
+        return standardDetectionPipelineService.run(config, sessionFrames.getFiles(), safetyPrompt, progressListener, null, options, sky).report();
     }
 
     /** Tracks of the last detection run on these frames, or null when none has run. */
@@ -330,7 +331,8 @@ public class ImageProcessing implements AutoCloseable {
     public PipelineExecutionData runDetectionPipeline(DetectionConfig config, TransientEngineProgressListener progressListener,
             DetectionRunOptions options) throws Exception {
         if (sessionFrames.getFiles() == null) getFitsfileInformation();
-        return standardDetectionPipelineService.runDetectionPipeline(config, sessionFrames.getFiles(), progressListener, options);
+        // Headless runs have no session: the correction and the catalogue are read from the frames' folder once.
+        return standardDetectionPipelineService.runDetectionPipeline(config, sessionFrames.getFiles(), progressListener, options, null);
     }
 
     /**

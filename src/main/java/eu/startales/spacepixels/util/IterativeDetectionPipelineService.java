@@ -31,7 +31,7 @@ public final class IterativeDetectionPipelineService {
     @FunctionalInterface
     interface PassRunner {
         StandardDetectionPipelineService.RunResult run(DetectionConfig config, FitsFileInformation[] files,
-                DetectionRunOptions options, ImageProcessing.DetectionSafetyPrompt prompt,
+                DetectionRunOptions options, SkySnapshot sky, ImageProcessing.DetectionSafetyPrompt prompt,
                 TransientEngineProgressListener progress, File output) throws Exception;
     }
 
@@ -105,7 +105,7 @@ public final class IterativeDetectionPipelineService {
             passStart = 30;
         }
         config = DetectionConfigRules.snapshot(config, DetectionConfigRules.Operation.CONFIGURATION);
-        return runPasses(config, files, request.runOptions(), request.plan(),
+        return runPasses(config, files, request.runOptions(), request.sky(), request.plan(),
                 request.directory(), prepared, request.autoTuneProfile(), tuneLimit, tuneReport, prompt, progress, passStart);
     }
 
@@ -114,7 +114,7 @@ public final class IterativeDetectionPipelineService {
     }
 
     private File runPasses(DetectionConfig config, FitsFileInformation[] files, DetectionRunOptions options,
-                           IterativeDetectionPlan plan,
+                           SkySnapshot sky, IterativeDetectionPlan plan,
                            File source, File prepared, AutoTuneProfile tuneProfile,
                            int tuneLimit, String tuneReport, ReportPrompt prompt,
                            TransientEngineProgressListener progress, int passStart) throws Exception {
@@ -159,7 +159,7 @@ public final class IterativeDetectionPipelineService {
                 StandardDetectionPipelineService.RunResult result;
                 // The pass's pictures say which pass they belong to.
                 try (RunPreviewScope passPictures = RunPreviewScope.labelled("Pass " + (passIndex + 1) + " of " + sizes.size())) {
-                    result = passRunner.run(passConfig, subset, options,
+                    result = passRunner.run(passConfig, subset, options, sky,
                             prompt == null ? null : summary -> prompt.confirm(summary, subset, passConfig), passProgress, output);
                 }
                 passes.set(passIndex, pass(subset, result.report() == null ? "REPORT_DECLINED" : "COMPLETED",
@@ -231,11 +231,11 @@ public final class IterativeDetectionPipelineService {
     }
 
     private static StandardDetectionPipelineService.RunResult standardPass(DetectionConfig config,
-            FitsFileInformation[] files, DetectionRunOptions options, ImageProcessing.DetectionSafetyPrompt prompt,
-            TransientEngineProgressListener progress, File output) throws Exception {
+            FitsFileInformation[] files, DetectionRunOptions options, SkySnapshot sky,
+            ImageProcessing.DetectionSafetyPrompt prompt, TransientEngineProgressListener progress, File output) throws Exception {
         SessionFrames state = new SessionFrames();
         try {
-            return new StandardDetectionPipelineService(state).run(config, files, prompt, progress, output, options);
+            return new StandardDetectionPipelineService(state).run(config, files, prompt, progress, output, options, sky);
         } finally {
             state.clear();
         }

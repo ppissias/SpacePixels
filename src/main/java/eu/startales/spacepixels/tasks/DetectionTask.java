@@ -21,6 +21,7 @@ import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.RunPreviewScope;
 import eu.startales.spacepixels.util.RunPreviewSink;
+import eu.startales.spacepixels.util.SkySnapshot;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 
 import java.io.File;
@@ -32,6 +33,7 @@ public class DetectionTask implements Job<File> {
     // Hold the configuration
     private final DetectionConfig config;
     private final DetectionRunOptions options;
+    private final SkySnapshot sky;
     private final ImageProcessing.DetectionSafetyPrompt safetyPrompt;
     /** Where the run's live-view pictures go; null makes none. */
     private RunPreviewSink previews;
@@ -41,22 +43,24 @@ public class DetectionTask implements Job<File> {
      * classified detections.
      */
     public DetectionTask(ImageProcessing preProcessing, DetectionConfig config) {
-        this(preProcessing, config, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES,
+        this(preProcessing, config, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, null,
                 summary -> summary.totalDetections <= 50);
     }
 
     /**
-     * Captures a job's settings, application options, Auto-Tune frame limit and report decision when the job is
-     * created; a missing processor retains the existing execution-time failure.
+     * Captures a job's settings, application options, Auto-Tune frame limit, the session's sky data and report
+     * decision when the job is created; a null {@code sky} reads the frames' folder. A missing processor retains the
+     * existing execution-time failure.
      */
     public DetectionTask(ImageProcessing preProcessing, DetectionConfig config, int autoTuneMaxCandidateFrames,
-                         ImageProcessing.DetectionSafetyPrompt safetyPrompt) {
+                         SkySnapshot sky, ImageProcessing.DetectionSafetyPrompt safetyPrompt) {
         this.preProcessing = preProcessing;
         this.config = DetectionConfigRules.snapshot(config,
                 DetectionConfigRules.Operation.CONFIGURATION);
         this.options = preProcessing == null
                 ? DetectionRunOptions.defaults().withAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames)
                 : preProcessing.captureRunOptions(autoTuneMaxCandidateFrames);
+        this.sky = sky;
         this.safetyPrompt = safetyPrompt;
     }
 
@@ -76,7 +80,7 @@ public class DetectionTask implements Job<File> {
     }
 
     private JobOutcome<File> runCancellable(JobContext context) throws Exception {
-        File exportDir = preProcessing.detectObjects(config, safetyPrompt, context::progress, options);
+        File exportDir = preProcessing.detectObjects(config, safetyPrompt, context::progress, options, sky);
         if (exportDir == null) {
             return JobOutcome.declined("Report generation aborted by user due to high track count. Try raising your thresholds.");
         }

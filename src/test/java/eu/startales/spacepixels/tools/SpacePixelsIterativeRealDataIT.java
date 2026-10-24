@@ -72,7 +72,7 @@ public class SpacePixelsIterativeRealDataIT {
                     preparedDirectory.getPreparedInputDirectory(), detectionConfig, new AppConfig(),
                     ExportVisualizationSettings.defaults(),
                     new IterativeDetectionPlan(5, 5, maxFrames > 0 ? Math.max(5, maxFrames) : 0),
-                    null, 5, false, false, 0), null, null);
+                    null, 5, false, false, 0, null), null, null);
 
             assertNotNull(iterativeIndex);
             assertTrue("Iterative index path was not created: " + iterativeIndex, iterativeIndex.isFile());

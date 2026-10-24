@@ -13,7 +13,8 @@ import java.util.Objects;
 public record IterativeDetectionRequest(File directory, DetectionConfig config, AppConfig appConfig,
                                        ExportVisualizationSettings visualization, IterativeDetectionPlan plan,
                                        AutoTuneProfile autoTuneProfile, int autoTuneFrames,
-                                       boolean autoPrepare, boolean keepNegativeValues, int expectedFrameCount) {
+                                       boolean autoPrepare, boolean keepNegativeValues, int expectedFrameCount,
+                                       SkySnapshot sky) {
     public IterativeDetectionRequest {
         Objects.requireNonNull(directory);
         config = DetectionConfigRules.snapshot(config, DetectionConfigRules.Operation.CONFIGURATION);

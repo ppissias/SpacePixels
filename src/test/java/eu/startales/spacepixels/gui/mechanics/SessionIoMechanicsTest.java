@@ -72,7 +72,7 @@ public class SessionIoMechanicsTest extends MechanicsTestCase {
             navigation.get(3, TimeUnit.SECONDS);
             paintWindow();
             saveRelease.countDown();
-            session.getPersistence().awaitWrites();
+            waitFor("saved correction", () -> PlateSolutionCorrection.load(input).enabled);
             assertTrue(PlateSolutionCorrection.load(input).enabled);
             GuiActionRunner.execute(() -> application().importFolder(input));
             waitFor("reimported saved setting", () -> GuiActionRunner.execute(() ->

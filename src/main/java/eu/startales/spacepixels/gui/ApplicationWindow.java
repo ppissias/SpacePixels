@@ -452,14 +452,6 @@ public class ApplicationWindow {
         return (handle, outcome) -> sessions.applyIfCurrent(handle.session(), () -> handler.handle(handle, outcome));
     }
 
-    public <Result> Job<Result> sessionJob(Job<Result> job) {
-        ProcessingSession owner = sessions.current();
-        return context -> {
-            if (owner != null && owner.getPersistence() != null) owner.getPersistence().awaitWrites(context::isCancelled);
-            return job.run(context);
-        };
-    }
-
     public ImageProcessing getImageProcessing() {
         ProcessingSession session = sessions.current();
         return session == null ? null : session.getProcessing();

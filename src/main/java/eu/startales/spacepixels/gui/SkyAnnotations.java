@@ -269,7 +269,7 @@ final class SkyAnnotations {
             notice.setText("Plate solution corrected · " + model.getCorrection().improvementText() + " · C switches it off");
         }
         if (model.getSaveFailure() != null) {
-            notice.setText("Cannot save the correction: " + model.getSaveFailure().getMessage() + "; the last saved setting is in use.");
+            notice.setText("Cannot save the correction: " + model.getSaveFailure().getMessage() + "; it stays in use until SpacePixels closes.");
         }
     }
 

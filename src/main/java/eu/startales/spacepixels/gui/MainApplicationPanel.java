@@ -496,8 +496,11 @@ public class MainApplicationPanel extends JPanel {
             return;
         }
         ImageProcessing session = mainAppWindow.getImageProcessing();
+        ProcessingSession owner = mainAppWindow.getSession();
+        if (owner == null || owner.getProcessing() != session) return;
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
         startJob(JobKind.DETECTION, session, new DetectionTask(session, settings, configuration.autoTuneMaxCandidateFrames(),
+                owner.getSkyCatalogue().snapshot(),
                 summary -> reportPrompt.confirm(summary, session.hasPlateSolvedFrame(), 50, null, settings))
                         .showingPreviews(progressDialog.previewSink()),
                 this::showDetectionOutcome);
@@ -520,7 +523,7 @@ public class MainApplicationPanel extends JPanel {
         BlinkImagesTask task = new BlinkImagesTask(selectedFitsFilesInfo, stop,
                 (read, total) -> EventQueue.invokeLater(() -> blinkFrame.showLoadProgress(read, total)));
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.BLINK,
-                mainAppWindow.getSession(), mainAppWindow.sessionJob(task),
+                mainAppWindow.getSession(), task,
                 mainAppWindow.forCurrentSession((handle, outcome) -> blinkLoaded(selectedFitsFilesInfo, outcome)));
         if (!admission.admitted()) {
             statusLabel.setText(admission.refusal());
@@ -594,14 +597,15 @@ public class MainApplicationPanel extends JPanel {
         application.variableStarReportOptions = configuration.reportOptions();
         IterativeDetectionRequest request = new IterativeDetectionRequest(selected.directory(), settings, application,
                 DetectionReportGenerator.captureExportSettings(application.variableStarReportOptions), selected.plan(),
-                selected.autoTuneProfile(), selected.autoTuneFrames(), selected.autoPrepare(), selected.keepNegative(), selected.availableFrames());
+                selected.autoTuneProfile(), selected.autoTuneFrames(), selected.autoPrepare(), selected.keepNegative(), selected.availableFrames(),
+                mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getSkyCatalogue().snapshot());
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
         IterativeDetectionTask task = new IterativeDetectionTask(request, (summary, files, passSettings) ->
                 reportPrompt.confirm(summary, java.util.Arrays.stream(files).anyMatch(FitsFileInformation::isWcsSolved),
                         50, "Iterative pass: " + files.length + " frames", passSettings))
                 .showingPreviews(progressDialog.previewSink());
         JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.ITERATIVE_DETECTION,
-                mainAppWindow.getSession(), mainAppWindow.sessionJob(task),
+                mainAppWindow.getSession(), task,
                 mainAppWindow.forCurrentSession((handle, outcome) -> showIterativeOutcome(outcome, task)));
         if (!admission.admitted()) statusLabel.setText(admission.refusal());
     }
@@ -1514,7 +1518,7 @@ public class MainApplicationPanel extends JPanel {
     <R> void startJob(JobKind kind, ImageProcessing processing, Job<R> job, JobCoordinator.OutcomeHandler<R> handler) {
         ProcessingSession owner = mainAppWindow.getSession();
         if (owner == null || owner.getProcessing() != processing) return;
-        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(kind, owner, mainAppWindow.sessionJob(job),
+        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(kind, owner, job,
                 mainAppWindow.forCurrentSession(handler));
         if (!admission.admitted()) {
             statusLabel.setText(admission.refusal());
@@ -1750,7 +1754,7 @@ public class MainApplicationPanel extends JPanel {
                 // Writing rewrites the whole frame, which takes a while for a large one: it is a job, off this thread.
                 ImageProcessing session = mainAppWindow.getImageProcessing();
                 JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.WRITE_WCS, mainAppWindow.getSession(),
-                        mainAppWindow.sessionJob(new WriteWcsTask(session, fileInfo.getFilePath(), result)),
+                        new WriteWcsTask(session, fileInfo.getFilePath(), result),
                         mainAppWindow.forCurrentSession((handle, written) -> showWcsWriteOutcome(fileInfo, written)));
                 if (admission.admitted()) {
                     return;

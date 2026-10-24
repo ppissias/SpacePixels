@@ -86,7 +86,7 @@ public class TaskOutcomesTest {
         AtomicBoolean asked = new AtomicBoolean();
         try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             DetectionTask task = new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig(),
-                    SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, summary -> {
+                    SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, null, summary -> {
                 asked.set(true);
                 assertTrue(summary.totalDetections >= 0);
                 return false;
@@ -103,8 +103,8 @@ public class TaskOutcomesTest {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "limit", 5);
         try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             var config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
-            DetectionTask first = new DetectionTask(processing, config, 19, summary -> true);
-            DetectionTask next = new DetectionTask(processing, config, 23, summary -> true);
+            DetectionTask first = new DetectionTask(processing, config, 19, null, summary -> true);
+            DetectionTask next = new DetectionTask(processing, config, 23, null, summary -> true);
             assertEquals(19, recordedAutoTuneLimit(outcomeOf(first)));
             assertEquals(23, recordedAutoTuneLimit(outcomeOf(next)));
         }
@@ -126,7 +126,7 @@ public class TaskOutcomesTest {
         var application = new eu.startales.spacepixels.config.AppConfig();
         var request = new eu.startales.spacepixels.util.IterativeDetectionRequest(sequence.toFile(), config, application,
                 eu.startales.spacepixels.util.reporting.DetectionReportGenerator.captureExportSettings(application.variableStarReportOptions),
-                new eu.startales.spacepixels.util.IterativeDetectionPlan(5, 1, 6), null, 5, false, true, 6);
+                new eu.startales.spacepixels.util.IterativeDetectionPlan(5, 1, 6), null, 5, false, true, 6, null);
         List<Integer> subsets = new ArrayList<>();
         IterativeDetectionTask task = new IterativeDetectionTask(request, (summary, files, settings) -> {
             subsets.add(files.length);
@@ -189,7 +189,7 @@ public class TaskOutcomesTest {
         return new IterativeDetectionTask(new eu.startales.spacepixels.util.IterativeDetectionRequest(directory,
                 SyntheticDatasetFactory.createSyntheticDetectionConfig(), new eu.startales.spacepixels.config.AppConfig(),
                 eu.startales.spacepixels.util.reporting.ExportVisualizationSettings.defaults(),
-                new eu.startales.spacepixels.util.IterativeDetectionPlan(5, 5, 0), null, 5, false, false, 0));
+                new eu.startales.spacepixels.util.IterativeDetectionPlan(5, 5, 0), null, 5, false, false, 0, null));
     }
 
     /** Runs the job on the sequence and cancels it at the first progress message starting with {@code cancelAt}. */

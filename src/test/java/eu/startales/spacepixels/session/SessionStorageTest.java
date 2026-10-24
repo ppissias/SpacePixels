@@ -9,6 +9,7 @@ import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.AutoTuneSessionStore;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
+import eu.startales.spacepixels.util.SkySnapshot;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import org.junit.Rule;
 import org.junit.Test;
@@ -69,11 +70,11 @@ public class SessionStorageTest {
         }
     }
 
+    /** A toggle is in use at once, before its save finishes; the save and a run admitted meanwhile keep their copies. */
     @Test(timeout = 15000)
-    public void slowCorrectionSaveIsDetachedAndTheRunBarrierWaitsForUiAcknowledgement() throws Exception {
+    public void aToggleIsInUseBeforeItsSaveFinishesAndTheSaveAndARunKeepTheirCopies() throws Exception {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        BlockingQueue<Runnable> callbacks = new LinkedBlockingQueue<>();
         List<Boolean> saved = new CopyOnWriteArrayList<>();
         SessionStorage storage = new SessionStorage(new Store() {
             @Override public void saveCorrection(File directory, PlateSolutionCorrection correction) throws IOException {
@@ -83,74 +84,52 @@ public class SessionStorageTest {
                 saved.add(correction.enabled);
             }
         });
+        BlockingQueue<Runnable> callbacks = new LinkedBlockingQueue<>();
         SessionPersistence persistence = new SessionPersistence(storage, callbacks::add);
         SkyCatalogueModel model = model(persistence);
-        ExecutorService run = Executors.newSingleThreadExecutor();
         try {
             EventQueue.invokeAndWait(() -> toggle(model, true));
             assertTrue(entered.await(5, TimeUnit.SECONDS));
             exerciseEdt();
+            SkySnapshot admitted = model.snapshot();
+            assertTrue("a run admitted before the save finishes takes the toggle", admitted.correction().enabled);
+            assertTrue(admitted.belongsTo(folder.getRoot()));
             model.getCorrection().enabled = false;
-            Future<?> waiting = run.submit(() -> { persistence.awaitWrites(); return null; });
+            assertTrue("a later change in memory does not reach the admitted run", admitted.correction().enabled);
             release.countDown();
-            Runnable acknowledge = callbacks.poll(5, TimeUnit.SECONDS);
-            assertNotNull(acknowledge);
-            assertFalse(waiting.isDone());
-            EventQueue.invokeAndWait(acknowledge);
-            waiting.get(5, TimeUnit.SECONDS);
-            assertEquals(List.of(true), saved);
+            EventQueue.invokeAndWait(callbacks.poll(5, TimeUnit.SECONDS));
+            assertEquals("the save writes the toggled copy", List.of(true), saved);
+            assertNull(model.getSaveFailure());
         } finally {
             release.countDown();
-            run.shutdownNow();
             storage.finish();
             persistence.close();
         }
     }
 
+    /** A failed save keeps the correction in use for the session and says why, until a later save succeeds. */
     @Test(timeout = 15000)
-    public void aFailedOldToggleDoesNotOverwriteANewerEditAndLatestFailureRollsBackToSavedState() throws Exception {
+    public void aFailedSaveKeepsTheCorrectionInUseUntilALaterSaveSucceeds() throws Exception {
         AtomicInteger attempts = new AtomicInteger();
         BlockingQueue<Runnable> callbacks = new LinkedBlockingQueue<>();
         SessionStorage storage = new SessionStorage(new Store() {
             @Override public void saveCorrection(File directory, PlateSolutionCorrection correction) throws IOException {
-                if (attempts.incrementAndGet() != 2) throw new IOException("read only");
+                if (attempts.incrementAndGet() == 1) throw new IOException("read only");
             }
         });
         SessionPersistence persistence = new SessionPersistence(storage, callbacks::add);
         SkyCatalogueModel model = model(persistence);
         try {
-            EventQueue.invokeAndWait(() -> { toggle(model, true); toggle(model, false); });
+            EventQueue.invokeAndWait(() -> toggle(model, true));
+            EventQueue.invokeAndWait(callbacks.poll(5, TimeUnit.SECONDS));
+            assertTrue(model.isCorrectionEnabled());
+            assertEquals(Boolean.TRUE, model.getCorrection().userEnabled);
+            assertNotNull(model.getSaveFailure());
+            assertTrue("a run uses the correction that could not be saved", model.snapshot().correction().enabled);
+            EventQueue.invokeAndWait(() -> toggle(model, false));
             EventQueue.invokeAndWait(callbacks.poll(5, TimeUnit.SECONDS));
             assertFalse(model.isCorrectionEnabled());
             assertNull(model.getSaveFailure());
-            EventQueue.invokeAndWait(callbacks.poll(5, TimeUnit.SECONDS));
-            EventQueue.invokeAndWait(() -> toggle(model, true));
-            EventQueue.invokeAndWait(callbacks.poll(5, TimeUnit.SECONDS));
-            assertFalse(model.isCorrectionEnabled());
-            assertEquals(Boolean.FALSE, model.getCorrection().userEnabled);
-            assertNotNull(model.getSaveFailure());
-        } finally {
-            persistence.close();
-            storage.finish();
-        }
-    }
-
-    @Test(timeout = 15000)
-    public void repeatedFailedEditsRollBackToTheLastSavedCorrectionNotAnUnsavedIntermediate() throws Exception {
-        BlockingQueue<Runnable> callbacks = new LinkedBlockingQueue<>();
-        SessionStorage storage = new SessionStorage(new Store() {
-            @Override public void saveCorrection(File directory, PlateSolutionCorrection correction) throws IOException {
-                throw new IOException("read only");
-            }
-        });
-        SessionPersistence persistence = new SessionPersistence(storage, callbacks::add);
-        SkyCatalogueModel model = model(persistence);
-        try {
-            EventQueue.invokeAndWait(() -> { toggle(model, true); toggle(model, false); toggle(model, true); });
-            for (int index = 0; index < 3; index++) EventQueue.invokeAndWait(callbacks.poll(5, TimeUnit.SECONDS));
-            assertFalse(model.isCorrectionEnabled());
-            assertNull(model.getCorrection().userEnabled);
-            assertNotNull(model.getSaveFailure());
         } finally {
             persistence.close();
             storage.finish();
@@ -210,34 +189,6 @@ public class SessionStorageTest {
         original.notes.add("later edit");
         assertEquals(0, copied.global.ax[0], 0);
         assertTrue(copied.notes.isEmpty());
-    }
-
-    @Test(timeout = 15000)
-    public void cancellingARunWaitingForASaveDoesNotCancelOrLoseTheSave() throws Exception {
-        CountDownLatch entered = new CountDownLatch(1);
-        CountDownLatch release = new CountDownLatch(1);
-        AtomicInteger writes = new AtomicInteger();
-        java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean();
-        SessionStorage storage = new SessionStorage(new Store());
-        SessionPersistence persistence = new SessionPersistence(storage, EventQueue::invokeLater);
-        ExecutorService run = Executors.newSingleThreadExecutor();
-        try {
-            persistence.save(() -> { entered.countDown(); await(release); writes.incrementAndGet(); }, failure -> {});
-            assertTrue(entered.await(5, TimeUnit.SECONDS));
-            Future<?> waiting = run.submit(() -> { persistence.awaitWrites(cancelled::get); return null; });
-            cancelled.set(true);
-            ExecutionException failure = assertThrows(ExecutionException.class, () -> waiting.get(2, TimeUnit.SECONDS));
-            assertTrue(failure.getCause() instanceof CancellationException);
-            assertEquals(0, writes.get());
-            release.countDown();
-            persistence.awaitWrites();
-            assertEquals(1, writes.get());
-        } finally {
-            release.countDown();
-            run.shutdownNow();
-            storage.finish();
-            persistence.close();
-        }
     }
 
     private SkyCatalogueModel model(SessionPersistence persistence) {

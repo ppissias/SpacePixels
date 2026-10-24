@@ -10,6 +10,7 @@
 package eu.startales.spacepixels.session;
 
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
+import eu.startales.spacepixels.util.SkySnapshot;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 
 import java.io.File;
@@ -32,9 +33,7 @@ public final class SkyCatalogueModel {
     private PlateSolutionCorrection correction;
     private File sessionFolder;
     private SessionPersistence persistence;
-    private PlateSolutionCorrection savedCorrection;
     private Throwable saveFailure;
-    private long revision;
     private boolean closed;
 
     public void setPersistence(SessionPersistence persistence) { this.persistence = persistence; }
@@ -71,16 +70,11 @@ public final class SkyCatalogueModel {
 
     public void setCorrection(PlateSolutionCorrection correction) {
         this.correction = correction;
-        savedCorrection = correction == null ? null : correction.copy();
         saveFailure = null;
-        revision++;
         fireCorrectionChanged();
     }
 
-    /**
-     * Switches the correction immediately in memory. Desktop sessions queue a detached snapshot for saving;
-     * detection jobs wait for outstanding writes before resolving the saved plate solution.
-     */
+    /** Switches the correction on or off at once, and saves it like {@link #saveCorrection}. */
     public void setCorrectionEnabled(boolean enabled) throws IOException {
         if (closed) throw new IOException("This session is closed.");
         if (correction == null || !correction.isNeeded()) {
@@ -92,6 +86,10 @@ public final class SkyCatalogueModel {
         saveCorrection(updated);
     }
 
+    /**
+     * Puts {@code updated} in use at once and saves a copy on the session writer. When the save fails, the correction
+     * stays in use for this session and {@link #getSaveFailure} says why; a later successful save clears it.
+     */
     public void saveCorrection(PlateSolutionCorrection updated) throws IOException {
         if (closed) throw new IOException("This session is closed.");
         PlateSolutionCorrection snapshot = updated.copy();
@@ -101,16 +99,19 @@ public final class SkyCatalogueModel {
             return;
         }
         correction = updated;
-        saveFailure = null;
-        long version = ++revision;
         persistence.save(() -> persistence.storage().store().saveCorrection(sessionFolder, snapshot), failure -> {
-            if (failure == null) savedCorrection = snapshot;
-            if (revision != version) return;
             saveFailure = failure;
-            if (failure != null) correction = savedCorrection == null ? null : savedCorrection.copy();
             fireCorrectionChanged();
         });
         fireCorrectionChanged();
+    }
+
+    /**
+     * The catalogue and the correction as a run takes them when it is admitted. The correction is copied; a
+     * catalogue is replaced, never changed, once set, so the run keeps what it was given.
+     */
+    public SkySnapshot snapshot() {
+        return new SkySnapshot(sessionFolder, correction == null ? null : correction.copy(), catalogue);
     }
 
     private void fireCorrectionChanged() {

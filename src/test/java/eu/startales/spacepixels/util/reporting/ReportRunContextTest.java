@@ -7,6 +7,7 @@ import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
+import eu.startales.spacepixels.util.SkySnapshot;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogueStore;
@@ -86,5 +87,66 @@ public class ReportRunContextTest {
         ReportRunContext context = ReportRunContext.capture(DetectionRunOptions.defaults(), new FitsFileInformation[]{file});
         SkyCatalogueStore.save(directory, new SkyCatalogue());
         assertFalse(context.catalogue().isAvailable());
+    }
+
+    /** A run on the session's frames takes the session's correction and catalogue, saved or not, not the files. */
+    @Test public void aRunOnTheSessionsFramesUsesItsSkyDataRatherThanTheFiles() throws Exception {
+        File directory = SyntheticDatasetFactory.createSolvedMono16FitsSequence(folder.getRoot().toPath(), "session", 5).toFile();
+        FitsFileInformation[] files = solvedFiles(directory);
+        var transformer = WcsCoordinateTransformer.fromHeader(files[0].getFitsHeader());
+        SkyCatalogueStore.save(directory, catalogue(transformer, files[0], "saved catalogue"));
+        PlateSolutionCorrection.save(directory, correction(transformer, files[0], false));
+        SkySnapshot sky = new SkySnapshot(directory, correction(transformer, files[0], true),
+                catalogue(transformer, files[0], "unsaved catalogue"));
+
+        ReportRunContext fromSession = ReportRunContext.capture(DetectionRunOptions.defaults(), files, sky);
+        ReportRunContext fromFiles = ReportRunContext.capture(DetectionRunOptions.defaults(), files);
+
+        assertEquals("unsaved catalogue", fromSession.catalogue().catalogue.starSource);
+        assertTrue(fromSession.astrometry().getTransformer().isCorrected());
+        assertEquals("saved catalogue", fromFiles.catalogue().catalogue.starSource);
+        assertFalse(fromFiles.astrometry().getTransformer().isCorrected());
+    }
+
+    /** The session's sky data is not used for frames in another folder, such as an iterative pass on a prepared copy. */
+    @Test public void skyDataOfAnotherFolderIsIgnored() throws Exception {
+        File directory = SyntheticDatasetFactory.createSolvedMono16FitsSequence(folder.getRoot().toPath(), "copy", 5).toFile();
+        FitsFileInformation[] files = solvedFiles(directory);
+        var transformer = WcsCoordinateTransformer.fromHeader(files[0].getFitsHeader());
+        SkyCatalogueStore.save(directory, catalogue(transformer, files[0], "the copy's catalogue"));
+        SkySnapshot elsewhere = new SkySnapshot(folder.newFolder("session"), correction(transformer, files[0], true),
+                catalogue(transformer, files[0], "the session's catalogue"));
+
+        ReportRunContext context = ReportRunContext.capture(DetectionRunOptions.defaults(), files, elsewhere);
+
+        assertEquals("the copy's catalogue", context.catalogue().catalogue.starSource);
+        assertFalse(context.astrometry().getTransformer().isCorrected());
+    }
+
+    private static FitsFileInformation[] solvedFiles(File directory) throws Exception {
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory, ApplicationSettings.inMemory(new AppConfig()))) {
+            return processor.getFitsfileInformationHeadless();
+        }
+    }
+
+    private static SkyCatalogue catalogue(WcsCoordinateTransformer transformer, FitsFileInformation file, String source) {
+        SkyCatalogue catalogue = new SkyCatalogue();
+        catalogue.field = SkyField.of(transformer, file.getSizeWidth(), file.getSizeHeight());
+        catalogue.starSource = source;
+        return catalogue;
+    }
+
+    private static PlateSolutionCorrection correction(WcsCoordinateTransformer transformer, FitsFileInformation file, boolean enabled) {
+        PlateSolutionCorrection correction = new PlateSolutionCorrection();
+        correction.enabled = enabled;
+        correction.solutionKey = transformer.solutionKey();
+        correction.width = file.getSizeWidth();
+        correction.height = file.getSizeHeight();
+        correction.global = new PlateSolutionCorrection.Polynomial();
+        correction.global.order = 0;
+        correction.global.scale = 1;
+        correction.global.ax = new double[]{1};
+        correction.global.ay = new double[]{0};
+        return correction;
     }
 }

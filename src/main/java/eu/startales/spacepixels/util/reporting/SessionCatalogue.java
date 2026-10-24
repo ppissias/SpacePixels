@@ -47,14 +47,23 @@ final class SessionCatalogue {
         return load(context.fitsFiles, context.astrometryContext);
     }
 
-    /** Loads an independently owned catalogue once for the supplied resolved run metadata. */
+    /** Loads the catalogue of the frames' folder once for the supplied resolved run metadata. */
     static SessionCatalogue load(FitsFileInformation[] files, DetectionReportAstrometry.Context astrometry) {
+        return of(files, astrometry, SkyCatalogueStore::load);
+    }
+
+    /**
+     * The catalogue that {@code source} gives for the frames' folder, when it covers the field the run's plate
+     * solution shows; otherwise an explicitly absent catalogue.
+     */
+    static SessionCatalogue of(FitsFileInformation[] files, DetectionReportAstrometry.Context astrometry,
+                               java.util.function.Function<File, SkyCatalogue> source) {
         WcsCoordinateTransformer transformer = astrometry != null ? astrometry.getTransformer() : null;
         if (files == null || files.length == 0 || files[0] == null || files[0].getFilePath() == null || transformer == null) {
             return new SessionCatalogue(null, 0);
         }
         File folder = new File(files[0].getFilePath()).getAbsoluteFile().getParentFile();
-        SkyCatalogue catalogue = folder == null ? null : SkyCatalogueStore.load(folder);
+        SkyCatalogue catalogue = folder == null ? null : source.apply(folder);
         if (catalogue == null || catalogue.field == null
                 || !SkyField.of(transformer, files[0].getSizeWidth(), files[0].getSizeHeight()).isSameFieldAs(catalogue.field)) {
             catalogue = null;
