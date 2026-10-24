@@ -45,7 +45,7 @@ public class ProcessingSessionTest {
             try (ProcessingSession second = session("second", settings)) {
                 assertSame(first.getProcessing().getAppConfig(), second.getProcessing().getAppConfig());
                 assertEquals("34", second.getProcessing().getAppConfig().siteLat);
-                second.getProcessing().saveAppConfig();
+                settings.save();
                 assertEquals("34", SpacePixelsAppConfigIO.load(file).siteLat);
                 assertNotEquals(first.getId(), second.getId());
             }

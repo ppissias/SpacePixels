@@ -3,7 +3,10 @@ package eu.startales.spacepixels.util.reporting;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.DetectionRunOptions;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.util.ReportInclusion;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogueStore;
 import eu.startales.spacepixels.util.skycatalog.SkyField;
@@ -96,7 +99,10 @@ public class CatalogueStarReportTest {
             if (mode.equals("no-catalogue")) Files.delete(new File(input, SkyCatalogue.FILE_NAME).toPath());
             if (mode.equals("unsolved")) for (var file : files) file.getFitsHeader().remove("CRVAL1");
             File output = temporary.newFolder(mode);
-            DetectionReportGenerator.exportTrackVisualizations(result, frames, files, output, config, new AppConfig());
+            DetectionReportGenerator.exportTrackVisualizations(result, frames, files, output, config,
+                    ReportRunContext.capture(DetectionRunOptions.capture(new AppConfig(),
+                            SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES), files),
+                    ReportInclusion.all(), null);
             String html = Files.readString(new File(output, "detection_report.html").toPath());
             String map = Files.readString(new File(output, VariableStarMapWriter.FULL_SIZE_FILE).toPath());
             String preview = Files.readString(new File(output, VariableStarMapWriter.PREVIEW_FILE).toPath());

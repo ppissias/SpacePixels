@@ -3,9 +3,10 @@ package eu.startales.spacepixels.util;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.DetectionRunOptions;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.session.SessionFrames;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Rule;
 import org.junit.Test;
@@ -63,14 +64,14 @@ public class LivePreviewPipelineTest {
         }
 
         File plain = folder.newFolder("without");
-        new StandardDetectionPipelineService(app, new SessionFrames()).run(config.clone(), files, null, null, plain,
-                DetectionReportGenerator.captureExportSettings(app.variableStarReportOptions));
+        new StandardDetectionPipelineService(new SessionFrames()).run(config.clone(), files, null, null, plain,
+                DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES));
 
         EverySink sink = new EverySink();
         File withPreview = folder.newFolder("with");
         try (RunPreviewScope scope = RunPreviewScope.open(sink)) {
-            new StandardDetectionPipelineService(app, new SessionFrames()).run(config.clone(), files, null, null, withPreview,
-                    DetectionReportGenerator.captureExportSettings(app.variableStarReportOptions));
+            new StandardDetectionPipelineService(new SessionFrames()).run(config.clone(), files, null, null, withPreview,
+                    DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES));
         }
 
         List<String> captions = sink.received.stream().map(RunPreview::caption).toList();

@@ -11,7 +11,6 @@ package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
-import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.util.reporting.ReportRunContext;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jplatesolve.PlateSolveOperation;
@@ -122,44 +121,6 @@ public class ImageProcessing implements AutoCloseable {
             return featureEnabled && count > 0;
         }
 
-        /**
-         * The warning shown when a run returns many detections, grouped by kind of result. Slow-mover candidates
-         * (maximum stack) and local rescue candidates (residual analysis of leftover transients) are different
-         * analyses and are listed separately.
-         *
-         * @param plateSolved whether a plate-solved frame gives the report sky coordinates
-         * @param limit the count above which the warning is shown
-         */
-        public String warningMessage(boolean plateSolved, int limit) {
-            String photometry;
-            if (photometryVerdict == null || "NOT_RUN".equals(photometryVerdict)) {
-                photometry = "off";
-            } else if ("NOT_READY".equals(photometryVerdict)) {
-                photometry = "session not ready for photometry (see the report)";
-            } else {
-                photometry = variableStarCandidates + " candidates, " + possibleVariableStars + " possible";
-            }
-            return "The engine found " + totalDetections + " detections, more than the usual " + limit + ".\n\n"
-                    + "Moving-object tracks: " + movingTargets + "\n"
-                    + "Streak tracks (multi-frame): " + streakTracks + "\n"
-                    + "Single streaks: " + singleStreaks + "\n"
-                    + "Single-frame anomalies: " + anomalies + "\n"
-                    + "Slow-mover candidates (maximum stack): " + slowMoverCandidates + "\n"
-                    + "Local rescue candidates: " + localRescueCandidates + "\n"
-                    + "Local activity clusters: " + localActivityClusters + "\n"
-                    + "Common-motion groups: " + commonMotionGroups + "\n"
-                    + "Camera-fixed groups (hot pixels, dust): " + cameraFixedGroups + "\n"
-                    + "Still unclassified, not counted above: " + unclassifiedDetections + "\n"
-                    + "Variable stars: " + photometry + "\n"
-                    + "Astrometry: " + (plateSolved
-                    ? "a plate-solved frame is available, so the report has sky coordinates and online identification."
-                    : "no plate-solved frame, so the report has no sky coordinates or identification.") + "\n\n"
-                    + "Largest group: " + largestGroup() + ".\n"
-                    + "Generating image crops, GIFs and the HTML report for this many objects takes a long time and uses a lot of disk space.\n"
-                    + "Many tracks or anomalies usually mean the Detection Sigma is too low and noise was linked.\n\n"
-                    + "Do you want to generate the report anyway?";
-        }
-
         /** Describes the largest classified group, preserving the existing tie order. */
         public String largestGroup() {
             String[] names = {"moving objects", "single-frame anomalies", "slow-mover candidates",
@@ -187,20 +148,17 @@ public class ImageProcessing implements AutoCloseable {
         private final DetectionConfig effectiveConfig;
         private final FitsFileInformation[] filesInformation;
         private final List<short[][]> rawFramesForExport;
-        private final long pipelineDurationMillis;
 
         PipelineExecutionData(PipelineResult pipelineResult,
                               DetectionConfig effectiveConfig,
                               FitsFileInformation[] filesInformation,
                               List<short[][]> rawFramesForExport,
-                              long pipelineDurationMillis,
                               ReportRunContext reportContext) {
             this.reportContext = java.util.Objects.requireNonNull(reportContext);
             this.pipelineResult = pipelineResult;
             this.effectiveConfig = effectiveConfig == null ? null : effectiveConfig.clone();
             this.filesInformation = filesInformation == null ? new FitsFileInformation[0] : filesInformation.clone();
             this.rawFramesForExport = Collections.unmodifiableList(new ArrayList<>(rawFramesForExport));
-            this.pipelineDurationMillis = pipelineDurationMillis;
         }
 
         /** Returns the captured report options, metadata, WCS and catalogue owned by this execution. */
@@ -222,10 +180,6 @@ public class ImageProcessing implements AutoCloseable {
 
         public List<short[][]> getRawFramesForExport() {
             return rawFramesForExport;
-        }
-
-        public long getPipelineDurationMillis() {
-            return pipelineDurationMillis;
         }
     }
 
@@ -256,7 +210,6 @@ public class ImageProcessing implements AutoCloseable {
     private final ApplicationSettings applicationSettings;
     private final PlateSolveService plateSolveService;
     private final StandardDetectionPipelineService standardDetectionPipelineService;
-    private final IterativeDetectionPipelineService iterativeDetectionPipelineService;
     private final FitsVisualizationRenderer fitsVisualizationRenderer;
 
     public SessionFrames getSessionFrames() { return sessionFrames; }
@@ -299,8 +252,7 @@ public class ImageProcessing implements AutoCloseable {
         this.applicationSettings = Objects.requireNonNull(settings);
         this.appConfig = settings.getConfig();
         this.plateSolveService = new PlateSolveService(this.appConfig);
-        this.standardDetectionPipelineService = new StandardDetectionPipelineService(this.appConfig, sessionFrames);
-        this.iterativeDetectionPipelineService = new IterativeDetectionPipelineService(this.appConfig);
+        this.standardDetectionPipelineService = new StandardDetectionPipelineService(sessionFrames);
         this.fitsVisualizationRenderer = new FitsVisualizationRenderer();
         this.batchService = new FitsBatchService(alignedFitsFolderFullPath, fitsVisualizationRenderer);
         this.importService = new FitsImportService(alignedFitsFolderFullPath, sessionFrames, batchService, interaction);
@@ -344,21 +296,16 @@ public class ImageProcessing implements AutoCloseable {
     // THE MULTI-THREADED DETECTION PIPELINE
     // =========================================================================
 
-    /**
-     * Runs the standard detection pipeline on the full cached frame set and exports the HTML
-     * session report plus associated visualizations.
-     */
-    public File detectObjects(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener) throws Exception {
-        return detectObjects(config, safetyPrompt, progressListener, captureRunOptions());
-    }
-
     /** Captures application options before a desktop job is queued; no file access or image copying occurs. */
     public DetectionRunOptions captureRunOptions() {
         return DetectionRunOptions.capture(appConfig,
                 SpacePixelsDetectionProfileIO.getActiveAutoTuneMaxCandidateFrames());
     }
 
-    /** Runs a previously admitted request with its captured application options. */
+    /**
+     * Runs the standard detection pipeline on the full cached frame set with the request's captured application
+     * options, and exports the HTML session report plus associated visualizations.
+     */
     public File detectObjects(DetectionConfig config, DetectionSafetyPrompt safetyPrompt,
             TransientEngineProgressListener progressListener, DetectionRunOptions options) throws Exception {
         if (sessionFrames.getFiles() == null) getFitsfileInformation();
@@ -376,14 +323,9 @@ public class ImageProcessing implements AutoCloseable {
     }
 
     /**
-     * Runs the standard detection pipeline and returns the in-memory engine output without writing
-     * any report artifacts to disk.
+     * Runs the standard detection pipeline with explicit immutable application options and returns the in-memory
+     * engine output without writing any report artifacts; the execution data carries the options into the export.
      */
-    public PipelineExecutionData runDetectionPipeline(DetectionConfig config, TransientEngineProgressListener progressListener) throws Exception {
-        return runDetectionPipeline(config, progressListener, captureRunOptions());
-    }
-
-    /** Runs with explicit immutable application options; returned execution data carries them into later export. */
     public PipelineExecutionData runDetectionPipeline(DetectionConfig config, TransientEngineProgressListener progressListener,
             DetectionRunOptions options) throws Exception {
         if (sessionFrames.getFiles() == null) getFitsfileInformation();
@@ -391,33 +333,11 @@ public class ImageProcessing implements AutoCloseable {
     }
 
     /**
-     * Exports the HTML report and visualization bundle for a previously executed pipeline run.
+     * Exports the HTML report and visualization bundle for a previously executed pipeline run, telling
+     * {@code progressListener} (which may be null) 0-99% as it writes.
      */
-    public File exportDetectionReport(PipelineExecutionData executionData) throws IOException {
-        return exportDetectionReport(executionData, null);
-    }
-
-    /** As {@link #exportDetectionReport(PipelineExecutionData)}, telling {@code progressListener} 0-99% as it writes. */
     public File exportDetectionReport(PipelineExecutionData executionData, TransientEngineProgressListener progressListener) throws IOException {
         return standardDetectionPipelineService.exportDetectionReport(executionData, progressListener);
-    }
-
-// =========================================================================
-// ITERATIVE SLOW-MOVER PIPELINE
-// =========================================================================
-
-    /**
-     * Re-runs detection on progressively larger time-spaced subsets so slow movers can be explored
-     * across several pass sizes, with an independent ordinary pipeline run for each subset.
-     */
-    public File detectSlowObjectsIterative(DetectionConfig config, DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener, int maxFramesLimit) throws Exception {
-        if (sessionFrames.getFiles() == null) getFitsfileInformation();
-        return iterativeDetectionPipelineService.detectSlowObjectsIterative(
-                config,
-                sessionFrames.getFiles(),
-                safetyPrompt,
-                progressListener,
-                maxFramesLimit);
     }
 
 // =========================================================================
@@ -495,13 +415,6 @@ public class ImageProcessing implements AutoCloseable {
         return appConfig;
     }
 
-    /**
-     * Writes the current application preferences back to the user's config file.
-     */
-    public void saveAppConfig() throws IOException {
-        applicationSettings.save();
-    }
-
     /** The interactive conversion's negative-value question. */
     static String negativeValueQuestion(FitsPixelConverter.NegativeValueScan scan, int offset) {
         return FitsImportService.negativeValueQuestion(scan, offset);
@@ -516,13 +429,6 @@ public class ImageProcessing implements AutoCloseable {
     /** The warning {@link #offerToImportLargestExposureGroup} shows. */
     static String mixedExposureQuestion(MixedExposureException mixed) {
         return FitsImportService.mixedExposureQuestion(mixed);
-    }
-
-    /**
-     * Applies the selected stretch algorithm directly to a FITS image in memory.
-     */
-    public void stretchFITSImage(Fits fitsImage, int stretchFactor, int iterations, StretchAlgorithm algo) throws FitsException, IOException {
-        fitsVisualizationRenderer.stretchFitsImage(fitsImage, stretchFactor, iterations, algo);
     }
 
     /**

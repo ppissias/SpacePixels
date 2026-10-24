@@ -37,7 +37,8 @@ public class TypedDetectionSettingsTest {
         assertTrue(failure.getMessage().contains(setting.id()));
         assertEquals(before, config.localActivityClusterRadiusPixels, 0);
         config.localActivityClusterRadiusPixels = Double.NaN;
-        assertTrue(setting.issues(config).stream().anyMatch(issue -> issue.ruleId() == DetectionConfigRules.RuleId.NON_FINITE));
+        assertTrue(DetectionConfigRules.validate(config, DetectionConfigRules.Operation.CONFIGURATION).stream()
+                .anyMatch(issue -> issue.fields().contains(setting.id()) && issue.ruleId() == DetectionConfigRules.RuleId.NON_FINITE));
         assertThrows(IllegalArgumentException.class, () -> new DetectionSetting<>("enableLocalActivityClusters",
                 "Wrong type", "", "Invalid application binding", false, Integer.class,
                 source -> source.localActivityClusterMinFrames, (target, value) -> target.localActivityClusterMinFrames = value));

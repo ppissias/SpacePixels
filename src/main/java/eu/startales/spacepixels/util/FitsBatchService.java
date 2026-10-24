@@ -206,21 +206,21 @@ final class FitsBatchService {
                 }
             }
 
-            System.out.println("\n--- DEBUG: " + label + " ---");
-            System.out.println("File:   " + fitsFile.getName());
-            System.out.println("BITPIX: " + bitpix);
-            System.out.println("BZERO:  " + bzero);
-            System.out.println("BSCALE: " + bscale);
+            DebugOutput.println("\n--- DEBUG: " + label + " ---");
+            DebugOutput.println("File:   " + fitsFile.getName());
+            DebugOutput.println("BITPIX: " + bitpix);
+            DebugOutput.println("BZERO:  " + bzero);
+            DebugOutput.println("BSCALE: " + bscale);
             if (min != Double.MAX_VALUE) {
-                System.out.println("Raw Min Value: " + min);
-                System.out.println("Raw Max Value: " + max);
+                DebugOutput.println("Raw Min Value: " + min);
+                DebugOutput.println("Raw Max Value: " + max);
                 // Calculate what the true value is after BZERO/BSCALE are applied by a viewer
-                System.out.println("True Visual Min: " + ((min * bscale) + bzero));
-                System.out.println("True Visual Max: " + ((max * bscale) + bzero));
+                DebugOutput.println("True Visual Min: " + ((min * bscale) + bzero));
+                DebugOutput.println("True Visual Max: " + ((max * bscale) + bzero));
             } else {
-                System.out.println("(3D Color array, skipping min/max scan for brevity)");
+                DebugOutput.println("(3D Color array, skipping min/max scan for brevity)");
             }
-            System.out.println("-----------------------------------");
+            DebugOutput.println("-----------------------------------");
 
         } catch (Exception failure) {
             System.err.println("Debug read failed for " + fitsFile.getName() + ": " + failure.getMessage());

@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.DetectionRunOptions;
+import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -38,7 +40,7 @@ public class IterativeDetectionRunTest {
         request.appConfig().siteLat = "also wrong";
         List<Integer> sizes = new ArrayList<>();
         List<String> progressMessages = new ArrayList<>();
-        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
+        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
                 (settings, files, options, prompt, progress, output) -> {
                     sizes.add(files.length);
                     assertTrue(settings.enableVariableStarDetection);
@@ -64,7 +66,7 @@ public class IterativeDetectionRunTest {
 
     @Test public void declinedAndFailedPassesAreRecordedAndLaterPassesStillRun() throws Exception {
         File source = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "outcomes", 9).toFile();
-        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
+        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
                 (config, files, options, prompt, progress, output) -> {
                     if (files.length == 5) return new StandardDetectionPipelineService.RunResult(null, summary());
                     if (files.length == 7) throw new IOException("export <failed>");
@@ -83,7 +85,7 @@ public class IterativeDetectionRunTest {
 
     @Test public void cancellationRetainsCompletedReportsAndMarksRemainingPasses() throws Exception {
         File source = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "cancel", 9).toFile();
-        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
+        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
                 (config, files, options, prompt, progress, output) -> {
                     if (files.length == 7) {
                         Files.createDirectories(output.toPath());
@@ -111,7 +113,7 @@ public class IterativeDetectionRunTest {
             @Override public boolean wantsPreview(boolean stageChange) { return true; }
             @Override public void preview(RunPreview preview) { previews.add(preview); }
         };
-        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
+        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
                 (config, files, options, prompt, progress, output) -> completed(output));
         try (RunPreviewScope scope = RunPreviewScope.open(sink)) {
             service.run(request(source, new DetectionConfig(), new AppConfig(), new IterativeDetectionPlan(5, 3, 8)), null, null);
@@ -124,7 +126,7 @@ public class IterativeDetectionRunTest {
 
     @Test public void aCancelledRunWithNoFinishedPassRemovesTheCopyItConverted() throws Exception {
         File source = SyntheticDatasetFactory.createMono32FloatFitsSequence(folder.getRoot().toPath(), "float-cancel", 9).toFile();
-        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
+        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
                 (config, files, options, prompt, progress, output) -> {
                     throw new CancellationException();
                 });
@@ -136,7 +138,7 @@ public class IterativeDetectionRunTest {
 
     @Test public void aCancelledRunThatPublishedAnIndexKeepsTheCopyItLinks() throws Exception {
         File source = SyntheticDatasetFactory.createMono32FloatFitsSequence(folder.getRoot().toPath(), "float-keep", 9).toFile();
-        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
+        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
                 (config, files, options, prompt, progress, output) -> {
                     if (files.length == 7) throw new CancellationException();
                     return completed(output);
@@ -172,8 +174,9 @@ public class IterativeDetectionRunTest {
                 }
             }
             File normal = folder.newFolder("normal" + passIndex);
-            new StandardDetectionPipelineService(app, new eu.startales.spacepixels.session.SessionFrames())
-                    .run(config.clone(), subset.toArray(FitsFileInformation[]::new), null, null, normal, request.visualization());
+            new StandardDetectionPipelineService(new eu.startales.spacepixels.session.SessionFrames())
+                    .run(config.clone(), subset.toArray(FitsFileInformation[]::new), null, null, normal,
+                            DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES).withVisualization(request.visualization()));
             File actual = new File(index.getParentFile(), pass.get("frameCount").getAsInt() + "_frames");
             JsonObject iterativeData = json(new File(actual, "report-data.json"));
             JsonObject normalData = json(new File(normal, "report-data.json"));
@@ -204,7 +207,7 @@ public class IterativeDetectionRunTest {
         List<String> passSettings = new ArrayList<>();
         List<String> messages = new ArrayList<>();
         java.util.concurrent.atomic.AtomicInteger tuningCalls = new java.util.concurrent.atomic.AtomicInteger();
-        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(null,
+        IterativeDetectionPipelineService service = new IterativeDetectionPipelineService(
                 (settings, files, options, prompt, progress, output) -> {
                     passSettings.add(new com.google.gson.Gson().toJson(settings));
                     assertFalse(messages.isEmpty());

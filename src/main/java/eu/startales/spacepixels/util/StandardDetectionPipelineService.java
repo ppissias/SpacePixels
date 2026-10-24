@@ -7,13 +7,10 @@
  */
 package eu.startales.spacepixels.util;
 
-import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.DetectionRunOptions;
-import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.util.reporting.ReportRunContext;
 import eu.startales.spacepixels.session.SessionFrames;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
-import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
@@ -31,39 +28,19 @@ import java.util.List;
  * Runs the standard JTransient detection path and exports the resulting report artifacts.
  *
  * <p>This service owns the non-iterative load-run-export flow so {@link ImageProcessing} can stay
- * focused on FITS lifecycle concerns, iterative workflows, and the broader facade API.</p>
+ * focused on FITS lifecycle concerns and the broader facade API. Each run receives its application options
+ * explicitly in a {@link eu.startales.spacepixels.config.DetectionRunOptions}.</p>
  */
 final class StandardDetectionPipelineService {
 
-    private final AppConfig appConfig;
     private final SessionFrames state;
 
-    StandardDetectionPipelineService(AppConfig appConfig, SessionFrames state) {
-        this.appConfig = appConfig;
+    /** Creates a service that records the last run's overlays in {@code state}. */
+    StandardDetectionPipelineService(SessionFrames state) {
         this.state = state;
     }
 
     record RunResult(File report, ImageProcessing.DetectionSummary summary) {}
-
-    File detectObjects(DetectionConfig config,
-                       FitsFileInformation[] cachedFileInfo,
-                       ImageProcessing.DetectionSafetyPrompt safetyPrompt,
-                       TransientEngineProgressListener progressListener) throws Exception {
-        return run(config, cachedFileInfo, safetyPrompt, progressListener, null, captureOptions()).report();
-    }
-
-    RunResult run(DetectionConfig config, FitsFileInformation[] cachedFileInfo,
-                  ImageProcessing.DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener,
-                  File outputDirectory, ExportVisualizationSettings visualization) throws Exception {
-        DetectionRunOptions options = captureOptions();
-        return run(config, cachedFileInfo, safetyPrompt, progressListener, outputDirectory,
-                visualization == null ? options : options.withVisualization(visualization));
-    }
-
-    /** Captures legacy facade defaults only at admission; admitted jobs supply explicit immutable options. */
-    private DetectionRunOptions captureOptions() {
-        return DetectionRunOptions.capture(appConfig, SpacePixelsDetectionProfileIO.getActiveAutoTuneMaxCandidateFrames());
-    }
 
     /** Executes load/detect/export using one options snapshot for the entire run. */
     RunResult run(DetectionConfig config, FitsFileInformation[] cachedFileInfo,
@@ -110,12 +87,6 @@ final class StandardDetectionPipelineService {
             progressListener.onProgressUpdate(100, "Finished!");
         }
         return new RunResult(reportFile, detectionSummary);
-    }
-
-    ImageProcessing.PipelineExecutionData runDetectionPipeline(DetectionConfig config,
-                                                               FitsFileInformation[] cachedFileInfo,
-                                                               TransientEngineProgressListener progressListener) throws Exception {
-        return runDetectionPipeline(config, cachedFileInfo, progressListener, captureOptions());
     }
 
     /** Freezes configuration, metadata, WCS and catalogue before the first progress callback or FITS read. */
@@ -190,21 +161,16 @@ final class StandardDetectionPipelineService {
         long pipelineDuration = System.currentTimeMillis() - startTime;
         DebugOutput.println("Total Pipeline Time: " + pipelineDuration + "ms");
 
-        return new ImageProcessing.PipelineExecutionData(result, effectiveConfig, cachedFileInfo, rawFramesForExport, pipelineDuration, reportContext);
-    }
-
-    File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData,
-                               TransientEngineProgressListener progressListener) throws IOException {
-        return exportDetectionReport(executionData, ReportInclusion.all(), progressListener);
+        return new ImageProcessing.PipelineExecutionData(result, effectiveConfig, cachedFileInfo, rawFramesForExport, reportContext);
     }
 
     /**
-     * Writes the report into a new {@code detections_} folder; {@code progressListener} (which may be null) hears
+     * Writes the full report into a new {@code detections_} folder; {@code progressListener} (which may be null) hears
      * 0-99%. When it stops the report with a cancel ({@link Cancellation}), the unfinished folder is removed.
      */
-    File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData, ReportInclusion inclusion,
+    File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData,
                                TransientEngineProgressListener progressListener) throws IOException {
-        return exportDetectionReport(executionData, inclusion, progressListener, null);
+        return exportDetectionReport(executionData, ReportInclusion.all(), progressListener, null);
     }
 
     private File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData, ReportInclusion inclusion,

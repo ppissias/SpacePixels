@@ -1,6 +1,9 @@
 package eu.startales.spacepixels.util;
 
+import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
+import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Rule;
 import org.junit.Test;
@@ -38,7 +41,7 @@ public class ReportFailureMessagesTest {
             IOException failure = assertThrows(IOException.class, () -> processing.detectObjects(config, summary -> {
                 replaceFolderWithFile(sequence.toFile());
                 return true;
-            }, null));
+            }, null, DetectionRunOptions.defaults()));
             assertTrue(failure.getMessage(), failure.getMessage().startsWith("The detection finished, but the report could not be written: "));
         }
     }
@@ -47,23 +50,22 @@ public class ReportFailureMessagesTest {
     public void anIterativePassWithoutAReportSaysSoOnTheIndexPage() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", FRAME_COUNT);
         DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
-        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            processing.getFitsfileInformationHeadless();
-            // Before the pass writes its report: a file takes the place of the pass's folder.
-            File index = processing.detectSlowObjectsIterative(config, summary -> {
-                File[] passes = sequence.toFile().listFiles(file -> file.getName().startsWith("iterative_detections_"));
-                assertNotNull(passes);
-                try {
-                    Files.writeString(new File(passes[0], FRAME_COUNT + "_frames").toPath(), "not a folder");
-                } catch (IOException e) {
-                    throw new IllegalStateException(e);
-                }
-                return true;
-            }, null, 0);
-            String html = Files.readString(index.toPath(), StandardCharsets.UTF_8);
-            assertTrue(html, html.contains("Failed") && html.contains("report could not be written"));
-            assertFalse(html, html.contains(FRAME_COUNT + "_frames/detection_report.html"));
-        }
+        var request = new IterativeDetectionRequest(sequence.toFile(), config, new AppConfig(),
+                ExportVisualizationSettings.defaults(), new IterativeDetectionPlan(5, 5, 0), null, 5, false, false, 0);
+        // Before the pass writes its report: a file takes the place of the pass's folder.
+        File index = new IterativeDetectionPipelineService().run(request, (summary, files, settings) -> {
+            File[] passes = sequence.toFile().listFiles(file -> file.getName().startsWith("iterative_detections_"));
+            assertNotNull(passes);
+            try {
+                Files.writeString(new File(passes[0], FRAME_COUNT + "_frames").toPath(), "not a folder");
+            } catch (IOException e) {
+                throw new IllegalStateException(e);
+            }
+            return true;
+        }, null);
+        String html = Files.readString(index.toPath(), StandardCharsets.UTF_8);
+        assertTrue(html, html.contains("Failed") && html.contains("report could not be written"));
+        assertFalse(html, html.contains(FRAME_COUNT + "_frames/detection_report.html"));
     }
 
     private static void replaceFolderWithFile(File directory) {

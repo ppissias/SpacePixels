@@ -195,6 +195,23 @@ public class GuiDetectionReportPromptTest {
         return new ImageProcessing.DetectionSummary(60, 0, 0, 1, 59, 0, 0, 0, "READY", 2, 1, 0, 0, 0);
     }
 
+    /** States the photometry readiness and, without a plate solution, that the report has no sky coordinates. */
+    @Test
+    public void photometryReadinessAndMissingAstrometryAreStated() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var config = new DetectionConfig();
+            config.enableVariableStarDetection = true;
+            var notReady = new Choice(new ImageProcessing.DetectionSummary(
+                    60, 0, 0, 60, 0, 0, 0, 0, "NOT_READY", 0, 0, 0, 0, 0), config);
+            assertTrue(notReady.hasText("session not ready for photometry"));
+            assertTrue(notReady.hasText("no plate-solved frame, so the report has no sky coordinates or identification."));
+            var ready = new Choice(new ImageProcessing.DetectionSummary(
+                    80, 2, 1, 4, 50, 5, 6, 2, "READY", 3, 1, 4, 12, 3), config);
+            assertTrue(ready.hasText("3 candidates, 1 possible"));
+            assertTrue(ready.hasText("Largest group: single-frame anomalies (50)."));
+        });
+    }
+
     /** Builds and inspects real dialog contents on the EDT without reflective access or modal windows. */
     private static final class Choice {
         private final GuiDetectionReportPrompt.ReportChoice choice;
@@ -243,6 +260,20 @@ public class GuiDetectionReportPromptTest {
         }
 
         /** Finds the changing included-count line among the surrounding explanation labels. */
+        /** Whether a label or wrapped text anywhere in the dialog, including the category grid, contains {@code text}. */
+        boolean hasText(String text) {
+            return contains(panel, text);
+        }
+
+        private static boolean contains(java.awt.Container container, String text) {
+            for (var component : container.getComponents()) {
+                if (component instanceof JLabel label && label.getText() != null && label.getText().contains(text)) return true;
+                if (component instanceof javax.swing.text.JTextComponent area && area.getText().contains(text)) return true;
+                if (component instanceof java.awt.Container child && contains(child, text)) return true;
+            }
+            return false;
+        }
+
         boolean hasLabel(String text) {
             return Arrays.stream(panel.getComponents())
                     .anyMatch(component -> component instanceof JLabel label && text.equals(label.getText()));

@@ -82,7 +82,9 @@ public class VariableStarPresentationTest {
         for (var options : List.of(new VariableStarReportOptions(40, VariableStarReportOptions.SortOrder.SIGNIFICANCE),
                 new VariableStarReportOptions(60, VariableStarReportOptions.SortOrder.LARGEST_VARIATION))) {
             File output = temporary.newFolder(); var app = new AppConfig(); app.variableStarReportOptions = options;
-            DetectionReportGenerator.exportTrackVisualizations(result, frames, files, output, config, app);
+            DetectionReportGenerator.exportTrackVisualizations(result, frames, files, output, config,
+                    ReportRunContext.capture(DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES), files),
+                    ReportInclusion.all(), null);
             String html = Files.readString(new File(output, "detection_report.html").toPath());
             assertEquals(options.maxCandidateCards(), count(html, "id='variable-v[0-9]+'"));
             var ids = new HashSet<String>(); var matches = Pattern.compile("(?<![\\w-])id=['\"]([^'\"]+)['\"]").matcher(html);

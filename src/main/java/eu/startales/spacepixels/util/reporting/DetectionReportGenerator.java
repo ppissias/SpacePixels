@@ -10,9 +10,6 @@
 
 package eu.startales.spacepixels.util.reporting;
 
-import eu.startales.spacepixels.config.DetectionRunOptions;
-import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
-import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
 import io.github.ppissias.jtransient.model.AnomalyDetection;
 import io.github.ppissias.jtransient.model.AnomalyType;
@@ -44,7 +41,6 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -1179,82 +1175,17 @@ if (FindingCategory.SLOW_MOVER.included(inclusion) && context.config != null && 
     // =================================================================
 
     /**
-     * The master HTML generator.
-     * Consumes the full engine result, config settings, and raw FITS frames to crop targets,
-     * render animated GIFs, and layout the final diagnostic dashboard.
+     * The master HTML generator. Consumes the full engine result, the run's captured context and the raw FITS frames
+     * to crop targets, render animated GIFs and lay out the report. A null {@code inclusion} includes every optional
+     * group. Tells {@code progress} (which may be null) how far it is, from 0 to 99 %. The listener may throw to stop
+     * the report, for example when its job is cancelled; the HTML page is then not written.
      */
-    public static void exportTrackVisualizations(PipelineResult result,
-                                                 List<short[][]> rawFrames,
-                                                 FitsFileInformation[] fitsFiles,
-                                                 File exportDir,
-                                                 DetectionConfig config,
-                                                 AppConfig appConfig) throws IOException {
-        exportTrackVisualizations(result, rawFrames, fitsFiles, exportDir, config, appConfig, ReportInclusion.all());
-    }
-
-    public static void exportTrackVisualizations(PipelineResult result,
-                                                 List<short[][]> rawFrames,
-                                                 FitsFileInformation[] fitsFiles,
-                                                 File exportDir,
-                                                 DetectionConfig config,
-                                                 AppConfig appConfig,
-                                                 ReportInclusion inclusion) throws IOException {
-        exportTrackVisualizations(result, rawFrames, fitsFiles, exportDir, config, appConfig, inclusion, null);
-    }
-
-    /**
-     * Writes the report, telling {@code progress} (which may be null) how far it is, from 0 to 99 %. The listener may
-     * throw to stop the report, for example when its job is cancelled; the HTML page is then not written.
-     */
-    public static void exportTrackVisualizations(PipelineResult result,
-                                                 List<short[][]> rawFrames,
-                                                 FitsFileInformation[] fitsFiles,
-                                                 File exportDir,
-                                                 DetectionConfig config,
-                                                 AppConfig appConfig,
-                                                 ReportInclusion inclusion,
-                                                 TransientEngineProgressListener progress) throws IOException {
-        exportTrackVisualizationsInternal(result, rawFrames, fitsFiles, exportDir, config, appConfig,
-                inclusion == null ? ReportInclusion.all() : inclusion, new ReportProgress(progress));
-    }
-
-    public static void exportTrackVisualizations(PipelineResult result, List<short[][]> rawFrames,
-                                                 FitsFileInformation[] fitsFiles, File exportDir,
-                                                 DetectionConfig config, AppConfig appConfig, ReportInclusion inclusion,
-                                                 TransientEngineProgressListener progress, ExportVisualizationSettings settings) throws IOException {
-        exportTrackVisualizationsInternal(result, rawFrames, fitsFiles, exportDir, config, appConfig,
-                inclusion == null ? ReportInclusion.all() : inclusion, new ReportProgress(progress),
-                settings == null ? captureExportSettings(appConfig != null && appConfig.variableStarReportOptions != null
-                        ? appConfig.variableStarReportOptions : VariableStarReportOptions.DEFAULT) : settings);
-    }
-
-    static void exportTrackVisualizationsInternal(PipelineResult result, List<short[][]> rawFrames,
-                                                  FitsFileInformation[] fitsFiles, File exportDir,
-                                                  DetectionConfig config, AppConfig appConfig, ReportInclusion inclusion,
-                                                  ReportProgress progress) throws IOException {
-        exportTrackVisualizationsInternal(result, rawFrames, fitsFiles, exportDir, config, appConfig, inclusion, progress,
-                captureExportSettings(appConfig != null && appConfig.variableStarReportOptions != null
-                        ? appConfig.variableStarReportOptions : VariableStarReportOptions.DEFAULT));
-    }
-
-    /** Exports an admitted run using its captured application, metadata and catalogue context. */
     public static void exportTrackVisualizations(PipelineResult result, List<short[][]> rawFrames,
             FitsFileInformation[] fitsFiles, File exportDir, DetectionConfig config, ReportRunContext runContext,
             ReportInclusion inclusion, TransientEngineProgressListener progress) throws IOException {
         exportTrackVisualizationsInternal(result, rawFrames, fitsFiles, exportDir, config,
                 runContext.options().applicationConfig(), inclusion == null ? ReportInclusion.all() : inclusion,
                 new ReportProgress(progress), runContext.options().visualization(), runContext);
-    }
-
-    private static void exportTrackVisualizationsInternal(PipelineResult result, List<short[][]> rawFrames,
-                                                  FitsFileInformation[] fitsFiles, File exportDir,
-                                                  DetectionConfig config, AppConfig appConfig, ReportInclusion inclusion,
-                                                  ReportProgress progress, ExportVisualizationSettings settings) throws IOException {
-        var options = DetectionRunOptions.capture(appConfig,
-                SpacePixelsDetectionProfileIO.getActiveAutoTuneMaxCandidateFrames())
-                .withVisualization(settings);
-        exportTrackVisualizationsInternal(result, rawFrames, fitsFiles, exportDir, config, appConfig,
-                inclusion, progress, settings, ReportRunContext.capture(options, fitsFiles));
     }
 
     /** Emits a report from a single resolved run context without reading live application preferences. */

@@ -3,7 +3,12 @@ package eu.startales.spacepixels.tools;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.util.DetectionInputPreparation;
+import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.IterativeDetectionPipelineService;
+import eu.startales.spacepixels.util.IterativeDetectionPlan;
+import eu.startales.spacepixels.util.IterativeDetectionRequest;
+import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Assume;
 import org.junit.Test;
@@ -63,11 +68,11 @@ public class SpacePixelsIterativeRealDataIT {
             int maxFrames = resolveConfiguredMaxFrames();
             int effectiveMaxFrames = resolveEffectiveMaxFrames(maxFrames, frameCount);
 
-            File iterativeIndex = imageProcessing.detectSlowObjectsIterative(
-                    detectionConfig.clone(),
-                    null,
-                    null,
-                    maxFrames);
+            File iterativeIndex = new IterativeDetectionPipelineService().run(new IterativeDetectionRequest(
+                    preparedDirectory.getPreparedInputDirectory(), detectionConfig, new AppConfig(),
+                    ExportVisualizationSettings.defaults(),
+                    new IterativeDetectionPlan(5, 5, maxFrames > 0 ? Math.max(5, maxFrames) : 0),
+                    null, 5, false, false, 0), null, null);
 
             assertNotNull(iterativeIndex);
             assertTrue("Iterative index path was not created: " + iterativeIndex, iterativeIndex.isFile());

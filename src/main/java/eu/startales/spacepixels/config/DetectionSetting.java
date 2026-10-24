@@ -2,7 +2,6 @@ package eu.startales.spacepixels.config;
 
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.config.DetectionConfigRules;
-import java.util.List;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
@@ -41,12 +40,6 @@ public record DetectionSetting<Value>(String id, String title, String unit, Stri
             throw new IllegalArgumentException(id + " must be finite.");
         }
         setter.accept(Objects.requireNonNull(config), value);
-    }
-
-    /** Returns engine-owned findings involving this field without redefining ranges or changing legacy values. */
-    public List<DetectionConfigRules.Issue> issues(DetectionConfig config) {
-        return DetectionConfigRules.validate(config, DetectionConfigRules.Operation.CONFIGURATION).stream()
-                .filter(issue -> issue.fields().contains(id)).toList();
     }
 
     /** Combines application guidance and units for search, labels and assistive descriptions. */

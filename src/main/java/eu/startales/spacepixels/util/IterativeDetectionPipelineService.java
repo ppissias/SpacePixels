@@ -1,11 +1,7 @@
 package eu.startales.spacepixels.util;
 
-import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
-import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
-import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.session.SessionFrames;
-import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import eu.startales.spacepixels.util.reporting.ExportVisualizationSettings;
 import eu.startales.spacepixels.util.reporting.IterativeDetectionIndex;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -46,18 +42,15 @@ public final class IterativeDetectionPipelineService {
     }
 
     private static final Logger LOGGER = Logger.getLogger(IterativeDetectionPipelineService.class.getName());
-    private final AppConfig legacyAppConfig;
     private final PassRunner passRunner;
     private final Tuner tuner;
     private volatile File indexFile;
 
-    public IterativeDetectionPipelineService() { this(null, IterativeDetectionPipelineService::standardPass); }
-    IterativeDetectionPipelineService(AppConfig appConfig) { this(appConfig, IterativeDetectionPipelineService::standardPass); }
-    IterativeDetectionPipelineService(AppConfig appConfig, PassRunner passRunner) {
-        this(appConfig, passRunner, IterativeDetectionPipelineService::tune);
+    public IterativeDetectionPipelineService() { this(IterativeDetectionPipelineService::standardPass); }
+    IterativeDetectionPipelineService(PassRunner passRunner) {
+        this(passRunner, IterativeDetectionPipelineService::tune);
     }
-    IterativeDetectionPipelineService(AppConfig appConfig, PassRunner passRunner, Tuner tuner) {
-        this.legacyAppConfig = appConfig;
+    IterativeDetectionPipelineService(PassRunner passRunner, Tuner tuner) {
         this.passRunner = passRunner;
         this.tuner = tuner;
     }
@@ -114,22 +107,6 @@ public final class IterativeDetectionPipelineService {
         config = DetectionConfigRules.snapshot(config, DetectionConfigRules.Operation.CONFIGURATION);
         return runPasses(config, files, request.runOptions(), request.plan(),
                 request.directory(), prepared, request.autoTuneProfile(), tuneLimit, tuneReport, prompt, progress, passStart);
-    }
-
-    File detectSlowObjectsIterative(DetectionConfig config, FitsFileInformation[] files,
-                                   ImageProcessing.DetectionSafetyPrompt prompt,
-                                   TransientEngineProgressListener progress, int maximumFrames) throws Exception {
-        indexFile = null;
-        AppConfig appConfig = legacyAppConfig.copy();
-        if (files.length < 5) {
-            return new StandardDetectionPipelineService(appConfig, new SessionFrames()).detectObjects(config, files, prompt, progress);
-        }
-        File directory = new File(files[0].getFilePath()).getParentFile();
-        IterativeDetectionPlan plan = new IterativeDetectionPlan(5, 5, maximumFrames > 0 ? Math.max(5, maximumFrames) : 0);
-        return runPasses(config.clone(), files, DetectionRunOptions.capture(appConfig,
-                SpacePixelsDetectionProfileIO.getActiveAutoTuneMaxCandidateFrames()), plan,
-                directory, directory, null, 0, null,
-                prompt == null ? null : (summary, subset, settings) -> prompt.shouldProceed(summary), progress, 0);
     }
 
     static List<Integer> sampleFrameIndices(long[] times, boolean timed, int availableFrames, int count) {
@@ -258,7 +235,7 @@ public final class IterativeDetectionPipelineService {
             TransientEngineProgressListener progress, File output) throws Exception {
         SessionFrames state = new SessionFrames();
         try {
-            return new StandardDetectionPipelineService(options.applicationConfig(), state).run(config, files, prompt, progress, output, options);
+            return new StandardDetectionPipelineService(state).run(config, files, prompt, progress, output, options);
         } finally {
             state.clear();
         }

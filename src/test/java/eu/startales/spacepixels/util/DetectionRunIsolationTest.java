@@ -104,7 +104,7 @@ public class DetectionRunIsolationTest {
             }, options);
             assertEquals(admittedSigma, execution.getEffectiveConfig().detectionSigmaMultiplier, 0);
             assertSame(options, execution.getReportContext().options());
-            File report = processor.exportDetectionReport(execution);
+            File report = processor.exportDetectionReport(execution, null);
             var profile = JsonParser.parseString(Files.readString(new File(report.getParentFile(), "detection_config.json").toPath())).getAsJsonObject();
             assertEquals(19, profile.get("autoTuneMaxCandidateFrames").getAsInt());
             assertEquals(admittedSigma, profile.get("detectionSigmaMultiplier").getAsDouble(), 0);

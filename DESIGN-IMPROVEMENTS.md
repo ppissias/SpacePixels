@@ -41,7 +41,6 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-09](#sp-09-one-write-queue-for-small-files) | One write queue for small files | Low | Small |
 | [SP-10](#sp-10-one-place-for-sky-math-and-statistics-helpers) | One place for sky-math and statistics helpers | Low | Small |
 | [SP-11](#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Fewer FITS helper classes; immutable frame metadata | Low | Medium |
-| [SP-12](#sp-12-remove-dead-and-test-only-code) | Remove dead and test-only code | High | Small |
 | [SP-13](#sp-13-one-way-to-report-problems-and-diagnostics) | One way to report problems and diagnostics | Low | Small |
 | [SP-14](#sp-14-package-names-that-say-what-they-hold) | Package names that say what they hold | Low | Medium, mechanical |
 | [SP-15](#sp-15-pass-the-live-view-sink-with-the-run) | Pass the live-view sink with the run | Low | Small |
@@ -50,7 +49,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-19](#sp-19-finish-the-common-base-of-the-image-viewers) | Finish the common base of the image viewers | Medium | Medium |
 
 **Suggested order.**
-1. Start with the small, safe items SP-12, SP-03 and SP-10. SP-18 is independent of the rest and can go at any time, as long as its regression runs on its own.
+1. Start with the small, safe items SP-03 and SP-10. SP-18 is independent of the rest and can go at any time, as long as its regression runs on its own.
 2. Then SP-01 and SP-02, which remove the most machinery.
 3. Then SP-04 together with SP-09, then SP-05 and SP-06.
 4. Then SP-08, then SP-07 and SP-15.
@@ -102,14 +101,14 @@ The variable-star report options travel the same way. They are held in a `transi
 
 ### SP-03. Remove the static "active" Auto-Tune limit
 
-**Problem.** `SpacePixelsDetectionProfileIO` holds a `static volatile int activeAutoTuneMaxCandidateFrames`. The settings panel sets it. `ImageProcessing`, `StandardDetectionPipelineService`, `IterativeDetectionPipelineService` and `DetectionReportGenerator` read it. The same value is also in `AutoTuneState` and `DetectionRunOptions`. This back channel contradicts the rule that a run uses only the options it captured.
+**Problem.** `SpacePixelsDetectionProfileIO` holds a `static volatile int activeAutoTuneMaxCandidateFrames`. The settings panel and the profile loader set it, and `ImageProcessing.captureRunOptions` reads it for GUI detection runs. The same value is also in `AutoTuneState` and `DetectionRunOptions`. This back channel contradicts the rule that a run uses only the options it captured.
 
 **Proposal.** Delete the static. GUI jobs take the limit from the session's `AutoTuneState` when the job is created. The API and the CLI pass it in the request, as they already can.
 
 ### SP-04. Retire the ImageProcessing facade
 
 **Problem.** `ImageProcessing` (562 lines) began as the old monolith. It is now mostly a pass-through over `FitsImportService`, `FitsBatchService`, `PlateSolveService`, `StandardDetectionPipelineService`, `IterativeDetectionPipelineService` and `FitsVisualizationRenderer`. It also carries:
-- nested types that belong elsewhere: `DetectionSummary` (about 130 lines, with user-facing warning text), `PipelineExecutionData`, `RedirectImportException` and `DetectionSafetyPrompt`;
+- nested types that belong elsewhere: `DetectionSummary` (about 100 lines), `PipelineExecutionData`, `RedirectImportException` and `DetectionSafetyPrompt`;
 - static FITS helpers;
 - three similarly named file accessors: `getImportedFiles`, `getFitsfileInformation` and `getFitsfileInformationHeadless`.
 
@@ -118,7 +117,7 @@ Its Javadoc says it keeps "the public processing API stable", but API.md marks i
 **Proposal.**
 - Tasks and the API call the services directly. The session (or one `SessionServices` holder it owns) creates them with the session's files and settings.
 - The session owns its files and the last run's overlays. A run returns its overlays in its result, and the GUI stores them in the session.
-- Move `DetectionSummary` and `PipelineExecutionData` to their own files. Move `DetectionSummary`'s warning text to `GuiDetectionReportPrompt`.
+- Move `DetectionSummary` and `PipelineExecutionData` to their own files.
 - Then delete `ImageProcessing` and `SessionFrames`.
 
 **Benefit.** One owner for session data and one obvious place for each operation, with no forwarding layer.
@@ -151,16 +150,15 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 
 **Problem.**
 - `DetectionSettingBinding` (engine fields) and `ApplicationSettingBinding` (application values) are two records of the same shape. With them come `ApplicationSetting`, client-property identity tags and three binding groups for twelve controls.
-- `DetectionSetting.issues()` is never called.
 - `applySettingsToMemory` catches every `Exception`, prints it with `System.err` and continues. It also writes into `mainAppWindow.getImageProcessing().getAppConfig()` (see SP-02).
 
-**Proposal.** After SP-02, the application values are fields of plain value objects. Use one generic `SettingBinding<V>`, with a read and write of the model and a read and write of the control, for both kinds. Remove `issues()`. Let a binding failure surface as an error instead of being swallowed.
+**Proposal.** After SP-02, the application values are fields of plain value objects. Use one generic `SettingBinding<V>`, with a read and write of the model and a read and write of the control, for both kinds. Let a binding failure surface as an error instead of being swallowed.
 
 ### SP-08. One report entry point and a complete report context
 
 **Problem.**
 - `DetectionReportGenerator` (1,523 lines) is an all-static class that holds global settings (SP-02), data types, image rendering (mask overlays, global maps, drift map, mosaics, cluster maps), text formatting and the export orchestration. 27 classes call its static helpers.
-- The export entry has six public overloads of `exportTrackVisualizations` and three internal variants. `StandardDetectionPipelineService` adds its own ladders: `detectObjects`, then two `run` overloads, then three `exportDetectionReport` overloads.
+- The export has one entry, `exportTrackVisualizations`, with eight positional parameters. The API and the GUI reach it through two forwarding layers: `ImageProcessing` (`detectObjects`, `runDetectionPipeline`, `exportDetectionReport`) and `StandardDetectionPipelineService`.
 - `DetectionReportContext` takes 20 constructor parameters, copied one by one from the `PipelineResult`. Six more fields are set after construction.
 - The context also has fallback branches "for isolated section callers": `data == null ? category.id(..) : data.finding(..)` and `runContext == null ? defaults`. That is production code kept only so tests can build sections without a full context.
 
@@ -202,17 +200,6 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 - Name static helpers consistently, and keep "Service" for instances.
 - Make `FitsFileInformation` immutable, with timestamps normalised when it is built. The defensive copies can then go.
 
-### SP-12. Remove dead and test-only code
-
-**Problem.** Found unused, or used only by tests:
-- `DetectionSetting.issues()`;
-- `ImageProcessing.stretchFITSImage` (no caller) and `ImageProcessing.saveAppConfig` (tests only);
-- the legacy path of `IterativeDetectionTask` that calls `ImageProcessing.detectSlowObjectsIterative`, which only tests construct, together with `IterativeDetectionPipelineService.detectSlowObjectsIterative`;
-- the overloads that exist only for older callers (SP-08);
-- `DetectionPipelineSupport` and `FitsImportService` printing their debug output with `System.out` instead of `DebugOutput` (see SP-13).
-
-**Proposal.** Delete them, and move the affected tests onto the paths the application uses.
-
 ### SP-13. One way to report problems and diagnostics
 
 **Problem.** Problems are reported in four ways:
@@ -220,8 +207,6 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 - `printStackTrace`, in `FitsFormatChecker`;
 - `java.util.logging`, in `PlateSolveService`, `ApplicationSettings` and `SessionOwner`;
 - `DebugOutput`.
-
-Debug output itself sometimes goes through `DebugOutput` and sometimes through `System.out` behind a `DebugOutput.isEnabled()` check.
 
 **Proposal.** Report problems with `java.util.logging` (WARNING or SEVERE), and send diagnostics only through `DebugOutput`. If JTransient adopts JT-04, diagnostics can become `java.util.logging` at FINE too, and `DebugOutput` shrinks to setting that level.
 

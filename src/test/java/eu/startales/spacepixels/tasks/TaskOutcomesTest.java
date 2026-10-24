@@ -54,7 +54,7 @@ public class TaskOutcomesTest {
         assertFailed(outcomeOf(new AutoTuneTask(null, new DetectionConfig(), 10,
                 AutoTuneProfile.values()[0])));
         assertFailed(outcomeOf(new DetectionTask(null, new DetectionConfig())));
-        assertFailed(outcomeOf(new IterativeDetectionTask(null, new DetectionConfig(), 0)));
+        assertFailed(outcomeOf(iterativeTask(new File(folder.getRoot(), "missing"))));
         assertFailed(outcomeOf(new ManualTransientInspectionTask(null, new DetectionConfig())));
         assertFailed(outcomeOf(new StarMaskStackTask(new FitsFileInformation[]{missingFrame()}, new DetectionConfig())));
         assertFailed(outcomeOf(new BlinkImagesTask(new FitsFileInformation[]{missingFrame()}, new AtomicBoolean(), (read, total) -> { })));
@@ -142,7 +142,7 @@ public class TaskOutcomesTest {
     public void anIterativeRunCancelledDuringItsSecondPassKeepsTheFirstWithAnIndex() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 10);
         JobOutcome<File> outcome = runCancelledAt(sequence, "Pass 10 frames: Writing the report", processing ->
-                new IterativeDetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig(), 0), new ArrayList<>());
+                iterativeTask(sequence.toFile()), new ArrayList<>());
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
         File[] runs = foldersStartingWith(sequence, "iterative_detections_");
         assertEquals(1, runs.length);
@@ -156,9 +156,17 @@ public class TaskOutcomesTest {
     public void anIterativeRunCancelledBeforeAnyPassFinishedLeavesNoFolder() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 10);
         JobOutcome<File> outcome = runCancelledAt(sequence, "Pass 5 frames: Loading", processing ->
-                new IterativeDetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig(), 0), new ArrayList<>());
+                iterativeTask(sequence.toFile()), new ArrayList<>());
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
         assertEquals(0, foldersStartingWith(sequence, "iterative_detections_").length);
+    }
+
+    /** Iterative passes of 5, 10, ... frames over {@code directory}, as the application requests them, without Auto-Tune. */
+    private static IterativeDetectionTask iterativeTask(File directory) {
+        return new IterativeDetectionTask(new eu.startales.spacepixels.util.IterativeDetectionRequest(directory,
+                SyntheticDatasetFactory.createSyntheticDetectionConfig(), new eu.startales.spacepixels.config.AppConfig(),
+                eu.startales.spacepixels.util.reporting.ExportVisualizationSettings.defaults(),
+                new eu.startales.spacepixels.util.IterativeDetectionPlan(5, 5, 0), null, 5, false, false, 0));
     }
 
     /** Runs the job on the sequence and cancels it at the first progress message starting with {@code cancelAt}. */

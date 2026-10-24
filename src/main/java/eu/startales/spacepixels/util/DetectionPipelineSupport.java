@@ -44,13 +44,13 @@ final class DetectionPipelineSupport {
             return;
         }
         if (frames == null) {
-            System.out.println("\n--- " + stageLabel + " JTransient Frame Timing Payload ---");
-            System.out.println("No frames prepared for JTransient.");
+            DebugOutput.println("\n--- " + stageLabel + " JTransient Frame Timing Payload ---");
+            DebugOutput.println("No frames prepared for JTransient.");
             return;
         }
 
         int validTimestamps = 0;
-        System.out.println("\n--- " + stageLabel + " JTransient Frame Timing Payload ---");
+        DebugOutput.println("\n--- " + stageLabel + " JTransient Frame Timing Payload ---");
         for (int i = 0; i < frames.size(); i++) {
             ImageFrame frame = frames.get(i);
             if (frame.timestamp > 0L) {
@@ -68,7 +68,7 @@ final class DetectionPipelineSupport {
                     ? fileInfo.getObservationTimestampDiagnostics()
                     : "No matching FitsFileInformation entry was found for this frame.";
 
-            System.out.println(String.format(
+            DebugOutput.println(String.format(
                     Locale.US,
                     "[%03d] sequenceIndex=%d | file='%s' | payloadTimestamp=%d | payloadUtc='%s' | exposureMs=%d | %s",
                     i,
@@ -79,7 +79,7 @@ final class DetectionPipelineSupport {
                     frame.exposureDuration,
                     diagnostics));
         }
-        System.out.println(String.format(
+        DebugOutput.println(String.format(
                 Locale.US,
                 "JTransient payload summary: %d/%d frames carry a usable timestamp.",
                 validTimestamps,

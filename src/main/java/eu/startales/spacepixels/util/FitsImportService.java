@@ -255,15 +255,15 @@ final class FitsImportService implements AutoCloseable {
             return;
         }
         if (filesInfo == null) {
-            System.out.println("\n--- " + stageLabel + " FITS Timestamp Diagnostics ---");
-            System.out.println("No FITS metadata loaded.");
+            DebugOutput.println("\n--- " + stageLabel + " FITS Timestamp Diagnostics ---");
+            DebugOutput.println("No FITS metadata loaded.");
             return;
         }
 
         int validTimestamps = 0;
         int displayWithoutTimestamp = 0;
 
-        System.out.println("\n--- " + stageLabel + " FITS Timestamp Diagnostics ---");
+        DebugOutput.println("\n--- " + stageLabel + " FITS Timestamp Diagnostics ---");
         for (int fileIndex = 0; fileIndex < filesInfo.length; fileIndex++) {
             FitsFileInformation info = filesInfo[fileIndex];
             long timestamp = info.getObservationTimestamp();
@@ -274,7 +274,7 @@ final class FitsImportService implements AutoCloseable {
                 displayWithoutTimestamp++;
             }
 
-            System.out.println(String.format(
+            DebugOutput.println(String.format(
                     Locale.US,
                     "[%03d] file='%s' | parsedTimestamp=%d | parsedUtc='%s' | %s",
                     fileIndex,
@@ -283,7 +283,7 @@ final class FitsImportService implements AutoCloseable {
                     formatTraceTimestamp(timestamp),
                     info.getObservationTimestampDiagnostics()));
         }
-        System.out.println(String.format(
+        DebugOutput.println(String.format(
                 Locale.US,
                 "Timestamp diagnostics summary: %d/%d files produced a usable timestamp; %d files displayed a date/time but would pass no usable timestamp to JTransient.",
                 validTimestamps,
