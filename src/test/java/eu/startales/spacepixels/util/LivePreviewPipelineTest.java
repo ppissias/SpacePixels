@@ -5,7 +5,6 @@ import com.google.gson.JsonParser;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
-import eu.startales.spacepixels.session.SessionFrames;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Rule;
@@ -64,14 +63,14 @@ public class LivePreviewPipelineTest {
         }
 
         File plain = folder.newFolder("without");
-        new StandardDetectionPipelineService(new SessionFrames()).run(config.clone(), files, null, null, plain,
-                DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES), null);
+        new StandardDetectionPipelineService().run(config.clone(), files, null, null, plain,
+                DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES), null, null);
 
         EverySink sink = new EverySink();
         File withPreview = folder.newFolder("with");
         try (RunPreviewScope scope = RunPreviewScope.open(sink)) {
-            new StandardDetectionPipelineService(new SessionFrames()).run(config.clone(), files, null, null, withPreview,
-                    DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES), null);
+            new StandardDetectionPipelineService().run(config.clone(), files, null, null, withPreview,
+                    DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES), null, null);
         }
 
         List<String> captions = sink.received.stream().map(RunPreview::caption).toList();

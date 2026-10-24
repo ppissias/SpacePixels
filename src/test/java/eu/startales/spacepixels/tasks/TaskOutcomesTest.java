@@ -19,13 +19,18 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -172,6 +177,66 @@ public class TaskOutcomesTest {
         assertFalse(run.contains("\"outcome\": \"FAILED\""));
     }
 
+    /**
+     * A detection that finishes keeps its overlays whatever becomes of its report: written, declined, not writable or
+     * cancelled while it is written. The window gives them to the session when the job ends.
+     */
+    @Test
+    public void aFinishedDetectionKeepsItsOverlaysWhateverBecomesOfTheReport() throws Exception {
+        DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
+        Path written = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "written", 5);
+        try (ImageProcessing processing = ImageProcessing.openProcessor(written.toFile())) {
+            DetectionTask task = new DetectionTask(processing, config, VisualizationSettings.defaults(), 19, null, summary -> true);
+            assertTrue(outcomeOf(task) instanceof JobOutcome.Completed<?>);
+            assertNotNull(task.detectedOverlays());
+            assertNotNull(task.detectedOverlays().tracks());
+            assertNotNull(task.detectedOverlays().variables());
+        }
+        Path declined = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "declined", 5);
+        try (ImageProcessing processing = ImageProcessing.openProcessor(declined.toFile())) {
+            DetectionTask task = new DetectionTask(processing, config, VisualizationSettings.defaults(), 19, null, summary -> false);
+            assertTrue(outcomeOf(task) instanceof JobOutcome.Declined<?>);
+            assertNotNull("a declined report leaves the run's overlays", task.detectedOverlays());
+        }
+        Path unwritable = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "unwritable", 5);
+        try (ImageProcessing processing = ImageProcessing.openProcessor(unwritable.toFile())) {
+            // After the detection, before the report: the session folder becomes a file, so no report folder fits in it.
+            DetectionTask task = new DetectionTask(processing, config, VisualizationSettings.defaults(), 19, null, summary -> {
+                replaceFolderWithFile(unwritable.toFile());
+                return true;
+            });
+            JobOutcome<File> outcome = outcomeOf(task);
+            assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Failed<?> failed
+                    && failed.reason().contains("the report could not be written"));
+            assertNotNull("a report that cannot be written leaves the run's overlays", task.detectedOverlays());
+        }
+        Path cancelled = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "cancelled", 5);
+        AtomicReference<DetectionTask> task = new AtomicReference<>();
+        JobOutcome<File> outcome = runCancelledAt(cancelled, "Writing the report: unclassified transients", processing -> {
+            task.set(new DetectionTask(processing, config, VisualizationSettings.defaults(), 19, null, summary -> true));
+            return task.get();
+        }, new ArrayList<>());
+        assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
+        assertNotNull("a report cancelled while it is written leaves the run's overlays", task.get().detectedOverlays());
+    }
+
+    /** A detection that stops before it finishes leaves no overlays, so the session keeps those of its last run. */
+    @Test
+    public void aDetectionThatStopsBeforeItFinishesLeavesNoOverlays() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "stopped", 5);
+        AtomicReference<DetectionTask> cancelled = new AtomicReference<>();
+        JobOutcome<File> outcome = runCancelledAt(sequence, "", processing -> {
+            cancelled.set(new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig()));
+            return cancelled.get();
+        }, new ArrayList<>());
+        assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
+        assertNull(cancelled.get().detectedOverlays());
+
+        DetectionTask failed = new DetectionTask(null, new DetectionConfig());
+        assertFailed(outcomeOf(failed));
+        assertNull(failed.detectedOverlays());
+    }
+
     @Test
     public void aDetectionCancelledWhileItRunsStopsBeforeWritingAReport() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 5);
@@ -266,6 +331,19 @@ public class TaskOutcomesTest {
         new JobCoordinator(Runnable::run, Runnable::run, () -> false).start(JobKind.DETECTION, null, job, (handle, outcome) -> outcomes.add(outcome));
         assertEquals(1, outcomes.size());
         return outcomes.get(0);
+    }
+
+    /** Replaces the session folder with a file of the same name, so no report folder can be created in it. */
+    private static void replaceFolderWithFile(File directory) {
+        try {
+            for (File file : directory.listFiles()) {
+                Files.delete(file.toPath());
+            }
+            Files.delete(directory.toPath());
+            Files.writeString(directory.toPath(), "not a folder");
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private static void assertFailed(JobOutcome<?> outcome) {

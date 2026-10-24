@@ -19,15 +19,22 @@ import io.github.ppissias.jtransient.execution.CancellationScope;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
+import eu.startales.spacepixels.util.DetectionOverlays;
+import eu.startales.spacepixels.util.DetectionSafetyPrompt;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.RunPreviewScope;
 import eu.startales.spacepixels.util.RunPreviewSink;
 import eu.startales.spacepixels.util.SkySnapshot;
+import eu.startales.spacepixels.util.StandardDetectionPipelineService;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 
 import java.io.File;
 
-/** Runs the detection on the whole session and writes the report; the result is the report file. */
+/**
+ * Runs the detection on the whole session and writes the report; the result is the report file. The run's overlays
+ * are kept apart from that result ({@link #detectedOverlays()}), so they outlast a declined report and a failed or
+ * cancelled export.
+ */
 public class DetectionTask implements Job<File> {
     private final ImageProcessing preProcessing;
 
@@ -35,9 +42,11 @@ public class DetectionTask implements Job<File> {
     private final DetectionConfig config;
     private final DetectionRunOptions options;
     private final SkySnapshot sky;
-    private final ImageProcessing.DetectionSafetyPrompt safetyPrompt;
+    private final DetectionSafetyPrompt safetyPrompt;
     /** Where the run's live-view pictures go; null makes none. */
     private RunPreviewSink previews;
+    /** Set on the worker as soon as the detection finishes; null until then. */
+    private volatile DetectionOverlays detected;
 
     /**
      * Creates a noninteractive job with the default Auto-Tune frame limit that declines report export above 50
@@ -55,14 +64,13 @@ public class DetectionTask implements Job<File> {
      */
     public DetectionTask(ImageProcessing preProcessing, DetectionConfig config, VisualizationSettings visualization,
                          int autoTuneMaxCandidateFrames, SkySnapshot sky,
-                         ImageProcessing.DetectionSafetyPrompt safetyPrompt) {
+                         DetectionSafetyPrompt safetyPrompt) {
         this.preProcessing = preProcessing;
         this.config = DetectionConfigRules.snapshot(config,
                 DetectionConfigRules.Operation.CONFIGURATION);
-        this.options = preProcessing == null
-                ? DetectionRunOptions.defaults().withAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames)
-                        .withVisualization(visualization)
-                : preProcessing.captureRunOptions(visualization, autoTuneMaxCandidateFrames);
+        this.options = (preProcessing == null ? DetectionRunOptions.defaults().withAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames)
+                : DetectionRunOptions.capture(preProcessing.getAppConfig(), autoTuneMaxCandidateFrames))
+                .withVisualization(visualization);
         this.sky = sky;
         this.safetyPrompt = safetyPrompt;
     }
@@ -82,8 +90,17 @@ public class DetectionTask implements Job<File> {
         }
     }
 
+    /**
+     * The overlays of this job's detection, once it has finished; null when the job ended before that (cancelled or
+     * failed during the detection). The window reads them when the job ends, whatever its outcome.
+     */
+    public DetectionOverlays detectedOverlays() {
+        return detected;
+    }
+
     private JobOutcome<File> runCancellable(JobContext context) throws Exception {
-        File exportDir = preProcessing.detectObjects(config, safetyPrompt, context::progress, options, sky);
+        File exportDir = new StandardDetectionPipelineService().run(config, preProcessing.getImportedFiles(), safetyPrompt,
+                context::progress, null, options, sky, overlays -> detected = overlays).report();
         if (exportDir == null) {
             return JobOutcome.declined("Report generation aborted by user due to high track count. Try raising your thresholds.");
         }

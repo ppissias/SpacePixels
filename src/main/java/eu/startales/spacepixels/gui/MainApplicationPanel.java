@@ -12,6 +12,7 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.util.BlinkSequence;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.SkyCatalogueModel;
+import eu.startales.spacepixels.util.DetectionOverlays;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.IterativeDetectionRequest;
@@ -498,12 +499,16 @@ public class MainApplicationPanel extends JPanel {
         ProcessingSession owner = mainAppWindow.getSession();
         if (owner == null || owner.getProcessing() != session) return;
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
-        startJob(JobKind.DETECTION, session, new DetectionTask(session, settings, configuration.visualizationSettings(),
+        DetectionTask detection = new DetectionTask(session, settings, configuration.visualizationSettings(),
                 configuration.autoTuneMaxCandidateFrames(),
                 owner.getSkyCatalogue().snapshot(),
                 summary -> reportPrompt.confirm(summary, session.hasPlateSolvedFrame(), 50, null, settings))
-                        .showingPreviews(progressDialog.previewSink()),
-                this::showDetectionOutcome);
+                        .showingPreviews(progressDialog.previewSink());
+        // The overlays first: they belong to the session whatever became of the report.
+        startJob(JobKind.DETECTION, session, detection, (handle, outcome) -> {
+            showDetectionOverlays(handle.session(), detection.detectedOverlays());
+            showDetectionOutcome(handle, outcome);
+        });
     }
 
     /** Blinks the selected frames, or stops the blink that is loading or playing. */
@@ -1478,8 +1483,6 @@ public class MainApplicationPanel extends JPanel {
         refreshWorkflowStatus();
         if (detectionSequenceFrame != null) {
             detectionSequenceFrame.setSettingsEditable(true);
-            // A detection run that just ended may have new tracks and candidates to show.
-            detectionSequenceFrame.showLastRun();
         }
         mainAppWindow.setSessionTabsEnabled(mainAppWindow.getImageProcessing() != null);
     }
@@ -1526,6 +1529,20 @@ public class MainApplicationPanel extends JPanel {
     }
 
 
+
+    /**
+     * Gives a finished detection's overlays to its session, when that session is still the current one, and shows
+     * them in an open Preview Frame. Null overlays (the detection did not finish) leave the last run's in place.
+     */
+    public void showDetectionOverlays(ProcessingSession owner, DetectionOverlays overlays) {
+        if (overlays == null || !mainAppWindow.isCurrentSession(owner)) {
+            return;
+        }
+        owner.setLastRun(overlays);
+        if (detectionSequenceFrame != null) {
+            detectionSequenceFrame.showLastRun();
+        }
+    }
 
     /** The end of Detect Moving Targets and Detect Iteratively: offers the report, or says what went wrong. */
     private void showDetectionOutcome(JobHandle handle, JobOutcome<File> outcome) {

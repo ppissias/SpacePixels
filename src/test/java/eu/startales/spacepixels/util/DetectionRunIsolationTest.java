@@ -96,13 +96,14 @@ public class DetectionRunIsolationTest {
         double admittedSigma = config.detectionSigmaMultiplier;
         var options = DetectionRunOptions.defaults().withAutoTuneMaxCandidateFrames(19);
         try (ImageProcessing processor = ImageProcessing.openProcessor(directory, ApplicationSettings.inMemory(application))) {
-            var execution = processor.runDetectionPipeline(config, (percent, message) -> {
+            var detection = new StandardDetectionPipelineService();
+            var execution = detection.runDetectionPipeline(config, processor.getImportedFiles(), (percent, message) -> {
                 config.detectionSigmaMultiplier = 20;
                 processor.getAppConfig().siteLat = "-24";
-            }, options);
+            }, options, null);
             assertEquals(admittedSigma, execution.getEffectiveConfig().detectionSigmaMultiplier, 0);
             assertSame(options, execution.getReportContext().options());
-            File report = processor.exportDetectionReport(execution, null);
+            File report = detection.exportDetectionReport(execution, null);
             var profile = JsonParser.parseString(Files.readString(new File(report.getParentFile(), "detection_config.json").toPath())).getAsJsonObject();
             assertEquals(19, profile.get("autoTuneMaxCandidateFrames").getAsInt());
             assertEquals(admittedSigma, profile.get("detectionSigmaMultiplier").getAsDouble(), 0);

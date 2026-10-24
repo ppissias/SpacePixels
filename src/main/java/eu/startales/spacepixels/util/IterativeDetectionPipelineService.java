@@ -25,13 +25,13 @@ import java.util.logging.Logger;
 public final class IterativeDetectionPipelineService {
     @FunctionalInterface
     public interface ReportPrompt {
-        boolean confirm(ImageProcessing.DetectionSummary summary, FitsFileInformation[] files, DetectionConfig config);
+        boolean confirm(DetectionSummary summary, FitsFileInformation[] files, DetectionConfig config);
     }
 
     @FunctionalInterface
     interface PassRunner {
         StandardDetectionPipelineService.RunResult run(DetectionConfig config, FitsFileInformation[] files,
-                DetectionRunOptions options, SkySnapshot sky, ImageProcessing.DetectionSafetyPrompt prompt,
+                DetectionRunOptions options, SkySnapshot sky, DetectionSafetyPrompt prompt,
                 TransientEngineProgressListener progress, File output) throws Exception;
     }
 
@@ -213,7 +213,7 @@ public final class IterativeDetectionPipelineService {
                 file.getSizeWidth(), file.getSizeHeight())).toList();
     }
 
-    private static Map<String, Integer> counts(ImageProcessing.DetectionSummary summary) {
+    private static Map<String, Integer> counts(DetectionSummary summary) {
         Map<String, Integer> counts = new LinkedHashMap<>();
         counts.put("Moving targets", summary.movingTargets);
         counts.put("Streak tracks", summary.streakTracks);
@@ -232,13 +232,9 @@ public final class IterativeDetectionPipelineService {
 
     private static StandardDetectionPipelineService.RunResult standardPass(DetectionConfig config,
             FitsFileInformation[] files, DetectionRunOptions options, SkySnapshot sky,
-            ImageProcessing.DetectionSafetyPrompt prompt, TransientEngineProgressListener progress, File output) throws Exception {
-        SessionFrames state = new SessionFrames();
-        try {
-            return new StandardDetectionPipelineService(state).run(config, files, prompt, progress, output, options, sky);
-        } finally {
-            state.clear();
-        }
+            DetectionSafetyPrompt prompt, TransientEngineProgressListener progress, File output) throws Exception {
+        // A pass leaves the session's overlays as they are: nobody receives its overlays.
+        return new StandardDetectionPipelineService().run(config, files, prompt, progress, output, options, sky, null);
     }
 
     record Tuned(DetectionConfig config, String telemetry) {}

@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.DetectionSummary;
 import eu.startales.spacepixels.util.ReportInclusion;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Test;
@@ -18,7 +18,7 @@ public class GuiDetectionReportPromptTest {
     @Test
     public void localRescueAndCommonMotionCanBeUncheckedOnTheirOwnRows() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
-            var summary = new ImageProcessing.DetectionSummary(
+            var summary = new DetectionSummary(
                     328, 0, 1, 0, 1, 0, 274, 0, "READY", 10, 18, 52, 1991, 0);
             var config = new DetectionConfig();
             config.enableVariableStarDetection = true;
@@ -50,7 +50,7 @@ public class GuiDetectionReportPromptTest {
     @Test
     public void everyOptionalCheckboxControlsItsMatchingCategory() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
-            var summary = new ImageProcessing.DetectionSummary(
+            var summary = new DetectionSummary(
                     46, 2, 1, 4, 3, 5, 7, 11, "READY", 1, 1, 13, 0, 17);
             var config = new DetectionConfig();
             config.enableLocalActivityClusters = true;
@@ -78,7 +78,7 @@ public class GuiDetectionReportPromptTest {
     /** Checks worker-to-EDT dispatch, accepted choices and unchanged detection settings. */
     @Test(timeout = 10_000)
     public void acceptedChoicesAreAppliedAfterTheEdtAnswers() {
-        ImageProcessing.DetectionSummary summary = summary();
+        DetectionSummary summary = summary();
         DetectionConfig config = new DetectionConfig();
         GuiDetectionReportPrompt prompt = new GuiDetectionReportPrompt(panel -> {
             assertTrue(SwingUtilities.isEventDispatchThread());
@@ -127,7 +127,7 @@ public class GuiDetectionReportPromptTest {
         var done = new java.util.concurrent.CountDownLatch(1);
         AtomicBoolean proceeded = new AtomicBoolean(true);
         AtomicBoolean interrupted = new AtomicBoolean();
-        ImageProcessing.DetectionSummary summary = summary();
+        DetectionSummary summary = summary();
         ReportInclusion before = summary.reportInclusion();
         GuiDetectionReportPrompt prompt = new GuiDetectionReportPrompt(panel -> {
             entered.countDown();
@@ -163,7 +163,7 @@ public class GuiDetectionReportPromptTest {
     @Test
     public void declinedChoicesAreNotApplied() {
         for (int answer : new int[]{JOptionPane.NO_OPTION, JOptionPane.CLOSED_OPTION}) {
-            ImageProcessing.DetectionSummary summary = summary();
+            DetectionSummary summary = summary();
             ReportInclusion before = summary.reportInclusion();
             GuiDetectionReportPrompt prompt = new GuiDetectionReportPrompt(panel -> {
                 new Choice(panel).checkbox("Single-frame anomalies").setSelected(false);
@@ -191,8 +191,8 @@ public class GuiDetectionReportPromptTest {
     }
 
     /** Creates a count snapshot above the desktop safety threshold. */
-    private static ImageProcessing.DetectionSummary summary() {
-        return new ImageProcessing.DetectionSummary(60, 0, 0, 1, 59, 0, 0, 0, "READY", 2, 1, 0, 0, 0);
+    private static DetectionSummary summary() {
+        return new DetectionSummary(60, 0, 0, 1, 59, 0, 0, 0, "READY", 2, 1, 0, 0, 0);
     }
 
     /** States the photometry readiness and, without a plate solution, that the report has no sky coordinates. */
@@ -201,11 +201,11 @@ public class GuiDetectionReportPromptTest {
         SwingUtilities.invokeAndWait(() -> {
             var config = new DetectionConfig();
             config.enableVariableStarDetection = true;
-            var notReady = new Choice(new ImageProcessing.DetectionSummary(
+            var notReady = new Choice(new DetectionSummary(
                     60, 0, 0, 60, 0, 0, 0, 0, "NOT_READY", 0, 0, 0, 0, 0), config);
             assertTrue(notReady.hasText("session not ready for photometry"));
             assertTrue(notReady.hasText("no plate-solved frame, so the report has no sky coordinates or identification."));
-            var ready = new Choice(new ImageProcessing.DetectionSummary(
+            var ready = new Choice(new DetectionSummary(
                     80, 2, 1, 4, 50, 5, 6, 2, "READY", 3, 1, 4, 12, 3), config);
             assertTrue(ready.hasText("3 candidates, 1 possible"));
             assertTrue(ready.hasText("Largest group: single-frame anomalies (50)."));
@@ -219,7 +219,7 @@ public class GuiDetectionReportPromptTest {
         private final JPanel grid;
 
         /** Builds the adapter's actual content for one run. */
-        Choice(ImageProcessing.DetectionSummary summary, DetectionConfig config) {
+        Choice(DetectionSummary summary, DetectionConfig config) {
             this(new GuiDetectionReportPrompt(component -> JOptionPane.YES_OPTION).warningPanel(summary, false, null, config));
         }
 

@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.session;
 
+import eu.startales.spacepixels.util.DetectionOverlays;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.TrackOverlay;
@@ -32,6 +33,8 @@ public final class ProcessingSession implements AutoCloseable {
     private final SessionFrames frames;
     private List<FitsFileInformation> selection = List.of();
     private File lastReport;
+    /** The overlays of the last detection run; written on the EDT when a run ends, read by the viewers. */
+    private volatile DetectionOverlays lastRun;
     private String masterStackKey;
     private JTransientEngine.MasterStackResult masterStack;
     private Thread skyCatalogueWorker;
@@ -131,8 +134,27 @@ public final class ProcessingSession implements AutoCloseable {
         masterStack = stack;
     }
 
-    public TrackOverlay getTrackOverlay() { return processing.getLastTrackOverlay(); }
-    public VariableStarOverlay getVariableStarOverlay() { return processing.getLastVariableStarOverlay(); }
+    /**
+     * Keeps a finished detection run's overlays for the viewers, replacing the previous run's. The window calls it on
+     * the EDT when the run ends, and only while this session is current; a closed session refuses it.
+     */
+    public void setLastRun(DetectionOverlays overlays) {
+        requireOpen();
+        lastRun = Objects.requireNonNull(overlays);
+    }
+
+    /** Tracks of the last detection run on this session, or null when none has finished. */
+    public TrackOverlay getTrackOverlay() {
+        DetectionOverlays run = lastRun;
+        return run == null ? null : run.tracks();
+    }
+
+    /** Variable-star candidates of the last detection run, numbered as in its report, or null when none has finished. */
+    public VariableStarOverlay getVariableStarOverlay() {
+        DetectionOverlays run = lastRun;
+        return run == null ? null : run.variables();
+    }
+
     public boolean isClosed() { return closed; }
 
     public void ownSkyCatalogueWorker(Thread worker) {
@@ -171,6 +193,7 @@ public final class ProcessingSession implements AutoCloseable {
             selection = List.of();
             frames.clear();
             lastReport = null;
+            lastRun = null;
         }
     }
 }

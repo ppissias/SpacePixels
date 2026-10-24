@@ -100,6 +100,7 @@ The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker
 - **The window's lock:** its listener, in `MainApplicationPanel`, locks the window and shows the progress dialog on admission, and unlocks the window when the job ends.
 - **Progress:** it reaches the window only while the job is current.
 - **Outcome:** it is delivered exactly once, on the UI thread, after the unlock.
+- **Detection products:** a finished detection's overlays are not part of the outcome. `DetectionTask` keeps the `DetectionOverlays` that `StandardDetectionPipelineService` hands over when the engine returns (`detectedOverlays()`, null when the job ended before that). At the outcome, before showing it, the window gives them to the job's session if that session is still the current one (`MainApplicationPanel.showDetectionOverlays`): after a written, declined or unwritable report, and after a cancel while the report was being written. A detection that stops before it finishes leaves the last run's overlays.
 - **Cancel:** the progress dialog's Cancel (or closing it) calls `cancel()`.
   - The job's next progress report throws `JobCancelledException`. Detection, iterative detection, Auto-Tune, Manual Transient Inspection and the Test Star Mask task also bind `context.isCancelled()` to JTransient's `CancellationScope`, so computation can stop between progress reports. The job's own cleanup runs as it leaves; the outcome is `Cancelled`, also when an engine `CancellationException` is wrapped.
   - Progress at 100% never throws, so finished work is kept.
@@ -120,7 +121,7 @@ The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker
 - **The last report:** `util.SessionReports.latest(...)` finds the newest finished report beside the frames when a session is imported (in the import job); a completed detection replaces it. The Main tab's Detect group offers it as **Open last report**.
 - **Failures:** an exception or `Error` becomes a failure. Running out of memory leaves the worker for the application's uncaught-exception handler. The handler marks it in `JobFailures`, and every other running job then stops at its next progress report while SpacePixels closes.
 
-Each `JobHandle` carries its explicit `ProcessingSession`, which has a UUID and owns frame metadata references, selection, catalogue/correction, tuning state, the master-stack cache, last report and processing facade. `SessionOwner` guards handover and callback admission independently of Swing. Only a successful import replaces the current session; stale callbacks and stale imports cannot modify its replacement. A session whose close fails, for example a plate-solve client that cannot confirm its shutdown within 10 s, is logged, so neither the handover nor closing the window stops; `ImageProcessing.close` clears its frames in that case too. The window loads `ApplicationSettings` once and injects it into each processor, preserving unsaved preferences across imports. `SessionFrames` holds the shared metadata and last track/variable overlays; import and pipeline services use that same store, without deep-copying buffers. `ImageProcessing` is a compatibility facade over `FitsImportService`, `FitsBatchService`, rendering, solving and pipeline services.
+Each `JobHandle` carries its explicit `ProcessingSession`, which has a UUID and owns frame metadata references, selection, catalogue/correction, tuning state, the master-stack cache, last report, the last detection run's overlays (`DetectionOverlays`, set on the EDT and refused once closed) and processing facade. `SessionOwner` guards handover and callback admission independently of Swing. Only a successful import replaces the current session; stale callbacks and stale imports cannot modify its replacement. A session whose close fails, for example a plate-solve client that cannot confirm its shutdown within 10 s, is logged, so neither the handover nor closing the window stops; `ImageProcessing.close` clears its frames in that case too. The window loads `ApplicationSettings` once and injects it into each processor, preserving unsaved preferences across imports. `SessionFrames` holds the shared frame metadata; the import service and the session use that same list, without deep-copying buffers. `ImageProcessing` is a compatibility facade over `FitsImportService`, `FitsBatchService`, rendering and solving; detection does not pass through it.
 
 ### `eu.startales.spacepixels.session`
 
@@ -216,7 +217,7 @@ Important classes:
 - `XisfImageConverter`
 - `StagedFile` (safe replacement of a file; see section 7)
 
-`ImageProcessing` is an internal facade over these services (DESIGN-IMPROVEMENTS.md SP-04 proposes retiring it). All `util` sources, including reporting/catalogue helpers, have no Swing/GUI dependencies; headless AWT image rendering remains permitted. Shared HDU discovery and directory listing are separate helpers. Import owns its bounded pool, closed by the facade. Solver/converter services own their loggers rather than loading the application window.
+`ImageProcessing` is an internal facade over the import, conversion, rendering and solving services; the detection services are called directly (DESIGN-IMPROVEMENTS.md SP-04 proposes retiring the rest). All `util` sources, including reporting/catalogue helpers, have no Swing/GUI dependencies; headless AWT image rendering remains permitted. Shared HDU discovery and directory listing are separate helpers. Import owns its bounded pool, closed by the facade. Solver/converter services own their loggers rather than loading the application window.
 
 Compressed 32-bit and signed/scaled 16-bit import selects combined preparation using the actual decompressed image HDU metadata. The existing batch standardizer reads compressed pixels through `FitsPreparationService`, writes final unsigned mono/color copies directly and preserves the shared sequence-wide offset/zero-padding policy. Already-standard unsigned 16-bit compressed input retains decompression-only behavior. GUI decisions stay in `FitsImportInteraction`; strict headless import continues to refuse non-ready input.
 
@@ -403,10 +404,9 @@ Owns or coordinates:
 - XISF import redirection through `XisfImageConverter`
 - batch mono conversion and batch stretch
 - plate solving through `PlateSolveService`
-- standard detection through `StandardDetectionPipelineService`
-- iterative detection through `IterativeDetectionPipelineService`
-- final report handoff
 - application config load/save
+
+Detection does not pass through it: `DetectionTask` (on the facade's imported frames), each iterative pass and `DefaultSpacePixelsPipelineApi` run `StandardDetectionPipelineService` themselves.
 
 Design note:
 
@@ -415,7 +415,7 @@ Design note:
 
 ### `StandardDetectionPipelineService`
 
-Standard JTransient run orchestrator.
+Standard JTransient run orchestrator. It keeps no state: each run receives its frames, settings, options and sky data, and returns its results, so its callers create one where they run it.
 
 Responsibilities:
 
@@ -424,7 +424,8 @@ Responsibilities:
 - create an effective config through `DetectionPipelineSupport`
 - call `JTransientEngine.runPipeline(...)`
 - suppress late-phase outputs when too few frames survive quality control
-- optionally run the UI detection-count safety prompt before report generation
+- hand the run's `DetectionOverlays` (tracks and variable-star candidates, no image buffers) to the caller as soon as the engine returns, before the report decision; Detect Moving Targets keeps them, iterative passes pass no receiver, and the API, which calls `runDetectionPipeline` and `exportDetectionReport` itself, does not ask for them
+- optionally run the UI detection-count safety prompt (`DetectionSafetyPrompt`, given a `DetectionSummary`) before report generation
 - export the standard report through `DetectionReportGenerator`
 
 ### `IterativeDetectionPipelineService`
@@ -440,7 +441,7 @@ Responsibilities:
 - release each pass's private processing state and pixel buffers before starting the next
 - publish lightweight outcomes and counts through `IterativeDetectionIndex`, with separate input manifests on disk and links to ordinary per-pass reports
 
-`IterativeDetectionDialog` runs its directory scan off the EDT, previews the pass sizes and explains manual tuning through normal import and Preview Frame. `IterativeDetectionRequest` captures unsaved validated settings, application/site values, export options and the source/plan. The job is admitted even without a GUI session; its completion does not change an existing session's frames, selection, catalogue, overlays or last-report reference. The public processing facade's legacy iterative entry point remains as an adapter over the new passes.
+`IterativeDetectionDialog` runs its directory scan off the EDT, previews the pass sizes and explains manual tuning through normal import and Preview Frame. `IterativeDetectionRequest` captures unsaved validated settings, application/site values, export options and the source/plan. The job is admitted even without a GUI session; its completion does not change an existing session's frames, selection, catalogue, overlays or last-report reference.
 
 ### `DefaultSpacePixelsPipelineApi`
 
@@ -558,12 +559,12 @@ DefaultSpacePixelsPipelineApi
 ### Standard Detection Flow
 
 ```text
-GUI/API/CLI
--> ImageProcessing.runDetectionPipeline(...) or detectObjects(...)
--> StandardDetectionPipelineService
+DetectionTask (GUI) / DefaultSpacePixelsPipelineApi (API, CLI)
+-> StandardDetectionPipelineService.run(...), or runDetectionPipeline(...) then exportDetectionReport(...)
 -> DetectionPipelineSupport.createEffectiveDetectionConfig(...)
 -> JTransientEngine.runPipeline(...)
--> PipelineResult
+-> PipelineResult (PipelineExecutionData), DetectionOverlays to the caller
+-> DetectionSafetyPrompt
 -> DetectionReportGenerator
 ```
 
@@ -656,7 +657,7 @@ MainApplicationPanel
 -> TransientInspectionFrame
 ```
 
-**The last run's tracks.** Blink, Preview Frame and Manual Transient Inspection draw the tracks of the session's last Detect Moving Targets run from the same `TrackOverlay` (`ProcessingSession.getTrackOverlay()`), which `StandardDetectionPipelineService` stores when the engine returns. `SequenceViewerFrame.setTrackOverlay` gives the two sequence viewers Blink's **Show tracks** switch (T): it is disabled with a reason when no track of that run is in the window's frames, and `FrameView` draws the positions the run measured, by file name. Nothing is detected again, and changed settings do not change the overlay. Preview Frame takes the overlays when it opens and again when a job ends (`DetectionSequenceFrame.showLastRun`, from the panel's unlock), so a run that ends while it is open shows its tracks. Closing a viewer clears the frame view, which drops the overlay; the overlay itself holds no listeners.
+**The last run's tracks.** Blink, Preview Frame and Manual Transient Inspection draw the tracks of the session's last Detect Moving Targets run from the same `TrackOverlay` (`ProcessingSession.getTrackOverlay()`). The run hands it over when the engine returns, and the window stores it in the session when the job ends, whatever became of the report (see the jobs section). `SequenceViewerFrame.setTrackOverlay` gives the two sequence viewers Blink's **Show tracks** switch (T): it is disabled with a reason when no track of that run is in the window's frames, and `FrameView` draws the positions the run measured, by file name. Nothing is detected again, and changed settings do not change the overlay. Preview Frame takes the overlays when it opens and again when a run's overlays reach the session (`DetectionSequenceFrame.showLastRun`, from `MainApplicationPanel.showDetectionOverlays`), so a run that ends while it is open shows its tracks. Closing a viewer clears the frame view, which drops the overlay; the overlay itself holds no listeners.
 
 ### Report Export Flow
 

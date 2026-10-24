@@ -11,7 +11,7 @@ public class DetectionSummaryTest {
 
     @Test
     public void largestGroupNamesTheBiggestKindOfResult() {
-        ImageProcessing.DetectionSummary summary = new ImageProcessing.DetectionSummary(
+        DetectionSummary summary = new DetectionSummary(
                 80, 2, 1, 4, 50, 5, 6, 2, "READY", 3, 1, 4, 12, 3);
 
         assertEquals("single-frame anomalies (50)", summary.largestGroup());
@@ -19,16 +19,16 @@ public class DetectionSummaryTest {
 
     @Test
     public void reportChoiceIsOfferedOnlyWhenTheDetectionRanThatGroup() {
-        assertFalse(ImageProcessing.DetectionSummary.offerInReport(false, 40));
-        assertFalse(ImageProcessing.DetectionSummary.offerInReport(true, 0));
-        assertTrue(ImageProcessing.DetectionSummary.offerInReport(true, 40));
+        assertFalse(DetectionSummary.offerInReport(false, 40));
+        assertFalse(DetectionSummary.offerInReport(true, 0));
+        assertTrue(DetectionSummary.offerInReport(true, 40));
     }
 
     /** Keeps the legacy confirmation entry point safe without implicitly opening a window. */
     @SuppressWarnings("deprecation")
     @Test
     public void compatibilityConfirmationDeclinesLargeReportsWithoutInteraction() {
-        ImageProcessing.DetectionSummary summary = new ImageProcessing.DetectionSummary(
+        DetectionSummary summary = new DetectionSummary(
                 51, 0, 0, 51, 0, 0, 0, 0, null, 0, 0, 0, 0, 0);
         ReportInclusion selected = new ReportInclusion(false, true, true, true, true, true, true);
         summary.includeInReport(selected);

@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.DetectionSummary;
 import eu.startales.spacepixels.util.ReportInclusion;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Test;
@@ -40,7 +40,7 @@ public class FindingCategoryTest {
 
     /** Each report option maps to exactly its measured category; photometry keeps both confidence tiers. */
     @Test public void summaryCountsAndInclusionUseTheSameCategories() {
-        var summary = new ImageProcessing.DetectionSummary(0, 2, 3, 5, 7, 11, 13, 17, "READY", 19, 23, 29, 0, 31);
+        var summary = new DetectionSummary(0, 2, 3, 5, 7, 11, 13, 17, "READY", 19, 23, 29, 0, 31);
         assertEquals(5, FindingCategory.MOVING_TARGET.count(summary));
         assertEquals(3, FindingCategory.STREAK_TRACK.count(summary));
         assertEquals(2, FindingCategory.SINGLE_STREAK.count(summary));
@@ -69,7 +69,7 @@ public class FindingCategoryTest {
         config.enableLocalRescueCandidates = true;
         config.enableCommonMotionRejection = true;
         config.enableVariableStarDetection = true;
-        var summary = new ImageProcessing.DetectionSummary(0, 0, 0, 0, 0, 0, 0, 0, "NOT_RUN", 0, 0, 0, 0, 0);
+        var summary = new DetectionSummary(0, 0, 0, 0, 0, 0, 0, 0, "NOT_RUN", 0, 0, 0, 0, 0);
         assertFalse(FindingCategory.LOCAL_RESCUE.computed(config, summary));
         assertTrue(FindingCategory.COMMON_MOTION.computed(config, summary));
         assertFalse(FindingCategory.VARIABLE_STAR.computed(config, summary));

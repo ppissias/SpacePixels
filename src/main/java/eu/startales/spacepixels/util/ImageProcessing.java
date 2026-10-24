@@ -9,9 +9,6 @@
  */
 package eu.startales.spacepixels.util;
 
-import eu.startales.spacepixels.config.DetectionRunOptions;
-import eu.startales.spacepixels.config.VisualizationSettings;
-import eu.startales.spacepixels.util.reporting.ReportRunContext;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jplatesolve.PlateSolveOperation;
 
@@ -21,167 +18,21 @@ import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.session.SessionFrames;
 
-import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.util.*;
-import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * High-level FITS processing facade for SpacePixels.
- *
- * <p>This class coordinates FITS import validation, image conversion, preview/stretch generation,
- * report handoff, and the JTransient detection pipeline. Specialized WCS/plate-solving behavior is
- * delegated to focused collaborators so the public processing API can remain stable while the
- * implementation is split into smaller responsibilities.</p>
+ * Internal facade over one imported folder of frames: import validation, image conversion, previews and stretches,
+ * and plate solving, each delegated to a focused service. Detection does not pass through it: Detect Moving Targets,
+ * Detect Iteratively and the API run {@link StandardDetectionPipelineService} themselves.
  */
 public class ImageProcessing implements AutoCloseable {
     public static final int MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS =
             DetectionPipelineSupport.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS;
-
-    /** Caller-supplied report decision after detection; implementations may set report-only inclusion. */
-    @FunctionalInterface
-    public interface DetectionSafetyPrompt {
-        /** Returns whether export may proceed for this summary. */
-        boolean shouldProceed(DetectionSummary summary);
-    }
-
-    /**
-     * Lightweight detection-count snapshot used by UI safety prompts before heavy report export.
-     */
-    public static final class DetectionSummary {
-        public final int totalDetections;
-        public final int singleStreaks;
-        public final int streakTracks;
-        public final int movingTargets;
-        public final int anomalies;
-        public final int slowMoverCandidates;
-        public final int localRescueCandidates;
-        public final int localActivityClusters;
-        /** Compact sources that share one displacement. Included in {@link #totalDetections}. */
-        public final int commonMotionGroups;
-        /** Detections that stay at one camera position (hot pixels, dust). Included in {@link #totalDetections}. */
-        public final int cameraFixedGroups;
-        /** Leftover detections. Shown in the summary, and not added to {@link #totalDetections}. */
-        public final int unclassifiedDetections;
-        /** Photometry verdict ("READY", "LIMITED", "NOT_READY") or null when variable-star detection did not run. */
-        public final String photometryVerdict;
-        public final int variableStarCandidates;
-        public final int possibleVariableStars;
-        /** Groups to write. The warning dialog replaces this when the user leaves some out. */
-        private ReportInclusion reportInclusion = ReportInclusion.all();
-
-        /** Captures measured counts; report inclusion starts with every optional group enabled. */
-        public DetectionSummary(int totalDetections,
-                         int singleStreaks,
-                         int streakTracks,
-                         int movingTargets,
-                         int anomalies,
-                         int slowMoverCandidates,
-                         int localRescueCandidates,
-                         int localActivityClusters,
-                         String photometryVerdict,
-                         int variableStarCandidates,
-                         int possibleVariableStars,
-                         int commonMotionGroups,
-                         int unclassifiedDetections,
-                         int cameraFixedGroups) {
-            this.totalDetections = totalDetections;
-            this.singleStreaks = singleStreaks;
-            this.streakTracks = streakTracks;
-            this.movingTargets = movingTargets;
-            this.anomalies = anomalies;
-            this.slowMoverCandidates = slowMoverCandidates;
-            this.localRescueCandidates = localRescueCandidates;
-            this.localActivityClusters = localActivityClusters;
-            this.photometryVerdict = photometryVerdict;
-            this.variableStarCandidates = variableStarCandidates;
-            this.possibleVariableStars = possibleVariableStars;
-            this.commonMotionGroups = commonMotionGroups;
-            this.unclassifiedDetections = unclassifiedDetections;
-            this.cameraFixedGroups = cameraFixedGroups;
-        }
-
-        /** Which optional groups this report should contain. All of them, unless the warning dialog said otherwise. */
-        public ReportInclusion reportInclusion() {
-            return reportInclusion;
-        }
-
-        /** Replaces report-only inclusion choices without mutating detection settings or measured results. */
-        public void includeInReport(ReportInclusion inclusion) {
-            reportInclusion = Objects.requireNonNull(inclusion);
-        }
-
-        /** A checkbox is offered only for a group the detection ran and that found something. */
-        public static boolean offerInReport(boolean featureEnabled, int count) {
-            return featureEnabled && count > 0;
-        }
-
-        /** Describes the largest classified group, preserving the existing tie order. */
-        public String largestGroup() {
-            String[] names = {"moving objects", "single-frame anomalies", "slow-mover candidates",
-                    "residual analysis", "common-motion groups", "camera-fixed groups"};
-            int[] counts = {movingTargets + streakTracks + singleStreaks, anomalies,
-                    slowMoverCandidates, localRescueCandidates + localActivityClusters, commonMotionGroups,
-                    cameraFixedGroups};
-            int best = 0;
-            for (int i = 1; i < counts.length; i++) {
-                if (counts[i] > counts[best]) {
-                    best = i;
-                }
-            }
-            return names[best] + " (" + counts[best] + ")";
-        }
-    }
-
-    /**
-     * Immutable payload returned after the JTransient engine completes but before any optional
-     * report export starts.
-     */
-    public static final class PipelineExecutionData {
-        private final ReportRunContext reportContext;
-        private final PipelineResult pipelineResult;
-        private final DetectionConfig effectiveConfig;
-        private final FitsFileInformation[] filesInformation;
-        private final List<short[][]> rawFramesForExport;
-
-        PipelineExecutionData(PipelineResult pipelineResult,
-                              DetectionConfig effectiveConfig,
-                              FitsFileInformation[] filesInformation,
-                              List<short[][]> rawFramesForExport,
-                              ReportRunContext reportContext) {
-            this.reportContext = java.util.Objects.requireNonNull(reportContext);
-            this.pipelineResult = pipelineResult;
-            this.effectiveConfig = effectiveConfig == null ? null : effectiveConfig.clone();
-            this.filesInformation = filesInformation == null ? new FitsFileInformation[0] : filesInformation.clone();
-            this.rawFramesForExport = Collections.unmodifiableList(new ArrayList<>(rawFramesForExport));
-        }
-
-        /** Returns the captured report options, metadata, WCS and catalogue owned by this execution. */
-        public ReportRunContext getReportContext() {
-            return reportContext;
-        }
-
-        public PipelineResult getPipelineResult() {
-            return pipelineResult;
-        }
-
-        public DetectionConfig getEffectiveConfig() {
-            return effectiveConfig == null ? null : effectiveConfig.clone();
-        }
-
-        public FitsFileInformation[] getFilesInformation() {
-            return java.util.Arrays.stream(filesInformation).map(FitsFileInformation::snapshot).toArray(FitsFileInformation[]::new);
-        }
-
-        public List<short[][]> getRawFramesForExport() {
-            return rawFramesForExport;
-        }
-    }
 
     public static class RedirectImportException extends Exception {
         private final File newDirectory;
@@ -209,7 +60,6 @@ public class ImageProcessing implements AutoCloseable {
     private final AppConfig appConfig;
     private final ApplicationSettings applicationSettings;
     private final PlateSolveService plateSolveService;
-    private final StandardDetectionPipelineService standardDetectionPipelineService;
     private final FitsVisualizationRenderer fitsVisualizationRenderer;
 
     public SessionFrames getSessionFrames() { return sessionFrames; }
@@ -252,7 +102,6 @@ public class ImageProcessing implements AutoCloseable {
         this.applicationSettings = Objects.requireNonNull(settings);
         this.appConfig = settings.getConfig();
         this.plateSolveService = new PlateSolveService(this.appConfig);
-        this.standardDetectionPipelineService = new StandardDetectionPipelineService(sessionFrames);
         this.fitsVisualizationRenderer = new FitsVisualizationRenderer();
         this.batchService = new FitsBatchService(alignedFitsFolderFullPath, fitsVisualizationRenderer);
         this.importService = new FitsImportService(alignedFitsFolderFullPath, sessionFrames, batchService, interaction);
@@ -290,58 +139,6 @@ public class ImageProcessing implements AutoCloseable {
      */
     public void batchStretch(int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
         batchService.batchStretch(stretchFactor, iterations, algo, progressListener);
-    }
-
-// =========================================================================
-    // THE MULTI-THREADED DETECTION PIPELINE
-    // =========================================================================
-
-    /**
-     * Captures application options, with the visualization settings and the Auto-Tune frame limit of the detection
-     * settings, before a desktop job is queued; no file access or image copying occurs.
-     */
-    public DetectionRunOptions captureRunOptions(VisualizationSettings visualization, int autoTuneMaxCandidateFrames) {
-        return DetectionRunOptions.capture(appConfig, autoTuneMaxCandidateFrames).withVisualization(visualization);
-    }
-
-    /**
-     * Runs the standard detection pipeline on the full cached frame set with the request's captured application
-     * options and the session's sky data ({@code sky}; null reads the frames' folder), and exports the HTML session
-     * report plus associated visualizations.
-     */
-    public File detectObjects(DetectionConfig config, DetectionSafetyPrompt safetyPrompt,
-            TransientEngineProgressListener progressListener, DetectionRunOptions options, SkySnapshot sky) throws Exception {
-        if (sessionFrames.getFiles() == null) getFitsfileInformation();
-        return standardDetectionPipelineService.run(config, sessionFrames.getFiles(), safetyPrompt, progressListener, null, options, sky).report();
-    }
-
-    /** Tracks of the last detection run on these frames, or null when none has run. */
-    public TrackOverlay getLastTrackOverlay() {
-        return sessionFrames.getTracks();
-    }
-
-    /** Variable-star candidates of the last standard detection run, numbered as in its report. */
-    public VariableStarOverlay getLastVariableStarOverlay() {
-        return sessionFrames.getVariables();
-    }
-
-    /**
-     * Runs the standard detection pipeline with explicit immutable application options and returns the in-memory
-     * engine output without writing any report artifacts; the execution data carries the options into the export.
-     */
-    public PipelineExecutionData runDetectionPipeline(DetectionConfig config, TransientEngineProgressListener progressListener,
-            DetectionRunOptions options) throws Exception {
-        if (sessionFrames.getFiles() == null) getFitsfileInformation();
-        // Headless runs have no session: the correction and the catalogue are read from the frames' folder once.
-        return standardDetectionPipelineService.runDetectionPipeline(config, sessionFrames.getFiles(), progressListener, options, null);
-    }
-
-    /**
-     * Exports the HTML report and visualization bundle for a previously executed pipeline run, telling
-     * {@code progressListener} (which may be null) 0-99% as it writes.
-     */
-    public File exportDetectionReport(PipelineExecutionData executionData, TransientEngineProgressListener progressListener) throws IOException {
-        return standardDetectionPipelineService.exportDetectionReport(executionData, progressListener);
     }
 
 // =========================================================================

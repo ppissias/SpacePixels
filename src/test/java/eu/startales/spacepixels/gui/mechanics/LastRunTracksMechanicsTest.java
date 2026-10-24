@@ -2,7 +2,9 @@ package eu.startales.spacepixels.gui.mechanics;
 
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
+import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
+import eu.startales.spacepixels.util.DetectionOverlays;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.TrackOverlay;
 import io.github.ppissias.jtransient.engine.PipelineResult;
@@ -15,10 +17,17 @@ import org.assertj.swing.fixture.FrameFixture;
 import org.assertj.swing.fixture.JCheckBoxFixture;
 import org.junit.Test;
 
+import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.EventQueue;
 import java.awt.KeyboardFocusManager;
+import java.awt.Window;
 import java.awt.event.KeyEvent;
 import java.io.File;
 import java.util.List;
@@ -30,6 +39,7 @@ import static org.junit.Assert.*;
 /**
  * Preview Frame and Manual Transient Inspection show the tracks of the session's last detection run, as Blink does:
  * Show tracks (T) is off until a run has tracks, and a run that ends while Preview Frame is open makes them available.
+ * A run gives its overlays to its session when it ends, and only while that session is the current one.
  */
 public class LastRunTracksMechanicsTest extends MechanicsTestCase {
 
@@ -68,8 +78,78 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
     }
 
     /**
-     * Stands in for a detection run: a job that leaves a track through the first three frames of the session where a
-     * run leaves its tracks. Its end unlocks the window, as a run's does.
+     * A real Detect Moving Targets run gives its overlays to the session when it ends, before the window shows the
+     * outcome: they are there while "Pipeline Complete" asks about the report.
+     */
+    @Test(timeout = 180_000)
+    public void detectMovingTargetsGivesTheSessionItsOverlaysBeforeShowingTheOutcome() throws Exception {
+        importFrames();
+        ProcessingSession session = GuiActionRunner.execute(() -> application().getSession());
+        assertNull("no run yet", session.getTrackOverlay());
+        JButton detect = window().button(VisibleText.button("Detect Moving Targets")).target();
+        EventQueue.invokeLater(detect::doClick);
+        waitFor("the run's completion dialog", () -> GuiActionRunner.execute(() -> showingDialog("Pipeline Complete") != null));
+        assertNotNull("the overlays arrive before the outcome is shown", session.getTrackOverlay());
+        assertNotNull(session.getVariableStarOverlay());
+        GuiActionRunner.execute(() -> optionPane(showingDialog("Pipeline Complete")).setValue(JOptionPane.NO_OPTION));
+        waitFor("the run releases the window", () -> GuiActionRunner.execute(() -> application().getJobCoordinator().current() == null
+                && showingDialog("Pipeline Complete") == null));
+        assertSame(session, GuiActionRunner.execute(() -> application().getSession()));
+        assertNotNull(session.getTrackOverlay());
+    }
+
+    /**
+     * A run's overlays reach only the session it ran on while that session is current: after a new import they are
+     * dropped, and neither the closed session nor the new one takes them.
+     */
+    @Test(timeout = 180_000)
+    public void aRunsOverlaysNeverReachAReplacedSession() throws Exception {
+        importFrames();
+        ProcessingSession first = GuiActionRunner.execute(() -> application().getSession());
+        File other = SyntheticDatasetFactory.createMono16FitsSequence(folder.newFolder("other").toPath(),
+                "other", SyntheticDatasetFactory.DEFAULT_FRAME_COUNT).toFile();
+        GuiActionRunner.execute(() -> application().importFolder(other));
+        waitFor("the second session installed", () -> GuiActionRunner.execute(() -> application().getSession() != first
+                && application().getSession() != null && application().getJobCoordinator().current() == null));
+        ProcessingSession second = GuiActionRunner.execute(() -> application().getSession());
+        assertTrue(first.isClosed());
+
+        TrackOverlay late = TrackOverlay.from(PipelineResult.builder().build());
+        GuiActionRunner.execute(() -> application().getMainApplicationPanel().showDetectionOverlays(first,
+                new DetectionOverlays(late, null)));
+        assertNull("the closed session takes nothing", first.getTrackOverlay());
+        assertNull("the new session keeps its own (none)", second.getTrackOverlay());
+    }
+
+    /** The showing dialog with this title, or null. */
+    private static JDialog showingDialog(String title) {
+        for (Window window : Window.getWindows()) {
+            if (window instanceof JDialog dialog && dialog.isShowing() && title.equals(dialog.getTitle())) {
+                return dialog;
+            }
+        }
+        return null;
+    }
+
+    /** The question inside a dialog made by {@link JOptionPane}, or null. */
+    private static JOptionPane optionPane(Component root) {
+        if (root instanceof JOptionPane pane) {
+            return pane;
+        }
+        if (root instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                JOptionPane found = optionPane(child);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Stands in for a detection run: a job that ends with a track through the first three frames of the session. Its
+     * end unlocks the window and hands the track to the window as a run's end does.
      */
     private void endARunWithOneTrack() throws Exception {
         FitsFileInformation[] files = GuiActionRunner.execute(() -> application().getSession().getFiles());
@@ -83,10 +163,11 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
         TrackOverlay overlay = TrackOverlay.from(PipelineResult.builder().tracks(List.of(track)).build());
         CountDownLatch ended = new CountDownLatch(1);
         var admission = GuiActionRunner.execute(() -> application().getJobCoordinator().start(JobKind.DETECTION,
-                application().getSession(), context -> {
-                    application().getImageProcessing().getSessionFrames().setOverlays(overlay, null);
-                    return JobOutcome.completed(Boolean.TRUE);
-                }, (handle, outcome) -> ended.countDown()));
+                application().getSession(), context -> JobOutcome.completed(Boolean.TRUE), (handle, outcome) -> {
+                    application().getMainApplicationPanel().showDetectionOverlays(handle.session(),
+                            new DetectionOverlays(overlay, null));
+                    ended.countDown();
+                }));
         assertTrue(admission.admitted());
         assertTrue(ended.await(30, TimeUnit.SECONDS));
     }

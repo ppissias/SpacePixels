@@ -174,9 +174,9 @@ public class IterativeDetectionRunTest {
                 }
             }
             File normal = folder.newFolder("normal" + passIndex);
-            new StandardDetectionPipelineService(new eu.startales.spacepixels.session.SessionFrames())
+            new StandardDetectionPipelineService()
                     .run(config.clone(), subset.toArray(FitsFileInformation[]::new), null, null, normal,
-                            DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES).withVisualization(request.visualization()), null);
+                            DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES).withVisualization(request.visualization()), null, null);
             File actual = new File(index.getParentFile(), pass.get("frameCount").getAsInt() + "_frames");
             JsonObject iterativeData = json(new File(actual, "report-data.json"));
             JsonObject normalData = json(new File(normal, "report-data.json"));
@@ -286,8 +286,8 @@ public class IterativeDetectionRunTest {
         return new StandardDetectionPipelineService.RunResult(report, summary());
     }
 
-    private static ImageProcessing.DetectionSummary summary() {
-        return new ImageProcessing.DetectionSummary(0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0, 0, 0, 0);
+    private static DetectionSummary summary() {
+        return new DetectionSummary(0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0, 0, 0, 0);
     }
 
     private static JsonObject record(File index) throws IOException { return json(new File(index.getParentFile(), "run-data.json")); }

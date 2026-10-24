@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.DetectionSummary;
 import eu.startales.spacepixels.util.ReportInclusion;
 import eu.startales.spacepixels.util.reporting.FindingCategory;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -19,7 +19,7 @@ import java.util.function.ToIntFunction;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static eu.startales.spacepixels.util.ImageProcessing.DetectionSummary.offerInReport;
+import static eu.startales.spacepixels.util.DetectionSummary.offerInReport;
 
 /** Desktop-only report confirmation; workers receive callbacks rather than depending on Swing. */
 public final class GuiDetectionReportPrompt {
@@ -41,7 +41,7 @@ public final class GuiDetectionReportPrompt {
      * Confirms counts above the limit on the EDT and applies accepted report-only choices.
      * Declines on dismissal, interruption or a dialog failure; counts at the limit proceed without UI.
      */
-    public boolean confirm(ImageProcessing.DetectionSummary summary, boolean plateSolved,
+    public boolean confirm(DetectionSummary summary, boolean plateSolved,
                            int limit, String heading, DetectionConfig config) {
         if (Thread.currentThread().isInterrupted()) return false;
         if (summary.totalDetections <= limit) return true;
@@ -66,7 +66,7 @@ public final class GuiDetectionReportPrompt {
     }
 
     /** Builds the existing report choices on the EDT without changing detection settings. */
-    ReportChoice warningPanel(ImageProcessing.DetectionSummary summary, boolean plateSolved, String heading, DetectionConfig config) {
+    ReportChoice warningPanel(DetectionSummary summary, boolean plateSolved, String heading, DetectionConfig config) {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setOpaque(false);
@@ -214,7 +214,7 @@ public final class GuiDetectionReportPrompt {
     }
 
     /** Counts classified results still selected for export; photometry is reported separately. */
-    private static String includedLine(ImageProcessing.DetectionSummary summary, JCheckBox[] boxes) {
+    private static String includedLine(DetectionSummary summary, JCheckBox[] boxes) {
         int included = FindingCategory.MOVING_TARGET.count(summary) + FindingCategory.STREAK_TRACK.count(summary)
                 + FindingCategory.SINGLE_STREAK.count(summary);
         FindingCategory[] optional = {FindingCategory.ANOMALY, FindingCategory.SLOW_MOVER, FindingCategory.LOCAL_RESCUE,
@@ -226,7 +226,7 @@ public final class GuiDetectionReportPrompt {
     }
 
     /** Summarizes the run's photometry readiness and variable-star counts. */
-    private static String photometryLine(ImageProcessing.DetectionSummary summary) {
+    private static String photometryLine(DetectionSummary summary) {
         if ("NOT_READY".equals(summary.photometryVerdict)) {
             return "session not ready for photometry";
         }
@@ -319,7 +319,7 @@ public final class GuiDetectionReportPrompt {
         }
 
         /** Builds an enabled category row from the same count/label policy as the exported report. */
-        static OptionalRow category(FindingCategory category, DetectionConfig config, ImageProcessing.DetectionSummary summary) {
+        static OptionalRow category(FindingCategory category, DetectionConfig config, DetectionSummary summary) {
             int count = category.count(summary);
             return category.computed(config, summary) ? new OptionalRow(category.summaryLabel(), Integer.toString(count), count) : null;
         }

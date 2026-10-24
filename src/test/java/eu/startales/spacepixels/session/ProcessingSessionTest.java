@@ -5,11 +5,14 @@ import eu.startales.spacepixels.config.SpacePixelsAppConfigIO;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
+import eu.startales.spacepixels.util.DetectionOverlays;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
+import eu.startales.spacepixels.util.TrackOverlay;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import io.github.ppissias.jtransient.engine.AutoTunerResult;
+import io.github.ppissias.jtransient.engine.PipelineResult;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -195,6 +198,9 @@ public class ProcessingSessionTest {
             }
         });
         session.setSelection(session.getFiles());
+        DetectionOverlays lastRun = new DetectionOverlays(TrackOverlay.from(PipelineResult.builder().build()), null);
+        session.setLastRun(lastRun);
+        assertSame(lastRun.tracks(), session.getTrackOverlay());
         session.ownSkyCatalogueWorker(worker);
         worker.start();
         try {
@@ -206,6 +212,10 @@ public class ProcessingSessionTest {
             assertTrue(session.getSelection().isEmpty());
             assertTrue(session.getAutoTune().isEmpty());
             assertThrows(IllegalStateException.class, () -> session.setLastReport(new File("late")));
+            assertNull("closing forgets the last run's overlays", session.getTrackOverlay());
+            assertThrows("a closed session takes no run's overlays", IllegalStateException.class,
+                    () -> session.setLastRun(lastRun));
+            assertNull(session.getTrackOverlay());
             session.close();
         } finally {
             worker.interrupt();

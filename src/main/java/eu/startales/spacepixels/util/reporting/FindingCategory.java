@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.DetectionSummary;
 import eu.startales.spacepixels.util.ReportInclusion;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.photometry.StarLightCurve;
@@ -137,7 +137,7 @@ public enum FindingCategory {
     }
 
     /** Resolves measured summary counts, keeping both variable confidence tiers represented. */
-    public int count(ImageProcessing.DetectionSummary summary) {
+    public int count(DetectionSummary summary) {
         return switch (this) {
             case MOVING_TARGET -> summary.movingTargets;
             case STREAK_TRACK -> summary.streakTracks;
@@ -153,7 +153,7 @@ public enum FindingCategory {
     }
 
     /** Preserves summary-row visibility for enabled analyses, including photometry's separate run verdict. */
-    public boolean computed(DetectionConfig config, ImageProcessing.DetectionSummary summary) {
+    public boolean computed(DetectionConfig config, DetectionSummary summary) {
         return switch (this) {
             case MOVING_TARGET, STREAK_TRACK, SINGLE_STREAK -> true;
             case ANOMALY -> config == null || config.enableAnomalyRescue;

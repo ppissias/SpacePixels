@@ -9,7 +9,6 @@ package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.util.reporting.ReportRunContext;
-import eu.startales.spacepixels.session.SessionFrames;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
@@ -23,37 +22,38 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Runs the standard JTransient detection path and exports the resulting report artifacts.
  *
- * <p>This service owns the non-iterative load-run-export flow so {@link ImageProcessing} can stay
- * focused on FITS lifecycle concerns and the broader facade API. Each run receives its application options
- * explicitly in a {@link eu.startales.spacepixels.config.DetectionRunOptions}.</p>
+ * <p>The service keeps no state: each run receives its frames, settings, application options
+ * ({@link eu.startales.spacepixels.config.DetectionRunOptions}) and sky data explicitly, and hands its results to the
+ * caller. Detect Moving Targets, Detect Iteratively and the API create one where they run it.</p>
  */
-final class StandardDetectionPipelineService {
+public final class StandardDetectionPipelineService {
 
-    private final SessionFrames state;
+    /** The report file (null when the report was declined) and the counts the report decision saw. */
+    public record RunResult(File report, DetectionSummary summary) {}
 
-    /** Creates a service that records the last run's overlays in {@code state}. */
-    StandardDetectionPipelineService(SessionFrames state) {
-        this.state = state;
-    }
-
-    record RunResult(File report, ImageProcessing.DetectionSummary summary) {}
-
-    /** Executes load/detect/export using one options snapshot for the entire run. */
-    RunResult run(DetectionConfig config, FitsFileInformation[] cachedFileInfo,
-                  ImageProcessing.DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener,
-                  File outputDirectory, DetectionRunOptions options, SkySnapshot sky) throws Exception {
+    /**
+     * Executes load/detect/export using one options snapshot for the entire run. As soon as the detection finishes,
+     * before the report decision and export, the run's overlays go to {@code detected} (null: nobody wants them), on
+     * the calling thread; they survive a declined report and a failed or cancelled export.
+     */
+    public RunResult run(DetectionConfig config, FitsFileInformation[] cachedFileInfo,
+                         DetectionSafetyPrompt safetyPrompt, TransientEngineProgressListener progressListener,
+                         File outputDirectory, DetectionRunOptions options, SkySnapshot sky,
+                         Consumer<DetectionOverlays> detected) throws Exception {
         // Detection takes 0-90% of the bar; exporting the report the rest.
-        ImageProcessing.PipelineExecutionData executionData = runDetectionPipeline(config, cachedFileInfo,
+        PipelineExecutionData executionData = runDetectionPipeline(config, cachedFileInfo,
                 progressListener == null ? null : (percent, message) -> progressListener.onProgressUpdate((int) (percent * 0.9), message), options, sky);
-        state.setOverlays(TrackOverlay.from(executionData.getPipelineResult()),
-                executionData.getReportContext().variableStarOverlay(executionData.getPipelineResult()));
+        if (detected != null) {
+            detected.accept(DetectionOverlays.of(executionData));
+        }
 
         ReportInclusion reportInclusion = ReportInclusion.all();
-        ImageProcessing.DetectionSummary detectionSummary = DetectionPipelineSupport.summarizeDetections(executionData.getPipelineResult());
+        DetectionSummary detectionSummary = DetectionPipelineSupport.summarizeDetections(executionData.getPipelineResult());
         if (safetyPrompt != null) {
             if (!safetyPrompt.shouldProceed(detectionSummary)) {
                 DebugOutput.println("Report generation aborted by UI callback. Detection count: " + detectionSummary.totalDetections);
@@ -93,7 +93,7 @@ final class StandardDetectionPipelineService {
      * Freezes configuration, metadata, WCS and catalogue before the first progress callback or FITS read. {@code sky}
      * is the session's correction and catalogue; null reads them from the frames' folder.
      */
-    ImageProcessing.PipelineExecutionData runDetectionPipeline(DetectionConfig config,
+    public PipelineExecutionData runDetectionPipeline(DetectionConfig config,
             FitsFileInformation[] cachedFileInfo, TransientEngineProgressListener progressListener,
             DetectionRunOptions options, SkySnapshot sky) throws Exception {
         ReportRunContext reportContext = ReportRunContext.capture(options, cachedFileInfo, sky);
@@ -164,19 +164,19 @@ final class StandardDetectionPipelineService {
         long pipelineDuration = System.currentTimeMillis() - startTime;
         DebugOutput.println("Total Pipeline Time: " + pipelineDuration + "ms");
 
-        return new ImageProcessing.PipelineExecutionData(result, effectiveConfig, cachedFileInfo, rawFramesForExport, reportContext);
+        return new PipelineExecutionData(result, effectiveConfig, cachedFileInfo, rawFramesForExport, reportContext);
     }
 
     /**
      * Writes the full report into a new {@code detections_} folder; {@code progressListener} (which may be null) hears
      * 0-99%. When it stops the report with a cancel ({@link Cancellation}), the unfinished folder is removed.
      */
-    File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData,
-                               TransientEngineProgressListener progressListener) throws IOException {
+    public File exportDetectionReport(PipelineExecutionData executionData,
+                                      TransientEngineProgressListener progressListener) throws IOException {
         return exportDetectionReport(executionData, ReportInclusion.all(), progressListener, null);
     }
 
-    private File exportDetectionReport(ImageProcessing.PipelineExecutionData executionData, ReportInclusion inclusion,
+    private File exportDetectionReport(PipelineExecutionData executionData, ReportInclusion inclusion,
                                TransientEngineProgressListener progressListener, File outputDirectory) throws IOException {
         if (executionData == null) {
             throw new IllegalArgumentException("executionData must not be null");

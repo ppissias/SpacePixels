@@ -15,6 +15,8 @@ import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.util.DetectionInputPreparation;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.PipelineExecutionData;
+import eu.startales.spacepixels.util.StandardDetectionPipelineService;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import io.github.ppissias.jtransient.engine.AutoTunerResult;
@@ -79,15 +81,18 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
             int pipelineEndPercent = request.isGenerateReport() ? 90 : 100;
             final int finalPipelineStartPercent = pipelineStartPercent;
             final int finalPipelineEndPercent = pipelineEndPercent;
-            ImageProcessing.PipelineExecutionData executionData = imageProcessing.runDetectionPipeline(
-                    pipelineBaseConfig,
-                    (percentage, message) -> emitScaledProgress(progressListener, finalPipelineStartPercent, finalPipelineEndPercent, percentage, message), runOptions);
+            StandardDetectionPipelineService detection = new StandardDetectionPipelineService();
+            // Headless runs have no session: the correction and the catalogue are read from the frames' folder once.
+            PipelineExecutionData executionData = detection.runDetectionPipeline(
+                    pipelineBaseConfig, filesInfo,
+                    (percentage, message) -> emitScaledProgress(progressListener, finalPipelineStartPercent, finalPipelineEndPercent, percentage, message),
+                    runOptions, null);
 
             File reportFile = null;
             File exportDirectory = null;
             if (request.isGenerateReport()) {
                 emitProgress(progressListener, 90, "Exporting tracks and generating HTML report...");
-                reportFile = imageProcessing.exportDetectionReport(executionData,
+                reportFile = detection.exportDetectionReport(executionData,
                         (percentage, message) -> emitScaledProgress(progressListener, 90, 100, percentage, message));
                 if (reportFile == null) {
                     throw new SpacePixelsPipelineException("Pipeline completed without producing an export report.");

@@ -94,7 +94,7 @@ final class DetectionPipelineSupport {
         return baseConfig.clone();
     }
 
-    static ImageProcessing.DetectionSummary summarizeDetections(PipelineResult result) {
+    static DetectionSummary summarizeDetections(PipelineResult result) {
         List<Track> tracks = result.tracks != null ? result.tracks : Collections.emptyList();
         List<AnomalyDetection> anomalies = result.anomalies != null ? result.anomalies : Collections.emptyList();
         int singleStreaks = 0;
@@ -137,7 +137,7 @@ final class DetectionPipelineSupport {
         }
         PipelineTelemetry.PhotometryTelemetry photometry = result.telemetry != null ? result.telemetry.photometryTelemetry : null;
 
-        return new ImageProcessing.DetectionSummary(
+        return new DetectionSummary(
                 singleStreaks + streakTracks + movingTargets + anomalyCount
                         + slowMoverCandidates + localRescueCandidates + localActivityClusters
                         + residualAnalysis.commonMotionGroups.size() + result.cameraFixedGroups.size(),

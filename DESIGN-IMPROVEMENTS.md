@@ -32,7 +32,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
-| [SP-04](#sp-04-retire-the-imageprocessing-facade) | Retire the `ImageProcessing` facade; the session owns its services and data | Medium | Large |
+| [SP-04](#sp-04-retire-the-imageprocessing-facade) | Retire the `ImageProcessing` facade; the session owns its services and data. Detection is done; import, files and the other services remain | Medium | Large |
 | [SP-05](#sp-05-give-panels-their-collaborators-not-the-whole-window) | Give panels their collaborators, not the whole window | Medium | Medium |
 | [SP-06](#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Move the sky-catalogue workflow out of the main panel | Medium | Small |
 | [SP-07](#sp-07-one-binding-type-for-settings-rows) | One binding type for settings rows | Low | Small |
@@ -56,25 +56,25 @@ Refactorings are intended to preserve behaviour. Evaluate the exceptions raised 
 
 ### SP-04. Retire the ImageProcessing facade
 
-**Problem.** `ImageProcessing` (562 lines) began as the old monolith. It is now mostly a pass-through over `FitsImportService`, `FitsBatchService`, `PlateSolveService`, `StandardDetectionPipelineService`, `IterativeDetectionPipelineService` and `FitsVisualizationRenderer`. It also carries:
-- nested types that belong elsewhere: `DetectionSummary` (about 100 lines), `PipelineExecutionData`, `RedirectImportException` and `DetectionSafetyPrompt`;
+**Step 1 done (2026-10-24): detection.** Detect Moving Targets, Detect Iteratively and the API call `StandardDetectionPipelineService` themselves. It keeps no state, so each caller creates one where it runs it and has nothing to dispose. A finished detection hands its `DetectionOverlays` (tracks and variable-star candidates, no image buffers) to its caller when the engine returns, before the report decision. `DetectionTask` keeps them apart from its `JobOutcome`. The window gives them to the job's session when the job ends, if that session is still the current one: after a written, declined or unwritable report, and after a cancel while the report was being written. A detection that stops before it finishes leaves the last run's overlays. The session owns them (`ProcessingSession.setLastRun`, refused once closed). `DetectionSummary`, `PipelineExecutionData` and `DetectionSafetyPrompt` are top-level types, and `SessionFrames` holds only the frame list. Iterative passes still leave the session's overlays alone. The reports stayed byte-identical, through both the batch command and the window's detection job.
+
+**Problem (what remains).** `ImageProcessing` (269 lines) is still a pass-through over `FitsImportService`, `FitsBatchService`, `PlateSolveService` and `FitsVisualizationRenderer`. It also carries:
+- `RedirectImportException`, a nested type that belongs with the import;
 - static FITS helpers;
 - three similarly named file accessors: `getImportedFiles`, `getFitsfileInformation` and `getFitsfileInformationHeadless`.
 
-Its Javadoc says it keeps "the public processing API stable", but API.md marks it as internal. It also owns `SessionFrames`, a shared mutable holder of the file list and the last run's overlays. The session exposes that holder, and `StandardDetectionPipelineService` writes overlays into it as a side effect of a run. So session state is split between `ProcessingSession`, `ImageProcessing` and `SessionFrames`. Tasks still call the facade `preProcessing`.
+API.md marks it as internal. It owns `SessionFrames`, the frame list shared by the import service and the session, so the session's files still live in two places. Tasks still call the facade `preProcessing`.
 
-**Proposal.**
-- Tasks and the API call the services directly. The session (or one `SessionServices` holder it owns) creates them with the session's files and settings.
-- The session owns its files and the last run's overlays. A run returns its overlays in its result, and the GUI stores them in the session.
-- Move `DetectionSummary` and `PipelineExecutionData` to their own files.
-- Then delete `ImageProcessing` and `SessionFrames`.
+**Proposal (remaining steps).**
+- Import and file ownership: the session owns its frame list, one accessor replaces the three, and `RedirectImportException` moves to the import. Then `SessionFrames` goes.
+- Tasks and the API call the remaining services directly. The session (or one `SessionServices` holder it owns) creates them with the session's files and settings.
+- Then delete `ImageProcessing`.
 
 **Benefit.** One owner for session data and one obvious place for each operation, with no forwarding layer.
 
 **Verification.** All tests, the GUI mechanics suite, and byte-identical reports on the reference datasets. This is the largest item. Do it in steps, one service at a time.
 
 **Issue review (2026-10-24; evaluate before implementation).**
-- **Preserve detection products independently of export.** `StandardDetectionPipelineService.run` installs overlays before the report prompt and export. They survive a declined report or export failure. Only `JobOutcome.Completed` currently carries a result, so returning overlays only on normal completion would lose that behaviour. Specify their delivery on report decline, cancellation and failure, guarded by session identity, and test those paths.
 - Give headless service construction and disposal an explicit owner too; the API currently closes its processor without creating a GUI session. Avoid replacing the facade with a holder that simply recreates its forwarding responsibilities. Migrate one service at a time.
 - **Evaluate an existing engine-boundary exception.** `DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain` rewrites `PipelineResult` and telemetry after engine execution. Assess this with JTransient against the rule that detection belongs to the engine. Do not silently delete or relocate this policy during the facade refactor; establish the intended few-frame result contract and compare real results separately.
 
@@ -124,7 +124,7 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 
 **Problem.**
 - `DetectionReportGenerator` (1,523 lines) is an all-static class that holds data types, image rendering (mask overlays, global maps, drift map, mosaics, cluster maps), text formatting and the export orchestration. 27 classes call its static helpers.
-- The export has one entry, `exportTrackVisualizations`, with eight positional parameters. The API and the GUI reach it through two forwarding layers: `ImageProcessing` (`detectObjects`, `runDetectionPipeline`, `exportDetectionReport`) and `StandardDetectionPipelineService`.
+- The export has one entry, `exportTrackVisualizations`, with eight positional parameters. The API and the GUI reach it through `StandardDetectionPipelineService` (`run`, or `runDetectionPipeline` and `exportDetectionReport`) and its private export overload.
 - `DetectionReportContext` takes 20 constructor parameters, copied one by one from the `PipelineResult`. Six more fields are set after construction.
 - The context also has fallback branches "for isolated section callers": `data == null ? category.id(..) : data.finding(..)` and `runContext == null ? defaults`. That is production code kept only so tests can build sections without a full context.
 
@@ -140,7 +140,7 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 **Issue review (2026-10-24; evaluate before implementation).**
 - A complete context should distinguish valid absence (no WCS, catalogue or optional analysis) from an uninitialized context. Keep no-WCS, empty-result and partial-inclusion cases covered when deleting test-only fallback construction paths.
 - **Clarify byte comparison.** `PipelineDiagnosticsSectionWriter.writeStageTimings` writes measured engine and stage durations into HTML. Excluding generation time alone cannot make independent report folders byte-identical. List and normalize volatile timing fields, compare deterministic outputs and rendered assets exactly, and assess performance separately, as in DEVELOPER.md.
-- Preserve cancellation cleanup, atomic HTML publication and report-failure messages when replacing the overloads; coordinate completed detection products with SP-04.
+- Preserve cancellation cleanup, atomic HTML publication and report-failure messages when replacing the overloads. Keep handing a run's overlays over before the report decision and export (SP-04, step 1), so they still survive a declined, failed or cancelled report.
 
 ### SP-10. One place for sky-math and statistics helpers
 

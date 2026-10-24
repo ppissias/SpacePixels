@@ -38,10 +38,11 @@ public class ReportFailureMessagesTest {
         try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             processing.getFitsfileInformationHeadless();
             // After the detection, before the report: the session folder becomes a file, so no report folder fits in it.
-            IOException failure = assertThrows(IOException.class, () -> processing.detectObjects(config, summary -> {
-                replaceFolderWithFile(sequence.toFile());
-                return true;
-            }, null, DetectionRunOptions.defaults(), null));
+            IOException failure = assertThrows(IOException.class, () -> new StandardDetectionPipelineService().run(config,
+                    processing.getImportedFiles(), summary -> {
+                        replaceFolderWithFile(sequence.toFile());
+                        return true;
+                    }, null, null, DetectionRunOptions.defaults(), null, null));
             assertTrue(failure.getMessage(), failure.getMessage().startsWith("The detection finished, but the report could not be written: "));
         }
     }

@@ -4,7 +4,7 @@ import eu.startales.spacepixels.gui.GuiDetectionReportPrompt;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.DetectionSummary;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.assertj.swing.core.GenericTypeMatcher;
 import org.assertj.swing.edt.GuiActionRunner;
@@ -28,7 +28,7 @@ public class ReportPromptMechanicsTest extends MechanicsTestCase {
     public void reportConfirmationAcceptsChoicesAndDeclinesWithoutMutatingSettings() throws Exception {
         GuiDetectionReportPrompt prompt = new GuiDetectionReportPrompt(application().getFrame());
         DetectionConfig config = new DetectionConfig();
-        ImageProcessing.DetectionSummary summary = new ImageProcessing.DetectionSummary(
+        DetectionSummary summary = new DetectionSummary(
                 60, 0, 0, 1, 59, 0, 0, 0, null, 0, 0, 0, 0, 0);
         CompletableFuture<Boolean> accepted = startReportQuestion(prompt, summary, true, "Iterative pass: 5 frames", config);
         DialogFixture dialog = dialog("Detection summary");
@@ -63,7 +63,7 @@ public class ReportPromptMechanicsTest extends MechanicsTestCase {
 
     /** Opens the question inside a real foreground job after its modal progress window is visible. */
     private CompletableFuture<Boolean> startReportQuestion(GuiDetectionReportPrompt prompt,
-            ImageProcessing.DetectionSummary summary, boolean solved, String heading, DetectionConfig config) {
+            DetectionSummary summary, boolean solved, String heading, DetectionConfig config) {
         CountDownLatch ready = new CountDownLatch(1);
         CompletableFuture<Boolean> answer = new CompletableFuture<>();
         var admission = GuiActionRunner.execute(() -> application().getJobCoordinator().start(JobKind.DETECTION,
