@@ -1,6 +1,7 @@
 package eu.startales.spacepixels.tasks;
 
 import eu.startales.spacepixels.config.VariableStarReportOptions;
+import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.jobs.Job;
@@ -31,6 +32,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -72,7 +74,7 @@ public class TaskOutcomesTest {
     public void blinkLoadsEveryFrameAndStopsWhenAsked() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 3);
         try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            FitsFileInformation[] files = processing.getFitsfileInformationHeadless();
+            FitsFileInformation[] files = processing.readFiles();
             List<String> reads = new ArrayList<>();
             JobOutcome<BlinkSequence> loaded = outcomeOf(new BlinkImagesTask(files, new AtomicBoolean(),
                     (read, total) -> reads.add(read + "/" + total)));
@@ -92,8 +94,8 @@ public class TaskOutcomesTest {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "prompt", 5);
         AtomicBoolean asked = new AtomicBoolean();
         try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            DetectionTask task = new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig(),
-                    VisualizationSettings.defaults(), SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, null, summary -> {
+            DetectionTask task = new DetectionTask(processing.readFiles(), SyntheticDatasetFactory.createSyntheticDetectionConfig(),
+                    DetectionRunOptions.capture(processing.getAppConfig(), SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES), null, summary -> {
                 asked.set(true);
                 assertTrue(summary.totalDetections >= 0);
                 return false;
@@ -110,8 +112,9 @@ public class TaskOutcomesTest {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "limit", 5);
         try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
             var config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
-            DetectionTask first = new DetectionTask(processing, config, VisualizationSettings.defaults(), 19, null, summary -> true);
-            DetectionTask next = new DetectionTask(processing, config, VisualizationSettings.defaults(), 23, null, summary -> true);
+            FitsFileInformation[] files = processing.readFiles();
+            DetectionTask first = new DetectionTask(files, config, DetectionRunOptions.capture(processing.getAppConfig(), 19), null, summary -> true);
+            DetectionTask next = new DetectionTask(files, config, DetectionRunOptions.capture(processing.getAppConfig(), 23), null, summary -> true);
             assertEquals(19, recordedAutoTuneLimit(outcomeOf(first)));
             assertEquals(23, recordedAutoTuneLimit(outcomeOf(next)));
         }
@@ -125,8 +128,10 @@ public class TaskOutcomesTest {
             var config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
             var edited = VisualizationSettings.defaults().withAutoStretchWhiteSigma(4.2).withVariableStarReportOptions(
                     new VariableStarReportOptions(13, VariableStarReportOptions.SortOrder.SIGNIFICANCE));
-            DetectionTask first = new DetectionTask(processing, config, edited, 19, null, summary -> true);
-            DetectionTask next = new DetectionTask(processing, config, VisualizationSettings.defaults(), 19, null, summary -> true);
+            FitsFileInformation[] files = processing.readFiles();
+            DetectionRunOptions options = DetectionRunOptions.capture(processing.getAppConfig(), 19);
+            DetectionTask first = new DetectionTask(files, config, options.withVisualization(edited), null, summary -> true);
+            DetectionTask next = new DetectionTask(files, config, options, null, summary -> true);
             File firstReport = report(outcomeOf(first));
             File nextReport = report(outcomeOf(next));
             assertEquals(13, recordedProfile(firstReport).get("variableStarMaxCandidateCards").getAsInt());
@@ -135,6 +140,33 @@ public class TaskOutcomesTest {
             assertFalse("the stretch of each run's master stack picture differs", java.util.Arrays.equals(
                     java.nio.file.Files.readAllBytes(new File(firstReport.getParentFile(), "master_stack.png").toPath()),
                     java.nio.file.Files.readAllBytes(new File(nextReport.getParentFile(), "master_stack.png").toPath())));
+        }
+    }
+
+    /** Admitted tasks protect their frame containers, share metadata, and never rescan the folder on the worker. */
+    @Test
+    public void detectionAndInspectionKeepTheirAdmittedFrames() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "admitted", 5);
+        try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
+            FitsFileInformation[] admitted = java.util.Arrays.copyOf(processing.readFiles(), 3);
+            FitsFileInformation first = admitted[0];
+            DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
+            DetectionTask detection = new DetectionTask(admitted, config, DetectionRunOptions.defaults(), null, summary -> true);
+            ManualTransientInspectionTask inspection = new ManualTransientInspectionTask(admitted, config);
+            admitted[0] = missingFrame();
+            first.getFitsHeader().put("OBJECT", "updated after admission");
+            Files.writeString(sequence.resolve("not-admitted.fit"), "Not a FITS image");
+
+            File report = report(outcomeOf(detection));
+            var data = com.google.gson.JsonParser.parseString(Files.readString(
+                    new File(report.getParentFile(), "report-data.json").toPath())).getAsJsonObject();
+            assertEquals(3, data.get("frameCount").getAsInt());
+            JobOutcome<ManualTransientInspectionTask.Result> inspected = outcomeOf(inspection);
+            assertTrue(String.valueOf(inspected), inspected instanceof JobOutcome.Completed<?>);
+            var result = ((JobOutcome.Completed<ManualTransientInspectionTask.Result>) inspected).result();
+            assertEquals(3, result.frames().size());
+            assertSame(first, result.files()[0]);
+            assertEquals("updated after admission", result.files()[0].getFitsHeader().get("OBJECT"));
         }
     }
 
@@ -186,7 +218,7 @@ public class TaskOutcomesTest {
         DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
         Path written = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "written", 5);
         try (ImageProcessing processing = ImageProcessing.openProcessor(written.toFile())) {
-            DetectionTask task = new DetectionTask(processing, config, VisualizationSettings.defaults(), 19, null, summary -> true);
+            DetectionTask task = new DetectionTask(processing.readFiles(), config, DetectionRunOptions.capture(processing.getAppConfig(), 19), null, summary -> true);
             assertTrue(outcomeOf(task) instanceof JobOutcome.Completed<?>);
             assertNotNull(task.detectedOverlays());
             assertNotNull(task.detectedOverlays().tracks());
@@ -194,14 +226,14 @@ public class TaskOutcomesTest {
         }
         Path declined = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "declined", 5);
         try (ImageProcessing processing = ImageProcessing.openProcessor(declined.toFile())) {
-            DetectionTask task = new DetectionTask(processing, config, VisualizationSettings.defaults(), 19, null, summary -> false);
+            DetectionTask task = new DetectionTask(processing.readFiles(), config, DetectionRunOptions.capture(processing.getAppConfig(), 19), null, summary -> false);
             assertTrue(outcomeOf(task) instanceof JobOutcome.Declined<?>);
             assertNotNull("a declined report leaves the run's overlays", task.detectedOverlays());
         }
         Path unwritable = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "unwritable", 5);
         try (ImageProcessing processing = ImageProcessing.openProcessor(unwritable.toFile())) {
             // After the detection, before the report: the session folder becomes a file, so no report folder fits in it.
-            DetectionTask task = new DetectionTask(processing, config, VisualizationSettings.defaults(), 19, null, summary -> {
+            DetectionTask task = new DetectionTask(processing.readFiles(), config, DetectionRunOptions.capture(processing.getAppConfig(), 19), null, summary -> {
                 replaceFolderWithFile(unwritable.toFile());
                 return true;
             });
@@ -212,8 +244,8 @@ public class TaskOutcomesTest {
         }
         Path cancelled = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "cancelled", 5);
         AtomicReference<DetectionTask> task = new AtomicReference<>();
-        JobOutcome<File> outcome = runCancelledAt(cancelled, "Writing the report: unclassified transients", processing -> {
-            task.set(new DetectionTask(processing, config, VisualizationSettings.defaults(), 19, null, summary -> true));
+        JobOutcome<File> outcome = runCancelledAt(cancelled, "Writing the report: unclassified transients", (processing, files) -> {
+            task.set(new DetectionTask(files, config, DetectionRunOptions.capture(processing.getAppConfig(), 19), null, summary -> true));
             return task.get();
         }, new ArrayList<>());
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
@@ -225,8 +257,8 @@ public class TaskOutcomesTest {
     public void aDetectionThatStopsBeforeItFinishesLeavesNoOverlays() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "stopped", 5);
         AtomicReference<DetectionTask> cancelled = new AtomicReference<>();
-        JobOutcome<File> outcome = runCancelledAt(sequence, "", processing -> {
-            cancelled.set(new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig()));
+        JobOutcome<File> outcome = runCancelledAt(sequence, "", (processing, files) -> {
+            cancelled.set(new DetectionTask(files, SyntheticDatasetFactory.createSyntheticDetectionConfig()));
             return cancelled.get();
         }, new ArrayList<>());
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
@@ -241,8 +273,8 @@ public class TaskOutcomesTest {
     public void aDetectionCancelledWhileItRunsStopsBeforeWritingAReport() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 5);
         // The user cancels as soon as the first progress appears.
-        JobOutcome<File> outcome = runCancelledAt(sequence, "", processing ->
-                new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig()), new ArrayList<>());
+        JobOutcome<File> outcome = runCancelledAt(sequence, "", (processing, files) ->
+                new DetectionTask(files, SyntheticDatasetFactory.createSyntheticDetectionConfig()), new ArrayList<>());
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
         assertEquals(0, foldersStartingWith(sequence, "detections_").length);
     }
@@ -251,8 +283,8 @@ public class TaskOutcomesTest {
     public void aDetectionCancelledWhileItWritesItsReportRemovesTheUnfinishedFolder() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 5);
         List<String> messages = new ArrayList<>();
-        JobOutcome<File> outcome = runCancelledAt(sequence, "Writing the report: unclassified transients", processing ->
-                new DetectionTask(processing, SyntheticDatasetFactory.createSyntheticDetectionConfig()), messages);
+        JobOutcome<File> outcome = runCancelledAt(sequence, "Writing the report: unclassified transients", (processing, files) ->
+                new DetectionTask(files, SyntheticDatasetFactory.createSyntheticDetectionConfig()), messages);
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
         assertTrue("the report reports its steps: " + messages, messages.contains("Writing the report: maps..."));
         assertEquals(0, foldersStartingWith(sequence, "detections_").length);
@@ -261,7 +293,7 @@ public class TaskOutcomesTest {
     @Test
     public void anIterativeRunCancelledDuringItsSecondPassKeepsTheFirstWithAnIndex() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 10);
-        JobOutcome<File> outcome = runCancelledAt(sequence, "Pass 10 frames: Writing the report", processing ->
+        JobOutcome<File> outcome = runCancelledAt(sequence, "Pass 10 frames: Writing the report", (processing, files) ->
                 iterativeTask(sequence.toFile()), new ArrayList<>());
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
         File[] runs = foldersStartingWith(sequence, "iterative_detections_");
@@ -275,7 +307,7 @@ public class TaskOutcomesTest {
     @Test
     public void anIterativeRunCancelledBeforeAnyPassFinishedLeavesNoFolder() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", 10);
-        JobOutcome<File> outcome = runCancelledAt(sequence, "Pass 5 frames: Loading", processing ->
+        JobOutcome<File> outcome = runCancelledAt(sequence, "Pass 5 frames: Loading", (processing, files) ->
                 iterativeTask(sequence.toFile()), new ArrayList<>());
         assertTrue(String.valueOf(outcome), outcome instanceof JobOutcome.Cancelled<?>);
         assertEquals(0, foldersStartingWith(sequence, "iterative_detections_").length);
@@ -291,10 +323,10 @@ public class TaskOutcomesTest {
 
     /** Runs the job on the sequence and cancels it at the first progress message starting with {@code cancelAt}. */
     private static JobOutcome<File> runCancelledAt(Path sequence, String cancelAt,
-                                                   java.util.function.Function<ImageProcessing, Job<File>> job,
+                                                   java.util.function.BiFunction<ImageProcessing, FitsFileInformation[], Job<File>> job,
                                                    List<String> messages) throws Exception {
         try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            processing.getFitsfileInformationHeadless();
+            FitsFileInformation[] files = processing.readFiles();
             List<JobOutcome<File>> outcomes = new ArrayList<>();
             JobCoordinator coordinator = new JobCoordinator(Runnable::run, Runnable::run, () -> false);
             coordinator.setListener(new JobCoordinator.Listener() {
@@ -314,7 +346,7 @@ public class TaskOutcomesTest {
                 public void jobEnded(eu.startales.spacepixels.jobs.JobHandle handle, JobOutcome<?> outcome) {
                 }
             });
-            coordinator.start(JobKind.DETECTION, null, job.apply(processing), (handle, outcome) -> outcomes.add(outcome));
+            coordinator.start(JobKind.DETECTION, null, job.apply(processing, files), (handle, outcome) -> outcomes.add(outcome));
             assertEquals(1, outcomes.size());
             return outcomes.get(0);
         }

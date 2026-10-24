@@ -59,7 +59,7 @@ public class LivePreviewPipelineTest {
         AppConfig app = new AppConfig();
         FitsFileInformation[] files;
         try (ImageProcessing processing = ImageProcessing.openProcessor(source)) {
-            files = processing.getFitsfileInformationHeadless();
+            files = processing.readFiles();
         }
 
         File plain = folder.newFolder("without");

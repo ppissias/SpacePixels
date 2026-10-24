@@ -16,7 +16,6 @@ import nom.tam.fits.*;
 
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
-import eu.startales.spacepixels.session.SessionFrames;
 
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 
@@ -34,26 +33,6 @@ public class ImageProcessing implements AutoCloseable {
     public static final int MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS =
             DetectionPipelineSupport.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS;
 
-    public static class RedirectImportException extends Exception {
-        private final File newDirectory;
-
-        /**
-         * Carries the replacement directory that the caller should load instead of the current one.
-         */
-        public RedirectImportException(File newDirectory) {
-            super("Redirecting import to new directory");
-            this.newDirectory = newDirectory;
-        }
-
-        /**
-         * Returns the directory that should replace the original import target.
-         */
-        public File getNewDirectory() {
-            return newDirectory;
-        }
-    }
-
-    private final SessionFrames sessionFrames = new SessionFrames();
     private final FitsImportService importService;
     private final FitsBatchService batchService;
 
@@ -62,12 +41,10 @@ public class ImageProcessing implements AutoCloseable {
     private final PlateSolveService plateSolveService;
     private final FitsVisualizationRenderer fitsVisualizationRenderer;
 
-    public SessionFrames getSessionFrames() { return sessionFrames; }
-
     /**
      * Opens a new, caller-owned noninteractive processing facade bound to an aligned FITS directory.
      * Loads standalone preferences; desktop import injects settings and explicit interaction instead.
-     * The caller closes the facade to release its import/solver services and session buffers.
+     * The caller closes the facade to release its import and solver services; it retains any returned metadata.
      */
     public static synchronized ImageProcessing openProcessor(File alignedFitsFolderFullPath) throws IOException, FitsException {
         return openProcessor(alignedFitsFolderFullPath, ApplicationSettings.loadDefault());
@@ -86,13 +63,8 @@ public class ImageProcessing implements AutoCloseable {
 
     @Override
     public void close() {
-        try {
-            importService.close();
-            plateSolveService.close();
-        } finally {
-            // Also when the plate-solve client cannot confirm in time that it stopped.
-            sessionFrames.clear();
-        }
+        importService.close();
+        plateSolveService.close();
     }
 
     /**
@@ -104,7 +76,7 @@ public class ImageProcessing implements AutoCloseable {
         this.plateSolveService = new PlateSolveService(this.appConfig);
         this.fitsVisualizationRenderer = new FitsVisualizationRenderer();
         this.batchService = new FitsBatchService(alignedFitsFolderFullPath, fitsVisualizationRenderer);
-        this.importService = new FitsImportService(alignedFitsFolderFullPath, sessionFrames, batchService, interaction);
+        this.importService = new FitsImportService(alignedFitsFolderFullPath, batchService, interaction);
     }
 
     // =========================================================================
@@ -145,43 +117,13 @@ public class ImageProcessing implements AutoCloseable {
     // UPDATED FITS FILE INFORMATION (The Import Gatekeeper)
     // =========================================================================
 
-    /** Whether any imported frame is plate-solved, which gives the report sky coordinates. */
-    public boolean hasPlateSolvedFrame() {
-        try {
-            for (FitsFileInformation file : getImportedFiles()) {
-                if (file.isWcsSolved()) {
-                    return true;
-                }
-            }
-        } catch (Exception ignored) {
-            // No frames: nothing is solved.
-        }
-        return false;
-    }
-
     /**
-     * The imported frames: the same objects the frame table shows and the detection run uses, so a header updated in
-     * place (Plate Solve writes the WCS) reaches all of them. Reads the folder only when nothing is loaded yet; use
-     * {@link #getFitsfileInformation()} only to import.
+     * Reads and validates metadata. Explicit interaction checks sequence consistency before offering conversions;
+     * without interaction, readiness is checked first and unsupported inputs are rejected without derivatives.
+     * Each call returns a fresh caller-owned array; the facade keeps no frames. Run this file work on a worker.
      */
-    public FitsFileInformation[] getImportedFiles() throws Exception {
-        return sessionFrames.getFiles() != null ? sessionFrames.getFiles() : getFitsfileInformation();
-    }
-
-    /**
-     * Loads metadata, checking sequence consistency before readiness. Explicit interaction may offer conversions;
-     * without it, unsupported inputs are rejected without dialogs or derivatives. Replaces the cached frames.
-     */
-    public FitsFileInformation[] getFitsfileInformation() throws Exception {
-        return importService.getFitsfileInformation();
-    }
-
-    /**
-     * Headless variant of FITS metadata loading used by CLI/batch flows that cannot prompt the
-     * user for decompression or format-conversion decisions.
-     */
-    public FitsFileInformation[] getFitsfileInformationHeadless() throws Exception {
-        return importService.getFitsfileInformationHeadless();
+    public FitsFileInformation[] readFiles() throws Exception {
+        return importService.readFiles();
     }
 
     public PlateSolveOperation startSolve(String path, boolean astap, boolean astrometry,

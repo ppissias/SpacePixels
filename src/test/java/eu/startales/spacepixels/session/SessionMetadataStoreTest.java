@@ -19,7 +19,7 @@ public class SessionMetadataStoreTest {
         File directory = SyntheticDatasetFactory.createSolvedMono16FitsSequence(folder.getRoot().toPath(), "frames", 3).toFile();
         try (ImageProcessing processing = ImageProcessing.openProcessor(directory,
                 ApplicationSettings.load(new File(folder.getRoot(), "preferences.json")))) {
-            FitsFileInformation[] frames = processing.getFitsfileInformationHeadless();
+            FitsFileInformation[] frames = processing.readFiles();
             var solution = WcsSolutionResolver.resolveUncorrected(null, frames);
             SkyCatalogue catalogue = new SkyCatalogue();
             catalogue.field = SkyField.of(solution.getTransformer(), frames[0].getSizeWidth(), frames[0].getSizeHeight());
@@ -58,7 +58,7 @@ public class SessionMetadataStoreTest {
         File directory = SyntheticDatasetFactory.createSolvedMono16FitsSequence(folder.getRoot().toPath(), "wcs", 3).toFile();
         try (ImageProcessing processing = ImageProcessing.openProcessor(directory,
                 ApplicationSettings.load(new File(folder.getRoot(), "preferences.json")))) {
-            FitsFileInformation[] frames = processing.getFitsfileInformationHeadless();
+            FitsFileInformation[] frames = processing.readFiles();
             var header = WcsSolutionResolver.resolveUncorrected(null, frames).getTransformer();
             PlateSolutionCorrection correction = new PlateSolutionCorrection();
             correction.solutionKey = header.solutionKey();

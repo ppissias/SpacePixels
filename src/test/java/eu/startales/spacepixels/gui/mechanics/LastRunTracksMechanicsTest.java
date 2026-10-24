@@ -60,7 +60,8 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
         focus(image);
         robot().pressAndReleaseKeys(KeyEvent.VK_T);
         waitFor("T shows the tracks", () -> previewTracks.target().isSelected());
-        assertTrue(GuiActionRunner.execute(() -> image.getAccessibleContext().getAccessibleDescription()).contains("Tracks on."));
+        String previewDescription = GuiActionRunner.execute(() -> image.getAccessibleContext().getAccessibleDescription());
+        assertTrue(previewDescription, previewDescription.contains("Tracks on."));
         robot().pressAndReleaseKeys(KeyEvent.VK_ESCAPE);
         waitFor("Escape on the image closes Preview Frame", () -> !preview.target().isShowing());
 
@@ -71,7 +72,8 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
         assertTrue("The last run's tracks are offered here too", inspectionTracks.target().isEnabled());
         inspectionTracks.check();
         JComponent inspected = image(inspection, "Manual Transient Inspection image");
-        assertTrue(GuiActionRunner.execute(() -> inspected.getAccessibleContext().getAccessibleDescription()).contains("Tracks on."));
+        String inspectionDescription = GuiActionRunner.execute(() -> inspected.getAccessibleContext().getAccessibleDescription());
+        assertTrue(inspectionDescription, inspectionDescription.contains("Tracks on."));
         focus(inspected);
         robot().pressAndReleaseKeys(KeyEvent.VK_ESCAPE);
         waitFor("Escape on the image closes the inspection", () -> !inspection.target().isShowing());

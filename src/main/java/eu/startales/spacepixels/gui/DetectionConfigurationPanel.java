@@ -353,12 +353,8 @@ public class DetectionConfigurationPanel extends JPanel {
      * kept while the frames and the settings that shape the stack stay the same.
      */
     private void openStarMaskExplorer() {
-        FitsFileInformation[] files;
-        try {
-            files = mainAppWindow.getImageProcessing().getImportedFiles();
-        } catch (Exception e) {
-            return;
-        }
+        ProcessingSession owner = mainAppWindow.getSession();
+        FitsFileInformation[] files = owner == null ? null : owner.getFiles();
         if (files == null || files.length == 0) {
             return;
         }
@@ -367,7 +363,6 @@ public class DetectionConfigurationPanel extends JPanel {
             return;
         }
         String stackKey = masterStackKey(config);
-        ProcessingSession owner = mainAppWindow.getSession();
         if (owner != null && owner.getMasterStack(stackKey) != null) {
             showStarMaskExplorer(files, config);
             return;

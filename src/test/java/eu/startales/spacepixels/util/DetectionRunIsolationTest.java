@@ -97,7 +97,7 @@ public class DetectionRunIsolationTest {
         var options = DetectionRunOptions.defaults().withAutoTuneMaxCandidateFrames(19);
         try (ImageProcessing processor = ImageProcessing.openProcessor(directory, ApplicationSettings.inMemory(application))) {
             var detection = new StandardDetectionPipelineService();
-            var execution = detection.runDetectionPipeline(config, processor.getImportedFiles(), (percent, message) -> {
+            var execution = detection.runDetectionPipeline(config, processor.readFiles(), (percent, message) -> {
                 config.detectionSigmaMultiplier = 20;
                 processor.getAppConfig().siteLat = "-24";
             }, options, null);

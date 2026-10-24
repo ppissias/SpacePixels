@@ -1,5 +1,7 @@
 package eu.startales.spacepixels.util;
 
+import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.ApplicationSettings;
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
 import org.junit.Rule;
@@ -75,6 +77,20 @@ public class FitsSequenceValidationTest {
         assertRejectedGuiAndPreparation(directory, "same type");
     }
 
+    /** Strict import keeps the API/CLI's readiness-first error when the sequence is also inconsistent. */
+    @Test
+    public void strictReadinessFailurePrecedesSequenceConsistencyFailure() throws Exception {
+        File directory = temporaryFolder.newFolder();
+        writeFits(directory, "A.fit", new int[2][3], null);
+        writeFits(directory, "B.fit", new int[3][3], null);
+        assertRejectedGuiAndPreparation(directory, "same type");
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
+            nom.tam.fits.FitsException failure = assertThrows(nom.tam.fits.FitsException.class, processor::readFiles);
+            assertTrue(failure.getMessage(), failure.getMessage().contains("A.fit has BITPIX=32"));
+        }
+        assertEquals("no conversion or derivative was written", 2, directory.listFiles().length);
+    }
+
     @Test
     public void mixedSignedAndUnsigned16BitFailsEveryImportPath() throws Exception {
         File directory = temporaryFolder.newFolder();
@@ -86,7 +102,7 @@ public class FitsSequenceValidationTest {
         }
         assertRejectedGuiAndPreparation(directory, "same type");
         try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
-            IOException exception = assertThrows(IOException.class, processor::getFitsfileInformationHeadless);
+            IOException exception = assertThrows(IOException.class, processor::readFiles);
             assertTrue(exception.getMessage(), exception.getMessage().contains("C.fit has BZERO=0 and BSCALE=1"));
         }
     }
@@ -101,7 +117,7 @@ public class FitsSequenceValidationTest {
             }
         }
         try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
-            IOException exception = assertThrows(IOException.class, processor::getFitsfileInformationHeadless);
+            IOException exception = assertThrows(IOException.class, processor::readFiles);
             assertTrue(exception.getMessage(), exception.getMessage().contains("Expected unsigned 16-bit FITS files"));
         }
     }
@@ -116,7 +132,7 @@ public class FitsSequenceValidationTest {
         writeFits(directory, "Long2.fit", new short[2][3], null, 120.0);
         assertRejectedEverywhere(directory, "4 images of 60 s, 2 images of 120 s (Long1.fit, Long2.fit)");
         try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
-            MixedExposureException mixed = assertThrows(MixedExposureException.class, processor::getFitsfileInformation);
+            MixedExposureException mixed = assertThrows(MixedExposureException.class, processor::readFiles);
             assertTrue(mixed.canImportLargestGroup());
             assertEquals(4, mixed.getLargestGroup().size());
             assertEquals("_exposure_60s", mixed.getLargestGroup().getFolderName());
@@ -176,7 +192,7 @@ public class FitsSequenceValidationTest {
         writeFits(directory, "A.fit", new short[2][3], null, 30.0);
         writeFits(directory, "B.fit", new short[2][3], null, 60.0);
         try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
-            MixedExposureException mixed = assertThrows(MixedExposureException.class, processor::getFitsfileInformation);
+            MixedExposureException mixed = assertThrows(MixedExposureException.class, processor::readFiles);
             assertFalse(mixed.canImportLargestGroup());
             assertTrue(mixed.getMessage(), mixed.getMessage().endsWith("Import a sequence of images that share one exposure time."));
         }
@@ -190,7 +206,7 @@ public class FitsSequenceValidationTest {
         writeFits(directory, "C.fit", new short[2][3], "2026-04-08T01:00:03", 120.0);
         MixedExposureException mixed;
         try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
-            mixed = assertThrows(MixedExposureException.class, processor::getFitsfileInformation);
+            mixed = assertThrows(MixedExposureException.class, processor::readFiles);
         }
         File subfolder = mixed.getLargestGroup().copyIntoSubfolder(null);
         assertEquals(new File(directory, "_exposure_60s"), subfolder);
@@ -218,7 +234,7 @@ public class FitsSequenceValidationTest {
         }
         writeFits(directory, "L&1.fit", new short[2][3], null, 120.0);
         try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
-            MixedExposureException mixed = assertThrows(MixedExposureException.class, processor::getFitsfileInformation);
+            MixedExposureException mixed = assertThrows(MixedExposureException.class, processor::readFiles);
             String question = ImageProcessing.mixedExposureQuestion(mixed);
             assertTrue(question, question.contains("These 4 images do not all have the same exposure time:"
                     + "<br>&bull; 3 images of 60 s<br>&bull; 1 image of 120 s (L&amp;1.fit)"));
@@ -262,7 +278,7 @@ public class FitsSequenceValidationTest {
         field.setAccessible(true);
         ThreadPoolExecutor executor = (ThreadPoolExecutor) field.get(importer);
         try {
-            processor.getFitsfileInformationHeadless();
+            processor.readFiles();
             assertTrue(executor.getMaximumPoolSize() <= 4);
         } finally {
             processor.close();
@@ -275,7 +291,7 @@ public class FitsSequenceValidationTest {
     private static void assertRejectedEverywhere(File directory, String message) throws Exception {
         assertRejectedGuiAndPreparation(directory, message);
         try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
-            IOException exception = assertThrows(IOException.class, processor::getFitsfileInformationHeadless);
+            IOException exception = assertThrows(IOException.class, processor::readFiles);
             assertTrue(exception.getMessage(), exception.getMessage().contains(message));
         }
     }
@@ -284,17 +300,33 @@ public class FitsSequenceValidationTest {
         IOException preparationException = assertThrows(IOException.class,
                 () -> DetectionInputPreparation.prepareInputDirectory(directory, true, null));
         assertTrue(preparationException.getMessage(), preparationException.getMessage().contains(message));
-        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
-            IOException importException = assertThrows(IOException.class, processor::getFitsfileInformation);
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory,
+                ApplicationSettings.inMemory(new AppConfig()), new NoQuestions())) {
+            IOException importException = assertThrows(IOException.class, processor::readFiles);
             assertTrue(importException.getMessage(), importException.getMessage().contains(message));
         }
     }
 
     private static void assertOrderForBothImports(File directory, String... expectedNames) throws Exception {
-        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
-            assertOrder(processor.getFitsfileInformation(), expectedNames);
-            assertOrder(processor.getFitsfileInformationHeadless(), expectedNames);
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory,
+                ApplicationSettings.inMemory(new AppConfig()), new NoQuestions())) {
+            assertOrder(processor.readFiles(), expectedNames);
         }
+        try (ImageProcessing processor = ImageProcessing.openProcessor(directory)) {
+            assertOrder(processor.readFiles(), expectedNames);
+        }
+    }
+
+    /** Sequence validation and ready-input reads must finish before any interactive preparation decision. */
+    private static final class NoQuestions implements FitsImportInteraction {
+        /** Fails if conversion is offered before an inconsistent sequence is rejected. */
+        @Override public int confirm(String message, String title) { throw new AssertionError(title); }
+        /** Fails if an exposure choice escapes the import service during metadata validation. */
+        @Override public int choose(String message, String title, String[] options) { throw new AssertionError(title); }
+        /** Fails if validation is replaced by a dialog rather than propagating its exception. */
+        @Override public void error(String message, String title) { throw new AssertionError(title); }
+        /** Fails if a read starts writing a prepared sequence. */
+        @Override public Progress progress(String title) { throw new AssertionError(title); }
     }
 
     private static void assertOrder(FitsFileInformation[] files, String[] expectedNames) {

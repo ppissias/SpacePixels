@@ -61,7 +61,7 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
             emitProgress(progressListener, 15, "Validating FITS metadata for pipeline execution...");
             imageProcessing = ImageProcessing.openProcessor(preparedDirectory.getPreparedInputDirectory(),
                     ApplicationSettings.inMemory(runOptions.applicationConfig()));
-            FitsFileInformation[] filesInfo = imageProcessing.getFitsfileInformationHeadless();
+            FitsFileInformation[] filesInfo = imageProcessing.readFiles();
 
             AutoTunerResult autoTuneResult = null;
             int pipelineStartPercent = 15;

@@ -30,7 +30,8 @@ public final class ProcessingSession implements AutoCloseable {
     private final ApplicationStorage storage;
     private final Executor ui;
     private final File folder;
-    private final SessionFrames frames;
+    /** This session owns the array; metadata elements remain shared with its table, selection and admitted runs. */
+    private FitsFileInformation[] files;
     private List<FitsFileInformation> selection = List.of();
     private File lastReport;
     /** The overlays of the last detection run; written on the EDT when a run ends, read by the viewers. */
@@ -51,8 +52,7 @@ public final class ProcessingSession implements AutoCloseable {
         this.storage = storage;
         this.ui = storage == null ? null : Objects.requireNonNull(ui);
         this.processing = Objects.requireNonNull(processing);
-        this.frames = processing.getSessionFrames();
-        frames.setFiles(Objects.requireNonNull(files).clone());
+        this.files = Objects.requireNonNull(files).clone();
         this.lastReport = lastReport;
         folder = files.length == 0 ? null : new File(files[0].getFilePath()).getParentFile();
         skyCatalogue.setSessionFolder(folder);
@@ -109,7 +109,16 @@ public final class ProcessingSession implements AutoCloseable {
 
     public UUID getId() { return id; }
     public ImageProcessing getProcessing() { return processing; }
-    public FitsFileInformation[] getFiles() { return frames.getFiles() == null ? new FitsFileInformation[0] : frames.getFiles().clone(); }
+    /** Returns a copy of the owned frame array, sharing its metadata objects; empty after close. */
+    public FitsFileInformation[] getFiles() { return files.clone(); }
+
+    /** Whether an owned frame is plate-solved, which gives a detection report sky coordinates. */
+    public boolean hasPlateSolvedFrame() {
+        for (FitsFileInformation file : files) {
+            if (file.isWcsSolved()) return true;
+        }
+        return false;
+    }
     public SkyCatalogueModel getSkyCatalogue() { return skyCatalogue; }
     public AutoTuneState getAutoTune() { return autoTune; }
     public File getLastReport() { return lastReport; }
@@ -191,7 +200,7 @@ public final class ProcessingSession implements AutoCloseable {
             masterStackKey = null;
             autoTune.clear();
             selection = List.of();
-            frames.clear();
+            files = new FitsFileInformation[0];
             lastReport = null;
             lastRun = null;
         }

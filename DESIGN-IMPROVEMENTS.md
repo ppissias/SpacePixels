@@ -32,7 +32,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
-| [SP-04](#sp-04-retire-the-imageprocessing-facade) | Retire the `ImageProcessing` facade; the session owns its services and data. Detection is done; import, files and the other services remain | Medium | Large |
+| [SP-04](#sp-04-retire-the-imageprocessing-facade) | Retire the `ImageProcessing` facade; detection and frame ownership are done, remaining service forwarding and the few-frame policy evaluation remain | Medium | Large |
 | [SP-05](#sp-05-give-panels-their-collaborators-not-the-whole-window) | Give panels their collaborators, not the whole window | Medium | Medium |
 | [SP-06](#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Move the sky-catalogue workflow out of the main panel | Medium | Small |
 | [SP-07](#sp-07-one-binding-type-for-settings-rows) | One binding type for settings rows | Low | Small |
@@ -56,17 +56,13 @@ Refactorings are intended to preserve behaviour. Evaluate the exceptions raised 
 
 ### SP-04. Retire the ImageProcessing facade
 
-**Step 1 done (2026-10-24): detection.** Detect Moving Targets, Detect Iteratively and the API call `StandardDetectionPipelineService` themselves. It keeps no state, so each caller creates one where it runs it and has nothing to dispose. A finished detection hands its `DetectionOverlays` (tracks and variable-star candidates, no image buffers) to its caller when the engine returns, before the report decision. `DetectionTask` keeps them apart from its `JobOutcome`. The window gives them to the job's session when the job ends, if that session is still the current one: after a written, declined or unwritable report, and after a cancel while the report was being written. A detection that stops before it finishes leaves the last run's overlays. The session owns them (`ProcessingSession.setLastRun`, refused once closed). `DetectionSummary`, `PipelineExecutionData` and `DetectionSafetyPrompt` are top-level types, and `SessionFrames` holds only the frame list. Iterative passes still leave the session's overlays alone. The reports stayed byte-identical, through both the batch command and the window's detection job.
+**Step 1 done (2026-10-24): detection.** Detect Moving Targets, Detect Iteratively and the API call `StandardDetectionPipelineService` themselves. It keeps no state, so each caller creates one where it runs it and has nothing to dispose. A finished detection hands its `DetectionOverlays` (tracks and variable-star candidates, no image buffers) to its caller when the engine returns, before the report decision. `DetectionTask` keeps them apart from its `JobOutcome`. The window gives them to the job's session when the job ends, if that session is still the current one: after a written, declined or unwritable report, and after a cancel while the report was being written. A detection that stops before it finishes leaves the last run's overlays. The session owns them (`ProcessingSession.setLastRun`, refused once closed). `DetectionSummary`, `PipelineExecutionData` and `DetectionSafetyPrompt` are top-level types. Iterative passes still leave the session's overlays alone. The reports stayed byte-identical, through both the batch command and the window's detection job.
 
-**Problem (what remains).** `ImageProcessing` (269 lines) is still a pass-through over `FitsImportService`, `FitsBatchService`, `PlateSolveService` and `FitsVisualizationRenderer`. It also carries:
-- `RedirectImportException`, a nested type that belongs with the import;
-- static FITS helpers;
-- three similarly named file accessors: `getImportedFiles`, `getFitsfileInformation` and `getFitsfileInformationHeadless`.
+**Step 2 done (2026-10-24): import and frame ownership.** `ProcessingSession` owns its frame array, protects the array at handover and on reads, and clears it even if processor close fails. Metadata objects remain shared for in-place WCS updates; SP-11's immutability work stays separate. Import returns fresh metadata without storing it, and `ImageProcessing.readFiles()` replaces the three old accessors. Every no-interaction read uses the API/CLI's readiness-first validation order; interactive conversion decisions are unchanged. Detection and inspection tasks copy their admitted arrays, with explicit immutable run options for detection. GUI readers use the session, headless callers keep their one returned array, `RedirectImportException` is a top-level import type, and `SessionFrames` is removed. Processing utilities no longer depend on session state.
 
-API.md marks it as internal. It owns `SessionFrames`, the frame list shared by the import service and the session, so the session's files still live in two places. Tasks still call the facade `preProcessing`.
+**Problem (what remains).** `ImageProcessing` remains an internal pass-through over `FitsImportService`, `FitsBatchService`, `PlateSolveService` and `FitsVisualizationRenderer`, together with static FITS helpers. Tasks for the remaining services still call the facade `preProcessing`.
 
 **Proposal (remaining steps).**
-- Import and file ownership: the session owns its frame list, one accessor replaces the three, and `RedirectImportException` moves to the import. Then `SessionFrames` goes.
 - Tasks and the API call the remaining services directly. The session (or one `SessionServices` holder it owns) creates them with the session's files and settings.
 - Then delete `ImageProcessing`.
 

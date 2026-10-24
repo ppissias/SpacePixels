@@ -55,7 +55,7 @@ public class AutoTuneJobTest {
     private JobOutcome<AutoTunerResult> runAutoTune(String cancelAt, List<Integer> progress) throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "mono16", FRAME_COUNT);
         try (ImageProcessing processing = ImageProcessing.openProcessor(sequence.toFile())) {
-            FitsFileInformation[] files = processing.getFitsfileInformationHeadless();
+            FitsFileInformation[] files = processing.readFiles();
             List<JobOutcome<AutoTunerResult>> outcomes = new ArrayList<>();
             JobCoordinator coordinator = new JobCoordinator(Runnable::run, Runnable::run, () -> false);
             coordinator.setListener(new JobCoordinator.Listener() {

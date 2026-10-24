@@ -22,6 +22,7 @@ import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.FitsImportInteraction;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.MixedExposureException;
+import eu.startales.spacepixels.util.RedirectImportException;
 import eu.startales.spacepixels.util.SessionReports;
 import eu.startales.spacepixels.util.XisfImageConverter;
 
@@ -85,7 +86,7 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
                 }
 
                 imgProcessing = ImageProcessing.openProcessor(importDirectory, preferences, interaction);
-                FitsFileInformation[] filesInfo = imgProcessing.getFitsfileInformation();
+                FitsFileInformation[] filesInfo = imgProcessing.readFiles();
                 context.progress(90, "FITS metadata loaded.");
                 if (filesInfo.length == 0) {
                     return JobOutcome.declined("No frames were imported.");
@@ -100,7 +101,7 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
                 ownershipTransferred = true;
                 return JobOutcome.completed(new Result(imgProcessing, filesInfo, lastReport, metadata));
 
-            } catch (ImageProcessing.RedirectImportException e) {
+            } catch (RedirectImportException e) {
                 // The user opted to automatically load the newly converted directory!
                 LOGGER.info("Redirecting import to newly created directory: " + e.getNewDirectory().getAbsolutePath());
                 folder = e.getNewDirectory();

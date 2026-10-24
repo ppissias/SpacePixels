@@ -1,7 +1,5 @@
 package eu.startales.spacepixels.util;
 
-import eu.startales.spacepixels.session.SessionFrames;
-import eu.startales.spacepixels.util.ImageProcessing.RedirectImportException;
 import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
@@ -17,27 +15,26 @@ final class FitsImportService implements AutoCloseable {
     private static final DateTimeFormatter TRACE_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS 'UTC'").withZone(ZoneOffset.UTC);
     private final File directory;
-    private final SessionFrames state;
     private final FitsBatchService batch;
     private final FitsImportInteraction interaction;
     private final ExecutorService executor = Executors.newFixedThreadPool(
             Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors())));
 
-    FitsImportService(File directory, SessionFrames state, FitsBatchService batch, FitsImportInteraction interaction) {
+    /** Owns metadata-reading workers; returned frame arrays belong to the caller and are never retained here. */
+    FitsImportService(File directory, FitsBatchService batch, FitsImportInteraction interaction) {
         this.directory = directory;
-        this.state = state;
         this.batch = batch;
         this.interaction = interaction;
     }
 
     @Override public void close() { executor.shutdown(); }
 
-    public FitsFileInformation[] getFitsfileInformation() throws Exception {
+    /** Reads and validates a fresh frame array; null interaction requires detection readiness before sequence checks. */
+    public FitsFileInformation[] readFiles() throws Exception {
         File[] files = FitsFiles.list(directory);
-        FitsPreparationService.Input[] inputs = FitsPreparationService.inspect(files, executor, false);
+        FitsPreparationService.Input[] inputs = FitsPreparationService.inspect(files, executor, interaction == null);
         if (interaction == null) {
-            for (FitsPreparationService.Input input : inputs) input.requireDetectionReady();
-            return installMetadata(inputs, "Headless import");
+            return metadata(inputs, "Headless import");
         }
         FitsPreparationService.Input reference = inputs[0];
         if (reference.compressed()) {
@@ -132,19 +129,14 @@ final class FitsImportService implements AutoCloseable {
         }
 
 
-        return installMetadata(inputs, "Interactive import");
+        return metadata(inputs, "Interactive import");
     }
 
-    public FitsFileInformation[] getFitsfileInformationHeadless() throws Exception {
-        File[] files = FitsFiles.list(directory);
-        return installMetadata(FitsPreparationService.inspect(files, executor, true), "Headless import");
-    }
-
-    private FitsFileInformation[] installMetadata(FitsPreparationService.Input[] inputs, String stage) throws IOException {
+    /** Returns validated metadata in frame order without keeping it in the importer. */
+    private static FitsFileInformation[] metadata(FitsPreparationService.Input[] inputs, String stage) throws IOException {
         FitsFileInformation[] metadata = Arrays.stream(inputs)
                 .map(FitsPreparationService.Input::information).toArray(FitsFileInformation[]::new);
         FitsSequenceValidator.validateAndSort(metadata);
-        state.setFiles(metadata);
         DebugOutput.println("Validated and loaded metadata for " + metadata.length + " FITS files.");
         logFitsTimestampDiagnostics(stage, metadata);
         return metadata;

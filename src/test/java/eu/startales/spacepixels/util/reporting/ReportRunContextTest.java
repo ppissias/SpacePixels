@@ -27,7 +27,7 @@ public class ReportRunContextTest {
         File directory = SyntheticDatasetFactory.createSolvedMono16FitsSequence(folder.getRoot().toPath(), "frames", 5).toFile();
         FitsFileInformation[] files;
         try (ImageProcessing processor = ImageProcessing.openProcessor(directory, ApplicationSettings.inMemory(new AppConfig()))) {
-            files = processor.getFitsfileInformationHeadless();
+            files = processor.readFiles();
         }
         for (FitsFileInformation file : files) {
             for (String key : new String[]{"SITELAT", "SITELONG", "SITELON", "OBSGEO-B", "OBSGEO-L", "LAT-OBS", "LONG-OBS", "LON-OBS"}) {
@@ -125,7 +125,7 @@ public class ReportRunContextTest {
 
     private static FitsFileInformation[] solvedFiles(File directory) throws Exception {
         try (ImageProcessing processor = ImageProcessing.openProcessor(directory, ApplicationSettings.inMemory(new AppConfig()))) {
-            return processor.getFitsfileInformationHeadless();
+            return processor.readFiles();
         }
     }
 

@@ -8,7 +8,6 @@ import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.ImageProcessing;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.FrameTransients;
 import io.github.ppissias.jtransient.engine.ImageFrame;
@@ -24,15 +23,15 @@ public class ManualTransientInspectionTask implements Job<ManualTransientInspect
     public record Result(List<ImageFrame> frames, List<FrameTransients> transients, FitsFileInformation[] files) {
     }
 
-    private final ImageProcessing preProcessing;
+    private final FitsFileInformation[] files;
     private final DetectionConfig config;
 
     /**
-     * The engine gets a copy of the settings taken at the click, so nothing a run changes can reach the settings panel
-     * or the saved profile, and later edits don't affect the running inspection.
+     * Copies the frame array and settings at admission; metadata elements stay shared for the existing WCS contract.
+     * Later array/configuration edits do not affect this inspection. Missing frames fail during execution.
      */
-    public ManualTransientInspectionTask(ImageProcessing preProcessing, DetectionConfig config) {
-        this.preProcessing = preProcessing;
+    public ManualTransientInspectionTask(FitsFileInformation[] files, DetectionConfig config) {
+        this.files = files == null ? null : files.clone();
         this.config = config.clone();
     }
 
@@ -47,7 +46,7 @@ public class ManualTransientInspectionTask implements Job<ManualTransientInspect
     private JobOutcome<Result> runCancellable(JobContext context) throws Exception {
         JTransientEngine engine = new JTransientEngine();
         try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
-            FitsFileInformation[] filesInfo = preProcessing.getImportedFiles();
+            FitsFileInformation[] filesInfo = java.util.Objects.requireNonNull(files, "frames");
             List<ImageFrame> framesForLibrary = SessionFrameLoader.loadAll(filesInfo, context::progress, 20);
 
             TransientEngineProgressListener progressListener =

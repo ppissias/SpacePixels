@@ -1,6 +1,5 @@
 package eu.startales.spacepixels.util;
 
-import eu.startales.spacepixels.session.SessionFrames;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
@@ -120,8 +119,10 @@ public class FitsPreparationParityTest {
             interaction.confirm = decline ? 1 : 0;
             interaction.negativeChoice = 2;
             try (FitsImportService importer = importer(input, interaction)) {
-                assertEquals(0, importer.getFitsfileInformation().length);
-                assertThrows(Exception.class, importer::getFitsfileInformationHeadless);
+                assertEquals(0, importer.readFiles().length);
+            }
+            try (FitsImportService strict = new FitsImportService(input, null, null)) {
+                assertThrows(Exception.class, strict::readFiles);
             }
             assertEquals(List.of("Combined FITS Preparation"), interaction.confirmationTitles);
             assertEquals(1, input.listFiles().length);
@@ -151,7 +152,7 @@ public class FitsPreparationParityTest {
         write(mixed, "second.fit.fz", new float[][]{{0, -10, 100, 0}}, 0, 1, "2026-10-22T01:00:02", true);
         Interaction interaction = new Interaction(true);
         try (FitsImportService importer = importer(mixed, interaction)) {
-            assertThrows(java.io.IOException.class, importer::getFitsfileInformation);
+            assertThrows(java.io.IOException.class, importer::readFiles);
         }
         assertTrue(interaction.confirmationTitles.isEmpty());
         assertEquals(2, mixed.listFiles().length);
@@ -195,8 +196,8 @@ public class FitsPreparationParityTest {
         DetectionInputPreparation.PreparedDirectory result = DetectionInputPreparation.prepareInputDirectory(input, false, null);
         assertEquals(input, result.getPreparedInputDirectory());
         assertFalse(result.isInputWasPrepared());
-        try (FitsImportService importer = importer(input, new Interaction(true))) {
-            Exception failure = assertThrows(Exception.class, importer::getFitsfileInformationHeadless);
+        try (FitsImportService importer = new FitsImportService(input, null, null)) {
+            Exception failure = assertThrows(Exception.class, importer::readFiles);
             assertTrue(failure.getMessage(), failure.getMessage().contains("BITPIX=32"));
         }
         assertEquals(1, input.listFiles().length);
@@ -208,12 +209,10 @@ public class FitsPreparationParityTest {
         write(input, "frame.fit", new int[][]{{0, -10, 100, 0}}, 0, 1, "2026-10-22T01:00:01", false);
         Interaction interaction = new Interaction(true);
         interaction.confirm = 1;
-        SessionFrames state = new SessionFrames();
-        try (FitsImportService importer = new FitsImportService(input, state,
+        try (FitsImportService importer = new FitsImportService(input,
                 new FitsBatchService(input, new FitsVisualizationRenderer()), interaction)) {
-            assertEquals(0, importer.getFitsfileInformation().length);
+            assertEquals(0, importer.readFiles().length);
         }
-        assertNull(state.getFiles());
         assertEquals(1, input.listFiles().length);
         assertEquals(0, interaction.openProgress);
     }
@@ -226,12 +225,10 @@ public class FitsPreparationParityTest {
         byte[] originalBytes = Files.readAllBytes(original.toPath());
         Interaction interaction = new Interaction(true);
         interaction.cancelProgress = true;
-        SessionFrames state = new SessionFrames();
-        try (FitsImportService importer = new FitsImportService(input, state,
+        try (FitsImportService importer = new FitsImportService(input,
                 new FitsBatchService(input, new FitsVisualizationRenderer()), interaction)) {
-            assertThrows(java.util.concurrent.CancellationException.class, importer::getFitsfileInformation);
+            assertThrows(java.util.concurrent.CancellationException.class, importer::readFiles);
         }
-        assertNull(state.getFiles());
         assertEquals(0, interaction.openProgress);
         assertEquals(1, input.listFiles().length);
         assertArrayEquals(originalBytes, Files.readAllBytes(original.toPath()));
@@ -245,19 +242,19 @@ public class FitsPreparationParityTest {
         File interactive = XisfImageConverter.prepareDirectoryForFitsImport(input);
         for (int attempt = 0; attempt < 4; attempt++) {
             try (FitsImportService importer = importer(interactive, interaction)) {
-                importer.getFitsfileInformation();
+                importer.readFiles();
                 break;
-            } catch (ImageProcessing.RedirectImportException redirect) {
+            } catch (RedirectImportException redirect) {
                 interactive = redirect.getNewDirectory();
             }
         }
         File automatic = DetectionInputPreparation.prepareInputDirectory(input, true, keepNegative, null).getPreparedInputDirectory();
         FitsFileInformation[] interactiveFiles;
         FitsFileInformation[] automaticFiles;
-        try (FitsImportService importer = importer(interactive, interaction);
-             FitsImportService api = importer(automatic, new Interaction(keepNegative))) {
-            interactiveFiles = importer.getFitsfileInformationHeadless();
-            automaticFiles = api.getFitsfileInformationHeadless();
+        try (FitsImportService importer = new FitsImportService(interactive, null, null);
+             FitsImportService api = new FitsImportService(automatic, null, null)) {
+            interactiveFiles = importer.readFiles();
+            automaticFiles = api.readFiles();
         }
         assertEquals(interactiveFiles.length, automaticFiles.length);
         for (int index = 0; index < interactiveFiles.length; index++) {
@@ -282,7 +279,7 @@ public class FitsPreparationParityTest {
     }
 
     private FitsImportService importer(File input, Interaction interaction) {
-        return new FitsImportService(input, new SessionFrames(), new FitsBatchService(input, new FitsVisualizationRenderer()), interaction);
+        return new FitsImportService(input, new FitsBatchService(input, new FitsVisualizationRenderer()), interaction);
     }
 
     private static Object color(Object mono) {

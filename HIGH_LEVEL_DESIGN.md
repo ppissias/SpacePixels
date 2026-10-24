@@ -121,7 +121,7 @@ The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker
 - **The last report:** `util.SessionReports.latest(...)` finds the newest finished report beside the frames when a session is imported (in the import job); a completed detection replaces it. The Main tab's Detect group offers it as **Open last report**.
 - **Failures:** an exception or `Error` becomes a failure. Running out of memory leaves the worker for the application's uncaught-exception handler. The handler marks it in `JobFailures`, and every other running job then stops at its next progress report while SpacePixels closes.
 
-Each `JobHandle` carries its explicit `ProcessingSession`, which has a UUID and owns frame metadata references, selection, catalogue/correction, tuning state, the master-stack cache, last report, the last detection run's overlays (`DetectionOverlays`, set on the EDT and refused once closed) and processing facade. `SessionOwner` guards handover and callback admission independently of Swing. Only a successful import replaces the current session; stale callbacks and stale imports cannot modify its replacement. A session whose close fails, for example a plate-solve client that cannot confirm its shutdown within 10 s, is logged, so neither the handover nor closing the window stops; `ImageProcessing.close` clears its frames in that case too. The window loads `ApplicationSettings` once and injects it into each processor, preserving unsaved preferences across imports. `SessionFrames` holds the shared frame metadata; the import service and the session use that same list, without deep-copying buffers. `ImageProcessing` is a compatibility facade over `FitsImportService`, `FitsBatchService`, rendering and solving; detection does not pass through it.
+Each `JobHandle` carries its explicit `ProcessingSession`, which has a UUID and owns its frame array, selection, catalogue/correction, tuning state, the master-stack cache, last report, the last detection run's overlays (`DetectionOverlays`, set on the EDT and refused once closed) and processing facade. `SessionOwner` guards handover and callback admission independently of Swing. Only a successful import replaces the current session; stale callbacks and stale imports cannot modify its replacement. A session whose close fails, for example a plate-solve client that cannot confirm its shutdown within 10 s, is logged, so neither the handover nor closing the window stops; `ProcessingSession.close` forgets its frames in a `finally` block even when processor cleanup fails. The window loads `ApplicationSettings` once and injects it into each processor, preserving unsaved preferences across imports. Import returns a fresh frame array and keeps no metadata cache. The session copies that array and returns copies from `getFiles`; metadata objects remain shared for the existing in-place WCS updates. Detection and inspection jobs copy their admitted arrays instead of reading a processor on the worker. `ImageProcessing` remains an internal facade over import, batch operations, rendering and solving; detection does not pass through it.
 
 ### `eu.startales.spacepixels.session`
 
@@ -398,7 +398,7 @@ Internal backend facade for a selected/imported sequence directory.
 
 Owns or coordinates:
 
-- sequence metadata loading
+- sequence metadata loading through one `readFiles()` operation, returning a fresh caller-owned array without caching it
 - GUI import-time FITS validation and prompting
 - decompression and 32-bit/color conversion helpers
 - XISF import redirection through `XisfImageConverter`
@@ -406,7 +406,7 @@ Owns or coordinates:
 - plate solving through `PlateSolveService`
 - application config load/save
 
-Detection does not pass through it: `DetectionTask` (on the facade's imported frames), each iterative pass and `DefaultSpacePixelsPipelineApi` run `StandardDetectionPipelineService` themselves.
+Detection does not pass through it: `DetectionTask` (on frames admitted from `ProcessingSession.getFiles()`), each iterative pass and `DefaultSpacePixelsPipelineApi` run `StandardDetectionPipelineService` themselves. Headless callers read metadata once and retain the returned array. Without interaction, readiness is checked before sequence consistency, preserving the API/CLI error order; interactive import checks consistency before offering preparation. `RedirectImportException` is a top-level `util` type used by the import task's redirect loop.
 
 Design note:
 
@@ -521,7 +521,7 @@ ApplicationWindow
 -> FitsImportTask
 -> XisfImageConverter.prepareDirectoryForFitsImport(...)
 -> ImageProcessing.openProcessor(importDirectory, applicationSettings)
--> ImageProcessing.getFitsfileInformation()
+-> ImageProcessing.readFiles()
 -> JobOutcome (Completed with the session, Declined, Cancelled or Failed)
 -> ApplicationWindow.installSession(...) and the SessionListeners
 ```
@@ -549,7 +549,7 @@ The engine receives unsigned-16-bit-equivalent pixels (`BZERO` 32768, `BSCALE` 1
 DefaultSpacePixelsPipelineApi
 -> DetectionInputPreparation.prepareInputDirectory(...)
 -> ImageProcessing.openProcessor(preparedDirectory)
--> ImageProcessing.getFitsfileInformationHeadless()
+-> ImageProcessing.readFiles()
 ```
 
 `FAIL_IF_NOT_READY` keeps the original directory and requires detection-ready files.

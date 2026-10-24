@@ -1,7 +1,6 @@
 package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
-import eu.startales.spacepixels.session.SessionFrames;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.util.reporting.IterativeDetectionIndex;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -86,8 +85,8 @@ public final class IterativeDetectionPipelineService {
     private File runPrepared(IterativeDetectionRequest request, File prepared, ReportPrompt prompt,
                              TransientEngineProgressListener progress) throws Exception {
         FitsFileInformation[] files;
-        try (FitsImportService importer = new FitsImportService(prepared, new SessionFrames(), null, null)) {
-            files = importer.getFitsfileInformationHeadless();
+        try (FitsImportService importer = new FitsImportService(prepared, null, null)) {
+            files = importer.readFiles();
         }
         if (request.expectedFrameCount() > 0 && files.length != request.expectedFrameCount()) {
             throw new IOException("The dataset frame count changed. Reopen the iterative configuration to review the passes.");

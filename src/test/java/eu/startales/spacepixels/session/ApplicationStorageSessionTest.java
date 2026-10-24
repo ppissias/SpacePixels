@@ -292,7 +292,7 @@ public class ApplicationStorageSessionTest {
         File directory = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "metadata-owner", 3).toFile();
         ImageProcessing processing = ImageProcessing.openProcessor(directory,
                 ApplicationSettings.load(new File(folder.getRoot(), "preferences.json")));
-        return new ProcessingSession(processing, processing.getFitsfileInformation(), null,
+        return new ProcessingSession(processing, processing.readFiles(), null,
                 SessionMetadata.empty(), storage, ui);
     }
 

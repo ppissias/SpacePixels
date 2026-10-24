@@ -65,6 +65,12 @@ public class DependencyRulesTest {
         assertNoReferences("util", "eu.startales.spacepixels.gui.", "javax.swing.");
     }
 
+    /** Processing returns values to the session instead of owning or mutating session state. */
+    @Test
+    public void processingUtilitiesDoNotDependOnSessionState() throws IOException {
+        assertNoReferences("util", "eu.startales.spacepixels.session.");
+    }
+
     /** Keeps every published headless package independent of desktop workflows as well as Swing. */
     @Test
     public void headlessPackagesDoNotDependOnDesktopCode() throws IOException {

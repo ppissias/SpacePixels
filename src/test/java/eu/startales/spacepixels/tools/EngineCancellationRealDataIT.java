@@ -119,7 +119,7 @@ public class EngineCancellationRealDataIT {
         try {
             System.setProperty("user.home", scratchHome.toString());
             try (ImageProcessing processing = ImageProcessing.openProcessor(new File(dataset))) {
-                FitsFileInformation[] files = processing.getFitsfileInformationHeadless();
+                FitsFileInformation[] files = processing.readFiles();
                 frames = new ArrayList<>();
                 for (int index = 0; index < files.length; index++) {
                     FitsFileInformation info = files[index];

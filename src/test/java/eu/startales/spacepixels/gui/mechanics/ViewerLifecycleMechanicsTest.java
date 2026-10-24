@@ -22,7 +22,7 @@ public class ViewerLifecycleMechanicsTest extends MechanicsTestCase {
     @Test
     public void closingTheStarMaskExplorerCancelsItsPendingMask() throws Exception {
         importSyntheticSequence();
-        var stack = StarMaskLifecycleProbe.buildStack(application().getImageProcessing().getImportedFiles());
+        var stack = StarMaskLifecycleProbe.buildStack(application().getSession().getFiles());
         StarMaskLifecycleProbe probe = GuiActionRunner.execute(() ->
                 new StarMaskLifecycleProbe(application().getFrame(), stack));
         try {
@@ -51,7 +51,7 @@ public class ViewerLifecycleMechanicsTest extends MechanicsTestCase {
     private void checkClosingWhilePreparing(boolean disposeOnClose) throws Exception {
         importSyntheticSequence();
         StretchPanel stretch = application().getStretchPanel();
-        FitsFileInformation[] files = application().getImageProcessing().getImportedFiles();
+        FitsFileInformation[] files = application().getSession().getFiles();
         var catalogue = GuiActionRunner.execute(() -> application().getSession().getSkyCatalogue());
         int catalogueListeners = GuiActionRunner.execute(() -> ViewerLifecycleProbe.catalogueListenerCount(catalogue));
         int stretchListeners = GuiActionRunner.execute(() -> stretchListeners(stretch));

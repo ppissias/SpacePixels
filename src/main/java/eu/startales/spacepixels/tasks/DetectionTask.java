@@ -11,8 +11,6 @@
 package eu.startales.spacepixels.tasks;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
-import eu.startales.spacepixels.config.VisualizationSettings;
-import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import io.github.ppissias.jtransient.config.DetectionConfigRules;
 import io.github.ppissias.jtransient.execution.CancellationScope;
 
@@ -21,7 +19,7 @@ import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.util.DetectionOverlays;
 import eu.startales.spacepixels.util.DetectionSafetyPrompt;
-import eu.startales.spacepixels.util.ImageProcessing;
+import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.RunPreviewScope;
 import eu.startales.spacepixels.util.RunPreviewSink;
 import eu.startales.spacepixels.util.SkySnapshot;
@@ -36,7 +34,7 @@ import java.io.File;
  * cancelled export.
  */
 public class DetectionTask implements Job<File> {
-    private final ImageProcessing preProcessing;
+    private final FitsFileInformation[] files;
 
     // Hold the configuration
     private final DetectionConfig config;
@@ -52,25 +50,20 @@ public class DetectionTask implements Job<File> {
      * Creates a noninteractive job with the default Auto-Tune frame limit that declines report export above 50
      * classified detections.
      */
-    public DetectionTask(ImageProcessing preProcessing, DetectionConfig config) {
-        this(preProcessing, config, VisualizationSettings.defaults(), SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, null,
-                summary -> summary.totalDetections <= 50);
+    public DetectionTask(FitsFileInformation[] files, DetectionConfig config) {
+        this(files, config, DetectionRunOptions.defaults(), null, summary -> summary.totalDetections <= 50);
     }
 
     /**
-     * Captures a job's settings, application options, visualization settings, Auto-Tune frame limit, the session's
-     * sky data and report decision when the job is created; a null {@code sky} reads the frames' folder. A missing
-     * processor retains the existing execution-time failure.
+     * Copies the admitted frame array and settings, keeping shared metadata elements and immutable run options.
+     * A null {@code sky} reads the frames' folder once at run start. Missing frames fail during execution.
      */
-    public DetectionTask(ImageProcessing preProcessing, DetectionConfig config, VisualizationSettings visualization,
-                         int autoTuneMaxCandidateFrames, SkySnapshot sky,
-                         DetectionSafetyPrompt safetyPrompt) {
-        this.preProcessing = preProcessing;
+    public DetectionTask(FitsFileInformation[] files, DetectionConfig config, DetectionRunOptions options,
+                         SkySnapshot sky, DetectionSafetyPrompt safetyPrompt) {
+        this.files = files == null ? null : files.clone();
         this.config = DetectionConfigRules.snapshot(config,
                 DetectionConfigRules.Operation.CONFIGURATION);
-        this.options = (preProcessing == null ? DetectionRunOptions.defaults().withAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames)
-                : DetectionRunOptions.capture(preProcessing.getAppConfig(), autoTuneMaxCandidateFrames))
-                .withVisualization(visualization);
+        this.options = java.util.Objects.requireNonNull(options);
         this.sky = sky;
         this.safetyPrompt = safetyPrompt;
     }
@@ -99,7 +92,7 @@ public class DetectionTask implements Job<File> {
     }
 
     private JobOutcome<File> runCancellable(JobContext context) throws Exception {
-        File exportDir = new StandardDetectionPipelineService().run(config, preProcessing.getImportedFiles(), safetyPrompt,
+        File exportDir = new StandardDetectionPipelineService().run(config, java.util.Objects.requireNonNull(files, "frames"), safetyPrompt,
                 context::progress, null, options, sky, overlays -> detected = overlays).report();
         if (exportDir == null) {
             return JobOutcome.declined("Report generation aborted by user due to high track count. Try raising your thresholds.");

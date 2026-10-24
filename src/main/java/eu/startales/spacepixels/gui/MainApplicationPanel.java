@@ -17,6 +17,7 @@ import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.ImageProcessing;
 import eu.startales.spacepixels.util.IterativeDetectionRequest;
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.SessionReports;
@@ -499,10 +500,11 @@ public class MainApplicationPanel extends JPanel {
         ProcessingSession owner = mainAppWindow.getSession();
         if (owner == null || owner.getProcessing() != session) return;
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
-        DetectionTask detection = new DetectionTask(session, settings, configuration.visualizationSettings(),
-                configuration.autoTuneMaxCandidateFrames(),
+        DetectionTask detection = new DetectionTask(owner.getFiles(), settings,
+                DetectionRunOptions.capture(session.getAppConfig(), configuration.autoTuneMaxCandidateFrames())
+                        .withVisualization(configuration.visualizationSettings()),
                 owner.getSkyCatalogue().snapshot(),
-                summary -> reportPrompt.confirm(summary, session.hasPlateSolvedFrame(), 50, null, settings))
+                summary -> reportPrompt.confirm(summary, owner.hasPlateSolvedFrame(), 50, null, settings))
                         .showingPreviews(progressDialog.previewSink());
         // The overlays first: they belong to the session whatever became of the report.
         startJob(JobKind.DETECTION, session, detection, (handle, outcome) -> {
@@ -572,7 +574,9 @@ public class MainApplicationPanel extends JPanel {
             return;
         }
         ImageProcessing session = mainAppWindow.getImageProcessing();
-        startJob(JobKind.TRANSIENT_INSPECTION, session, new ManualTransientInspectionTask(session, settings), (handle, outcome) -> {
+        ProcessingSession owner = mainAppWindow.getSession();
+        if (owner == null) return;
+        startJob(JobKind.TRANSIENT_INSPECTION, session, new ManualTransientInspectionTask(owner.getFiles(), settings), (handle, outcome) -> {
             if (outcome instanceof JobOutcome.Completed<ManualTransientInspectionTask.Result> completed) {
                 ManualTransientInspectionTask.Result result = completed.result();
                 TransientInspectionFrame frame = new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
