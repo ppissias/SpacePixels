@@ -1,8 +1,8 @@
 # Git-Based Collaboration Protocol — Claude Code + Codex
 
-**Version:** 1.1
+**Version:** 1.2
 
-**Files:** `AGENT_COLLABORATION.md` (rules) and `AGENT_HANDOFF.md` (per-task mailbox)
+**Files:** `AGENT_COLLABORATION.md` (rules), `AGENT_HANDOFF.md` (per-task mailbox) and `AGENT_HANDOFF_ARCHIVE.md` (older mailbox messages, section 4)
 
 ## 1. Purpose and operating mode
 
@@ -71,6 +71,16 @@ For a new feature, start a **new task initialization** and new history, in a sui
 
 A mailbox handoff must include an exact next action. The waiting agent must process each handoff commit **at most once**.
 
+### Keeping the mailbox short
+
+Every agent re-reads `AGENT_HANDOFF.md` on each turn, so its message history keeps only recent messages. Older messages move to `AGENT_HANDOFF_ARCHIVE.md`.
+
+- **What stays:** every message of the subtask or slice in progress (from its proposal on), and the last approval before it. Keep at least the last three messages.
+- **When:** the agent that owns the turn archives as part of its own handoff commit, when older messages are present. Archiving is a mailbox change, so a reviewer may do it too; it never transfers ownership by itself.
+- **How:** move messages verbatim and in order to the end of the archive, and never edit them there. Message numbers continue unchanged. In the history, leave one line in their place: "Messages 001–NNN are in [AGENT_HANDOFF_ARCHIVE.md](AGENT_HANDOFF_ARCHIVE.md)."
+- **Before archiving a subtask's messages,** check that its ledger row records the outcome, base and reviewed commits, the rounds used, and any decision later work depends on. Name the archived message where a decision needs its full text.
+- The configuration, current state, maintainer instructions and ledger stay in `AGENT_HANDOFF.md`. Watchers read only that file; an archive change is not a handoff. Read the archive only when older context is needed. Git history keeps every version of both files.
+
 ### Expected transitions
 
 - `IMPLEMENTING` or an `ANSWER` to the implementer → implementer works → `READY_FOR_REVIEW`, `QUESTION`, `PAUSED_QUOTA`, or `BLOCKED`.
@@ -99,7 +109,7 @@ When `Owner: REVIEWER` in the **committed** mailbox:
 
 1. For `READY_FOR_REVIEW`, inspect the **full feature diff** from the configured base commit to `HEAD`, not merely the most recent implementation commit; use `git diff <BASE_SHA>..HEAD` plus targeted source inspection. Ignore mailbox/protocol-only differences when judging implementation quality.
 2. Review correctness, edge cases, regressions, behavior against acceptance criteria, code quality, and test coverage. Run relevant tests only when authorized and safe; remove only your own generated temporary files before committing.
-3. **Do not modify implementation files.** Commit only changes to `AGENT_HANDOFF.md`.
+3. **Do not modify implementation files.** Commit only changes to `AGENT_HANDOFF.md` and, when archiving (section 4), `AGENT_HANDOFF_ARCHIVE.md`.
 4. If the complete feature is acceptable, commit `APPROVED`, evidence and limitations, `Owner: HUMAN`; stop. Approval of a subtask uses `SUBTASK_APPROVED` and continues according to section 13.
 5. Otherwise, if a round remains, combine material concerns into **one actionable** `CHANGES_REQUESTED`, increase the round counter, set `Owner: IMPLEMENTER`, commit; stop.
 6. To clarify a genuine uncertainty, ask one focused `QUESTION` if a round remains; increase the counter and hand control to `IMPLEMENTER`.
@@ -208,7 +218,7 @@ If either participant approaches its quota during its own turn, it may instead c
 
 ## 12. Final report and recovery
 
-When complete or blocked, provide the human with the feature and branch, meaningful commit SHAs, current owner/state, implementation summary, tests actually executed, interaction rounds used, quota status if known, and outstanding risks. If a session closes unexpectedly, **Git and the committed mailbox** are the recovery record; resume the appropriate CLI session manually, re-read both files, and never assume ownership based on stale chat context.
+When complete or blocked, provide the human with the feature and branch, meaningful commit SHAs, current owner/state, implementation summary, tests actually executed, interaction rounds used, quota status if known, and outstanding risks. If a session closes unexpectedly, **Git and the committed mailbox** (with its archive) are the recovery record; resume the appropriate CLI session manually, re-read both files, and never assume ownership based on stale chat context.
 
 ## 13. One feature with subtasks: selection, agreement and continuation
 
