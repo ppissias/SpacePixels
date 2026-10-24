@@ -40,7 +40,7 @@ public class ReportingConsistencyTest {
 
     @Test public void lookupUsesTheEpochOfTheMeasuredCentroids() {
         FitsFileInformation[] files = files();
-        var context = DetectionReportAstrometry.buildContext(files, null);
+        var context = AstrometryContextFactory.buildContext(files, null, null);
         var target = SolarSystemQueryTargetFactory.buildTrackQueryTarget(context, track(files));
         assertEquals(Instant.parse("2026-10-01T00:03:00Z").toEpochMilli(), target.timestampMillis);
     }
@@ -48,7 +48,7 @@ public class ReportingConsistencyTest {
     @Test public void pixelSpeedUsesElapsedTimeBetweenExposureMidpoints() {
         FitsFileInformation[] files = files();
         String html = DetectionReportGenerator.buildTrackTimingSummaryHtml(track(files),
-                DetectionReportAstrometry.buildContext(files, null));
+                AstrometryContextFactory.buildContext(files, null, null));
         assertTrue(html, html.contains("5.00 px/min"));
         assertTrue("Keep the full observing span separate from motion time", html.contains("6.0 min"));
     }

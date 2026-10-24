@@ -18,11 +18,7 @@ final class AstrometryContextFactory {
     private AstrometryContextFactory() {
     }
 
-    static DetectionReportAstrometry.Context buildContext(FitsFileInformation[] fitsFiles, AppConfig appConfig) {
-        return buildResolvedContext(fitsFiles, appConfig, WcsSolutionResolver.resolve(null, fitsFiles));
-    }
-
-    /** Resolves astrometry against a privately loaded correction without consulting the live correction cache. */
+    /** Resolves astrometry with the run's correction, which may be null; no session file is read. */
     static DetectionReportAstrometry.Context buildContext(FitsFileInformation[] fitsFiles, AppConfig appConfig,
             PlateSolutionCorrection correction) {
         return buildResolvedContext(fitsFiles, appConfig, WcsSolutionResolver.resolve(null, fitsFiles, correction));

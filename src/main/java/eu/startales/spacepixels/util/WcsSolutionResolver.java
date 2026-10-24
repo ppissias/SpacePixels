@@ -1,6 +1,5 @@
 package eu.startales.spacepixels.util;
 
-import java.io.File;
 
 /**
  * Resolves a usable WCS solution for an aligned image set.
@@ -13,18 +12,12 @@ public final class WcsSolutionResolver {
     private WcsSolutionResolver() {
     }
 
-    public static ResolvedWcsSolution resolve(FitsFileInformation preferredFile, FitsFileInformation[] alignedFiles) {
-        FitsFileInformation reference = preferredFile != null ? preferredFile : firstFile(alignedFiles);
-        PlateSolutionCorrection correction = reference == null ? null : PlateSolutionCorrection.activeIn(folderOf(reference));
-        return resolve(preferredFile, alignedFiles, correction);
-    }
-
     /** The solution as the FITS headers give it, without a correction. */
     public static ResolvedWcsSolution resolveUncorrected(FitsFileInformation preferredFile, FitsFileInformation[] alignedFiles) {
         return resolve(preferredFile, alignedFiles, null);
     }
 
-    /** Resolves against an in-memory snapshot, without accessing the session folder. */
+    /** Resolves the plate solution of the frames, corrected by {@code correction} when it is given and switched on. */
     public static ResolvedWcsSolution resolve(FitsFileInformation preferredFile, FitsFileInformation[] alignedFiles,
                                               PlateSolutionCorrection correction) {
         ResolvedWcsSolution solution = null;
@@ -73,11 +66,6 @@ public final class WcsSolutionResolver {
             }
         }
         return null;
-    }
-
-    private static File folderOf(FitsFileInformation file) {
-        String path = file.getFilePath();
-        return path == null ? null : new File(path).getAbsoluteFile().getParentFile();
     }
 
     private static ResolvedWcsSolution resolveForFile(FitsFileInformation fileInfo, boolean sharedAcrossAlignedSet) {

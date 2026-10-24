@@ -21,21 +21,21 @@ public class VariableStarOverlayTest {
     @Test public void keepsReportNumberingAndExcludesRejectedStars() throws Exception {
         FitsFileInformation file = file(folder.newFolder("session"));
         VariableStarOverlay overlay = VariableStarOverlay.fromCandidates(Arrays.asList(
-                star("HIGH_CONFIDENCE", 1), star("POSSIBLE", 2), star("REJECTED", 3)), new FitsFileInformation[]{file});
+                star("HIGH_CONFIDENCE", 1), star("POSSIBLE", 2), star("REJECTED", 3)), new FitsFileInformation[]{file}, null, null);
         assertEquals(2, overlay.getCandidates().size());
         assertEquals("V1", overlay.getCandidates().get(0).label);
         assertEquals("V2", overlay.getCandidates().get(1).label);
         assertTrue(overlay.getCandidates().get(0).highConfidence);
         assertFalse(overlay.getCandidates().get(1).highConfidence);
         assertTrue(overlay.coversAnyOf(new FitsFileInformation[]{file}));
-        assertFalse(VariableStarOverlay.fromCandidates(Collections.emptyList(), new FitsFileInformation[]{file})
+        assertFalse(VariableStarOverlay.fromCandidates(Collections.emptyList(), new FitsFileInformation[]{file}, null, null)
                 .coversAnyOf(new FitsFileInformation[]{file}));
     }
 
     @Test public void doesNotReuseCandidatesForAnotherSessionOrFrameSize() throws Exception {
         FitsFileInformation file = file(folder.newFolder("first"));
         VariableStarOverlay overlay = VariableStarOverlay.fromCandidates(Collections.singletonList(star("HIGH_CONFIDENCE", 1)),
-                new FitsFileInformation[]{file});
+                new FitsFileInformation[]{file}, null, null);
         assertFalse(overlay.covers(file(folder.newFolder("second"))));
         file.setSizeWidth(201);
         assertFalse(overlay.covers(file));
@@ -62,14 +62,15 @@ public class VariableStarOverlayTest {
         match.dec = 20 + 3.0 / 3600;
         catalogue.variables.add(match);
         SkyCatalogueStore.save(session, catalogue);
+        WcsCoordinateTransformer transformer = WcsCoordinateTransformer.fromHeader(file.getFitsHeader());
         VariableStarOverlay overlay = VariableStarOverlay.fromCandidates(Collections.singletonList(star("HIGH_CONFIDENCE", 1)),
-                new FitsFileInformation[]{file});
+                new FitsFileInformation[]{file}, transformer, SkyCatalogueStore.load(session));
         assertEquals("DK Per", overlay.getCandidates().get(0).name);
         assertTrue(overlay.getCandidates().get(0).description.contains("V1 · DK Per"));
         match.dec = 21;
         SkyCatalogueStore.save(session, catalogue);
         assertNull(VariableStarOverlay.fromCandidates(Collections.singletonList(star("HIGH_CONFIDENCE", 1)),
-                new FitsFileInformation[]{file}).getCandidates().get(0).name);
+                new FitsFileInformation[]{file}, transformer, SkyCatalogueStore.load(session)).getCandidates().get(0).name);
     }
 
     private static FitsFileInformation file(File session) {

@@ -18,7 +18,7 @@ public class WcsSolutionResolverTest {
         FitsFileInformation fileInfo = new FitsFileInformation("sample.fit", "sample.fit", true, 1320, 989);
         fileInfo.getFitsHeader().putAll(createStandardWcsHeader(140.89806, -7.0669513));
 
-        WcsSolutionResolver.ResolvedWcsSolution resolved = WcsSolutionResolver.resolve(fileInfo, new FitsFileInformation[]{fileInfo});
+        WcsSolutionResolver.ResolvedWcsSolution resolved = WcsSolutionResolver.resolve(fileInfo, new FitsFileInformation[]{fileInfo}, null);
 
         assertNotNull(resolved);
         assertEquals("FITS header", resolved.getSourceType());
@@ -36,7 +36,7 @@ public class WcsSolutionResolverTest {
         FitsFileInformation aligned = new FitsFileInformation("aligned.fit", "aligned.fit", true, 1320, 989);
         aligned.getFitsHeader().putAll(createStandardWcsHeader(10.0, 20.0));
 
-        WcsSolutionResolver.ResolvedWcsSolution resolved = WcsSolutionResolver.resolve(preferred, new FitsFileInformation[]{preferred, aligned});
+        WcsSolutionResolver.ResolvedWcsSolution resolved = WcsSolutionResolver.resolve(preferred, new FitsFileInformation[]{preferred, aligned}, null);
 
         assertNotNull(resolved);
         assertTrue(resolved.isSharedAcrossAlignedSet());
@@ -53,7 +53,7 @@ public class WcsSolutionResolverTest {
         FitsFileInformation incompatible = new FitsFileInformation("aligned.fit", "aligned.fit", true, 1400, 1000);
         incompatible.getFitsHeader().putAll(createStandardWcsHeader(10.0, 20.0));
 
-        WcsSolutionResolver.ResolvedWcsSolution resolved = WcsSolutionResolver.resolve(preferred, new FitsFileInformation[]{preferred, incompatible});
+        WcsSolutionResolver.ResolvedWcsSolution resolved = WcsSolutionResolver.resolve(preferred, new FitsFileInformation[]{preferred, incompatible}, null);
 
         assertNull(resolved);
     }

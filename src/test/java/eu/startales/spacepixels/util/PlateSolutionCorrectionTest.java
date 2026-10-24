@@ -63,20 +63,20 @@ public class PlateSolutionCorrectionTest {
         PlateSolutionCorrection correction = correction(header);
 
         PlateSolutionCorrection.save(session, correction);
-        PlateSolutionCorrection.forget(session);
-        assertFalse(WcsSolutionResolver.resolve(a, files).getTransformer().isCorrected());
+        PlateSolutionCorrection off = PlateSolutionCorrection.load(session);
+        assertFalse(WcsSolutionResolver.resolve(a, files, off).getTransformer().isCorrected());
 
         correction.enabled = true;
         PlateSolutionCorrection.save(session, correction);
-        PlateSolutionCorrection.forget(session);
-        WcsSolutionResolver.ResolvedWcsSolution resolved = WcsSolutionResolver.resolve(a, files);
+        PlateSolutionCorrection on = PlateSolutionCorrection.load(session);
+        WcsSolutionResolver.ResolvedWcsSolution resolved = WcsSolutionResolver.resolve(a, files, on);
         assertTrue(resolved.getTransformer().isCorrected());
         assertTrue(resolved.getSourceType().contains("corrected"));
-        assertTrue(WcsSolutionResolver.resolve(null, files).getTransformer().isCorrected());
+        assertTrue(WcsSolutionResolver.resolve(null, files, on).getTransformer().isCorrected());
         assertFalse(WcsSolutionResolver.resolveUncorrected(a, files).getTransformer().isCorrected());
         // a.fit has its own part, b.fit not.
-        double ya = WcsSolutionResolver.resolve(a, files).getTransformer().skyToPixel(150.1, 20.05)[1];
-        double yb = WcsSolutionResolver.resolve(b, files).getTransformer().skyToPixel(150.1, 20.05)[1];
+        double ya = WcsSolutionResolver.resolve(a, files, on).getTransformer().skyToPixel(150.1, 20.05)[1];
+        double yb = WcsSolutionResolver.resolve(b, files, on).getTransformer().skyToPixel(150.1, 20.05)[1];
         assertEquals(-0.5, ya - yb, 1e-6);
     }
 

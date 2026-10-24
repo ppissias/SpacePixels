@@ -2,7 +2,6 @@ package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.util.reporting.FindingCategory;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogueStore;
 import eu.startales.spacepixels.util.skycatalog.SkyField;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.photometry.StarLightCurve;
@@ -66,10 +65,6 @@ public final class VariableStarOverlay {
         return false;
     }
 
-    public static VariableStarOverlay from(PipelineResult result, FitsFileInformation[] files) {
-        return fromCandidates(result == null ? Collections.emptyList() : result.variableStarAnalysis.candidates, files);
-    }
-
     /** Builds an overlay from explicit run-owned astrometry/catalogue data without reading session files. */
     public static VariableStarOverlay from(PipelineResult result, FitsFileInformation[] files,
             WcsCoordinateTransformer transformer, SkyCatalogue catalogue) {
@@ -77,18 +72,8 @@ public final class VariableStarOverlay {
                 files, transformer, catalogue);
     }
 
-    /** Captures current session context for standalone viewer callers. */
-    static VariableStarOverlay fromCandidates(List<StarLightCurve> stars, FitsFileInformation[] files) {
-        var solution = WcsSolutionResolver.resolve(null, files);
-        var transformer = solution == null ? null : solution.getTransformer();
-        FitsFileInformation first = files != null && files.length > 0 ? files[0] : null;
-        SkyCatalogue catalogue = first == null || first.getFilePath() == null || transformer == null ? null
-                : SkyCatalogueStore.load(new File(first.getFilePath()).getAbsoluteFile().getParentFile());
-        return fromCandidates(stars, files, transformer, catalogue);
-    }
-
     /** Copies candidate display state using only the supplied metadata and read-only catalogue. */
-    private static VariableStarOverlay fromCandidates(List<StarLightCurve> stars, FitsFileInformation[] files,
+    static VariableStarOverlay fromCandidates(List<StarLightCurve> stars, FitsFileInformation[] files,
             WcsCoordinateTransformer transformer, SkyCatalogue catalogue) {
         List<Candidate> candidates = new ArrayList<>();
         Set<String> paths = new HashSet<>();

@@ -147,9 +147,9 @@ final class ViewerSupport {
         private final Map<FitsFileInformation, WcsCoordinateTransformer> skyCoordinates = new IdentityHashMap<>();
         private java.util.function.Function<FitsFileInformation, WcsSolutionResolver.ResolvedWcsSolution> resolver;
 
-        /** The frames of the sequence, which can share a plate solution. */
-        void reset(FitsFileInformation[] files) {
-            reset(files, info -> WcsSolutionResolver.resolve(info, files));
+        /** Forgets the frames: the cursor shows pixel coordinates only until the next reset. */
+        void clear() {
+            reset(null, info -> null);
         }
 
         void reset(FitsFileInformation[] files,

@@ -51,7 +51,6 @@ public interface SessionMetadataStore {
             }
             @Override public void saveCorrection(File folder, PlateSolutionCorrection correction) throws IOException {
                 PlateSolutionCorrection.save(folder, correction);
-                PlateSolutionCorrection.forget(folder);
             }
             @Override public void saveAutoTune(File folder, AutoTuneSessionStore.Document document) throws IOException {
                 AutoTuneSessionStore.save(folder, document);

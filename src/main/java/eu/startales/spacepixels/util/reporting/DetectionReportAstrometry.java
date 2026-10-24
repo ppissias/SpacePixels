@@ -13,7 +13,6 @@ package eu.startales.spacepixels.util.reporting;
 import eu.startales.spacepixels.util.SkyMath;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Track;
-import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
@@ -159,10 +158,6 @@ final class DetectionReportAstrometry {
     }
 
     private DetectionReportAstrometry() {
-    }
-
-    static Context buildContext(FitsFileInformation[] fitsFiles, AppConfig appConfig) {
-        return AstrometryContextFactory.buildContext(fitsFiles, appConfig);
     }
 
     static String buildDeepStackIdentificationHtml(Context astrometryContext,

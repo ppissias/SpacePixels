@@ -49,7 +49,7 @@ public class CatalogueStarReportTest {
             for (int y = 0; y < 120; y++) for (int x = 0; x < 160; x++) data[y][x] = (short) (-32000 + (x * y) % 100);
             frames.add(data);
         }
-        var astrometry = DetectionReportAstrometry.buildContext(files, null);
+        var astrometry = AstrometryContextFactory.buildContext(files, null, null);
         var sky = astrometry.getTransformer().pixelToSky(80, 60);
         SkyCatalogue catalogue = new SkyCatalogue();
         catalogue.field = SkyField.of(astrometry.getTransformer(), 160, 120);

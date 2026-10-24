@@ -74,7 +74,6 @@ public final class SkyCatalogueModel {
         savedCorrection = correction == null ? null : correction.copy();
         saveFailure = null;
         revision++;
-        PlateSolutionCorrection.forget(sessionFolder);
         fireCorrectionChanged();
     }
 

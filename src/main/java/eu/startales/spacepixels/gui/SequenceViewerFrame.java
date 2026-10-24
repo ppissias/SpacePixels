@@ -298,7 +298,7 @@ abstract class SequenceViewerFrame extends JFrame {
         shown = null;
         shownIndex = -1;
         cursorPixel = null;
-        cursorReadout.reset(null);
+        cursorReadout.clear();
         sky.detach();
         view.clear();
         if (stretch != null) {

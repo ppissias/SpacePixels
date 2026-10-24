@@ -45,7 +45,7 @@ public class TrackFindingIndexTest {
         var overlay = TrackOverlay.from(PipelineResult.builder().tracks(input).build());
         assertEquals(List.of("T1", "T2", "ST1"), overlay.getTracks().stream().map(track -> track.label).toList());
         var context = new DetectionReportContext(ExportVisualizationSettings.defaults(), new File("."), List.of(),
-                new FitsFileInformation[0], new DetectionConfig(), DetectionReportAstrometry.buildContext(new FitsFileInformation[0], null),
+                new FitsFileInformation[0], new DetectionConfig(), AstrometryContextFactory.buildContext(new FitsFileInformation[0], null, null),
                 null, null, null, null, null, List.of(), List.of(), null, List.of(), List.of(), List.of(),
                 index.singleStreaks(), index.streakTracks(), index.movingTargets());
         context.data = ReportData.create(context, null, null, List.of(), ReportInclusion.all());

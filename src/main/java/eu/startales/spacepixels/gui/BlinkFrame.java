@@ -277,7 +277,7 @@ public class BlinkFrame extends JFrame {
         if (stretch != null) {
             stretch.clearTables();
         }
-        cursorReadout.reset(null);
+        cursorReadout.clear();
         sky.detach();
         cursorPixel = null;
         view.clear();

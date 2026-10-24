@@ -20,7 +20,6 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -39,7 +38,6 @@ public final class PlateSolutionCorrection {
     static final int CURRENT_VERSION = 1;
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
     /** Loaded corrections by folder, with the file time they were read at. */
-    private static final Map<String, Object[]> CACHE = new HashMap<>();
 
     public int version = CURRENT_VERSION;
     /** Whether the correction is used. */
@@ -199,34 +197,4 @@ public final class PlateSolutionCorrection {
         }
     }
 
-    /**
-     * The correction in use for the session in this folder: the one in its file, when it is enabled. Read again
-     * when the file changes, so a change made in the application is seen everywhere.
-     */
-    static PlateSolutionCorrection activeIn(File sessionFolder) {
-        if (sessionFolder == null) {
-            return null;
-        }
-        File file = fileIn(sessionFolder);
-        String key = file.getAbsolutePath();
-        long modified = file.isFile() ? file.lastModified() : -1;
-        synchronized (CACHE) {
-            Object[] cached = CACHE.get(key);
-            if (cached == null || (long) cached[0] != modified) {
-                cached = new Object[]{modified, modified < 0 ? null : load(sessionFolder)};
-                CACHE.put(key, cached);
-            }
-            PlateSolutionCorrection correction = (PlateSolutionCorrection) cached[1];
-            return correction != null && correction.enabled ? correction : null;
-        }
-    }
-
-    /** Forgets what was read, for example after the file was written within the same clock tick. */
-    public static void forget(File sessionFolder) {
-        if (sessionFolder != null) {
-            synchronized (CACHE) {
-                CACHE.remove(fileIn(sessionFolder).getAbsolutePath());
-            }
-        }
-    }
 }

@@ -29,7 +29,7 @@ public class VariableStarPresentationTest {
         var analysis = analysis(List.of(steady, cycle, possible));
         File input = temporary.newFolder();
         var files = files(input);
-        var astrometry = DetectionReportAstrometry.buildContext(files, null);
+        var astrometry = AstrometryContextFactory.buildContext(files, null, null);
         var catalogue = new SkyCatalogue(); catalogue.field = SkyField.of(astrometry.getTransformer(), 160, 120);
         for (var star : List.of(steady, cycle)) {
             var sky = astrometry.getTransformer().pixelToSky(star.x, star.y);
@@ -97,7 +97,7 @@ public class VariableStarPresentationTest {
             var first = findings.get(0).getAsJsonObject();
             assertEquals(options.maxCandidateCards() == 40 ? "V1" : "V64", first.get("id").getAsString());
             assertEquals(options.maxCandidateCards() == 40 ? 1 : 64, first.get("starId").getAsInt());
-            var overlay = VariableStarOverlay.from(result, files);
+            var overlay = VariableStarOverlay.from(result, files, null, null);
             assertEquals("V64", overlay.getCandidates().get(63).label);
             for (String name : List.of("photometry_stars.csv", "photometry_lightcurves.csv", "photometry_frames.csv")) {
                 String contents = Files.readString(new File(output, name).toPath());
@@ -163,7 +163,7 @@ public class VariableStarPresentationTest {
     }
     private DetectionReportContext context(File output, FitsFileInformation[] files, VariableStarReportOptions options) {
         return new DetectionReportContext(new ExportVisualizationSettings(3,10,100,10,100,12,1,options),output,List.of(),files,
-                new DetectionConfig(),DetectionReportAstrometry.buildContext(files,null),null,null,null,null,null,List.of(),List.of(),null,List.of(),List.of(),List.of(),List.of(),List.of(),List.of());
+                new DetectionConfig(),AstrometryContextFactory.buildContext(files, null, null),null,null,null,null,null,List.of(),List.of(),null,List.of(),List.of(),List.of(),List.of(),List.of(),List.of());
     }
     private short[][] stack() { short[][] pixels = new short[120][160]; for (int y=0;y<120;y++)for(int x=0;x<160;x++)pixels[y][x]=(short)(-32000+(x*y)%100);return pixels; }
     private int count(String text, String regex) { int count=0;var m=Pattern.compile(regex).matcher(text);while(m.find())count++;return count; }
