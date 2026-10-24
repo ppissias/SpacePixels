@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.SkyMath;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
@@ -86,7 +87,7 @@ final class SessionCatalogue {
             if (Math.abs(variable.dec - dec) * 3600 > radiusArcsec) {
                 continue;
             }
-            double separation = separationArcsec(ra, dec, variable.ra, variable.dec);
+            double separation = SkyMath.separationArcsecHaversineRaDeltaInDegrees(ra, dec, variable.ra, variable.dec);
             if (separation <= radiusArcsec) {
                 matches.add(new VariableMatch(variable, separation));
             }
@@ -113,7 +114,7 @@ final class SessionCatalogue {
             if (Math.abs(starDec - dec) * 3600 > nearestSeparation) {
                 continue;
             }
-            double separation = separationArcsec(ra, dec, starRa, starDec);
+            double separation = SkyMath.separationArcsecHaversineRaDeltaInDegrees(ra, dec, starRa, starDec);
             if (separation <= nearestSeparation) {
                 nearest = star;
                 nearestSeparation = separation;
@@ -134,7 +135,7 @@ final class SessionCatalogue {
         double closest = radiusArcsec;
         for (SkyCatalogue.NamedStar star : catalogue.namedStars) {
             if (star.name == null || star.name.isBlank()) continue;
-            double separation = separationArcsec(ra, dec, star.ra, star.dec);
+            double separation = SkyMath.separationArcsecHaversineRaDeltaInDegrees(ra, dec, star.ra, star.dec);
             // A nearby named neighbour must not lend its name to a different, closer Gaia star.
             if (separation <= closest && (gaia == null || gaiaStarNear(star.ra, star.dec, radiusArcsec) == gaia)) {
                 named = new StarIdentity(star.name.trim(), "SIMBAD", separation);
@@ -149,15 +150,7 @@ final class SessionCatalogue {
             starDec += gaia.pmdec * years / 3.6e6;
             starRa += gaia.pmra * years / 3.6e6 / Math.max(1e-6, Math.cos(Math.toRadians(gaia.dec)));
         }
-        return new StarIdentity("Gaia DR3 " + gaia.sourceId, "Gaia DR3", separationArcsec(ra, dec, starRa, starDec));
-    }
-
-    static double separationArcsec(double ra1, double dec1, double ra2, double dec2) {
-        double d1 = Math.toRadians(dec1);
-        double d2 = Math.toRadians(dec2);
-        double a = Math.pow(Math.sin((d2 - d1) / 2), 2)
-                + Math.cos(d1) * Math.cos(d2) * Math.pow(Math.sin(Math.toRadians(ra2 - ra1) / 2), 2);
-        return Math.toDegrees(2 * Math.asin(Math.min(1, Math.sqrt(a)))) * 3600;
+        return new StarIdentity("Gaia DR3 " + gaia.sourceId, "Gaia DR3", SkyMath.separationArcsecHaversineRaDeltaInDegrees(ra, dec, starRa, starDec));
     }
 
     /** "EW (W UMa-type eclipsing binary)", or the VSX type as it is when it is not one of the common types. */

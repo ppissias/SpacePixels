@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.Statistics;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.DebugOutput;
 
@@ -71,15 +72,9 @@ final class FieldDepth {
     double median() {
         List<Double> values = new ArrayList<>();
         for (Frame frame : frames) {
-            if (!Double.isNaN(frame.depth)) {
-                values.add(frame.depth);
-            }
+            values.add(frame.depth);
         }
-        if (values.isEmpty()) {
-            return Double.NaN;
-        }
-        Collections.sort(values);
-        return values.get(values.size() / 2);
+        return Statistics.upperMedianIgnoringNaN(values);
     }
 
     boolean isEmpty() {

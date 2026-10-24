@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.SkyMath;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
@@ -161,7 +162,7 @@ final class SatCheckerQueryTargetFactory {
             }
 
             WcsCoordinateTransformer.SkyCoordinate pointSky = transformer.pixelToSky(point.x, point.y);
-            double separationDegrees = computeAngularSeparationDegrees(
+            double separationDegrees = SkyMath.separationDegreesCosineRule(
                     midpointSky.getRaDegrees(),
                     midpointSky.getDecDegrees(),
                     pointSky.getRaDegrees(),
@@ -172,7 +173,7 @@ final class SatCheckerQueryTargetFactory {
             maxTrackSeparationDegrees = Math.max(maxTrackSeparationDegrees, separationDegrees);
         }
 
-        double fovRadiusDegrees = clampFieldOfViewDegrees(
+        double fovRadiusDegrees = SkyMath.clampFieldOfViewDegrees(
                 Math.max(trackQueryTarget.searchRadiusDegrees * 1.5d, maxTrackSeparationDegrees + TRACK_FOV_PADDING_DEGREES),
                 MIN_FOV_RADIUS_DEGREES,
                 MAX_FOV_RADIUS_DEGREES);
@@ -184,34 +185,6 @@ final class SatCheckerQueryTargetFactory {
                 timeWindow.endTimestampMillis,
                 timeWindow.durationSeconds,
                 "SatChecker tight query centered on the measured streak-track midpoint");
-    }
-
-    private static double clampFieldOfViewDegrees(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    private static double computeAngularSeparationDegrees(double ra1Degrees,
-                                                          double dec1Degrees,
-                                                          double ra2Degrees,
-                                                          double dec2Degrees) {
-        if (!Double.isFinite(ra1Degrees) || !Double.isFinite(dec1Degrees)
-                || !Double.isFinite(ra2Degrees) || !Double.isFinite(dec2Degrees)) {
-            return Double.NaN;
-        }
-
-        double ra1Rad = Math.toRadians(ra1Degrees);
-        double dec1Rad = Math.toRadians(dec1Degrees);
-        double ra2Rad = Math.toRadians(ra2Degrees);
-        double dec2Rad = Math.toRadians(dec2Degrees);
-
-        double sinDec1 = Math.sin(dec1Rad);
-        double sinDec2 = Math.sin(dec2Rad);
-        double cosDec1 = Math.cos(dec1Rad);
-        double cosDec2 = Math.cos(dec2Rad);
-        double cosDeltaRa = Math.cos(ra2Rad - ra1Rad);
-        double cosine = (sinDec1 * sinDec2) + (cosDec1 * cosDec2 * cosDeltaRa);
-        cosine = Math.max(-1.0d, Math.min(1.0d, cosine));
-        return Math.toDegrees(Math.acos(cosine));
     }
 
     private static final class TrackTimeWindow {

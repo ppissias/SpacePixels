@@ -10,6 +10,7 @@
 
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.SkyMath;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.config.AppConfig;
@@ -407,9 +408,9 @@ final class DetectionReportAstrometry {
             return null;
         }
 
-        double raDeltaDegrees = normalizeAngleDeltaDegrees(latestSky.getRaDegrees() - earliestSky.getRaDegrees());
+        double raDeltaDegrees = SkyMath.wrapSignedDegrees(latestSky.getRaDegrees() - earliestSky.getRaDegrees());
         double decDeltaDegrees = latestSky.getDecDegrees() - earliestSky.getDecDegrees();
-        double skySeparationDegrees = computeAngularSeparationDegrees(
+        double skySeparationDegrees = SkyMath.separationDegreesCosineRule(
                 earliestSky.getRaDegrees(),
                 earliestSky.getDecDegrees(),
                 latestSky.getRaDegrees(),
@@ -606,20 +607,6 @@ final class DetectionReportAstrometry {
         return String.format(Locale.US, "%." + decimals + "f", value);
     }
 
-    static double clampFieldOfViewDegrees(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    private static double normalizeAngleDeltaDegrees(double deltaDegrees) {
-        while (deltaDegrees <= -180.0d) {
-            deltaDegrees += 360.0d;
-        }
-        while (deltaDegrees > 180.0d) {
-            deltaDegrees -= 360.0d;
-        }
-        return deltaDegrees;
-    }
-
     private static String formatSkyRateArcsecPerHour(double rateArcsecPerHour) {
         if (!Double.isFinite(rateArcsecPerHour)) {
             return "n/a";
@@ -699,7 +686,7 @@ final class DetectionReportAstrometry {
         }
 
         double localSiderealTimeDeg = computeLocalSiderealTimeDegrees(timestampMillis, observerSite.longitudeDeg);
-        double hourAngleDeg = normalizeAngleDeltaDegrees(localSiderealTimeDeg - normalizeDegrees(raDegrees));
+        double hourAngleDeg = SkyMath.wrapSignedDegrees(localSiderealTimeDeg - SkyMath.normalizeDegrees(raDegrees));
 
         double latitudeRad = Math.toRadians(observerSite.latitudeDeg);
         double declinationRad = Math.toRadians(decDegrees);
@@ -717,7 +704,7 @@ final class DetectionReportAstrometry {
         sinAzimuth = Math.max(-1.0d, Math.min(1.0d, sinAzimuth));
         cosAzimuth = Math.max(-1.0d, Math.min(1.0d, cosAzimuth));
 
-        double azimuthDeg = normalizeDegrees(Math.toDegrees(Math.atan2(sinAzimuth, cosAzimuth)));
+        double azimuthDeg = SkyMath.normalizeDegrees(Math.toDegrees(Math.atan2(sinAzimuth, cosAzimuth)));
         double altitudeDeg = Math.toDegrees(altitudeRad);
         return new HorizontalCoordinate(altitudeDeg, azimuthDeg);
     }
@@ -729,35 +716,7 @@ final class DetectionReportAstrometry {
                 + (360.98564736629d * (julianDate - 2451545.0d))
                 + (0.000387933d * centuriesSinceJ2000 * centuriesSinceJ2000)
                 - ((centuriesSinceJ2000 * centuriesSinceJ2000 * centuriesSinceJ2000) / 38710000.0d);
-        return normalizeDegrees(gmstDegrees + longitudeDegrees);
-    }
-
-    private static double computeAngularSeparationDegrees(double ra1Degrees,
-                                                          double dec1Degrees,
-                                                          double ra2Degrees,
-                                                          double dec2Degrees) {
-        if (!Double.isFinite(ra1Degrees) || !Double.isFinite(dec1Degrees)
-                || !Double.isFinite(ra2Degrees) || !Double.isFinite(dec2Degrees)) {
-            return Double.NaN;
-        }
-
-        double ra1Rad = Math.toRadians(ra1Degrees);
-        double dec1Rad = Math.toRadians(dec1Degrees);
-        double ra2Rad = Math.toRadians(ra2Degrees);
-        double dec2Rad = Math.toRadians(dec2Degrees);
-
-        double sinDec1 = Math.sin(dec1Rad);
-        double sinDec2 = Math.sin(dec2Rad);
-        double cosDec1 = Math.cos(dec1Rad);
-        double cosDec2 = Math.cos(dec2Rad);
-        double cosDeltaRa = Math.cos(ra2Rad - ra1Rad);
-        double cosine = (sinDec1 * sinDec2) + (cosDec1 * cosDec2 * cosDeltaRa);
-        cosine = Math.max(-1.0d, Math.min(1.0d, cosine));
-        return Math.toDegrees(Math.acos(cosine));
-    }
-
-    static boolean isJplCompatibleObservatoryCode(String observerCode) {
-        return JplSbIdentUrlBuilder.isJplCompatibleObservatoryCode(observerCode);
+        return SkyMath.normalizeDegrees(gmstDegrees + longitudeDegrees);
     }
 
     static String buildSatCheckerFovUrl(ObserverSite observerSite,
@@ -775,15 +734,6 @@ final class DetectionReportAstrometry {
                 decDegrees,
                 fovRadiusDegrees,
                 asyncResponse);
-    }
-
-    private static double normalizeDegrees(double degrees) {
-        double normalized = degrees % 360.0;
-        return normalized < 0.0 ? normalized + 360.0 : normalized;
-    }
-
-    static double normalizeLongitudeDegrees(double longitudeDegrees) {
-        return JplSbIdentUrlBuilder.normalizeLongitudeDegrees(longitudeDegrees);
     }
 
     static String urlEncode(String value) {

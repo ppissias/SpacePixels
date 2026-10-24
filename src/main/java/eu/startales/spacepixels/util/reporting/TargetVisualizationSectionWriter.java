@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.SkyMath;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.FitsFileInformation;
@@ -600,9 +601,9 @@ final class TargetVisualizationSectionWriter {
             return null;
         }
 
-        double eastPerPixelX = normalizeSkyAngleDeltaDegrees(offsetX.getRaDegrees() - center.getRaDegrees()) * cosDec;
+        double eastPerPixelX = SkyMath.normalizeSignedDegrees(offsetX.getRaDegrees() - center.getRaDegrees()) * cosDec;
         double northPerPixelX = offsetX.getDecDegrees() - center.getDecDegrees();
-        double eastPerPixelY = normalizeSkyAngleDeltaDegrees(offsetY.getRaDegrees() - center.getRaDegrees()) * cosDec;
+        double eastPerPixelY = SkyMath.normalizeSignedDegrees(offsetY.getRaDegrees() - center.getRaDegrees()) * cosDec;
         double northPerPixelY = offsetY.getDecDegrees() - center.getDecDegrees();
         double determinant = eastPerPixelX * northPerPixelY - eastPerPixelY * northPerPixelX;
         if (!Double.isFinite(determinant) || Math.abs(determinant) < 1.0e-12) {
@@ -706,17 +707,6 @@ final class TargetVisualizationSectionWriter {
                     40 + 24 * dx, 40 + 24 * dy, 40 + 34 * dx, 40 + 34 * dy, labels[i]));
         }
         return svg.append("</svg>").toString();
-    }
-
-    private static double normalizeSkyAngleDeltaDegrees(double deltaDegrees) {
-        double normalized = deltaDegrees % 360.0d;
-        if (normalized > 180.0d) {
-            normalized -= 360.0d;
-        }
-        if (normalized < -180.0d) {
-            normalized += 360.0d;
-        }
-        return normalized;
     }
 
     private static double angleClockwiseFromImageUp(double dx, double dy) {

@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.util.skycatalog;
 
+import eu.startales.spacepixels.util.Statistics;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.DebugOutput;
 
@@ -175,7 +176,7 @@ public final class PlateCorrectionFitter {
         double best = Double.MAX_VALUE;
         for (int order = 1; order <= 3; order++) {
             PlateSolutionCorrection.Polynomial trial = PolynomialFit.fit(trainFrom, trainBy, order, cx, cy, scale);
-            testMedian[order] = trial == null ? Double.MAX_VALUE : median(residuals(testFrom, testBy, trial));
+            testMedian[order] = trial == null ? Double.MAX_VALUE : Statistics.upperMedian(residuals(testFrom, testBy, trial));
             best = Math.min(best, testMedian[order]);
         }
         if (best == Double.MAX_VALUE) {
@@ -185,7 +186,7 @@ public final class PlateCorrectionFitter {
         while (testMedian[order] > best * (1 + ORDER_TOLERANCE)) {
             order++;
         }
-        double headerTestMedian = median(residuals(testFrom, testBy, null));
+        double headerTestMedian = Statistics.upperMedian(residuals(testFrom, testBy, null));
         if (headerTestMedian <= best * (1 + ORDER_TOLERANCE)) {
             // On the stars left out of the fit, the header solution does as well as the best correction: none is made.
             notes.add(0, String.format(Locale.US, "The plate solution in the FITS header already matches the Gaia stars: "
@@ -270,12 +271,6 @@ public final class PlateCorrectionFitter {
             residuals.add(Math.hypot(by.get(k)[0] - d[0], by.get(k)[1] - d[1]));
         }
         return residuals;
-    }
-
-    private static double median(List<Double> values) {
-        List<Double> sorted = new ArrayList<>(values);
-        Collections.sort(sorted);
-        return sorted.isEmpty() ? Double.MAX_VALUE : sorted.get(sorted.size() / 2);
     }
 
     private static int countOnFrame(List<SkyCatalogue.Star> stars, WcsCoordinateTransformer header, int width, int height) {

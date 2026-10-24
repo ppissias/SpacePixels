@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.SkyMath;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 
 import java.util.Locale;
@@ -42,9 +43,9 @@ final class SkyViewerHtmlBuilder {
         double tightFovDegrees = preferredTightFovDegrees != null
                 && Double.isFinite(preferredTightFovDegrees)
                 && preferredTightFovDegrees > 0.0d
-                ? DetectionReportAstrometry.clampFieldOfViewDegrees(preferredTightFovDegrees, 0.20d, 12.0d)
-                : DetectionReportAstrometry.clampFieldOfViewDegrees(queryTarget.searchRadiusDegrees * 8.0d, 0.5d, 12.0d);
-        double wideFovDegrees = DetectionReportAstrometry.clampFieldOfViewDegrees(
+                ? SkyMath.clampFieldOfViewDegrees(preferredTightFovDegrees, 0.20d, 12.0d)
+                : SkyMath.clampFieldOfViewDegrees(queryTarget.searchRadiusDegrees * 8.0d, 0.5d, 12.0d);
+        double wideFovDegrees = SkyMath.clampFieldOfViewDegrees(
                 Math.max(queryTarget.searchRadiusDegrees * 22.0d, tightFovDegrees * 6.0d),
                 4.0d,
                 60.0d);

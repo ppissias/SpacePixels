@@ -122,12 +122,12 @@ public final class VariableStarOverlay {
         WcsCoordinateTransformer.SkyCoordinate centre = transformer.pixelToSky(x, y);
         WcsCoordinateTransformer.SkyCoordinate next = transformer.pixelToSky(x + 1, y);
         if (centre == null || next == null) return null;
-        double radius = Math.max(10, Math.min(60, 4 * separation(centre.getRaDegrees(), centre.getDecDegrees(),
+        double radius = Math.max(10, Math.min(60, 4 * SkyMath.separationArcsecHaversineDeltasInDegrees(centre.getRaDegrees(), centre.getDecDegrees(),
                 next.getRaDegrees(), next.getDecDegrees())));
         if (!Double.isFinite(radius)) radius = 10;
         String name = null;
         for (SkyCatalogue.VariableStar variable : catalogue.variables) {
-            double distance = separation(centre.getRaDegrees(), centre.getDecDegrees(), variable.ra, variable.dec);
+            double distance = SkyMath.separationArcsecHaversineDeltasInDegrees(centre.getRaDegrees(), centre.getDecDegrees(), variable.ra, variable.dec);
             if (Double.isFinite(distance) && distance <= radius) {
                 radius = distance;
                 name = variable.name;
@@ -136,10 +136,4 @@ public final class VariableStarOverlay {
         return name;
     }
 
-    private static double separation(double ra1, double dec1, double ra2, double dec2) {
-        double a = Math.pow(Math.sin(Math.toRadians(dec2 - dec1) / 2), 2)
-                + Math.cos(Math.toRadians(dec1)) * Math.cos(Math.toRadians(dec2))
-                * Math.pow(Math.sin(Math.toRadians(ra2 - ra1) / 2), 2);
-        return Math.toDegrees(2 * Math.asin(Math.min(1, Math.sqrt(a)))) * 3600;
-    }
 }

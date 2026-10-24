@@ -160,7 +160,7 @@ final class AstrometryIdentificationHtmlBuilder {
             }
             html.append("</div>");
             html.append("<div class='astro-note' style='margin-top: 6px;'>JPL Small-Body Identification uses ");
-            if (DetectionReportAstrometry.isJplCompatibleObservatoryCode(astrometryContext.getSkybotObserverCode())) {
+            if (JplSbIdentUrlBuilder.isJplCompatibleObservatoryCode(astrometryContext.getSkybotObserverCode())) {
                 html.append("MPC observatory code ").append(DetectionReportAstrometry.escapeHtml(
                         JplSbIdentUrlBuilder.normalizeObservatoryCode(astrometryContext.getSkybotObserverCode())));
             } else if (observerSite != null) {

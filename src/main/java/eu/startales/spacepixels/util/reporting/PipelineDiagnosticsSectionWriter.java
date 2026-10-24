@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.SkyMath;
 import io.github.ppissias.jtransient.model.Pixel;
 import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
@@ -51,7 +52,7 @@ final class PipelineDiagnosticsSectionWriter {
         if (transformer != null && width > 0 && height > 0) {
             WcsCoordinateTransformer.SkyCoordinate centre = transformer.pixelToSky(width / 2.0, height / 2.0);
             WcsCoordinateTransformer.SkyCoordinate step = transformer.pixelToSky(width / 2.0 + 1.0, height / 2.0);
-            double scaleArcsec = angularSeparationDeg(centre, step) * 3600.0;
+            double scaleArcsec = SkyMath.separationDegreesHaversineUnclamped(centre.getRaDegrees(), centre.getDecDegrees(), step.getRaDegrees(), step.getDecDegrees()) * 3600.0;
             String field = WcsCoordinateTransformer.formatRa(centre.getRaDegrees()) + " "
                     + WcsCoordinateTransformer.formatDec(centre.getDecDegrees());
             items.add(headerItem("Field", DetectionReportGenerator.escapeHtml(field)
@@ -401,16 +402,6 @@ final class PipelineDiagnosticsSectionWriter {
         return Math.abs(seconds - Math.rint(seconds)) < 1e-6
                 ? String.format(Locale.US, "%.0f s", seconds)
                 : String.format(Locale.US, "%.1f s", seconds);
-    }
-
-    private static double angularSeparationDeg(WcsCoordinateTransformer.SkyCoordinate a, WcsCoordinateTransformer.SkyCoordinate b) {
-        double ra1 = Math.toRadians(a.getRaDegrees());
-        double ra2 = Math.toRadians(b.getRaDegrees());
-        double de1 = Math.toRadians(a.getDecDegrees());
-        double de2 = Math.toRadians(b.getDecDegrees());
-        double sinDe = Math.sin((de2 - de1) / 2);
-        double sinRa = Math.sin((ra2 - ra1) / 2);
-        return Math.toDegrees(2 * Math.asin(Math.sqrt(sinDe * sinDe + Math.cos(de1) * Math.cos(de2) * sinRa * sinRa)));
     }
 
     private static void writeAstrometricContext(PrintWriter report, DetectionReportContext reportContext) {

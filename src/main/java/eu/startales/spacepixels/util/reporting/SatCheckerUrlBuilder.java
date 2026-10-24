@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.SkyMath;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -35,7 +36,7 @@ final class SatCheckerUrlBuilder {
             return null;
         }
 
-        double normalizedLongitude = JplSbIdentUrlBuilder.normalizeLongitudeDegrees(observerSite.longitudeDeg);
+        double normalizedLongitude = SkyMath.normalizeSignedDegrees(observerSite.longitudeDeg);
         if (!Double.isFinite(normalizedLongitude)) {
             return null;
         }
@@ -50,7 +51,7 @@ final class SatCheckerUrlBuilder {
         url.append("&elevation=").append(urlEncode(formatDecimal(elevationMeters, 1)));
         url.append("&mid_obs_time_jd=").append(urlEncode(formatJulianDate(midpointTimestampMillis)));
         url.append("&duration=").append(durationSeconds);
-        url.append("&ra=").append(urlEncode(formatDecimal(normalizeDegrees(raDegrees), 6)));
+        url.append("&ra=").append(urlEncode(formatDecimal(SkyMath.normalizeDegrees(raDegrees), 6)));
         url.append("&dec=").append(urlEncode(formatDecimal(decDegrees, 6)));
         url.append("&fov_radius=").append(urlEncode(formatDecimal(fovRadiusDegrees, 4)));
         url.append("&group_by=satellite");
@@ -62,11 +63,6 @@ final class SatCheckerUrlBuilder {
     private static String formatJulianDate(long timestampMillis) {
         double julianDate = (timestampMillis / 86400000.0d) + 2440587.5d;
         return formatDecimal(julianDate, 8);
-    }
-
-    private static double normalizeDegrees(double degrees) {
-        double normalized = degrees % 360.0;
-        return normalized < 0.0 ? normalized + 360.0 : normalized;
     }
 
     private static String formatDecimal(double value, int decimals) {

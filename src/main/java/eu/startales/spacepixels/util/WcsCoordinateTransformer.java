@@ -168,7 +168,7 @@ public final class WcsCoordinateTransformer {
                 Math.sqrt((denominator * denominator) + (xi * xi))
         );
 
-        return new SkyCoordinate(normalizeDegrees(Math.toDegrees(ra)), Math.toDegrees(dec));
+        return new SkyCoordinate(SkyMath.normalizeDegrees(Math.toDegrees(ra)), Math.toDegrees(dec));
     }
 
     /**
@@ -255,7 +255,7 @@ public final class WcsCoordinateTransformer {
 
     public static String formatRa(double raDegrees) {
         if (!Double.isFinite(raDegrees)) return "n/a";
-        long ticks = Math.round(normalizeDegrees(raDegrees) / 15.0 * 36000.0) % 864000;
+        long ticks = Math.round(SkyMath.normalizeDegrees(raDegrees) / 15.0 * 36000.0) % 864000;
         return String.format(Locale.US, "%02d:%02d:%04.1f", ticks / 36000, ticks / 600 % 60, ticks % 600 / 10.0);
     }
 
@@ -354,11 +354,6 @@ public final class WcsCoordinateTransformer {
         }
 
         return value.replace("'", "").trim();
-    }
-
-    private static double normalizeDegrees(double degrees) {
-        double normalized = degrees % 360.0;
-        return normalized < 0.0 ? normalized + 360.0 : normalized;
     }
 
     public static final class SkyCoordinate {

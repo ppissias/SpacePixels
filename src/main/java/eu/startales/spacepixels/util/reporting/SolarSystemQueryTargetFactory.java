@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.SkyMath;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
@@ -123,20 +124,9 @@ final class SolarSystemQueryTargetFactory {
         WcsCoordinateTransformer.SkyCoordinate center = transformer.pixelToSky(pixelX, pixelY);
         WcsCoordinateTransformer.SkyCoordinate offsetX = transformer.pixelToSky(pixelX + 1.0, pixelY);
         WcsCoordinateTransformer.SkyCoordinate offsetY = transformer.pixelToSky(pixelX, pixelY + 1.0);
-        double stepX = angularSeparationArcsec(center.getRaDegrees(), center.getDecDegrees(), offsetX.getRaDegrees(), offsetX.getDecDegrees());
-        double stepY = angularSeparationArcsec(center.getRaDegrees(), center.getDecDegrees(), offsetY.getRaDegrees(), offsetY.getDecDegrees());
+        double stepX = SkyMath.separationArcsecHaversine(center.getRaDegrees(), center.getDecDegrees(), offsetX.getRaDegrees(), offsetX.getDecDegrees());
+        double stepY = SkyMath.separationArcsecHaversine(center.getRaDegrees(), center.getDecDegrees(), offsetY.getRaDegrees(), offsetY.getDecDegrees());
         return (stepX + stepY) / 2.0;
     }
 
-    private static double angularSeparationArcsec(double ra1Deg, double dec1Deg, double ra2Deg, double dec2Deg) {
-        double ra1 = Math.toRadians(ra1Deg);
-        double dec1 = Math.toRadians(dec1Deg);
-        double ra2 = Math.toRadians(ra2Deg);
-        double dec2 = Math.toRadians(dec2Deg);
-        double sinHalfDec = Math.sin((dec2 - dec1) / 2.0);
-        double sinHalfRa = Math.sin((ra2 - ra1) / 2.0);
-        double a = (sinHalfDec * sinHalfDec) + (Math.cos(dec1) * Math.cos(dec2) * sinHalfRa * sinHalfRa);
-        double c = 2.0 * Math.asin(Math.min(1.0, Math.sqrt(Math.max(0.0, a))));
-        return Math.toDegrees(c) * 3600.0;
-    }
 }

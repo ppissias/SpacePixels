@@ -40,7 +40,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-07](#sp-07-one-binding-type-for-settings-rows) | One binding type for settings rows | Low | Small |
 | [SP-08](#sp-08-one-report-entry-point-and-a-complete-report-context) | One report entry point and a complete report context | Medium | Medium |
 | [SP-09](#sp-09-one-write-queue-for-small-files) | One write queue for small files | Low | Small |
-| [SP-10](#sp-10-one-place-for-sky-math-and-statistics-helpers) | One place for sky-math and statistics helpers | Low | Small |
+| [SP-10](#sp-10-one-place-for-sky-math-and-statistics-helpers) | One place for sky-math and statistics helpers: done; evaluate the differing variants | Low | Small |
 | [SP-11](#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Fewer FITS helper classes; immutable frame metadata | Low | Medium |
 | [SP-13](#sp-13-one-way-to-report-problems-and-diagnostics) | One way to report problems and diagnostics | Low | Small |
 | [SP-14](#sp-14-package-names-that-say-what-they-hold) | Package names that say what they hold | Low | Medium, mechanical |
@@ -50,7 +50,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-19](#sp-19-finish-the-common-base-of-the-image-viewers) | Finish the common base of the image viewers | Medium | Medium |
 
 **Suggested order.**
-1. Evaluate SP-10's differing numerical contracts before scheduling it as a small refactoring. SP-18's follow-ups are independent of the rest; keep their regression separate from refactorings.
+1. SP-10 and SP-18 are done apart from their follow-ups: evaluate SP-10's differing variants as a numerical decision, and take SP-18's follow-ups when nom-tam-fits 1.23.1 is out. Keep both separate from refactorings.
 2. Then SP-01 and SP-02, which remove the most machinery.
 3. Then SP-04 together with SP-09, then SP-05 and SP-06.
 4. Then SP-08, then SP-07 and SP-15.
@@ -210,18 +210,19 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 
 ### SP-10. One place for sky-math and statistics helpers
 
-**Problem.** Small helpers are implemented many times:
-- angular separation, about eight times: `SessionCatalogue`, `SkyField`, `VariableStarOverlay`, `PhotometryReportSectionWriter`, `PipelineDiagnosticsSectionWriter`, `SatCheckerQueryTargetFactory`, `DetectionReportAstrometry` and `SolarSystemQueryTargetFactory`;
-- `normalizeDegrees`, four times;
-- a median, about eight times;
-- `clampFieldOfViewDegrees`, twice;
-- `isJplCompatibleObservatoryCode` and `normalizeLongitudeDegrees`, in both `DetectionReportAstrometry` and `JplSbIdentUrlBuilder`.
+**Done (2026-10-24).** `SkyMath` and `Statistics` in `util` hold every copy. The identical copies are merged: `normalizeDegrees` (four), the field-of-view clamp (two), the law-of-cosines separation (two), and the wrap to [-180, 180] (`normalizeLongitudeDegrees` and `normalizeSkyAngleDeltaDegrees` gave the same result for every input). `DetectionReportAstrometry` no longer forwards the JPL observatory-code check and the longitude wrap. The variants that differ moved unchanged, under names that say how they differ, and `SkyMathTest` and `StatisticsTest` pin their contracts. The reports stayed byte-identical.
 
-**Proposal.** One `SkyMath` class and one `Statistics` class in `util`, with unit tests. Replace the copies.
+**To evaluate: why do the remaining variants differ, and do they need to?**
+- **Angular separation, six variants** in `SkyMath`:
+  - `separationDegreesCosineRule`: the track astrometry of the report and the SatChecker queries. NaN for a non-finite input, and it resolves only about 0.003″.
+  - `separationDegreesHaversine` (photometry pixel scale) and `separationDegreesHaversineUnclamped` (diagnostics pixel scale): the same arithmetic, except that the unclamped one can give NaN for points almost opposite on the sky.
+  - `separationArcsecHaversineRaDeltaInDegrees` (session catalogue matching), `separationArcsecHaversineDeltasInDegrees` (variable-star overlay) and `separationArcsecHaversine` (solar-system queries): they differ in where degrees become radians and in how the haversine is limited.
+  - `separationDegreesAtan2`: the size and overlap of the catalogue's sky field.
 
-**Issue review (2026-10-24; evaluate before implementation).**
-- **The median implementations differ.** `PlateCorrectionFitter.median` uses the upper middle value and returns `Double.MAX_VALUE` for empty input; `NightEquipment.median` averages the middle pair and returns `NaN`; the photometry helper filters `NaN` values. Unifying them without preserving these contracts can change correction selection and diagnostics.
-- Inventory units, finite-value handling, empty inputs, angular wrapping and numerical stability before replacing helpers. Use distinct names for distinct operations. Test odd/even samples, empty/NaN inputs and sky-coordinate boundary cases. Changing mathematical policy is a separate scientific change, so this item is not yet an automatically safe starter task.
+  They agree to far below a milliarcsecond on the tested pairs. One haversine form would probably do, unless a threshold depends on the last bits.
+- **Wrapping to ±180:** `normalizeSignedDegrees` keeps both ends; `wrapSignedDegrees` (hour angle and RA motion in the track astrometry) maps -180 to 180, and never returns for an infinite input.
+- **Medians** in `Statistics`: the mean of the two middle values (`median` for Night & Equipment, `medianIgnoringNaN` for photometry, `medianOfSorted` for star shapes) against the upper middle value (`upperMedian` for the plate-solution correction, `Double.MAX_VALUE` when empty; `upperMedianIgnoringNaN` for the field depth). Several algorithms also take the upper middle value inline: `PlateCorrectionFitter` (median distances and stars per frame), `PolynomialFit` (residual clipping), `FieldDepth` (patch offsets), `NightEquipment.clippedMedian`, and the photometry running median and black point.
+- Changing any of them is a change of numerical policy, not a refactoring. Show its effect on the reference datasets (correction selection, report figures, catalogue matches) and decide it on its own.
 
 ### SP-11. Fewer FITS helper classes; immutable frame metadata
 

@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.Statistics;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
@@ -18,7 +19,6 @@ import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -331,7 +331,7 @@ final class NightEquipment {
             }
         }
         if (!flatTops.isEmpty()) {
-            double saturationLevel = median(flatTops);
+            double saturationLevel = Statistics.median(flatTops);
             for (Sample sample : frameSamples) {
                 if (sample.shape.peak > 0.85 * saturationLevel) {
                     sample.saturated = true;
@@ -357,9 +357,9 @@ final class NightEquipment {
         if (allSizes.size() < 10) {
             return null;
         }
-        frame.seeingPx = median(centreSizes.size() >= 10 ? centreSizes : allSizes);
-        frame.e1 = median(e1);
-        frame.e2 = median(e2);
+        frame.seeingPx = Statistics.median(centreSizes.size() >= 10 ? centreSizes : allSizes);
+        frame.e1 = Statistics.median(e1);
+        frame.e2 = Statistics.median(e2);
         FrameWork result = new FrameWork();
         result.frame = frame;
         result.samples = frameSamples;
@@ -489,7 +489,7 @@ final class NightEquipment {
                 sizes.add(star.fwhm);
             }
         }
-        return sizes.isEmpty() ? 3 : Math.max(1.2, median(sizes));
+        return sizes.isEmpty() ? 3 : Math.max(1.2, Statistics.median(sizes));
     }
 
     /** Isolated stars away from the edges, the brightest of each part of the field, at most {@link #MAX_STARS}. */
@@ -569,7 +569,7 @@ final class NightEquipment {
                     values.add(m);
                 }
             }
-            reference[s] = values.size() >= Math.max(2, frames.size() / 2) ? median(values) : Double.NaN;
+            reference[s] = values.size() >= Math.max(2, frames.size() / 2) ? Statistics.median(values) : Double.NaN;
         }
         double best = Double.NEGATIVE_INFINITY;
         for (int f = 0; f < frames.size(); f++) {
@@ -580,7 +580,7 @@ final class NightEquipment {
                 }
             }
             if (differences.size() >= 10) {
-                frames.get(f).relativeZeroPoint = median(differences);
+                frames.get(f).relativeZeroPoint = Statistics.median(differences);
                 best = Math.max(best, frames.get(f).relativeZeroPoint);
             }
         }
@@ -672,7 +672,7 @@ final class NightEquipment {
                 perFrame.get(sample.frame).add(match.g + 2.5 * Math.log10(sample.shape.flux) - colour * colourOrZero(match));
             }
             for (int f = 0; f < frames.size(); f++) {
-                zeroPoints[f] = perFrame.get(f).size() >= 5 ? median(perFrame.get(f)) : Double.NaN;
+                zeroPoints[f] = perFrame.get(f).size() >= 5 ? Statistics.median(perFrame.get(f)) : Double.NaN;
             }
             // Colour term: residual against BP-RP, with outliers clipped.
             List<double[]> points = new ArrayList<>();
@@ -712,7 +712,7 @@ final class NightEquipment {
                 linearFrames[f] = Double.isFinite(lines[f][1]) && Math.abs(lines[f][1] - 1) <= 0.12;
             }
         }
-        linearity = slopes.isEmpty() ? Double.NaN : median(slopes);
+        linearity = slopes.isEmpty() ? Double.NaN : Statistics.median(slopes);
         calibrated = !Double.isNaN(linearity) && Math.abs(linearity - 1) <= 0.12;
         if (!calibrated) {
             notes.add(Double.isFinite(linearity) ? String.format(Locale.US, "The star brightness does not follow Gaia in proportion (slope %.2f instead of 1): "
@@ -778,8 +778,8 @@ final class NightEquipment {
         double[] offsetX = new double[9];
         double[] offsetY = new double[9];
         for (int i = 0; i < 9; i++) {
-            offsetX[i] = dxs.get(i).size() >= 5 ? median(dxs.get(i)) : 0;
-            offsetY[i] = dys.get(i).size() >= 5 ? median(dys.get(i)) : 0;
+            offsetX[i] = dxs.get(i).size() >= 5 ? Statistics.median(dxs.get(i)) : 0;
+            offsetY[i] = dys.get(i).size() >= 5 ? Statistics.median(dys.get(i)) : 0;
         }
         GaiaMatch[] matches = new GaiaMatch[stars.size()];
         for (int s = 0; s < stars.size(); s++) {
@@ -839,9 +839,9 @@ final class NightEquipment {
             }
             centreSizes.add(frame.seeingPx);
         }
-        centreSizePx = median(centreSizes);
-        trackingE1 = median(e1);
-        trackingE2 = median(e2);
+        centreSizePx = Statistics.median(centreSizes);
+        trackingE1 = Statistics.median(e1);
+        trackingE2 = Statistics.median(e2);
         for (Sample sample : samples) {
             if (sample.saturated) {
                 continue;
@@ -947,7 +947,7 @@ final class NightEquipment {
                         block.add(v);
                     }
                 }
-                value = median(block);
+                value = Statistics.median(block);
             }
             if (Double.isNaN(value)) {
                 return null;
@@ -1037,7 +1037,7 @@ final class NightEquipment {
         for (int r = 0; r < backgroundRows; r++) {
             for (int c = 0; c < backgroundColumns; c++) {
                 List<Double> values = perBox.get(r * backgroundColumns + c);
-                background[r][c] = values.isEmpty() ? Double.NaN : median(values);
+                background[r][c] = values.isEmpty() ? Double.NaN : Statistics.median(values);
                 counts[r][c] = values.size();
             }
         }
@@ -1141,7 +1141,7 @@ final class NightEquipment {
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < columns; c++) {
                 List<Double> values = cells.get(r * columns + c);
-                result[r][c] = values.size() >= minimum ? median(values) : Double.NaN;
+                result[r][c] = values.size() >= minimum ? Statistics.median(values) : Double.NaN;
             }
         }
         return result;
@@ -1247,7 +1247,7 @@ final class NightEquipment {
         for (double[] p : points) {
             residuals.add(Math.abs(p[1] - fit[0] - fit[1] * p[0]));
         }
-        double limit = 3 * 1.4826 * median(residuals);
+        double limit = 3 * 1.4826 * Statistics.median(residuals);
         double[] clipped = line(points, limit > 0 ? new double[]{fit[0], fit[1], limit} : null);
         return clipped != null ? clipped : fit;
     }
@@ -1276,16 +1276,6 @@ final class NightEquipment {
         return new double[]{(sy - slope * sx) / n, slope};
     }
 
-    static double median(List<Double> values) {
-        if (values.isEmpty()) {
-            return Double.NaN;
-        }
-        List<Double> sorted = new ArrayList<>(values);
-        Collections.sort(sorted);
-        int n = sorted.size();
-        return n % 2 == 1 ? sorted.get(n / 2) : (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2;
-    }
-
     private static double medianOf(double[][] grid) {
         List<Double> values = new ArrayList<>();
         for (double[] row : grid) {
@@ -1295,7 +1285,7 @@ final class NightEquipment {
                 }
             }
         }
-        return median(values);
+        return Statistics.median(values);
     }
 
     private static double[] toArray(List<Double> values) {

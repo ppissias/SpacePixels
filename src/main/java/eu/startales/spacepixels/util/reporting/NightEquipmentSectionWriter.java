@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.Statistics;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
@@ -120,9 +121,9 @@ final class NightEquipmentSectionWriter {
 
     private static String seeingReading(NightEquipment ne, List<Double> seeing, String unit) {
         if (seeing.size() < 3) {
-            return "The stars measure " + format(NightEquipment.median(seeing), unit) + " across.";
+            return "The stars measure " + format(Statistics.median(seeing), unit) + " across.";
         }
-        double median = NightEquipment.median(seeing);
+        double median = Statistics.median(seeing);
         double lowest = Double.POSITIVE_INFINITY;
         double highest = Double.NEGATIVE_INFINITY;
         for (double value : seeing) {
@@ -130,8 +131,8 @@ final class NightEquipmentSectionWriter {
             highest = Math.max(highest, value);
         }
         int third = Math.max(1, seeing.size() / 3);
-        double start = NightEquipment.median(seeing.subList(0, third));
-        double end = NightEquipment.median(seeing.subList(seeing.size() - third, seeing.size()));
+        double start = Statistics.median(seeing.subList(0, third));
+        double end = Statistics.median(seeing.subList(seeing.size() - third, seeing.size()));
         double change = end / start - 1;
         double trend = rankCorrelation(seeing);
         StringBuilder text = new StringBuilder(String.format(Locale.US, "The stars near the centre measure %s across (median), from %s to %s. ",
@@ -216,12 +217,12 @@ final class NightEquipmentSectionWriter {
 
     private static String skyReading(NightEquipment ne) {
         List<Double> sky = values(ne, f -> f.skyBrightness);
-        double median = NightEquipment.median(sky);
+        double median = Statistics.median(sky);
         StringBuilder text = new StringBuilder(String.format(Locale.US, "The estimated sky brightness is %.2f mag/arcsec&sup2; (median).", median));
         if (sky.size() >= 6) {
             int third = Math.max(1, sky.size() / 3);
-            double start = NightEquipment.median(sky.subList(0, third));
-            double end = NightEquipment.median(sky.subList(sky.size() - third, sky.size()));
+            double start = Statistics.median(sky.subList(0, third));
+            double end = Statistics.median(sky.subList(sky.size() - third, sky.size()));
             if (start - end > 0.2) {
                 text.append(String.format(Locale.US, " It got %.1f mag brighter towards the end (twilight, the Moon rising, or the target sinking into the light pollution).", start - end));
             } else if (end - start > 0.2) {
@@ -492,7 +493,7 @@ final class NightEquipmentSectionWriter {
             }
         }
         if (best != null) {
-            best[3] = NightEquipment.median(shares);
+            best[3] = Statistics.median(shares);
         }
         return best;
     }
@@ -904,7 +905,7 @@ final class NightEquipmentSectionWriter {
     }
 
     private static double medianOf(NightEquipment ne, ToDoubleFunction<NightEquipment.Frame> value) {
-        return NightEquipment.median(values(ne, value));
+        return Statistics.median(values(ne, value));
     }
 
     private static double maxOf(NightEquipment ne, ToDoubleFunction<NightEquipment.Frame> value) {

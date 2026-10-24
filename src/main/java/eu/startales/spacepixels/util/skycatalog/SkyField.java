@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.util.skycatalog;
 
+import eu.startales.spacepixels.util.SkyMath;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 
 import java.util.Locale;
@@ -51,8 +52,8 @@ public final class SkyField {
         WcsCoordinateTransformer.SkyCoordinate center = transformer.pixelToSky((width - 1) / 2.0, (height - 1) / 2.0);
         field.centerRa = center.getRaDegrees();
         field.centerDec = center.getDecDegrees();
-        field.widthDeg = separation(field.cornerRa[0], field.cornerDec[0], field.cornerRa[1], field.cornerDec[1]);
-        field.heightDeg = separation(field.cornerRa[1], field.cornerDec[1], field.cornerRa[2], field.cornerDec[2]);
+        field.widthDeg = SkyMath.separationDegreesAtan2(field.cornerRa[0], field.cornerDec[0], field.cornerRa[1], field.cornerDec[1]);
+        field.heightDeg = SkyMath.separationDegreesAtan2(field.cornerRa[1], field.cornerDec[1], field.cornerRa[2], field.cornerDec[2]);
         return field;
     }
 
@@ -68,18 +69,7 @@ public final class SkyField {
     /** True when the other field is roughly this one: its centre is within a quarter of the diagonal of this centre. */
     public boolean isSameFieldAs(SkyField other) {
         return other != null
-                && separation(centerRa, centerDec, other.centerRa, other.centerDec) < Math.hypot(widthDeg, heightDeg) / 4;
-    }
-
-    /** Angle between two sky positions, in degrees. */
-    static double separation(double ra1, double dec1, double ra2, double dec2) {
-        double phi1 = Math.toRadians(dec1);
-        double phi2 = Math.toRadians(dec2);
-        double deltaPhi = phi2 - phi1;
-        double deltaLambda = Math.toRadians(ra2 - ra1);
-        double a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2)
-                + Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
-        return Math.toDegrees(2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+                && SkyMath.separationDegreesAtan2(centerRa, centerDec, other.centerRa, other.centerDec) < Math.hypot(widthDeg, heightDeg) / 4;
     }
 
     /** "4.1° × 2.7°". */

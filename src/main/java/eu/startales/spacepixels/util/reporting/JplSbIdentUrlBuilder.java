@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.SkyMath;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -65,21 +66,6 @@ final class JplSbIdentUrlBuilder {
         return normalized.isEmpty() ? null : normalized;
     }
 
-    static double normalizeLongitudeDegrees(double longitudeDegrees) {
-        if (!Double.isFinite(longitudeDegrees)) {
-            return Double.NaN;
-        }
-
-        double normalized = longitudeDegrees % 360.0d;
-        if (normalized > 180.0d) {
-            normalized -= 360.0d;
-        }
-        if (normalized < -180.0d) {
-            normalized += 360.0d;
-        }
-        return normalized;
-    }
-
     private static boolean appendObserverParameters(StringBuilder url,
                                                     String observerCode,
                                                     Double observerLatitudeDeg,
@@ -97,7 +83,7 @@ final class JplSbIdentUrlBuilder {
             return false;
         }
 
-        double normalizedLongitude = normalizeLongitudeDegrees(observerLongitudeDeg);
+        double normalizedLongitude = SkyMath.normalizeSignedDegrees(observerLongitudeDeg);
         if (!Double.isFinite(normalizedLongitude) || normalizedLongitude < -180.0d || normalizedLongitude > 180.0d) {
             return false;
         }
@@ -118,7 +104,7 @@ final class JplSbIdentUrlBuilder {
     }
 
     private static String formatJplRa(double raDegrees) {
-        long ticks = Math.round(normalizeDegrees(raDegrees) / 15.0 * 360000) % 8640000;
+        long ticks = Math.round(SkyMath.normalizeDegrees(raDegrees) / 15.0 * 360000) % 8640000;
         return String.format(Locale.US, "%02d-%02d-%05.2f", ticks / 360000, ticks / 6000 % 60, ticks % 6000 / 100.0);
     }
 
@@ -134,11 +120,6 @@ final class JplSbIdentUrlBuilder {
             return Math.min(decHalfWidthDegrees * 6.0, 12.0);
         }
         return Math.min(decHalfWidthDegrees / Math.abs(cosine), 12.0);
-    }
-
-    private static double normalizeDegrees(double degrees) {
-        double normalized = degrees % 360.0;
-        return normalized < 0.0 ? normalized + 360.0 : normalized;
     }
 
     private static String formatDecimal(double value, int decimals) {

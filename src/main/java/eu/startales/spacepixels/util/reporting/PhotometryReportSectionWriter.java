@@ -10,6 +10,8 @@
 
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.Statistics;
+import eu.startales.spacepixels.util.SkyMath;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import io.github.ppissias.jtransient.core.PixelEncoding;
@@ -619,7 +621,7 @@ final class PhotometryReportSectionWriter {
         for (int i = from; i < to; i++) {
             window[i - from] = points.get(i).expectedScatter;
         }
-        return median(window);
+        return Statistics.medianIgnoringNaN(window);
     }
 
     private interface FrameValue {
@@ -1164,7 +1166,7 @@ final class PhotometryReportSectionWriter {
         WcsCoordinateTransformer transformer = context.astrometryContext.getTransformer();
         WcsCoordinateTransformer.SkyCoordinate centre = transformer.pixelToSky(x, y);
         WcsCoordinateTransformer.SkyCoordinate neighbour = transformer.pixelToSky(x + 1.0, y);
-        double pixelScaleArcsec = angularSeparationDegrees(centre.getRaDegrees(), centre.getDecDegrees(),
+        double pixelScaleArcsec = SkyMath.separationDegreesHaversine(centre.getRaDegrees(), centre.getDecDegrees(),
                 neighbour.getRaDegrees(), neighbour.getDecDegrees()) * 3600.0;
         double radius = Math.max(MIN_SEARCH_RADIUS_ARCSEC,
                 Math.min(MAX_SEARCH_RADIUS_ARCSEC, SEARCH_RADIUS_PIXELS * pixelScaleArcsec));
@@ -1288,17 +1290,6 @@ final class PhotometryReportSectionWriter {
     /** Percent-encodes a query value, using %20 for spaces. */
     private static String urlEncode(String value) {
         return java.net.URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
-    }
-
-    private static double angularSeparationDegrees(double ra1, double dec1, double ra2, double dec2) {
-        double r1 = Math.toRadians(ra1);
-        double d1 = Math.toRadians(dec1);
-        double r2 = Math.toRadians(ra2);
-        double d2 = Math.toRadians(dec2);
-        double sinDd = Math.sin((d2 - d1) / 2);
-        double sinDr = Math.sin((r2 - r1) / 2);
-        double a = sinDd * sinDd + Math.cos(d1) * Math.cos(d2) * sinDr * sinDr;
-        return Math.toDegrees(2 * Math.asin(Math.min(1.0, Math.sqrt(a))));
     }
 
     private static String lightCurveChart(VariableStarAnalysis analysis, StarLightCurve star,
@@ -1731,9 +1722,4 @@ final class PhotometryReportSectionWriter {
         return String.format(Locale.US, "%.9f|%.9f", mag, scatter);
     }
 
-    private static double median(double[] values) {
-        double[] sorted = Arrays.stream(values).filter(v -> !Double.isNaN(v)).sorted().toArray();
-        if (sorted.length == 0) return Double.NaN;
-        return sorted.length % 2 == 1 ? sorted[sorted.length / 2] : 0.5 * (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]);
-    }
 }

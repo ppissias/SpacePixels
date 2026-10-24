@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.Statistics;
 import java.util.Arrays;
 
 /**
@@ -93,13 +94,13 @@ final class StarShape {
         }
         double[] sky = Arrays.copyOf(ring, ringCount);
         Arrays.sort(sky);
-        double background = median(sky);
+        double background = Statistics.medianOfSorted(sky);
         double[] deviations = new double[ringCount];
         for (int k = 0; k < ringCount; k++) {
             deviations[k] = Math.abs(sky[k] - background);
         }
         Arrays.sort(deviations);
-        double noise = Math.max(1e-3, 1.4826 * median(deviations));
+        double noise = Math.max(1e-3, 1.4826 * Statistics.medianOfSorted(deviations));
 
         StarShape star = new StarShape();
         star.background = background;
@@ -234,8 +235,4 @@ final class StarShape {
         return star;
     }
 
-    private static double median(double[] sorted) {
-        int n = sorted.length;
-        return n % 2 == 1 ? sorted[n / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
-    }
 }

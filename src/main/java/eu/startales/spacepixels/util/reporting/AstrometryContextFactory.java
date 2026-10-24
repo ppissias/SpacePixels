@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import eu.startales.spacepixels.util.SkyMath;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.util.FitsFileInformation;
@@ -86,7 +87,7 @@ final class AstrometryContextFactory {
             return null;
         }
 
-        double normalizedLongitude = DetectionReportAstrometry.normalizeLongitudeDegrees(longitudeDeg);
+        double normalizedLongitude = SkyMath.normalizeSignedDegrees(longitudeDeg);
         if (!Double.isFinite(normalizedLongitude) || normalizedLongitude < -180.0d || normalizedLongitude > 180.0d) {
             return null;
         }
