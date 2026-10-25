@@ -71,6 +71,7 @@ It does not include an automatic updater; a new release is installed by running 
 4. **Icon.** An `.ico` is needed. Proposal: build it from the existing `spacepixels-16`…`256` PNG icons.
 5. **Where the installer is built.** On a Windows machine with WiX: the maintainer's PC, or a Windows GitHub Actions runner. Proposal: a Gradle task on the maintainer's PC first; CI can come later.
 6. **Unsigned release.** Windows SmartScreen warns about an unsigned download ("Windows protected your PC" → More info → Run anyway). The manual should say so until signing is added.
+7. **Bundled Java runtime.** Decide whether the application and its installer use Java 21 or Java 25. This is an optional runtime upgrade; JTransient and JPlateSolve retain Java 21 compatibility. The packaging details above describe JDK 21 and must be checked against the selected packaging JDK.
 
 **Acceptance.** On a clean Windows machine: install, launch, run a small analysis and open its report, upgrade from a previous version, and uninstall while saved profiles and data stay.
 
@@ -172,7 +173,7 @@ This settles the earlier open question about the report phase: the report is one
 
 **Request (2026-10-23):** explore what the newer versions of the libraries offer, "especially flatlaf".
 
-SpacePixels uses FlatLaf 3.7.2 (`FlatDarkLaf`) since the upgrade of [SP-18](DESIGN-IMPROVEMENTS.md#sp-18-upgrade-the-dependencies). SpacePixels already uses `FlatLaf.style`, the clear button and placeholder text of text fields, and `JComponent.outline`.
+SpacePixels uses FlatLaf 3.7.2 (`FlatDarkLaf`) since the completed [SP-18 upgrade](DEVELOPER.md#dependencies). SpacePixels already uses `FlatLaf.style`, the clear button and placeholder text of text fields, and `JComponent.outline`.
 
 **Worth using, most valuable first:**
 1. **Native file dialogs** (`SystemFileChooser`, 3.7). The three `JFileChooser`s would open the Windows Explorer dialog, with its recent places, quick access and search. They choose the import folder, the folder for iterative detection and the ASTAP executable. Glob filters arrived in 3.7.1.

@@ -194,7 +194,7 @@ public class ArtificialStarInjector {
 
                 // Create new FITS and copy headers
                 Fits outFits = new Fits();
-                BasicHDU<?> newHdu = FitsFactory.hduFactory(data);
+                BasicHDU<?> newHdu = Fits.makeHDU(data);
                 outFits.addHDU(newHdu);
 
                 Cursor<String, HeaderCard> originalCursor = hdu.getHeader().iterator();

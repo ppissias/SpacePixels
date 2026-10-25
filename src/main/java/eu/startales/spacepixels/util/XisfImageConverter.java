@@ -3,7 +3,6 @@ package eu.startales.spacepixels.util;
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
-import nom.tam.fits.FitsFactory;
 import nom.tam.fits.Header;
 import nom.tam.fits.HeaderCardException;
 import org.w3c.dom.Document;
@@ -158,7 +157,7 @@ public final class XisfImageConverter {
 
     private static void writeFits(XisfImageData imageData, File outputFile) throws FitsException, IOException {
         try (Fits fits = new Fits()) {
-            BasicHDU<?> hdu = FitsFactory.hduFactory(imageData.monoData);
+            BasicHDU<?> hdu = Fits.makeHDU(imageData.monoData);
             fits.addHDU(hdu);
 
             Header header = hdu.getHeader();

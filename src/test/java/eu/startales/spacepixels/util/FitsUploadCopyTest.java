@@ -2,7 +2,6 @@ package eu.startales.spacepixels.util;
 
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
-import nom.tam.fits.FitsFactory;
 import nom.tam.fits.Header;
 import org.junit.Rule;
 import org.junit.Test;
@@ -28,7 +27,7 @@ public class FitsUploadCopyTest {
     /** A small 16-bit frame with a site, an observer, pointing hints and a checksum, as capture programs write them. */
     static File frameWithSite(File file) throws Exception {
         try (Fits fits = new Fits()) {
-            BasicHDU<?> image = FitsFactory.hduFactory(pixels(30, 20, 7));
+            BasicHDU<?> image = Fits.makeHDU(pixels(30, 20, 7));
             Header header = image.getHeader();
             header.addValue("SITELAT", "+37 51 54.000", "THE SITE LATITUDE");
             header.addValue("SITELONG", "+23 45 18.310", "THE SITE LONGITUDE");
@@ -95,9 +94,9 @@ public class FitsUploadCopyTest {
     public void everyHeaderOfAFileWithExtensionsIsCleaned() throws Exception {
         File original = folder.newFile("two-hdus.fits");
         try (Fits fits = new Fits()) {
-            BasicHDU<?> primary = FitsFactory.hduFactory(pixels(8, 6, 1));
+            BasicHDU<?> primary = Fits.makeHDU(pixels(8, 6, 1));
             primary.getHeader().addValue("OBSGEO-B", 37.865, "latitude");
-            BasicHDU<?> extension = FitsFactory.hduFactory(pixels(12, 9, 2));
+            BasicHDU<?> extension = Fits.makeHDU(pixels(12, 9, 2));
             extension.getHeader().addValue("OBSGEO-L", 23.755, "longitude");
             extension.getHeader().addValue("OBSERVAT", "Home observatory", "");
             extension.getHeader().addValue("OBJECT", "M5", "");

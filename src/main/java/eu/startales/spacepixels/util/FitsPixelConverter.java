@@ -10,7 +10,6 @@ package eu.startales.spacepixels.util;
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
-import nom.tam.fits.FitsFactory;
 import nom.tam.fits.Header;
 import nom.tam.fits.HeaderCard;
 import nom.tam.util.Cursor;
@@ -42,7 +41,7 @@ final class FitsPixelConverter {
      */
     static Fits createFitsFromData(Object newData, Header originalHeader, int addedOffset) throws FitsException, IOException {
         Fits updatedFits = new Fits();
-        BasicHDU<?> newHDU = FitsFactory.hduFactory(newData);
+        BasicHDU<?> newHDU = Fits.makeHDU(newData);
         updatedFits.addHDU(newHDU);
 
         Header newHeader = newHDU.getHeader();

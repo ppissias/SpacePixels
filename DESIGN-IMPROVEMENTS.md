@@ -44,7 +44,6 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-19](#sp-19-finish-the-common-base-of-the-image-viewers) | Finish the common base of the image viewers | Medium | Medium |
 | [SP-21](#sp-21-upgrade-nom-tam-fits-after-the-dither-fix) | Upgrade nom-tam-fits after the dither fix | Low | Small |
 | [SP-22](#sp-22-upgrade-gson-to-2150) | Upgrade Gson to 2.15.0 | Low | Small |
-| [SP-23](#sp-23-replace-deprecated-fits-hdu-creation) | Replace deprecated FITS HDU creation | Low | Small |
 
 **Suggested order.**
 
@@ -52,7 +51,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 2. Then SP-08, then SP-07.
 3. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
-Keep dependency maintenance (SP-21–SP-23) separate from refactorings, according to each item's timing.
+Keep dependency maintenance (SP-21 and SP-22) separate from refactorings, according to each item's timing.
 
 Refactorings are intended to preserve behaviour. Evaluate the exceptions raised by the issue reviews, including SP-19's viewer lifetime and settings policy, as explicit behaviour decisions. Check implementation changes with the relevant unit and GUI mechanics tests. Items that touch detection or reports also need byte-identical deterministic `report-data.json`, `detection_config.json` and CSV content on the reference datasets, using the normalization and comparison method in DEVELOPER.md.
 
@@ -216,14 +215,6 @@ With 1.23.0, dithered floating-point `.fz` frames still differ from cfitsio by a
 **Deferred to the next dependency update.** Follow-up to the completed [SP-18 upgrade](DEVELOPER.md#dependencies). Upgrade Gson from 2.14.0 to 2.15.0 in all three repositories, reviewing its change of the default `Map` type to `LinkedHashMap`.
 
 **Verification.** Round-trip saved settings files and check that their values and compatibility are preserved; run the relevant tests and reference-data comparisons from DEVELOPER.md.
-
-### SP-23. Replace deprecated FITS HDU creation
-
-**Pending maintenance, before the deprecated API is removed.** Follow-up to the completed [SP-18 upgrade](DEVELOPER.md#dependencies). `FitsFactory.hduFactory(Object)` is deprecated since nom-tam-fits 1.22 and remains in `FitsPixelConverter`, `XisfImageConverter` and `ArtificialStarInjector`.
-
-Replace these calls with the supported HDU creation API while preserving pixel values and headers. Keep this change separate from the dependency upgrades.
-
-**Verification.** Run the relevant conversion and injection tests and the reference-data regression in DEVELOPER.md, comparing FITS pixels, headers and deterministic outputs.
 
 ## Removed from the previous plan (2026-10-23)
 

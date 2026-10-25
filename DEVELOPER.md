@@ -81,6 +81,14 @@ Add `-PspacepixelsDebug` (or `-Dspacepixels.debug=true` on a plain `java` comman
 
 **Releases.** Select the exact JTransient and JPlateSolve versions for the release and pin them. With both composites disabled, build and test that exact combination and check the resolved versions ([docs/release-artifacts.md](docs/release-artifacts.md)). `mavenCentralBundle` also runs `apiConsumerTest`, a separate build that consumes only the staged `spacepixels` artifact. See [PUBLISHING.md](PUBLISHING.md).
 
+### Dependencies
+
+**SP-18 is complete (2026-10-24).** The coordinated dependency upgrade established Gradle 9.8.2, nom-tam-fits 1.23.0, Gson 2.14.0 and FlatLaf 3.7.2 across the repositories that use them. Reference outputs stayed byte-identical, saved settings files loaded unchanged, and compressed frames were compared with cfitsio through astropy. `UiStyle.spinner` preserves the earlier caret-on-focus behaviour. The upgrade commits record the checks.
+
+FITS HDU creation uses the public `Fits.makeHDU(Object)` API in pixel conversion, XISF import, artificial-star injection and test fixtures (SP-23, completed 2026-10-25). It replaces the deprecated `FitsFactory.hduFactory(Object)` calls while preserving pixel and header handling.
+
+Remaining dependency maintenance is tracked separately as SP-21 and SP-22 in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md). The optional application runtime choice belongs to [F06, Windows installer](FEATURE-REQUESTS.md#f06-windows-installer); JTransient and JPlateSolve retain Java 21 compatibility.
+
 ## The packages
 
 All packages are under `eu.startales.spacepixels`.
@@ -193,7 +201,9 @@ Saving the profile and the visualization preferences stages both files, but repl
 
 ## Testing
 
-Tests use JUnit 4. Start with the affected tests, then run the full suite.
+Tests use JUnit 4.13.2. Start with the affected tests, then run the full suite.
+
+**Framework decision.** Stay on JUnit 4; a migration to JUnit 6 is optional future maintenance, with no application behaviour change. If revisited, run existing JUnit 4 tests on the Vintage engine, migrate classes as they are touched, and account for the GUI mechanics tests' move to AssertJ Swing's Jupiter variant.
 
 - **Boundaries and ownership:** `DependencyRulesTest` (no GUI in jobs, tasks or `util`; no AWT in session state), `JobCoordinatorTest`, `ProcessingSessionTest`, `ApplicationStorageSessionTest`, `ApplicationStorageSettingsTest`. The storage tests cover one queue's settings/session order, reimport reads behind writes, target failures and retries, shutdown drain, and session completions already queued when their owner closes.
 - **Synthetic data:** `SyntheticDatasetFactory` builds disposable FITS datasets.
