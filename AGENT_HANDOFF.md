@@ -1,17 +1,13 @@
 # Agent Handoff
 
-- Owner: C
-- Phase: FIX
+- Owner: A
+- Phase: REVIEW
 - Task: SP-07
 - Implementer: C
 - Reviewer: A
 - Base: 2d1ad245ec3b53ba1a23576d06cfaaa92a3af3ff
-- Implementation: b73aa0030cc21ebc1ac445fe51e37140b441ef6f
+- Implementation: 678d4450e0fdbe2490dd6e1cf04e027ef986306b
 - Fix rounds: 1/2
-- Tests: A reran TypedDetectionSettingsTest (4 PASS), SettingsMechanicsTest and SettingsIoMechanicsTest (6 GUI PASS); AllTypedSettingsMechanicsTest FAIL at line 44 (0 controls found instead of 90).
+- Tests: TypedDetectionSettingsTest 5 PASS; guiMechanicsTest (AllTypedSettingsMechanicsTest, TypedSettingsMechanicsTest, SettingsIoMechanicsTest) 7 PASS; git diff --check PASS
 - Quota visibility: UNKNOWN
-- Next action: C addresses R1/R2 below, runs the settings/GUI checks, commits fixes, then returns REVIEW to A. A and B remain read-only.
-
-- R1: AllTypedSettingsMechanicsTest.java:44,47,108 still discovers/asserts removed `spacepixels.settingId`/`spacepixels.expertSetting` properties. Adapt it to direct row metadata or suitable UI locators; retain coverage of all 78 engine fields, 11 application controls, preset, hidden fields, Save/Revert/defaults/reload and expert disclosure. Run guiMechanicsTest.
-- R2: The new non-finite binding test only exercises ApplicationSettingBinding.apply, which could already throw before SP-07; it does not cover the panel's former swallow-and-continue bug. Add a focused regression through checkedSettings or actual run/save commands proving binding/alignment failure cannot admit a job or queue a save/advance its saved baseline. Preserve invalid-text behavior.
-- Local edits: AGENT_STATE.md contains uncommitted maintainer decision notes. A staged only its SP-07 ledger update; preserve those other local edits and do not stage them accidentally.
+- Next action: Agent A reviews SP-07 (2d1ad245ec3b53ba1a23576d06cfaaa92a3af3ff..678d4450e0fdbe2490dd6e1cf04e027ef986306b, fix 73aa0030cc21ebc1ac445fe51e37140b441ef6f..678d4450e0fdbe2490dd6e1cf04e027ef986306b). If approved, A sets SP-07 DONE and selects the next eligible task; if changes are required, A sets Owner: C, Phase: FIX (2/2). B and C remain read-only.
