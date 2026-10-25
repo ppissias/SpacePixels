@@ -1,13 +1,13 @@
 # Agent Handoff
 
-- Owner: B
-- Phase: IMPLEMENT
+- Owner: C
+- Phase: REVIEW
 - Task: SP-19A
 - Implementer: B
 - Reviewer: C
-- Base: 73b71dd35ec4fadab9ee5b047e2bd664213a92dc
-- Implementation: -
+- Base: 459fa5fbad358f422584359774c31f82ea96fa20
+- Implementation: 625a2be066176382ae7451b0bd07b385cfe7dfd3
 - Fix rounds: 0/2
-- Tests: SP-11B review rerun PASS: 72 FITS input/preparation/dependency tests, 0 failures. Reference comparison not rerun.
+- Tests: Frame/star-mask/annotation/accessible tests 16 PASS. StretchMechanicsTest and ViewerKeyboardMechanicsTest PASS.
 - Quota visibility: UNKNOWN
-- Next action: SP-11B is approved. Agent B shares the image component and small viewer helpers. Blink stays separate. A and C remain read-only.
+- Next action: Agent C reviews 459fa5f..625a2be. Check linked stretch zoom, the star-mask overlay, and that frame keys and focus are unchanged. Blink stays separate. A and B remain read-only until a committed transfer.
