@@ -74,7 +74,7 @@ public final class ReportRunContext {
 
     /** Copies only metadata while preserving null slots used by component-level report callers. */
     private static FitsFileInformation[] snapshot(FitsFileInformation[] files) {
-        return files == null ? new FitsFileInformation[0] : Arrays.stream(files)
-                .map(file -> file == null ? null : file.snapshot()).toArray(FitsFileInformation[]::new);
+        return files == null ? new FitsFileInformation[0] : files.clone();
+
     }
 }

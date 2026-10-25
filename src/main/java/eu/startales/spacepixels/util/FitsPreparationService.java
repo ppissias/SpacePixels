@@ -11,7 +11,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -102,13 +104,15 @@ final class FitsPreparationService {
             int width = axes == null || axes.length < 2 ? 0 : axes[axes.length - 1];
             int height = axes == null || axes.length < 2 ? 0 : axes[axes.length - 2];
             Header header = image.getHeader();
-            FitsFileInformation information = new FitsFileInformation(file.getAbsolutePath(), file.getName(),
-                    axes != null && axes.length == 2, width, height);
+            Map<String, String> headerMap = new HashMap<>();
+
             Cursor<String, HeaderCard> cards = header.iterator();
             while (cards.hasNext()) {
                 HeaderCard card = cards.next();
-                information.getFitsHeader().put(card.getKey(), card.getValue());
+                headerMap.put(card.getKey(), card.getValue());
             }
+            FitsFileInformation information = new FitsFileInformation(file.getAbsolutePath(), file.getName(),
+                    axes != null && axes.length == 2, width, height, headerMap);
             return new Input(information, axes, header.getIntValue("BITPIX", 0),
                     header.getDoubleValue("BZERO", 0.0), header.getDoubleValue("BSCALE", 1.0), compressed);
         }

@@ -15,8 +15,8 @@ public class WcsSolutionResolverTest {
 
     @Test
     public void resolvesStandardWcsFromFitsHeader() {
-        FitsFileInformation fileInfo = new FitsFileInformation("sample.fit", "sample.fit", true, 1320, 989);
-        fileInfo.getFitsHeader().putAll(createStandardWcsHeader(140.89806, -7.0669513));
+        FitsFileInformation fileInfo = new FitsFileInformation("sample.fit", "sample.fit", true, 1320, 989,
+                createStandardWcsHeader(140.89806, -7.0669513));
 
         WcsSolutionResolver.ResolvedWcsSolution resolved = WcsSolutionResolver.resolve(fileInfo, new FitsFileInformation[]{fileInfo}, null);
 
@@ -33,8 +33,8 @@ public class WcsSolutionResolverTest {
     @Test
     public void fallsBackToCompatibleAlignedFileHeader() {
         FitsFileInformation preferred = new FitsFileInformation("preferred.fit", "preferred.fit", true, 1320, 989);
-        FitsFileInformation aligned = new FitsFileInformation("aligned.fit", "aligned.fit", true, 1320, 989);
-        aligned.getFitsHeader().putAll(createStandardWcsHeader(10.0, 20.0));
+        FitsFileInformation aligned = new FitsFileInformation("aligned.fit", "aligned.fit", true, 1320, 989,
+                createStandardWcsHeader(10.0, 20.0));
 
         WcsSolutionResolver.ResolvedWcsSolution resolved = WcsSolutionResolver.resolve(preferred, new FitsFileInformation[]{preferred, aligned}, null);
 
@@ -50,8 +50,8 @@ public class WcsSolutionResolverTest {
     @Test
     public void ignoresAlignedFilesWithIncompatibleDimensions() {
         FitsFileInformation preferred = new FitsFileInformation("preferred.fit", "preferred.fit", true, 1320, 989);
-        FitsFileInformation incompatible = new FitsFileInformation("aligned.fit", "aligned.fit", true, 1400, 1000);
-        incompatible.getFitsHeader().putAll(createStandardWcsHeader(10.0, 20.0));
+        FitsFileInformation incompatible = new FitsFileInformation("aligned.fit", "aligned.fit", true, 1400, 1000,
+                createStandardWcsHeader(10.0, 20.0));
 
         WcsSolutionResolver.ResolvedWcsSolution resolved = WcsSolutionResolver.resolve(preferred, new FitsFileInformation[]{preferred, incompatible}, null);
 

@@ -12,8 +12,10 @@ import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Executor;
@@ -149,6 +151,55 @@ public final class ProcessingSession implements AutoCloseable {
             throw new IllegalArgumentException("Selected frames belong to another session.");
         }
         selection = selected == null ? List.of() : List.copyOf(Arrays.asList(selected));
+    }
+
+    /**
+     * Replaces the FITS header metadata of {@code frame} in this session with an immutable descriptor containing
+     * {@code fitsHeader}, updating any selected reference to that frame as well. Existing snapshots held by admitted
+     * runs keep their previous descriptor.
+     */
+    public FitsFileInformation replaceFrameHeader(FitsFileInformation frame, Map<String, String> fitsHeader) {
+        requireOpen();
+        Objects.requireNonNull(frame, "frame");
+        int index = indexOfFrame(frame);
+        if (index < 0) {
+            throw new IllegalArgumentException("Frame belongs to another session.");
+        }
+        FitsFileInformation previous = files[index];
+        FitsFileInformation updated = previous.withFitsHeader(fitsHeader);
+        files[index] = updated;
+        if (!selection.isEmpty()) {
+            List<FitsFileInformation> updatedSelection = new ArrayList<>(selection.size());
+            boolean changed = false;
+            for (FitsFileInformation selected : selection) {
+                if (selected == previous || sameFrame(selected, previous)) {
+                    updatedSelection.add(updated);
+                    changed = true;
+                } else {
+                    updatedSelection.add(selected);
+                }
+            }
+            if (changed) {
+                selection = List.copyOf(updatedSelection);
+            }
+        }
+        return updated;
+    }
+
+    private int indexOfFrame(FitsFileInformation frame) {
+        for (int index = 0; index < files.length; index++) {
+            if (files[index] == frame) return index;
+        }
+        for (int index = 0; index < files.length; index++) {
+            if (sameFrame(files[index], frame)) return index;
+        }
+        return -1;
+    }
+
+    private static boolean sameFrame(FitsFileInformation first, FitsFileInformation second) {
+        return first != null && second != null
+                && first.getFilePath() != null
+                && first.getFilePath().equals(second.getFilePath());
     }
 
     public JTransientEngine.MasterStackResult getMasterStack(String key) {

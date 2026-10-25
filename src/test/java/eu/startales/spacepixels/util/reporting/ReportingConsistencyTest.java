@@ -19,9 +19,8 @@ public class ReportingConsistencyTest {
     private static FitsFileInformation[] files() {
         FitsFileInformation[] files = new FitsFileInformation[3];
         for (int i = 0; i < files.length; i++) {
-            files[i] = new FitsFileInformation("frame" + i + ".fit", "frame" + i + ".fit", true, 600, 400);
-            files[i].getFitsHeader().put("DATE-OBS", "2026-10-01T00:0" + (2 * i) + ":00");
-            files[i].getFitsHeader().put("EXPTIME", "120");
+            files[i] = new FitsFileInformation("frame" + i + ".fit", "frame" + i + ".fit", true, 600, 400,
+                    java.util.Map.of("DATE-OBS", "2026-10-01T00:0" + (2 * i) + ":00", "EXPTIME", "120"));
         }
         return files;
     }

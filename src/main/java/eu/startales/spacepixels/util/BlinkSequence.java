@@ -38,6 +38,25 @@ public final class BlinkSequence {
         return frames;
     }
 
+    /** Returns a sequence sharing pixel buffers where any frame matching {@code previous} uses {@code updated}. */
+    public BlinkSequence replaceFrameInfo(FitsFileInformation previous, FitsFileInformation updated) {
+        if (previous == null || updated == null) {
+            return this;
+        }
+        List<Frame> updatedFrames = new ArrayList<>(frames.size());
+        boolean changed = false;
+        for (Frame frame : frames) {
+            FitsFileInformation info = frame.getInfo();
+            if (info == previous || (info != null && info.getFilePath() != null && info.getFilePath().equals(previous.getFilePath()))) {
+                updatedFrames.add(frame.withInfo(updated));
+                changed = true;
+            } else {
+                updatedFrames.add(frame);
+            }
+        }
+        return changed ? new BlinkSequence(updatedFrames) : this;
+    }
+
     /** One frame: its file, the histogram of each channel, and the data at full and reduced sizes. */
     public static final class Frame {
         private final FitsFileInformation info;
@@ -51,6 +70,17 @@ public final class BlinkSequence {
                 histograms[channel] = DisplayStretch.histogram(channels[channel]);
             }
             this.levels = levels(new Level(width, height, channels));
+        }
+
+        private Frame(FitsFileInformation info, int[][] histograms, List<Level> levels) {
+            this.info = info;
+            this.histograms = histograms;
+            this.levels = levels;
+        }
+
+        /** Returns a frame sharing pixel buffers and histograms with {@code updatedInfo}. */
+        public Frame withInfo(FitsFileInformation updatedInfo) {
+            return new Frame(updatedInfo, histograms, levels);
         }
 
         public FitsFileInformation getInfo() {

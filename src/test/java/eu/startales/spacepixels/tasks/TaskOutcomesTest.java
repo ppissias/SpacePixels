@@ -146,18 +146,22 @@ public class TaskOutcomesTest {
         }
     }
 
-    /** Admitted tasks protect their frame containers, share metadata, and never rescan the folder on the worker. */
+    /** Admitted tasks protect their frame containers, keep their immutable frame snapshots, and never rescan the folder on the worker. */
     @Test
     public void detectionAndInspectionKeepTheirAdmittedFrames() throws Exception {
         Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "admitted", 5);
-        try (FitsImportService importer = new FitsImportService(sequence.toFile(), null)) {
-            FitsFileInformation[] admitted = java.util.Arrays.copyOf(importer.readFiles(), 3);
+        try (FitsImportService importer = new FitsImportService(sequence.toFile(), null);
+             eu.startales.spacepixels.session.ProcessingSession session = new eu.startales.spacepixels.session.ProcessingSession(
+                     new PlateSolveService(new AppConfig()), java.util.Arrays.copyOf(importer.readFiles(), 3), null)) {
+            FitsFileInformation[] admitted = session.getFiles();
             FitsFileInformation first = admitted[0];
             DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
             DetectionTask detection = new DetectionTask(admitted, config, DetectionRunOptions.defaults(), null, summary -> true);
             ManualTransientInspectionTask inspection = new ManualTransientInspectionTask(admitted, config);
             admitted[0] = missingFrame();
-            first.getFitsHeader().put("OBJECT", "updated after admission");
+            java.util.Map<String, String> updatedHeader = new java.util.HashMap<>(first.getFitsHeader());
+            updatedHeader.put("OBJECT", "updated after admission");
+            FitsFileInformation replaced = session.replaceFrameHeader(first, updatedHeader);
             Files.writeString(sequence.resolve("not-admitted.fit"), "Not a FITS image");
 
             File report = report(outcomeOf(detection));
@@ -169,7 +173,9 @@ public class TaskOutcomesTest {
             var result = ((JobOutcome.Completed<ManualTransientInspectionTask.Result>) inspected).result();
             assertEquals(3, result.frames().size());
             assertSame(first, result.files()[0]);
-            assertEquals("updated after admission", result.files()[0].getFitsHeader().get("OBJECT"));
+            assertNull(result.files()[0].getFitsHeader().get("OBJECT"));
+            assertSame(replaced, session.getFiles()[0]);
+            assertEquals("updated after admission", session.getFiles()[0].getFitsHeader().get("OBJECT"));
         }
     }
 

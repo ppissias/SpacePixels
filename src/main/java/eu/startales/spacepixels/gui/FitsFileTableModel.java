@@ -32,7 +32,7 @@ public class FitsFileTableModel extends AbstractTableModel {
     private final String[] columns = {"Filename", "Mono/Color", "Width", "Height", "Time (UTC)", "Exposure", "Location", "Loc Link", "Solved"};
 
     public FitsFileTableModel(FitsFileInformation[] fitsfiles) {
-        this.fitsfiles = fitsfiles;
+        this.fitsfiles = fitsfiles == null ? new FitsFileInformation[0] : fitsfiles.clone();
     }
 
     // --- 2. NEW EXPLICIT GETTER ---
@@ -61,12 +61,31 @@ public class FitsFileTableModel extends AbstractTableModel {
 
     /** The row that shows this file object, or -1 when the table shows other files. */
     public int rowOf(FitsFileInformation file) {
+        if (file == null) {
+            return -1;
+        }
         for (int row = 0; row < fitsfiles.length; row++) {
             if (fitsfiles[row] == file) {
                 return row;
             }
         }
+        for (int row = 0; row < fitsfiles.length; row++) {
+            if (fitsfiles[row] != null && fitsfiles[row].getFilePath() != null
+                    && fitsfiles[row].getFilePath().equals(file.getFilePath())) {
+                return row;
+            }
+        }
         return -1;
+    }
+
+    /** Replaces the row of {@code previous} with {@code updated} and notifies listeners, returning the updated row or -1. */
+    public int replaceFile(FitsFileInformation previous, FitsFileInformation updated) {
+        int row = rowOf(previous);
+        if (row >= 0) {
+            fitsfiles[row] = updated;
+            fireTableRowsUpdated(row, row);
+        }
+        return row;
     }
 
     public void refreshRow(int rowIndex) {

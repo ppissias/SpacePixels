@@ -78,6 +78,8 @@ SP-08B moves map rendering to `ReportMaps` and text formatting to `ReportFormat`
 
 ### SP-11. Fewer FITS helper classes; immutable frame metadata
 
+**Implementation split.** SP-11A makes `FitsFileInformation` immutable with construction-time normalised timestamps and session-owned WCS metadata replacement. SP-11B covers the FITS input helper consolidation and naming. The proposal remains pending until both parts are reviewed.
+
 **Problem.**
 - FITS input is spread over small static classes: `FitsFiles` (32 lines), `FitsImages`, `FitsFormatChecker`, `FitsSequenceValidator`, `FitsPreparationService` (all static, despite the name), `FitsPixelConverter` and `DetectionInputPreparation`.
 - "Service" means an instance with collaborators in some classes and a static utility in others.

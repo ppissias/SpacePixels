@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -22,11 +23,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Mutable metadata container for one imported FITS file, including basic image dimensions,
- * monochrome/color state, raw header cards, and normalized observation timestamps used by the
- * detection pipeline and report export.
+ * Immutable metadata descriptor for one imported FITS file, including basic image dimensions,
+ * monochrome/color state, unmodifiable header cards, and normalized observation timestamps used by
+ * the detection pipeline and report export.
  */
-public class FitsFileInformation {
+public final class FitsFileInformation {
     private static final DateTimeFormatter PIPELINE_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS 'UTC'").withZone(ZoneOffset.UTC);
     private static final Pattern COMBINED_DATE_TIME_PATTERN = Pattern.compile(
@@ -51,84 +52,76 @@ public class FitsFileInformation {
         }
     }
 
-    private String filePath;
-    private String fileName;
-    private boolean monochrome;
-    private int sizeWidth;
-    private int sizeHeight;
+    private final String filePath;
+    private final String fileName;
+    private final boolean monochrome;
+    private final int sizeWidth;
+    private final int sizeHeight;
+    private final Map<String, String> fitsHeader;
+    private final ObservationTimestampParseResult observationTimestamp;
 
-    private final Map<String, String> fitsHeader = new HashMap<String, String>();
+    /**
+     * Builds an immutable FITS metadata descriptor with an empty header map.
+     */
+    public FitsFileInformation(String filePath, String fileName, boolean monochrome, int sizeWidth, int sizeHeight) {
+        this(filePath, fileName, monochrome, sizeWidth, sizeHeight, Collections.emptyMap());
+    }
 
+    /**
+     * Builds an immutable FITS metadata descriptor, copying {@code fitsHeader} into an unmodifiable map and
+     * normalizing its observation timestamp at construction.
+     */
+    public FitsFileInformation(String filePath, String fileName, boolean monochrome, int sizeWidth, int sizeHeight,
+                               Map<String, String> fitsHeader) {
+        this.filePath = filePath;
+        this.fileName = fileName;
+        this.monochrome = monochrome;
+        this.sizeWidth = sizeWidth;
+        this.sizeHeight = sizeHeight;
+        this.fitsHeader = freezeHeader(fitsHeader);
+        this.observationTimestamp = parseObservationTimestamp(this.fitsHeader);
+    }
+
+    /**
+     * Returns a new immutable descriptor for the same file and dimensions with {@code newFitsHeader}.
+     */
+    public FitsFileInformation withFitsHeader(Map<String, String> newFitsHeader) {
+        return new FitsFileInformation(filePath, fileName, monochrome, sizeWidth, sizeHeight, newFitsHeader);
+    }
+
+    private static Map<String, String> freezeHeader(Map<String, String> header) {
+        if (header == null || header.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return Collections.unmodifiableMap(new HashMap<>(header));
+    }
 
     public String getFilePath() {
         return filePath;
-    }
-
-    public void setFilePath(String filePath) {
-        this.filePath = filePath;
     }
 
     public boolean isMonochrome() {
         return monochrome;
     }
 
-    public void setMonochrome(boolean monochrome) {
-        this.monochrome = monochrome;
-    }
-
     public int getSizeWidth() {
         return sizeWidth;
-    }
-
-    public void setSizeWidth(int sizeWidth) {
-        this.sizeWidth = sizeWidth;
     }
 
     public int getSizeHeight() {
         return sizeHeight;
     }
 
-    public void setSizeHeight(int sizeHeight) {
-        this.sizeHeight = sizeHeight;
-    }
-
-
-    /**
-     * @param filePath
-     * @param fileName
-     * @param monochrome
-     * @param sizeWidth
-     * @param sizeHeight
-     */
-    public FitsFileInformation(String filePath, String fileName, boolean monochrome, int sizeWidth, int sizeHeight) {
-        super();
-        this.filePath = filePath;
-        this.fileName = fileName;
-        this.monochrome = monochrome;
-        this.sizeWidth = sizeWidth;
-        this.sizeHeight = sizeHeight;
-    }
-
     public String getFileName() {
         return fileName;
     }
 
-    public void setFileName(String fileName) {
-        this.fileName = fileName;
-    }
-
+    /**
+     * Returns an unmodifiable view of this frame's FITS header map.
+     */
     public Map<String, String> getFitsHeader() {
         return fitsHeader;
     }
-
-    /** Copies file identity, dimensions and header metadata for a run; no image pixels are loaded or retained. */
-    public FitsFileInformation snapshot() {
-        FitsFileInformation copy = new FitsFileInformation(filePath, fileName, monochrome, sizeWidth, sizeHeight);
-        copy.fitsHeader.putAll(fitsHeader);
-        return copy;
-    }
-
-    // --- NEW: Helper methods to extract display information from the FITS header map ---
 
     public String getRawObservationDateHeader() {
         return sanitizeHeaderValue(fitsHeader.get("DATE-OBS"));
@@ -139,9 +132,8 @@ public class FitsFileInformation {
     }
 
     public String getObservationDate() {
-        ObservationTimestampParseResult parseResult = parseObservationTimestamp();
-        if (parseResult.timestampMillis > 0L) {
-            return formatPipelineTimestamp(parseResult.timestampMillis);
+        if (observationTimestamp.timestampMillis > 0L) {
+            return formatPipelineTimestamp(observationTimestamp.timestampMillis);
         }
 
         String rawDisplay = getRawObservationDisplay();
@@ -149,11 +141,12 @@ public class FitsFileInformation {
     }
 
     /**
-     * Extracts and parses the ISO-8601 DATE-OBS and TIME-OBS headers.
+     * Returns the normalized ISO-8601 DATE-OBS / TIME-OBS timestamp parsed when this descriptor was built.
+     *
      * @return Epoch milliseconds, or -1 if the date is missing or malformed.
      */
     public long getObservationTimestamp() {
-        return parseObservationTimestamp().timestampMillis;
+        return observationTimestamp.timestampMillis;
     }
 
     public boolean hasDisplayableObservationDateWithoutUsableTimestamp() {
@@ -161,7 +154,7 @@ public class FitsFileInformation {
     }
 
     public String getObservationTimestampDiagnostics() {
-        ObservationTimestampParseResult parseResult = parseObservationTimestamp();
+        ObservationTimestampParseResult parseResult = observationTimestamp;
         StringBuilder sb = new StringBuilder();
         sb.append("rawDATE-OBS='").append(valueOrPlaceholder(getRawObservationDateHeader())).append("'");
         sb.append(", rawTIME-OBS='").append(valueOrPlaceholder(getRawObservationTimeHeader())).append("'");
@@ -187,7 +180,7 @@ public class FitsFileInformation {
     public String getExposure() {
         String exp = fitsHeader.get("EXPTIME");
         if (exp == null) exp = fitsHeader.get("EXPOSURE"); // Fallback for older FITS standard
-        
+
         if (exp != null) {
             exp = exp.replace("'", "").trim();
             try {
@@ -207,7 +200,7 @@ public class FitsFileInformation {
     public long getExposureDurationMillis() {
         String exp = fitsHeader.get("EXPTIME");
         if (exp == null) exp = fitsHeader.get("EXPOSURE"); // Fallback for older FITS standard
-        
+
         if (exp != null) {
             exp = exp.replace("'", "").trim();
             try {
@@ -223,11 +216,11 @@ public class FitsFileInformation {
     public String getLocation() {
         String lat = firstCoordinateHeader("SITELAT", "OBSGEO-B", "LAT-OBS");
         String lon = firstCoordinateHeader("SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS");
-        
+
         if (lat != null && lon != null) {
             return lat + " / " + lon;
         }
-        
+
         String obs = sanitizeHeaderValue(fitsHeader.get("OBSERVAT"));
         if (obs != null) {
             return obs;
@@ -293,8 +286,8 @@ public class FitsFileInformation {
         return null;
     }
 
-    private ObservationTimestampParseResult parseObservationTimestamp() {
-        String dateObs = getRawObservationDateHeader();
+    private static ObservationTimestampParseResult parseObservationTimestamp(Map<String, String> header) {
+        String dateObs = sanitizeHeaderValue(header.get("DATE-OBS"));
         if (dateObs == null || dateObs.isEmpty()) {
             return new ObservationTimestampParseResult(-1L, null, null, "DATE-OBS missing");
         }
@@ -303,7 +296,7 @@ public class FitsFileInformation {
             return parseCombinedDateTime(dateObs, "DATE-OBS as combined date/time");
         }
 
-        String timeObs = getRawObservationTimeHeader();
+        String timeObs = sanitizeHeaderValue(header.get("TIME-OBS"));
         if (timeObs != null && !timeObs.isEmpty()) {
             return parseCombinedDateTime(dateObs + "T" + timeObs, "DATE-OBS + TIME-OBS as combined date/time");
         }
@@ -319,7 +312,7 @@ public class FitsFileInformation {
         }
     }
 
-    private ObservationTimestampParseResult parseCombinedDateTime(String candidateInput, String strategy) {
+    private static ObservationTimestampParseResult parseCombinedDateTime(String candidateInput, String strategy) {
         String normalizedInput = normalizeCombinedDateTime(candidateInput);
         if (normalizedInput == null) {
             return new ObservationTimestampParseResult(-1L, candidateInput, strategy, "Could not normalize date/time value");

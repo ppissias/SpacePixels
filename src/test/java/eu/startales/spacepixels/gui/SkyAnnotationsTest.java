@@ -48,6 +48,44 @@ public class SkyAnnotationsTest {
         });
     }
 
+    @Test
+    public void wcsHeaderReplacementUpdatesTableAndViewerReadout() throws Exception {
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+            var unsolved = new eu.startales.spacepixels.util.FitsFileInformation(
+                    "frame_01.fit", "frame_01.fit", true, 2000, 1600);
+            var second = new eu.startales.spacepixels.util.FitsFileInformation(
+                    "frame_02.fit", "frame_02.fit", true, 2000, 1600);
+            var tableModel = new FitsFileTableModel(new eu.startales.spacepixels.util.FitsFileInformation[]{unsolved, second});
+            assertEquals("No", tableModel.getValueAt(0, FitsFileTableModel.COL_SOLVED));
+
+            SkyAnnotations sky = new SkyAnnotations(new FrameView());
+            ViewerSupport.CursorReadout cursorReadout = new ViewerSupport.CursorReadout();
+            sky.setOnSolutionChanged(cursorReadout::forgetSolutions);
+            var files = new eu.startales.spacepixels.util.FitsFileInformation[]{unsolved, second};
+            cursorReadout.reset(files, sky::solutionFor);
+            sky.attach(files);
+
+            var displayFrame = eu.startales.spacepixels.util.BlinkSequence.fromMono(unsolved, new short[1600][2000]);
+            var secondDisplay = eu.startales.spacepixels.util.BlinkSequence.fromMono(second, new short[1600][2000]);
+            java.awt.Point center = new java.awt.Point(1000, 800);
+            String before = cursorReadout.describe(displayFrame, center);
+            assertTrue(before, !before.contains("RA "));
+
+            var solved = unsolved.withFitsHeader(header());
+            assertEquals(0, tableModel.replaceFile(unsolved, solved));
+            assertEquals("Yes", tableModel.getValueAt(0, FitsFileTableModel.COL_SOLVED));
+            assertEquals(solved, tableModel.getFitsFileAt(0));
+
+            sky.replaceFrame(unsolved, solved);
+            String afterSolvedFrame = cursorReadout.describe(displayFrame.withInfo(solved), center);
+            assertTrue(afterSolvedFrame, afterSolvedFrame.contains("RA ") && afterSolvedFrame.contains("Dec "));
+            String afterAlignedSecond = cursorReadout.describe(secondDisplay, center);
+            assertTrue("aligned frames in the viewer also resolve the new WCS solution",
+                    afterAlignedSecond.contains("RA ") && afterAlignedSecond.contains("Dec "));
+            sky.detach();
+        });
+    }
+
     /** 1.5″ per pixel, north up and east left, centre at pixel (999.5, 799.5) of a 2000 × 1600 frame. */
     private static final double SCALE_DEG = 1.5 / 3600;
     private static final WcsCoordinateTransformer TRANSFORMER = WcsCoordinateTransformer.fromHeader(header());

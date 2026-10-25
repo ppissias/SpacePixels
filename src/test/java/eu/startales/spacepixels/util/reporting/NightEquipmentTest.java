@@ -212,8 +212,8 @@ public class NightEquipmentTest {
         NightEquipment plain = NightEquipment.measure(frames(vignettedSky(0), 4), kept, null, masterStars(), null, null);
         eu.startales.spacepixels.util.FitsFileInformation[] files = new eu.startales.spacepixels.util.FitsFileInformation[4];
         for (int f = 0; f < files.length; f++) {
-            files[f] = new eu.startales.spacepixels.util.FitsFileInformation("f" + f + ".fit", "f" + f + ".fit", true, WIDTH, HEIGHT);
-            files[f].getFitsHeader().put("SPOFFSET", "2000");
+            files[f] = new eu.startales.spacepixels.util.FitsFileInformation("f" + f + ".fit", "f" + f + ".fit", true, WIDTH, HEIGHT,
+                    java.util.Map.of("SPOFFSET", "2000"));
         }
         NightEquipment offset = NightEquipment.measure(frames(vignettedSky(2000), 4), kept, files, masterStars(), null, null);
 

@@ -24,7 +24,7 @@ public class ReportExporterTest {
     @Test public void requestOwnsMetadataAndConfigButSharesImageBuffers() throws Exception {
         File directory = temporary.newFolder();
         FitsFileInformation[] files = files(directory);
-        files[0].getFitsHeader().put("EXPTIME", "60");
+        files[0] = files[0].withFitsHeader(java.util.Map.of("EXPTIME", "60"));
         var config = new DetectionConfig();
         double sigma = config.detectionSigmaMultiplier;
         short[][] image = new short[24][24];
@@ -33,10 +33,11 @@ public class ReportExporterTest {
         var request = new ReportRequest(PipelineResult.builder().build(), frames, files, directory, config,
                 ReportRunContext.capture(DetectionRunOptions.defaults(), files), null, null);
         frames.clear();
-        files[0].getFitsHeader().put("EXPTIME", "120");
+        files[0] = files[0].withFitsHeader(java.util.Map.of("EXPTIME", "120"));
         files[0] = null;
         config.detectionSigmaMultiplier = sigma + 1;
-        request.fitsFiles()[0].getFitsHeader().clear();
+        assertThrows(UnsupportedOperationException.class, () -> request.fitsFiles()[0].getFitsHeader().clear());
+        request.fitsFiles()[0] = null;
         request.config().detectionSigmaMultiplier = sigma + 2;
         assertEquals("60", request.fitsFiles()[0].getFitsHeader().get("EXPTIME"));
         assertEquals(sigma, request.config().detectionSigmaMultiplier, 0);

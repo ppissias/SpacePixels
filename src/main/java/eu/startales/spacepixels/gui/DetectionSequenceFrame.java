@@ -68,9 +68,23 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
 
     /** Shows the frames of the session from {@code startIndex}. */
     public void openSequence(FitsFileInformation[] files, int startIndex, StretchPanel stretchPanel) {
-        this.files = files;
+        this.files = files == null ? null : files.clone();
         if (sessions.current() != null) setSkyCatalogueModel(sessions.current().getSkyCatalogue());
-        openAt(startIndex, stretchPanel, files);
+        openAt(startIndex, stretchPanel, this.files);
+        showLastRun();
+    }
+
+    @Override
+    protected void onFrameMetadataReplaced(FitsFileInformation previous, FitsFileInformation updated) {
+        if (files == null) {
+            return;
+        }
+        for (int i = 0; i < files.length; i++) {
+            if (files[i] == previous || (files[i] != null && files[i].getFilePath() != null
+                    && files[i].getFilePath().equals(previous.getFilePath()))) {
+                files[i] = updated;
+            }
+        }
         showLastRun();
     }
 

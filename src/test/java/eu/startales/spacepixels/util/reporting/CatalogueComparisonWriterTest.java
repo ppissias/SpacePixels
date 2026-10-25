@@ -102,9 +102,8 @@ public class CatalogueComparisonWriterTest {
     }
 
     private static FitsFileInformation file(String name, String filter) {
-        FitsFileInformation file = new FitsFileInformation("unused", name, true, 10, 10);
-        file.getFitsHeader().put("FILTER", filter);
-        return file;
+        return new FitsFileInformation("unused", name, true, 10, 10,
+                filter == null ? java.util.Collections.emptyMap() : java.util.Collections.singletonMap("FILTER", filter));
     }
 
     private static PipelineTelemetry.PhotometryFrameStat frame(int index, String name, double jd) {

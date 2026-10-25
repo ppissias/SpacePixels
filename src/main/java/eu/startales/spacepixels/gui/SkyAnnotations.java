@@ -121,7 +121,7 @@ final class SkyAnnotations {
     }
 
     void attach(FitsFileInformation[] files) {
-        this.files = files;
+        this.files = files == null ? null : files.clone();
         if (!attached) {
             model.addListener(catalogueListener);
             model.addCorrectionListener(correctionListener);
@@ -152,6 +152,29 @@ final class SkyAnnotations {
         if (annotateBox.isSelected()) {
             view.setSkyMarks(marksFor(info), catalogue.starMagnitudeLimit);
         }
+    }
+
+    /** Replaces a session frame's metadata after a WCS write and refreshes sky marks and solution listeners. */
+    void replaceFrame(FitsFileInformation previous, FitsFileInformation updated) {
+        if (files != null && previous != null && updated != null) {
+            for (int i = 0; i < files.length; i++) {
+                if (files[i] == previous || sameFrame(files[i], previous)) {
+                    files[i] = updated;
+                }
+            }
+        }
+        if (shownInfo == previous || sameFrame(shownInfo, previous)) {
+            shownInfo = updated;
+        }
+        marksBySolution.clear();
+        apply();
+        onSolutionChanged.run();
+    }
+
+    private static boolean sameFrame(FitsFileInformation first, FitsFileInformation second) {
+        return first != null && second != null
+                && first.getFilePath() != null
+                && first.getFilePath().equals(second.getFilePath());
     }
 
     /** Key A. */

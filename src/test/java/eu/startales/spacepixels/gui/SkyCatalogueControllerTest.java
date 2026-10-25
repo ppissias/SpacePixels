@@ -107,7 +107,7 @@ public class SkyCatalogueControllerTest {
     /** Importing saved stars without a correction runs only the fit against the already imported metadata. */
     @Test public void restoringSavedCatalogueFitsWithoutFetchingAgain() throws Exception {
         ProcessingSession session = session();
-        session.getFiles()[0].getFitsHeader().putAll(Map.of(
+        session.replaceFrameHeader(session.getFiles()[0], Map.of(
                 "CTYPE1", "RA---TAN", "CTYPE2", "DEC--TAN", "CRPIX1", "10", "CRPIX2", "10",
                 "CRVAL1", "120", "CRVAL2", "30", "CD1_1", "0.001", "CD1_2", "0", "CD2_1", "0", "CD2_2", "0.001"));
         SkyCatalogue saved = catalogue(true);

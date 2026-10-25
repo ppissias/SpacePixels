@@ -187,6 +187,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private SkyCatalogueController skyController;
 
     private DetectionSequenceFrame detectionSequenceFrame;
+    private TransientInspectionFrame transientInspectionFrame;
 
     /**
      * Builds the main panel from the window's session, jobs and import. The stretch and detection panels are attached
@@ -609,7 +610,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                         stretch);
                 frame.setSkyCatalogueModel(skyCatalogue());
                 frame.setMarkerSettings(() -> detectionSettings.visualizationSettings());
-                if (!frame.open(sessions.current() == null ? null : sessions.current().getTrackOverlay())) {
+                if (frame.open(sessions.current() == null ? null : sessions.current().getTrackOverlay())) {
+                    transientInspectionFrame = frame;
+                } else {
                     JOptionPane.showMessageDialog(null, "The detection kept no frames to inspect.",
                             "Manual Transient Inspection", JOptionPane.INFORMATION_MESSAGE);
                 }
@@ -1667,10 +1670,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     /** The end of writing the WCS solution: the frame's row shows its new header, or the error says why it is unchanged. */
     private void showWcsWriteOutcome(FitsFileInformation fileInfo, JobOutcome<Map<String, String>> outcome) {
         if (outcome instanceof JobOutcome.Completed<Map<String, String>> completed) {
-            fileInfo.getFitsHeader().clear();
-            fileInfo.getFitsHeader().putAll(completed.result());
-            FitsFileTableModel model = (FitsFileTableModel) table.getModel();
-            model.refreshRow(model.rowOf(fileInfo));
+            applyWcsHeaderReplacement(fileInfo, completed.result());
             statusLabel.setText("FITS header updated with WCS solution");
             JOptionPane.showMessageDialog(this, "FITS header successfully updated.", "Success", JOptionPane.INFORMATION_MESSAGE);
         } else if (outcome instanceof JobOutcome.Failed<Map<String, String>> failed) {
@@ -1678,6 +1678,33 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             FailureDialog.show(this, "Error", "Failed to update FITS header: " + failed.reason(), failed.cause());
         }
         refreshCommands();
+    }
+
+    /**
+     * Replaces {@code fileInfo}'s FITS header in the current session, frame table, selection and open viewers with
+     * {@code updatedHeader}, returning the replacement descriptor.
+     */
+    FitsFileInformation applyWcsHeaderReplacement(FitsFileInformation fileInfo, Map<String, String> updatedHeader) {
+        ProcessingSession session = sessions.current();
+        FitsFileInformation updated = session == null
+                ? fileInfo.withFitsHeader(updatedHeader)
+                : session.replaceFrameHeader(fileInfo, updatedHeader);
+        FitsFileTableModel model = (FitsFileTableModel) table.getModel();
+        model.replaceFile(fileInfo, updated);
+        if (session != null) {
+            session.setSelection(getSelectedFilesInformation());
+        }
+        if (detectionSequenceFrame != null) {
+            detectionSequenceFrame.replaceFrameMetadata(fileInfo, updated);
+        }
+        if (stretch != null) {
+            stretch.replaceFrameMetadata(fileInfo, updated);
+        }
+        if (transientInspectionFrame != null) {
+            transientInspectionFrame.replaceFrameMetadata(fileInfo, updated);
+        }
+        blink.replaceFrameMetadata(fileInfo, updated);
+        return updated;
     }
 
     /** The end of Convert to Mono: offers to import the new mono folder, or says what went wrong. */

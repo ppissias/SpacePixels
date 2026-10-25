@@ -168,8 +168,8 @@ public class BlinkFrame extends JFrame {
         bindStretch(stretchPanel);
         release();
         this.sequence = sequence;
-        this.files = files;
-        FitsFileInformation[] alignedFiles = sessionFiles != null ? sessionFiles : files;
+        this.files = files == null ? null : files.clone();
+        FitsFileInformation[] alignedFiles = sessionFiles != null ? sessionFiles : this.files;
         cursorReadout.reset(alignedFiles, sky::solutionFor);
         sky.attach(alignedFiles);
         this.skipped = new boolean[sequence.getFrames().size()];
@@ -213,6 +213,23 @@ public class BlinkFrame extends JFrame {
         toFront();
         view.requestFocusInWindow();
         play();
+    }
+
+    /** Updates the blink viewer's frame metadata after a session WCS write when the viewer is open. */
+    void replaceFrameMetadata(FitsFileInformation previous, FitsFileInformation updated) {
+        if (previous == null || updated == null || !open || sequence == null) {
+            return;
+        }
+        sequence = sequence.replaceFrameInfo(previous, updated);
+        if (files != null) {
+            for (int i = 0; i < files.length; i++) {
+                if (files[i] == previous || (files[i] != null && files[i].getFilePath() != null
+                        && files[i].getFilePath().equals(previous.getFilePath()))) {
+                    files[i] = updated;
+                }
+            }
+        }
+        sky.replaceFrame(previous, updated);
     }
 
     /** Shows the window at once with the progress of reading these frames; {@link #open} then starts the blink. */

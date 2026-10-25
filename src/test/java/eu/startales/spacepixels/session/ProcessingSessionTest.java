@@ -104,6 +104,54 @@ public class ProcessingSessionTest {
     }
 
     @Test
+    public void wcsHeaderReplacementUpdatesSessionAndSelectionWhileAdmittedRunsKeepTheirSnapshot() throws Exception {
+        ApplicationSettings settings = settings();
+        try (ProcessingSession session = session("wcs-replace", settings);
+             ProcessingSession other = session("other-session", settings)) {
+            FitsFileInformation unsolved = session.getFiles()[0];
+            session.setSelection(new FitsFileInformation[]{unsolved});
+            assertFalse(session.hasPlateSolvedFrame());
+
+            var admittedRun = eu.startales.spacepixels.util.reporting.ReportRunContext.capture(
+                    eu.startales.spacepixels.config.DetectionRunOptions.defaults(), session.getFiles());
+
+            java.util.Map<String, String> wcsHeader = java.util.Map.of(
+                    "CTYPE1", "RA---TAN",
+                    "CTYPE2", "DEC--TAN",
+                    "CRPIX1", "5.5",
+                    "CRPIX2", "5.5",
+                    "CRVAL1", "150.0",
+                    "CRVAL2", "20.0",
+                    "CD1_1", "-0.0004166667",
+                    "CD1_2", "0.0",
+                    "CD2_1", "0.0",
+                    "CD2_2", "0.0004166667");
+            FitsFileInformation solved = session.replaceFrameHeader(unsolved, wcsHeader);
+
+            assertNotSame(unsolved, solved);
+            assertFalse(unsolved.isWcsSolved());
+            assertTrue(solved.isWcsSolved());
+            assertTrue(session.hasPlateSolvedFrame());
+            assertSame(solved, session.getFiles()[0]);
+            assertSame(solved, session.getSelection().get(0));
+
+            assertSame(unsolved, admittedRun.filesInformation()[0]);
+            assertFalse(admittedRun.filesInformation()[0].isWcsSolved());
+
+            var nextRun = eu.startales.spacepixels.util.reporting.ReportRunContext.capture(
+                    eu.startales.spacepixels.config.DetectionRunOptions.defaults(), session.getFiles());
+            assertSame(solved, nextRun.filesInformation()[0]);
+            assertTrue(nextRun.filesInformation()[0].isWcsSolved());
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> session.replaceFrameHeader(other.getFiles()[0], wcsHeader));
+            session.close();
+            assertThrows(IllegalStateException.class,
+                    () -> session.replaceFrameHeader(solved, wcsHeader));
+        }
+    }
+
+    @Test
     public void handoverRejectsLateUpdatesAndStaleImportsWithoutConstructingTheWindow() throws Exception {
         ApplicationSettings settings = settings();
         ProcessingSession first = session("first", settings);

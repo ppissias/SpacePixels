@@ -120,14 +120,16 @@ public final class XisfImageConverter {
             String colorSpace = imageElement.hasAttribute("colorSpace") ? imageElement.getAttribute("colorSpace") : "Gray";
 
             // Same keywords and parser as the converted FITS file, so this agrees with the FITS import check.
-            FitsFileInformation information = new FitsFileInformation(xisfFile.getAbsolutePath(), xisfFile.getName(),
-                    geometry.channels == 1, geometry.width, geometry.height);
+            Map<String, String> headerMap = new HashMap<>();
+
             for (FitsKeyword keyword : extractFitsKeywords(imageElement.getOwnerDocument().getDocumentElement(), imageElement)) {
                 if (keyword.name != null && !keyword.name.isBlank()) {
                     String value = keyword.value == null ? "" : keyword.value.trim();
-                    information.getFitsHeader().put(keyword.name.trim(), decodeFitsString(value));
+                    headerMap.put(keyword.name.trim(), decodeFitsString(value));
                 }
             }
+            FitsFileInformation information = new FitsFileInformation(xisfFile.getAbsolutePath(), xisfFile.getName(),
+                    geometry.channels == 1, geometry.width, geometry.height, headerMap);
             return new ImageType(geometry, sampleFormat, colorSpace, information.getObservationTimestamp() != -1L,
                     information.getExposureDurationMillis());
         }

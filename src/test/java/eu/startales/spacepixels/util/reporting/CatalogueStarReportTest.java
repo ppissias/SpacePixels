@@ -25,6 +25,7 @@ import java.io.File;
 import java.net.URI;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -39,12 +40,12 @@ public class CatalogueStarReportTest {
         FitsFileInformation[] files = new FitsFileInformation[3];
         List<short[][]> frames = new ArrayList<>();
         for (int i = 0; i < files.length; i++) {
-            files[i] = new FitsFileInformation(new File(input, "frame" + i + ".fit").toString(), "frame" + i + ".fit", true, 160, 120);
-            var h = files[i].getFitsHeader();
+            var h = new HashMap<String, String>();
             h.put("DATE-OBS", "2026-10-01T00:0" + (i * 2) + ":00"); h.put("EXPTIME", "120"); h.put("FILTER", "L");
             h.put("CTYPE1", "RA---TAN"); h.put("CTYPE2", "DEC--TAN"); h.put("CRPIX1", "80.5"); h.put("CRPIX2", "60.5");
             h.put("CRVAL1", "150"); h.put("CRVAL2", "20");
             h.put("CD1_1", "-0.0004166667"); h.put("CD1_2", "0"); h.put("CD2_1", "0"); h.put("CD2_2", "0.0004166667");
+            files[i] = new FitsFileInformation(new File(input, "frame" + i + ".fit").toString(), "frame" + i + ".fit", true, 160, 120, h);
             short[][] data = new short[120][160];
             for (int y = 0; y < 120; y++) for (int x = 0; x < 160; x++) data[y][x] = (short) (-32000 + (x * y) % 100);
             frames.add(data);
@@ -97,7 +98,13 @@ public class CatalogueStarReportTest {
             if (mode.equals("legacy")) { catalogue.namedStars.clear(); catalogue.variables.clear(); gaia.sourceId = null; }
             SkyCatalogueStore.save(input, catalogue);
             if (mode.equals("no-catalogue")) Files.delete(new File(input, SkyCatalogue.FILE_NAME).toPath());
-            if (mode.equals("unsolved")) for (var file : files) file.getFitsHeader().remove("CRVAL1");
+            if (mode.equals("unsolved")) {
+                for (int i = 0; i < files.length; i++) {
+                    var h = new HashMap<>(files[i].getFitsHeader());
+                    h.remove("CRVAL1");
+                    files[i] = files[i].withFitsHeader(h);
+                }
+            }
             File output = temporary.newFolder(mode);
             ReportExporter.export(new ReportRequest(result, frames, files, output, config,
                     ReportRunContext.capture(DetectionRunOptions.capture(new AppConfig(),

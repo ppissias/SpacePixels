@@ -24,10 +24,8 @@ public class ReportExportConsistencyTest {
         FitsFileInformation[] files = new FitsFileInformation[3];
         List<short[][]> frames = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
-            files[i] = new FitsFileInformation(new File(temporary.getRoot(), "frame" + i + ".fit").toString(), "frame" + i + ".fit", true, 160, 120);
-            files[i].getFitsHeader().put("DATE-OBS", "2026-10-01T00:0" + (2 * i) + ":00");
-            files[i].getFitsHeader().put("EXPTIME", "120");
-            files[i].getFitsHeader().put("FILTER", i == 0 ? "R" : "L");
+            files[i] = new FitsFileInformation(new File(temporary.getRoot(), "frame" + i + ".fit").toString(), "frame" + i + ".fit", true, 160, 120,
+                    Map.of("DATE-OBS", "2026-10-01T00:0" + (2 * i) + ":00", "EXPTIME", "120", "FILTER", i == 0 ? "R" : "L"));
             short[][] pixels = new short[120][160];
             for (int y = 0; y < 120; y++) for (int x = 0; x < 160; x++) pixels[y][x] = (short) (-32000 + (x * y) % 100);
             frames.add(pixels);
@@ -109,9 +107,8 @@ public class ReportExportConsistencyTest {
         FitsFileInformation[] files = new FitsFileInformation[3];
         List<short[][]> frames = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
-            files[i] = new FitsFileInformation("frame" + i + ".fit", "frame" + i + ".fit", true, 160, 120);
-            files[i].getFitsHeader().put("DATE-OBS", "2026-10-01T00:0" + (2 * i) + ":00");
-            files[i].getFitsHeader().put("EXPTIME", "120");
+            files[i] = new FitsFileInformation("frame" + i + ".fit", "frame" + i + ".fit", true, 160, 120,
+                    Map.of("DATE-OBS", "2026-10-01T00:0" + (2 * i) + ":00", "EXPTIME", "120"));
             short[][] pixels = new short[120][160];
             for (int y = 0; y < 120; y++) for (int x = 0; x < 160; x++) pixels[y][x] = (short) (-32000 + (x * y) % 100);
             frames.add(pixels);

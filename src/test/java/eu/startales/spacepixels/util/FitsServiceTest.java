@@ -45,8 +45,13 @@ public class FitsServiceTest {
             FitsFileInformation[] exposed = session.getFiles();
             exposed[0] = null;
             assertSame(first, session.getFiles()[0]);
-            first.getFitsHeader().put("OBJECT", "shared");
+            assertThrows(UnsupportedOperationException.class, () -> first.getFitsHeader().put("OBJECT", "shared"));
+            java.util.Map<String, String> updatedHeader = new java.util.HashMap<>(first.getFitsHeader());
+            updatedHeader.put("OBJECT", "shared");
+            FitsFileInformation replaced = session.replaceFrameHeader(first, updatedHeader);
+            assertSame(replaced, session.getFiles()[0]);
             assertEquals("shared", session.getFiles()[0].getFitsHeader().get("OBJECT"));
+            assertNull("previous immutable metadata snapshot is unchanged", first.getFitsHeader().get("OBJECT"));
             assertNotEquals("the importer retains no metadata", "shared", strict.readFiles()[0].getFitsHeader().get("OBJECT"));
             assertTrue(session.hasPlateSolvedFrame());
             session.close();

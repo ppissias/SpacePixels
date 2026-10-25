@@ -33,27 +33,29 @@ public class VariableStarOverlayTest {
     }
 
     @Test public void doesNotReuseCandidatesForAnotherSessionOrFrameSize() throws Exception {
-        FitsFileInformation file = file(folder.newFolder("first"));
+        File firstFolder = folder.newFolder("first");
+        FitsFileInformation file = file(firstFolder);
         VariableStarOverlay overlay = VariableStarOverlay.fromCandidates(Collections.singletonList(star("HIGH_CONFIDENCE", 1)),
                 new FitsFileInformation[]{file}, null, null);
         assertFalse(overlay.covers(file(folder.newFolder("second"))));
-        file.setSizeWidth(201);
-        assertFalse(overlay.covers(file));
+        FitsFileInformation resized = new FitsFileInformation(
+                new File(firstFolder, "same-name.fit").getAbsolutePath(), "same-name.fit", true, 201, 160);
+        assertFalse(overlay.covers(resized));
     }
 
     @Test public void namesCandidatesFromTheMatchingSavedCatalogue() throws Exception {
         File session = folder.newFolder("named");
-        FitsFileInformation file = file(session);
-        file.getFitsHeader().put("CTYPE1", "RA---TAN");
-        file.getFitsHeader().put("CTYPE2", "DEC--TAN");
-        file.getFitsHeader().put("CRPIX1", "100.5");
-        file.getFitsHeader().put("CRPIX2", "80.5");
-        file.getFitsHeader().put("CRVAL1", "150");
-        file.getFitsHeader().put("CRVAL2", "20");
-        file.getFitsHeader().put("CD1_1", "-0.0002777777778");
-        file.getFitsHeader().put("CD1_2", "0");
-        file.getFitsHeader().put("CD2_1", "0");
-        file.getFitsHeader().put("CD2_2", "0.0002777777778");
+        FitsFileInformation file = file(session).withFitsHeader(java.util.Map.of(
+                "CTYPE1", "RA---TAN",
+                "CTYPE2", "DEC--TAN",
+                "CRPIX1", "100.5",
+                "CRPIX2", "80.5",
+                "CRVAL1", "150",
+                "CRVAL2", "20",
+                "CD1_1", "-0.0002777777778",
+                "CD1_2", "0",
+                "CD2_1", "0",
+                "CD2_2", "0.0002777777778"));
         SkyCatalogue catalogue = new SkyCatalogue();
         catalogue.field = SkyField.of(WcsCoordinateTransformer.fromHeader(file.getFitsHeader()), 200, 160);
         SkyCatalogue.VariableStar match = new SkyCatalogue.VariableStar();

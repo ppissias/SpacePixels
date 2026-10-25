@@ -27,6 +27,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -37,7 +38,11 @@ public class AnomalySectionWriterTest {
     private static final long START = Instant.parse("2026-10-01T00:00:00Z").toEpochMilli();
 
     @Test public void satelliteQueryCoversTheWholeExposureIncludingFractionalSecondsAndFitsFallback() throws Exception {
-        var context = context(5, 2, AnomalyType.PEAK_SIGMA, files -> files[2].getFitsHeader().put("EXPTIME", "120.25"));
+        var context = context(5, 2, AnomalyType.PEAK_SIGMA, files -> {
+            var h = new HashMap<>(files[2].getFitsHeader());
+            h.put("EXPTIME", "120.25");
+            files[2] = files[2].withFitsHeader(h);
+        });
         var point = context.anomalies.get(0).object;
         point.timestamp = -1;
         point.exposureDuration = -1;
@@ -68,7 +73,11 @@ public class AnomalySectionWriterTest {
                 WcsSolutionResolver.resolveUncorrected(null, context.fitsFiles), null, null, null, START);
         html = AstrometryIdentificationHtmlBuilder.buildAnomalySatCheckerHtml(noSite, point, "slot", "result.json");
         assertTrue(html.contains("observing location"));
-        context = context(1, 0, AnomalyType.PEAK_SIGMA, files -> files[0].getFitsHeader().remove("EXPTIME"));
+        context = context(1, 0, AnomalyType.PEAK_SIGMA, files -> {
+            var h = new HashMap<>(files[0].getFitsHeader());
+            h.remove("EXPTIME");
+            files[0] = files[0].withFitsHeader(h);
+        });
         point = context.anomalies.get(0).object;
         point.exposureDuration = -1;
         assertNull(SatCheckerQueryTargetFactory.buildAnomalySatCheckerQueryTarget(context.astrometryContext, point));
@@ -77,8 +86,10 @@ public class AnomalySectionWriterTest {
         assertFalse(html.contains("data-provider='satchecker'"));
         assertTrue(html.contains("<dt>Exposure end</dt><dd>Unknown</dd>"));
         context = context(1, 0, AnomalyType.PEAK_SIGMA, files -> {
-            files[0].getFitsHeader().put("EXPTIME", "60");
-            files[0].getFitsHeader().remove("DATE-OBS");
+            var h = new HashMap<>(files[0].getFitsHeader());
+            h.put("EXPTIME", "60");
+            h.remove("DATE-OBS");
+            files[0] = files[0].withFitsHeader(h);
         });
         point = context.anomalies.get(0).object;
         point.timestamp = -1;
@@ -199,12 +210,12 @@ public class AnomalySectionWriterTest {
         FitsFileInformation[] files = new FitsFileInformation[count];
         List<short[][]> frames = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            files[i] = new FitsFileInformation(new File(temporary.getRoot(), "frame" + i + ".fit").toString(), "frame" + i + ".fit", true, 160, 120);
-            var h = files[i].getFitsHeader();
+            var h = new HashMap<String, String>();
             h.put("DATE-OBS", Instant.ofEpochMilli(START + i * 120_000L).toString()); h.put("EXPTIME", "120");
             h.put("CTYPE1", "RA---TAN"); h.put("CTYPE2", "DEC--TAN");
             h.put("CRPIX1", "80.5"); h.put("CRPIX2", "60.5"); h.put("CRVAL1", "150"); h.put("CRVAL2", "20");
             h.put("CD1_1", "-0.0004166667"); h.put("CD1_2", "0"); h.put("CD2_1", "0"); h.put("CD2_2", "0.0004166667");
+            files[i] = new FitsFileInformation(new File(temporary.getRoot(), "frame" + i + ".fit").toString(), "frame" + i + ".fit", true, 160, 120, h);
             short[][] pixels = new short[120][160];
             for (short[] row : pixels) Arrays.fill(row, (short) (1000 + 500 * i - 32768));
             frames.add(pixels);

@@ -194,6 +194,32 @@ abstract class SequenceViewerFrame extends JFrame {
     protected void released() {
     }
 
+    /** Hook for subclasses to replace {@code previous} with {@code updated} in their frame array or map. */
+    protected void onFrameMetadataReplaced(FitsFileInformation previous, FitsFileInformation updated) {
+    }
+
+    /**
+     * Updates this viewer's frame metadata after a session WCS write, refreshing the shown frame, sky annotations
+     * and cursor readout when the viewer is open.
+     */
+    public final void replaceFrameMetadata(FitsFileInformation previous, FitsFileInformation updated) {
+        if (previous == null || updated == null) {
+            return;
+        }
+        onFrameMetadataReplaced(previous, updated);
+        if (!open) {
+            return;
+        }
+        if (shown != null && shown.frame != null && shownIndex >= 0 && shownIndex < frameCount()) {
+            FitsFileInformation currentInfo = infoOf(shownIndex);
+            if (currentInfo != null && shown.frame.getInfo() != currentInfo) {
+                shown = Result.of(shown.frame.withInfo(currentInfo), shown.detections, shown.summary);
+            }
+            frameLabel.setText(frameText(shownIndex, shown.summary));
+        }
+        sky.replaceFrame(previous, updated);
+    }
+
     /**
      * Shows the tracks of the last detection run on this session, as Blink does: the positions measured by that run,
      * drawn on the frames they were measured in. Nothing is detected again. Call it after {@link #openAt}.

@@ -156,10 +156,10 @@ public class VariableStarPresentationTest {
     private FitsFileInformation[] files(File input) {
         var files = new FitsFileInformation[9];
         for (int i = 0; i < 9; i++) {
-            files[i] = new FitsFileInformation(new File(input,"frame"+i+".fit").toString(),"frame"+i+".fit",true,160,120);
-            var h = files[i].getFitsHeader(); h.put("DATE-OBS", "2026-10-01T00:0"+i+":00"); h.put("EXPTIME","60");
+            var h = new HashMap<String, String>(); h.put("DATE-OBS", "2026-10-01T00:0"+i+":00"); h.put("EXPTIME","60");
             h.put("CTYPE1","RA---TAN"); h.put("CTYPE2","DEC--TAN"); h.put("CRPIX1","80.5"); h.put("CRPIX2","60.5");
             h.put("CRVAL1","150"); h.put("CRVAL2","20"); h.put("CD1_1","-0.0004166667");h.put("CD1_2","0");h.put("CD2_1","0");h.put("CD2_2","0.0004166667");
+            files[i] = new FitsFileInformation(new File(input,"frame"+i+".fit").toString(),"frame"+i+".fit",true,160,120, h);
         } return files;
     }
     private DetectionReportContext context(File output, FitsFileInformation[] files, VariableStarReportOptions options, VariableStarAnalysis analysis) {

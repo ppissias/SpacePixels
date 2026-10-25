@@ -28,10 +28,12 @@ public class ReportRunContextTest {
         try (FitsImportService importer = new FitsImportService(directory, null)) {
             files = importer.readFiles();
         }
-        for (FitsFileInformation file : files) {
+        for (int index = 0; index < files.length; index++) {
+            var header = new java.util.HashMap<>(files[index].getFitsHeader());
             for (String key : new String[]{"SITELAT", "SITELONG", "SITELON", "OBSGEO-B", "OBSGEO-L", "LAT-OBS", "LONG-OBS", "LON-OBS"}) {
-                file.getFitsHeader().remove(key);
+                header.remove(key);
             }
+            files[index] = files[index].withFitsHeader(header);
         }
         var transformer = WcsCoordinateTransformer.fromHeader(files[0].getFitsHeader());
         assertNotNull(transformer);
@@ -60,8 +62,12 @@ public class ReportRunContextTest {
         assertEquals("first catalogue", first.catalogue().catalogue.starSource);
         application.siteLat = "-24";
         options.applicationConfig().siteLat = "wrong";
-        files[0].getFitsHeader().put("DATE-OBS", "2030-01-01T00:00:00");
-        first.filesInformation()[0].getFitsHeader().put("DATE-OBS", "2040-01-01T00:00:00");
+        assertThrows(UnsupportedOperationException.class,
+                () -> first.filesInformation()[0].getFitsHeader().put("DATE-OBS", "2040-01-01T00:00:00"));
+        first.filesInformation()[0] = null;
+        var updatedHeader = new java.util.HashMap<>(files[0].getFitsHeader());
+        updatedHeader.put("DATE-OBS", "2030-01-01T00:00:00");
+        files[0] = files[0].withFitsHeader(updatedHeader);
         catalogue.starSource = "second catalogue";
         SkyCatalogueStore.save(directory, catalogue);
         correction.global.ax[0] = 5;

@@ -43,7 +43,7 @@ public record ReportRequest(PipelineResult result, List<short[][]> rawFrames, Fi
 
     /** Copies metadata without retaining a caller's mutable array or header maps. */
     private static FitsFileInformation[] snapshot(FitsFileInformation[] files) {
-        return files == null ? new FitsFileInformation[0] : Arrays.stream(files)
-                .map(file -> file == null ? null : file.snapshot()).toArray(FitsFileInformation[]::new);
+        return files == null ? new FitsFileInformation[0] : files.clone();
+
     }
 }

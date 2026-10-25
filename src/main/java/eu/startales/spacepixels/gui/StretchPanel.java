@@ -421,6 +421,13 @@ public class StretchPanel extends JPanel {
         triggerPreviewUpdate();
     }
 
+    /** Forwards a session frame metadata replacement to the full-size sequence viewer when it is present. */
+    void replaceFrameMetadata(FitsFileInformation previous, FitsFileInformation updated) {
+        if (sequenceFrame != null) {
+            sequenceFrame.replaceFrameMetadata(previous, updated);
+        }
+    }
+
     private void openFullSize() {
         var session = sessions.current();
         FitsFileInformation[] files = session == null ? null : session.getFiles();

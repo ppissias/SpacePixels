@@ -51,7 +51,22 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
             }
         }
         this.stretchPanel = stretchPanel;
-        this.filesInfo = filesInfo;
+        this.filesInfo = filesInfo == null ? null : filesInfo.clone();
+    }
+
+    @Override
+    protected void onFrameMetadataReplaced(FitsFileInformation previous, FitsFileInformation updated) {
+        if (filesInfo != null) {
+            for (int i = 0; i < filesInfo.length; i++) {
+                if (filesInfo[i] == previous || (filesInfo[i] != null && filesInfo[i].getFilePath() != null
+                        && filesInfo[i].getFilePath().equals(previous.getFilePath()))) {
+                    filesInfo[i] = updated;
+                }
+            }
+        }
+        if (updated.getFileName() != null && fileInfoByName.containsKey(updated.getFileName())) {
+            fileInfoByName.put(updated.getFileName(), updated);
+        }
     }
 
     /**

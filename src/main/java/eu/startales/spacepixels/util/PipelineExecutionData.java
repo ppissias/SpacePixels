@@ -61,7 +61,7 @@ public final class PipelineExecutionData {
 
     /** Snapshots of the run's frame metadata, in frame order; changing them does not change this run. */
     public FitsFileInformation[] getFilesInformation() {
-        return java.util.Arrays.stream(filesInformation).map(FitsFileInformation::snapshot).toArray(FitsFileInformation[]::new);
+        return filesInformation.clone();
     }
 
     /** The frame buffers the report draws from, in frame order: an unmodifiable list of the shared buffers. */

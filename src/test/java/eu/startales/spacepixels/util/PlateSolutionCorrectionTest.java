@@ -138,9 +138,7 @@ public class PlateSolutionCorrectionTest {
     }
 
     private static FitsFileInformation frame(File session, String name) {
-        FitsFileInformation info = new FitsFileInformation(new File(session, name).getPath(), name, true, 2000, 1600);
-        info.getFitsHeader().putAll(header());
-        return info;
+        return new FitsFileInformation(new File(session, name).getPath(), name, true, 2000, 1600, header());
     }
 
     /** Session: +1 px in x, 2 v px in y (v = (y - 800) / 1000); frame a.fit: -0.5 px in y. */
