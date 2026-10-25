@@ -19,6 +19,8 @@ A request is a proposal until the maintainer decides on it. Decisions are record
 | [F02](#f02-session-summary-and-multiple-night-warning) | Session summary and multiple-night warning | Deferred |
 | [F05](#f05-small-star-visibility-in-stretch-previews) | Small-star visibility in stretch previews | Deferred |
 
+Note from maintainer: New feature request: it seems that whynot-nocalibration-wrongdrift , is not well aligned and this is problematic for the detection process. Can we detect not well calibrated frames and issue a warning to the user? These should not be processed.
+
 ## F04. MCP agent services
 
 AI agents operate SpacePixels through an MCP server, beginning with what the [Java API](API.md) does. Use the headless application services, with the public API as the starting boundary; never drive `ApplicationWindow`.
