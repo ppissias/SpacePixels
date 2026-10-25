@@ -102,9 +102,9 @@ public class AutoTuneOverviewPanel extends JPanel {
     private final JButton previewButton = new JButton("Preview Frame");
     private final JButton detectButton = new JButton("Detect Moving Targets");
     private final JLabel profileLabel = new JLabel();
-    private final JLabel tableNoteLabel = new JLabel(" ");
+    private final WrappingHelpLabel tableNoteLabel = new WrappingHelpLabel(" ", 480);
     private final JLabel lastRunLabel = new JLabel(" ");
-    private final JLabel statusLabel = new JLabel(" ");
+    private final WrappingHelpLabel statusLabel = new WrappingHelpLabel(" ", 480);
     private final ProfileTableModel tableModel = new ProfileTableModel();
     private final JTable profileTable = new JTable(tableModel);
 
@@ -782,7 +782,7 @@ public class AutoTuneOverviewPanel extends JPanel {
 
     private void showProblem(String text) {
         statusLabel.setForeground(warningColor());
-        statusLabel.setText("<html><div style='width: 480px;'>" + text + "</div></html>");
+        statusLabel.setText("<html>" + text + "</html>");
     }
 
     /**
@@ -796,8 +796,8 @@ public class AutoTuneOverviewPanel extends JPanel {
                 + "Low: fewest noise detections. Medium: in between. High (default): close to the noise level.<br>"
                 + "Maximum: as sensitive as possible, with many more candidates to review (for small sensors or targeted searches for faint objects).</html>");
         profileLabel.setToolTipText(profileCombo.getToolTipText());
-        tableNoteLabel.setText("<html><div style='width: 480px;'>One run measures every setting. Each profile then picks the most sensitive one "
-                + "within its budget of noise detections per MPix per frame (the ≤ value).</div></html>");
+        tableNoteLabel.setText("<html>One run measures every setting. Each profile then picks the most sensitive one "
+                + "within its budget of noise detections per MPix per frame (the ≤ value).</html>");
     }
 
     /** Shows the last run (or an empty table). */

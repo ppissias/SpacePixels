@@ -325,7 +325,8 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         nextButton.addActionListener(e -> stepByHand(1));
 
         speedSlider.setToolTipText("Time each frame is shown (↑ faster, ↓ slower).");
-        speedSlider.setPreferredSize(new Dimension(160, speedSlider.getPreferredSize().height));
+        Dimension speedSize = speedSlider.getPreferredSize();
+        speedSlider.setPreferredSize(new Dimension(UiStyle.space(160), speedSize.height));
         speedSlider.addChangeListener(e -> speedChanged());
         ViewerSupport.fixWidth(speedLabel, "2000 ms (20.0 frames/s)");
 

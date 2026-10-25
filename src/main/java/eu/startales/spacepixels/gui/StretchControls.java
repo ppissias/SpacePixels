@@ -67,7 +67,8 @@ final class StretchControls {
         primarySlider = new JSlider(panel.getStretchSlider().getModel());
         secondarySlider = new JSlider(panel.getStretchIterationsSlider().getModel());
         for (JSlider slider : new JSlider[]{primarySlider, secondarySlider}) {
-            slider.setPreferredSize(new Dimension(150, slider.getPreferredSize().height));
+            Dimension natural = slider.getPreferredSize();
+            slider.setPreferredSize(new Dimension(UiStyle.space(150), natural.height));
             slider.getModel().addChangeListener(modelListener);
         }
         algorithmCombo.addActionListener(algorithmListener);

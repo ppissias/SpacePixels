@@ -94,11 +94,11 @@ public class StretchPanel extends JPanel {
         JPanel controls = new JPanel();
         controls.setLayout(new BoxLayout(controls, BoxLayout.Y_AXIS));
         controls.add(createSectionHeader("Display Stretch"));
-        JLabel explanation = new JLabel("<html><div style='color: #999999; width: 620px;'>"
-                + "Used by <b>Blink Selected</b>, <b>Preview Frame</b>, <b>Manual Transient Inspection</b>, "
+        WrappingHelpLabel explanation = new WrappingHelpLabel(
+                "Used by <b>Blink Selected</b>, <b>Preview Frame</b>, <b>Manual Transient Inspection</b>, "
                 + "<b>Show full size</b> and the optional stretched copies. "
                 + "Detection always works on the linear data, and report images use their own stretch "
-                + "(Detection Settings → Report Visualization).</div></html>");
+                + "(Detection Settings → Report Visualization).", 620);
         controls.add(left(explanation));
 
         stretchAlgoCombo.setRenderer(new DefaultListCellRenderer() {

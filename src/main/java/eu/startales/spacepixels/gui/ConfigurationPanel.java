@@ -607,7 +607,7 @@ public class ConfigurationPanel extends JPanel {
 
     private static String wrapStatus(String text) {
         String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-        return "<html><div style='width: 330px;'>" + escaped + "</div></html>";
+        return "<html>" + escaped + "</html>";
     }
 
     // ==========================================
@@ -716,7 +716,7 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private static JLabel statusLabel() {
-        JLabel label = new JLabel(" ");
+        WrappingHelpLabel label = new WrappingHelpLabel(" ", 330);
         label.setFont(UiStyle.bodyFont());
         return label;
     }

@@ -30,19 +30,17 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 ### Recommended changes
 
-**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10, SP-13, SP-06, SP-05, SP-07, SP-08, SP-11 and SP-19 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Pending: SP-16, followed by the mechanical SP-14 package move. SP-19 is reviewed. Their proposals and issue reviews below still apply.
+**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10, SP-13, SP-06, SP-05, SP-07, SP-08, SP-11, SP-16 and SP-19 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Pending: the mechanical SP-14 package move. SP-16 and SP-19 are reviewed. Their proposals and issue reviews below still apply.
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
 | [SP-14](#sp-14-package-names-that-say-what-they-hold) | Package names that say what they hold | Low | Medium, mechanical |
-| [SP-16](#sp-16-check-the-ui-at-larger-display-scaling) | Check the UI at larger display scaling | Low | Small |
 | [SP-21](#sp-21-upgrade-nom-tam-fits-after-the-dither-fix) | Upgrade nom-tam-fits after the dither fix | Low | Small |
 | [SP-22](#sp-22-upgrade-gson-to-2150) | Upgrade Gson to 2.15.0 | Low | Small |
 
 **Suggested order.**
 
-1. Inspect scaling (SP-16). The catalogue controller, panel collaborators, direct settings rows, application I/O queue, session-owned services, report boundaries, FITS input helpers and the shared viewer base are in place.
-2. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
+1. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review. The catalogue controller, panel collaborators, direct settings rows, application I/O queue, session-owned services, report boundaries, FITS input helpers, the shared viewer base and the scaled layout notes are in place.
 
 Keep dependency maintenance (SP-21 and SP-22) separate from refactorings, according to each item's timing.
 
@@ -57,14 +55,6 @@ Refactorings are intended to preserve behaviour. Evaluate the exceptions raised 
 **Issue review (2026-10-24; evaluate before implementation).**
 - Update `build.gradle` source-set and resource include patterns as well as Java imports and `DependencyRulesTest`; the headless artifact currently explicitly includes `util/**`.
 - `FitsFileInformation` and visualization/run-option types are exposed through public request/result signatures. Moving them changes consumer APIs even if the implementation move is mechanical. Identify those breaks, update API examples and release documentation, and run `check` plus the isolated `apiConsumerTest` against the staged artifact.
-
-### SP-16. Check the UI at larger display scaling
-
-What remains of the earlier visual-rules item. Inspect the empty and loaded main window, the settings pages, the Astrometry Config tab, the viewers and the progress dialog at 100, 150 and 200 % display scaling and with a larger base font. Fix the local widths and font sizes found in the Overview status, the table HTML and the viewer controls. Layout tests cover forms and base fonts; display scaling of the whole window has not been inspected.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- No additional architectural blocker was identified. Retain the real keyboard/focus checks while inspecting clipping, wrapping, scroll access and controls at each scale; visual consolidation must not alter the existing text-field and viewer-key rules.
-- Keep local layout fixes separate from changing viewer settings policy in SP-19, so their effects can be assessed independently.
 
 ### SP-21. Upgrade nom-tam-fits after the dither fix
 

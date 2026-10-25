@@ -139,7 +139,7 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(12, 14, 12, 14));
-        panel.setPreferredSize(new Dimension(340, 10));
+        panel.setPreferredSize(new Dimension(UiStyle.space(340), 10));
 
         panel.add(left(DetectionConfigurationPanel.createSectionHeader("Star Mask")));
         panel.add(left(muted(basisText(stackResult))));
@@ -386,7 +386,7 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
     // ==========================================
 
     private static JLabel muted(String text) {
-        JLabel label = new JLabel("<html><div style='width: 230px;'>" + text + "</div></html>");
+        WrappingHelpLabel label = new WrappingHelpLabel(text, 230);
         label.setForeground(UIManager.getColor("Label.disabledForeground"));
         return label;
     }
