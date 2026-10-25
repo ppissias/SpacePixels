@@ -1,14 +1,15 @@
 # Agent Handoff
 
 - Owner: A
-- Phase: SELECT
-- Task: -
+- Phase: IMPLEMENT
+- Task: SP-11B
 - Implementer: A
 - Reviewer: B
-- Base: -
+- Base: d3a511a78cb272b3e03a1467ee8d06c6d87aeaa3
 - Implementation: -
 - Fix rounds: 0/2
-- Tests: SP-11A APPROVED at f8db558: independent check 511 (4 skipped), full GUI mechanics 35, staged-API consumer 9 PASS. Original R1/R2 probes now pass. All 18 datasets/14,232 normalized report files/assets match; GUI-only corrections reused that evidence.
+- Tests: Planned: FITS input/preparation/parity/compression suites, full check/API consumer, affected GUI import checks and all 18 reference-output comparisons using the same validated fixture paths/profile.
 - Quota visibility: UNKNOWN
-- Next action: A selects the next eligible task with B reviewing. SP-11B preparation identified the existing input-helper dependency cycle; keep pixel converters separate. At the next implementation, tidy the migration method list (setFitsHeader never existed) and remove completed SP-08 from pending proposals.
-- Local edits: Maintainer decision annotations in AGENT_STATE.md remain preserved unstaged; structured decisions are committed.
+- Next action: A consolidates the input helper cycle into FitsInput, retaining prepared-output writing and converters separately; rename static preparation helper consistently. Preserve accepted inputs and error/interaction ordering. B and C are read-only.
+- Documentation: Tidy the metadata migration method list and remove completed SP-08 from pending proposals during this implementation.
+- Local edits: Maintainer annotations in AGENT_STATE.md remain preserved unstaged.
