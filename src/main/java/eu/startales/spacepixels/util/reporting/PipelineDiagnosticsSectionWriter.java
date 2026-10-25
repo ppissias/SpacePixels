@@ -52,7 +52,7 @@ final class PipelineDiagnosticsSectionWriter {
         if (transformer != null && width > 0 && height > 0) {
             WcsCoordinateTransformer.SkyCoordinate centre = transformer.pixelToSky(width / 2.0, height / 2.0);
             WcsCoordinateTransformer.SkyCoordinate step = transformer.pixelToSky(width / 2.0 + 1.0, height / 2.0);
-            double scaleArcsec = SkyMath.separationDegreesHaversineUnclamped(centre.getRaDegrees(), centre.getDecDegrees(), step.getRaDegrees(), step.getDecDegrees()) * 3600.0;
+            double scaleArcsec = SkyMath.separationArcsec(centre.getRaDegrees(), centre.getDecDegrees(), step.getRaDegrees(), step.getDecDegrees());
             String field = WcsCoordinateTransformer.formatRa(centre.getRaDegrees()) + " "
                     + WcsCoordinateTransformer.formatDec(centre.getDecDegrees());
             items.add(headerItem("Field", DetectionReportGenerator.escapeHtml(field)

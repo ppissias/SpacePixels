@@ -10,17 +10,18 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
-/** Pins the contract of each median variant: even counts, NaN values and empty input differ on purpose for now (SP-10). */
+/** Pins the contract of the median helpers in {@link Statistics}. */
 public class StatisticsTest {
     private static final double NAN = Double.NaN;
 
     @Test
-    public void medianAveragesTheMiddlePairCountsNaNAndLeavesItsInputAlone() {
+    public void medianAveragesTheMiddlePairSkipsNaNAndLeavesItsInputAlone() {
         List<Double> values = new ArrayList<>(List.of(4.0, 1.0, 3.0, 2.0));
         assertEquals(2.5, Statistics.median(values), 0);
         assertEquals(List.of(4.0, 1.0, 3.0, 2.0), values);
         assertEquals(2.0, Statistics.median(List.of(3.0, 1.0, 2.0)), 0);
-        assertEquals("NaN sorts last and is counted", 2.0, Statistics.median(List.of(1.0, NAN, 2.0)), 0);
+        assertEquals("NaN is skipped", 1.5, Statistics.median(List.of(1.0, NAN, 2.0)), 0);
+        assertTrue(Double.isNaN(Statistics.median(List.of(NAN))));
         assertTrue(Double.isNaN(Statistics.median(List.of())));
     }
 
@@ -42,11 +43,11 @@ public class StatisticsTest {
     }
 
     @Test
-    public void upperMedianTakesTheUpperMiddleValue() {
+    public void upperMedianTakesTheUpperMiddleNonNaNValue() {
         assertEquals(3.0, Statistics.upperMedian(List.of(4.0, 1.0, 3.0, 2.0)), 0);
         assertEquals(2.0, Statistics.upperMedian(List.of(3.0, 1.0, 2.0)), 0);
-        assertEquals(Double.MAX_VALUE, Statistics.upperMedian(List.of()), 0);
-        assertEquals(3.0, Statistics.upperMedianIgnoringNaN(List.of(4.0, NAN, 1.0, 3.0, 2.0)), 0);
-        assertTrue(Double.isNaN(Statistics.upperMedianIgnoringNaN(List.of(NAN))));
+        assertEquals(3.0, Statistics.upperMedian(List.of(4.0, NAN, 1.0, 3.0, 2.0)), 0);
+        assertTrue(Double.isNaN(Statistics.upperMedian(List.of())));
+        assertTrue(Double.isNaN(Statistics.upperMedian(List.of(NAN))));
     }
 }

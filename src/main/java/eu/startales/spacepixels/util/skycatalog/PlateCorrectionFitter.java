@@ -176,7 +176,7 @@ public final class PlateCorrectionFitter {
         double best = Double.MAX_VALUE;
         for (int order = 1; order <= 3; order++) {
             PlateSolutionCorrection.Polynomial trial = PolynomialFit.fit(trainFrom, trainBy, order, cx, cy, scale);
-            testMedian[order] = trial == null ? Double.MAX_VALUE : Statistics.upperMedian(residuals(testFrom, testBy, trial));
+            testMedian[order] = trial == null ? Double.MAX_VALUE : residualMedian(testFrom, testBy, trial);
             best = Math.min(best, testMedian[order]);
         }
         if (best == Double.MAX_VALUE) {
@@ -186,7 +186,7 @@ public final class PlateCorrectionFitter {
         while (testMedian[order] > best * (1 + ORDER_TOLERANCE)) {
             order++;
         }
-        double headerTestMedian = Statistics.upperMedian(residuals(testFrom, testBy, null));
+        double headerTestMedian = residualMedian(testFrom, testBy, null);
         if (headerTestMedian <= best * (1 + ORDER_TOLERANCE)) {
             // On the stars left out of the fit, the header solution does as well as the best correction: none is made.
             notes.add(0, String.format(Locale.US, "The plate solution in the FITS header already matches the Gaia stars: "
@@ -262,6 +262,11 @@ public final class PlateCorrectionFitter {
         correction.afterP90Px = correction.beforeP90Px;
         correction.starsPerFrame = counts.get(counts.size() / 2);
         correction.framesFitted = frames.size();
+    }
+
+    private static double residualMedian(List<double[]> from, List<double[]> by, PlateSolutionCorrection.Polynomial fit) {
+        double median = Statistics.upperMedian(residuals(from, by, fit));
+        return Double.isNaN(median) ? Double.MAX_VALUE : median;
     }
 
     private static List<Double> residuals(List<double[]> from, List<double[]> by, PlateSolutionCorrection.Polynomial fit) {

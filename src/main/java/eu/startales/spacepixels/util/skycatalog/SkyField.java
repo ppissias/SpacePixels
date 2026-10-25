@@ -52,8 +52,8 @@ public final class SkyField {
         WcsCoordinateTransformer.SkyCoordinate center = transformer.pixelToSky((width - 1) / 2.0, (height - 1) / 2.0);
         field.centerRa = center.getRaDegrees();
         field.centerDec = center.getDecDegrees();
-        field.widthDeg = SkyMath.separationDegreesAtan2(field.cornerRa[0], field.cornerDec[0], field.cornerRa[1], field.cornerDec[1]);
-        field.heightDeg = SkyMath.separationDegreesAtan2(field.cornerRa[1], field.cornerDec[1], field.cornerRa[2], field.cornerDec[2]);
+        field.widthDeg = SkyMath.separationDegrees(field.cornerRa[0], field.cornerDec[0], field.cornerRa[1], field.cornerDec[1]);
+        field.heightDeg = SkyMath.separationDegrees(field.cornerRa[1], field.cornerDec[1], field.cornerRa[2], field.cornerDec[2]);
         return field;
     }
 
@@ -69,7 +69,7 @@ public final class SkyField {
     /** True when the other field is roughly this one: its centre is within a quarter of the diagonal of this centre. */
     public boolean isSameFieldAs(SkyField other) {
         return other != null
-                && SkyMath.separationDegreesAtan2(centerRa, centerDec, other.centerRa, other.centerDec) < Math.hypot(widthDeg, heightDeg) / 4;
+                && SkyMath.separationDegrees(centerRa, centerDec, other.centerRa, other.centerDec) < Math.hypot(widthDeg, heightDeg) / 4;
     }
 
     /** "4.1° × 2.7°". */

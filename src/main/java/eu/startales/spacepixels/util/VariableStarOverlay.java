@@ -107,12 +107,12 @@ public final class VariableStarOverlay {
         WcsCoordinateTransformer.SkyCoordinate centre = transformer.pixelToSky(x, y);
         WcsCoordinateTransformer.SkyCoordinate next = transformer.pixelToSky(x + 1, y);
         if (centre == null || next == null) return null;
-        double radius = Math.max(10, Math.min(60, 4 * SkyMath.separationArcsecHaversineDeltasInDegrees(centre.getRaDegrees(), centre.getDecDegrees(),
+        double radius = Math.max(10, Math.min(60, 4 * SkyMath.separationArcsec(centre.getRaDegrees(), centre.getDecDegrees(),
                 next.getRaDegrees(), next.getDecDegrees())));
         if (!Double.isFinite(radius)) radius = 10;
         String name = null;
         for (SkyCatalogue.VariableStar variable : catalogue.variables) {
-            double distance = SkyMath.separationArcsecHaversineDeltasInDegrees(centre.getRaDegrees(), centre.getDecDegrees(), variable.ra, variable.dec);
+            double distance = SkyMath.separationArcsec(centre.getRaDegrees(), centre.getDecDegrees(), variable.ra, variable.dec);
             if (Double.isFinite(distance) && distance <= radius) {
                 radius = distance;
                 name = variable.name;

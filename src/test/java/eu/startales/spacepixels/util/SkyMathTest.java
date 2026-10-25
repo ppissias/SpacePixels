@@ -5,7 +5,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-/** Pins the contract of each angle helper; the separation variants agree to well below a milliarcsecond (SP-10). */
+/** Pins the contract of the angle and angular-separation helpers in {@link SkyMath}. */
 public class SkyMathTest {
 
     @Test
@@ -21,10 +21,8 @@ public class SkyMathTest {
         assertEquals(-180, SkyMath.normalizeSignedDegrees(-180), 0);
         assertEquals(180, SkyMath.normalizeSignedDegrees(540), 0);
         assertTrue(Double.isNaN(SkyMath.normalizeSignedDegrees(Double.POSITIVE_INFINITY)));
-
-        assertEquals("-180 becomes 180", 180, SkyMath.wrapSignedDegrees(-180), 0);
-        assertEquals(180, SkyMath.wrapSignedDegrees(540), 0);
-        assertEquals(170, SkyMath.wrapSignedDegrees(-190), 1e-12);
+        assertTrue(Double.isNaN(SkyMath.normalizeSignedDegrees(Double.NEGATIVE_INFINITY)));
+        assertTrue(Double.isNaN(SkyMath.normalizeSignedDegrees(Double.NaN)));
     }
 
     @Test
@@ -35,28 +33,17 @@ public class SkyMathTest {
     }
 
     @Test
-    public void separationVariantsAgreeAcrossThePoleAndTheRaWrap() {
-        double[][] pairs = {{10, 20, 10.5, 20.5}, {0, 89.9, 180, 89.9}, {359.9, 0, 0.1, 0}, {150, 70, 150.01, 70}, {0, -45, 90, 45}};
-        for (double[] p : pairs) {
-            double reference = SkyMath.separationDegreesAtan2(p[0], p[1], p[2], p[3]);
-            assertEquals(reference, SkyMath.separationDegreesHaversine(p[0], p[1], p[2], p[3]), 1e-12);
-            assertEquals(reference, SkyMath.separationDegreesHaversineUnclamped(p[0], p[1], p[2], p[3]), 1e-12);
-            assertEquals(reference, SkyMath.separationDegreesCosineRule(p[0], p[1], p[2], p[3]), 1e-9);
-            assertEquals(reference * 3600, SkyMath.separationArcsecHaversine(p[0], p[1], p[2], p[3]), 1e-8);
-            assertEquals(reference * 3600, SkyMath.separationArcsecHaversineRaDeltaInDegrees(p[0], p[1], p[2], p[3]), 1e-8);
-            assertEquals(reference * 3600, SkyMath.separationArcsecHaversineDeltasInDegrees(p[0], p[1], p[2], p[3]), 1e-8);
-        }
-        assertEquals(0.2, SkyMath.separationDegreesAtan2(359.9, 0, 0.1, 0), 1e-9);
-        assertEquals(0.2, SkyMath.separationDegreesAtan2(0, 89.9, 180, 89.9), 1e-9);
-    }
+    public void separationHandlesPoleRaWrapAntipodesAndTinyAngles() {
+        assertEquals(0.2, SkyMath.separationDegrees(359.9, 0, 0.1, 0), 1e-9);
+        assertEquals(0.2, SkyMath.separationDegrees(0, 89.9, 180, 89.9), 1e-9);
+        assertEquals(180.0, SkyMath.separationDegrees(0, 45, 180, -45), 1e-9);
+        assertEquals(SkyMath.separationDegrees(10, 20, 10.5, 20.5) * 3600.0,
+                SkyMath.separationArcsec(10, 20, 10.5, 20.5), 0);
 
-    @Test
-    public void onlyTheCosineRuleRejectsNonFiniteInputAndLosesTinySeparations() {
-        assertTrue(Double.isNaN(SkyMath.separationDegreesCosineRule(Double.POSITIVE_INFINITY, 0, 0, 0)));
         double oneMilliarcsec = 1 / 3.6e6;
-        assertEquals(0.001, SkyMath.separationArcsecHaversine(10, 20, 10, 20 + oneMilliarcsec), 1e-9);
-        assertEquals(0.001, SkyMath.separationDegreesAtan2(10, 20, 10, 20 + oneMilliarcsec) * 3600, 1e-9);
-        double cosineRule = SkyMath.separationDegreesCosineRule(10, 20, 10, 20 + oneMilliarcsec) * 3600;
-        assertTrue("the cosine rule resolves only about 0.003 arcsec: " + cosineRule, cosineRule >= 0 && cosineRule < 0.01);
+        assertEquals(0.001, SkyMath.separationArcsec(10, 20, 10, 20 + oneMilliarcsec), 1e-9);
+
+        assertTrue(Double.isNaN(SkyMath.separationDegrees(Double.POSITIVE_INFINITY, 0, 0, 0)));
+        assertTrue(Double.isNaN(SkyMath.separationArcsec(0, Double.NaN, 0, 0)));
     }
 }

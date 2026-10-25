@@ -17,10 +17,10 @@ import java.util.List;
 /**
  * Medians used by the report, the sky-catalogue correction and the star measurements.
  *
- * <p>They come in variants that differ in how they treat an even count (the mean of the two middle values, or the
- * upper one), NaN values and empty input. Each keeps its exact behaviour so that the reports stay byte-identical, and
- * its name says how it differs. Whether they need to differ is an open question (DESIGN-IMPROVEMENTS.md, SP-10).
- * Several algorithms also take an upper-middle value inline from data they have already sorted.</p>
+ * <p>{@link #median} and {@link #medianIgnoringNaN} take the mean of the two middle values for an even count;
+ * {@link #upperMedian} takes the upper-middle value ({@code n / 2}), for callers that select a single middle sample
+ * or order statistic. All methods ignore {@code NaN} values and return {@code NaN} when no finite/non-NaN values
+ * remain, except {@link #medianOfSorted} which operates directly on a non-empty pre-sorted array.</p>
  */
 public final class Statistics {
 
@@ -28,20 +28,19 @@ public final class Statistics {
     }
 
     /**
-     * The middle value of a sorted copy, or the mean of the two middle values for an even count; NaN when empty.
-     * NaN values are counted and sort last.
+     * The middle value over the values that are not NaN, or the mean of the two middle values for an even count;
+     * NaN when there are none. The list is not changed.
      */
     public static double median(List<Double> values) {
-        if (values.isEmpty()) {
+        List<Double> sorted = sortedNonNaN(values);
+        if (sorted.isEmpty()) {
             return Double.NaN;
         }
-        List<Double> sorted = new ArrayList<>(values);
-        Collections.sort(sorted);
         int n = sorted.size();
         return n % 2 == 1 ? sorted.get(n / 2) : (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2;
     }
 
-    /** As {@link #median}, over the values that are not NaN; NaN when there are none. The array is not changed. */
+    /** As {@link #median}, over a {@code double[]} array; NaN when there are no non-NaN values. The array is not changed. */
     public static double medianIgnoringNaN(double[] values) {
         double[] sorted = Arrays.stream(values).filter(v -> !Double.isNaN(v)).sorted().toArray();
         if (sorted.length == 0) return Double.NaN;
@@ -57,25 +56,23 @@ public final class Statistics {
         return n % 2 == 1 ? sorted[n / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
     }
 
-    /** The upper of the two middle values of a sorted copy (the middle one for an odd count); {@code Double.MAX_VALUE} when empty. */
+    /**
+     * The upper of the two middle values that are not NaN (the middle one for an odd count); NaN when there are none.
+     * The list is not changed.
+     */
     public static double upperMedian(List<Double> values) {
-        List<Double> sorted = new ArrayList<>(values);
-        Collections.sort(sorted);
-        return sorted.isEmpty() ? Double.MAX_VALUE : sorted.get(sorted.size() / 2);
+        List<Double> sorted = sortedNonNaN(values);
+        return sorted.isEmpty() ? Double.NaN : sorted.get(sorted.size() / 2);
     }
 
-    /** The upper of the two middle values that are not NaN (the middle one for an odd count); NaN when there are none. */
-    public static double upperMedianIgnoringNaN(List<Double> values) {
-        List<Double> sorted = new ArrayList<>();
+    private static List<Double> sortedNonNaN(List<Double> values) {
+        List<Double> sorted = new ArrayList<>(values.size());
         for (Double value : values) {
-            if (!Double.isNaN(value)) {
+            if (value != null && !Double.isNaN(value)) {
                 sorted.add(value);
             }
         }
-        if (sorted.isEmpty()) {
-            return Double.NaN;
-        }
         Collections.sort(sorted);
-        return sorted.get(sorted.size() / 2);
+        return sorted;
     }
 }

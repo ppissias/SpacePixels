@@ -96,7 +96,7 @@ final class SessionCatalogue {
             if (Math.abs(variable.dec - dec) * 3600 > radiusArcsec) {
                 continue;
             }
-            double separation = SkyMath.separationArcsecHaversineRaDeltaInDegrees(ra, dec, variable.ra, variable.dec);
+            double separation = SkyMath.separationArcsec(ra, dec, variable.ra, variable.dec);
             if (separation <= radiusArcsec) {
                 matches.add(new VariableMatch(variable, separation));
             }
@@ -123,7 +123,7 @@ final class SessionCatalogue {
             if (Math.abs(starDec - dec) * 3600 > nearestSeparation) {
                 continue;
             }
-            double separation = SkyMath.separationArcsecHaversineRaDeltaInDegrees(ra, dec, starRa, starDec);
+            double separation = SkyMath.separationArcsec(ra, dec, starRa, starDec);
             if (separation <= nearestSeparation) {
                 nearest = star;
                 nearestSeparation = separation;
@@ -144,7 +144,7 @@ final class SessionCatalogue {
         double closest = radiusArcsec;
         for (SkyCatalogue.NamedStar star : catalogue.namedStars) {
             if (star.name == null || star.name.isBlank()) continue;
-            double separation = SkyMath.separationArcsecHaversineRaDeltaInDegrees(ra, dec, star.ra, star.dec);
+            double separation = SkyMath.separationArcsec(ra, dec, star.ra, star.dec);
             // A nearby named neighbour must not lend its name to a different, closer Gaia star.
             if (separation <= closest && (gaia == null || gaiaStarNear(star.ra, star.dec, radiusArcsec) == gaia)) {
                 named = new StarIdentity(star.name.trim(), "SIMBAD", separation);
@@ -159,7 +159,7 @@ final class SessionCatalogue {
             starDec += gaia.pmdec * years / 3.6e6;
             starRa += gaia.pmra * years / 3.6e6 / Math.max(1e-6, Math.cos(Math.toRadians(gaia.dec)));
         }
-        return new StarIdentity("Gaia DR3 " + gaia.sourceId, "Gaia DR3", SkyMath.separationArcsecHaversineRaDeltaInDegrees(ra, dec, starRa, starDec));
+        return new StarIdentity("Gaia DR3 " + gaia.sourceId, "Gaia DR3", SkyMath.separationArcsec(ra, dec, starRa, starDec));
     }
 
     /** "EW (W UMa-type eclipsing binary)", or the VSX type as it is when it is not one of the common types. */

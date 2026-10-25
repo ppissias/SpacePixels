@@ -403,9 +403,9 @@ final class DetectionReportAstrometry {
             return null;
         }
 
-        double raDeltaDegrees = SkyMath.wrapSignedDegrees(latestSky.getRaDegrees() - earliestSky.getRaDegrees());
+        double raDeltaDegrees = SkyMath.normalizeSignedDegrees(latestSky.getRaDegrees() - earliestSky.getRaDegrees());
         double decDeltaDegrees = latestSky.getDecDegrees() - earliestSky.getDecDegrees();
-        double skySeparationDegrees = SkyMath.separationDegreesCosineRule(
+        double skySeparationDegrees = SkyMath.separationDegrees(
                 earliestSky.getRaDegrees(),
                 earliestSky.getDecDegrees(),
                 latestSky.getRaDegrees(),
@@ -681,7 +681,7 @@ final class DetectionReportAstrometry {
         }
 
         double localSiderealTimeDeg = computeLocalSiderealTimeDegrees(timestampMillis, observerSite.longitudeDeg);
-        double hourAngleDeg = SkyMath.wrapSignedDegrees(localSiderealTimeDeg - SkyMath.normalizeDegrees(raDegrees));
+        double hourAngleDeg = SkyMath.normalizeSignedDegrees(localSiderealTimeDeg - SkyMath.normalizeDegrees(raDegrees));
 
         double latitudeRad = Math.toRadians(observerSite.latitudeDeg);
         double declinationRad = Math.toRadians(decDegrees);

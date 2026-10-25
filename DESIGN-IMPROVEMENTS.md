@@ -30,15 +30,14 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 ### Recommended changes
 
-**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09 and SP-04. SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-05, SP-06, SP-08, SP-11, SP-13, SP-15, SP-16 and SP-19. Their proposals and issue reviews below still apply.
+**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04 and SP-10 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-05, SP-06, SP-08, SP-11, SP-13, SP-15, SP-16 and SP-19. Their proposals and issue reviews below still apply.
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
 | [SP-05](#sp-05-give-panels-their-collaborators-not-the-whole-window) | Give panels their collaborators, not the whole window | Medium | Medium |
 | [SP-06](#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Move the sky-catalogue workflow out of the main panel | Medium | Small |
-| [SP-07](#sp-07-one-binding-type-for-settings-rows) | One binding type for settings rows | Low | Small |
+| [SP-07](#sp-07-fail-fast-settings-apply-and-direct-setting-row-wiring) | Fail-fast settings apply and direct setting-row wiring | Low | Small |
 | [SP-08](#sp-08-one-report-entry-point-and-a-complete-report-context) | One report entry point and a complete report context | Medium | Medium |
-| [SP-10](#sp-10-one-place-for-sky-math-and-statistics-helpers) | One place for sky-math and statistics helpers: done; evaluate the differing variants | Low | Small |
 | [SP-11](#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Fewer FITS helper classes; immutable frame metadata | Low | Medium |
 | [SP-13](#sp-13-one-way-to-report-problems-and-diagnostics) | One way to report problems and diagnostics | Low | Small |
 | [SP-14](#sp-14-package-names-that-say-what-they-hold) | Package names that say what they hold | Low | Medium, mechanical |
@@ -48,7 +47,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-19](#sp-19-finish-the-common-base-of-the-image-viewers) | Finish the common base of the image viewers | Medium | Medium |
 
 **Suggested order.**
-1. SP-10 and SP-18 are done apart from their follow-ups: evaluate SP-10's differing variants as a numerical decision, and take SP-18's follow-ups when nom-tam-fits 1.23.1 is out. Keep both separate from refactorings.
+1. SP-18 is done apart from its follow-ups when nom-tam-fits 1.23.1 is out. Keep dependency upgrades separate from refactorings.
 2. Then SP-06, which both agents chose as the next item, then SP-05. The shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
 3. Then SP-08, then SP-07 and SP-15.
 4. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
@@ -85,17 +84,21 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 - Cancelling a `Future` does not retract EDT callbacks already queued. Preserve the task/session checks currently in `showSkyFetchStage`, `skyFetchFinished` and `correctionFinished`, including replacement work within the same session.
 - Specify who owns and shuts down the executor, stops its progress timer and detaches listeners. Check cancellation, task replacement, session handover and shutdown with a delayed result. A GUI controller must not introduce a dependency from the headless `session` package back to `gui`.
 
-### SP-07. One binding type for settings rows
+### SP-07. Fail-fast settings apply and direct setting-row wiring
 
 **Problem.**
-- `DetectionSettingBinding` (engine fields) and `ApplicationSettingBinding` (application values) are two records of the same shape. With them come `ApplicationSetting`, client-property identity tags and three binding groups for twelve controls.
-- `applySettingsToMemory` catches every `Exception`, prints it with `System.err` and continues.
+- `applySettingsToMemory` catches every `Exception`, prints it with `System.err` and continues, which could allow a run or save (`checkedSettings`) to proceed with a partially applied configuration.
+- `SettingRow` receives its field ID and expert flag indirectly through `JComponent` client properties (`SETTING_ID`, `EXPERT_SETTING`) set just before `addSettingRow`.
+- `ApplicationSetting` is a 40-line record used only inline when constructing `ApplicationSettingBinding` for 11 controls in `DetectionConfigurationPanel`.
 
-**Proposal.** The application values are now plain values (`VisualizationSettings` and the Auto-Tune limit). Use one generic `SettingBinding<V>`, with a read and write of the model and a read and write of the control, for both kinds. Let a binding failure surface as an error instead of being swallowed.
+**Proposal (reduced scope, 2026-10-25).**
+- Remove the `catch (Exception)` in `applySettingsToMemory` so binding or alignment failures surface immediately and prevent a run or save from proceeding with half-applied settings.
+- Pass `id` and `expert` directly to `SettingRow` and `addSettingRow` instead of passing them through `JComponent` client properties.
+- Fold `ApplicationSetting` into `ApplicationSettingBinding` (or inline the metadata at registration). Keep `DetectionSettingBinding` separate with its explicit `DetectionConfig` target parameter (used for `draft` pair alignment and loading from Auto-Tune / rule-aligned configs), and keep the distinct reset/revert lifecycles of `reportBindings`, `tuningBindings` and `visualizationBindings`.
 
 **Issue review (2026-10-24; evaluate before implementation).**
-- Consolidate only the genuinely shared binding behaviour, on the value model that SP-02 established. Preserve the typed `DetectionSetting` tables, hidden values, range checks and pair-alignment policy.
-- Define what happens when applying a binding fails: surface the failure and prevent a run or save from proceeding with a partly applied configuration. Check that invalid text, changed markers and saved baselines retain their current meaning. A more general framework is not justified merely to eliminate two small records.
+- Preserve the typed `DetectionSetting` tables, hidden values, range checks, invalid-text handling, changed markers, saved baselines and pair-alignment policy.
+- Rejected from the original proposal: merging `DetectionSettingBinding` and `ApplicationSettingBinding` into one generic `SettingBinding<V>` or merging the three application binding lists, as `DetectionSettingBinding` operates on explicit `DetectionConfig` instances and the binding groups have different `Load Defaults` versus `Revert` lifecycles.
 
 ### SP-08. One report entry point and a complete report context
 
@@ -118,22 +121,6 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 - A complete context should distinguish valid absence (no WCS, catalogue or optional analysis) from an uninitialized context. Keep no-WCS, empty-result and partial-inclusion cases covered when deleting test-only fallback construction paths.
 - **Clarify byte comparison.** `PipelineDiagnosticsSectionWriter.writeStageTimings` writes measured engine and stage durations into HTML. Excluding generation time alone cannot make independent report folders byte-identical. List and normalize volatile timing fields, compare deterministic outputs and rendered assets exactly, and assess performance separately, as in DEVELOPER.md.
 - Preserve cancellation cleanup, atomic HTML publication and report-failure messages when replacing the overloads. Keep handing a run's overlays over before the report decision and export (SP-04, step 1), so they still survive a declined, failed or cancelled report.
-
-### SP-10. One place for sky-math and statistics helpers
-
-**Done (2026-10-24).** `SkyMath` and `Statistics` in `util` hold every copy. The identical copies are merged: `normalizeDegrees` (four), the field-of-view clamp (two), the law-of-cosines separation (two), and the wrap to [-180, 180] (`normalizeLongitudeDegrees` and `normalizeSkyAngleDeltaDegrees` gave the same result for every input). `DetectionReportAstrometry` no longer forwards the JPL observatory-code check and the longitude wrap. The variants that differ moved unchanged, under names that say how they differ, and `SkyMathTest` and `StatisticsTest` pin their contracts. The reports stayed byte-identical.
-
-**To evaluate: why do the remaining variants differ, and do they need to?**
-- **Angular separation, six variants** in `SkyMath`:
-  - `separationDegreesCosineRule`: the track astrometry of the report and the SatChecker queries. NaN for a non-finite input, and it resolves only about 0.003″.
-  - `separationDegreesHaversine` (photometry pixel scale) and `separationDegreesHaversineUnclamped` (diagnostics pixel scale): the same arithmetic, except that the unclamped one can give NaN for points almost opposite on the sky.
-  - `separationArcsecHaversineRaDeltaInDegrees` (session catalogue matching), `separationArcsecHaversineDeltasInDegrees` (variable-star overlay) and `separationArcsecHaversine` (solar-system queries): they differ in where degrees become radians and in how the haversine is limited.
-  - `separationDegreesAtan2`: the size and overlap of the catalogue's sky field.
-
-  They agree to far below a milliarcsecond on the tested pairs. One haversine form would probably do, unless a threshold depends on the last bits.
-- **Wrapping to ±180:** `normalizeSignedDegrees` keeps both ends; `wrapSignedDegrees` (hour angle and RA motion in the track astrometry) maps -180 to 180, and never returns for an infinite input.
-- **Medians** in `Statistics`: the mean of the two middle values (`median` for Night & Equipment, `medianIgnoringNaN` for photometry, `medianOfSorted` for star shapes) against the upper middle value (`upperMedian` for the plate-solution correction, `Double.MAX_VALUE` when empty; `upperMedianIgnoringNaN` for the field depth). Several algorithms also take the upper middle value inline: `PlateCorrectionFitter` (median distances and stars per frame), `PolynomialFit` (residual clipping), `FieldDepth` (patch offsets), `NightEquipment.clippedMedian`, and the photometry running median and black point.
-- Changing any of them is a change of numerical policy, not a refactoring. Show its effect on the reference datasets (correction selection, report figures, catalogue matches) and decide it on its own.
 
 ### SP-11. Fewer FITS helper classes; immutable frame metadata
 

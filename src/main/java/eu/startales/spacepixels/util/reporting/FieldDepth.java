@@ -74,7 +74,7 @@ final class FieldDepth {
         for (Frame frame : frames) {
             values.add(frame.depth);
         }
-        return Statistics.upperMedianIgnoringNaN(values);
+        return Statistics.upperMedian(values);
     }
 
     boolean isEmpty() {

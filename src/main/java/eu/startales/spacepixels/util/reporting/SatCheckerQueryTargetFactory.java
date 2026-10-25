@@ -162,7 +162,7 @@ final class SatCheckerQueryTargetFactory {
             }
 
             WcsCoordinateTransformer.SkyCoordinate pointSky = transformer.pixelToSky(point.x, point.y);
-            double separationDegrees = SkyMath.separationDegreesCosineRule(
+            double separationDegrees = SkyMath.separationDegrees(
                     midpointSky.getRaDegrees(),
                     midpointSky.getDecDegrees(),
                     pointSky.getRaDegrees(),

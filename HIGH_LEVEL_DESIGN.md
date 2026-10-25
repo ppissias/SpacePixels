@@ -213,6 +213,8 @@ Important classes:
 - `DisplayImageRenderer`
 - `WcsCoordinateTransformer`
 - `WcsSolutionResolver`
+- `SkyMath` (angle wrapping and clamped-haversine angular separation in degrees and arcseconds)
+- `Statistics` (NaN-ignoring standard medians and upper-middle order-statistic medians)
 - `XisfImageConverter`
 - `StagedFile` (safe replacement of a file; see section 7)
 

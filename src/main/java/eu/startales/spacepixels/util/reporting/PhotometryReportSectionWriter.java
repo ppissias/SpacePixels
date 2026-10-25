@@ -1166,8 +1166,8 @@ final class PhotometryReportSectionWriter {
         WcsCoordinateTransformer transformer = context.astrometryContext.getTransformer();
         WcsCoordinateTransformer.SkyCoordinate centre = transformer.pixelToSky(x, y);
         WcsCoordinateTransformer.SkyCoordinate neighbour = transformer.pixelToSky(x + 1.0, y);
-        double pixelScaleArcsec = SkyMath.separationDegreesHaversine(centre.getRaDegrees(), centre.getDecDegrees(),
-                neighbour.getRaDegrees(), neighbour.getDecDegrees()) * 3600.0;
+        double pixelScaleArcsec = SkyMath.separationArcsec(centre.getRaDegrees(), centre.getDecDegrees(),
+                neighbour.getRaDegrees(), neighbour.getDecDegrees());
         double radius = Math.max(MIN_SEARCH_RADIUS_ARCSEC,
                 Math.min(MAX_SEARCH_RADIUS_ARCSEC, SEARCH_RADIUS_PIXELS * pixelScaleArcsec));
         if (!Double.isFinite(radius)) {
