@@ -174,7 +174,7 @@ final class AnomalySectionWriter {
     }
 
     private static void summaryItem(PrintWriter report, String label, String value) {
-        report.println("<div><dt>" + label + "</dt><dd>" + DetectionReportGenerator.escapeHtml(value) + "</dd></div>");
+        report.println("<div><dt>" + label + "</dt><dd>" + ReportFormat.escapeHtml(value) + "</dd></div>");
     }
 
     private static void writeComparisonFrame(PrintWriter report, DetectionReportContext context,
@@ -237,7 +237,7 @@ final class AnomalySectionWriter {
         diagnosticImage(report, shape, "Detected footprint");
         if (context.masterStackData != null && context.masterVetoMask != null) {
             String mask = prefix + "_master_mask.png";
-            TrackVisualizationRenderer.saveLosslessPng(DetectionReportGenerator.createCroppedMaskOverlay(
+            TrackVisualizationRenderer.saveLosslessPng(ReportMaps.createCroppedMaskOverlay(
                     context.masterStackData, context.masterVetoMask, bounds.fixedCenterX, bounds.fixedCenterY,
                     bounds.trackBoxWidth, bounds.trackBoxHeight, point, new Color(255, 32, 32), context.settings),
                     new File(context.exportDir, mask));
@@ -245,7 +245,7 @@ final class AnomalySectionWriter {
         }
         report.println("</div>");
         if (context.masterStackData != null && context.masterVetoMask != null) {
-            var overlap = DetectionReportGenerator.computeMaskOverlapStats(point, context.masterVetoMask,
+            var overlap = ReportMaps.computeMaskOverlapStats(point, context.masterVetoMask,
                     context.masterStackData[0].length, context.masterStackData.length);
             if (overlap.totalPixels > 0) {
                 report.printf(Locale.US, "<p class='astro-note'>Veto-mask overlap: %.1f%% (%d / %d detection pixels). Configured limit: %.1f%%.</p>%n",

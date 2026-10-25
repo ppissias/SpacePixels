@@ -464,7 +464,7 @@ The context factory normalizes optional outputs and initializes its final model 
 them. Each export owns its progress counter. Section fixtures use this same construction path, so finding identities
 and quality-filtered frame choices always come from the prepared model.
 
-`DetectionReportGenerator` retains visualization helpers and iterative index generation pending SP-08B.
+`ReportMaps` draws the map and mask pictures. `ReportFormat` formats report text. `DetectionReportGenerator` writes the iterative index.
 
 Responsibilities:
 
@@ -860,7 +860,7 @@ JTransient:
 Accepted current debt:
 
 - `DetectionConfigurationPanel` and `MainApplicationPanel` still combine Swing view logic and workflow control.
-- `DetectionReportGenerator` still contains substantial static rendering/helper behavior even though major sections have been split into writers.
+- `DetectionReportGenerator` now keeps the iterative index. Map pictures and text formatting live in `ReportMaps` and `ReportFormat`.
 
 Preferred refactor direction:
 

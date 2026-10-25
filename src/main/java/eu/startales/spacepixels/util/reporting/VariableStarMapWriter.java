@@ -123,13 +123,13 @@ final class VariableStarMapWriter {
                 out.printf(Locale.US, "<g class='variable-map-marker' data-candidate='%s'><title>%s · %s · star #%d · %s</title>"
                                 + "<circle cx='%.2f' cy='%.2f' r='%.2f' fill='none' stroke='#000' stroke-width='%s'/>"
                                 + "<circle cx='%.2f' cy='%.2f' r='%.2f' fill='none' stroke='%s' stroke-width='%s'/>",
-                        FindingCategory.VARIABLE_STAR.id(i + 1), FindingCategory.VARIABLE_STAR.id(i + 1), DetectionReportGenerator.escapeHtml(labelText), star.id, star.tier == VariabilityTier.HIGH_CONFIDENCE ? "High confidence" : "Possible",
+                        FindingCategory.VARIABLE_STAR.id(i + 1), FindingCategory.VARIABLE_STAR.id(i + 1), ReportFormat.escapeHtml(labelText), star.id, star.tier == VariabilityTier.HIGH_CONFIDENCE ? "High confidence" : "Possible",
                         star.x + .5, star.y + .5, radius, curves ? "4" : Math.max(3, width / 450.0),
                         star.x + .5, star.y + .5, radius, color(star), curves ? "2" : Math.max(2, width / 1000.0));
                 Rectangle2D.Double label = placeLabel(star, labelText, radius, font, width, height, occupied, labels);
                 labels.add(label);
                 out.printf(Locale.US, "<text x='%.2f' y='%.2f' fill='%s' font-size='%.2f' stroke='#000' stroke-width='3' paint-order='stroke'>%s</text></g>%n",
-                        label.x, label.y + font, color(star), font, DetectionReportGenerator.escapeHtml(labelText));
+                        label.x, label.y + font, color(star), font, ReportFormat.escapeHtml(labelText));
             }
             out.println("</g></svg>");
             artifact.commit();
@@ -191,7 +191,7 @@ final class VariableStarMapWriter {
                                     String name, Rectangle2D.Double box) {
         out.printf(Locale.US, "<g class='variable-map-curve' data-candidate='%s' data-star-id='%d' transform='translate(%.2f %.2f)'>%n",
                 FindingCategory.VARIABLE_STAR.id(number), star.id, box.x, box.y);
-        out.println("<title>" + FindingCategory.VARIABLE_STAR.id(number) + (name == null ? "" : " · " + DetectionReportGenerator.escapeHtml(name))
+        out.println("<title>" + FindingCategory.VARIABLE_STAR.id(number) + (name == null ? "" : " · " + ReportFormat.escapeHtml(name))
                 + " · observed variation (95th–5th percentile); brighter up; individual magnitude scale</title>");
         out.printf(Locale.US, "<rect width='%.2f' height='%.2f' rx='4' fill='#000' fill-opacity='0.18'/>%n",
                 box.width, box.height);
@@ -251,7 +251,7 @@ final class VariableStarMapWriter {
 
     private static void text(PrintWriter out, int x, int y, String value, String color, int size) {
         out.printf(Locale.US, "<text x='%d' y='%d' fill='%s' font-size='%d'>%s</text>%n",
-                x, y, color, size, DetectionReportGenerator.escapeHtml(value));
+                x, y, color, size, ReportFormat.escapeHtml(value));
     }
 
     private static String jpeg(BufferedImage image) throws IOException {

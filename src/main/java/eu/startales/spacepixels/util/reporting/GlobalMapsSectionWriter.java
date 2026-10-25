@@ -48,7 +48,7 @@ final class GlobalMapsSectionWriter {
             return;
         }
 
-        BufferedImage globalMap = DetectionReportGenerator.createGlobalTrackMap(
+        BufferedImage globalMap = ReportMaps.createGlobalTrackMap(
                 backgroundData,
                 reportContext.anomalies,
                 reportContext.singleStreaks,
@@ -150,10 +150,10 @@ final class GlobalMapsSectionWriter {
             return;
         }
 
-        BufferedImage transientMap = DetectionReportGenerator.createGlobalTransientMap(backgroundData, allTransients, reportContext.settings);
+        BufferedImage transientMap = ReportMaps.createGlobalTransientMap(backgroundData, allTransients, reportContext.settings);
         TrackVisualizationRenderer.saveLosslessPng(transientMap, new File(reportContext.exportDir, "global_transient_map.png"));
 
-        BufferedImage rainbowMap = DetectionReportGenerator.createRainbowClusterMap(backgroundData, allTransients, reportContext.settings);
+        BufferedImage rainbowMap = ReportMaps.createRainbowClusterMap(backgroundData, allTransients, reportContext.settings);
         TrackVisualizationRenderer.saveLosslessPng(rainbowMap, new File(reportContext.exportDir, "rainbow_cluster_map.png"));
 
         report.println("<div class='panel'>");
@@ -193,15 +193,15 @@ final class GlobalMapsSectionWriter {
         String label = category.mapLabel();
         Color color = category.color();
         html.append(interactive ? "<button type='button' class='legend-pill' data-report-category='" + code
-                        + "' aria-pressed='true' title='Show or hide " + DetectionReportGenerator.escapeHtml(label) + "'>"
+                        + "' aria-pressed='true' title='Show or hide " + ReportFormat.escapeHtml(label) + "'>"
                         : "<div class='legend-pill'>")
                 .append("<span class='legend-code' style='background:")
                 .append(colorToHex(color))
                 .append(";'>")
-                .append(DetectionReportGenerator.escapeHtml(code))
+                .append(ReportFormat.escapeHtml(code))
                 .append("</span>")
                 .append("<span>")
-                .append(DetectionReportGenerator.escapeHtml(label))
+                .append(ReportFormat.escapeHtml(label))
                 .append(": <strong>")
                 .append(count)
                 .append("</strong></span>").append(interactive ? "</button>" : "</div>");

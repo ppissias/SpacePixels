@@ -68,7 +68,7 @@ final class SessionPictureSectionWriter {
         } catch (RuntimeException e) {
             LOGGER.log(Level.WARNING, "Failed to write the session picture", e);
             report.println("<div class='astro-note'>The session picture could not be written: "
-                    + DetectionReportGenerator.escapeHtml(String.valueOf(e)) + "</div>");
+                    + ReportFormat.escapeHtml(String.valueOf(e)) + "</div>");
             return;
         }
         report.print(section);
@@ -95,7 +95,7 @@ final class SessionPictureSectionWriter {
             }
         } catch (IOException | RuntimeException e) {
             report.println("<div class='astro-note'>The session picture could not be written: "
-                    + DetectionReportGenerator.escapeHtml(String.valueOf(e.getMessage())) + "</div>");
+                    + ReportFormat.escapeHtml(String.valueOf(e.getMessage())) + "</div>");
             return;
         }
 
@@ -152,7 +152,7 @@ final class SessionPictureSectionWriter {
                 + (catalogueLayer != null && transformer != null && transformer.isCorrected() ? "; catalogue positions use the plate solution corrected to the stars" : "")
                 + ". Click the picture for the full-size stack.</div>");
         if (area != null && !context.dataAreaText.isEmpty()) {
-            report.println("<div class='sp-caption'>" + DetectionReportGenerator.escapeHtml(context.dataAreaText)
+            report.println("<div class='sp-caption'>" + ReportFormat.escapeHtml(context.dataAreaText)
                     + " It is outlined in blue.</div>");
         }
         report.println("</div>");
@@ -167,7 +167,7 @@ final class SessionPictureSectionWriter {
 
     private static String button(String layer, String label, boolean available, boolean on, String tooltip) {
         return "<button type='button' class='id-link sp-toggle" + (on ? " active" : "") + "' data-layer='" + layer + "' aria-pressed='" + on + "'"
-                + (available ? "" : " disabled") + " title='" + DetectionReportGenerator.escapeHtml(tooltip) + "'>" + label + "</button>";
+                + (available ? "" : " disabled") + " title='" + ReportFormat.escapeHtml(tooltip) + "'>" + label + "</button>";
     }
 
     // ==========================================
@@ -197,29 +197,29 @@ final class SessionPictureSectionWriter {
         double marker = width / 140.0;
         double offset = width / 160.0;
         int count = 0;
-        count += tracks(svg, context.streakTracks, DetectionReportGenerator.GLOBAL_MAP_STREAK_TRACK_COLOR, FindingCategory.STREAK_TRACK, context, offset);
-        count += tracks(svg, context.movingTargets, DetectionReportGenerator.GLOBAL_MAP_MOVING_TARGET_COLOR, FindingCategory.MOVING_TARGET, context, offset);
-        count += tracks(svg, localRescueTracks, DetectionReportGenerator.GLOBAL_MAP_LOCAL_RESCUE_COLOR, FindingCategory.LOCAL_RESCUE, context, offset);
+        count += tracks(svg, context.streakTracks, ReportMaps.GLOBAL_MAP_STREAK_TRACK_COLOR, FindingCategory.STREAK_TRACK, context, offset);
+        count += tracks(svg, context.movingTargets, ReportMaps.GLOBAL_MAP_MOVING_TARGET_COLOR, FindingCategory.MOVING_TARGET, context, offset);
+        count += tracks(svg, localRescueTracks, ReportMaps.GLOBAL_MAP_LOCAL_RESCUE_COLOR, FindingCategory.LOCAL_RESCUE, context, offset);
         int index = 1;
         for (ResidualTransientAnalysis.LocalActivityCluster cluster : context.localActivityClusters) {
             if (cluster != null && cluster.points != null && !cluster.points.isEmpty()) {
                 double x = cluster.metrics != null ? cluster.metrics.centroidX : cluster.points.get(0).x;
                 double y = cluster.metrics != null ? cluster.metrics.centroidY : cluster.points.get(0).y;
                 double radius = Math.max(marker, (cluster.metrics != null ? cluster.metrics.clusterRadiusPixels : 0) + marker / 2);
-                circle(svg, x, y, radius, DetectionReportGenerator.GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, context.findingId(FindingCategory.LOCAL_ACTIVITY, index), true);
+                circle(svg, x, y, radius, ReportMaps.GLOBAL_MAP_LOCAL_ACTIVITY_COLOR, context.findingId(FindingCategory.LOCAL_ACTIVITY, index), true);
                 count++;
             }
             index++;
         }
         index = 1;
         for (DetectedObject candidate : context.slowMoverCandidates) {
-            circle(svg, candidate.x, candidate.y, marker, DetectionReportGenerator.GLOBAL_MAP_DEEP_STACK_COLOR, context.findingId(FindingCategory.SLOW_MOVER, index++), false);
+            circle(svg, candidate.x, candidate.y, marker, ReportMaps.GLOBAL_MAP_DEEP_STACK_COLOR, context.findingId(FindingCategory.SLOW_MOVER, index++), false);
             count++;
         }
         index = 1;
         for (AnomalyDetection anomaly : context.anomalies) {
             if (anomaly.object != null) {
-                circle(svg, anomaly.object.x, anomaly.object.y, marker, DetectionReportGenerator.GLOBAL_MAP_ANOMALY_COLOR, context.findingId(FindingCategory.ANOMALY, index), false);
+                circle(svg, anomaly.object.x, anomaly.object.y, marker, ReportMaps.GLOBAL_MAP_ANOMALY_COLOR, context.findingId(FindingCategory.ANOMALY, index), false);
                 count++;
             }
             index++;
@@ -228,7 +228,7 @@ final class SessionPictureSectionWriter {
         for (Track streak : context.singleStreaks) {
             if (streak.points != null && !streak.points.isEmpty()) {
                 DetectedObject point = streak.points.get(0);
-                circle(svg, point.x, point.y, marker, DetectionReportGenerator.GLOBAL_MAP_SINGLE_STREAK_COLOR, context.findingId(FindingCategory.SINGLE_STREAK, index), false);
+                circle(svg, point.x, point.y, marker, ReportMaps.GLOBAL_MAP_SINGLE_STREAK_COLOR, context.findingId(FindingCategory.SINGLE_STREAK, index), false);
                 count++;
             }
             index++;
@@ -276,7 +276,7 @@ final class SessionPictureSectionWriter {
 
     private static void label(StringBuilder svg, double x, double y, String text, String colour) {
         svg.append(ReportPresentation.linkLabel(text, String.format(Locale.US, "<text x='%.1f' y='%.1f' fill='%s' stroke='#000' stroke-width='3' paint-order='stroke' stroke-opacity='0.7'>%s</text>",
-                x, y, colour, DetectionReportGenerator.escapeHtml(text))));
+                x, y, colour, ReportFormat.escapeHtml(text))));
     }
 
     static String variablesLayer(DetectionReportContext context, int width, int height) {
@@ -308,7 +308,7 @@ final class SessionPictureSectionWriter {
             double x = shape[0] + 0.5;
             double y = shape[1] + 0.5;
             String name = SkyProjection.deepSkyLabel(object);
-            String title = "<title>" + DetectionReportGenerator.escapeHtml(name + " · " + typeName(object.type)) + "</title>";
+            String title = "<title>" + ReportFormat.escapeHtml(name + " · " + typeName(object.type)) + "</title>";
             if (shape[2] > cross) {
                 svg.append(String.format(Locale.US, "<ellipse cx='%.1f' cy='%.1f' rx='%.1f' ry='%.1f' transform='rotate(%.2f %.1f %.1f)' fill='none' stroke='%s' stroke-width='1.5' vector-effect='non-scaling-stroke'>%s</ellipse>",
                         x, y, shape[2], Math.max(cross / 3, shape[3]), Math.toDegrees(shape[4]), x, y, DEEP_SKY_COLOR, title));
@@ -343,7 +343,7 @@ final class SessionPictureSectionWriter {
             double y = p[1] + 0.5;
             svg.append(String.format(Locale.US, "<path d='M%.1f %.1fL%.1f %.1fL%.1f %.1fL%.1f %.1fZ' fill='none' stroke='%s' stroke-width='1.5' vector-effect='non-scaling-stroke'><title>%s</title></path>",
                     x, y - diamond, x + diamond, y, x, y + diamond, x - diamond, y, VARIABLE_COLOR,
-                    DetectionReportGenerator.escapeHtml(variable.name + (variable.type != null ? " · " + variable.type : ""))));
+                    ReportFormat.escapeHtml(variable.name + (variable.type != null ? " · " + variable.type : ""))));
             label(svg, x + diamond * 1.6, y - diamond, variable.name, VARIABLE_COLOR);
             count++;
         }

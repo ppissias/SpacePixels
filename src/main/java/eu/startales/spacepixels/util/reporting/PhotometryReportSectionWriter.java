@@ -229,7 +229,7 @@ final class PhotometryReportSectionWriter {
         } else if ("NOT_READY".equals(t.verdict)) {
             html.append("<strong>Not ready:</strong> no star was scored, because:<ul style='margin:6px 0 4px 18px; padding:0;'>");
             for (String message : t.readinessMessages) {
-                html.append("<li>").append(DetectionReportGenerator.escapeHtml(message)).append("</li>");
+                html.append("<li>").append(ReportFormat.escapeHtml(message)).append("</li>");
             }
             html.append("</ul>");
             List<String> actions = new ArrayList<>();
@@ -257,7 +257,7 @@ final class PhotometryReportSectionWriter {
             if (!actions.isEmpty()) {
                 html.append("<strong>What can help:</strong><ul style='margin:6px 0 0 18px; padding:0;'>");
                 for (String action : actions) {
-                    html.append("<li>").append(DetectionReportGenerator.escapeHtml(action)).append("</li>");
+                    html.append("<li>").append(ReportFormat.escapeHtml(action)).append("</li>");
                 }
                 html.append("</ul>");
             }
@@ -290,7 +290,7 @@ final class PhotometryReportSectionWriter {
         if (!t.readinessMessages.isEmpty() && !"NOT_READY".equals(t.verdict)) {
             report.println("<ul style='margin: 0 0 12px 18px; padding: 0; font-size: 13px; line-height: 1.5;'>");
             for (String message : t.readinessMessages) {
-                report.println("<li>" + DetectionReportGenerator.escapeHtml(message) + "</li>");
+                report.println("<li>" + ReportFormat.escapeHtml(message) + "</li>");
             }
             report.println("</ul>");
         }
@@ -380,15 +380,15 @@ final class PhotometryReportSectionWriter {
                 gates.append(e.getKey()).append(": ").append(e.getValue());
             }
             report.println("<div class='astro-note'" + tipAttr("How many candidate stars failed each check. A star can fail more than one. Hover the checks on a candidate card for the explanation and the result.")
-                    + ">Checks failed by candidates: " + DetectionReportGenerator.escapeHtml(gates.toString()) + "</div>");
+                    + ">Checks failed by candidates: " + ReportFormat.escapeHtml(gates.toString()) + "</div>");
         }
         report.println("</div>");
     }
 
     private static String checkRow(String status, String name, String tests, String result) {
         return "<div>" + statusBadge(status) + "</div><div style='color:#ffffff; font-weight:600; white-space:nowrap;'>" + name + "</div>"
-                + "<div><span style='color:#aab4bd;'>" + DetectionReportGenerator.escapeHtml(tests) + "</span><br>"
-                + DetectionReportGenerator.escapeHtml(result) + "</div>";
+                + "<div><span style='color:#aab4bd;'>" + ReportFormat.escapeHtml(tests) + "</span><br>"
+                + ReportFormat.escapeHtml(result) + "</div>";
     }
 
     /** Stars from the master map to the scored set, as proportional bars with the reasons for each drop. */
@@ -479,8 +479,8 @@ final class PhotometryReportSectionWriter {
         return "<div style='display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:3px 0;'>"
                 + "<div style='flex: 0 1 360px; max-width:100%; background:#262626; border-radius:3px; height:14px;'><div style='width:"
                 + String.format(Locale.US, "%.1f", percent) + "%; height:100%; background:" + color + "; border-radius:3px;'></div></div>"
-                + "<div><span style='color:#ffffff;'>" + DetectionReportGenerator.escapeHtml(label) + "</span>"
-                + (note.isEmpty() ? "" : " <span style='color:#99a3ad;'>(" + DetectionReportGenerator.escapeHtml(note) + ")</span>") + "</div></div>";
+                + "<div><span style='color:#ffffff;'>" + ReportFormat.escapeHtml(label) + "</span>"
+                + (note.isEmpty() ? "" : " <span style='color:#99a3ad;'>(" + ReportFormat.escapeHtml(note) + ")</span>") + "</div></div>";
     }
 
     // =================================================================
@@ -670,9 +670,9 @@ final class PhotometryReportSectionWriter {
         chart.line(x, usedY, PhotometrySvgChart.SERIES_BLUE, 2, false, null);
         chart.points(x, usedY, PhotometrySvgChart.SERIES_BLUE, 4, PhotometrySvgChart.Marker.CIRCLE, usedTips);
         chart.points(x, excludedY, PhotometrySvgChart.STATUS_CRITICAL, 4.5, PhotometrySvgChart.Marker.CROSS, excludedTips);
-        return "<div><div style='font-size:12px; color:#cccccc;'>" + DetectionReportGenerator.escapeHtml(title) + "</div>"
+        return "<div><div style='font-size:12px; color:#cccccc;'>" + ReportFormat.escapeHtml(title) + "</div>"
                 + "<div style='font-size:11px; color:#9aa3ab; max-width:360px; margin:0 0 4px 0; line-height:1.35;'>"
-                + DetectionReportGenerator.escapeHtml(explanation) + "</div>" + chart.render() + "</div>";
+                + ReportFormat.escapeHtml(explanation) + "</div>" + chart.render() + "</div>";
     }
 
     private static String concentrationChart(List<PipelineTelemetry.PhotometryFrameStat> frames, double drift) {
@@ -735,7 +735,7 @@ final class PhotometryReportSectionWriter {
                     + "It describes the observed time span, rather than a full-cycle amplitude. Catalogue ranges and amplitudes use the listed passbands; "
                     + "differences in filter, time coverage and phase limit direct comparisons.</p>");
             report.println("<p class='compact-note'>Presentation: high confidence first; "
-                    + DetectionReportGenerator.escapeHtml(context.settings.getVariableStarReportOptions().sortOrder().toString())
+                    + ReportFormat.escapeHtml(context.settings.getVariableStarReportOptions().sortOrder().toString())
                     + ". V numbers stay fixed across the table, maps, CSVs and viewers. Showing " + presentation.cards.size()
                     + " of " + cards.size() + " detailed cards (limit "
                     + context.settings.getVariableStarReportOptions().maxCandidateCards()
@@ -770,11 +770,11 @@ final class PhotometryReportSectionWriter {
                 + th("Look Up", "Searches the same sky position in VSX or SIMBAD.")
                 + "</tr></thead><tbody>");
             for (StarLightCurve star : rejected) {
-                report.println("<tr><td>#" + star.id + "</td><td>" + DetectionReportGenerator.escapeHtml(
+                report.println("<tr><td>#" + star.id + "</td><td>" + ReportFormat.escapeHtml(
                         DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, star.x, star.y)) + "</td>"
                         + "<td>" + formatMag(star.meanMag, 2) + "</td><td>" + formatMag(star.amplitude, 3) + "</td>"
                         + "<td>" + formatMag(star.scatterZ, 1) + "</td><td>" + formatMag(star.stetsonJZ, 1) + "</td>"
-                        + "<td class='alert'>" + DetectionReportGenerator.escapeHtml(String.join(", ", star.failedGates)) + "</td>"
+                        + "<td class='alert'>" + ReportFormat.escapeHtml(String.join(", ", star.failedGates)) + "</td>"
                         + "<td>" + lookUpLinks(context, star) + "</td></tr>");
             }
             report.println("</tbody></table></div>");
@@ -789,9 +789,9 @@ final class PhotometryReportSectionWriter {
         report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.VARIABLE_STAR, number) + "' style='border-left-color:" + tierColor + ";'>");
         report.println("<div class='detection-title'>" + FindingCategory.VARIABLE_STAR.id(number) + " &middot; " + tierLabel(star.tier) + " &middot; star #" + star.id + "</div>");
         report.println("<div class='astro-note' style='margin-top:-8px; margin-bottom:8px;'>"
-                + DetectionReportGenerator.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, star.x, star.y))
+                + ReportFormat.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, star.x, star.y))
                 + "</div>");
-        report.println("<p style='font-size:14px; color:#e6e6e6; margin: 0 0 10px 0; line-height:1.5;'>" + DetectionReportGenerator.escapeHtml(plainSummary(analysis, star)) + "</p>");
+        report.println("<p style='font-size:14px; color:#e6e6e6; margin: 0 0 10px 0; line-height:1.5;'>" + ReportFormat.escapeHtml(plainSummary(analysis, star)) + "</p>");
         report.println(catalogueEntryHtml(context, star, sessionCatalogue));
         SkyTarget comparisonTarget = skyTarget(context, star.x, star.y);
         boolean comparisonMatched = comparisonTarget != null && !sessionCatalogue.variablesNear(
@@ -821,7 +821,7 @@ final class PhotometryReportSectionWriter {
         report.println(compactMetric(formatMag(star.apertureAmplitudeDifference, 2), "Aperture amplitude difference",
                 "Absolute difference between the small-aperture and large-aperture amplitudes, divided by the candidate amplitude. This is a fraction of the amplitude, not a difference in magnitudes. A discrepancy can indicate contamination or other aperture-dependent effects."));
         report.println(compactMetric(formatMag(star.maxSystematicsCorrelation, 2)
-                + (star.maxSystematicsSource != null ? " <span style='font-size:10px; color:#999;'>" + DetectionReportGenerator.escapeHtml(star.maxSystematicsSource) + "</span>" : ""),
+                + (star.maxSystematicsSource != null ? " <span style='font-size:10px; color:#999;'>" + ReportFormat.escapeHtml(star.maxSystematicsSource) + "</span>" : ""),
                 "Maximum systematics correlation (r)",
                 "Largest absolute correlation between the light curve and the monitored frame properties: ensemble zero point, stellar-image width, sky background, and registration offsets."));
         report.println(compactMetric(formatMag(star.systematicsLimitMag, 3), "Systematics limit (mag)",
@@ -922,13 +922,13 @@ final class PhotometryReportSectionWriter {
             boolean high = star.tier == VariabilityTier.HIGH_CONFIDENCE;
             report.print("<tr><td><strong>" + name + "</strong></td>"
                     + "<td style='color:" + (high ? PhotometrySvgChart.SERIES_BLUE : PhotometrySvgChart.SERIES_ORANGE) + ";'>" + tierLabel(star.tier) + "</td>"
-                    + "<td>" + DetectionReportGenerator.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, star.x, star.y)) + "</td>"
+                    + "<td>" + ReportFormat.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, star.x, star.y)) + "</td>"
                     + "<td>" + formatMag(star.meanMag, 2) + "</td>"
                     + "<td>" + formatMag(star.amplitude, 3) + " mag</td>"
                     + "<td>" + (Double.isNaN(star.timeSpanMinutes) ? "n/a" : formatMag(star.timeSpanMinutes, 0) + " min") + "</td>"
-                    + "<td>" + DetectionReportGenerator.escapeHtml(describeChange(star)) + "</td>"
+                    + "<td>" + ReportFormat.escapeHtml(describeChange(star)) + "</td>"
                     + "<td" + (star.failedGates.isEmpty() ? "" : " class='alert'") + ">" + (star.failedGates.isEmpty() ? "&ndash;"
-                    : DetectionReportGenerator.escapeHtml(String.join(", ", star.failedGates))) + "</td>");
+                    : ReportFormat.escapeHtml(String.join(", ", star.failedGates))) + "</td>");
             SkyTarget target = sky ? skyTarget(context, star.x, star.y) : null;
             List<SessionCatalogue.VariableMatch> matches = target == null ? List.of()
                     : sessionCatalogue.variablesNear(target.raDegrees, target.decDegrees, target.radiusArcsec);
@@ -943,7 +943,7 @@ final class PhotometryReportSectionWriter {
                         "VSX", sidecar, String.format(Locale.US, "AAVSO VSX within %.0f arcsec of %s", target.radiusArcsec, FindingCategory.VARIABLE_STAR.id(number)))
                         .replace("<button ", "<button style='display:none' data-identify-all='1' ");
                 report.print("<td><span data-known-as-sidecar='" + sidecar + "' data-catalogue-star='"
-                        + DetectionReportGenerator.escapeHtml(fallback) + "'>" + (fallback.isEmpty() ? "" : fallback + "<br>")
+                        + ReportFormat.escapeHtml(fallback) + "'>" + (fallback.isEmpty() ? "" : fallback + "<br>")
                         + "<span style='color:#777;'>VSX: not checked</span>" + hidden
                         + "</span>" + CatalogueComparisonWriter.slot(number, true, false) + "</td>");
             } else if (sky) {
@@ -957,10 +957,10 @@ final class PhotometryReportSectionWriter {
     /** The "Known as" cell of a candidate matched in the session's catalogue, written like the live VSX result. */
     static String knownAsHtml(List<SessionCatalogue.VariableMatch> matches) {
         SkyCatalogue.VariableStar star = matches.get(0).star;
-        String name = DetectionReportGenerator.escapeHtml(star.name);
+        String name = ReportFormat.escapeHtml(star.name);
         String link = star.oid > 0 ? "<a class='live-link-inline' href='https://www.aavso.org/vsx/index.php?view=detail.top&amp;oid="
                 + star.oid + "' target='_blank' rel='noopener noreferrer'>" + name + "</a>" : name;
-        return "<strong>" + link + "</strong> &middot; " + DetectionReportGenerator.escapeHtml(star.type != null ? star.type : "?")
+        return "<strong>" + link + "</strong> &middot; " + ReportFormat.escapeHtml(star.type != null ? star.type : "?")
                 + " &middot; " + (star.periodDays != null ? SessionCatalogue.formatPeriod(star.periodDays) : "no period")
                 + " &middot; " + String.format(Locale.US, "%.1f", matches.get(0).separationArcsec) + "&Prime;"
                 + (matches.size() > 1 ? " <span style='color:#888;'>(+" + (matches.size() - 1) + " more)</span>" : "");
@@ -971,8 +971,8 @@ final class PhotometryReportSectionWriter {
         SessionCatalogue.StarIdentity identity = target == null ? null
                 : catalogue.starIdentityNear(target.raDegrees, target.decDegrees, Math.min(target.radiusArcsec, 5.0));
         if (identity == null) return "";
-        return "Catalogue star: <strong>" + DetectionReportGenerator.escapeHtml(identity.name()) + "</strong>"
-                + " <span style='color:#888;'>(" + DetectionReportGenerator.escapeHtml(identity.source()) + ", "
+        return "Catalogue star: <strong>" + ReportFormat.escapeHtml(identity.name()) + "</strong>"
+                + " <span style='color:#888;'>(" + ReportFormat.escapeHtml(identity.source()) + ", "
                 + String.format(Locale.US, "%.1f", identity.separationArcsec()) + "&Prime; away)</span>";
     }
 
@@ -997,15 +997,15 @@ final class PhotometryReportSectionWriter {
         } else {
             SessionCatalogue.VariableMatch match = matches.get(0);
             SkyCatalogue.VariableStar variable = match.star;
-            String name = DetectionReportGenerator.escapeHtml(variable.name);
+            String name = ReportFormat.escapeHtml(variable.name);
             html.append("<strong>Catalogued as ")
                     .append(variable.oid > 0 ? "<a class='live-link-inline' href='https://www.aavso.org/vsx/index.php?view=detail.top&amp;oid="
                             + variable.oid + "' target='_blank' rel='noopener noreferrer'>" + name + "</a>" : name)
                     .append("</strong> in AAVSO VSX, ").append(String.format(Locale.US, "%.1f", match.separationArcsec)).append("&Prime; away: ")
-                    .append(DetectionReportGenerator.escapeHtml(SessionCatalogue.describeVsxType(variable.type)));
+                    .append(ReportFormat.escapeHtml(SessionCatalogue.describeVsxType(variable.type)));
             String range = vsxRange(variable);
             if (range != null) {
-                html.append(" &middot; ").append(DetectionReportGenerator.escapeHtml(range));
+                html.append(" &middot; ").append(ReportFormat.escapeHtml(range));
             }
             if (variable.periodDays != null && variable.periodDays > 0) {
                 html.append(" &middot; period ").append(SessionCatalogue.formatPeriod(variable.periodDays)).append('.');
@@ -1230,9 +1230,9 @@ final class PhotometryReportSectionWriter {
     }
 
     private static String externalCatalogueLink(String url, String label, String description) {
-        return "<a class='id-link' href='" + DetectionReportGenerator.escapeHtml(url)
-                + "' target='_blank' rel='noopener noreferrer' title='" + DetectionReportGenerator.escapeHtml(description)
-                + "'>" + DetectionReportGenerator.escapeHtml(label) + "</a>";
+        return "<a class='id-link' href='" + ReportFormat.escapeHtml(url)
+                + "' target='_blank' rel='noopener noreferrer' title='" + ReportFormat.escapeHtml(description)
+                + "'>" + ReportFormat.escapeHtml(label) + "</a>";
     }
 
     /** Coordinate searches work even when the downloaded catalogue contains no entry for the star. */
@@ -1448,7 +1448,7 @@ final class PhotometryReportSectionWriter {
 
     private static String cutoutHtml(String file, String caption) {
         return "<div><a href='" + file + "' target='_blank'><img loading='lazy' decoding='async' src='" + file + "' style='width:" + CUTOUT_DISPLAY_SIZE + "px; image-rendering:pixelated;' alt='"
-                + DetectionReportGenerator.escapeHtml(caption) + "' /></a><br/><center><small>" + DetectionReportGenerator.escapeHtml(caption) + "</small></center></div>";
+                + ReportFormat.escapeHtml(caption) + "' /></a><br/><center><small>" + ReportFormat.escapeHtml(caption) + "</small></center></div>";
     }
 
     // =================================================================
@@ -1499,8 +1499,8 @@ final class PhotometryReportSectionWriter {
                 + th("Outliers", "Measurements flagged as isolated outliers and omitted from the ensemble.")
                 + "</tr></thead><tbody>");
         for (PipelineTelemetry.PhotometryFrameStat f : t.frames) {
-            String status = f.used ? "Used" : "Excluded: " + DetectionReportGenerator.escapeHtml(f.exclusionReason);
-            report.println("<tr><td>" + (f.frameIndex + 1) + "</td><td>" + DetectionReportGenerator.escapeHtml(f.filename) + "</td>"
+            String status = f.used ? "Used" : "Excluded: " + ReportFormat.escapeHtml(f.exclusionReason);
+            report.println("<tr><td>" + (f.frameIndex + 1) + "</td><td>" + ReportFormat.escapeHtml(f.filename) + "</td>"
                     + "<td" + (f.used ? "" : " class='alert'") + ">" + status + "</td>"
                     + "<td>" + formatMag(f.fwhm, 2) + "</td><td>" + formatMag(f.apertureRadius, 2) + "</td><td>" + formatMag(f.skyMedian, 1) + "</td>"
                     + "<td>" + formatMag(f.registrationOffsetX, 2) + "</td><td>" + formatMag(f.registrationOffsetY, 2) + "</td><td>" + formatMag(f.registrationSpread, 2) + "</td>"
@@ -1624,7 +1624,7 @@ final class PhotometryReportSectionWriter {
         if (tip == null || tip.isEmpty()) {
             return "";
         }
-        return " title='" + DetectionReportGenerator.escapeHtml(tip).replace("'", "&#39;") + "'";
+        return " title='" + ReportFormat.escapeHtml(tip).replace("'", "&#39;") + "'";
     }
 
     private static String th(String label, String tip) {

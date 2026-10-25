@@ -156,7 +156,7 @@ final class PhotometrySvgChart {
                     .append("' stroke-width='").append(fmt(strokeWidth)).append("' stroke-linejoin='round' stroke-linecap='round'")
                     .append(dashed ? " stroke-dasharray='6 4'" : "").append(">");
             if (tooltip != null) {
-                marks.append("<title>").append(DetectionReportGenerator.escapeHtml(tooltip)).append("</title>");
+                marks.append("<title>").append(ReportFormat.escapeHtml(tooltip)).append("</title>");
             }
             marks.append("</path>");
         });
@@ -173,7 +173,7 @@ final class PhotometrySvgChart {
                 double cy = py(ys[i]);
                 marks.append("<g>");
                 if (tooltips != null && tooltips[i] != null) {
-                    marks.append("<title>").append(DetectionReportGenerator.escapeHtml(tooltips[i])).append("</title>");
+                    marks.append("<title>").append(ReportFormat.escapeHtml(tooltips[i])).append("</title>");
                     // Invisible hit target larger than the mark.
                     marks.append("<circle cx='").append(fmt(cx)).append("' cy='").append(fmt(cy))
                             .append("' r='").append(fmt(Math.max(7, radius + 4))).append("' fill='transparent'/>");
@@ -217,7 +217,7 @@ final class PhotometrySvgChart {
             if (label != null) {
                 marks.append("<text x='").append(width - marginRight - 2).append("' y='").append(fmt(yy - 4))
                         .append("' fill='").append(TEXT_SECONDARY).append("' font-size='10' text-anchor='end'>")
-                        .append(DetectionReportGenerator.escapeHtml(label)).append("</text>");
+                        .append(ReportFormat.escapeHtml(label)).append("</text>");
             }
         });
     }
@@ -244,7 +244,7 @@ final class PhotometrySvgChart {
             }
             marks.append("<text x='").append(fmt(px(x) + 6)).append("' y='").append(fmt(py(y) + 4))
                     .append("' fill='").append(TEXT_SECONDARY).append("' font-size='10'>")
-                    .append(DetectionReportGenerator.escapeHtml(text)).append("</text>");
+                    .append(ReportFormat.escapeHtml(text)).append("</text>");
         });
     }
 
@@ -258,7 +258,7 @@ final class PhotometrySvgChart {
                 .append("' width='").append(width).append("' height='").append(height)
                 .append("' style='max-width:100%; height:auto; background:").append(SURFACE).append("; border-radius:4px;'")
                 .append(" font-family=\"'Segoe UI', Tahoma, sans-serif\">");
-        svg.append("<title>").append(DetectionReportGenerator.escapeHtml(ariaLabel)).append("</title>");
+        svg.append("<title>").append(ReportFormat.escapeHtml(ariaLabel)).append("</title>");
         svg.append(background);
         appendAxes(svg);
         svg.append(marks);
@@ -348,10 +348,10 @@ final class PhotometrySvgChart {
                 .append("' y2='").append(plotBottom).append("' stroke='").append(AXIS).append("'/>");
         svg.append("<text x='").append((plotLeft + plotRight) / 2).append("' y='").append(height - 6).append("' fill='")
                 .append(TEXT_SECONDARY).append("' font-size='11' text-anchor='middle'>")
-                .append(DetectionReportGenerator.escapeHtml(xLabel)).append("</text>");
+                .append(ReportFormat.escapeHtml(xLabel)).append("</text>");
         svg.append("<text x='12' y='").append((plotTop + plotBottom) / 2).append("' fill='").append(TEXT_SECONDARY)
                 .append("' font-size='11' text-anchor='middle' transform='rotate(-90 12 ").append((plotTop + plotBottom) / 2)
-                .append(")'>").append(DetectionReportGenerator.escapeHtml(yLabel)).append("</text>");
+                .append(")'>").append(ReportFormat.escapeHtml(yLabel)).append("</text>");
     }
 
     private double px(double x) {

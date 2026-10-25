@@ -176,7 +176,7 @@ final class TargetVisualizationSectionWriter {
             report.println("<div class='detection-card streak-title' id='" + context.findingAnchor(FindingCategory.STREAK_TRACK, counter) + "' style='border-left-color: #ffcc33;'>");
             String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
             report.println("<div class='detection-title' style='color: #ffcc33;'>Confirmed Streak Track " + FindingCategory.STREAK_TRACK.id(counter) + timeBadge + "</div>");
-            report.print(DetectionReportGenerator.buildTrackTimingSummaryHtml(track, context.astrometryContext));
+            report.print(ReportFormat.buildTrackTimingSummaryHtml(track, context.astrometryContext));
             report.print(buildConfirmedStreakFrameFragmentSummaryHtml(track, context.fitsFiles));
 
             report.println("<div class='image-container'>");
@@ -261,7 +261,7 @@ final class TargetVisualizationSectionWriter {
             report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.MOVING_TARGET, counter) + "'>");
             String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
             report.println("<div class='detection-title'>Moving Target Track " + FindingCategory.MOVING_TARGET.id(counter) + timeBadge + "</div>");
-            report.print(DetectionReportGenerator.buildTrackTimingSummaryHtml(track, context.astrometryContext));
+            report.print(ReportFormat.buildTrackTimingSummaryHtml(track, context.astrometryContext));
 
             report.println("<div class='image-container'>");
             report.println(buildSkyOrientationImageTileHtml(
@@ -426,10 +426,10 @@ final class TargetVisualizationSectionWriter {
             html.append(frameIndex >= 0 ? frameIndex + 1 : "?");
             html.append("</span>");
             if (filename != null && !filename.isBlank()) {
-                html.append(" <span style='color:#7fbfff;'>(").append(DetectionReportGenerator.escapeHtml(filename)).append(")</span>");
+                html.append(" <span style='color:#7fbfff;'>(").append(ReportFormat.escapeHtml(filename)).append(")</span>");
             }
             if (timestampMillis > 0L) {
-                html.append(" <span style='color:#88c999;'>").append(DetectionReportGenerator.escapeHtml(formatUtcTimestamp(timestampMillis))).append("</span>");
+                html.append(" <span style='color:#88c999;'>").append(ReportFormat.escapeHtml(formatUtcTimestamp(timestampMillis))).append("</span>");
             }
             html.append(": fragments <span style='color:#ffcc66;'>");
             for (int i = 0; i < fragmentIndices.size(); i++) {
@@ -454,9 +454,9 @@ final class TargetVisualizationSectionWriter {
 
         StringBuilder html = new StringBuilder();
         html.append("<details class='foldable-streak-details'>");
-        html.append("<summary>").append(DetectionReportGenerator.escapeHtml(summaryLabel)).append("</summary>");
+        html.append("<summary>").append(ReportFormat.escapeHtml(summaryLabel)).append("</summary>");
         html.append("<div class='foldable-streak-body'>");
-        html.append("<strong>").append(DetectionReportGenerator.escapeHtml(headingLabel)).append(":</strong>");
+        html.append("<strong>").append(ReportFormat.escapeHtml(headingLabel)).append(":</strong>");
         html.append("<ul class='source-list'>").append(entriesHtml).append("</ul>");
         html.append("</div>");
         html.append("</details>");
@@ -557,11 +557,11 @@ final class TargetVisualizationSectionWriter {
             html.append("Frame: <span style='color:#fff;'>").append(frameIndex + 1).append("</span><br>");
         }
         html.append("Frame UTC: <span style='color:#fff;'>")
-                .append(DetectionReportGenerator.escapeHtml(formatUtcTimestamp(frameTimestamp)))
+                .append(ReportFormat.escapeHtml(formatUtcTimestamp(frameTimestamp)))
                 .append("</span><br>");
         if (exposureMillis > 0L) {
             html.append("Exposure: <span style='color:#fff;'>")
-                    .append(DetectionReportGenerator.escapeHtml(formatDuration(exposureMillis)))
+                    .append(ReportFormat.escapeHtml(formatDuration(exposureMillis)))
                     .append("</span><br>");
         }
         html.append("Streak Parts: <span style='color:#fff;'>").append(partCount).append("</span>");
@@ -671,16 +671,16 @@ final class TargetVisualizationSectionWriter {
         StringBuilder html = new StringBuilder();
         html.append("<div>");
         html.append("<div class='sky-orientation-figure'>");
-        html.append("<a href='").append(DetectionReportGenerator.escapeHtml(fileName)).append("' target='_blank'");
+        html.append("<a href='").append(ReportFormat.escapeHtml(fileName)).append("' target='_blank'");
         if (overlay != null) {
-            html.append(" title='").append(DetectionReportGenerator.escapeHtml("FOV "
+            html.append(" title='").append(ReportFormat.escapeHtml("FOV "
                     + formatFieldOfViewDimensions(overlay.fovWidthDegrees, overlay.fovHeightDegrees)
                     + " · Center RA " + overlay.centerRaText + " · Dec " + overlay.centerDecText)).append("'");
         }
         html.append(">");
-        html.append("<img loading='lazy' decoding='async' src='").append(DetectionReportGenerator.escapeHtml(fileName)).append("' alt='").append(DetectionReportGenerator.escapeHtml(altText)).append("'");
+        html.append("<img loading='lazy' decoding='async' src='").append(ReportFormat.escapeHtml(fileName)).append("' alt='").append(ReportFormat.escapeHtml(altText)).append("'");
         if (imageStyle != null && !imageStyle.isBlank()) {
-            html.append(" style='").append(DetectionReportGenerator.escapeHtml(imageStyle)).append("'");
+            html.append(" style='").append(ReportFormat.escapeHtml(imageStyle)).append("'");
         }
         html.append(" /></a>");
         if (overlay != null) {
@@ -689,7 +689,7 @@ final class TargetVisualizationSectionWriter {
             html.append("</div>");
         }
         html.append("</div>");
-        html.append("<br/><center><small>").append(DetectionReportGenerator.escapeHtml(captionText)).append("</small></center>");
+        html.append("<br/><center><small>").append(ReportFormat.escapeHtml(captionText)).append("</small></center>");
         html.append("</div>");
         return html.toString();
     }

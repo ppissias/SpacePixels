@@ -65,11 +65,11 @@ final class DeepStackReportSectionWriter {
             report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rejectedHighStationaryLikelihood), "Rejected High Stationary Likelihood"));
             report.println(compactMetricBox(String.format(Locale.US, "%.2f", context.slowMoverTelemetry.minAxisRatioThreshold), "Min Axis Ratio"));
             report.println(compactMetricBox(String.format(Locale.US, "%.2f", context.slowMoverTelemetry.maxAxisRatioThreshold), "Max Axis Ratio"));
-            report.println(compactMetricBox(DetectionReportGenerator.formatPercent(context.slowMoverTelemetry.minFillFactorThreshold), "Min Fill Factor"));
+            report.println(compactMetricBox(ReportFormat.formatPercent(context.slowMoverTelemetry.minFillFactorThreshold), "Min Fill Factor"));
             report.println(compactMetricBox(String.format(Locale.US, "%.2f", context.slowMoverTelemetry.avgCandidateAxisRatio), "Avg Candidate Axis Ratio"));
-            report.println(compactMetricBox(DetectionReportGenerator.formatPercent(context.slowMoverTelemetry.medianSupportOverlapThreshold), "Min Overlap"));
-            report.println(compactMetricBox(DetectionReportGenerator.formatPercent(context.slowMoverTelemetry.medianSupportMaxOverlapThreshold), "Max Overlap"));
-            report.println(compactMetricBox(DetectionReportGenerator.formatPercent(context.slowMoverTelemetry.avgMedianMaskOverlap), "Avg Evaluated Overlap"));
+            report.println(compactMetricBox(ReportFormat.formatPercent(context.slowMoverTelemetry.medianSupportOverlapThreshold), "Min Overlap"));
+            report.println(compactMetricBox(ReportFormat.formatPercent(context.slowMoverTelemetry.medianSupportMaxOverlapThreshold), "Max Overlap"));
+            report.println(compactMetricBox(ReportFormat.formatPercent(context.slowMoverTelemetry.avgMedianMaskOverlap), "Avg Evaluated Overlap"));
             report.println(compactMetricBox(formatPercentage(context.slowMoverTelemetry.minFrameSupportThreshold), "Min Frame Support"));
             report.println(compactMetricBox(formatPercentage(context.slowMoverTelemetry.maxStationaryLikelihoodThreshold), "Max Stationary Likelihood"));
             report.println("</div>");
@@ -156,7 +156,7 @@ final class DeepStackReportSectionWriter {
         }
 
         if (context.slowMoverMedianVetoMask != null && context.masterStackData != null) {
-            BufferedImage maskImage = DetectionReportGenerator.createCroppedMaskOverlay(
+            BufferedImage maskImage = ReportMaps.createCroppedMaskOverlay(
                     context.masterStackData,
                     context.slowMoverMedianVetoMask,
                     cx,
@@ -170,7 +170,7 @@ final class DeepStackReportSectionWriter {
         }
 
         if (context.slowMoverMedianVetoMask != null && maskReferenceData != null && resolvedAuxiliaryMaskOverlap == null) {
-            resolvedAuxiliaryMaskOverlap = DetectionReportGenerator.computeMaskOverlapStats(
+            resolvedAuxiliaryMaskOverlap = ReportMaps.computeMaskOverlapStats(
                     detection,
                     context.slowMoverMedianVetoMask,
                     maskReferenceData[0].length,
@@ -232,7 +232,7 @@ final class DeepStackReportSectionWriter {
 
         StringBuilder deepStackStats = new StringBuilder();
         deepStackStats.append("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>")
-                .append(DetectionReportGenerator.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, detection.x, detection.y)))
+                .append(ReportFormat.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, detection.x, detection.y)))
                 .append("<br>Moment Elongation: <span style='color:#fff;'>")
                 .append(String.format(Locale.US, "%.2f", detection.elongation))
                 .append("</span><br>Pixels: <span style='color:#fff;'>")
@@ -240,16 +240,16 @@ final class DeepStackReportSectionWriter {
                 .append("</span>");
         if (resolvedAuxiliaryMaskOverlap != null) {
             deepStackStats.append("<br>Mask Overlap: <span style='color:#fff;'>")
-                    .append(DetectionReportGenerator.formatPercent(resolvedAuxiliaryMaskOverlap))
+                    .append(ReportFormat.formatPercent(resolvedAuxiliaryMaskOverlap))
                     .append("</span>");
         }
         if (candidateDiagnostics != null) {
             deepStackStats.append("<br>Axis Ratio: <span style='color:#fff;'>")
                     .append(String.format(Locale.US, "%.2f", candidateDiagnostics.axisRatio))
                     .append("</span><br>Fill Factor: <span style='color:#fff;'>")
-                    .append(DetectionReportGenerator.formatPercent(candidateDiagnostics.fillFactor))
+                    .append(ReportFormat.formatPercent(candidateDiagnostics.fillFactor))
                     .append("</span><br>Outside Median Mask: <span style='color:#fff;'>")
-                    .append(DetectionReportGenerator.formatPercent(candidateDiagnostics.outsideMedianMaskFraction))
+                    .append(ReportFormat.formatPercent(candidateDiagnostics.outsideMedianMaskFraction))
                     .append("</span><br>Shape-Estimated Motion: <span style='color:#fff;'>")
                     .append(String.format(Locale.US, "%.1f px (%.2f diameters)", candidateDiagnostics.estimatedMotionPixels, candidateDiagnostics.estimatedMotionDiameters))
                     .append("</span>");
@@ -393,9 +393,9 @@ final class DeepStackReportSectionWriter {
             if (i > 0) {
                 html.append(" ");
             }
-            html.append(DetectionReportGenerator.escapeHtml(match.label))
+            html.append(ReportFormat.escapeHtml(match.label))
                     .append(" (")
-                    .append(DetectionReportGenerator.escapeHtml(match.categoryLabel))
+                    .append(ReportFormat.escapeHtml(match.categoryLabel))
                     .append(") has ")
                     .append(match.overlappingTrackPoints)
                     .append(match.overlappingTrackPoints == 1 ? " detection" : " detections")
@@ -469,8 +469,8 @@ final class DeepStackReportSectionWriter {
 
     private static String compactMetricBox(String value, String label) {
         return "<div class='metric-box compact'>"
-                + "<span class='metric-value'>" + DetectionReportGenerator.escapeHtml(value) + "</span>"
-                + "<span class='metric-label'>" + DetectionReportGenerator.escapeHtml(label) + "</span>"
+                + "<span class='metric-value'>" + ReportFormat.escapeHtml(value) + "</span>"
+                + "<span class='metric-label'>" + ReportFormat.escapeHtml(label) + "</span>"
                 + "</div>";
     }
 

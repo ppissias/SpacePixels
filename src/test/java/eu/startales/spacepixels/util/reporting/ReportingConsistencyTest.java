@@ -47,7 +47,7 @@ public class ReportingConsistencyTest {
 
     @Test public void pixelSpeedUsesElapsedTimeBetweenExposureMidpoints() {
         FitsFileInformation[] files = files();
-        String html = DetectionReportGenerator.buildTrackTimingSummaryHtml(track(files),
+        String html = ReportFormat.buildTrackTimingSummaryHtml(track(files),
                 AstrometryContextFactory.buildContext(files, null, null));
         assertTrue(html, html.contains("5.00 px/min"));
         assertTrue("Keep the full observing span separate from motion time", html.contains("6.0 min"));

@@ -633,7 +633,7 @@ final class ResidualReviewSectionWriter {
         report.println("</div>");
 
         report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 10px;'>"
-                + "Type: <span style='color:#fff;'>" + DetectionReportGenerator.escapeHtml(formatLocalRescueKind(candidate.kind)) + "</span>"
+                + "Type: <span style='color:#fff;'>" + ReportFormat.escapeHtml(formatLocalRescueKind(candidate.kind)) + "</span>"
                 + " | "
                 + "Support: <span style='color:#fff;'>" + metrics.pointCount + " detections</span>"
                 + " across <span style='color:#fff;'>" + metrics.frameSpan + "</span> frame(s)"
@@ -644,7 +644,7 @@ final class ResidualReviewSectionWriter {
                 + " | Fit RMSE: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.linearityRmsePixels) + "</span>"
                 + " | Score: <span style='color:#fff;'>" + String.format(Locale.US, "%.1f", candidate.score) + "</span>"
                 + "</div>");
-        report.print(DetectionReportGenerator.buildTrackTimingSummaryHtml(track, context.astrometryContext));
+        report.print(ReportFormat.buildTrackTimingSummaryHtml(track, context.astrometryContext));
 
         report.println("<strong>Detection Coordinates & Frames:</strong><ul class='source-list'>");
         for (int i = 0; i < track.points.size(); i++) {

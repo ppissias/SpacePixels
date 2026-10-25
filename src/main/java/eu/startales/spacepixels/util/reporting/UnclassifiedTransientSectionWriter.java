@@ -509,7 +509,7 @@ final class UnclassifiedTransientSectionWriter {
                 .append("' data-id='U").append(marker.id)
                 .append("' data-frame='").append(marker.sourceFrame() + 1)
                 .append("' data-index='").append(marker.sourceFrame())
-                .append("' data-time='").append(escape(DetectionReportGenerator.formatUtcTimestamp(detection.timestamp)))
+                .append("' data-time='").append(escape(ReportFormat.formatUtcTimestamp(detection.timestamp)))
                 .append("' data-filename='").append(escape(detection.sourceFilename == null ? "Unknown" : detection.sourceFilename))
                 .append("' data-x='").append(format(detection.x))
                 .append("' data-y='").append(format(detection.y))
@@ -568,7 +568,7 @@ final class UnclassifiedTransientSectionWriter {
     }
 
     private static String escape(String value) {
-        return DetectionReportGenerator.escapeHtml(value).replace("'", "&#39;");
+        return ReportFormat.escapeHtml(value).replace("'", "&#39;");
     }
 
     private static void appendInteractionScript(PrintWriter report, int frameDelayMs) {

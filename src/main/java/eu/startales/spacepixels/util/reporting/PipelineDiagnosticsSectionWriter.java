@@ -59,7 +59,7 @@ final class PipelineDiagnosticsSectionWriter {
             double scaleArcsec = SkyMath.separationArcsec(centre.getRaDegrees(), centre.getDecDegrees(), step.getRaDegrees(), step.getDecDegrees());
             String field = WcsCoordinateTransformer.formatRa(centre.getRaDegrees()) + " "
                     + WcsCoordinateTransformer.formatDec(centre.getDecDegrees());
-            items.add(headerItem("Field", DetectionReportGenerator.escapeHtml(field)
+            items.add(headerItem("Field", ReportFormat.escapeHtml(field)
                     + String.format(Locale.US, " &middot; %.1f&deg; &times; %.1f&deg; &middot; %.2f&Prime;/px",
                     width * scaleArcsec / 3600.0, height * scaleArcsec / 3600.0, scaleArcsec)));
         }
@@ -103,14 +103,14 @@ final class PipelineDiagnosticsSectionWriter {
                         ? "–" + formatSeconds(exposures.last() / 1000.0) : "");
                 items.add(headerItem("Exposure", exposure));
             }
-            if (!filters.isEmpty()) items.add(headerItem("Filter", DetectionReportGenerator.escapeHtml(String.join(", ", filters))
+            if (!filters.isEmpty()) items.add(headerItem("Filter", ReportFormat.escapeHtml(String.join(", ", filters))
                     + (filters.size() > 1 ? " (mixed filters)" : "") + (missingFilter ? " (some headers missing)" : "")));
             String camera = headerValue(first, "INSTRUME");
             String telescope = headerValue(first, "TELESCOP");
             if (camera != null || telescope != null) {
                 String text = camera != null && telescope != null && !camera.equals(telescope)
-                        ? DetectionReportGenerator.escapeHtml(camera) + " &middot; " + DetectionReportGenerator.escapeHtml(telescope)
-                        : DetectionReportGenerator.escapeHtml(camera != null ? camera : telescope);
+                        ? ReportFormat.escapeHtml(camera) + " &middot; " + ReportFormat.escapeHtml(telescope)
+                        : ReportFormat.escapeHtml(camera != null ? camera : telescope);
                 items.add(headerItem("Camera", text));
             }
             if (width > 0 && height > 0) {
@@ -146,8 +146,8 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<nav class='report-nav'><span class='nav-title'>Jump to</span>");
         for (NavItem item : items) {
             report.println("<a href='#" + item.anchor + "'" + (item.muted ? " class='nav-muted'" : "") + ">"
-                    + DetectionReportGenerator.escapeHtml(item.label)
-                    + (item.count != null ? "<span class='nav-count'>" + DetectionReportGenerator.escapeHtml(item.count) + "</span>" : "")
+                    + ReportFormat.escapeHtml(item.label)
+                    + (item.count != null ? "<span class='nav-count'>" + ReportFormat.escapeHtml(item.count) + "</span>" : "")
                     + "</a>");
         }
         report.println("</nav>");
@@ -240,7 +240,7 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("</div>");
         if (!empty.isEmpty()) {
             report.println("<div class='astro-note' style='margin-top: -6px; margin-bottom: 14px;'>Nothing found: "
-                    + DetectionReportGenerator.escapeHtml(String.join(", ", empty)) + ".</div>");
+                    + ReportFormat.escapeHtml(String.join(", ", empty)) + ".</div>");
         }
         SessionPictureSectionWriter.writeAssets(report);
         SessionPictureSectionWriter.write(report, reportContext, localRescueTracks);
@@ -350,7 +350,7 @@ final class PipelineDiagnosticsSectionWriter {
     private static void writeTimingRow(PrintWriter report, String label, long elapsedMs, long totalMs, boolean substep) {
         String share = totalMs > 0 ? String.format(Locale.US, "%.1f%%", 100.0 * elapsedMs / totalMs) : "&ndash;";
         report.printf(Locale.US, "<tr><td%s>%s</td><td>%.3f s</td><td>%s</td></tr>%n",
-                substep ? " style='padding-left:28px;'" : "", DetectionReportGenerator.escapeHtml(label),
+                substep ? " style='padding-left:28px;'" : "", ReportFormat.escapeHtml(label),
                 elapsedMs / 1000.0, share);
     }
 
@@ -364,13 +364,13 @@ final class PipelineDiagnosticsSectionWriter {
 
     private static String textCard(String value, String label, String anchor, boolean quiet) {
         String box = "<div class='metric-box" + (quiet ? " quiet" : "") + "'><span class='metric-value'>" + value
-                + "</span><span class='metric-label'>" + DetectionReportGenerator.escapeHtml(label) + "</span></div>";
+                + "</span><span class='metric-label'>" + ReportFormat.escapeHtml(label) + "</span></div>";
         return anchor != null ? "<a class='metric-link' href='#" + anchor + "'>" + box + "</a>" : box;
     }
 
     private static String compactCard(String value, String label) {
         return "<div class='metric-box compact'><span class='metric-value'>" + value + "</span><span class='metric-label'>"
-                + DetectionReportGenerator.escapeHtml(label) + "</span></div>";
+                + ReportFormat.escapeHtml(label) + "</span></div>";
     }
 
     private static String headerItem(String label, String valueHtml) {
@@ -415,20 +415,20 @@ final class PipelineDiagnosticsSectionWriter {
         if (reportContext.astrometryContext.hasAstrometricSolution()) {
             report.println("<div class='flex-container'>");
             report.println("<div class='metric-box'><span class='metric-value'>Available</span><span class='metric-label'>Aligned WCS</span></div>");
-            report.println("<div class='metric-box'><span class='metric-value'>" + DetectionReportGenerator.escapeHtml(DetectionReportGenerator.formatUtcTimestamp(reportContext.astrometryContext.getSessionMidpointTimestampMillis())) + "</span><span class='metric-label'>Session Midpoint (UTC)</span></div>");
+            report.println("<div class='metric-box'><span class='metric-value'>" + ReportFormat.escapeHtml(ReportFormat.formatUtcTimestamp(reportContext.astrometryContext.getSessionMidpointTimestampMillis())) + "</span><span class='metric-label'>Session Midpoint (UTC)</span></div>");
             String observerMetric = reportContext.astrometryContext.hasSkybotObserverCode()
-                    ? DetectionReportGenerator.escapeHtml(reportContext.astrometryContext.getSkybotObserverCode())
+                    ? ReportFormat.escapeHtml(reportContext.astrometryContext.getSkybotObserverCode())
                     : "Geocentre";
             report.println("<div class='metric-box'><span class='metric-value'>" + observerMetric + "</span><span class='metric-label'>Observer for SkyBoT</span></div>");
             report.println("</div>");
             report.println("<div class='astro-note'>WCS source: " + reportContext.astrometryContext.getWcsSummary() + ".");
             if (reportContext.astrometryContext.hasSkybotObserverCode()) {
-                report.println("<br>SkyBoT observer code source: " + DetectionReportGenerator.escapeHtml(reportContext.astrometryContext.getSkybotObserverSource()) + ".");
+                report.println("<br>SkyBoT observer code source: " + ReportFormat.escapeHtml(reportContext.astrometryContext.getSkybotObserverSource()) + ".");
             } else {
                 report.println("<br>No IAU observatory code configured. SkyBoT links will use geocenter (500).");
             }
             if (reportContext.astrometryContext.getObserverSiteSourceLabel() != null) {
-                report.println("<br>Known site coordinates source: " + DetectionReportGenerator.escapeHtml(reportContext.astrometryContext.getObserverSiteSourceLabel()) + ".");
+                report.println("<br>Known site coordinates source: " + ReportFormat.escapeHtml(reportContext.astrometryContext.getObserverSiteSourceLabel()) + ".");
             } else {
                 report.println("<br>No observer site coordinates found.");
             }
@@ -519,7 +519,7 @@ final class PipelineDiagnosticsSectionWriter {
     }
 
     private static String escapeForSvg(String text) {
-        return DetectionReportGenerator.escapeHtml(text == null ? "" : text);
+        return ReportFormat.escapeHtml(text == null ? "" : text);
     }
 
     private static void writeFrameQualityStatistics(PrintWriter report, PipelineTelemetry pipelineTelemetry) {
@@ -536,26 +536,26 @@ final class PipelineDiagnosticsSectionWriter {
                 + (pipelineTelemetry.qualityThresholds.available ? "" : " No session limits could be derived for this run.") + "</p>");
         report.println("<div class='compact-threshold-grid'>");
         report.println("<div class='config-item'><span>Min Allowed Star Count</span><span class='val'>" + (Double.isFinite(pipelineTelemetry.qualityThresholds.minAllowedStarCount) ? String.valueOf((long) Math.ceil(pipelineTelemetry.qualityThresholds.minAllowedStarCount)) : "n/a") + "</span></div>");
-        report.println("<div class='config-item'><span>Max Allowed FWHM</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedFwhm) + "</span></div>");
-        report.println("<div class='config-item'><span>Max Allowed Eccentricity</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedEccentricity) + "</span></div>");
-        report.println("<div class='config-item'><span>Max Bright-Star Eccentricity</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedBrightStarEccentricity) + "</span></div>");
-        report.println("<div class='config-item'><span>Background Median Baseline</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.backgroundMedianBaseline) + "</span></div>");
-        report.println("<div class='config-item'><span>Max Background Deviation</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedBackgroundDeviation) + "</span></div>");
-        report.println("<div class='config-item'><span>Min Allowed Bg Median</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.minAllowedBackgroundMedian) + "</span></div>");
-        report.println("<div class='config-item'><span>Max Allowed Bg Median</span><span class='val'>" + DetectionReportGenerator.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedBackgroundMedian) + "</span></div>");
+        report.println("<div class='config-item'><span>Max Allowed FWHM</span><span class='val'>" + ReportFormat.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedFwhm) + "</span></div>");
+        report.println("<div class='config-item'><span>Max Allowed Eccentricity</span><span class='val'>" + ReportFormat.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedEccentricity) + "</span></div>");
+        report.println("<div class='config-item'><span>Max Bright-Star Eccentricity</span><span class='val'>" + ReportFormat.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedBrightStarEccentricity) + "</span></div>");
+        report.println("<div class='config-item'><span>Background Median Baseline</span><span class='val'>" + ReportFormat.formatOptionalMetric(pipelineTelemetry.qualityThresholds.backgroundMedianBaseline) + "</span></div>");
+        report.println("<div class='config-item'><span>Max Background Deviation</span><span class='val'>" + ReportFormat.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedBackgroundDeviation) + "</span></div>");
+        report.println("<div class='config-item'><span>Min Allowed Bg Median</span><span class='val'>" + ReportFormat.formatOptionalMetric(pipelineTelemetry.qualityThresholds.minAllowedBackgroundMedian) + "</span></div>");
+        report.println("<div class='config-item'><span>Max Allowed Bg Median</span><span class='val'>" + ReportFormat.formatOptionalMetric(pipelineTelemetry.qualityThresholds.maxAllowedBackgroundMedian) + "</span></div>");
         report.println("</div>");
         report.println("<div class='scroll-box compact-table-box'>");
         report.println("<table><thead><tr><th>Frame</th><th>Filename</th><th>Bg Median</th><th>Bg Sigma</th><th>Median FWHM</th><th>Median Ecc</th><th>Bright-Star Median Ecc</th><th>Stars</th><th>Shape Stars</th><th>Bright Shape Stars</th><th>FWHM Stars</th><th>Status</th><th>Rejection Reason</th></tr></thead><tbody>");
         for (PipelineTelemetry.FrameQualityStat stat : pipelineTelemetry.frameQualityStats) {
             String statusLabel = stat.rejected ? "Rejected" : "Kept";
-            String rejectionReason = (stat.rejectionReason == null || stat.rejectionReason.isBlank()) ? "-" : DetectionReportGenerator.escapeHtml(stat.rejectionReason);
+            String rejectionReason = (stat.rejectionReason == null || stat.rejectionReason.isBlank()) ? "-" : ReportFormat.escapeHtml(stat.rejectionReason);
             report.println("<tr><td>" + (stat.frameIndex + 1) + "</td>");
-            report.println("<td>" + DetectionReportGenerator.escapeHtml(stat.filename) + "</td>");
-            report.println("<td>" + DetectionReportGenerator.formatOptionalMetric(stat.backgroundMedian) + "</td>");
-            report.println("<td>" + DetectionReportGenerator.formatOptionalMetric(stat.backgroundNoise) + "</td>");
-            report.println("<td>" + DetectionReportGenerator.formatOptionalMetric(stat.medianFWHM) + "</td>");
-            report.println("<td>" + DetectionReportGenerator.formatOptionalMetric(stat.medianEccentricity) + "</td>");
-            report.println("<td>" + DetectionReportGenerator.formatOptionalMetric(stat.brightStarMedianEccentricity) + "</td>");
+            report.println("<td>" + ReportFormat.escapeHtml(stat.filename) + "</td>");
+            report.println("<td>" + ReportFormat.formatOptionalMetric(stat.backgroundMedian) + "</td>");
+            report.println("<td>" + ReportFormat.formatOptionalMetric(stat.backgroundNoise) + "</td>");
+            report.println("<td>" + ReportFormat.formatOptionalMetric(stat.medianFWHM) + "</td>");
+            report.println("<td>" + ReportFormat.formatOptionalMetric(stat.medianEccentricity) + "</td>");
+            report.println("<td>" + ReportFormat.formatOptionalMetric(stat.brightStarMedianEccentricity) + "</td>");
             report.println("<td>" + stat.starCount + "</td>");
             report.println("<td>" + stat.usableShapeStarCount + "</td>");
             report.println("<td>" + stat.brightStarShapeStarCount + "</td>");
@@ -581,13 +581,13 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<table><thead><tr><th>Frame</th><th>Filename</th><th>Median Ecc</th><th>Bright-Star Median Ecc</th><th>Bright Shape Stars</th><th>Rejection Reason</th></tr></thead><tbody>");
         for (PipelineTelemetry.FrameRejectionStat rej : pipelineTelemetry.rejectedFrames) {
             report.println("<tr><td>" + (rej.frameIndex + 1) + "</td>");
-            report.println("<td>" + DetectionReportGenerator.escapeHtml(rej.filename) + "</td>");
-            report.println("<td>" + DetectionReportGenerator.formatOptionalMetric(rej.medianEccentricity) + "</td>");
-            report.println("<td>" + DetectionReportGenerator.formatOptionalMetric(rej.brightStarMedianEccentricity) + "</td>");
+            report.println("<td>" + ReportFormat.escapeHtml(rej.filename) + "</td>");
+            report.println("<td>" + ReportFormat.formatOptionalMetric(rej.medianEccentricity) + "</td>");
+            report.println("<td>" + ReportFormat.formatOptionalMetric(rej.brightStarMedianEccentricity) + "</td>");
             report.println("<td>" + rej.brightStarShapeStarCount + "</td>");
             String details = FrameRejectionExplanation.details(pipelineTelemetry, rej);
-            report.println("<td class='alert rejection-reason'>" + DetectionReportGenerator.escapeHtml(rej.reason)
-                    + (details.isEmpty() ? "" : "<small>" + DetectionReportGenerator.escapeHtml(details) + "</small>") + "</td></tr>");
+            report.println("<td class='alert rejection-reason'>" + ReportFormat.escapeHtml(rej.reason)
+                    + (details.isEmpty() ? "" : "<small>" + ReportFormat.escapeHtml(details) + "</small>") + "</td></tr>");
         }
         report.println("</tbody></table>");
         report.println("</div>");
@@ -626,8 +626,8 @@ final class PipelineDiagnosticsSectionWriter {
                 Object defaultValue = field.get(defaults);
                 boolean differs = !java.util.Objects.equals(value, defaultValue);
                 String item = "<div class='config-item'" + (differs ? " style='border-left-color:#ff9933;' title='Default: "
-                        + DetectionReportGenerator.escapeHtml(String.valueOf(defaultValue)) + "'" : "") + "><span>" + field.getName()
-                        + "</span> <span class='val'" + (differs ? " style='color:#ffb366;'" : "") + ">" + DetectionReportGenerator.escapeHtml(String.valueOf(value)) + "</span></div>";
+                        + ReportFormat.escapeHtml(String.valueOf(defaultValue)) + "'" : "") + "><span>" + field.getName()
+                        + "</span> <span class='val'" + (differs ? " style='color:#ffb366;'" : "") + ">" + ReportFormat.escapeHtml(String.valueOf(value)) + "</span></div>";
                 (differs ? changed : unchanged).add(item);
             } catch (IllegalAccessException e) {
                 // Silently ignore fields that cannot be accessed
@@ -663,7 +663,7 @@ final class PipelineDiagnosticsSectionWriter {
             BufferedImage masterImg = TrackVisualizationRenderer.createDisplayImage(reportContext.masterStackData, reportContext.settings);
             TrackVisualizationRenderer.saveLosslessPng(masterImg, new File(reportContext.exportDir, "master_stack.png"));
 
-            BufferedImage masterMaskImg = DetectionReportGenerator.createMasterMaskOverlay(reportContext.masterStackData, reportContext.masterVetoMask);
+            BufferedImage masterMaskImg = ReportMaps.createMasterMaskOverlay(reportContext.masterStackData, reportContext.masterVetoMask);
             TrackVisualizationRenderer.saveLosslessPng(masterMaskImg, new File(reportContext.exportDir, "master_mask_overlay.png"));
 
             report.println("<div class='image-container'>");
@@ -704,10 +704,10 @@ final class PipelineDiagnosticsSectionWriter {
                 15);
 
         for (int idx : sampledCornerIndices) {
-            cornerFrames.add(DetectionReportGenerator.createFourCornerMosaic(reportContext.rawFrames.get(idx), 150, reportContext.settings));
+            cornerFrames.add(ReportMaps.createFourCornerMosaic(reportContext.rawFrames.get(idx), 150, reportContext.settings));
         }
 
-        BufferedImage driftImg = DetectionReportGenerator.createDriftMap(driftPoints, 300);
+        BufferedImage driftImg = ReportMaps.createDriftMap(driftPoints, 300);
         TrackVisualizationRenderer.saveLosslessPng(driftImg, new File(reportContext.exportDir, "dither_drift_map.png"));
 
         String cornerGifFile = "dither_corners_sampled.gif";
@@ -718,7 +718,7 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
         report.println("Shows how the image frame drifted across the session. Sensor dust or hot pixels move exactly along this trajectory, potentially creating false moving targets.</p>");
         if (!reportContext.dataAreaText.isEmpty()) {
-            report.println("<div class='astro-note'>" + DetectionReportGenerator.escapeHtml(reportContext.dataAreaText)
+            report.println("<div class='astro-note'>" + ReportFormat.escapeHtml(reportContext.dataAreaText)
                     + " The Overview picture and the detection map outline it in blue.</div>");
         }
         if (excludedFrames != null && !excludedFrames.isEmpty()) {
@@ -727,7 +727,7 @@ final class PipelineDiagnosticsSectionWriter {
                 frames.append(frames.length() == 0 ? "" : ", ").append(index + 1);
             }
             report.println("<div class='astro-note'>Left out of the drift analysis as blank or failed registrations (less than half of the pixels hold image data): frame "
-                    + DetectionReportGenerator.escapeHtml(frames.toString()) + ".</div>");
+                    + ReportFormat.escapeHtml(frames.toString()) + ".</div>");
         }
         report.println("<div class='image-container'>");
         report.println("<div><a href='dither_drift_map.png' target='_blank'><img loading='lazy' decoding='async' src='dither_drift_map.png' style='max-width: 300px;' alt='Drift Trajectory' /></a><br/><center><small>Drift Trajectory Map (Blue = Start, Red = End)</small></center></div>");
@@ -736,7 +736,7 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<div class='config-grid' style='grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));'>");
         for (int i = 0; i < driftPoints.size(); i++) {
             Pixel point = driftPoints.get(i);
-            report.println("<div class='config-item'><span style='color: #aaa;'>Frame " + (point.value + 1) + "</span> <span class='val'>" + DetectionReportGenerator.escapeHtml(DetectionReportGenerator.formatPixelCoordinateOnly(point.x, point.y)) + "</span></div>");
+            report.println("<div class='config-item'><span style='color: #aaa;'>Frame " + (point.value + 1) + "</span> <span class='val'>" + ReportFormat.escapeHtml(ReportFormat.formatPixelCoordinateOnly(point.x, point.y)) + "</span></div>");
         }
         report.println("</div></div></div>");
         report.println("</div>");
@@ -751,7 +751,7 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<table><thead><tr><th>Frame</th><th>Filename</th><th>Objects Extracted</th><th>Seed Threshold</th><th>Grow Threshold</th></tr></thead><tbody>");
         for (PipelineTelemetry.FrameExtractionStat stat : pipelineTelemetry.frameExtractionStats) {
             report.println("<tr><td>" + (stat.frameIndex + 1) + "</td>");
-            report.println("<td>" + DetectionReportGenerator.escapeHtml(stat.filename) + "</td>");
+            report.println("<td>" + ReportFormat.escapeHtml(stat.filename) + "</td>");
             report.println("<td>" + stat.objectCount + "</td>");
             report.println("<td>" + String.format(Locale.US, "%.2f", stat.seedThreshold) + "</td>");
             report.println("<td>" + String.format(Locale.US, "%.2f", stat.growThreshold) + "</td></tr>");
@@ -780,7 +780,7 @@ final class PipelineDiagnosticsSectionWriter {
                     fileName = pipelineTelemetry.frameExtractionStats.get(starStat.frameIndex).filename;
                 }
                 report.println("<tr><td>" + (starStat.frameIndex + 1) + "</td>");
-                report.println("<td>" + DetectionReportGenerator.escapeHtml(fileName) + "</td>");
+                report.println("<td>" + ReportFormat.escapeHtml(fileName) + "</td>");
                 report.println("<td>" + starStat.initialPointSources + "</td>");
                 report.println("<td style='color: #ff9933;'>" + starStat.purgedStars + "</td>");
                 report.println("<td style='color: #44ff44; font-weight: bold;'>" + starStat.survivingTransients + "</td></tr>");

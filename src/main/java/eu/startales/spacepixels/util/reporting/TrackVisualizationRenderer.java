@@ -164,7 +164,7 @@ final class TrackVisualizationRenderer {
     static String frameLabel(DetectionReportContext context, int index) {
         long timestamp = context.fitsFiles != null && index >= 0 && index < context.fitsFiles.length && context.fitsFiles[index] != null
                 ? context.fitsFiles[index].getObservationTimestamp() : -1;
-        return "Frame " + (index + 1) + (timestamp > 0 ? " · " + DetectionReportGenerator.formatUtcTimestamp(timestamp) : "");
+        return "Frame " + (index + 1) + (timestamp > 0 ? " · " + ReportFormat.formatUtcTimestamp(timestamp) : "");
     }
 
     static BufferedImage createSingleStreakShapeImage(List<DetectedObject> points,

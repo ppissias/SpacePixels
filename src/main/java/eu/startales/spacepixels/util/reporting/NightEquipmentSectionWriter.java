@@ -654,7 +654,7 @@ final class NightEquipmentSectionWriter {
             double y = top + (range[1] - v) / (range[1] - range[0]) * (height - top - bottom);
             line.append(String.format(Locale.US, "%.1f,%.1f ", x, y));
             svg.append(String.format(Locale.US, "<circle cx='%.1f' cy='%.1f' r='2.6' fill='#4da6ff'><title>Frame %d%s: %s</title></circle>",
-                    x, y, frame.index + 1, frame.timestamp > 0 ? " (" + DetectionReportGenerator.formatUtcTimestamp(frame.timestamp) + ")" : "",
+                    x, y, frame.index + 1, frame.timestamp > 0 ? " (" + ReportFormat.formatUtcTimestamp(frame.timestamp) + ")" : "",
                     String.format(Locale.US, format.replace("%.1f", "%.2f"), v)));
             if (secondRange != null) {
                 double s = second.applyAsDouble(frame);
@@ -678,7 +678,7 @@ final class NightEquipmentSectionWriter {
     }
 
     private static String hhmm(long millis) {
-        String stamp = DetectionReportGenerator.formatUtcTimestamp(millis);
+        String stamp = ReportFormat.formatUtcTimestamp(millis);
         int space = stamp.indexOf(' ');
         return space >= 0 && stamp.length() >= space + 6 ? stamp.substring(space + 1, space + 6) : stamp;
     }
@@ -940,6 +940,6 @@ final class NightEquipmentSectionWriter {
     }
 
     private static String esc(String text) {
-        return DetectionReportGenerator.escapeHtml(text == null ? "" : text);
+        return ReportFormat.escapeHtml(text == null ? "" : text);
     }
 }

@@ -189,9 +189,8 @@ The report has three stages:
 2. **Sections:** one writer per section, such as `TargetVisualizationSectionWriter`, `AnomalySectionWriter` and `PhotometryReportSectionWriter`.
 3. **Publish:** the HTML is published only when complete (`AtomicReportFile`).
 
-`DetectionReportGenerator` currently retains map/format helpers and the iterative index; their extraction is SP-08B.
-Internal Java callers migrate from `exportTrackVisualizations` and the service's `exportDetectionReport` overloads to
-`ReportExporter.export(new ReportRequest(...))`; the supported `api` surface and report schemas are unchanged.
+`ReportMaps` draws the map and mask pictures, and `ReportFormat` formats report text. `DetectionReportGenerator` keeps the iterative index.
+Internal Java callers use `ReportExporter.export(new ReportRequest(...))`; the supported `api` surface and report schemas are unchanged.
 
 The report never changes the engine's results. When the engine stops after quality control because it kept fewer than three frames (`PipelineResult.tooFewFrames`), the report says so and shows the quality-control results. Its live lookups (SatChecker, JPL, SkyBoT) go through `ReportLookupProxyServer`, a small localhost server owned by the window. `report-data.json` is versioned. Its frame numbers are one-based, and its finding IDs are local to the report.
 
