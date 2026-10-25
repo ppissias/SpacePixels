@@ -18,6 +18,8 @@ import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.detection.DetectionOverlays;
 import eu.startales.spacepixels.detection.DetectionSafetyPrompt;
+import eu.startales.spacepixels.detection.PreFlightSafetyPrompt;
+import eu.startales.spacepixels.fits.FrameCalibrationInspector;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.detection.RunPreviewScope;
 import eu.startales.spacepixels.detection.RunPreviewSink;
@@ -41,6 +43,7 @@ public class DetectionTask implements Job<File> {
     private final DetectionRunOptions options;
     private final SkySnapshot sky;
     private final DetectionSafetyPrompt safetyPrompt;
+    private final PreFlightSafetyPrompt preFlightPrompt;
     /** Where the run's live-view pictures go; null makes none. */
     private RunPreviewSink previews;
     /** Set on the worker as soon as the detection finishes; null until then. */
@@ -66,6 +69,18 @@ public class DetectionTask implements Job<File> {
         this.options = Objects.requireNonNull(options);
         this.sky = sky;
         this.safetyPrompt = safetyPrompt;
+        this.preFlightPrompt = null;
+    }
+
+    public DetectionTask(FitsFileInformation[] files, DetectionConfig config, DetectionRunOptions options,
+                         SkySnapshot sky, DetectionSafetyPrompt safetyPrompt, PreFlightSafetyPrompt preFlightPrompt) {
+        this.files = files == null ? null : files.clone();
+        this.config = DetectionConfigRules.snapshot(config,
+                DetectionConfigRules.Operation.CONFIGURATION);
+        this.options = Objects.requireNonNull(options);
+        this.sky = sky;
+        this.safetyPrompt = safetyPrompt;
+        this.preFlightPrompt = preFlightPrompt;
     }
 
     /** Sends pictures of the work under way to {@code previews}, for the progress dialog's live view. */
@@ -92,6 +107,12 @@ public class DetectionTask implements Job<File> {
     }
 
     private JobOutcome<File> runCancellable(JobContext context) throws Exception {
+        if (preFlightPrompt != null && files != null && files.length > 0) {
+            FrameCalibrationInspector.InspectionResult inspection = FrameCalibrationInspector.inspect(files);
+            if (inspection.hasWarning() && !preFlightPrompt.shouldProceed(inspection)) {
+                return JobOutcome.declined("Detection cancelled by user: " + inspection.summary());
+            }
+        }
         File exportDir = new StandardDetectionPipelineService().run(config, Objects.requireNonNull(files, "frames"), safetyPrompt,
                 context::progress, null, options, sky, overlays -> detected = overlays).report();
         if (exportDir == null) {

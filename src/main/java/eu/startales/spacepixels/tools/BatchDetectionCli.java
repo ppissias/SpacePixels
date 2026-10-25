@@ -122,6 +122,10 @@ public class BatchDetectionCli {
             throw new IOException("Pipeline completed without producing an export report.");
         }
 
+        if (pipelineResult.hasCalibrationWarning()) {
+            out.println("Warning: " + pipelineResult.getCalibrationWarning());
+        }
+
         out.println("Report file: " + reportFile.getAbsolutePath());
     }
 

@@ -34,6 +34,7 @@ public final class SpacePixelsPipelineResult {
     private final PipelineResult pipelineResult;
     private final File exportDirectory;
     private final File reportFile;
+    private final String calibrationWarning;
 
     public SpacePixelsPipelineResult(File originalInputDirectory,
                                      File preparedInputDirectory,
@@ -59,6 +60,35 @@ public final class SpacePixelsPipelineResult {
         this.pipelineResult = pipelineResult;
         this.exportDirectory = exportDirectory;
         this.reportFile = reportFile;
+        this.calibrationWarning = null;
+    }
+
+    public SpacePixelsPipelineResult(File originalInputDirectory,
+                                     File preparedInputDirectory,
+                                     boolean inputWasPrepared,
+                                     FitsFileInformation[] filesInformation,
+                                     DetectionConfig baseConfig,
+                                     DetectionConfig effectiveConfig,
+                                     boolean autoTuneApplied,
+                                     AutoTuneProfile autoTuneProfileUsed,
+                                     String autoTuneTelemetryReport,
+                                     PipelineResult pipelineResult,
+                                     File exportDirectory,
+                                     File reportFile,
+                                     String calibrationWarning) {
+        this.originalInputDirectory = originalInputDirectory;
+        this.preparedInputDirectory = preparedInputDirectory;
+        this.inputWasPrepared = inputWasPrepared;
+        this.filesInformation = filesInformation == null ? new FitsFileInformation[0] : filesInformation.clone();
+        this.baseConfig = baseConfig == null ? null : baseConfig.clone();
+        this.effectiveConfig = effectiveConfig == null ? null : effectiveConfig.clone();
+        this.autoTuneApplied = autoTuneApplied;
+        this.autoTuneProfileUsed = autoTuneProfileUsed;
+        this.autoTuneTelemetryReport = autoTuneTelemetryReport;
+        this.pipelineResult = pipelineResult;
+        this.exportDirectory = exportDirectory;
+        this.reportFile = reportFile;
+        this.calibrationWarning = calibrationWarning;
     }
 
     /**
@@ -170,6 +200,14 @@ public final class SpacePixelsPipelineResult {
      *
      * @return HTML report file, or {@code null} when report generation was disabled
      */
+    public String getCalibrationWarning() {
+        return calibrationWarning;
+    }
+
+    public boolean hasCalibrationWarning() {
+        return calibrationWarning != null;
+    }
+
     public File getReportFile() {
         return reportFile;
     }

@@ -85,4 +85,36 @@ public class DefaultSpacePixelsPipelineApiTest {
         assertTrue(report.contains("Too Few Frames After Quality Control"));
         assertTrue(report.contains("Only <strong>2</strong> frames remained after quality control."));
     }
+
+    @Test
+    public void uncalibratedDatasetProducesCalibrationWarning() throws Exception {
+        Path tempRoot = Files.createTempDirectory("spacepixels-api-uncalibrated-warn");
+        Path sequenceDirectory = SyntheticDatasetFactory.createUncalibratedMono16FitsSequence(tempRoot, "uncal", FRAME_COUNT, 50);
+
+        SpacePixelsPipelineResult result = new DefaultSpacePixelsPipelineApi().run(
+                SpacePixelsPipelineRequest.builder(sequenceDirectory.toFile())
+                        .detectionConfig(SyntheticDatasetFactory.createSyntheticDetectionConfig())
+                        .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
+                        .generateReport(false)
+                        .failIfUncalibratedOrMisaligned(false)
+                        .build());
+
+        assertTrue(result.hasCalibrationWarning());
+        assertNotNull(result.getCalibrationWarning());
+        assertTrue(result.getCalibrationWarning().contains("hot-pixel density"));
+    }
+
+    @Test(expected = SpacePixelsPipelineException.class)
+    public void uncalibratedDatasetFailsWhenConfigured() throws Exception {
+        Path tempRoot = Files.createTempDirectory("spacepixels-api-uncalibrated-fail");
+        Path sequenceDirectory = SyntheticDatasetFactory.createUncalibratedMono16FitsSequence(tempRoot, "uncal", FRAME_COUNT, 50);
+
+        new DefaultSpacePixelsPipelineApi().run(
+                SpacePixelsPipelineRequest.builder(sequenceDirectory.toFile())
+                        .detectionConfig(SyntheticDatasetFactory.createSyntheticDetectionConfig())
+                        .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
+                        .generateReport(false)
+                        .failIfUncalibratedOrMisaligned(true)
+                        .build());
+    }
 }

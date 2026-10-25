@@ -33,6 +33,7 @@ public final class SpacePixelsPipelineRequest {
     private final InputPreparationMode inputPreparationMode;
     private final NegativeValueHandling negativeValueHandling;
     private final boolean generateReport;
+    private final boolean failIfUncalibratedOrMisaligned;
     private final VariableStarReportOptions variableStarReportOptions;
     private final SpacePixelsProgressListener progressListener;
 
@@ -46,6 +47,7 @@ public final class SpacePixelsPipelineRequest {
         this.inputPreparationMode = builder.inputPreparationMode;
         this.negativeValueHandling = builder.negativeValueHandling;
         this.generateReport = builder.generateReport;
+        this.failIfUncalibratedOrMisaligned = builder.failIfUncalibratedOrMisaligned;
         this.variableStarReportOptions = builder.variableStarReportOptions;
         this.progressListener = builder.progressListener;
         this.runOptions = builder.runOptions.withAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames)
@@ -134,6 +136,9 @@ public final class SpacePixelsPipelineRequest {
     /** Presentation-only choices for variable-star cards; never applied to the engine. */
     public VariableStarReportOptions getVariableStarReportOptions() { return variableStarReportOptions; }
 
+    /** Whether detection should fail fast if the sequence appears uncalibrated or misaligned. */
+    public boolean isFailIfUncalibratedOrMisaligned() { return failIfUncalibratedOrMisaligned; }
+
     /**
      * Returns the optional progress listener.
      *
@@ -155,6 +160,7 @@ public final class SpacePixelsPipelineRequest {
         private InputPreparationMode inputPreparationMode = InputPreparationMode.FAIL_IF_NOT_READY;
         private NegativeValueHandling negativeValueHandling = NegativeValueHandling.ADD_OFFSET;
         private boolean generateReport = true;
+        private boolean failIfUncalibratedOrMisaligned = false;
         private VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
         private SpacePixelsProgressListener progressListener;
 
@@ -241,6 +247,17 @@ public final class SpacePixelsPipelineRequest {
          */
         public Builder generateReport(boolean generateReport) {
             this.generateReport = generateReport;
+            return this;
+        }
+
+        /**
+         * Sets whether the pipeline should fail fast if the sequence appears uncalibrated or misaligned.
+         *
+         * @param fail {@code true} to fail fast with an exception, {@code false} to record a warning
+         * @return this builder
+         */
+        public Builder failIfUncalibratedOrMisaligned(boolean fail) {
+            this.failIfUncalibratedOrMisaligned = fail;
             return this;
         }
 

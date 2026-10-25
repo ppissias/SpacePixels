@@ -555,7 +555,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 DetectionRunOptions.capture(applicationSettings.getConfig(), configuration.autoTuneMaxCandidateFrames())
                         .withVisualization(configuration.visualizationSettings()),
                 owner.getSkyCatalogue().snapshot(),
-                summary -> reportPrompt.confirm(summary, owner.hasPlateSolvedFrame(), 50, null, settings))
+                summary -> reportPrompt.confirm(summary, owner.hasPlateSolvedFrame(), 50, null, settings),
+                reportPrompt::confirmPreFlight)
                         .showingPreviews(progressDialog.previewSink());
         // The overlays first: they belong to the session whatever became of the report.
         startJob(JobKind.DETECTION, owner, detection, (handle, outcome) -> {

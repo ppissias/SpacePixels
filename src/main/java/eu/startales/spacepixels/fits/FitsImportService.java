@@ -46,7 +46,7 @@ public final class FitsImportService implements AutoCloseable {
         File[] files = FitsInput.list(directory);
         FitsInput.Input[] inputs = FitsInput.inspect(files, executor, interaction == null);
         if (interaction == null) {
-            return metadata(inputs, "Headless import");
+            return checkCalibration(metadata(inputs, "Headless import"));
         }
         FitsInput.Input reference = inputs[0];
         if (reference.compressed()) {
@@ -141,7 +141,7 @@ public final class FitsImportService implements AutoCloseable {
         }
 
 
-        return metadata(inputs, "Interactive import");
+        return checkCalibration(metadata(inputs, "Interactive import"));
     }
 
     /** Returns validated metadata in frame order without keeping it in the importer. */
@@ -151,6 +151,28 @@ public final class FitsImportService implements AutoCloseable {
         FitsInput.validateAndSort(metadata);
         DebugOutput.println("Validated and loaded metadata for " + metadata.length + " FITS files.");
         logFitsTimestampDiagnostics(stage, metadata);
+        return metadata;
+    }
+
+    private FitsFileInformation[] checkCalibration(FitsFileInformation[] metadata) {
+        if (metadata == null || metadata.length == 0) {
+            return metadata;
+        }
+        FrameCalibrationInspector.InspectionResult inspection = FrameCalibrationInspector.inspect(metadata);
+        if (inspection.hasWarning()) {
+            if (interaction != null) {
+                String[] options = {"Cancel Import (Recommended)", "Proceed Anyway"};
+                int choice = interaction.choose(inspection.warningDialogText(), "Dataset Quality Warning", options);
+                if (choice != 1) {
+                    LOGGER.warning("Import cancelled by user due to dataset quality warning: " + inspection.summary());
+                    return new FitsFileInformation[0];
+                }
+                LOGGER.info("User chose to proceed with import despite dataset quality warning: " + inspection.summary());
+            } else {
+                LOGGER.warning("Dataset Quality Warning: " + inspection.summary());
+                DebugOutput.println("Dataset Quality Warning: " + inspection.summary());
+            }
+        }
         return metadata;
     }
 

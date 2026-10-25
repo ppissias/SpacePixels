@@ -2,7 +2,7 @@
 
 New or changed functionality for SpacePixels: what the application does, as opposed to how its code is organised. Design and refactoring work is in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md). Detection and photometry algorithm proposals belong to JTransient's [feature requests](../JTransient/FEATURE-REQUESTS.md), and solver features to JPlateSolve's [feature requests](../JPlateSolve/FEATURE-REQUESTS.md).
 
-A request is a proposal until the maintainer decides on it. Decisions are recorded under each request, in the maintainer's words. When a request is implemented, describe it in [MANUAL.md](MANUAL.md) (and the developer documentation where relevant) and remove it from this file.
+A request is a proposal until the maintainer decides on it. A settled choice is marked **Decision (made)** and kept in the maintainer's words, followed by what that choice resolves. Points that are still open stay listed as decision points. When a request is implemented, describe it in [MANUAL.md](MANUAL.md) (and the developer documentation where relevant) and remove it from this file.
 
 | ID | Request | Status |
 |---|---|---|
@@ -10,22 +10,21 @@ A request is a proposal until the maintainer decides on it. Decisions are record
 | [F06](#f06-windows-installer) | Windows installer with a bundled Java runtime | Agreed. Decision points listed. |
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Agreed. The matching policy is to be proposed. |
 | [F10](#f10-live-view-pictures-of-the-running-phase) | Live view: pictures of the running phase, one every 3 s | Direction decided. Design proposed. |
-| [F11](#f11-animation-speed-control-in-the-report) | Animation speed control in the report | Proposed. Decision points listed. |
+| [F11](#f11-animation-speed-control-in-the-report) | Animation speed control in the report | Decided. Frame sheets and GIFs; one speed control. |
 | [F12](#f12-newer-flatlaf-features) | Newer FlatLaf features | Proposed; FlatLaf 3.7.2 is in use |
-| [F13](#f13-manual-transient-inspection-with-trial-per-frame-settings) | Manual Transient Inspection with trial per-frame settings | Proposed. Decision points listed. |
-| [F14](#f14-matching-backgrounds-in-the-variable-star-cutouts) | Matching backgrounds in the variable-star cutouts | Proposed. Decision point listed. |
-| [F15](#f15-clean-moving-object-animations-to-download-narrow-or-wide) | Clean moving-object animations to download, narrow or wide | Proposed. Decision points listed. |
+| [F13](#f13-manual-transient-inspection-with-trial-per-frame-settings) | Manual Transient Inspection with trial per-frame settings | Decided. Same trial policy as the other viewers. |
+| [F14](#f14-matching-backgrounds-in-the-variable-star-cutouts) | Matching backgrounds in the variable-star cutouts | Decided. Same background and same transparency. |
+| [F15](#f15-clean-moving-object-animations-to-download-narrow-or-wide) | Clean moving-object animations to download, narrow or wide | Decided. Moving objects only; written with the report. |
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
 | [F02](#f02-session-summary-and-multiple-night-warning) | Session summary and multiple-night warning | Deferred |
+| [F16](#f16-uncalibrated-and-misaligned-frame-detection-with-user-warning) | Uncalibrated and misaligned frame detection with user warning | Decided. Confirm the thresholds on the datasets. |
 | [F05](#f05-small-star-visibility-in-stretch-previews) | Small-star visibility in stretch previews | Deferred |
-
-Note from maintainer: New feature request: it seems that whynot-nocalibration-wrongdrift , is not well aligned and this is problematic for the detection process. Can we detect not well calibrated frames and issue a warning to the user? These should not be processed.
 
 ## F04. MCP agent services
 
 AI agents operate SpacePixels through an MCP server, beginning with what the [Java API](API.md) does. Use the headless application services, with the public API as the starting boundary; never drive `ApplicationWindow`.
 
-**Decision:** "I propose to have an http interface. But first we should do a table with the services that we will provide and each service description. After we agree on the services we will proceed with an implementation."
+**Decision (made):** "I propose to have an http interface. But first we should do a table with the services that we will provide and each service description. After we agree on the services we will proceed with an implementation."
 
 ### Proposed services (for agreement)
 
@@ -56,7 +55,7 @@ The server is an MCP server on the Streamable HTTP transport, so an agent connec
 
 A normal install, launch, upgrade and uninstall on Windows; other platforms can follow. User settings and datasets stay separate from application files, so an upgrade or an uninstall leaves them in place.
 
-**Decision:** "The per-windows installer should have an exe format and bundle a java runtime. I would follow best practices for the rest of the questions about shortcuts, app updates, etc. Signing would be a second step, we can start with an unsigned release. If there are other decision points that we need before we start, please let me know. I think java already has such a mechanism natively (at least partly), please confirm."
+**Decision (made):** "The per-windows installer should have an exe format and bundle a java runtime. I would follow best practices for the rest of the questions about shortcuts, app updates, etc. Signing would be a second step, we can start with an unsigned release. If there are other decision points that we need before we start, please let me know. I think java already has such a mechanism natively (at least partly), please confirm."
 
 **Answer.** Yes. The JDK's `jpackage` tool (in JDK 21) builds a Windows `.exe` installer that contains the application and a Java runtime cut down with `jlink`. It needs the WiX Toolset on the build machine (WiX 3 for JDK 21). It covers most of the questions:
 
@@ -83,7 +82,7 @@ It does not include an automatic updater; a new release is installed by running 
 
 Basic iterative detection is implemented: independent runs over growing subsets of a directory, with an index of the per-pass reports. This request adds one combined report.
 
-**Decision:** "Agreed. please also use a similar page layout for the super report (colors, background, ...) as the individual reports."
+**Decision (made):** "Agreed. please also use a similar page layout for the super report (colors, background, ...) as the individual reports."
 
 **Proposal.** Read the completed pass reports and their saved run metadata, recognise findings that are the same physical object or event, and present each once with the best information from the passes that saw it. The individual reports, and their own identities, stay available.
 
@@ -101,7 +100,7 @@ Basic iterative detection is implemented: independent runs over growing subsets 
 
 The live view in the progress dialog shows the frames as they load, each engine stage's findings while the detection runs, and the report's pictures as they are written (see the manual and HIGH_LEVEL_DESIGN.md).
 
-**Decision (2026-10-23):** "What I had in mind, was that it shows specific images from the current phase it is currently. So if it does photometry, it should show something related to photometry. There should be a general rule, not to change too frequently the images, so say every 3 seconds a new image from the current phase. So each phase, should send an update every 3 seconds more or less. If we have a small dataset, it is natural not to show anything for some phases, for them to be skipped, if it is less than 3 seconds from the last update. Overall it is working well, I just wanted to make sure it will work like this. I also wanted to check with you, that we implement it efficiently and only send updates when needed from the engine."
+**Decision (made, 2026-10-23):** "What I had in mind, was that it shows specific images from the current phase it is currently. So if it does photometry, it should show something related to photometry. There should be a general rule, not to change too frequently the images, so say every 3 seconds a new image from the current phase. So each phase, should send an update every 3 seconds more or less. If we have a small dataset, it is natural not to show anything for some phases, for them to be skipped, if it is less than 3 seconds from the last update. Overall it is working well, I just wanted to make sure it will work like this. I also wanted to check with you, that we implement it efficiently and only send updates when needed from the engine."
 
 This settles the earlier open question about the report phase: the report is one more phase, under the same rule.
 
@@ -156,7 +155,7 @@ This settles the earlier open question about the report phase: the report is one
 **Why the current files cannot do it.** The report's animations are animated GIFs, written by `GifSequenceWriter`. The frame delay comes from "GIF Blink Speed (ms)" and is written into each file. Browsers play a GIF at its own delays and offer no way to change them. The report's "Pause animations" button only swaps each GIF for its `.poster.png`.
 
 **Options:**
-1. **Frame sheets played by the report (recommended).** For each animation, also write its frames as one image sheet: a grid of frames. The report's script plays the sheets, with a speed control next to "Pause animations", for example from 0.25× to 4×.
+1. **Frame sheets played by the report (chosen).** For each animation, also write its frames as one image sheet: a grid of frames. The report's script plays the sheets, for example from 0.25× to 4×. The speed control is the one decided below.
    - The report can also step through an animation frame by frame while paused, which a GIF cannot do.
    - The setting in SpacePixels becomes the starting speed.
    - It works for a report opened from disk, since the script only shows images and reads no files.
@@ -164,9 +163,11 @@ This settles the earlier open question about the report phase: the report is one
 2. **Decode the GIFs in the browser** (`ImageDecoder`). This needs no new files. However, the script must read the GIF bytes, which browsers block for a report opened from disk, and browser support is uneven. Not recommended.
 3. **Write each GIF at two or three speeds.** Simple, but it multiplies the size of the animations and offers only fixed steps. Not recommended.
 
-**Decision points:**
-- **GIFs too, or sheets only?** Keeping the GIFs lets an animation be saved or shared on its own, but the report grows. Playing only sheets keeps it smaller.
-- **One speed control, or one per animation?** Proposal: one control for the whole report, remembered by the browser, plus frame stepping per animation while paused.
+**Decision (made):** "Lets proceed with option 1. Please include the GIFs as well and have a link in the report for the animated gif. Please have one control for the whole report, which would be always visible on top (like we have not some controls always visible)."
+
+- **Frame sheets (option 1).** The report plays the image sheets, with frame stepping while an animation is paused. The GIF setting in SpacePixels is the starting speed.
+- **GIFs stay.** Each animation also keeps its GIF, and the report links to that GIF so it can be opened or saved on its own.
+- **One control.** One speed control for the whole report, always visible at the top, in the same way as the controls that stay visible now.
 
 **Acceptance.**
 - The speed changes all animations at once, without reloading the report.
@@ -225,17 +226,17 @@ So, with the frame selection and the mask kept, re-detecting a frame with new pe
 
   The veto is internal to the engine today, so this has to be an engine API rather than SpacePixels calling the extractor itself.
 - **SpacePixels:**
-  - **Controls.** `TransientInspectionFrame` gets the three spinners, re-detecting 300 ms after a change, as Preview Frame does. Next to them is a read-only line with the values the mask was built with: master sigma, master grow sigma, master minimum pixels, and the star jitter that widens the mask.
+  - **Controls.** `TransientInspectionFrame` gets the three spinners, re-detecting 300 ms after a change, as Preview Frame does, and Apply to Settings under the same trial policy decided below. Next to them is a read-only line with the values the mask was built with: master sigma, master grow sigma, master minimum pixels, and the star jitter that widens the mask.
   - **What is re-detected.** Only the frame on show is re-detected, in the background; the viewer already prepares frames off the Swing thread, and the newest request wins. Each other frame is re-detected when it is shown, so a change costs one frame's extraction, not the whole set's.
   - **Caching.** Re-detected frames are kept per setting while the window is open, so stepping back is instant.
   - **Count line.** It shows the settings in use, and the frame's transient count updates.
   - **Memory.** The window already holds all frames. The kept reference adds the master stars and the star mask, at one byte per pixel (about 61 MB for a 61-MPix sensor).
 
-### Decision points
+**Decision (made):** "for point 1. I remember we have a policy now on ther other previous windows, please use the same policy. I agreee with options 2 and 3."
 
-1. **Do the spinners change the session's settings?** Preview Frame edits the Detection Settings directly: its spinners share their models. The Star Mask Explorer is the mirror of this idea, with fixed frames and trial master settings, and it keeps trial values with an "Apply to Settings" button. Proposal: do it the Star Mask Explorer's way, since this window is for experimenting. See [SP-19](DESIGN-IMPROVEMENTS.md#sp-19-finish-the-common-base-of-the-image-viewers) on having one pattern for trial settings.
-2. **One frame per change, or all frames?** Proposal: only the frame on show, which is fast, as in Preview Frame. A "Count all frames" action could re-detect every kept frame to give a total, at the cost of a full extraction.
-3. **Master settings changed while the window is open** (on the Detection Settings tab). Proposal: the window keeps its reference and says that the tab's master values now differ. Reopening the window rebuilds the reference.
+1. **Trial settings follow the existing viewer policy.** Preview Frame and Star Mask Explorer keep trial values and copy only the edited fields with Apply to Settings. This window uses that same policy.
+2. **One frame per change.** Only the frame on show is re-detected.
+3. **Master settings changed while the window is open.** The window keeps its reference and says that the Detection Settings tab's master values now differ. Reopening the window rebuilds the reference.
 
 ### Acceptance
 
@@ -257,11 +258,13 @@ This explanation follows from the code; confirm it on a card that shows the prob
 
 **Proposal.** The engine already records, for every frame, the median local sky of the measured stars (`PhotometryFrameStat.skyMedian`) and the ensemble zero point (`zeroPoint`).
 1. **Same background.** Set each cutout's black point at its own sky level, and keep one shared span (white minus black) from the brightest frame. Both backgrounds then look the same, and the star's brightness above the sky still compares directly.
-2. **Optionally, same transparency.** Also scale the faintest cutout by the zero-point difference between the two frames, so that constant stars look alike and only the variable changes. The pictures then show what the corrected light curve says, and the caption says so.
+2. **Same transparency.** Also scale the faintest cutout by the zero-point difference between the two frames, so that constant stars look alike and only the variable changes. The pictures then show what the corrected light curve says, and the caption says so.
 
 Only the pictures change. Measurements, light curves, CSVs and `report-data.json` stay as they are.
 
-**Decision point.** Step 1 only, or steps 1 and 2. Proposal: both.
+**Decision (made):** "I Agree with both points."
+
+Both steps are in scope. Each cutout's black point is its own sky level, with one shared span from the brightest frame, and the faintest cutout is also scaled by the zero-point difference between the two frames. The caption says so.
 
 **Acceptance.**
 - On dc-reg (DK Per, Mis V1395) and klangwolke-2, the two cutouts of each card show the same background level: the cutouts' medians differ by at most a few grey levels.
@@ -284,16 +287,59 @@ Both use the run's display stretch and GIF speed. There is no clean copy of the 
 
 The card gets a "Download animation" control with **Narrow** and **Wide** links. A link with the `download` attribute saves the file. Check that this works in a report opened from disk; otherwise the link opens the GIF, and the user saves it from there. Cards past the report's limit of animated detections have no animations, so they get no download either.
 
-**Decision points:**
-1. **Which findings.** Moving objects, as asked. Streak tracks have star-centric animations too. Proposal: moving objects and streak tracks.
-2. **How wide.** Proposal: twice the narrow crop's width and height, at least 400 × 400 px and at most 1000 × 1000 px, kept inside the frame.
-3. **Written with the report, or on request.** Writing them with the report makes it larger; measure the growth on klangwolke-2. Making them on request would only work while SpacePixels runs, through its local proxy, and not in a report opened later. Proposal: write them with the report.
+**Decision (made):** "1. moving objects only. 2. agreed. 3.write them with the report, we do not have so many moving object tracks."
+
+1. **Which findings.** Moving objects only.
+2. **How wide.** Twice the narrow crop's width and height, at least 400 × 400 px and at most 1000 × 1000 px, kept inside the frame.
+3. **When they are written.** With the report. Measure the growth on klangwolke-2.
 
 **Acceptance.**
 - Each eligible card offers both downloads, and the files show no circle and no label.
 - The narrow file's frames equal the star-centric animation's frames apart from the circle and the label.
 - The wide file has the same centre and more sky.
 - The findings and `report-data.json` are unchanged, and the report's growth in size is measured.
+
+## F16. Uncalibrated and misaligned frame detection with user warning
+
+**Request (2026-10-25):** "it seems that whynot-nocalibration-wrongdrift , is not well aligned and this is problematic for the detection process. Can we detect not well calibrated frames and issue a warning to the user? These should not be processed."
+
+### Problem analysis
+
+Datasets with uncalibrated frames (no dark/bias subtraction or cosmetic hot-pixel correction) or poor registration corrupt the transient detection pipeline, producing massive amounts of false positives:
+- **Case study (`whynot-nocalibration-wrongdrift`):** 61 raw DSLR frames (Canon EOS 300D) registered by Siril with a slow steady tracking drift (~22 px total drift across the run). Star registration itself is accurate (shifts < 1 px), but because dark calibration was omitted, the sensor retains thousands of hot and warm pixels (> 2,000 sub-pixel spikes per frame). As the telescope drifts against the stars, the sensor defects move across the registered image at a constant rate, which the moving-object linker misinterprets as hundreds of real objects. A run on this dataset generated **946 findings**, including **232 false moving-target tracks** and **652 camera-fixed groups**.
+- **Misaligned frames:** When star alignment fails or unaligned raw frames are accidentally supplied to the pipeline, every unaligned star leaks through the median reference subtraction and triggers false detections across the entire field.
+- **Current behaviour:** SpacePixels checks sequence consistency (dimensions, BITPIX, exposure times, timestamps) on import, but performs no checks for hot-pixel saturation, calibration defects, or star alignment quality before admitting the run. The pipeline runs to completion, generating hundreds of misleading report findings and consuming substantial compute time.
+
+### Proposed detection methods
+
+1. **Uncalibrated frame detector (Hot-pixel spike density):**
+   - Sample the first and middle frames during import/pre-flight inspection.
+   - Measure isolated sub-pixel spikes: pixels where value > median + 10 sigma and value - max(8 neighbors) > 3 sigma. Unlike real optical stars that follow a Gaussian/Airy PSF spanning multiple pixels (FWHM >= 1.5 px), hot pixels are single-pixel spikes with FWHM < 1.0 px.
+   - On calibrated reference datasets (klangwolke-2, m101-reg, helix-reg, Apophis), spike density is low (<= 15 spikes/MP). On uncalibrated frames like whynot-nocalibration-wrongdrift, spike density is exceptionally high (> 50 spikes/MP, hundreds to thousands of raw spikes).
+   - If spike density exceeds a threshold (e.g., > 35 spikes/MP or > 300 isolated spikes per frame), flag the dataset as **Uncalibrated (high hot-pixel density)**.
+
+2. **Misaligned frame detector (Star registration consistency):**
+   - Fast cross-correlation or bright-star centroid matching between the reference frame and subsequent frames (sampling e.g. first, middle, last, or all frames).
+   - If the detected star shift exceeds a threshold (e.g. > 2.5 px), flag the dataset as **Misaligned Frames (registration failure or unaligned sequence)**.
+
+3. **User warning and gate:**
+   - **Desktop UI (Import and Pre-Detection):** Display a clear warning dialog:
+     - *"Warning: The selected dataset appears uncalibrated (high density of hot pixels) [or not properly aligned]. Processing uncalibrated or drifting frames can produce hundreds of false detections. Do you want to cancel the import or proceed anyway?"*
+     - If the user chooses to cancel, the run is declined ("These should not be processed").
+   - **CLI and Headless API:** Output a warning log and either fail fast (e.g., `FAIL_IF_UNCALIBRATED`) or record the warning in the pipeline result summary.
+
+**Decision (made):** "1. Agreed, 2. Agreed, 3. Agreed - but lets do some tests on the various datasets to confirm we can detect them without false positives."
+
+1. **Warning with an override.** In the window, a warning dialog offers Cancel (recommended) and Proceed Anyway. In the headless API and the command line, a setting defaults to recording a warning in the result and in the command output.
+2. **Where the check runs.** At import, and again as a pre-flight check before the heavy processing starts.
+3. **Thresholds, after a false-positive check.** Test these limits on the reference datasets before treating them as final: more than 35 hot-pixel spikes per megapixel and more than 300 spikes in a frame, and a star-centroid offset above 2.5 px. Calibrated, well-aligned sessions must stay unflagged.
+
+### Acceptance
+
+- `whynot-nocalibration-wrongdrift` is reliably detected as uncalibrated, triggering the warning dialog.
+- Clean reference datasets (`klangwolke-1`, `klangwolke-2`, `m101-reg`, `m31-*-reg`, `helix-reg`, `Apophis`, `Africano`, `Eagle-noisy`) are NOT falsely flagged.
+- Artificially unaligned frames (shifted by > 3 px) are reliably flagged as misaligned.
+- Tests cover both detection heuristics and UI/API warning handling.
 
 ## F01. Slow-mover and per-frame tuning relation
 

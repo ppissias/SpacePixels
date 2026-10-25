@@ -16,6 +16,7 @@ import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.detection.DetectionInputPreparation;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.fits.FitsImportService;
+import eu.startales.spacepixels.fits.FrameCalibrationInspector;
 import eu.startales.spacepixels.detection.PipelineExecutionData;
 import eu.startales.spacepixels.detection.StandardDetectionPipelineService;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -62,6 +63,16 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
             FitsFileInformation[] filesInfo;
             try (FitsImportService importer = new FitsImportService(preparedDirectory.getPreparedInputDirectory(), null)) {
                 filesInfo = importer.readFiles();
+            }
+
+            FrameCalibrationInspector.InspectionResult inspection = FrameCalibrationInspector.inspect(filesInfo);
+            String calibrationWarning = null;
+            if (inspection.hasWarning()) {
+                calibrationWarning = inspection.summary();
+                if (request.isFailIfUncalibratedOrMisaligned()) {
+                    throw new SpacePixelsPipelineException("Pipeline rejected dataset: " + calibrationWarning);
+                }
+                DebugOutput.println("Pipeline dataset warning: " + calibrationWarning);
             }
 
             AutoTunerResult autoTuneResult = null;
@@ -118,7 +129,8 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
                     autoTuneResult == null ? null : autoTuneResult.telemetryReport,
                     executionData.getPipelineResult(),
                     exportDirectory,
-                    reportFile);
+                    reportFile,
+                    calibrationWarning);
         } catch (SpacePixelsPipelineException e) {
             throw e;
         } catch (Exception e) {

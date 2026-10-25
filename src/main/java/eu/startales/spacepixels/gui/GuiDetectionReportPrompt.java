@@ -1,6 +1,7 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.detection.DetectionSummary;
+import eu.startales.spacepixels.fits.FrameCalibrationInspector;
 import eu.startales.spacepixels.report.ReportInclusion;
 import eu.startales.spacepixels.report.FindingCategory;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -61,6 +62,33 @@ public final class GuiDetectionReportPrompt {
             return false;
         } catch (ExecutionException failure) {
             LOGGER.log(Level.WARNING, "Could not ask whether to generate the report.", failure.getCause());
+            return false;
+        }
+    }
+
+    /**
+     * Confirms dataset quality warnings on the EDT before detection begins.
+     * Offers Cancel Detection (recommended) and Proceed Anyway.
+     */
+    public boolean confirmPreFlight(FrameCalibrationInspector.InspectionResult inspection) {
+        if (Thread.currentThread().isInterrupted()) return false;
+        if (inspection == null || !inspection.hasWarning()) return true;
+        FutureTask<Boolean> question = new FutureTask<>(() -> {
+            String[] options = {"Cancel Detection (Recommended)", "Proceed Anyway"};
+            int choice = JOptionPane.showOptionDialog(null, inspection.warningDialogText(),
+                    "Pre-Detection Quality Warning", JOptionPane.DEFAULT_OPTION,
+                    JOptionPane.WARNING_MESSAGE, null, options, options[0]);
+            return choice == 1;
+        });
+        if (SwingUtilities.isEventDispatchThread()) question.run(); else SwingUtilities.invokeLater(question);
+        try {
+            return question.get();
+        } catch (InterruptedException interrupted) {
+            question.cancel(false);
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (ExecutionException failure) {
+            LOGGER.log(Level.WARNING, "Pre-flight confirmation failed; declining detection.", failure.getCause());
             return false;
         }
     }

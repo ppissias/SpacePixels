@@ -47,6 +47,37 @@ public final class SyntheticDatasetFactory {
         return sequenceDirectory;
     }
 
+    public static Path createUncalibratedMono16FitsSequence(Path rootDirectory, String directoryName, int frameCount, int hotPixelSpikes) throws Exception {
+        Path sequenceDirectory = Files.createDirectories(rootDirectory.resolve(directoryName));
+        for (int i = 0; i < frameCount; i++) {
+            short[][] frame = createMono16Frame();
+            int planted = 0;
+            for (int y = 5; y < DEFAULT_HEIGHT - 5 && planted < hotPixelSpikes; y += 3) {
+                for (int x = 5; x < DEFAULT_WIDTH - 5 && planted < hotPixelSpikes; x += 3) {
+                    frame[y][x] = (short) 30000;
+                    planted++;
+                }
+            }
+            writeFits(sequenceDirectory.resolve(frameFilename(i)), frame, standardHeaderValues(i));
+        }
+        return sequenceDirectory;
+    }
+
+    public static Path createMisalignedMono16FitsSequence(Path rootDirectory, String directoryName, int frameCount, int shiftX, int shiftY) throws Exception {
+        Path sequenceDirectory = Files.createDirectories(rootDirectory.resolve(directoryName));
+        for (int i = 0; i < frameCount; i++) {
+            short[][] frame = new short[DEFAULT_HEIGHT][DEFAULT_WIDTH];
+            fill(frame, (short) 640);
+            int sx = (i == 0) ? 0 : shiftX;
+            int sy = (i == 0) ? 0 : shiftY;
+            for (int[] center : STAR_CENTERS) {
+                stampStar(frame, center[0] + sx, center[1] + sy, 620);
+            }
+            writeFits(sequenceDirectory.resolve(frameFilename(i)), frame, standardHeaderValues(i));
+        }
+        return sequenceDirectory;
+    }
+
     /**
      * The same frames as {@link #createMono16FitsSequence}, with a TAN plate solution so the file table says Solved.
      * The reference pixel is the centre of the {@link #DEFAULT_WIDTH} by {@link #DEFAULT_HEIGHT} frame.
