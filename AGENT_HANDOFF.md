@@ -1,13 +1,13 @@
 # Agent Handoff
 
 - Owner: C
-- Phase: SELECT
-- Task: SP-08B
-- Implementer: B
-- Reviewer: C
-- Base: 4d0f9d16ba6d9a6f9b4e6c1211d4faccac3c1ba5
-- Implementation: f5b444d53ff4bfec006307030026a073f2949f19
+- Phase: IMPLEMENT
+- Task: SP-11A
+- Implementer: C
+- Reviewer: A
+- Base: 6df647069c726ce6b3c4ff004b6f6b08603d3db3
+- Implementation: -
 - Fix rounds: 0/2
-- Tests: Reporting suite, ReportFailureMessagesTest, DetectionRunIsolationTest, DependencyRulesTest: 109 tests PASS, 0 failures.
+- Tests: -
 - Quota visibility: UNKNOWN
-- Next action: SP-08B APPROVED and marked DONE. Agent C selects the next eligible TODO task (SP-11A).
+- Next action: Agent C implements SP-11A (immutable FitsFileInformation with unmodifiable header map, normalised timestamps at construction, removal of redundant snapshot() deep copies while retaining array/container protection, and session-owned WCS metadata replacement that updates table/selection/viewers while admitted runs keep their snapshots). A and B remain read-only.
