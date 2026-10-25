@@ -1,15 +1,14 @@
 # Agent Handoff
 
 - Owner: A
-- Phase: SELECT
-- Task: -
+- Phase: IMPLEMENT
+- Task: SP-08A
 - Implementer: A
 - Reviewer: B
-- Base: -
+- Base: bca171dfed6ac439d0f534c9f036419976f885d3
 - Implementation: -
 - Fix rounds: 0/2
-- Tests: SP-07 approved at 3f420611affdfc5dabfd6c9b32bd291862bab2e1. A normal check PASS (503 tests, 4 skipped), headless TypedDetectionSettingsTest 5 PASS, full guiMechanicsTest 33 PASS.
+- Tests: Planned: report/API/cancellation/empty-no-WCS tests, full check, apiConsumerTest, applicable GUI mechanics, deterministic before/after reference outputs with explicitly listed volatile fields.
 - Quota visibility: UNKNOWN
-- Next action: A selects SP-08A (report entry/context), with B as reviewer; SP-08B covers the subsequent maps/formatting helpers. D-01/D-02/D-03 are resolved from the maintainer's local decision notes. B and C remain read-only.
-- Validation note: A blanket headless run hit 10 pre-existing dialog/view tests outside SP-07; the focused settings logic now passes headlessly. Use the normal project check for the full desktop-capable unit suite.
-- Local edits: Original maintainer decision annotations in AGENT_STATE.md remain unmodified and unstaged; their choices are captured in the committed decision fields.
+- Next action: A captures a frozen baseline and implements the report request/entry point and complete context. SP-08B retains rendering/formatting extraction. B and C remain read-only until REVIEW.
+- Local edits: Maintainer decision annotations in AGENT_STATE.md are preserved unstaged; the decisions are already recorded in committed structured fields.

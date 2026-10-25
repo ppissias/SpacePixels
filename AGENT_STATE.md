@@ -1,4 +1,4 @@
-# Agent State â€” design improvements collaboration
+# Agent State — design improvements collaboration
 
 ## Collaboration
 
@@ -19,7 +19,7 @@
 | --- | --- | --- | --- | --- |
 | SP-06 | Extract the sky-catalogue workflow | - | DONE | Reviewed `bd173bee9374516eddb947d327657cde4180c63a`. Reran SkyCatalogueControllerTest 9, ProcessingSessionTest 10, DependencyRulesTest 9: PASS. GUI mechanics not rerun (they move the mouse); implementer recorded SessionMechanicsTest and SessionIoMechanicsTest PASS. No code change in review. |
 | SP-05 | Give panels specific collaborators and listeners | SP-06 | DONE | Reviewed `9ba8f6072feac587fe62dc98b6f51d0ed3d1d186`. Reran DependencyRulesTest and gui unit suites (93 tests across 22 suites): PASS. Implementer recorded test 502 PASS (4 skipped) and guiMechanicsTest 33 PASS. Borrowed DetectionConfig read on EDT without retention; jobs keep captured session/settings at admission. No code change in review. |
-| SP-08A | One report request/entry point and a complete context (SP-08) | - | TODO | First bounded report task; preserve valid absence, cancellation, atomic publication and deterministic reference outputs. |
+| SP-08A | One report request/entry point and a complete context (SP-08) | - | IN_PROGRESS | A implements, B reviews; base `bca171dfed6ac439d0f534c9f036419976f885d3`. Capture frozen baseline classes/dependencies and before/after reference outputs; preserve valid absence, cancellation, atomic publication and completed detection products. |
 | SP-08B | Separate report map rendering and formatting helpers (SP-08) | SP-08A | TODO | Complete the remaining SP-08 helper consolidation; reuse verified baseline products where comparison remains equivalent. |
 | SP-07 | Fail-fast settings apply and direct row wiring | SP-05 | DONE | A reviewed `3f420611affdfc5dabfd6c9b32bd291862bab2e1` (including `b73aa00` and `678d445`). Normal check PASS (503 tests, 4 skipped), headless TypedDetectionSettingsTest 5 PASS, full GUI mechanics 33 PASS. R1/R2/R3 resolved; no implementation edits in review. |
 | SP-11A | Immutable frame metadata and session-owned WCS replacement | - | TODO | Public Java API changes approved (D-03); retain array/container and header-map protection and admitted-run snapshots. |
@@ -34,14 +34,14 @@ Statuses: TODO, IN_PROGRESS, REVIEW, DONE, DEFERRED. Independent review is requi
 
 ## Maintainer decisions
 
-### D-01 â€” Independent viewer lifetime
+### D-01 — Independent viewer lifetime
 - Task: SP-19B. RESOLVED (2026-10-25): the maintainer chose a fresh start on import; close every viewer, including Manual Transient Inspection and Star Mask Explorer.
 - Next action: Implement owned viewer registration, session-handover/exit cleanup, queued-callback guards and unregister-on-disposal checks.
 
-### D-02 â€” Trial-setting policy and F13 boundary
+### D-02 — Trial-setting policy and F13 boundary
 - Task: SP-19C. RESOLVED (2026-10-25): the maintainer chose the same trial-value/Apply workflow in the existing preview windows; Preview Frame adopts Apply to Settings.
 - Next action: Share controls for existing viewers, preserve preview refresh and focus rules, and apply only the edited fields to session settings. F13 remains a separate feature.
 
-### D-03 â€” Public package compatibility
+### D-03 — Public package compatibility
 - Task: SP-11A and SP-14. RESOLVED (2026-10-25): the maintainer confirmed there are no official external SpacePixels API callers and approved intentional public Java API changes.
 - Next action: Document removed metadata mutators and public package/type moves, update migration/API examples and consumer checks, and preserve scientific results/report schemas. No legacy shims without a real caller.
