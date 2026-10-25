@@ -1,6 +1,6 @@
 # Agent Handoff — Design improvements
 
-> **Active feature.** Read [AGENT_COLLABORATION.md](AGENT_COLLABORATION.md), especially sections 3 and 13, and read the committed version of this mailbox before acting. The maintainer authorized Codex to start as first implementer on 2026-10-24. Only the committed `Owner` may write; implementation of a subtask still requires `SUBTASK_AGREED` from both agents.
+> **Closed cycle.** The maintainer ended this implementation cycle on 2026-10-25 (Message 031). No agent acts on this mailbox. A later cycle starts with a new setup under the collaboration protocol then in force; the pending work is in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md).
 
 ## Configuration
 
@@ -22,10 +22,10 @@
 
 ## Current state
 
-- Owner: IMPLEMENTER
-- State: SELECTING_SUBTASK
-- Current subtask: NONE — SP-04 slices 1–3 are approved; the few-frame evaluation remains pending separately.
-- Current agreement: SP-04 slice 3 APPROVED at `7026112` against `2603552` (Message 030), within Messages 027/028. No later subtask is agreed.
+- Owner: HUMAN
+- State: CLOSED_BY_MAINTAINER
+- Current subtask: NONE — the cycle is closed (Message 031).
+- Current agreement: NONE — no subtask is agreed or in progress; SP-04 slice 3 was the last approval (Message 030).
 - Interaction rounds used: 0
 - Codex preferred next subtask: SP-06 — extract the sky-catalogue workflow with explicit worker/timer ownership and queued-callback identity checks, before the broader panel redesign. Keep SP-04’s written few-frame evaluation separate.
 - Claude Code preferred next subtask: SP-06, the sky-catalogue workflow (Message 029); the few-frame evaluation is written up separately for the maintainer's decision.
@@ -33,7 +33,7 @@
 - Resume action (when paused): N/A
 - Quota visibility: UNKNOWN
 - Last reported quota: Codex UNKNOWN; Claude Code UNKNOWN
-- Implementation/review status: SP-20, SP-02, SP-09 and SP-04 slices 1–3 are independently approved. The facade is removed. SP-04 retains the few-frame evaluation; eight other subtasks await agreement, with SP-06 preferred next by both agents.
+- Implementation/review status: Closed by the maintainer. SP-20, SP-02, SP-09 and SP-04 slices 1–3 are implemented and independently approved. SP-04's few-frame decision and SP-05, SP-06, SP-08, SP-11, SP-13, SP-15, SP-16 and SP-19 stay open in DESIGN-IMPROVEMENTS.md. No final whole-feature review was run.
 
 ## Maintainer instructions for this feature
 
@@ -98,32 +98,7 @@ The maintainer authorized activation with "you can start as the first implemente
 
 ## Message history
 
-Messages 001–027 are in [AGENT_HANDOFF_ARCHIVE.md](AGENT_HANDOFF_ARCHIVE.md).
-
-### Message 028 — 2026-10-24 — SP-04 slice 3 agreed, roles rotated
-
-- From: Claude Code (REVIEWER for SP-04 slice 2; IMPLEMENTER for SP-04 slice 3 from this commit)
-- To: Codex (IMPLEMENTER for SP-04 slice 2; REVIEWER for SP-04 slice 3 from this commit)
-- Type: SUBTASK_AGREED
-- Current subtask: SP-04 slice 3, the scope of Message 027: the remaining service ownership and the removal of `ImageProcessing`. The few-frame evaluation stays separate, so SP-04 stays open after this slice.
-- Preferred next subtask / reason: SP-04 slice 3 now. After it, SP-06: it is small, independent of the panel redesign, and can use the session-owned collaborators this slice creates. The few-frame evaluation is a numerical policy decision with JTransient. The feature does not authorize policy changes, so it ends in a written evaluation for the maintainer's decision rather than a code change.
-- Role change: accepted. From this commit, Claude Code is IMPLEMENTER and Codex is REVIEWER for slice 3, and the Configuration fields say so. Claude Code keeps ownership and implements after this checkpoint. Codex reviews when the committed owner becomes REVIEWER.
-- Summary / agreement: Codex and Claude Code agree on Message 027, points 1-6, its acceptance checks and its review-comment decisions. I checked them against the code: about 83 facade references in main code and 108 in tests; `PlateSolveService`, `FitsImages`, `OutputFolders` and `FitsImportService` are package-private today. The agreement adds these points:
-  1. **The solver keeps the live settings.** The session's `PlateSolveService` takes the window's shared `AppConfig` (`ApplicationSettings.getConfig()`), as the facade's did. It reads the ASTAP path and the Astrometry.net key when a solve starts, so edits on the Astrometry Config tab keep reaching the next solve without a reimport. Its online client stays lazy, so building it with the session on the EDT costs nothing. The session closes it once; the new seam replaces the reflection in `FitsServiceTest`.
-  2. **The stale-import path stays.** The window builds the session from the import result, then calls `SessionOwner.replace(expected, candidate)`, which still closes a rejected candidate. The import result holds no resources: each attempt closes its metadata pool in a `finally`, including redirects, refusals, cancellation and failure.
-  3. **Visibility only where a caller needs it.** Make public only the constructors and methods that callers in another package use: the import entry, `FitsImages.getImageHDU`, the detection-output-folder creation, and the solver service's constructor and operations. Everything else stays package-private. RELEASE_NOTES.md lists the internal types and signatures that change. DEVELOPER.md's input contract names the HDU helper by its new home.
-  4. **Checkpoints.** I may make local commits while I own the turn, as section 5 allows, each compiling and passing its affected tests. `READY_FOR_REVIEW` names the full slice diff `2603552..HEAD`.
-  5. **Real-data baseline.** My frozen install of `a68d4bf` (Message 026) is the base: `git diff a68d4bf 2603552 -- src` is empty, and I will confirm by jar hash against an install built at this slice base before editing.
-     - Its reports from Message 026 are the baselines for 17 datasets and the five `DetectionTask` datasets.
-     - For klangwolke-2, I will run that install before editing when memory allows. Otherwise its baseline is the slice-1 report, which Codex's slice-2 comparison showed identical.
-     - The derivative checks need one more harness pair. Batch stretch, and Convert to Mono where a small real dataset allows it, run through the base facade and through the new services on scratch copies of a small reference dataset, and every file is compared byte for byte. The source folders are never touched.
-  6. **Memory.** I check the free commit before klangwolke-2 and run large JVMs one at a time. If it still cannot start, I report it as not run rather than retrying in a loop.
-- Relevant commits / files: Slice base `2603552fd57b33a50907d21ea685f84d96314d52`, Codex's proposal commit; this agreement commit changes only the mailbox. Feature base `9486b2062470dc0492e85bdff5922429aaaad72f`. Codex's archive of Message 024 is verbatim, compared with the mailbox at `384eae9`.
-- Mailbox maintenance: under section 4, I moved Message 025 unchanged to the archive. The history keeps 026, the last approval, and slice 3's 027 and 028. The ledger row for slice 2 now names its archived messages.
-- Tests / evidence: read-only inspection of the facade's remaining methods and their callers, the `PlateSolveService` constructors, `FitsImages`, `OutputFolders`, the window's import admission and `SessionOwner.replace`. No tests run for this agreement.
-- Usage / quota: Claude Code UNKNOWN (no provider reading available to this session); Codex UNKNOWN.
-- Remaining work / risks: This is a large mechanical migration, with many internal constructors and tests. I keep the session and preview identity guards, the solver's cancellation and cleanup, and the shared in-place metadata. Memory is tight for klangwolke-2.
-- Requested next action: Claude Code (IMPLEMENTER) implements SP-04 slice 3 and commits `READY_FOR_REVIEW` with the evidence and `Owner: REVIEWER` (Codex). Codex waits read-only until then.
+Messages 001–028 are in [AGENT_HANDOFF_ARCHIVE.md](AGENT_HANDOFF_ARCHIVE.md).
 
 ### Message 029 — 2026-10-24 — SP-04 slice 3 ready for review
 
@@ -205,6 +180,24 @@ Messages 001–027 are in [AGENT_HANDOFF_ARCHIVE.md](AGENT_HANDOFF_ARCHIVE.md).
 - Usage / quota: Codex UNKNOWN; Claude Code UNKNOWN. No provider reading is available.
 - Remaining work / risks: SP-04's written few-frame evaluation and SP-05, SP-06, SP-08, SP-19, SP-11, SP-13, SP-15 and SP-16 remain pending. Slice 3 used 0/2 rounds; this is not final feature approval or human integration acceptance.
 - Requested next action: Claude Code selects an eligible next subtask, preferably SP-06, and commits a scoped `SUBTASK_PROPOSED` with explicit ownership/lifetime, compatibility decisions and checks to REVIEWER (Codex). Do not implement before agreement. Codex stops writing after this approval and continues read-only monitoring.
+
+### Message 031 — 2026-10-25 — cycle closed by the maintainer
+
+- From: HUMAN (the maintainer's decision, recorded by Claude Code, the owner of the turn)
+- To: Codex and Claude Code
+- Type: CLOSED_BY_MAINTAINER
+- Current subtask: NONE.
+- Preferred next subtask / reason: none for this cycle. Both agents' preference for a later cycle was SP-06 (Messages 029 and 030).
+- Summary / decision: The maintainer considers this implementation cycle on `feature/design-improvements` complete. They asked for every repository to be pushed and for DESIGN-IMPROVEMENTS.md to keep each unfinished item open, with the decision or the pending work described.
+  - **Done and independently approved:** SP-20, SP-02, SP-09 and SP-04 slices 1–3.
+  - **Kept open:** SP-04's few-frame result policy, a numerical decision for the maintainer with JTransient, described with its options in DESIGN-IMPROVEMENTS.md; and SP-05, SP-06, SP-08, SP-11, SP-13, SP-15, SP-16 and SP-19, which were not started.
+  - **Not run:** the protocol's final whole-feature review (section 13). The maintainer closes the cycle on the subtask reviews. The branch is pushed but not merged; merging and release are the maintainer's.
+  - The maintainer is revising the collaboration protocol; a later cycle starts with a new setup.
+- Relevant commits / files: feature base `9486b20`; last approval `8845b1d` (Message 030); the maintainer's `.gitignore` commit `0a512a9`; DESIGN-IMPROVEMENTS.md updated in this commit. Under section 4, Message 028 moved to the archive.
+- Tests / evidence: none new; the plan and the mailbox changed. The last full checks are those of Messages 029 and 030.
+- Usage / quota: Claude Code UNKNOWN; Codex UNKNOWN.
+- Remaining work / risks: the open items above. Open notes for whoever next touches them: `AutoTunerRealDataDiagnosticsIT` should close its importer (Message 030); `MainApplicationPanel.getImportedFiles()` keeps its old name (Message 026).
+- Requested next action: none. Codex and Claude Code stop watching this mailbox. The maintainer decides on merging and on the next cycle.
 
 <!-- Append-only message format after activation:
 

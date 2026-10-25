@@ -12,9 +12,9 @@ A fresh review of the whole application (about 50,000 lines of main code and 17,
 
 **Overall.** The architecture is sound. Jobs, commands, the session handover, the viewers and the public API are small, well-bounded and consistent, and should stay as they are. The over-engineering the maintainer suspected is real, but it is concentrated in three kinds of place:
 
-1. **State with more than one owner.** The rendering preferences and the session's frame list each live in two or three places. Each copy then needs machinery to stay in step: write barriers, version checks, rollback, static caches and "capture" steps. Giving each piece of state one owner removes that machinery rather than adding to it.
+1. **State with more than one owner.** The rendering preferences and the session's frame list each lived in two or three places. Each copy then needed machinery to stay in step: write barriers, version checks, rollback, static caches and "capture" steps. Giving each piece of state one owner removes that machinery rather than adding to it. Both now have one owner (SP-02 and SP-04, 2026-10-24).
 2. **Layers kept for compatibility after compatibility stopped mattering.** The libraries are now developed together with the application, and old signatures need not survive. Still left over are chains of overloads that exist for older callers.
-3. **Mechanisms heavier than their use.** Examples are two near-identical write queues for small JSON files, and a binding framework whose application side writes to global static fields.
+3. **Mechanisms heavier than their use.** Examples were two near-identical write queues for small JSON files, now one (SP-09), and a binding framework whose application side wrote to global static fields. The statics are gone (SP-02); the bindings remain (SP-07).
 
 Line counts alone are not a problem. Large report section writers and panels are acceptable when they read top to bottom as one responsibility.
 
@@ -30,9 +30,11 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 ### Recommended changes
 
+**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09 and SP-04 apart from one decision. Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-05, SP-06, SP-08, SP-11, SP-13, SP-15, SP-16 and SP-19. Their proposals and issue reviews below still apply.
+
 | ID | Change | Priority | Size |
 |---|---|---|---|
-| [SP-04](#sp-04-retire-the-imageprocessing-facade) | Retire the `ImageProcessing` facade: done; evaluate the few-frame policy | Medium | Small |
+| [SP-04](#sp-04-retire-the-imageprocessing-facade) | Retire the `ImageProcessing` facade: done; decide the few-frame result policy | Medium | Small |
 | [SP-05](#sp-05-give-panels-their-collaborators-not-the-whole-window) | Give panels their collaborators, not the whole window | Medium | Medium |
 | [SP-06](#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Move the sky-catalogue workflow out of the main panel | Medium | Small |
 | [SP-07](#sp-07-one-binding-type-for-settings-rows) | One binding type for settings rows | Low | Small |
@@ -48,7 +50,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 **Suggested order.**
 1. SP-10 and SP-18 are done apart from their follow-ups: evaluate SP-10's differing variants as a numerical decision, and take SP-18's follow-ups when nom-tam-fits 1.23.1 is out. Keep both separate from refactorings.
-2. Then SP-05 and SP-06, and SP-04's few-frame evaluation on its own. The shared application I/O queue (SP-09) is in place.
+2. Then SP-06, which both agents chose as the next item, then SP-05. Decide SP-04's few-frame policy on its own. The shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
 3. Then SP-08, then SP-07 and SP-15.
 4. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
@@ -56,20 +58,25 @@ Refactorings are intended to preserve behaviour. Evaluate the exceptions raised 
 
 ### SP-04. Retire the ImageProcessing facade
 
-**Step 1 done (2026-10-24): detection.** Detect Moving Targets, Detect Iteratively and the API call `StandardDetectionPipelineService` themselves. It keeps no state, so each caller creates one where it runs it and has nothing to dispose. A finished detection hands its `DetectionOverlays` (tracks and variable-star candidates, no image buffers) to its caller when the engine returns, before the report decision. `DetectionTask` keeps them apart from its `JobOutcome`. The window gives them to the job's session when the job ends, if that session is still the current one: after a written, declined or unwritable report, and after a cancel while the report was being written. A detection that stops before it finishes leaves the last run's overlays. The session owns them (`ProcessingSession.setLastRun`, refused once closed). `DetectionSummary`, `PipelineExecutionData` and `DetectionSafetyPrompt` are top-level types. Iterative passes still leave the session's overlays alone. The reports stayed byte-identical, through both the batch command and the window's detection job.
+**Done (2026-10-24), apart from one decision.** The facade and `SessionFrames` are gone, and nothing forwards in their place. Each service has an explicit owner. The session owns its frames, its last run's overlays, its plate solver and the batch service of its folder. Runs take their frames and options when they are admitted. A finished detection's overlays reach the session whatever becomes of the report. The headless API owns and closes its own importer. HIGH_LEVEL_DESIGN.md (the jobs, session and `util` sections) and DEVELOPER.md describe the result. The reports stayed byte-identical through the batch command and the window's detection job.
 
-**Step 2 done (2026-10-24): import and frame ownership.** `ProcessingSession` owns its frame array, protects the array at handover and on reads, and clears it even if its solver's close fails. Metadata objects remain shared for in-place WCS updates; SP-11's immutability work stays separate. Import returns fresh metadata without storing it, and one `readFiles()` replaces the three old accessors. Every no-interaction read uses the API/CLI's readiness-first validation order; interactive conversion decisions are unchanged. Detection and inspection tasks copy their admitted arrays, with explicit immutable run options for detection. GUI readers use the session, headless callers keep their one returned array, `RedirectImportException` is a top-level import type, and `SessionFrames` is removed. Processing utilities no longer depend on session state.
-
-**Step 3 done (2026-10-24): the remaining services; the facade is gone.** A desktop `ProcessingSession` owns its `PlateSolveService`, built by the window on its live settings and closed with the session, and the `FitsBatchService` of its folder. The window builds the session from a completed import, whose result now holds no resources: `FitsImportTask` reads the folder with its own `FitsImportService` and closes it before it returns or redirects, and needs no application settings. The batch, preview, plate-solve and WCS-write tasks take their service when they are created, and job admission compares the captured session with the current one. The API reads its frames with its own importer and creates no solver. The static forwards went to their owners: `FitsImages.getImageHDU`, `OutputFolders.createDetectionsDirectory` and `DetectionPipelineSupport.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS`, and the exposure-group offer to `FitsImportService`. `ImageProcessing`, `ApplicationWindow.getImageProcessing()` and `ProcessingSession.getProcessing()` are deleted, with no holder in their place. The reports stayed byte-identical, through both the batch command and the window's detection job.
-
-**What remains.** The few-frame evaluation below. It is a numerical decision, not a move of code.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- **Evaluate an existing engine-boundary exception.** `DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain` rewrites `PipelineResult` and telemetry after engine execution. Assess this with JTransient against the rule that detection belongs to the engine. Do not silently delete or relocate this policy during the facade refactor; establish the intended few-frame result contract and compare real results separately.
+**Decision needed: the few-frame result policy.** DEVELOPER.md lists this as its one current exception to "JTransient owns detection".
+- **What happens now.** When fewer than 3 frames survive quality control, `StandardDetectionPipelineService` passes the engine's result through `DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain`. That method builds a new `PipelineResult`:
+  - It empties the tracks, anomalies, slow-mover candidates and residual analysis.
+  - It sets the track and anomaly counts in the telemetry to 0, and removes the tracker and slow-mover telemetry.
+  - It keeps the stacks, the star mask, the drift points, the data area and the transient lists.
+  - The fields it does not copy fall back to the builder's defaults, so the slow-mover analysis and stack, the variable-star analysis and the camera-fixed groups are dropped as well. That may not be intended.
+  - The report then says that the multi-frame sections were skipped (`PipelineDiagnosticsSectionWriter`, `DetectionReportGenerator`).
+- **Options.**
+  1. Move the rule into JTransient. The engine itself stops after quality control when too few frames remain, and returns an explicit "too few frames" result. This needs a JTransient item and its own engine checks.
+  2. Keep it in SpacePixels as a documented report policy, copy every field explicitly, and decide which results survive (for example the camera-fixed groups).
+  3. Remove it, and let the report show whatever the engine finds with one or two frames.
+- **Before deciding.** Find inputs that reach the rule: a session where quality control keeps one or two frames, and check whether any reference dataset does. Compare the engine's own result with the rewritten one.
+- **Then.** Implement the chosen option with the real-data comparison from DEVELOPER.md, update the "Current exceptions" note in DEVELOPER.md, and remove SP-04 from this file.
 
 ### SP-05. Give panels their collaborators, not the whole window
 
-**Problem.** Every panel receives the whole `ApplicationWindow` and reaches through its getters:
+**Problem.** Every panel receives the whole `ApplicationWindow` and reaches through its getters. The counts are from the review of 2026-10-23; SP-04 moved calls from `getImageProcessing` to `getSession`, and the totals are about the same:
 - `MainApplicationPanel` does so 82 times, including `getSession` 26 times, `getStretchPanel` 12 times and `getDetectionConfigurationPanel` 7 times.
 - `DetectionConfigurationPanel` does so 40 times, including `getMainApplicationPanel` 7 times.
 - `StretchPanel` calls `getMainApplicationPanel` 7 times.
@@ -180,7 +187,7 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 
 ### SP-14. Package names that say what they hold
 
-**Problem.** `util` (49 classes) is the application's core, not a set of utilities. It holds the services and the facade, domain types (`PlateSolutionCorrection`, `TrackOverlay`, `VariableStarOverlay`, `ExposureGroup`, `BlinkSequence`), FITS input/output and WCS. `util.reporting` (56 classes) is a subsystem, not a utility.
+**Problem.** `util` (55 classes) is the application's core, not a set of utilities. It holds the services, domain types (`PlateSolutionCorrection`, `TrackOverlay`, `VariableStarOverlay`, `ExposureGroup`, `BlinkSequence`), FITS input/output and WCS. `util.reporting` (52 classes) is a subsystem, not a utility.
 
 **Proposal.** Domain-named packages: `fits` (input, preparation, conversion, WCS), `detection` (pipeline services, run options, overlays), `platesolve`, `report` (with a `report.lookup` subpackage for the SatChecker/JPL/SkyBoT proxy and builders) and `skycatalog`. Do it last, as a mechanical move, and keep `DependencyRulesTest` in step.
 
