@@ -52,7 +52,7 @@ final class ViewerSupport {
 
     /** The frame description in the middle, the cursor on the right and the keys underneath. */
     static JComponent statusBar(JLabel frameLabel, JLabel cursorLabel, String keyHint) {
-        JLabel hint = new JLabel(keyHint);
+        JLabel hint = new WrappingHelpLabel(keyHint, 1400);
         hint.setForeground(UiStyle.helpColor());
         JPanel status = new JPanel(new BorderLayout(12, 2));
         status.add(frameLabel, BorderLayout.CENTER);

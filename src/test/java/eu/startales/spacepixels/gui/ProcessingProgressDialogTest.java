@@ -202,12 +202,28 @@ public class ProcessingProgressDialogTest {
                     try {
                         large.beginPreview(true);
                         int width = large.getWidth();
-                        large.updateProgress(40, message);
-                        large.validate();
-                        java.awt.Container content = large.getContentPane();
-                        assertTrue("every wrapped line is shown at font " + size,
-                                content.getPreferredSize().height <= content.getHeight());
-                        assertEquals("the dialog keeps its width at font " + size, width, large.getWidth());
+                        for (String progress : new String[]{message,
+                                "Reading frame 3 of 5: aligned_luminance_long_exposure_2026-10-25_frame_0003.fit"}) {
+                            large.updateProgress(40, progress);
+                            large.validate();
+                            java.awt.Container content = large.getContentPane();
+                            assertTrue("every wrapped line is shown at font " + size,
+                                    content.getPreferredSize().height <= content.getHeight());
+                            assertEquals("the dialog keeps its width at font " + size, width, large.getWidth());
+                            boolean foundStatus = false;
+                            for (java.awt.Component component : allComponents(content)) {
+                                if (component instanceof javax.swing.JLabel label && progress.equals(label.getToolTipText())) {
+                                    foundStatus = true;
+                                    javax.swing.text.View html = (javax.swing.text.View) label.getClientProperty(
+                                            javax.swing.plaf.basic.BasicHTML.propertyKey);
+                                    assertTrue("long filenames can wrap inside the label at font " + size,
+                                            html.getMinimumSpan(javax.swing.text.View.X_AXIS) <= label.getWidth());
+                                    assertTrue("the label's measured content fits at font " + size,
+                                            label.getPreferredSize().width <= label.getWidth());
+                                }
+                            }
+                            assertTrue("the current progress message was measured", foundStatus);
+                        }
                     } finally {
                         large.dispose();
                     }

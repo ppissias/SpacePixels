@@ -30,31 +30,16 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 ### Recommended changes
 
-**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10, SP-13, SP-06, SP-05, SP-07, SP-08, SP-11, SP-16 and SP-19 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Pending: the mechanical SP-14 package move. SP-16 and SP-19 are reviewed. Their proposals and issue reviews below still apply.
+**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10, SP-13, SP-06, SP-05, SP-07, SP-08, SP-11, SP-14, SP-16 and SP-19 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Only the separate dependency follow-ups SP-21 and SP-22 remain in this list.
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
-| [SP-14](#sp-14-package-names-that-say-what-they-hold) | Package names that say what they hold | Low | Medium, mechanical |
 | [SP-21](#sp-21-upgrade-nom-tam-fits-after-the-dither-fix) | Upgrade nom-tam-fits after the dither fix | Low | Small |
 | [SP-22](#sp-22-upgrade-gson-to-2150) | Upgrade Gson to 2.15.0 | Low | Small |
-
-**Suggested order.**
-
-1. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review. The catalogue controller, panel collaborators, direct settings rows, application I/O queue, session-owned services, report boundaries, FITS input helpers, the shared viewer base and the scaled layout notes are in place.
 
 Keep dependency maintenance (SP-21 and SP-22) separate from refactorings, according to each item's timing.
 
 Refactorings are intended to preserve behaviour. Evaluate the exceptions raised by the issue reviews, including SP-19's viewer lifetime and settings policy, as explicit behaviour decisions. Check implementation changes with the relevant unit and GUI mechanics tests. Items that touch detection or reports also need byte-identical deterministic `report-data.json`, `detection_config.json` and CSV content on the reference datasets, using the normalization and comparison method in DEVELOPER.md.
-
-### SP-14. Package names that say what they hold
-
-**Problem.** `util` (55 classes) is the application's core, not a set of utilities. It holds the services, domain types (`PlateSolutionCorrection`, `TrackOverlay`, `VariableStarOverlay`, `ExposureGroup`, `BlinkSequence`), FITS input/output and WCS. `util.reporting` (52 classes) is a subsystem, not a utility.
-
-**Proposal.** Domain-named packages: `fits` (input, preparation, conversion, WCS), `detection` (pipeline services, run options, overlays), `platesolve`, `report` (with a `report.lookup` subpackage for the SatChecker/JPL/SkyBoT proxy and builders) and `skycatalog`. Do it last, as a mechanical move, and keep `DependencyRulesTest` in step.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- Update `build.gradle` source-set and resource include patterns as well as Java imports and `DependencyRulesTest`; the headless artifact currently explicitly includes `util/**`.
-- `FitsFileInformation` and visualization/run-option types are exposed through public request/result signatures. Moving them changes consumer APIs even if the implementation move is mechanical. Identify those breaks, update API examples and release documentation, and run `check` plus the isolated `apiConsumerTest` against the staged artifact.
 
 ### SP-21. Upgrade nom-tam-fits after the dither fix
 

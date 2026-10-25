@@ -390,7 +390,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         colourNotice.setToolTipText("<html>Colour frames support Blink Selected, Image Stretch and Batch Stretch, and Convert to Mono."
                 + "<br>Astrometry remains available. Preview Frame, Manual Transient Inspection, Auto-Tune and all detection"
                 + "<br>(including variable-star photometry) need monochrome frames. Import the converted mono folder to use them.</html>");
-        JPanel topArea = new JPanel(new BorderLayout());
+        JPanel topArea = new WidthTrackingPanel();
         topArea.add(workflowStrip, BorderLayout.CENTER);
         JPanel notices = new JPanel();
         notices.setLayout(new BoxLayout(notices, BoxLayout.Y_AXIS));
@@ -399,7 +399,18 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         notices.add(analysisScope);
         notices.add(colourNotice);
         topArea.add(notices, BorderLayout.SOUTH);
-        add(topArea, BorderLayout.NORTH);
+        JScrollPane workflowScroll = new JScrollPane(topArea) {
+            /** Reserves table space when scaled workflow cards need more than one screen. */
+            @Override public Dimension getPreferredSize() {
+                Dimension size = super.getPreferredSize();
+                if (getParent() != null && getParent().getHeight() > 0) {
+                    size.height = Math.min(size.height, getParent().getHeight() * 3 / 5);
+                }
+                return size;
+            }
+        };
+        workflowScroll.setBorder(null);
+        add(workflowScroll, BorderLayout.NORTH);
         refreshWorkflowStatus();
 
         // ==========================================

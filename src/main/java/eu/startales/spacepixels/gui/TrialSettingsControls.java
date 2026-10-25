@@ -99,7 +99,7 @@ final class TrialSettingsControls {
 
     /** Builds the horizontal input row used under Preview Frame's image controls. */
     JComponent horizontal() {
-        JPanel inputs = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        JPanel inputs = new WrappingControlsPanel(6, 0);
         for (Entry entry : entries) {
             inputs.add(entry.label);
             inputs.add(entry.spinner);
@@ -135,10 +135,9 @@ final class TrialSettingsControls {
 
     /** Builds the common Reset/Apply actions and the validation note for a sidebar. */
     JComponent actions() {
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        JPanel buttons = new WrappingControlsPanel(6, 0);
         buttons.add(reset);
         buttons.add(apply);
-        buttons.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttons.getPreferredSize().height));
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         buttons.setAlignmentX(Component.LEFT_ALIGNMENT);

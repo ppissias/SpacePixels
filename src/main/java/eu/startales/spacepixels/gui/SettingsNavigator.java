@@ -455,41 +455,6 @@ final class SettingsNavigator extends JPanel {
         return "<html>" + text + " <u>Show expert settings</u></html>";
     }
 
-    /**
-     * Holds a page in its scroll pane and takes the width of the viewport, so a page reflows to the window instead
-     * of scrolling sideways; only a viewport narrower than the page's minimum width brings the horizontal bar back.
-     */
-    static final class WidthTrackingPanel extends JPanel implements Scrollable {
-        WidthTrackingPanel() {
-            super(new BorderLayout());
-        }
-
-        @Override
-        public Dimension getPreferredScrollableViewportSize() {
-            return getPreferredSize();
-        }
-
-        @Override
-        public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
-            return 16;
-        }
-
-        @Override
-        public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
-            return orientation == SwingConstants.VERTICAL ? visibleRect.height - 32 : visibleRect.width - 32;
-        }
-
-        @Override
-        public boolean getScrollableTracksViewportWidth() {
-            return getParent() instanceof JViewport && getParent().getWidth() >= getMinimumSize().width;
-        }
-
-        @Override
-        public boolean getScrollableTracksViewportHeight() {
-            return getParent() instanceof JViewport && getParent().getHeight() > getPreferredSize().height;
-        }
-    }
-
     private final class NavRenderer extends DefaultListCellRenderer {
         @Override
         public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {

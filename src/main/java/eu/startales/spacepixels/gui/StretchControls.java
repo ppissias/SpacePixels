@@ -37,7 +37,7 @@ final class StretchControls {
     private final JSlider secondarySlider;
     private final JLabel primaryLabel = new JLabel();
     private final JLabel secondaryLabel = new JLabel();
-    private final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    private final JPanel row = new WrappingControlsPanel(6, 0);
     private final ChangeListener modelListener = e -> scheduleRefresh();
     private final ActionListener algorithmListener = e -> scheduleRefresh();
     private final ItemListener displayListener = e -> scheduleRefresh();

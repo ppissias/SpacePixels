@@ -165,7 +165,7 @@ public class ProcessingProgressDialog extends JDialog {
 
     /** Centred, wrapped text with room for at least {@code lines} lines so short messages keep the size. */
     private static void setWrapped(JLabel label, String text, int lines) {
-        String escaped = (text == null || text.isEmpty() ? " " : text)
+        String escaped = breakLongTokens(text == null || text.isEmpty() ? " " : text, label.getFontMetrics(label.getFont()))
                 .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>");
         label.setText("<html><div style='text-align:center;width:"
                 + UiStyle.space(TEXT_WIDTH) + "px'>" + escaped + "</div></html>");
@@ -173,6 +173,29 @@ public class ProcessingProgressDialog extends JDialog {
         Dimension natural = label.getPreferredSize();
         int minimum = label.getFontMetrics(label.getFont()).getHeight() * lines;
         label.setPreferredSize(new Dimension(natural.width, Math.max(natural.height, minimum)));
+        label.setToolTipText(text);
+    }
+
+    /** Adds invisible wrap opportunities inside filenames that cannot fit as one word at the current font. */
+    private static String breakLongTokens(String text, FontMetrics metrics) {
+        StringBuilder wrapped = new StringBuilder();
+        int tokenWidth = 0;
+        for (int offset = 0; offset < text.length();) {
+            int codePoint = text.codePointAt(offset);
+            int width = metrics.charWidth(codePoint);
+            if (Character.isWhitespace(codePoint)) {
+                tokenWidth = 0;
+            } else {
+                if (tokenWidth > 0 && tokenWidth + width > UiStyle.space(TEXT_WIDTH)) {
+                    wrapped.append('\u200b');
+                    tokenWidth = 0;
+                }
+                tokenWidth += width;
+            }
+            wrapped.appendCodePoint(codePoint);
+            offset += Character.charCount(codePoint);
+        }
+        return wrapped.toString();
     }
 
     /**

@@ -380,7 +380,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
                 + "pixels are tinted too (D).");
         detectionsBox.addActionListener(e -> view.setDetectionsVisible(detectionsBox.isSelected()));
 
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        JPanel row = new WrappingControlsPanel(6, 0);
         row.add(previousButton);
         row.add(nextButton);
         row.add(Box.createHorizontalStrut(10));

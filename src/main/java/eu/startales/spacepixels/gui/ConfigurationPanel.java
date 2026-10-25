@@ -55,7 +55,7 @@ public class ConfigurationPanel extends JPanel {
     private final JButton saveButton = new JButton("Save");
 
     private final JLabel astapPathLabel = new JLabel("Not set");
-    private final JLabel astapStatusLabel = new JLabel(" ");
+    private final JLabel astapStatusLabel = statusLabel();
     private final JButton astapDownloadButton = AccessibleControls.link("Download ASTAP and star databases",
             "Download ASTAP and star databases", () -> openBrowser(ASTAP_DOWNLOAD_URL));
     private final JRadioButton astrometryAnonymousButton = new JRadioButton("Anonymous");
@@ -103,7 +103,7 @@ public class ConfigurationPanel extends JPanel {
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(10, 20, 20, 20));
 
-        JPanel mainContent = new JPanel();
+        JPanel mainContent = new WidthTrackingPanel();
         mainContent.setLayout(new BoxLayout(mainContent, BoxLayout.Y_AXIS));
 
         // --- EXTERNAL TOOLS ---
@@ -674,7 +674,7 @@ public class ConfigurationPanel extends JPanel {
     private void showAstapStatus(boolean ok, String text) {
         astapStatusLabel.setForeground(ok ? UIManager.getColor("Label.disabledForeground") : warningColor());
         boolean download = text.contains("Download");
-        astapStatusLabel.setText(text);
+        astapStatusLabel.setText(wrapStatus(text));
         astapStatusLabel.setToolTipText(download ? ASTAP_DOWNLOAD_URL : null);
         astapDownloadButton.setVisible(download);
     }

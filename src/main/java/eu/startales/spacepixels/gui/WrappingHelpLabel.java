@@ -29,7 +29,8 @@ final class WrappingHelpLabel extends JLabel {
     @Override public Dimension getPreferredSize() {
         int width = wrapWidth > 0 ? wrapWidth : UiStyle.space(logicalWidth);
         if (wrapWidth == 0 && getParent() != null && getParent().getWidth() > 0) {
-            width = Math.min(width, getParent().getWidth());
+            Insets parentInsets = getParent().getInsets();
+            width = Math.min(width, getParent().getWidth() - parentInsets.left - parentInsets.right);
         }
         View html = (View) getClientProperty(BasicHTML.propertyKey);
         if (html == null) return super.getPreferredSize();

@@ -202,7 +202,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         runButton.addActionListener(e -> host.startAutoTune((AutoTuneProfile) profileCombo.getSelectedItem()));
         updateProfileLabel();
 
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        JPanel controls = new WrappingControlsPanel(6, 0);
         controls.add(profileLabel);
         controls.add(profileCombo);
         controls.add(Box.createHorizontalStrut(8));
@@ -229,8 +229,10 @@ public class AutoTuneOverviewPanel extends JPanel {
             }
         });
         profileTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        profileTable.setRowHeight(26);
+        profileTable.setRowHeight(Math.max(UiStyle.space(26),
+                profileTable.getFontMetrics(profileTable.getFont()).getHeight() + UiStyle.space(6)));
         profileTable.setFillsViewportHeight(true);
+        profileTable.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         profileTable.getTableHeader().setReorderingAllowed(false);
         profileTable.setDefaultRenderer(Object.class, new ProfileCellRenderer());
         tableModel.applyColumnWidths();
@@ -244,9 +246,11 @@ public class AutoTuneOverviewPanel extends JPanel {
             }
         });
         JScrollPane tableScroll = new JScrollPane(profileTable);
-        // The table takes the page width; the preferred width only sets where it starts to squeeze its columns.
-        Dimension tableSize = new Dimension(640, profileTable.getRowHeight() * 4 + 48);
+        // Scroll the wide table locally so the surrounding page can still reflow to its viewport.
+        Dimension tableSize = new Dimension(UiStyle.space(640), profileTable.getRowHeight() * 4
+                + profileTable.getTableHeader().getPreferredSize().height + UiStyle.space(20));
         tableScroll.setPreferredSize(tableSize);
+        tableScroll.setMinimumSize(new Dimension(0, tableSize.height));
         tableScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, tableSize.height));
         box.add(left(tableScroll));
 
@@ -265,7 +269,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         chartButton.setToolTipText("<html>Show why Auto-Tune chose these settings: stars found against false detections,<br>"
                 + "and how faint the chosen setting still recovers a test star.</html>");
         chartButton.addActionListener(e -> showAutoTuneChart());
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        JPanel actions = new WrappingControlsPanel(6, 0);
         actions.setBorder(new EmptyBorder(8, 0, 0, 0));
         actions.add(useProfileButton);
         actions.add(reportButton);
@@ -877,7 +881,7 @@ public class AutoTuneOverviewPanel extends JPanel {
 
         void applyColumnWidths() {
             for (int i = 0; i < COLUMNS.length; i++) {
-                profileTable.getColumnModel().getColumn(i).setPreferredWidth(COLUMN_WIDTHS[i]);
+                profileTable.getColumnModel().getColumn(i).setPreferredWidth(UiStyle.space(COLUMN_WIDTHS[i]));
             }
         }
 

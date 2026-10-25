@@ -63,6 +63,8 @@ To get sky coordinates and identify objects, SpacePixels needs **one plate-solve
 
 ## 2. The main window
 
+At larger display scales or text sizes, controls wrap onto more rows. If the main workflow area or the Star Mask Explorer sidebar needs more height, scroll within that area; the main frame table stays visible. Tab brings the focused control into view. The wide Auto-Tune results table scrolls horizontally within the Overview page.
+
 ![SpacePixels at start](docs/images/manual/ui-start.png)
 
 The window has four tabs:

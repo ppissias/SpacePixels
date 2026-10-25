@@ -137,10 +137,16 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
     }
 
     private JComponent buildControls(JTransientEngine.MasterStackResult stackResult) {
-        JPanel panel = new JPanel();
+        JPanel panel = new WidthTrackingPanel() {
+            /** Keeps a useful sidebar width without fixing the content height. */
+            @Override public Dimension getPreferredSize() {
+                Dimension size = super.getPreferredSize();
+                size.width = Math.max(UiStyle.space(340), getMinimumSize().width);
+                return size;
+            }
+        };
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(12, 14, 12, 14));
-        panel.setPreferredSize(new Dimension(UiStyle.space(340), 10));
 
         panel.add(left(DetectionConfigurationPanel.createSectionHeader("Star Mask")));
         panel.add(left(muted(basisText(stackResult))));
@@ -166,11 +172,10 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
             }
         });
         ViewerSupport.bind(getRootPane(), "ESCAPE", "close", this::dispose);
-        JPanel maskRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JPanel maskRow = new WrappingControlsPanel(0, 0);
         maskRow.add(showMask);
         maskRow.add(Box.createHorizontalStrut(10));
         maskRow.add(holdButton);
-        maskRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, maskRow.getPreferredSize().height));
         panel.add(Box.createVerticalStrut(6));
         panel.add(left(maskRow));
         panel.add(left(muted("Scroll to zoom down to single pixels, drag to pan, double-click to switch between fit and 100 %. "
@@ -189,12 +194,14 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         panel.add(left(trials.actions()));
         JButton closeButton = new JButton("Close");
         closeButton.addActionListener(e -> dispose());
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        JPanel buttons = new WrappingControlsPanel(6, 0);
         buttons.add(closeButton);
-        buttons.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttons.getPreferredSize().height));
         panel.add(left(buttons));
         ViewerSupport.prepareControls(panel);
-        return panel;
+        // Reserve the bar's width before BorderLayout sizes the sidebar; its arrival must not force sideways scrolling.
+        JScrollPane scroll = new JScrollPane(panel, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        scroll.setBorder(null);
+        return scroll;
     }
 
     private static String basisText(JTransientEngine.MasterStackResult result) {

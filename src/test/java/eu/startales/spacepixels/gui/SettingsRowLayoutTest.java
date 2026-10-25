@@ -59,6 +59,30 @@ public class SettingsRowLayoutTest {
         });
     }
 
+    /** Page padding must be excluded before measuring a paragraph's wrapped lines. */
+    @Test public void paddedPageIntroReservesEveryRenderedLine() throws Exception {
+        EventQueue.invokeAndWait(() -> {
+            Font original = UIManager.getFont("Label.font");
+            try {
+                UIManager.put("Label.font", new Font(Font.SANS_SERIF, Font.PLAIN, UiStyle.space(20)));
+                JPanel page = new JPanel();
+                page.setLayout(new BoxLayout(page, BoxLayout.Y_AXIS));
+                page.setBorder(BorderFactory.createEmptyBorder(10, UiStyle.space(20), 20, UiStyle.space(20)));
+                WrappingHelpLabel intro = new WrappingHelpLabel(LONG_HELP, 600);
+                page.add(intro);
+                page.setSize(UiStyle.space(500), 5000);
+                page.doLayout();
+                javax.swing.text.View html = (javax.swing.text.View) intro.getClientProperty(
+                        javax.swing.plaf.basic.BasicHTML.propertyKey);
+                html.setSize(intro.getWidth(), 0);
+                assertTrue("the allocated height contains the actual rendered paragraph",
+                        intro.getHeight() >= Math.ceil(html.getPreferredSpan(javax.swing.text.View.Y_AXIS)));
+            } finally {
+                UIManager.put("Label.font", original);
+            }
+        });
+    }
+
     /** Lays out real Swing descendants so assertions cover allocated bounds as well as preferred sizes. */
     private static void layoutChildren(Container parent) {
         parent.doLayout();
