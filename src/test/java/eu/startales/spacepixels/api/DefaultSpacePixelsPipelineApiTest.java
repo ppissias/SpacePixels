@@ -65,4 +65,23 @@ public class DefaultSpacePixelsPipelineApiTest {
         assertTrue(result.getExportDirectory().isDirectory());
         assertTrue(result.getReportFile().isFile());
     }
+
+    /** With two frames the engine stops after quality control, and the report says so instead of failing. */
+    @Test
+    public void reportExplainsARunWithTooFewFrames() throws Exception {
+        Path tempRoot = Files.createTempDirectory("spacepixels-api-two-frames");
+        Path sequenceDirectory = SyntheticDatasetFactory.createMono16FitsSequence(tempRoot, "two-frames", 2);
+
+        SpacePixelsPipelineResult result = new DefaultSpacePixelsPipelineApi().run(
+                SpacePixelsPipelineRequest.builder(sequenceDirectory.toFile())
+                        .detectionConfig(SyntheticDatasetFactory.createSyntheticDetectionConfig())
+                        .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
+                        .generateReport(true)
+                        .build());
+
+        assertTrue(result.getPipelineResult().tooFewFrames);
+        String report = Files.readString(result.getReportFile().toPath());
+        assertTrue(report.contains("Too Few Frames After Quality Control"));
+        assertTrue(report.contains("Only <strong>2</strong> frames remained after quality control."));
+    }
 }

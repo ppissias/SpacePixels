@@ -1,6 +1,6 @@
 # Developer guide
 
-How SpacePixels is built, how its code is organised, the principles it follows, and how to change it safely. This guide is for developers and coding agents. The implementation sections describe the current code; the principles guide changes, with current exceptions identified below. Planned design work is in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md) and planned functionality in [FEATURE-REQUESTS.md](FEATURE-REQUESTS.md).
+How SpacePixels is built, how its code is organised, the principles it follows, and how to change it safely. This guide is for developers and coding agents. The implementation sections describe the current code; the principles guide changes. Planned design work is in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md) and planned functionality in [FEATURE-REQUESTS.md](FEATURE-REQUESTS.md).
 
 | Read | For |
 |---|---|
@@ -35,7 +35,7 @@ The design rules that follow from them:
 - **Logic is testable without the window.** The GUI mechanics tests drive the real window separately.
 - **The three repositories are one coordinated source set.** SpacePixels, JTransient and JPlateSolve change together; there is no promise to keep old library signatures, and no reflection or fallback code for older library versions. Changes to exposed API types still need an explicit compatibility decision, updated consumer checks and release documentation; updating sibling callers does not update external consumers.
 
-**Current exceptions.** `DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain` rewrites engine results and telemetry after detection when fewer than three frames remain. This is an existing implementation fact, not an example to copy; its evaluation is recorded with SP-04 in DESIGN-IMPROVEMENTS.md. Package dependency tests enforce selected structural boundaries, not runtime thread confinement or every ownership rule.
+**Enforcement.** Package dependency tests enforce selected structural boundaries, not runtime thread confinement or every ownership rule.
 
 **Avoid:** rewriting the Swing UI in another toolkit to fix state problems; splitting classes by line count; replacing a large panel with an equally large controller; generic jobs with untyped results; making every object observable; keeping large image buffers for later convenience; changing the viewers' focus rules without real keyboard tests.
 
@@ -172,7 +172,7 @@ Preview Frame (`DetectionSequenceFrame`), Manual Transient Inspection (`Transien
 2. **Sections:** one writer per section, such as `TargetVisualizationSectionWriter`, `AnomalySectionWriter` and `PhotometryReportSectionWriter`.
 3. **Publish:** the HTML is published only when complete (`AtomicReportFile`).
 
-The report never changes the engine's results. Its live lookups (SatChecker, JPL, SkyBoT) go through `ReportLookupProxyServer`, a small localhost server owned by the window. `report-data.json` is versioned. Its frame numbers are one-based, and its finding IDs are local to the report.
+The report never changes the engine's results. When the engine stops after quality control because it kept fewer than three frames (`PipelineResult.tooFewFrames`), the report says so and shows the quality-control results. Its live lookups (SatChecker, JPL, SkyBoT) go through `ReportLookupProxyServer`, a small localhost server owned by the window. `report-data.json` is versioned. Its frame numbers are one-based, and its finding IDs are local to the report.
 
 ## Headless: the API and the command line
 

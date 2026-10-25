@@ -159,7 +159,6 @@ public final class StandardDetectionPipelineService {
                 liveFindings.close();
             }
         }
-        result = DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain(result);
 
         long pipelineDuration = System.currentTimeMillis() - startTime;
         DebugOutput.println("Total Pipeline Time: " + pipelineDuration + "ms");

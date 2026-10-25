@@ -6,8 +6,8 @@ import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
-import eu.startales.spacepixels.util.DetectionPipelineSupport;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import io.github.ppissias.jtransient.telemetry.TrackerTelemetry;
 
@@ -280,10 +280,11 @@ final class PipelineDiagnosticsSectionWriter {
         }
         report.println("</div>");
 
-        if (summary.insufficientFramesAfterQuality) {
+        if (summary.tooFewFrames) {
             report.println("<div class='panel'>");
             report.println("<h2>Too Few Frames After Quality Control</h2>");
-            report.println("<p>Only <strong>" + pipelineTelemetry.totalFramesKept + "</strong> frames remained after quality control. SpacePixels needs at least <strong>" + DetectionPipelineSupport.MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS + "</strong> usable frames before multi-frame tracking and maximum-stack candidate review are meaningful, so those sections were skipped for this run.</p>");
+            int kept = pipelineTelemetry.totalFramesKept;
+            report.println("<p>Only <strong>" + kept + "</strong> " + (kept == 1 ? "frame" : "frames") + " remained after quality control. The detection needs at least <strong>" + JTransientEngine.MIN_KEPT_FRAMES + "</strong> before it builds the stacks, links tracks, looks for slow movers and measures variable stars, so it stopped after quality control.</p>");
             report.println("<div class='astro-note'>The quality-control tables under Diagnostics show which frames were rejected and why.</div>");
             report.println("</div>");
         }

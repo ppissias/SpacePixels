@@ -49,7 +49,7 @@ The API runs the standard SpacePixels detection pipeline on a directory of align
 - validated FITS metadata
 - the base and effective detection configuration
 - optional Auto-Tune telemetry
-- the raw JTransient `PipelineResult`
+- the raw JTransient `PipelineResult`; its `tooFewFrames` is true when quality control kept fewer than three frames and the engine stopped there
 - optional HTML report/export paths
 
 When `generateReport(true)` is enabled, SpacePixels writes the report into a new

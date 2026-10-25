@@ -13,7 +13,8 @@ final class DetectionReportSummary {
     final int streakTrackCount;
     final int movingTargetCount;
     final int confirmedLinkedTrackCount;
-    final boolean insufficientFramesAfterQuality;
+    /** The engine stopped after quality control because it kept too few frames ({@code PipelineResult.tooFewFrames}). */
+    final boolean tooFewFrames;
     final int returnedTrackCount;
     final int masterStarCount;
     final int masterMapObjectCount;
@@ -30,7 +31,7 @@ final class DetectionReportSummary {
                            int streakTrackCount,
                            int movingTargetCount,
                            int confirmedLinkedTrackCount,
-                           boolean insufficientFramesAfterQuality,
+                           boolean tooFewFrames,
                            int returnedTrackCount,
                            int masterStarCount,
                            int masterMapObjectCount,
@@ -46,7 +47,7 @@ final class DetectionReportSummary {
         this.streakTrackCount = streakTrackCount;
         this.movingTargetCount = movingTargetCount;
         this.confirmedLinkedTrackCount = confirmedLinkedTrackCount;
-        this.insufficientFramesAfterQuality = insufficientFramesAfterQuality;
+        this.tooFewFrames = tooFewFrames;
         this.returnedTrackCount = returnedTrackCount;
         this.masterStarCount = masterStarCount;
         this.masterMapObjectCount = masterMapObjectCount;

@@ -415,8 +415,7 @@ Responsibilities:
 - load validated FITS frames into JTransient `ImageFrame` objects
 - preserve raw frame arrays needed by report export
 - create an effective config through `DetectionPipelineSupport`
-- call `JTransientEngine.runPipeline(...)`
-- suppress late-phase outputs when too few frames survive quality control
+- call `JTransientEngine.runPipeline(...)`; when it keeps fewer than three frames, the engine stops after quality control and marks the result `tooFewFrames`, which the report presents as it is
 - hand the run's `DetectionOverlays` (tracks and variable-star candidates, no image buffers) to the caller as soon as the engine returns, before the report decision; Detect Moving Targets keeps them, iterative passes pass no receiver, and the API, which calls `runDetectionPipeline` and `exportDetectionReport` itself, does not ask for them
 - optionally run the UI detection-count safety prompt (`DetectionSafetyPrompt`, given a `DetectionSummary`) before report generation
 - export the standard report through `DetectionReportGenerator`

@@ -25,13 +25,9 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Shared runtime helpers used by both standard and iterative pipeline orchestration services. Only the minimum
- * frame count is public, for the report sections that explain it.
+ * Shared runtime helpers used by both standard and iterative pipeline orchestration services.
  */
-public final class DetectionPipelineSupport {
-
-    /** The fewest frames that survive quality control for the multi-frame analyses to run. */
-    public static final int MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS = 3;
+final class DetectionPipelineSupport {
 
     private static final DateTimeFormatter TRACE_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS 'UTC'").withZone(ZoneOffset.UTC);
@@ -156,42 +152,6 @@ public final class DetectionPipelineSupport {
                 residualAnalysis.commonMotionGroups.size(),
                 unclassifiedDetections,
                 result.cameraFixedGroups.size());
-    }
-
-    static PipelineResult suppressLatePhaseOutputsWhenTooFewFramesRemain(PipelineResult result) {
-        if (result == null || result.telemetry == null) {
-            return result;
-        }
-
-        int keptFrames = result.telemetry.totalFramesKept;
-        if (keptFrames >= MIN_USABLE_FRAMES_FOR_MULTI_FRAME_ANALYSIS) {
-            return result;
-        }
-
-        DebugOutput.println(
-                "Only " + keptFrames
-                        + " frames remained after quality control. Suppressing downstream multi-frame report outputs.");
-
-        result.telemetry.totalTracksFound = 0;
-        result.telemetry.totalAnomaliesFound = 0;
-        result.telemetry.trackerTelemetry = null;
-        result.telemetry.slowMoverTelemetry = null;
-
-        return PipelineResult.builder()
-                .tracks(Collections.emptyList())
-                .telemetry(result.telemetry)
-                .masterStackData(result.masterStackData)
-                .masterStars(result.masterStars == null ? Collections.emptyList() : result.masterStars)
-                .slowMoverCandidates(Collections.emptyList())
-                .anomalies(Collections.emptyList())
-                .allTransients(result.allTransients == null ? Collections.emptyList() : result.allTransients)
-                .unclassifiedTransients(result.unclassifiedTransients == null ? Collections.emptyList() : result.unclassifiedTransients)
-                .residualTransientAnalysis(ResidualTransientAnalysis.empty())
-                .masterVetoMask(result.masterVetoMask)
-                .driftPoints(result.driftPoints == null ? Collections.emptyList() : result.driftPoints)
-                .maximumStackData(result.maximumStackData)
-                .dataArea(result.dataArea)
-                .build();
     }
 
     private static String formatTraceTimestamp(long timestampMillis) {
