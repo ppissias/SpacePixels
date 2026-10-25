@@ -1,13 +1,13 @@
 # Agent Handoff
 
 - Owner: B
-- Phase: SELECT
-- Task: -
+- Phase: IMPLEMENT
+- Task: SP-05
 - Implementer: B
 - Reviewer: C
-- Base: -
+- Base: effe9d03fb4a44aae7717b0a750b2efe2272180f
 - Implementation: -
 - Fix rounds: 0/2
-- Tests: SP-06 review rerun PASS: SkyCatalogueControllerTest 9, ProcessingSessionTest 10, DependencyRulesTest 9. GUI mechanics not rerun.
+- Tests: -
 - Quota visibility: UNKNOWN
-- Next action: SP-06 is approved. Agent B selects the next eligible task. A and C remain read-only.
+- Next action: Agent B replaces the window parameter on the main, stretch and detection panels with specific collaborators. Admitted jobs keep the session and settings captured at start. A and C remain read-only.

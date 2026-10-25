@@ -18,7 +18,7 @@
 | ID | Task / spec | Depends on | Status | Evidence / deviations / next action |
 | --- | --- | --- | --- | --- |
 | SP-06 | Extract the sky-catalogue workflow | - | DONE | Reviewed `bd173bee9374516eddb947d327657cde4180c63a`. Reran SkyCatalogueControllerTest 9, ProcessingSessionTest 10, DependencyRulesTest 9: PASS. GUI mechanics not rerun (they move the mouse); implementer recorded SessionMechanicsTest and SessionIoMechanicsTest PASS. No code change in review. |
-| SP-05 | Give panels specific collaborators and listeners | SP-06 | TODO | Preserve EDT notification, captured worker inputs and listener detachment. |
+| SP-05 | Give panels specific collaborators and listeners | SP-06 | IN_PROGRESS | B implements, C reviews; base `effe9d03fb4a44aae7717b0a750b2efe2272180f`. Preserve EDT notification, captured worker inputs and listener detachment. |
 | SP-08 | Complete report request/context and consolidate entry points | - | TODO | Accept review cautions for valid absence, cancellation, atomic publication and explicit volatile-field normalization. |
 | SP-07 | Fail-fast settings apply and direct row wiring | SP-05 | TODO | Use the reduced proposal; preserve explicit engine targets, separate reset lifecycles, invalid text and saved baselines. |
 | SP-11A | Immutable frame metadata and session-owned WCS replacement | - | TODO | Retain array/container and header-map protection; preserve admitted run snapshots. |
