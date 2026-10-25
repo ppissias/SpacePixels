@@ -1,13 +1,13 @@
 # Agent Handoff
 
 - Owner: C
-- Phase: REVIEW
-- Task: SP-16
-- Implementer: B
-- Reviewer: C
-- Base: 2884b50e2e876ae53f767b7693de48c01babda49
-- Implementation: fb69f693366a06273316a4ce8e3d69ab0bbe2a93
+- Phase: IMPLEMENT
+- Task: SP-14
+- Implementer: C
+- Reviewer: A
+- Base: baf19e313e49943126341fb40359dc1ece49dc45
+- Implementation: -
 - Fix rounds: 0/2
-- Tests: DisplayScaleLayoutTest and SettingsRowLayoutTest PASS.
+- Tests: SP-16 review rerun PASS: DisplayScaleLayoutTest 2, SettingsRowLayoutTest 5, gui unit suites 95, check 520, apiConsumerTest 9.
 - Quota visibility: UNKNOWN
-- Next action: Agent C reviews 2884b50..fb69f69. Check wrapped Overview, Astrometry and star-mask notes, and scaled viewer slider widths. Keyboard and focus rules must be unchanged. A and B remain read-only until a committed transfer.
+- Next action: SP-16 is approved. Agent C implements SP-14 (move core code into domain packages). A and B remain read-only.
