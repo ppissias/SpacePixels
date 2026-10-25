@@ -17,7 +17,7 @@
 
 | ID | Task / spec | Depends on | Status | Evidence / deviations / next action |
 | --- | --- | --- | --- | --- |
-| SP-06 | Extract the sky-catalogue workflow | - | IN_PROGRESS | A implements, B reviews; base `dbce4f21a2fbd67e65aa5eb212246e7060c42d73`. Accept both issue-review cautions: task/session identity checks, executor/timer shutdown, delayed completion and no session-to-GUI dependency. |
+| SP-06 | Extract the sky-catalogue workflow | - | REVIEW | A implementation `bd173bee9374516eddb947d327657cde4180c63a`, base `dbce4f21a2fbd67e65aa5eb212246e7060c42d73`; B reviews. Check PASS (502 tests, 4 skipped), 3 session GUI mechanics PASS. Both issue-review cautions accepted; details and validation limits in the implementation commit. |
 | SP-05 | Give panels specific collaborators and listeners | SP-06 | TODO | Preserve EDT notification, captured worker inputs and listener detachment. |
 | SP-08 | Complete report request/context and consolidate entry points | - | TODO | Accept review cautions for valid absence, cancellation, atomic publication and explicit volatile-field normalization. |
 | SP-07 | Fail-fast settings apply and direct row wiring | SP-05 | TODO | Use the reduced proposal; preserve explicit engine targets, separate reset lifecycles, invalid text and saved baselines. |
