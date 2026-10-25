@@ -111,7 +111,24 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private static final int SHORT_NAME_LENGTH = 12;
     static final double MAX_ZOOM = 16.0;
     static final double MAX_PIXEL_SCALE = 8.0;
+    /** Reduced picture copies are made down to this size. */
+    private static final int SMALLEST_LEVEL_SIDE = 512;
 
+    /** Zoom and centre shared by linked views. A lone view keeps a private link. */
+    static final class ViewLink {
+        private final java.util.List<FrameView> views = new java.util.ArrayList<>();
+        double zoom = 1.0;
+        double centerX = 0.5;
+        double centerY = 0.5;
+
+        private void add(FrameView view) { views.add(view); }
+
+        private void repaint() {
+            for (FrameView view : views) view.repaint();
+        }
+    }
+
+    private final ViewLink link;
     private BlinkSequence.Frame frame;
     /** Stretch table of each channel of {@link #frame}. */
     private byte[][] tables;
@@ -134,11 +151,11 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private boolean variableStarsVisible = true;
     private String placeholder = "Loading…";
     private CursorListener cursorListener;
-
-    /** Zoom relative to the fitted view, and the centre as a fraction of the frame width and height. */
-    private double zoom = 1.0;
-    private double centerX = 0.5;
-    private double centerY = 0.5;
+    /** A prepared picture, used by the stretch previews and the star-mask stack instead of a FITS frame. */
+    private BufferedImage picture;
+    private java.util.List<BufferedImage> pictureLevels = java.util.List.of();
+    private java.util.List<BufferedImage> imageOverlayLevels = java.util.List.of();
+    private boolean imageOverlayVisible = true;
 
     private BufferedImage buffer;
     private int[] bufferPixels;
@@ -146,7 +163,12 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private double dragCenterX;
     private double dragCenterY;
 
-    FrameView() {
+    FrameView() { this(new ViewLink()); }
+
+    /** Shares zoom and pan with the other views of {@code link}, as the two stretch previews do. */
+    FrameView(ViewLink link) {
+        this.link = link;
+        link.add(this);
         setPreferredSize(new Dimension(800, 600));
         setOpaque(true);
         ToolTipManager.sharedInstance().registerComponent(this);
@@ -154,19 +176,19 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             @Override
             public void mousePressed(MouseEvent e) {
                 dragStart = e.getPoint();
-                dragCenterX = centerX;
-                dragCenterY = centerY;
+                dragCenterX = link.centerX;
+                dragCenterY = link.centerY;
             }
 
             @Override
             public void mouseDragged(MouseEvent e) {
                 double scale = scale();
-                if (dragStart == null || frame == null || scale <= 0) {
+                if (dragStart == null || shownWidth() <= 0 || scale <= 0) {
                     return;
                 }
-                centerX = clamp(dragCenterX - (e.getX() - dragStart.x) / (scale * frame.getWidth()));
-                centerY = clamp(dragCenterY - (e.getY() - dragStart.y) / (scale * frame.getHeight()));
-                repaint();
+                link.centerX = clamp(dragCenterX - (e.getX() - dragStart.x) / (scale * shownWidth()));
+                link.centerY = clamp(dragCenterY - (e.getY() - dragStart.y) / (scale * shownHeight()));
+                link.repaint();
                 reportCursor(e.getX(), e.getY());
             }
 
@@ -184,10 +206,10 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
 
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() != 2 || frame == null) {
+                if (e.getClickCount() != 2 || shownWidth() <= 0) {
                     return;
                 }
-                if (zoom > 1.0) {
+                if (link.zoom > 1.0) {
                     fit();
                 } else {
                     zoomAround(e.getX(), e.getY(), 1.0 / fitScale());
@@ -196,8 +218,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
 
             @Override
             public void mouseWheelMoved(MouseWheelEvent e) {
-                if (frame != null) {
-                    zoomAround(e.getX(), e.getY(), zoom * Math.pow(1.25, -e.getPreciseWheelRotation()));
+                if (shownWidth() > 0) {
+                    zoomAround(e.getX(), e.getY(), link.zoom * Math.pow(1.25, -e.getPreciseWheelRotation()));
                     reportCursor(e.getX(), e.getY());
                 }
             }
@@ -213,6 +235,9 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
 
     /** Shows this frame with these stretch tables; {@code extremeColour} draws a colour frame as the brightest channel. */
     void showFrame(BlinkSequence.Frame frame, byte[][] tables, boolean extremeColour) {
+        this.picture = null;
+        this.pictureLevels = java.util.List.of();
+        this.imageOverlayLevels = java.util.List.of();
         this.frame = frame;
         this.tables = tables;
         this.extremeColour = extremeColour;
@@ -226,10 +251,44 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         repaint();
     }
 
-    /** Forgets the frame and the drawing buffer, so the frame data can be freed. */
+    /** Shows a prepared picture. A null picture clears it and does not change the zoom. */
+    void showPicture(BufferedImage image) {
+        this.picture = image;
+        this.pictureLevels = image == null ? java.util.List.of() : java.util.List.of(image);
+        if (image != null) {
+            frame = null;
+            tables = null;
+        }
+        repaint();
+    }
+
+    /** A same-sized picture drawn over {@link #showPicture}, for example the star mask. */
+    void setImageOverlay(BufferedImage overlay) {
+        setImageOverlayLevels(overlay == null ? java.util.List.of() : java.util.List.of(overlay));
+    }
+
+    /**
+     * The mask and its reduced copies: entry k is reduced by 2^k. A missing level uses the closest finer one.
+     */
+    void setImageOverlayLevels(java.util.List<BufferedImage> levels) {
+        this.imageOverlayLevels = levels == null ? java.util.List.of() : levels;
+        repaint();
+    }
+
+    /** Shows or hides the picture overlay without affecting the track overlay. */
+    void setImageOverlayVisible(boolean visible) {
+        this.imageOverlayVisible = visible;
+        repaint();
+    }
+
+    boolean isImageOverlayVisible() { return imageOverlayVisible; }
+
     void clear() {
         frame = null;
         tables = null;
+        picture = null;
+        pictureLevels = java.util.List.of();
+        imageOverlayLevels = java.util.List.of();
         buffer = null;
         bufferPixels = null;
         overlay = null;
@@ -383,10 +442,10 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     }
 
     void fit() {
-        zoom = 1.0;
-        centerX = 0.5;
-        centerY = 0.5;
-        repaint();
+        link.zoom = 1.0;
+        link.centerX = 0.5;
+        link.centerY = 0.5;
+        link.repaint();
     }
 
     /** Zooms to this many screen pixels per frame pixel (1 is 100 %), keeping the centre. */
@@ -395,8 +454,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         if (fit <= 0) {
             return;
         }
-        zoom = Math.max(1.0, Math.min(maxZoom(), pixelScale / fit));
-        repaint();
+        link.zoom = Math.max(1.0, Math.min(maxZoom(), pixelScale / fit));
+        link.repaint();
     }
 
     /** The zoom as a percentage (screen pixels per frame pixel). */
@@ -408,11 +467,11 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         double before = scale();
         double pointX = frameX(screenX, before);
         double pointY = frameY(screenY, before);
-        zoom = Math.max(1.0, Math.min(maxZoom(), newZoom));
+        link.zoom = Math.max(1.0, Math.min(maxZoom(), newZoom));
         double after = scale();
-        centerX = clamp(pointX - (screenX - getWidth() / 2.0) / (after * frame.getWidth()));
-        centerY = clamp(pointY - (screenY - getHeight() / 2.0) / (after * frame.getHeight()));
-        repaint();
+        link.centerX = clamp(pointX - (screenX - getWidth() / 2.0) / (after * shownWidth()));
+        link.centerY = clamp(pointY - (screenY - getHeight() / 2.0) / (after * shownHeight()));
+        link.repaint();
     }
 
     private double maxZoom() {
@@ -420,16 +479,26 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         return fit <= 0 ? MAX_ZOOM : Math.max(MAX_ZOOM, MAX_PIXEL_SCALE / fit);
     }
 
+    private int shownWidth() {
+        if (picture != null) return picture.getWidth();
+        return frame == null ? 0 : frame.getWidth();
+    }
+
+    private int shownHeight() {
+        if (picture != null) return picture.getHeight();
+        return frame == null ? 0 : frame.getHeight();
+    }
+
     private double fitScale() {
-        if (frame == null || getWidth() <= 0 || getHeight() <= 0) {
+        if (shownWidth() <= 0 || shownHeight() <= 0 || getWidth() <= 0 || getHeight() <= 0) {
             return 0;
         }
-        return Math.min(getWidth() / (double) frame.getWidth(), getHeight() / (double) frame.getHeight());
+        return Math.min(getWidth() / (double) shownWidth(), getHeight() / (double) shownHeight());
     }
 
     /** Screen pixels per frame pixel. */
     private double scale() {
-        return fitScale() * zoom;
+        return fitScale() * link.zoom;
     }
 
     /** Fraction of the frame width under this screen column. */
@@ -443,13 +512,13 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
 
     /** Screen position of the frame's left edge: centred when it fits, else set by the centre. */
     private double left(double scale) {
-        double drawWidth = frame.getWidth() * scale;
-        return drawWidth <= getWidth() ? (getWidth() - drawWidth) / 2 : getWidth() / 2.0 - centerX * drawWidth;
+        double drawWidth = shownWidth() * scale;
+        return drawWidth <= getWidth() ? (getWidth() - drawWidth) / 2 : getWidth() / 2.0 - link.centerX * drawWidth;
     }
 
     private double top(double scale) {
-        double drawHeight = frame.getHeight() * scale;
-        return drawHeight <= getHeight() ? (getHeight() - drawHeight) / 2 : getHeight() / 2.0 - centerY * drawHeight;
+        double drawHeight = shownHeight() * scale;
+        return drawHeight <= getHeight() ? (getHeight() - drawHeight) / 2 : getHeight() / 2.0 - link.centerY * drawHeight;
     }
 
     private static double clamp(double value) {
@@ -465,10 +534,10 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
 
     private Point pixelAt(int screenX, int screenY) {
         double scale = scale();
-        if (frame == null || scale <= 0) return null;
+        if (shownWidth() <= 0 || scale <= 0) return null;
         int x = (int) Math.floor((screenX - left(scale)) / scale);
         int y = (int) Math.floor((screenY - top(scale)) / scale);
-        boolean inside = x >= 0 && y >= 0 && x < frame.getWidth() && y < frame.getHeight();
+        boolean inside = x >= 0 && y >= 0 && x < shownWidth() && y < shownHeight();
         return inside ? new Point(x, y) : null;
     }
 
@@ -480,12 +549,74 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         return (int) Math.floor(Math.log(1.0 / devicePixelsPerFramePixel) / Math.log(2.0));
     }
 
+    /** Draws a prepared picture with the same fit, zoom and pan as a frame, plus its optional mask. */
+    private void drawPicture(Graphics2D g2) {
+        double scale = scale();
+        double left = left(scale);
+        double top = top(scale);
+        int x = (int) Math.round(left);
+        int y = (int) Math.round(top);
+        int w = (int) Math.round(picture.getWidth() * scale);
+        int h = (int) Math.round(picture.getHeight() * scale);
+        int level = levelFor(scale);
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, scale >= 1.0
+                ? RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR : RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g2.drawImage(pictureLevel(level), x, y, w, h, null);
+        if (!imageOverlayLevels.isEmpty() && imageOverlayVisible) {
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            g2.drawImage(imageOverlayLevels.get(Math.min(level, imageOverlayLevels.size() - 1)), x, y, w, h, null);
+        }
+    }
+
+    private BufferedImage pictureLevel(int level) {
+        if (pictureLevels.size() == 1 && picture != null
+                && Math.max(picture.getWidth(), picture.getHeight()) > SMALLEST_LEVEL_SIDE * 2) {
+            pictureLevels = halvings(picture);
+        }
+        return pictureLevels.get(Math.min(level, pictureLevels.size() - 1));
+    }
+
+    /** Smoothed half-size copies, down to {@link #SMALLEST_LEVEL_SIDE}. */
+    private static java.util.List<BufferedImage> halvings(BufferedImage source) {
+        java.util.List<BufferedImage> levels = new java.util.ArrayList<>();
+        levels.add(source);
+        BufferedImage current = source;
+        while (Math.max(current.getWidth(), current.getHeight()) > SMALLEST_LEVEL_SIDE) {
+            int width = Math.max(1, current.getWidth() / 2);
+            int height = Math.max(1, current.getHeight() / 2);
+            int type = current.getType() == BufferedImage.TYPE_CUSTOM ? BufferedImage.TYPE_INT_ARGB : current.getType();
+            BufferedImage half = new BufferedImage(width, height, type);
+            Graphics2D g = half.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.drawImage(current, 0, 0, width, height, null);
+            g.dispose();
+            levels.add(half);
+            current = half;
+        }
+        return levels;
+    }
+
+    private void drawZoomLabel(Graphics2D g2) {
+        if (link.zoom <= 1.0) return;
+        String label = String.format(Locale.US, "%.0f %%", zoomPercent());
+        g2.setColor(new Color(10, 12, 20, 190));
+        g2.fillRect(6, 6, g2.getFontMetrics().stringWidth(label) + 10, 18);
+        g2.setColor(Color.WHITE);
+        g2.drawString(label, 11, 19);
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
         try {
             g2.setColor(BACKGROUND);
             g2.fillRect(0, 0, getWidth(), getHeight());
+            if (picture != null) {
+                drawPicture(g2);
+                drawZoomLabel(g2);
+                return;
+            }
             if (frame == null || tables == null) {
                 g2.setColor(UIManager.getColor("Label.disabledForeground"));
                 FontMetrics metrics = g2.getFontMetrics();
@@ -503,13 +634,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                 drawOverlay(g2);
             }
             if (hasVariableStars()) drawVariableStars(g2);
-            if (zoom > 1.0) {
-                String label = String.format(Locale.US, "%.0f %%", zoomPercent());
-                g2.setColor(new Color(10, 12, 20, 190));
-                g2.fillRect(6, 6, g2.getFontMetrics().stringWidth(label) + 10, 18);
-                g2.setColor(Color.WHITE);
-                g2.drawString(label, 11, 19);
-            }
+            drawZoomLabel(g2);
         } finally {
             g2.dispose();
         }

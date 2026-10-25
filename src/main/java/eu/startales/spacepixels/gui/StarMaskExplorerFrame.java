@@ -78,7 +78,7 @@ final class StarMaskExplorerFrame extends JFrame {
     private final Consumer<Settings> apply;
     private final ComputeMask computeMask;
 
-    private final ZoomableImageView view = new ZoomableImageView(new ZoomableImageView.ViewState());
+    private final FrameView view = new FrameView();
     private final JSpinner sigmaSpinner;
     private final JSpinner growSpinner;
     private final JSpinner minPixelsSpinner;
@@ -122,8 +122,10 @@ final class StarMaskExplorerFrame extends JFrame {
         view.setPlaceholder("Rendering the master stack…");
         view.setToolTipText("Scroll to zoom down to single pixels, drag to pan, double-click to switch between fit and 100 %.");
         // Full resolution: zooming in shows the real pixels of the master stack.
-        view.setImage(DisplayImageRenderer.createDisplayImage(stack, visualization.getAutoStretchBlackSigma(),
+        view.setFocusable(true);
+        view.showPicture(DisplayImageRenderer.createDisplayImage(stack, visualization.getAutoStretchBlackSigma(),
                 visualization.getAutoStretchWhiteSigma()));
+        ViewerSupport.bindZoomKeys(getRootPane(), view);
 
         setLayout(new BorderLayout());
         add(view, BorderLayout.CENTER);
@@ -172,24 +174,24 @@ final class StarMaskExplorerFrame extends JFrame {
         panel.add(left(grid));
 
         JCheckBox showMask = new JCheckBox("Show mask", true);
-        showMask.addItemListener(e -> view.setOverlayVisible(showMask.isSelected()));
+        showMask.addItemListener(e -> view.setImageOverlayVisible(showMask.isSelected()));
         // Hold to compare: the bare median stack while pressed, the mask again when released (also the Space bar).
         JButton holdButton = new JButton("Hold to See the Stack Only");
         holdButton.setToolTipText("Press and hold (or hold the Space bar) to hide the mask and see the median stack; release to see the mask again.");
-        holdButton.getModel().addChangeListener(e -> view.setOverlayVisible(showMask.isSelected() && !holdButton.getModel().isPressed()));
+        holdButton.getModel().addChangeListener(e -> view.setImageOverlayVisible(showMask.isSelected() && !holdButton.getModel().isPressed()));
         JRootPane root = getRootPane();
         root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("pressed SPACE"), "hideMask");
         root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("released SPACE"), "showMask");
         root.getActionMap().put("hideMask", new AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
-                view.setOverlayVisible(false);
+                view.setImageOverlayVisible(false);
             }
         });
         root.getActionMap().put("showMask", new AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
-                view.setOverlayVisible(showMask.isSelected());
+                view.setImageOverlayVisible(showMask.isSelected());
             }
         });
         JPanel maskRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -298,7 +300,7 @@ final class StarMaskExplorerFrame extends JFrame {
                     }
                     @SuppressWarnings("unchecked")
                     List<BufferedImage> levels = (List<BufferedImage>) result[1];
-                    view.setOverlayLevels(levels);
+                    view.setImageOverlayLevels(levels);
                     showStatistics(statistics);
                     statusLabel.setText(" ");
                 } catch (Exception e) {
@@ -327,8 +329,8 @@ final class StarMaskExplorerFrame extends JFrame {
             }
             stack = null;
             initialStatistics = null;
-            view.setImage(null);
-            view.setOverlayLevels(java.util.Collections.emptyList());
+            view.showPicture(null);
+            view.setImageOverlayLevels(java.util.Collections.emptyList());
         }
         super.dispose();
     }

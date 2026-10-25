@@ -54,10 +54,10 @@ public class StarMaskExplorerFrameTest {
 
     @Test
     public void zoomedOutViewsDrawFromTheMatchingReducedCopy() {
-        assertEquals(0, ZoomableImageView.levelFor(1.0));
-        assertEquals(0, ZoomableImageView.levelFor(4.0));
-        assertEquals(0, ZoomableImageView.levelFor(0.6));
-        assertEquals(1, ZoomableImageView.levelFor(0.5));
-        assertEquals(3, ZoomableImageView.levelFor(0.11));
+        assertEquals(0, FrameView.levelFor(1.0));
+        assertEquals(0, FrameView.levelFor(4.0));
+        assertEquals(0, FrameView.levelFor(0.6));
+        assertEquals(1, FrameView.levelFor(0.5));
+        assertEquals(3, FrameView.levelFor(0.11));
     }
 }

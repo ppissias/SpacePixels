@@ -140,7 +140,7 @@ Main classes:
 - `ApplicationWindow`
 - `MainApplicationPanel`
 - `ConfigurationPanel`
-- `StretchPanel` (display stretch, remembered in Java preferences; whole-frame preview with `ZoomableImageView` and a histogram)
+- `StretchPanel` (display stretch, remembered in Java preferences; whole-frame preview with two linked `FrameView`s and a histogram)
 - `StretchPreviewRenderer` (renders the `StretchPanel` previews one request at a time and shows a result only while its request is the newest; a change of frame or stretch, hiding the tab or another import makes a render under way stale)
 - `DetectionConfigurationPanel`
 - `AutoTuneOverviewPanel`
@@ -381,7 +381,7 @@ The Star Mask Explorer, opened from the Overview.
 
 - `StarMaskStackTask` loads the frames (with `SessionFrameLoader`, shared with Manual Transient Inspection) and calls `JTransientEngine.generateMasterStackWithDetails(...)`, so the stack comes from the pipeline's own frame selection.
 - `DetectionConfigurationPanel` keeps the stack for the session. The key is the imported files plus every setting except the star mask values.
-- For trial values the frame calls `MasterReferenceAnalyzer.analyzeFromMasterStack(...)` and `MasterVetoMask.build(...)`, the same code as the pipeline, in a background worker. It shows the mask as a one-bit overlay on `ZoomableImageView`.
+- For trial values the frame calls `MasterReferenceAnalyzer.analyzeFromMasterStack(...)` and `MasterVetoMask.build(...)`, the same code as the pipeline, in a background worker. It shows the mask as a one-bit overlay on `FrameView`.
 
 ### `SettingsNavigator` and `SettingRow`
 

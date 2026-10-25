@@ -165,7 +165,7 @@ public class BlinkFrame extends JFrame {
 
     void open(BlinkSequence sequence, FitsFileInformation[] files, FitsFileInformation[] sessionFiles,
               StretchPanel stretchPanel, TrackOverlay overlay, VariableStarOverlay variables) {
-        bindStretch(stretchPanel);
+        stretch = ViewerSupport.bindStretch(stretch, stretchPanel, this::showCurrent, stretchRow);
         release();
         this.sequence = sequence;
         this.files = files == null ? null : files.clone();
@@ -198,7 +198,7 @@ public class BlinkFrame extends JFrame {
         view.setVariableStarOverlay(hasVariables ? variables : null);
         view.setVariableStarsVisible(variablesBox.isSelected());
 
-        setTitle("Blink · " + sessionName(sequence.getFrames().get(0).getInfo().getFilePath()) + " · "
+        setTitle("Blink · " + ViewerSupport.sessionName(sequence.getFrames().get(0).getInfo().getFilePath()) + " · "
                 + sequence.getFrames().size() + " frames");
         frameModel.fireTableDataChanged();
         updateLoopCount();
@@ -239,7 +239,7 @@ public class BlinkFrame extends JFrame {
         loadingFiles = files;
         loadBar.setMaximum(files.length);
         showLoadProgress(0, files.length);
-        setTitle("Blink · " + sessionName(files[0].getFilePath()) + " · reading " + files.length + " frames");
+        setTitle("Blink · " + ViewerSupport.sessionName(files[0].getFilePath()) + " · reading " + files.length + " frames");
         controls.setVisible(false);
         statusBar.setVisible(false);
         centerCards.show(center, LOADING_CARD);
@@ -299,11 +299,6 @@ public class BlinkFrame extends JFrame {
         cursorPixel = null;
         view.clear();
         frameModel.fireTableDataChanged();
-    }
-
-    private static String sessionName(String filePath) {
-        File file = new File(filePath);
-        return file.getParentFile() != null ? file.getParentFile().getName() : file.getName();
     }
 
     // ==========================================
@@ -460,20 +455,6 @@ public class BlinkFrame extends JFrame {
     private JComponent buildStatusBar() {
         return ViewerSupport.statusBar(frameLabel, cursorLabel, "Space play/pause · ← → step · ↑ ↓ speed · "
                 + "S skip frame (paused) · T tracks · A annotate · C correct plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
-    }
-
-    /** The stretch row shares its models with the Image Stretch tab (see {@link StretchControls}). */
-    private void bindStretch(StretchPanel panel) {
-        if (stretch != null && stretch.getPanel() == panel) {
-            return;
-        }
-        if (stretch != null) {
-            stretch.detach();
-        }
-        stretch = new StretchControls(panel, this::showCurrent);
-        stretchRow.removeAll();
-        stretchRow.add(stretch.getRow(), BorderLayout.CENTER);
-        stretchRow.revalidate();
     }
 
     private void installKeyBindings() {

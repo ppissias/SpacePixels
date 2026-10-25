@@ -17,6 +17,7 @@ import eu.startales.spacepixels.util.WcsSolutionResolver;
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.File;
 import java.awt.event.ActionEvent;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -104,6 +105,36 @@ final class ViewerSupport {
                 prepareControls(child);
             }
         }
+    }
+
+    /** The dataset folder name shown in viewer titles, or the file name when it has no parent. */
+    static String sessionName(String filePath) {
+        return sessionName(filePath == null ? null : new File(filePath));
+    }
+
+    /** The dataset folder name for a frame, or empty when the frame is absent. */
+    static String sessionName(FitsFileInformation info) {
+        return info == null ? "" : sessionName(info.getFilePath());
+    }
+
+    /** The dataset folder name, or the file name when it has no parent. */
+    static String sessionName(File file) {
+        if (file == null) return "";
+        return file.getParentFile() != null ? file.getParentFile().getName() : file.getName();
+    }
+
+    /**
+     * Installs the stretch row for {@code panel}, replacing a row already bound to another panel. The same method
+     * serves Blink and the sequence viewers; {@code redraw} is the viewer's own refresh.
+     */
+    static StretchControls bindStretch(StretchControls current, StretchPanel panel, Runnable redraw, JComponent row) {
+        if (current != null && current.getPanel() == panel) return current;
+        if (current != null) current.detach();
+        StretchControls next = new StretchControls(panel, redraw);
+        row.removeAll();
+        row.add(next.getRow(), BorderLayout.CENTER);
+        row.revalidate();
+        return next;
     }
 
     /** Keeps a label as wide as this text, so the controls next to it do not move when its value changes. */

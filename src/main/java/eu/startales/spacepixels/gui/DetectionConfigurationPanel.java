@@ -404,7 +404,7 @@ public class DetectionConfigurationPanel extends JPanel {
     /** Opens the explorer on the settings taken when Test Star Mask was clicked. */
     private void showStarMaskExplorer(FitsFileInformation[] files, DetectionConfig config) {
         File first = new File(files[0].getFilePath());
-        String sessionName = first.getParentFile() != null ? first.getParentFile().getName() : first.getName();
+        String sessionName = ViewerSupport.sessionName(first);
         StarMaskExplorerFrame.Settings current = new StarMaskExplorerFrame.Settings(
                 config.masterSigmaMultiplier, config.masterGrowSigmaMultiplier, config.masterMinDetectionPixels, config.maxStarJitter);
         ProcessingSession owner = sessions.current();
@@ -1605,7 +1605,7 @@ public class DetectionConfigurationPanel extends JPanel {
             }
         }
         File firstFile = new File(filesInfo[0].getFilePath());
-        String sessionName = firstFile.getParentFile() != null ? firstFile.getParentFile().getName() : firstFile.getName();
+        String sessionName = ViewerSupport.sessionName(firstFile);
         List<String> fileNames = new ArrayList<>();
         for (FitsFileInformation file : filesInfo) {
             fileNames.add(new File(file.getFilePath()).getName());

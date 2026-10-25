@@ -302,7 +302,7 @@ abstract class SequenceViewerFrame extends JFrame {
     }
 
     protected void openAt(int index, StretchPanel stretchPanel, FitsFileInformation[] files) {
-        bindStretch(stretchPanel);
+        stretch = ViewerSupport.bindStretch(stretch, stretchPanel, this::redraw, stretchRow);
         cursorReadout.reset(files, sky::solutionFor);
         sky.attach(files);
         open = true;
@@ -311,7 +311,7 @@ abstract class SequenceViewerFrame extends JFrame {
         view.clear();
         view.setDetectionsVisible(detectionsBox.isSelected());
         FitsFileInformation first = infoOf(0);
-        setTitle(windowName + " · " + sessionName(first) + " · " + frameCount() + " frames");
+        setTitle(windowName + " · " + ViewerSupport.sessionName(first) + " · " + frameCount() + " frames");
         if (!isVisible()) {
             setVisible(true);
         }
@@ -345,27 +345,6 @@ abstract class SequenceViewerFrame extends JFrame {
         } else {
             setVisible(false);
         }
-    }
-
-    private void bindStretch(StretchPanel panel) {
-        if (stretch != null && stretch.getPanel() == panel) {
-            return;
-        }
-        if (stretch != null) {
-            stretch.detach();
-        }
-        stretch = new StretchControls(panel, this::redraw);
-        stretchRow.removeAll();
-        stretchRow.add(stretch.getRow(), BorderLayout.CENTER);
-        stretchRow.revalidate();
-    }
-
-    private static String sessionName(FitsFileInformation info) {
-        if (info == null || info.getFilePath() == null) {
-            return "";
-        }
-        File file = new File(info.getFilePath());
-        return file.getParentFile() != null ? file.getParentFile().getName() : file.getName();
     }
 
     // ==========================================

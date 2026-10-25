@@ -47,9 +47,9 @@ public class StretchPanel extends JPanel {
     private final JLabel displayPreviewTitle = new JLabel("Stretched", SwingConstants.CENTER);
 
     // Preview
-    private final ZoomableImageView.ViewState viewState = new ZoomableImageView.ViewState();
-    private final ZoomableImageView originalView = new ZoomableImageView(viewState);
-    private final ZoomableImageView stretchedView = new ZoomableImageView(viewState);
+    private final FrameView.ViewLink viewState = new FrameView.ViewLink();
+    private final FrameView originalView = linkedPreview(viewState);
+    private final FrameView stretchedView = linkedPreview(viewState);
     private final HistogramView originalHistogramView = new HistogramView();
     private final HistogramView histogramView = new HistogramView();
     private final JLabel frameLabel = new JLabel(" ");
@@ -67,6 +67,14 @@ public class StretchPanel extends JPanel {
     private boolean adjusting;
 
     private StretchedSequenceFrame sequenceFrame;
+
+    /** A stretch preview with the previous preferred size, sharing zoom and pan with its pair. */
+    private static FrameView linkedPreview(FrameView.ViewLink link) {
+        FrameView view = new FrameView(link);
+        view.setPreferredSize(new Dimension(400, 300));
+        view.setToolTipText("Scroll to zoom, drag to pan, double-click to switch between fit and 100 %. Both previews move together.");
+        return view;
+    }
 
     /** The frame list is the main panel. The full-size viewer is created by the window. */
     public StretchPanel(SessionAccess sessions, FrameList frames, FullSizeViewer fullSize) {
@@ -387,8 +395,8 @@ public class StretchPanel extends JPanel {
 
     /** Shows the previews of the newest request; the renderer drops any other. */
     private void showPreviews(StretchPreviewRenderer.Previews previews) {
-        originalView.setImage(previews.original);
-        stretchedView.setImage(previews.stretched);
+        originalView.showPicture(previews.original);
+        stretchedView.showPicture(previews.stretched);
         if (!previews.isRendered()) {
             stretchedView.setPlaceholder("The preview could not be rendered");
         }
@@ -402,8 +410,8 @@ public class StretchPanel extends JPanel {
     private void clearPreviews(String placeholder) {
         renderer.cancel();
         rendering = false;
-        originalView.setImage(null);
-        stretchedView.setImage(null);
+        originalView.showPicture(null);
+        stretchedView.showPicture(null);
         originalView.setPlaceholder(placeholder);
         stretchedView.setPlaceholder(placeholder);
         originalHistogramView.setHistogram(null);

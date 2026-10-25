@@ -117,7 +117,7 @@ public class StretchMechanicsTest extends MechanicsTestCase {
     }
 
     private static void collectPreviews(Component component, List<Component> views) {
-        if (component.isShowing() && component.getClass().getSimpleName().equals("ZoomableImageView")) {
+        if (component.isShowing() && component.getClass().getSimpleName().equals("FrameView")) {
             views.add(component);
         }
         if (component instanceof Container container) {
@@ -130,7 +130,7 @@ public class StretchMechanicsTest extends MechanicsTestCase {
     private static long signature(Component view) {
         BufferedImage image;
         try {
-            Field field = view.getClass().getDeclaredField("image");
+            Field field = view.getClass().getDeclaredField("picture");
             field.setAccessible(true);
             image = (BufferedImage) field.get(view);
         } catch (ReflectiveOperationException e) {
