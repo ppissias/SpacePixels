@@ -452,7 +452,7 @@ public class StretchPanel extends JPanel {
                 }
             }
         }
-        if (sequenceFrame == null) {
+        if (sequenceFrame == null || !sequenceFrame.isDisplayable()) {
             sequenceFrame = fullSize.create(this);
         }
         sequenceFrame.openSequence(files, startIndex);

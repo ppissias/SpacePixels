@@ -40,7 +40,7 @@ import java.util.prefs.Preferences;
  * detection run can be drawn on top. The list on the left shows every frame; while paused, frames can be left out of
  * the loop. The window opens as soon as the frames start loading and shows the progress.
  */
-public class BlinkFrame extends JFrame {
+public class BlinkFrame extends JFrame implements SessionViewer {
 
     private static final String SPEED_PREFERENCE = "blink.frameMillis";
     private static final int MIN_MILLIS = 50;
@@ -265,6 +265,11 @@ public class BlinkFrame extends JFrame {
      * Ends the blink, or the loading before it: stops, frees the frames and tells the main window. Only hides the
      * window when neither is going on.
      */
+    @Override
+    public void closeForSessionChange() {
+        close();
+    }
+
     void close() {
         boolean active = open || loading;
         release();

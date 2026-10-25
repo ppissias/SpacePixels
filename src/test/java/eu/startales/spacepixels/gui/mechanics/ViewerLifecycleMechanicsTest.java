@@ -44,6 +44,24 @@ public class ViewerLifecycleMechanicsTest extends MechanicsTestCase {
     }
 
     @Test
+    public void importingANewSessionClosesRegisteredViewers() throws Exception {
+        var sequence = importSyntheticSequence();
+        var stack = StarMaskLifecycleProbe.buildStack(application().getSession().getFiles());
+        StarMaskLifecycleProbe probe = GuiActionRunner.execute(() ->
+                new StarMaskLifecycleProbe(application().getFrame(), stack));
+        application().getViewers().register((eu.startales.spacepixels.gui.SessionViewer) probe.viewer());
+        probe.finishPreparation();
+        assertTrue(probe.awaitFinished());
+        assertTrue(GuiActionRunner.execute(() -> probe.viewer().isDisplayable()));
+        assertTrue(GuiActionRunner.execute(() -> application().getViewers().isRegistered((eu.startales.spacepixels.gui.SessionViewer) probe.viewer())));
+
+        GuiActionRunner.execute(() -> application().importFolder(sequence.toFile()));
+        waitFor("registered viewers are closed on import", () -> GuiActionRunner.execute(() ->
+                application().getViewers().count() == 0));
+        assertFalse(GuiActionRunner.execute(() -> probe.viewer().isDisplayable()));
+    }
+
+    @Test
     public void disposingAViewerDropsThePendingResultAndDetachesListeners() throws Exception {
         checkClosingWhilePreparing(true);
     }

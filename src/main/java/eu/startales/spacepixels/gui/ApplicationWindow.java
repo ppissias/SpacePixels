@@ -87,6 +87,7 @@ public class ApplicationWindow {
     private static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
 
     private final BlinkFrame blinkFrame = new BlinkFrame();
+    private final ViewerRegistry viewers = new ViewerRegistry();
     private final JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
 
 
@@ -199,17 +200,19 @@ public class ApplicationWindow {
                 applicationSettings, new FolderImport() {
                     @Override public void choose() { chooseAndImportFolder(); }
                     @Override public void importFolder(File folder) { ApplicationWindow.this.importFolder(folder); }
-                }, this::setSessionTabsEnabled);
+                }, this::setSessionTabsEnabled, viewers);
         configurationApplicationPanel = new ConfigurationPanel(applicationSettings, sessionAccess, mainApplicationPanel,
                 storage, () -> closing);
-        stretchPanel = new StretchPanel(sessionAccess, mainApplicationPanel, stretch -> new StretchedSequenceFrame(this, stretch));
+        stretchPanel = new StretchPanel(sessionAccess, mainApplicationPanel,
+                stretch -> viewers.register(new StretchedSequenceFrame(this, stretch)));
         detectionConfigurationPanel = new DetectionConfigurationPanel(sessionAccess, jobCoordinator, storage, frmIpodImage,
                 () -> closing, () -> tabbedPane.setSelectedComponent(detectionConfigurationPanel),
-                mainApplicationPanel, mainApplicationPanel);
+                mainApplicationPanel, mainApplicationPanel, viewers);
         mainApplicationPanel.attach(stretchPanel, detectionConfigurationPanel,
                 () -> tabbedPane.setSelectedComponent(detectionConfigurationPanel));
 
         // In the order the panels used to hear of a new session.
+        addSessionListener(viewers::sessionChanged);
         addSessionListener(mainApplicationPanel::sessionChanged);
         addSessionListener(files -> configurationApplicationPanel.sessionChanged());
         addSessionListener(stretchPanel::sessionChanged);
@@ -264,6 +267,7 @@ public class ApplicationWindow {
     private void closeSessionResources() {
         closing = true;
         jobCoordinator.cancel();
+        viewers.closeAll();
         if (configurationApplicationPanel != null) configurationApplicationPanel.close();
         if (mainApplicationPanel != null) mainApplicationPanel.closeSessionViews();
         sessions.close();
@@ -442,6 +446,8 @@ public class ApplicationWindow {
     public JobCoordinator getJobCoordinator() {
         return jobCoordinator;
     }
+
+    public ViewerRegistry getViewers() { return viewers; }
 
     public BlinkFrame getBlinkFrame() {
         return blinkFrame;

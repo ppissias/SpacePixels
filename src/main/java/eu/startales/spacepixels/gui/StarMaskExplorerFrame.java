@@ -35,7 +35,7 @@ import java.util.function.Consumer;
  * Shows the session's master stack with the stationary-star veto mask the detection run would use, for trial star
  * mask settings, with coverage statistics. The mask is built by the same JTransient code as in the pipeline.
  */
-final class StarMaskExplorerFrame extends JFrame {
+final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
 
     @FunctionalInterface
     interface ComputeMask {
@@ -315,6 +315,11 @@ final class StarMaskExplorerFrame extends JFrame {
         List<DetectedObject> stars = MasterReferenceAnalyzer.analyzeFromMasterStack(stack, config).masterStars;
         boolean[][] mask = MasterVetoMask.build(stars, stack[0].length, stack.length, settings.starJitter);
         return new Object[]{statistics(stars, mask), overlayLevels(mask, MASK_COLOR)};
+    }
+
+    @Override
+    public void closeForSessionChange() {
+        dispose();
     }
 
     @Override

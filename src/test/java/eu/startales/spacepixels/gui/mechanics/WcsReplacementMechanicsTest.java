@@ -99,7 +99,7 @@ public class WcsReplacementMechanicsTest extends MechanicsTestCase {
             }
         });
 
-        // Importing the same folder again makes a new session; its writes leave the old session's windows alone.
+        // Importing the same folder again makes a new session; with SP-19B, import closes every viewer.
         GuiActionRunner.execute(() -> application().importFolder(sequence.toFile()));
         waitFor("the folder is imported again", () -> GuiActionRunner.execute(() ->
                 application().getSession() != null && application().getSession() != first));
@@ -107,18 +107,12 @@ public class WcsReplacementMechanicsTest extends MechanicsTestCase {
         assertEquals(secondPath, reimported.getFilePath());
         GuiActionRunner.execute(() -> MetadataReplacementProbe.applyWcsHeader(panel, reimported, solution(120.0)));
         GuiActionRunner.execute(() -> {
-            assertEquals("the inspections stay open after the import", 2, MetadataReplacementProbe.registeredInspections(panel));
+            assertEquals("the inspections are closed on import", 0, MetadataReplacementProbe.registeredInspections(panel));
             for (Window inspection : inspections) {
-                assertTrue(inspection.isShowing());
-                assertFalse("a write in the new session does not reach the old session's inspection",
-                        MetadataReplacementProbe.inspectedInfo(inspection, secondPath).isWcsSolved());
-            }
-            for (Window inspection : inspections) {
-                inspection.dispatchEvent(new java.awt.event.WindowEvent(inspection, java.awt.event.WindowEvent.WINDOW_CLOSING));
+                assertFalse("the old session's inspection is closed on import", inspection.isShowing());
+                assertFalse("the old session's inspection is disposed on import", inspection.isDisplayable());
             }
         });
-        waitFor("closed inspections are forgotten",
-                () -> GuiActionRunner.execute(() -> MetadataReplacementProbe.registeredInspections(panel) == 0));
     }
 
     private void openInspection(int expected) {

@@ -38,7 +38,7 @@ import java.util.concurrent.ExecutionException;
  * detections has a "Show detections" switch (D), and can show the tracks (T) and variable-star candidates (V) of the
  * last detection run. Every window has the Annotate switch (A) for the sky catalogue.
  */
-abstract class SequenceViewerFrame extends JFrame {
+abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
 
     /** What the window shows for one frame. */
     static final class Result {
@@ -296,7 +296,8 @@ abstract class SequenceViewerFrame extends JFrame {
         view.setMarkerSettings(settings);
     }
 
-    void closeForSessionChange() {
+    @Override
+    public void closeForSessionChange() {
         close();
         dispose();
     }

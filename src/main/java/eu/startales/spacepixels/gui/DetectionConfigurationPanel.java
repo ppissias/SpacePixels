@@ -170,6 +170,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private VisualizationSettings savedVisualization;
     private String savedSnapshot;
     private boolean suppressAutoApply;
+    private final ViewerRegistry viewers;
 
     /**
      * Builds the EDT-owned settings editor. {@code readout} and {@code frames} are the main panel. Admitted jobs copy
@@ -178,6 +179,12 @@ public class DetectionConfigurationPanel extends JPanel {
     public DetectionConfigurationPanel(SessionAccess sessions, JobCoordinator jobs, ApplicationStorage storage,
             JFrame windowFrame, BooleanSupplier closing, Runnable showThisTab, ActiveSettingsReadout readout,
             FrameList frames) {
+        this(sessions, jobs, storage, windowFrame, closing, showThisTab, readout, frames, new ViewerRegistry());
+    }
+
+    public DetectionConfigurationPanel(SessionAccess sessions, JobCoordinator jobs, ApplicationStorage storage,
+            JFrame windowFrame, BooleanSupplier closing, Runnable showThisTab, ActiveSettingsReadout readout,
+            FrameList frames, ViewerRegistry viewers) {
         this.sessions = sessions;
         this.jobs = jobs;
         this.storage = storage;
@@ -186,6 +193,7 @@ public class DetectionConfigurationPanel extends JPanel {
         this.showThisTab = showThisTab;
         this.readout = readout;
         this.frames = frames;
+        this.viewers = viewers != null ? viewers : new ViewerRegistry();
         loadPersistedSettings();
 
         setLayout(new BorderLayout());
@@ -408,11 +416,12 @@ public class DetectionConfigurationPanel extends JPanel {
         StarMaskExplorerFrame.Settings current = new StarMaskExplorerFrame.Settings(
                 config.masterSigmaMultiplier, config.masterGrowSigmaMultiplier, config.masterMinDetectionPixels, config.maxStarJitter);
         ProcessingSession owner = sessions.current();
-        new StarMaskExplorerFrame(windowFrame, sessionName, owner.getMasterStack(masterStackKey(config)), config,
+        StarMaskExplorerFrame frame = viewers.register(new StarMaskExplorerFrame(windowFrame, sessionName, owner.getMasterStack(masterStackKey(config)), config,
                 visualization, current,
                 settings -> {
                     if (sessions.isCurrent(owner)) applyStarMaskSettings(settings);
-                }).setVisible(true);
+                }));
+        frame.setVisible(true);
     }
 
     /** Writes the explorer's values into the settings (they then count as manual changes). */

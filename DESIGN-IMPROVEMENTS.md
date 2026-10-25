@@ -71,7 +71,7 @@ What remains of the earlier visual-rules item. Inspect the empty and loaded main
 
 **Request (2026-10-23):** "I have another idea, related to the preview windows. To create a common base for all of them. Maybe they already have common mechanisms, but please check what we can have once, common for all of them."
 
-**Implementation.** SP-19A uses `FrameView` for the stretch previews and the star-mask stack, including the mask overlay, and moves `bindStretch` and the dataset-folder name into `ViewerSupport`. Blink stays its own window. SP-19B and SP-19C remain.
+**Implementation.** SP-19A uses `FrameView` for the stretch previews and the star-mask stack, including the mask overlay, and moves `bindStretch` and the dataset-folder name into `ViewerSupport`. Blink stays its own window. SP-19B establishes `ViewerRegistry` and closes every viewer on import (fresh start, per D-01) and at exit, unregistering disposed windows and releasing workers and listeners. SP-19C remains.
 
 **What is shared already.**
 - `SequenceViewerFrame` is the base of Preview Frame, Manual Transient Inspection and the Image Stretch tab's sequence viewer (`StretchedSequenceFrame`). It is a template method that provides the window, stepping through frames, background preparation where the newest request wins, the overlays, and closing and releasing.

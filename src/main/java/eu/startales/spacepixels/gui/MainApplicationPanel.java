@@ -192,6 +192,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
      * import; a WCS write reaches only those of the session it was written in.
      */
     private final Map<TransientInspectionFrame, ProcessingSession> inspectionFrames = new java.util.LinkedHashMap<>();
+    private final ViewerRegistry viewers;
 
     /**
      * Builds the main panel from the window's session, jobs and import. The stretch and detection panels are attached
@@ -200,6 +201,12 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     public MainApplicationPanel(JFrame windowFrame, BlinkFrame blink, JobCoordinator jobs, SessionAccess sessions,
             ApplicationStorage storage, ApplicationSettings applicationSettings, FolderImport folderImport,
             Consumer<Boolean> sessionTabs) {
+        this(windowFrame, blink, jobs, sessions, storage, applicationSettings, folderImport, sessionTabs, new ViewerRegistry());
+    }
+
+    public MainApplicationPanel(JFrame windowFrame, BlinkFrame blink, JobCoordinator jobs, SessionAccess sessions,
+            ApplicationStorage storage, ApplicationSettings applicationSettings, FolderImport folderImport,
+            Consumer<Boolean> sessionTabs, ViewerRegistry viewers) {
         this.windowFrame = windowFrame;
         this.blink = blink;
         this.jobs = jobs;
@@ -208,10 +215,14 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         this.applicationSettings = applicationSettings;
         this.folderImport = folderImport;
         this.sessionTabs = sessionTabs;
+        this.viewers = viewers != null ? viewers : new ViewerRegistry();
 
         this.progressDialog = new ProcessingProgressDialog(windowFrame);
         restoreLiveViewPreference();
-        blink.setOnClose(this::blinkWindowClosed);
+        blink.setOnClose(() -> {
+            blinkWindowClosed();
+            this.viewers.unregister(blink);
+        });
         jobs.setListener(new JobCoordinator.Listener() {
             @Override
             public void jobStarted(JobHandle handle) {
@@ -556,6 +567,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         }
         AtomicBoolean stop = new AtomicBoolean();
         BlinkFrame blinkFrame = blink;
+        viewers.register(blinkFrame);
         BlinkImagesTask task = new BlinkImagesTask(selectedFitsFilesInfo, stop,
                 (read, total) -> EventQueue.invokeLater(() -> blinkFrame.showLoadProgress(read, total)));
         JobCoordinator.Admission admission = jobs.start(JobKind.BLINK,
@@ -610,8 +622,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         startJob(JobKind.TRANSIENT_INSPECTION, owner, new ManualTransientInspectionTask(owner.getFiles(), settings), (handle, outcome) -> {
             if (outcome instanceof JobOutcome.Completed<ManualTransientInspectionTask.Result> completed) {
                 ManualTransientInspectionTask.Result result = completed.result();
-                TransientInspectionFrame frame = new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
-                        stretch);
+                TransientInspectionFrame frame = viewers.register(new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
+                        stretch));
                 frame.setSkyCatalogueModel(skyCatalogue());
                 frame.setMarkerSettings(() -> detectionSettings.visualizationSettings());
                 if (frame.open(sessions.current() == null ? null : sessions.current().getTrackOverlay())) {
@@ -1479,8 +1491,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         if (detectionSettings.checkedSettings("Preview Frame did not open.") == null) {
             return;
         }
-        if (detectionSequenceFrame == null) {
-            detectionSequenceFrame = new DetectionSequenceFrame(windowFrame, sessions, detectionSettings);
+        if (detectionSequenceFrame == null || !detectionSequenceFrame.isDisplayable()) {
+            detectionSequenceFrame = viewers.register(new DetectionSequenceFrame(windowFrame, sessions, detectionSettings));
             detectionSequenceFrame.setSettingsEditable(!uiLocked);
         }
 
@@ -1595,6 +1607,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
      */
     private void blinkLoaded(FitsFileInformation[] files, JobOutcome<BlinkSequence> outcome) {
         BlinkFrame blinkFrame = blink;
+        viewers.register(blinkFrame);
         if (outcome instanceof JobOutcome.Completed<BlinkSequence> completed && !blinkStop.get()) {
             // Playing first, so the lock leaves Blink available as Stop Blinking.
             blinkPlaying = true;
