@@ -187,7 +187,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private SkyCatalogueController skyController;
 
     private DetectionSequenceFrame detectionSequenceFrame;
-    private TransientInspectionFrame transientInspectionFrame;
+    /**
+     * The open Manual Transient Inspection windows, each with the session it inspects. They stay open after another
+     * import; a WCS write reaches only those of the session it was written in.
+     */
+    private final Map<TransientInspectionFrame, ProcessingSession> inspectionFrames = new java.util.LinkedHashMap<>();
 
     /**
      * Builds the main panel from the window's session, jobs and import. The stretch and detection panels are attached
@@ -611,7 +615,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 frame.setSkyCatalogueModel(skyCatalogue());
                 frame.setMarkerSettings(() -> detectionSettings.visualizationSettings());
                 if (frame.open(sessions.current() == null ? null : sessions.current().getTrackOverlay())) {
-                    transientInspectionFrame = frame;
+                    registerInspection(frame, handle.session());
                 } else {
                     JOptionPane.showMessageDialog(null, "The detection kept no frames to inspect.",
                             "Manual Transient Inspection", JOptionPane.INFORMATION_MESSAGE);
@@ -1700,11 +1704,31 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         if (stretch != null) {
             stretch.replaceFrameMetadata(fileInfo, updated);
         }
-        if (transientInspectionFrame != null) {
-            transientInspectionFrame.replaceFrameMetadata(fileInfo, updated);
+        if (session != null) {
+            for (Map.Entry<TransientInspectionFrame, ProcessingSession> inspection : List.copyOf(inspectionFrames.entrySet())) {
+                if (inspection.getValue() == session) {
+                    inspection.getKey().replaceFrameMetadata(fileInfo, updated);
+                }
+            }
         }
         blink.replaceFrameMetadata(fileInfo, updated);
         return updated;
+    }
+
+    /** Keeps an opened inspection window, with its session, until the window is disposed. */
+    void registerInspection(TransientInspectionFrame frame, ProcessingSession session) {
+        inspectionFrames.put(frame, session);
+        frame.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosed(java.awt.event.WindowEvent e) {
+                inspectionFrames.remove(frame);
+            }
+        });
+    }
+
+    /** The number of inspection windows still registered; for tests. */
+    int openInspectionCount() {
+        return inspectionFrames.size();
     }
 
     /** The end of Convert to Mono: offers to import the new mono folder, or says what went wrong. */

@@ -23,6 +23,15 @@ Other `eu.startales.spacepixels.*` packages should be treated as internal implem
 - `io.github.ppissias.jtransient.engine.PipelineResult`
 - `eu.startales.spacepixels.util.FitsFileInformation`
 
+### Frame metadata migration (SP-11A)
+
+As authorized under maintainer decision D-03, `eu.startales.spacepixels.util.FitsFileInformation` is `final` and deeply immutable:
+
+- **Mutators and snapshots removed:** `setSizeWidth(...)`, `setSizeHeight(...)`, `setFitsHeader(...)`, and `snapshot()` have been removed. Existing callers should not mutate metadata instances in place or rely on shallow copies.
+- **Construction:** Use `new FitsFileInformation(filePath, fileName, monochrome, sizeWidth, sizeHeight, fitsHeader)` to construct frame descriptors. The constructor freezes the header map into an unmodifiable map (preserving null commentary card values) and normalises ISO-8601 observation timestamps at construction time.
+- **Copy with updated header:** Use `fileInfo.withFitsHeader(updatedHeaderMap)` to produce an updated descriptor (for example when applying a newly computed WCS solution) without mutating existing descriptors.
+- **Container protection:** Array getters in results (`result.getFilesInformation()`) clone the array container to protect ordering, while individual descriptors remain shared and immutable.
+
 The internal import service, `util.FitsImportService`, creates no Swing adapters (S13). Each one reads one folder for one import attempt and is closed by its caller to stop its metadata pool. `readFiles()` returns fresh caller-owned metadata and keeps no frame cache; headless callers read once and retain that array. The API creates no plate solver. Without interaction, readiness is checked before sequence consistency; desktop code supplies `FitsImportInteraction` explicitly and checks sequence consistency before offering conversion. This does not change the supported pipeline request/result surface, preparation policy or API report behavior; API execution continues without report-size questions.
 
 ## Dependency

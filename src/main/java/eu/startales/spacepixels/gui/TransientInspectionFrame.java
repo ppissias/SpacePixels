@@ -54,19 +54,25 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
         this.filesInfo = filesInfo == null ? null : filesInfo.clone();
     }
 
+    /** Replaces only this window's own file: the same descriptor or the same full path, never another folder's namesake. */
     @Override
     protected void onFrameMetadataReplaced(FitsFileInformation previous, FitsFileInformation updated) {
         if (filesInfo != null) {
             for (int i = 0; i < filesInfo.length; i++) {
-                if (filesInfo[i] == previous || (filesInfo[i] != null && filesInfo[i].getFilePath() != null
-                        && filesInfo[i].getFilePath().equals(previous.getFilePath()))) {
+                if (sameFile(filesInfo[i], previous)) {
                     filesInfo[i] = updated;
                 }
             }
         }
-        if (updated.getFileName() != null && fileInfoByName.containsKey(updated.getFileName())) {
+        FitsFileInformation existing = updated.getFileName() == null ? null : fileInfoByName.get(updated.getFileName());
+        if (sameFile(existing, previous)) {
             fileInfoByName.put(updated.getFileName(), updated);
         }
+    }
+
+    private static boolean sameFile(FitsFileInformation own, FitsFileInformation previous) {
+        return own != null && (own == previous
+                || (own.getFilePath() != null && own.getFilePath().equals(previous.getFilePath())));
     }
 
     /**

@@ -10,6 +10,7 @@ import eu.startales.spacepixels.config.VariableStarReportOptions;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.BuildInfo;
+import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.tools.BatchDetectionCli;
 import eu.startales.spacepixels.tools.ArtificialStarInjector;
 import io.github.ppissias.jtransient.engine.AutoTuneProfile;
@@ -25,6 +26,8 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.Assert.*;
 
@@ -161,6 +164,43 @@ public class HeadlessApiConsumerTest {
             System.setOut(original);
         }
         assertTrue(output.toString(StandardCharsets.UTF_8), output.toString(StandardCharsets.UTF_8).contains("Usage:"));
+    }
+
+    /** Verifies the SP-11A migration contract: immutable FitsFileInformation, unmodifiable header, copy replacement, and removed mutators. */
+    @Test
+    public void immutableFitsFileInformationEnforcesImmutabilityAndCopyReplacement() throws Exception {
+        Map<String, String> header = new HashMap<>();
+        header.put("DATE-OBS", "2026-10-01T00:02:03.250");
+        header.put("CRVAL1", "150.0");
+        header.put("COMMENT", null);
+
+        FitsFileInformation info = new FitsFileInformation("test.fit", "test.fit", true, 640, 480, header);
+        header.put("CRVAL1", "999.0");
+        assertEquals("150.0", info.getFitsHeader().get("CRVAL1"));
+
+        // Header map is unmodifiable
+        assertThrows(UnsupportedOperationException.class, () -> info.getFitsHeader().put("NEWKEY", "val"));
+        assertThrows(UnsupportedOperationException.class, () -> info.getFitsHeader().remove("CRVAL1"));
+
+        // withFitsHeader creates a new descriptor without mutating the original
+        FitsFileInformation updated = info.withFitsHeader(Map.of("CRVAL1", "210.0"));
+        assertNotSame(info, updated);
+        assertEquals("150.0", info.getFitsHeader().get("CRVAL1"));
+        assertEquals("210.0", updated.getFitsHeader().get("CRVAL1"));
+
+        // Verify mutators and snapshot() were removed
+        for (String removedMethod : new String[]{"setSizeWidth", "setSizeHeight", "setFitsHeader", "snapshot"}) {
+            for (java.lang.reflect.Method m : FitsFileInformation.class.getDeclaredMethods()) {
+                assertNotEquals("Method " + removedMethod + " should be removed", removedMethod, m.getName());
+            }
+        }
+
+        // Pipeline execution returns immutable descriptors
+        Path input = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "meta-immutability", 3);
+        SpacePixelsPipelineResult result = run(input, InputPreparationMode.FAIL_IF_NOT_READY, false, false);
+        FitsFileInformation[] files = result.getFilesInformation();
+        assertEquals(3, files.length);
+        assertThrows(UnsupportedOperationException.class, () -> files[0].getFitsHeader().put("MUTATED", "true"));
     }
 
     /** Creates detached synthetic requests and invokes only the supported public pipeline API. */

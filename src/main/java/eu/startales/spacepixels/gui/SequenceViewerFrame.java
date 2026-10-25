@@ -200,10 +200,12 @@ abstract class SequenceViewerFrame extends JFrame {
 
     /**
      * Updates this viewer's frame metadata after a session WCS write, refreshing the shown frame, sky annotations
-     * and cursor readout when the viewer is open.
+     * and cursor readout when the viewer is open. A frame being prepared meanwhile takes the new metadata when it is
+     * shown ({@link #show}). Both descriptors must name the same file; anything else is ignored.
      */
     public final void replaceFrameMetadata(FitsFileInformation previous, FitsFileInformation updated) {
-        if (previous == null || updated == null) {
+        if (previous == null || updated == null || previous.getFilePath() == null
+                || !previous.getFilePath().equals(updated.getFilePath())) {
             return;
         }
         onFrameMetadataReplaced(previous, updated);
@@ -484,7 +486,19 @@ abstract class SequenceViewerFrame extends JFrame {
         worker.execute();
     }
 
+    /** The metadata of the frame on show, or null; for tests of metadata replacement. */
+    FitsFileInformation shownFrameInfo() {
+        return shown == null || shown.frame == null ? null : shown.frame.getInfo();
+    }
+
     private void show(int index, Result result) {
+        // The metadata can have been replaced (a WCS write) while the frame was prepared: show the current one.
+        FitsFileInformation currentInfo = result.frame == null ? null : infoOf(index);
+        if (currentInfo != null && result.frame.getInfo() != currentInfo && result.frame.getInfo() != null
+                && currentInfo.getFilePath() != null
+                && currentInfo.getFilePath().equals(result.frame.getInfo().getFilePath())) {
+            result = Result.of(result.frame.withInfo(currentInfo), result.detections, result.summary);
+        }
         boolean first = shownIndex < 0;
         shown = result;
         shownIndex = index;

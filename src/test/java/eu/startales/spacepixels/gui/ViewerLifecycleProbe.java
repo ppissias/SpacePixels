@@ -52,6 +52,23 @@ public final class ViewerLifecycleProbe extends SequenceViewerFrame {
         return files != null;
     }
 
+    /** The metadata of the frame on show, or null before a frame is shown. */
+    public FitsFileInformation shownInfo() {
+        return shownFrameInfo();
+    }
+
+    @Override
+    protected void onFrameMetadataReplaced(FitsFileInformation previous, FitsFileInformation updated) {
+        if (files == null) {
+            return;
+        }
+        for (int i = 0; i < files.length; i++) {
+            if (files[i] != null && files[i].getFilePath().equals(previous.getFilePath())) {
+                files[i] = updated;
+            }
+        }
+    }
+
     public boolean showsObsoleteResult() {
         return containsObsoleteCaption(getContentPane());
     }
