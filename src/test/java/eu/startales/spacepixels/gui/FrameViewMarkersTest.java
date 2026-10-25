@@ -1,8 +1,8 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.config.VisualizationSettings;
-import eu.startales.spacepixels.util.BlinkSequence;
-import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.fits.BlinkSequence;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import org.junit.Test;
 

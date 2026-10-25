@@ -22,10 +22,10 @@ tasks.register('verifyApiPublication') {
                 }
                 if (taskName == 'jar') {
                     for (String resource : ['spacepixels-build.properties',
-                            'eu/startales/spacepixels/util/reporting/report-lookups.js',
-                            'eu/startales/spacepixels/util/reporting/report-interactions.js',
-                            'eu/startales/spacepixels/util/reporting/catalogue-comparison.js',
-                            'eu/startales/spacepixels/util/reporting/catalogue-source-notes.json']) {
+                            'eu/startales/spacepixels/report/report-lookups.js',
+                            'eu/startales/spacepixels/report/report-interactions.js',
+                            'eu/startales/spacepixels/report/catalogue-comparison.js',
+                            'eu/startales/spacepixels/report/catalogue-source-notes.json']) {
                         if (!names.contains(resource)) throw new GradleException("Missing API resource: ${resource}")
                     }
                     Properties versions = new Properties()

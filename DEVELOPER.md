@@ -75,7 +75,7 @@ Headless batch run of one dataset (it prints `Report file: ...` and any problems
 
 Add `-PspacepixelsDebug` (or `-Dspacepixels.debug=true` on a plain `java` command) for progress, per-frame statistics and the engine's debug output.
 
-**Source sets.** `main` is the headless API and CLI artifact (`eu.startales.spacepixels:spacepixels`): `api`, `config`, `session`, `util` (with reporting and the sky catalogue) and `tools`, with no Swing and no FlatLaf. `desktop` holds `gui`, `jobs`, `tasks` and the icons, and is not published. `run`, `installDist` and the desktop launchers use both; the CLI launchers use only `main`. `check` verifies the published jar, its POM and Gradle metadata, and that the two source sets own disjoint classes.
+**Source sets.** `main` is the headless API and CLI artifact (`eu.startales.spacepixels:spacepixels`): `api`, `config`, `session`, `fits`, `detection`, `platesolve`, `skycatalog`, `report`, `util` and `tools`, with no Swing and no FlatLaf. `desktop` holds `gui`, `jobs`, `tasks` and the icons, and is not published. `run`, `installDist` and the desktop launchers use both; the CLI launchers use only `main`. `check` verifies the published jar, its POM and Gradle metadata, and that the two source sets own disjoint classes.
 
 **Sibling libraries.** During development, both libraries are built from their sibling checkouts. Set `useLocalJTransientBuild=true` and `useLocalJPlateSolveBuild=true` in the git-ignored `gradle.properties` (copy [gradle.properties.example](gradle.properties.example)). The environment variables `USE_LOCAL_JTRANSIENT_BUILD` and `USE_LOCAL_JPLATE_SOLVE_BUILD` also work; an explicit `-P` property wins. Without the flags, Gradle uses the published versions in `build.gradle`.
 
@@ -100,17 +100,20 @@ All packages are under `eu.startales.spacepixels`.
 | `tasks` | The long operations, one class per job | `FitsImportTask`, `DetectionTask`, `PlateSolveTask`, `AutoTuneTask`, … |
 | `session` | The imported dataset: identity, owned state and handover; the application I/O queue; no Swing | `ProcessingSession`, `SessionOwner`, `SkyCatalogueModel`, `AutoTuneState`, `ApplicationStorage` |
 | `config` | Application settings, detection profiles, visualization settings and their files; the typed setting definitions | `ApplicationSettings`, `AppConfig`, `SpacePixelsDetectionProfileIO`, `DetectionSetting`, `DetectionRunOptions`, `VisualizationSettings` |
-| `util` | The processing services: import and preparation, FITS and XISF, WCS, the detection pipelines, plate solving | `FitsImportService`, `FitsBatchService`, `StandardDetectionPipelineService`, `IterativeDetectionPipelineService`, `PlateSolveService`, `StagedFile` |
-| `util.reporting` | The HTML report, its model, section writers and the live lookup proxy | `ReportExporter`, `ReportRequest`, `ReportData`, `FindingCategory`, the `…SectionWriter` classes |
-| `util.skycatalog` | Fetching and storing the sky catalogue; the plate-solution correction fit | `SkyCatalogueClient`, `SkyCatalogueStore`, `PlateCorrectionFitter` |
+| `fits` | FITS/XISF input, validation, preparation, pixel converters, display stretch, WCS | `FitsFileInformation`, `FitsImportService`, `FitsBatchService`, `FitsInput`, `FitsPixelConverter`, `FitsPreparation`, `WcsCoordinateTransformer` |
+| `detection` | Detection pipeline services, iterative detection, live preview, auto-tune runners, overlays | `StandardDetectionPipelineService`, `IterativeDetectionPipelineService`, `AutoTunerRunner`, `TrackOverlay`, `VariableStarOverlay` |
+| `platesolve` | Plate solving integration and session plate solution correction | `PlateSolveService`, `PlateSolutionCorrection`, `AstrometryNetAccount` |
+| `skycatalog` | Fetching and storing the sky catalogue; the plate-solution correction fit; sky snapshots | `SkyCatalogueClient`, `SkyCatalogueStore`, `PlateCorrectionFitter`, `SkySnapshot` |
+| `report` | The HTML report, its model, section writers, and lookup proxy/builders (`report.lookup`) | `ReportExporter`, `ReportRequest`, `ReportData`, `FindingCategory`, `ReportLookupProxyServer` |
+| `util` | General cross-cutting utilities | `StagedFile`, `Statistics`, `SkyMath`, `BuildInfo`, `Cancellation`, `DebugOutput` |
 | `api`, `tools` | The public Java API and the command-line tools | `DefaultSpacePixelsPipelineApi`, `SpacePixelsPipelineRequest`, `BatchDetectionCli` |
 
-`util` is the application core rather than a set of utilities; DESIGN-IMPROVEMENTS.md (SP-14) proposes domain-named packages. Other locations: `src/main/resources` (icons, build metadata), `src/dist/config` (the default detection profile), `src/launchers`, `src/consumerTest` (the isolated API consumer build).
+Other locations: `src/main/resources` (icons, build metadata), `src/dist/config` (the default detection profile), `src/launchers`, `src/consumerTest` (the isolated API consumer build).
 
 The main paths through the code:
 
-- **GUI:** a `gui` command → `JobCoordinator` runs a `tasks` job → `util` services → JTransient or JPlateSolve.
-- **Headless:** `api` and `tools` → `util` services → JTransient.
+- **GUI:** a `gui` command → `JobCoordinator` runs a `tasks` job → `fits`/`detection`/`platesolve` services → JTransient or JPlateSolve.
+- **Headless:** `api` and `tools` → `fits`/`detection` services → JTransient.
 
 **Input contract.** Detection consumes aligned, equally sized monochrome frames with unsigned-16-bit pixels (`BZERO=32768`, `BSCALE=1`) in `short[][]` buffers. `FitsFileInformation` carries each frame's immutable metadata, unmodifiable header map and construction-time normalised timing. Compressed FITS can have an empty primary HDU, so use the HDU helper (`FitsInput.getImageHDU`). Preparation keeps timing and WCS headers, the registration padding, and the sequence-wide offset recorded in `SPOFFSET`.
 
@@ -223,7 +226,7 @@ Tests use JUnit 4.13.2. Start with the affected tests, then run the full suite.
 
 **Framework decision.** Stay on JUnit 4; a migration to JUnit 6 is optional future maintenance, with no application behaviour change. If revisited, run existing JUnit 4 tests on the Vintage engine, migrate classes as they are touched, and account for the GUI mechanics tests' move to AssertJ Swing's Jupiter variant.
 
-- **Boundaries and ownership:** `DependencyRulesTest` (no GUI in jobs, tasks or `util`; no AWT in session state), `JobCoordinatorTest`, `ProcessingSessionTest`, `ApplicationStorageSessionTest`, `ApplicationStorageSettingsTest`. The storage tests cover one queue's settings/session order, reimport reads behind writes, target failures and retries, shutdown drain, and session completions already queued when their owner closes.
+- **Boundaries and ownership:** `DependencyRulesTest` (no GUI in jobs, tasks or headless domain packages; no AWT in session state), `JobCoordinatorTest`, `ProcessingSessionTest`, `ApplicationStorageSessionTest`, `ApplicationStorageSettingsTest`. The storage tests cover one queue's settings/session order, reimport reads behind writes, target failures and retries, shutdown drain, and session completions already queued when their owner closes.
 - **Synthetic data:** `SyntheticDatasetFactory` builds disposable FITS datasets.
 - **Preparation parity:** `FitsPreparationParityTest` compares GUI and API preparation across formats.
 - **Iterative detection:** `IterativeDetectionPlanTest` and `IterativeDetectionRunTest`, which compares passes with ordinary runs on the same subsets.

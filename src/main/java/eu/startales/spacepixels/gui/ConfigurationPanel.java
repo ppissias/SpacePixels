@@ -7,14 +7,13 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.session.ApplicationStorage;
-import eu.startales.spacepixels.util.AstrometryNetAccount;
-import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.platesolve.AstrometryNetAccount;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;

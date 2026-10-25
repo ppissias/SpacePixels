@@ -22,9 +22,11 @@
  * <p>Consumers should treat other {@code eu.startales.spacepixels.*} packages as internal
  * implementation details unless a type is explicitly exposed through this package. The current
  * request/result contract also exposes
- * {@link eu.startales.spacepixels.util.FitsFileInformation},
+ * {@link eu.startales.spacepixels.fits.FitsFileInformation},
  * {@link io.github.ppissias.jtransient.config.DetectionConfig},
  * {@link io.github.ppissias.jtransient.engine.AutoTuneProfile}, and
  * {@link io.github.ppissias.jtransient.engine.PipelineResult}.
  */
 package eu.startales.spacepixels.api;
+
+import eu.startales.spacepixels.fits.FitsFileInformation;

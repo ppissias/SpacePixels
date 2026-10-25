@@ -5,7 +5,6 @@
  * See the LICENSE file included in this distribution.
  *
  */
-
 package eu.startales.spacepixels.tools;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;

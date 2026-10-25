@@ -7,7 +7,6 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.config;
 
 import java.util.Objects;

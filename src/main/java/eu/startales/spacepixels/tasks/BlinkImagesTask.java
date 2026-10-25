@@ -4,8 +4,8 @@ import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobFailures;
 import eu.startales.spacepixels.jobs.JobOutcome;
-import eu.startales.spacepixels.util.BlinkSequence;
-import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.fits.BlinkSequence;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 
 import java.util.ArrayList;
 import java.util.List;

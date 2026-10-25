@@ -7,7 +7,7 @@ import eu.startales.spacepixels.api.SpacePixelsPipelineRequest;
 import eu.startales.spacepixels.api.SpacePixelsPipelineResult;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
-import eu.startales.spacepixels.util.DetectionInputPreparation;
+import eu.startales.spacepixels.detection.DetectionInputPreparation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Assume;
 import org.junit.Test;

@@ -21,18 +21,18 @@ Other `eu.startales.spacepixels.*` packages should be treated as internal implem
 - `io.github.ppissias.jtransient.config.DetectionConfig`
 - `io.github.ppissias.jtransient.engine.AutoTuneProfile`
 - `io.github.ppissias.jtransient.engine.PipelineResult`
-- `eu.startales.spacepixels.util.FitsFileInformation`
+- `eu.startales.spacepixels.fits.FitsFileInformation`
 
-### Frame metadata migration (SP-11A)
+### Frame metadata migration (SP-11A, SP-14)
 
-As authorized under maintainer decision D-03, `eu.startales.spacepixels.util.FitsFileInformation` is `final` and deeply immutable:
+As authorized under maintainer decision D-03, `eu.startales.spacepixels.fits.FitsFileInformation` is `final` and deeply immutable:
 
 - **Mutators and snapshots removed:** `setFilePath(...)`, `setFileName(...)`, `setMonochrome(...)`, `setSizeWidth(...)`, `setSizeHeight(...)` and `snapshot()` have been removed. This is an intentional source and binary API break: update callers and recompile. `getFitsHeader()` returns an unmodifiable map; build a new map and replace the descriptor instead of calling `put`, `putAll` or `clear` on it.
 - **Construction:** Use `new FitsFileInformation(filePath, fileName, monochrome, sizeWidth, sizeHeight, fitsHeader)` to construct frame descriptors. The constructor freezes the header map into an unmodifiable map (preserving null commentary card values) and normalises ISO-8601 observation timestamps at construction time.
 - **Copy with updated header:** Use `fileInfo.withFitsHeader(updatedHeaderMap)` to produce an updated descriptor (for example when applying a newly computed WCS solution) without mutating existing descriptors.
 - **Container protection:** Array getters in results (`result.getFilesInformation()`) clone the array container to protect ordering, while individual descriptors remain shared and immutable.
 
-The internal import service, `util.FitsImportService`, creates no Swing adapters (S13). Each one reads one folder for one import attempt and is closed by its caller to stop its metadata pool. `readFiles()` returns fresh caller-owned metadata and keeps no frame cache; headless callers read once and retain that array. The API creates no plate solver. Without interaction, readiness is checked before sequence consistency; desktop code supplies `FitsImportInteraction` explicitly and checks sequence consistency before offering conversion. This does not change the supported pipeline request/result surface, preparation policy or API report behavior; API execution continues without report-size questions.
+The internal import service, `its.FitsImportService`, creates no Swing adapters (S13). Each one reads one folder for one import attempt and is closed by its caller to stop its metadata pool. `readFiles()` returns fresh caller-owned metadata and keeps no frame cache; headless callers read once and retain that array. The API creates no plate solver. Without interaction, readiness is checked before sequence consistency; desktop code supplies `FitsImportInteraction` explicitly and checks sequence consistency before offering conversion. This does not change the supported pipeline request/result surface, preparation policy or API report behavior; API execution continues without report-size questions.
 
 ## Dependency
 
@@ -44,7 +44,7 @@ implementation 'eu.startales.spacepixels:spacepixels:<version>'
 
 `spacepixels` is the only Maven publication: the public API plus the headless configuration, session, FITS/preparation, processing, catalogue and reporting implementation/resources it needs. It also includes the `BatchDetectionCli` and `ArtificialStarInjector` command-line entrypoints, usable with a dependency-resolved Java classpath. Matching sources and Javadocs cover the same headless code. It contains no SpacePixels GUI, jobs/tasks, GUI icons or FlatLaf dependency.
 
-JTransient is an `api` dependency because its configuration and result types appear in the supported API. FITS, Gson and JPlateSolve remain `implementation` dependencies: consumers still receive them transitively at runtime, but they are not exposed on the compile classpath. The internal `util.PlateSolveService` exposes solver types, but it is not a supported embedding contract; consumers using it must declare their own compile dependency. Promoting JPlateSolve to `api` would be appropriate only if solver types enter the supported public API.
+JTransient is an `api` dependency because its configuration and result types appear in the supported API. FITS, Gson and JPlateSolve remain `implementation` dependencies: consumers still receive them transitively at runtime, but they are not exposed on the compile classpath. The internal `platesolve.PlateSolveService` exposes solver types, but it is not a supported embedding contract; consumers using it must declare their own compile dependency. Promoting JPlateSolve to `api` would be appropriate only if solver types enter the supported public API.
 
 The original coordinate and Java package/signature names are preserved; there is no separate `spacepixels-core` module or publication. The desktop application is still built by `run`/`installDist`, using an unpublished desktop companion JAR and GUI-only dependencies. A Maven API JAR is not a standalone desktop application or a shaded dependency bundle. Headless AWT image/report rendering still requires the JDK's `java.desktop` module; run servers with `-Djava.awt.headless=true` rather than removing that module. Java 21 is the compilation baseline.
 

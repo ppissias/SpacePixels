@@ -7,7 +7,6 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.tasks;
 
 import eu.startales.spacepixels.session.SessionMetadata;
@@ -16,13 +15,13 @@ import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.FitsImportInteraction;
-import eu.startales.spacepixels.util.FitsImportService;
-import eu.startales.spacepixels.util.MixedExposureException;
-import eu.startales.spacepixels.util.RedirectImportException;
-import eu.startales.spacepixels.util.SessionReports;
-import eu.startales.spacepixels.util.XisfImageConverter;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsImportInteraction;
+import eu.startales.spacepixels.fits.FitsImportService;
+import eu.startales.spacepixels.fits.MixedExposureException;
+import eu.startales.spacepixels.fits.RedirectImportException;
+import eu.startales.spacepixels.report.SessionReports;
+import eu.startales.spacepixels.fits.XisfImageConverter;
 
 import java.io.File;
 import java.util.logging.Logger;

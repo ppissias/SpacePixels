@@ -13,6 +13,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 
 public class DefaultSpacePixelsPipelineApiTest {
 
@@ -38,7 +39,7 @@ public class DefaultSpacePixelsPipelineApiTest {
         assertEquals(FRAME_COUNT, result.getFilesInformation().length);
         assertNull(result.getExportDirectory());
         assertNull(result.getReportFile());
-        for (eu.startales.spacepixels.util.FitsFileInformation fileInformation : result.getFilesInformation()) {
+        for (eu.startales.spacepixels.fits.FitsFileInformation fileInformation : result.getFilesInformation()) {
             assertTrue(fileInformation.isMonochrome());
         }
     }

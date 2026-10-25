@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.util.Arrays;
 
 import static org.junit.Assert.*;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 
 public class IterativeDetectionMechanicsTest extends MechanicsTestCase {
     @Test(timeout = 120_000)
@@ -51,7 +52,7 @@ public class IterativeDetectionMechanicsTest extends MechanicsTestCase {
         waitFor("the current session", () -> GuiActionRunner.execute(() -> application().getSession() != null
                 && application().getJobCoordinator().current() == null));
         ProcessingSession session = GuiActionRunner.execute(() -> application().getSession());
-        eu.startales.spacepixels.util.skycatalog.SkyCatalogue catalogue = new eu.startales.spacepixels.util.skycatalog.SkyCatalogue();
+        eu.startales.spacepixels.skycatalog.SkyCatalogue catalogue = new eu.startales.spacepixels.skycatalog.SkyCatalogue();
         File report = new File(current, "previous-report.html");
         GuiActionRunner.execute(() -> {
             session.setLastReport(report);

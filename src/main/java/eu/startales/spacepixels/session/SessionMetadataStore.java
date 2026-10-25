@@ -1,12 +1,12 @@
 package eu.startales.spacepixels.session;
 
-import eu.startales.spacepixels.util.AutoTuneSessionStore;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.PlateSolutionCorrection;
-import eu.startales.spacepixels.util.WcsSolutionResolver;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogueStore;
-import eu.startales.spacepixels.util.skycatalog.SkyField;
+import eu.startales.spacepixels.detection.AutoTuneSessionStore;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
+import eu.startales.spacepixels.fits.WcsSolutionResolver;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.skycatalog.SkyCatalogueStore;
+import eu.startales.spacepixels.skycatalog.SkyField;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;

@@ -1,9 +1,8 @@
 package eu.startales.spacepixels.tools;
-
 import eu.startales.spacepixels.util.Cancellation;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.FitsImportService;
-import eu.startales.spacepixels.util.FitsInput;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsImportService;
+import eu.startales.spacepixels.fits.FitsInput;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.GsonBuilder;

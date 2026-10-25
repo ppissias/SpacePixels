@@ -1,8 +1,8 @@
 package eu.startales.spacepixels.gui.mechanics;
 
-import eu.startales.spacepixels.util.reporting.ReportExporter;
+import eu.startales.spacepixels.report.ReportExporter;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
+import eu.startales.spacepixels.report.DetectionReportGenerator;
 import org.assertj.swing.edt.GuiActionRunner;
 import org.junit.Test;
 import javax.swing.*;

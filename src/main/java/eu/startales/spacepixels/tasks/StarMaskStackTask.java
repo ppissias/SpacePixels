@@ -8,7 +8,6 @@
  *
  */
 package eu.startales.spacepixels.tasks;
-
 import eu.startales.spacepixels.util.DebugOutput;
 
 import io.github.ppissias.jtransient.execution.CancellationScope;
@@ -16,7 +15,7 @@ import io.github.ppissias.jtransient.execution.CancellationScope;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
-import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;

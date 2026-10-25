@@ -2,8 +2,8 @@ package eu.startales.spacepixels.jobs;
 
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.session.ProcessingSession;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.PlateSolveService;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.platesolve.PlateSolveService;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;

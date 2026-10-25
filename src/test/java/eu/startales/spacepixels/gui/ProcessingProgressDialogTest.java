@@ -1,7 +1,7 @@
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.RunPreview;
-import eu.startales.spacepixels.util.RunPreviewSink;
+import eu.startales.spacepixels.detection.RunPreview;
+import eu.startales.spacepixels.detection.RunPreviewSink;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

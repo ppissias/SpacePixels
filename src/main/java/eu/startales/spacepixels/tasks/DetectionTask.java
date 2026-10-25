@@ -7,7 +7,6 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.tasks;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
@@ -17,13 +16,13 @@ import io.github.ppissias.jtransient.execution.CancellationScope;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
-import eu.startales.spacepixels.util.DetectionOverlays;
-import eu.startales.spacepixels.util.DetectionSafetyPrompt;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.RunPreviewScope;
-import eu.startales.spacepixels.util.RunPreviewSink;
-import eu.startales.spacepixels.util.SkySnapshot;
-import eu.startales.spacepixels.util.StandardDetectionPipelineService;
+import eu.startales.spacepixels.detection.DetectionOverlays;
+import eu.startales.spacepixels.detection.DetectionSafetyPrompt;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.detection.RunPreviewScope;
+import eu.startales.spacepixels.detection.RunPreviewSink;
+import eu.startales.spacepixels.skycatalog.SkySnapshot;
+import eu.startales.spacepixels.detection.StandardDetectionPipelineService;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 
 import java.io.File;

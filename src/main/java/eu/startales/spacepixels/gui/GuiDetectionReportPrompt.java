@@ -1,8 +1,8 @@
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.DetectionSummary;
-import eu.startales.spacepixels.util.ReportInclusion;
-import eu.startales.spacepixels.util.reporting.FindingCategory;
+import eu.startales.spacepixels.detection.DetectionSummary;
+import eu.startales.spacepixels.report.ReportInclusion;
+import eu.startales.spacepixels.report.FindingCategory;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 
 import javax.swing.*;
@@ -19,7 +19,7 @@ import java.util.function.ToIntFunction;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static eu.startales.spacepixels.util.DetectionSummary.offerInReport;
+import static eu.startales.spacepixels.detection.DetectionSummary.offerInReport;
 
 /** Desktop-only report confirmation; workers receive callbacks rather than depending on Swing. */
 public final class GuiDetectionReportPrompt {

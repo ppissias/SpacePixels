@@ -1,7 +1,7 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
-import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
+import eu.startales.spacepixels.detection.AutoTuneCandidatePoolBuilder;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import java.util.ArrayList;
 import java.util.List;

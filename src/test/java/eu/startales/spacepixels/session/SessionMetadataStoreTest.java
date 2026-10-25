@@ -1,14 +1,21 @@
 package eu.startales.spacepixels.session;
 
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.*;
-import eu.startales.spacepixels.util.skycatalog.*;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import java.io.File;
 import java.util.Arrays;
 import static org.junit.Assert.*;
+import eu.startales.spacepixels.detection.AutoTuneSessionStore;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsImportService;
+import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
+import eu.startales.spacepixels.fits.WcsSolutionResolver;
+import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.skycatalog.SkyCatalogueStore;
+import eu.startales.spacepixels.skycatalog.SkyField;
 
 public class SessionMetadataStoreTest {
     @Rule public TemporaryFolder folder = new TemporaryFolder();

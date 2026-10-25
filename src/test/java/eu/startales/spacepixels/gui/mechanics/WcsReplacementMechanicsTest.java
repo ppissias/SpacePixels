@@ -4,7 +4,7 @@ import eu.startales.spacepixels.gui.MainApplicationPanel;
 import eu.startales.spacepixels.gui.MetadataReplacementProbe;
 import eu.startales.spacepixels.gui.ViewerLifecycleProbe;
 import eu.startales.spacepixels.session.ProcessingSession;
-import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 import org.assertj.swing.edt.GuiActionRunner;
 import org.junit.Test;
 

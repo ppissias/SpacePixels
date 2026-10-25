@@ -11,7 +11,7 @@ package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.AutoTuneState;
-import eu.startales.spacepixels.util.AutoTuneSessionStore;
+import eu.startales.spacepixels.detection.AutoTuneSessionStore;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import io.github.ppissias.jtransient.engine.AutoTunerResult;

@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.StretchAlgorithm;
+import eu.startales.spacepixels.fits.StretchAlgorithm;
 import org.junit.Test;
 
 import javax.swing.*;

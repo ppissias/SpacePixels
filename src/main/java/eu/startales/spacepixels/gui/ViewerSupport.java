@@ -7,13 +7,12 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.BlinkSequence;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.WcsCoordinateTransformer;
-import eu.startales.spacepixels.util.WcsSolutionResolver;
+import eu.startales.spacepixels.fits.BlinkSequence;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
+import eu.startales.spacepixels.fits.WcsSolutionResolver;
 
 import javax.swing.*;
 import java.awt.*;

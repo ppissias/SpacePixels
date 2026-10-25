@@ -12,7 +12,7 @@ package eu.startales.spacepixels.gui;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.config.CoreDetectionSettings;
-import eu.startales.spacepixels.util.DisplayImageRenderer;
+import eu.startales.spacepixels.fits.DisplayImageRenderer;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.MasterReferenceAnalyzer;
 import io.github.ppissias.jtransient.core.MasterVetoMask;
@@ -32,6 +32,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import eu.startales.spacepixels.util.Statistics;
 
 /**
  * Shows the session's master stack with the stationary-star veto mask the detection run would use, for trial star

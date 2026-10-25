@@ -1,11 +1,11 @@
 package eu.startales.spacepixels.gui.mechanics;
 
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.PlateSolutionCorrection;
-import eu.startales.spacepixels.util.WcsCoordinateTransformer;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogueStore;
-import eu.startales.spacepixels.util.skycatalog.SkyField;
+import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
+import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.skycatalog.SkyCatalogueStore;
+import eu.startales.spacepixels.skycatalog.SkyField;
 import nom.tam.fits.Fits;
 import nom.tam.fits.Header;
 import nom.tam.fits.HeaderCard;

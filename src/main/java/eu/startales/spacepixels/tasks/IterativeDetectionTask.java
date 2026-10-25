@@ -14,10 +14,10 @@ import io.github.ppissias.jtransient.execution.CancellationScope;
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
-import eu.startales.spacepixels.util.IterativeDetectionRequest;
-import eu.startales.spacepixels.util.IterativeDetectionPipelineService;
-import eu.startales.spacepixels.util.RunPreviewScope;
-import eu.startales.spacepixels.util.RunPreviewSink;
+import eu.startales.spacepixels.detection.IterativeDetectionRequest;
+import eu.startales.spacepixels.detection.IterativeDetectionPipelineService;
+import eu.startales.spacepixels.detection.RunPreviewScope;
+import eu.startales.spacepixels.detection.RunPreviewSink;
 
 import java.io.File;
 

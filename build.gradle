@@ -55,9 +55,11 @@ sourceSets {
     main {
         java.include 'eu/startales/spacepixels/api/**', 'eu/startales/spacepixels/config/**',
                 'eu/startales/spacepixels/session/**', 'eu/startales/spacepixels/util/**',
-                'eu/startales/spacepixels/tools/**'
+                'eu/startales/spacepixels/tools/**', 'eu/startales/spacepixels/fits/**',
+                'eu/startales/spacepixels/detection/**', 'eu/startales/spacepixels/platesolve/**',
+                'eu/startales/spacepixels/report/**', 'eu/startales/spacepixels/skycatalog/**'
         resources.include 'spacepixels-build.properties', 'eu/startales/spacepixels/util/**',
-                'eu/startales/spacepixels/tools/**'
+                'eu/startales/spacepixels/tools/**', 'eu/startales/spacepixels/report/**'
     }
     desktop {
         java {

@@ -2,8 +2,7 @@ package eu.startales.spacepixels.gui.mechanics;
 
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.session.*;
-import eu.startales.spacepixels.util.*;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import org.assertj.swing.edt.GuiActionRunner;
 import org.junit.Test;
 import java.awt.EventQueue;
@@ -12,6 +11,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.*;
 import static org.junit.Assert.*;
+import eu.startales.spacepixels.detection.AutoTuneSessionStore;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 
 /** Direct EDT checks deliberately hold session I/O, without taking over native mouse input. */
 public class SessionIoMechanicsTest extends MechanicsTestCase {

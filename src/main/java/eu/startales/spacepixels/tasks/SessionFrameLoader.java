@@ -9,8 +9,8 @@
  */
 package eu.startales.spacepixels.tasks;
 
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.FitsInput;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsInput;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 import nom.tam.fits.Fits;

@@ -7,14 +7,13 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.tasks;
 
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
-import eu.startales.spacepixels.util.FitsBatchService;
-import eu.startales.spacepixels.util.StretchAlgorithm;
+import eu.startales.spacepixels.fits.FitsBatchService;
+import eu.startales.spacepixels.fits.StretchAlgorithm;
 
 import java.io.File;
 

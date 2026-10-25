@@ -4,7 +4,7 @@ import eu.startales.spacepixels.gui.GuiDetectionReportPrompt;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.DetectionSummary;
+import eu.startales.spacepixels.detection.DetectionSummary;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.assertj.swing.core.GenericTypeMatcher;
 import org.assertj.swing.edt.GuiActionRunner;

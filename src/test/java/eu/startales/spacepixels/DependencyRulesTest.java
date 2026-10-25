@@ -46,35 +46,41 @@ public class DependencyRulesTest {
 
     @Test
     public void fitsImportAndBatchServicesDoNotDependOnSwingOrTheWindow() throws IOException {
-        for (String file : List.of("FitsImportService", "FitsBatchService", "FitsImportInteraction", "FitsInput", "FitsInput",
-                "FitsPreparation", "DetectionInputPreparation", "FitsInput", "FitsInput",
-                "IterativeDetectionPipelineService", "IterativeDetectionRequest", "IterativeDetectionPlan")) {
-            assertNoReferences("util/" + file + ".java", "eu.startales.spacepixels.gui.", "javax.swing.", "java.awt.");
+        for (String file : List.of("fits/FitsImportService.java", "fits/FitsBatchService.java", "fits/FitsImportInteraction.java",
+                "fits/FitsInput.java", "fits/FitsPreparation.java", "detection/DetectionInputPreparation.java",
+                "detection/IterativeDetectionPipelineService.java", "detection/IterativeDetectionRequest.java",
+                "detection/IterativeDetectionPlan.java")) {
+            assertNoReferences(file, "eu.startales.spacepixels.gui.", "javax.swing.", "java.awt.");
         }
     }
 
     /** Settings are values and their files; the renderers take them as parameters, so settings need no report code. */
     @Test
     public void settingsDoNotDependOnReporting() throws IOException {
-        assertNoReferences("config", "eu.startales.spacepixels.util.reporting.");
+        assertNoReferences("config", "eu.startales.spacepixels.report.");
     }
 
     /** Keeps all processing and reporting utilities window-free while allowing headless AWT rendering. */
     @Test
     public void processingUtilitiesDoNotDependOnSwingOrTheWindow() throws IOException {
-        assertNoReferences("util", "eu.startales.spacepixels.gui.", "javax.swing.");
+        for (String pkg : List.of("fits", "detection", "platesolve", "report", "skycatalog", "util")) {
+            assertNoReferences(pkg, "eu.startales.spacepixels.gui.", "javax.swing.");
+        }
     }
 
     /** Processing returns values to the session instead of owning or mutating session state. */
     @Test
     public void processingUtilitiesDoNotDependOnSessionState() throws IOException {
-        assertNoReferences("util", "eu.startales.spacepixels.session.");
+        for (String pkg : List.of("fits", "detection", "platesolve", "report", "skycatalog", "util")) {
+            assertNoReferences(pkg, "eu.startales.spacepixels.session.");
+        }
     }
 
     /** Keeps every published headless package independent of desktop workflows as well as Swing. */
     @Test
     public void headlessPackagesDoNotDependOnDesktopCode() throws IOException {
-        for (String packageName : List.of("api", "config", "session", "util", "tools")) {
+        for (String packageName : List.of("api", "config", "session", "util", "tools",
+                "fits", "detection", "platesolve", "report", "skycatalog")) {
             assertNoReferences(packageName, "eu.startales.spacepixels.gui.", "eu.startales.spacepixels.tasks.",
                     "eu.startales.spacepixels.jobs.", "javax.swing.");
         }

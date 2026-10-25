@@ -9,9 +9,9 @@
  */
 package eu.startales.spacepixels.session;
 
-import eu.startales.spacepixels.util.PlateSolutionCorrection;
-import eu.startales.spacepixels.util.SkySnapshot;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
+import eu.startales.spacepixels.skycatalog.SkySnapshot;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 
 import java.io.File;
 import java.io.IOException;

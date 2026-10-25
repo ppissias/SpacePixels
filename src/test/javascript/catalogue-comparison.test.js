@@ -1,7 +1,7 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const api = require('../../main/resources/eu/startales/spacepixels/util/reporting/catalogue-comparison.js');
-const sources = require('../../main/resources/eu/startales/spacepixels/util/reporting/catalogue-source-notes.json').records;
+const api = require('../../main/resources/eu/startales/spacepixels/report/catalogue-comparison.js');
+const sources = require('../../main/resources/eu/startales/spacepixels/report/catalogue-source-notes.json').records;
 
 const observation = overrides => Object.assign({observedRange: 0.161, expectedScatter: 0.02,
   usablePoints: 29, spanMinutes: 74.7216, largestGapMinutes: 7.5, filters: ['L'], missingFilter: false}, overrides);

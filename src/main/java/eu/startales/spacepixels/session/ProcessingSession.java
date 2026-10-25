@@ -1,14 +1,14 @@
 package eu.startales.spacepixels.session;
 
-import eu.startales.spacepixels.util.DetectionOverlays;
-import eu.startales.spacepixels.util.FitsBatchService;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.FitsVisualizationRenderer;
-import eu.startales.spacepixels.util.PlateSolveService;
-import eu.startales.spacepixels.util.TrackOverlay;
-import eu.startales.spacepixels.util.VariableStarOverlay;
-import eu.startales.spacepixels.util.AutoTuneSessionStore;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.detection.DetectionOverlays;
+import eu.startales.spacepixels.fits.FitsBatchService;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsVisualizationRenderer;
+import eu.startales.spacepixels.platesolve.PlateSolveService;
+import eu.startales.spacepixels.detection.TrackOverlay;
+import eu.startales.spacepixels.detection.VariableStarOverlay;
+import eu.startales.spacepixels.detection.AutoTuneSessionStore;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import java.io.File;
 import java.io.IOException;

@@ -12,9 +12,9 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Pixel;
-import eu.startales.spacepixels.util.BlinkSequence;
-import eu.startales.spacepixels.util.TrackOverlay;
-import eu.startales.spacepixels.util.VariableStarOverlay;
+import eu.startales.spacepixels.fits.BlinkSequence;
+import eu.startales.spacepixels.detection.TrackOverlay;
+import eu.startales.spacepixels.detection.VariableStarOverlay;
 
 import javax.swing.JComponent;
 import javax.swing.UIManager;

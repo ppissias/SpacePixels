@@ -7,17 +7,17 @@
  */
 package eu.startales.spacepixels.api;
 
-import eu.startales.spacepixels.util.reporting.ReportExporter;
-import eu.startales.spacepixels.util.reporting.ReportRequest;
+import eu.startales.spacepixels.report.ReportExporter;
+import eu.startales.spacepixels.report.ReportRequest;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
-import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
-import eu.startales.spacepixels.util.AutoTunerRunner;
+import eu.startales.spacepixels.detection.AutoTuneCandidatePoolBuilder;
+import eu.startales.spacepixels.detection.AutoTunerRunner;
 import eu.startales.spacepixels.util.DebugOutput;
-import eu.startales.spacepixels.util.DetectionInputPreparation;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.FitsImportService;
-import eu.startales.spacepixels.util.PipelineExecutionData;
-import eu.startales.spacepixels.util.StandardDetectionPipelineService;
+import eu.startales.spacepixels.detection.DetectionInputPreparation;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsImportService;
+import eu.startales.spacepixels.detection.PipelineExecutionData;
+import eu.startales.spacepixels.detection.StandardDetectionPipelineService;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import io.github.ppissias.jtransient.engine.AutoTunerResult;

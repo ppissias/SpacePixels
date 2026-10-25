@@ -7,13 +7,12 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.gui;
 
 import io.github.ppissias.jtransient.model.DetectedObject;
-import eu.startales.spacepixels.util.BlinkSequence;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.TrackOverlay;
+import eu.startales.spacepixels.fits.BlinkSequence;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.detection.TrackOverlay;
 import io.github.ppissias.jtransient.engine.FrameTransients;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 

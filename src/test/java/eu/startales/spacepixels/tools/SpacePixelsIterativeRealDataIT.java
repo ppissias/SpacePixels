@@ -2,12 +2,12 @@ package eu.startales.spacepixels.tools;
 
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
-import eu.startales.spacepixels.util.DetectionInputPreparation;
+import eu.startales.spacepixels.detection.DetectionInputPreparation;
 import eu.startales.spacepixels.config.AppConfig;
-import eu.startales.spacepixels.util.FitsImportService;
-import eu.startales.spacepixels.util.IterativeDetectionPipelineService;
-import eu.startales.spacepixels.util.IterativeDetectionPlan;
-import eu.startales.spacepixels.util.IterativeDetectionRequest;
+import eu.startales.spacepixels.fits.FitsImportService;
+import eu.startales.spacepixels.detection.IterativeDetectionPipelineService;
+import eu.startales.spacepixels.detection.IterativeDetectionPlan;
+import eu.startales.spacepixels.detection.IterativeDetectionRequest;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Assume;

@@ -7,13 +7,12 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.tasks.GeneratePreviewsTask;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.FitsVisualizationRenderer;
-import eu.startales.spacepixels.util.StretchAlgorithm;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsVisualizationRenderer;
+import eu.startales.spacepixels.fits.StretchAlgorithm;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;

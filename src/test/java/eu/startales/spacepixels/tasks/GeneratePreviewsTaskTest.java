@@ -3,8 +3,8 @@ package eu.startales.spacepixels.tasks;
 import org.junit.Test;
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
-import eu.startales.spacepixels.util.FitsVisualizationRenderer;
-import eu.startales.spacepixels.util.StretchAlgorithm;
+import eu.startales.spacepixels.fits.FitsVisualizationRenderer;
+import eu.startales.spacepixels.fits.StretchAlgorithm;
 import nom.tam.fits.Fits;
 
 import java.awt.image.BufferedImage;

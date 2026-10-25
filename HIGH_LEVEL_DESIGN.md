@@ -191,43 +191,28 @@ Current tools:
 - `ArtificialStarInjector`
   - synthetic moving-star injection for testing and validation
 
-### `eu.startales.spacepixels.util`
+### Domain packages: `fits`, `detection`, `platesolve`, `skycatalog`, `report`, `util`
 
-Internal processing services.
+Processing services organized by domain.
 
-Important classes:
+Important classes by package:
 
-- `FitsImportService`, `FitsInput`, `FitsPreparation`, `FitsBatchService`
-- `FitsImportInteraction` (decisions/progress; implemented on the EDT by `gui.GuiFitsImportInteraction`)
-- `DetectionInputPreparation`
-- `StandardDetectionPipelineService`
-- `IterativeDetectionPipelineService`
-- `DetectionPipelineSupport`
-- `AutoTuneCandidatePoolBuilder`
-- `AutoTunerRunner`
-- `PlateSolveService`
-- `FitsFileInformation`
-- `FitsInput` (storage format classification)
-- `FitsPixelConverter`
-- `FitsVisualizationRenderer`
-- `DisplayImageRenderer`
-- `WcsCoordinateTransformer`
-- `WcsSolutionResolver`
-- `SkyMath` (angle wrapping and clamped-haversine angular separation in degrees and arcseconds)
-- `Statistics` (NaN-ignoring standard medians and upper-middle order-statistic medians)
-- `DebugOutput` (optional `-Dspacepixels.debug=true` diagnostic output and per-operation `DiagnosticContext` scopes)
-- `XisfImageConverter`
-- `StagedFile` (safe replacement of a file; see section 7)
+- `fits`: `FitsImportService`, `FitsInput`, `FitsPreparation`, `FitsBatchService`, `FitsPixelConverter`, `FitsVisualizationRenderer`, `DisplayImageRenderer`, `DisplayStretch`, `StretchAlgorithm`, `BlinkSequence`, `ExposureGroup`, `WcsCoordinateTransformer`, `WcsSolutionResolver`, `XisfImageConverter`
+- `detection`: `DetectionInputPreparation`, `StandardDetectionPipelineService`, `IterativeDetectionPipelineService`, `DetectionPipelineSupport`, `AutoTuneCandidatePoolBuilder`, `AutoTunerRunner`, `TrackOverlay`, `VariableStarOverlay`, `RunPreview`, `PreviewThumbnails`, `OutputFolders`
+- `platesolve`: `PlateSolveService`, `PlateSolutionCorrection`, `AstrometryNetAccount`
+- `skycatalog`: `SkyCatalogueClient`, `SkyCatalogueStore`, `PlateCorrectionFitter`, `SkySnapshot`
+- `report`: `ReportExporter`, `ReportRequest`, `ReportData`, `FindingCategory`, the section writers, and lookup proxy/builders in `report.lookup` (`ReportLookupProxyServer`, `SatCheckerUrlBuilder`, `JplSbIdentUrlBuilder`, `SkyViewerHtmlBuilder`)
+- `util`: `StagedFile`, `Statistics`, `SkyMath`, `BuildInfo`, `Cancellation`, `DebugOutput`
 
-Callers use these services directly; there is no forwarding facade. All `util` sources, including reporting/catalogue helpers, have no Swing/GUI dependencies; headless AWT image rendering remains permitted. Shared HDU discovery and directory listing are separate helpers. Each `FitsImportService` owns its bounded pool for one import attempt, and its caller closes it. Classes across GUI, session, FITS and reporting packages log non-fatal problems through their own `java.util.logging.Logger` instances (`WARNING` or `SEVERE`) and send optional diagnostic output through `DebugOutput`.
+Callers use these services directly; there is no forwarding facade. All headless domain sources have no Swing/GUI dependencies; headless AWT image rendering remains permitted. Shared HDU discovery and directory listing are separate helpers. Each `FitsImportService` owns its bounded pool for one import attempt, and its caller closes it. Classes across GUI, session, FITS and reporting packages log non-fatal problems through their own `java.util.logging.Logger` instances (`WARNING` or `SEVERE`) and send optional diagnostic output through `DebugOutput`.
 
 Compressed 32-bit and signed/scaled 16-bit import selects combined preparation using the actual decompressed image HDU metadata. The existing batch standardizer reads compressed pixels through `FitsPreparation`, writes final unsigned mono/color copies directly and preserves the shared sequence-wide offset/zero-padding policy. Already-standard unsigned 16-bit compressed input retains decompression-only behavior. GUI decisions stay in `FitsImportInteraction`; strict headless import continues to refuse non-ready input.
 
 The window explicitly injects `gui.GuiFitsImportInteraction` through `FitsImportTask` into `FitsImportService` and its exposure-group decision (`FitsImportService.offerToImportLargestExposureGroup`). An importer without interaction validates strictly and never creates dialogs. `MainApplicationPanel` injects `gui.GuiDetectionReportPrompt` callbacks into normal/iterative jobs; only this GUI adapter builds the report-size question on the EDT. The threshold remains 50, and iterative callbacks use each pass's subset/WCS and effective config. Accepted choices replace only the summary's `ReportInclusion`, consumed by export, not the measurements/config. Default task constructors are noninteractive threshold guards; explicit null report callbacks permit export without asking. A declined import preserves the current session. These boundaries are protected by recursive dependency tests and dialog/job tests.
 
-The build publishes only `eu.startales.spacepixels:spacepixels`: the headless API/config/session/util implementation, CLI tools and reporting resources, with matching sources/Javadocs. There is no separate core project or desktop Maven publication. An unpublished `desktopJar` owns GUI/jobs/tasks and GUI icons; `run` and distributions combine it with the API and desktop-only FlatLaf. CLI launchers need only the API/runtime graph. Package names and source paths stay stable through complementary source sets. Binary/source/Javadoc and dependency-metadata checks plus an isolated Maven-resolved consumer protect this boundary. JTransient is compile/API-scoped for exposed DTOs; JPlateSolve/FITS/Gson remain runtime-transitive implementation dependencies. Headless graphics still require `java.desktop`. See [the developer guide](DEVELOPER.md#build-and-run) and [publishing](PUBLISHING.md).
+The build publishes only `eu.startales.spacepixels:spacepixels`: the headless API/config/session/domain implementation, CLI tools and reporting resources, with matching sources/Javadocs. There is no separate core project or desktop Maven publication. An unpublished `desktopJar` owns GUI/jobs/tasks and GUI icons; `run` and distributions combine it with the API and desktop-only FlatLaf. CLI launchers need only the API/runtime graph. Package names and source paths stay stable through complementary source sets. Binary/source/Javadoc and dependency-metadata checks plus an isolated Maven-resolved consumer protect this boundary. JTransient is compile/API-scoped for exposed DTOs; JPlateSolve/FITS/Gson remain runtime-transitive implementation dependencies. Headless graphics still require `java.desktop`. See [the developer guide](DEVELOPER.md#build-and-run) and [publishing](PUBLISHING.md).
 
-### `eu.startales.spacepixels.util.reporting`
+### `eu.startales.spacepixels.report` (and `eu.startales.spacepixels.report.lookup`)
 
 Report export, report-side rendering, WCS-aware report context, and live report lookup support.
 

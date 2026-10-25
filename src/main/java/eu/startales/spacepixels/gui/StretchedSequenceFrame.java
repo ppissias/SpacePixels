@@ -9,8 +9,8 @@
  */
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.BlinkSequence;
-import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.fits.BlinkSequence;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 
 import java.util.Locale;
 

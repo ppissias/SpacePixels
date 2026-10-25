@@ -7,7 +7,6 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.config.DetectionSettingsPresentation;
@@ -29,7 +28,7 @@ import eu.startales.spacepixels.config.SlowMoversSettings;
 import eu.startales.spacepixels.config.AnomalyDetectionSettings;
 import eu.startales.spacepixels.config.MovingObjectsSettings;
 import eu.startales.spacepixels.config.StreakDetectionSettings;
-import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
+import eu.startales.spacepixels.detection.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
@@ -40,7 +39,6 @@ import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
-import eu.startales.spacepixels.util.*;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -56,6 +54,8 @@ import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.util.DebugOutput;
 
 /** Owns typed detection and application settings bindings, preserving hidden profile fields and shared viewer models. */
 public class DetectionConfigurationPanel extends JPanel {

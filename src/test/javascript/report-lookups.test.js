@@ -2,8 +2,8 @@ const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync('src/main/resources/eu/startales/spacepixels/util/reporting/report-lookups.js', 'utf8');
-const {matchesMarker} = require('../../main/resources/eu/startales/spacepixels/util/reporting/report-interactions.js');
+const source = fs.readFileSync('src/main/resources/eu/startales/spacepixels/report/report-lookups.js', 'utf8');
+const {matchesMarker} = require('../../main/resources/eu/startales/spacepixels/report/report-interactions.js');
 
 function client(responses, count = 1, catalogueStar = '') {
   const slot = {innerHTML: ''}, status = {textContent: ''}, requests = [], buttons = [];

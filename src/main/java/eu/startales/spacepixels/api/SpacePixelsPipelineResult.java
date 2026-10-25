@@ -7,7 +7,7 @@
  */
 package eu.startales.spacepixels.api;
 
-import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import io.github.ppissias.jtransient.engine.PipelineResult;

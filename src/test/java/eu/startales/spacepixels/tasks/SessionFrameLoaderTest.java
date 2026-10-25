@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.tasks;
 
-import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import nom.tam.fits.Fits;
 import nom.tam.fits.NullDataHDU;

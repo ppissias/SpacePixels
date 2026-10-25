@@ -8,7 +8,6 @@
  *
  */
 package eu.startales.spacepixels.gui;
-
 import eu.startales.spacepixels.util.BuildInfo;
 
 import javax.swing.*;

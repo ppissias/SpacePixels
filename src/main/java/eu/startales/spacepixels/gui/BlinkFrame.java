@@ -7,13 +7,12 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.BlinkSequence;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.TrackOverlay;
-import eu.startales.spacepixels.util.VariableStarOverlay;
+import eu.startales.spacepixels.fits.BlinkSequence;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.detection.TrackOverlay;
+import eu.startales.spacepixels.detection.VariableStarOverlay;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;

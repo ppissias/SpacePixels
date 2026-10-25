@@ -9,8 +9,8 @@
  */
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.FitsVisualizationRenderer;
-import eu.startales.spacepixels.util.StretchAlgorithm;
+import eu.startales.spacepixels.fits.FitsVisualizationRenderer;
+import eu.startales.spacepixels.fits.StretchAlgorithm;
 
 import javax.swing.*;
 import java.awt.image.BufferedImage;

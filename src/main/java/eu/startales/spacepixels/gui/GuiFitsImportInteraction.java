@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.FitsImportInteraction;
+import eu.startales.spacepixels.fits.FitsImportInteraction;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.util.concurrent.Callable;

@@ -9,7 +9,7 @@
  */
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 
 /**
  * Told by the window, on the event thread, when its session changes: a folder was imported, or the session was

@@ -1,7 +1,7 @@
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.WcsCoordinateTransformer;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import org.junit.Test;
 
 import java.time.Instant;
@@ -11,6 +11,8 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import eu.startales.spacepixels.fits.BlinkSequence;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 
 public class SkyAnnotationsTest {
 
@@ -51,22 +53,22 @@ public class SkyAnnotationsTest {
     @Test
     public void wcsHeaderReplacementUpdatesTableAndViewerReadout() throws Exception {
         javax.swing.SwingUtilities.invokeAndWait(() -> {
-            var unsolved = new eu.startales.spacepixels.util.FitsFileInformation(
+            var unsolved = new eu.startales.spacepixels.fits.FitsFileInformation(
                     "frame_01.fit", "frame_01.fit", true, 2000, 1600);
-            var second = new eu.startales.spacepixels.util.FitsFileInformation(
+            var second = new eu.startales.spacepixels.fits.FitsFileInformation(
                     "frame_02.fit", "frame_02.fit", true, 2000, 1600);
-            var tableModel = new FitsFileTableModel(new eu.startales.spacepixels.util.FitsFileInformation[]{unsolved, second});
+            var tableModel = new FitsFileTableModel(new eu.startales.spacepixels.fits.FitsFileInformation[]{unsolved, second});
             assertEquals("No", tableModel.getValueAt(0, FitsFileTableModel.COL_SOLVED));
 
             SkyAnnotations sky = new SkyAnnotations(new FrameView());
             ViewerSupport.CursorReadout cursorReadout = new ViewerSupport.CursorReadout();
             sky.setOnSolutionChanged(cursorReadout::forgetSolutions);
-            var files = new eu.startales.spacepixels.util.FitsFileInformation[]{unsolved, second};
+            var files = new eu.startales.spacepixels.fits.FitsFileInformation[]{unsolved, second};
             cursorReadout.reset(files, sky::solutionFor);
             sky.attach(files);
 
-            var displayFrame = eu.startales.spacepixels.util.BlinkSequence.fromMono(unsolved, new short[1600][2000]);
-            var secondDisplay = eu.startales.spacepixels.util.BlinkSequence.fromMono(second, new short[1600][2000]);
+            var displayFrame = eu.startales.spacepixels.fits.BlinkSequence.fromMono(unsolved, new short[1600][2000]);
+            var secondDisplay = eu.startales.spacepixels.fits.BlinkSequence.fromMono(second, new short[1600][2000]);
             java.awt.Point center = new java.awt.Point(1000, 800);
             String before = cursorReadout.describe(displayFrame, center);
             assertTrue(before, !before.contains("RA "));

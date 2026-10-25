@@ -10,7 +10,7 @@ import eu.startales.spacepixels.config.VariableStarReportOptions;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.BuildInfo;
-import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.tools.BatchDetectionCli;
 import eu.startales.spacepixels.tools.ArtificialStarInjector;
 import io.github.ppissias.jtransient.engine.AutoTuneProfile;
@@ -68,7 +68,7 @@ public class HeadlessApiConsumerTest {
         for (String resource : new String[]{"report-lookups.js", "report-interactions.js", "catalogue-comparison.js",
                 "catalogue-source-notes.json"}) {
             try (InputStream stream = DefaultSpacePixelsPipelineApi.class.getResourceAsStream(
-                    "/eu/startales/spacepixels/util/reporting/" + resource)) {
+                    "/eu/startales/spacepixels/report/" + resource)) {
                 assertNotNull(resource, stream);
                 assertTrue(resource, stream.readAllBytes().length > 100);
             }

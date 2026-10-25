@@ -10,11 +10,11 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.session.SkyCatalogueModel;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.WcsCoordinateTransformer;
-import eu.startales.spacepixels.util.WcsSolutionResolver;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
-import eu.startales.spacepixels.util.skycatalog.SkyProjection;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
+import eu.startales.spacepixels.fits.WcsSolutionResolver;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.skycatalog.SkyProjection;
 
 import javax.swing.*;
 import java.awt.*;
@@ -23,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 
 /**
  * The Annotate switch of a frame viewer (key A), with its Layers menu: labels from the session's sky catalogue
@@ -301,7 +302,7 @@ final class SkyAnnotations {
     }
 
     private void updateEnabled() {
-        eu.startales.spacepixels.util.PlateSolutionCorrection correction = model.getCorrection();
+        eu.startales.spacepixels.platesolve.PlateSolutionCorrection correction = model.getCorrection();
         correctBox.setEnabled(!model.isClosed() && correction != null && correction.isNeeded());
         correctBox.setSelected(correction != null && correction.enabled);
         if (correction == null) {

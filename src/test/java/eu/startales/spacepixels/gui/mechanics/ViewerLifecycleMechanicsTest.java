@@ -3,7 +3,7 @@ package eu.startales.spacepixels.gui.mechanics;
 import eu.startales.spacepixels.gui.StretchPanel;
 import eu.startales.spacepixels.gui.StarMaskLifecycleProbe;
 import eu.startales.spacepixels.gui.ViewerLifecycleProbe;
-import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 import org.assertj.swing.edt.GuiActionRunner;
 import org.junit.Test;
 

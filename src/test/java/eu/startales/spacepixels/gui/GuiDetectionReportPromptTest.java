@@ -1,7 +1,7 @@
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.DetectionSummary;
-import eu.startales.spacepixels.util.ReportInclusion;
+import eu.startales.spacepixels.detection.DetectionSummary;
+import eu.startales.spacepixels.report.ReportInclusion;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Test;
 

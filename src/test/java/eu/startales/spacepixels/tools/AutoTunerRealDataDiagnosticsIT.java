@@ -2,10 +2,10 @@ package eu.startales.spacepixels.tools;
 
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
-import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
-import eu.startales.spacepixels.util.DetectionInputPreparation;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.FitsImportService;
+import eu.startales.spacepixels.detection.AutoTuneCandidatePoolBuilder;
+import eu.startales.spacepixels.detection.DetectionInputPreparation;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsImportService;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.AutoTuneProfile;
 import io.github.ppissias.jtransient.engine.AutoTunerResult;

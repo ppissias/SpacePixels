@@ -1,6 +1,6 @@
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.FitsFileInformation;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 import javax.swing.Action;
 
 /** The imported frames and the Overview commands that share the main panel's actions. */

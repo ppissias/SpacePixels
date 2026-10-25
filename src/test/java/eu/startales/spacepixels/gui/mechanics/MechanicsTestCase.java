@@ -3,7 +3,7 @@ package eu.startales.spacepixels.gui.mechanics;
 import com.formdev.flatlaf.FlatDarkLaf;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.reporting.ReportLookupProxyServer;
+import eu.startales.spacepixels.report.lookup.ReportLookupProxyServer;
 import org.assertj.swing.finder.JFileChooserFinder;
 import org.assertj.swing.fixture.JFileChooserFixture;
 import org.assertj.swing.edt.GuiActionRunner;

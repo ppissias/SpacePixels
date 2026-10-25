@@ -7,13 +7,12 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.tasks;
 
 import nom.tam.fits.Fits;
-import eu.startales.spacepixels.util.FitsVisualizationRenderer;
-import eu.startales.spacepixels.util.StretchAlgorithm;
-import eu.startales.spacepixels.util.FitsInput;
+import eu.startales.spacepixels.fits.FitsVisualizationRenderer;
+import eu.startales.spacepixels.fits.StretchAlgorithm;
+import eu.startales.spacepixels.fits.FitsInput;
 
 import java.awt.image.BufferedImage;
 import java.util.concurrent.Callable;

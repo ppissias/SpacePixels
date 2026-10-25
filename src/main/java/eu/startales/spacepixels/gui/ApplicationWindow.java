@@ -23,9 +23,9 @@ import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.tasks.FitsImportTask;
 import eu.startales.spacepixels.util.DebugOutput;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.PlateSolveService;
-import eu.startales.spacepixels.util.reporting.ReportLookupProxyServer;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.platesolve.PlateSolveService;
+import eu.startales.spacepixels.report.lookup.ReportLookupProxyServer;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;

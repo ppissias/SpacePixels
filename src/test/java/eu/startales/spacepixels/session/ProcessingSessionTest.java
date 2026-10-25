@@ -5,12 +5,12 @@ import eu.startales.spacepixels.config.SpacePixelsAppConfigIO;
 import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
-import eu.startales.spacepixels.util.DetectionOverlays;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.PlateSolutionCorrection;
-import eu.startales.spacepixels.util.PlateSolveService;
-import eu.startales.spacepixels.util.TrackOverlay;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.detection.DetectionOverlays;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
+import eu.startales.spacepixels.platesolve.PlateSolveService;
+import eu.startales.spacepixels.detection.TrackOverlay;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import io.github.ppissias.jtransient.engine.AutoTunerResult;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 import org.junit.Rule;
@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
+import eu.startales.spacepixels.report.ReportRunContext;
 
 public class ProcessingSessionTest {
     @Rule public TemporaryFolder folder = new TemporaryFolder();
@@ -112,7 +113,7 @@ public class ProcessingSessionTest {
             session.setSelection(new FitsFileInformation[]{unsolved});
             assertFalse(session.hasPlateSolvedFrame());
 
-            var admittedRun = eu.startales.spacepixels.util.reporting.ReportRunContext.capture(
+            var admittedRun = eu.startales.spacepixels.report.ReportRunContext.capture(
                     eu.startales.spacepixels.config.DetectionRunOptions.defaults(), session.getFiles());
 
             java.util.Map<String, String> wcsHeader = java.util.Map.of(
@@ -138,7 +139,7 @@ public class ProcessingSessionTest {
             assertSame(unsolved, admittedRun.filesInformation()[0]);
             assertFalse(admittedRun.filesInformation()[0].isWcsSolved());
 
-            var nextRun = eu.startales.spacepixels.util.reporting.ReportRunContext.capture(
+            var nextRun = eu.startales.spacepixels.report.ReportRunContext.capture(
                     eu.startales.spacepixels.config.DetectionRunOptions.defaults(), session.getFiles());
             assertSame(solved, nextRun.filesInformation()[0]);
             assertTrue(nextRun.filesInformation()[0].isWcsSolved());

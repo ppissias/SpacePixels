@@ -7,13 +7,12 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.tasks;
 
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
-import eu.startales.spacepixels.util.PlateSolveService;
+import eu.startales.spacepixels.platesolve.PlateSolveService;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 
 import io.github.ppissias.jplatesolve.PlateSolveOperation;

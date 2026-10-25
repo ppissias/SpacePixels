@@ -7,14 +7,13 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.tasks;
 
 import eu.startales.spacepixels.jobs.Job;
 import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
-import eu.startales.spacepixels.util.FitsBatchService;
-import eu.startales.spacepixels.util.StretchAlgorithm;
+import eu.startales.spacepixels.fits.FitsBatchService;
+import eu.startales.spacepixels.fits.StretchAlgorithm;
 
 /** Writes stretched copies of all frames of the session, colour or mono, into a new folder. */
 public class BatchStretchTask implements Job<Void> {

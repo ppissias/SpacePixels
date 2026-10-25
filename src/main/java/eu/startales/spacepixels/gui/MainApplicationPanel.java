@@ -9,21 +9,21 @@
  */
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.BlinkSequence;
+import eu.startales.spacepixels.fits.BlinkSequence;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.SkyCatalogueModel;
-import eu.startales.spacepixels.util.DetectionOverlays;
-import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.IterativeDetectionRequest;
+import eu.startales.spacepixels.detection.DetectionOverlays;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.detection.IterativeDetectionRequest;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.session.ApplicationStorage;
-import eu.startales.spacepixels.util.StretchAlgorithm;
-import eu.startales.spacepixels.util.PlateSolutionCorrection;
-import eu.startales.spacepixels.util.SessionReports;
-import eu.startales.spacepixels.util.WcsSolutionResolver;
-import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.fits.StretchAlgorithm;
+import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
+import eu.startales.spacepixels.report.SessionReports;
+import eu.startales.spacepixels.fits.WcsSolutionResolver;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import eu.startales.spacepixels.jobs.*;

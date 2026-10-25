@@ -1,5 +1,4 @@
 package eu.startales.spacepixels.gui;
-
 import eu.startales.spacepixels.util.BuildInfo;
 import org.junit.Test;
 

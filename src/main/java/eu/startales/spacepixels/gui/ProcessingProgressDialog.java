@@ -1,7 +1,7 @@
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.RunPreview;
-import eu.startales.spacepixels.util.RunPreviewSink;
+import eu.startales.spacepixels.detection.RunPreview;
+import eu.startales.spacepixels.detection.RunPreviewSink;
 
 import javax.swing.*;
 import java.awt.*;

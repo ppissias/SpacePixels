@@ -6,7 +6,6 @@
  *
  */
 package eu.startales.spacepixels.config;
-
 import eu.startales.spacepixels.util.StagedFile;
 
 import java.io.File;

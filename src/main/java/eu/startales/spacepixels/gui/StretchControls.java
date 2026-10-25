@@ -7,12 +7,11 @@
  * author: Petros Pissias <petrospis at gmail.com>
  *
  */
-
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.util.BlinkSequence;
-import eu.startales.spacepixels.util.DisplayStretch;
-import eu.startales.spacepixels.util.StretchAlgorithm;
+import eu.startales.spacepixels.fits.BlinkSequence;
+import eu.startales.spacepixels.fits.DisplayStretch;
+import eu.startales.spacepixels.fits.StretchAlgorithm;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
