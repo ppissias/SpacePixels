@@ -1,18 +1,20 @@
 # Agent Handoff
 
-- Owner: C
-- Phase: FIX
+- Owner: A
+- Phase: REVIEW
 - Task: SP-11A
 - Implementer: C
 - Reviewer: A
 - Base: 6df647069c726ce6b3c4ff004b6f6b08603d3db3
-- Implementation: f02dca375fc47b379d54993dbeeec44cca20c97f
+- Implementation: f8db55890915c408ef938187ebc142f9bdde6c7e
 - Fix rounds: 1/2
-- Tests: Independent PASS: check 511 (4 skipped), full GUI mechanics 33, isolated consumer 8. All 18 reference datasets/14,232 normalized report files and assets match the SP-08A outputs, also verifying SP-08B. Targeted external viewer probes reproduce R1/R2; their preferences were backed up/restored.
+- Tests: PASS (`.\gradlew.bat check`, `.\gradlew.bat test --rerun`, `.\gradlew.bat apiConsumerTest`, `.\gradlew.bat guiMechanicsTest --tests WcsReplacementMechanicsTest`)
 - Quota visibility: UNKNOWN
-- R1: `SequenceViewerFrame.replaceFrameMetadata` does not invalidate in-flight preparation. A latch probe captures old WCS RA 150, replaces metadata with RA 210, then releases preparation: the displayed result reverts to RA 150 (one preparation). Advance/invalidate the preparation generation and retain the updated metadata on delivery; add a real-viewer regression for this ordering.
-- R2: `MainApplicationPanel` retains/notifies only the last Manual Transient Inspection window; earlier open inspections miss WCS replacements. `TransientInspectionFrame.onFrameMetadataReplaced` also updates `fileInfoByName` by basename without checking ownership/path: a probe for `/dataset-a/shared.fit` accepted a replacement for `/dataset-b/shared.fit`. Notify every relevant current-session inspection and reject foreign dataset/session updates, including repeated imports/same basenames; preserve lifetime policy until SP-19B. Add regressions for multiple inspections and foreign metadata.
-- R3: D-03 explicitly requires migration/API examples and consumer checks for removed metadata mutators. `API.md` and `src/consumerTest` are unchanged. Document setter/`snapshot()` removal and immutable construction/header replacement (including the deliberate source/API break), and exercise that migration against the isolated staged API artifact.
-- Next action: C fixes R1-R3, reruns affected checks and returns the full task for A review. Existing real-data evidence can be reused if the correction changes only GUI delivery and documentation/consumer tests. A and B are read-only after this transfer.
-- Evidence: External scratch prefix `spacepixels-sp11-review-` contains `MetadataRaceProbe.java` and `metadata-race-and-foreign.log`; reference manifests are under the external `spacepixels-sp08-` scratch prefix.
-- Local edits: Maintainer decision annotations in AGENT_STATE.md remain preserved unstaged; their structured decisions are committed.
+- Next action: Agent A reviews SP-11A fix round 1 (`6df647069c726ce6b3c4ff004b6f6b08603d3db3..f8db55890915c408ef938187ebc142f9bdde6c7e`). B and C remain read-only.
+
+## Review Findings
+
+- R1 resolved: `SequenceViewerFrame.show` binds current frame metadata on delivery so in-flight preparation does not revert WCS replacements, and replacements with mismatched file paths are ignored.
+- R2 resolved: `MainApplicationPanel` routes WCS replacements to all open `TransientInspectionFrame` instances of the session, unregisters closed windows on window close, and `TransientInspectionFrame.onFrameMetadataReplaced` checks full path equality before replacing `fileInfoByName` entries, ignoring foreign datasets.
+- R3 resolved: Documented `FitsFileInformation` immutability and migration under maintainer decision D-03 in `API.md`, and added `HeadlessApiConsumerTest.immutableFitsFileInformationEnforcesImmutabilityAndCopyReplacement` against the staged API artifact.
+- Regressions added: `WcsReplacementMechanicsTest` verifies concurrent preparation delivery, multi-inspection notification, and foreign dataset isolation.
