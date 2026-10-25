@@ -7,11 +7,11 @@
 - Branch: `feature/design-improvements-collaboration`
 - Feature baseline: `b4bac726b6242d029d9c7636cccffd25d8d85895`
 - Agents (ordered): A=this session; B=maintainer-started Agent B; C=maintainer-started Agent C. No additional agents are needed.
-- Overall: INTEGRATING
+- Overall: COMPLETE
 - Execution: One shared working tree, one committed Owner; A implements / B reviews, B implements / C reviews, C implements / A reviews. Waiting agents are read-only.
 - Scope boundary: Completed SP-10, SP-13 and SP-18 stay complete; dropped SP-15 stays dropped. SP-23 is already complete. No dependency upgrades or unrelated functional requests.
 - Required final checks: `gradlew.bat check`, `guiMechanicsTest`, `apiConsumerTest`; reference-data before/after comparisons for preparation/report/numeric changes as in DEVELOPER.md. Large JVMs run sequentially, using LOCAL-ENVIRONMENT.txt and scratch homes. Run the relevant checks per task before review.
-- Final integration: The maintainer explicitly approved committing all remaining changes, pushing them and moving the reviewed feature to master on 2026-10-25. Agent A owns the integration; other agents stay read-only.
+- Final integration: The maintainer explicitly approved committing all remaining changes, pushing them and moving the reviewed feature to master on 2026-10-25. The reviewed feature has been fast-forwarded into master. Implementation and independent review are complete; agents stay read-only.
 - Protocol: AGENT_COLLABORATION.md v2.2 (2026-10-25). Quotas are gone. Every agent keeps running and checks for new handoff commits every 2 minutes, an owner commits a status update at least every 30 minutes during long work, and an owner silent for an hour may be bypassed (section 8). Agents started under v2.1 re-read sections 4 and 8.
 
 ## Task ledger
