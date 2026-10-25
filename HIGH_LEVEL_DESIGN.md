@@ -392,7 +392,7 @@ The Star Mask Explorer, opened from the Overview.
 
 Expert sections are found from the header labels that `DetectionConfigurationPanel` marks with a client property.
 
-`SettingRow` is one setting on a page: its input, its saved value and a `Reset` button. It marks itself when its value differs from the saved configuration and tells the navigator to refresh the filters and counts.
+`SettingRow` is one setting on a page: its input, its setting ID and expert visibility (passed directly when the row is built), its saved value and a `Reset` button. It marks itself when its value differs from the saved configuration and tells the navigator to refresh the filters and counts.
 
 ### `FitsImportService`
 

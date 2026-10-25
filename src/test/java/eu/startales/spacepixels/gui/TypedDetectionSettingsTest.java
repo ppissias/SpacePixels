@@ -62,14 +62,18 @@ public class TypedDetectionSettingsTest {
             assertFalse(config.enableResidualTransientAnalysis);
             assertEquals(1.234, config.qualityGrowSigmaMultiplier, 0);
             JSpinner input = new JSpinner(new SpinnerNumberModel(10.0, 0.0, 100.0, 0.5));
-            input.putClientProperty(SettingRow.SETTING_ID, ResidualAnalysisSettings.CLUSTER_RADIUS.id());
-            input.putClientProperty(SettingRow.EXPERT_SETTING, true);
-            SettingRow row = new SettingRow(new JPanel(), new JPanel(), new JLabel("Radius"), "Radius",
-                    ResidualAnalysisSettings.CLUSTER_RADIUS.help(), input);
+            SettingRow row = new SettingRow(new JPanel(), new JPanel(), new JLabel("Radius"),
+                    ResidualAnalysisSettings.CLUSTER_RADIUS.id(), "Radius",
+                    ResidualAnalysisSettings.CLUSTER_RADIUS.help(), true, input);
+            row.section = new SettingsNavigator.Section(new JLabel("Common"), "Common", false);
             assertEquals(ResidualAnalysisSettings.CLUSTER_RADIUS.id(), row.id);
             assertTrue(row.matches("localactivityclusterradiuspixels"));
             assertTrue(row.matches("pixels"));
             assertTrue(row.isExpert());
+            SettingRow nonExpertInExpertSection = new SettingRow(new JPanel(), new JPanel(), new JLabel("Preset"),
+                    "frameRejectionPreset", "Strictness", "Outlier preset", false, new JComboBox<>(new String[]{"Normal"}));
+            nonExpertInExpertSection.section = new SettingsNavigator.Section(new JLabel("Expert"), "Expert", true);
+            assertFalse(nonExpertInExpertSection.isExpert());
         });
     }
 
@@ -77,12 +81,11 @@ public class TypedDetectionSettingsTest {
     @Test public void applicationBindingsKeepTheirOwnerAndRejectNonFiniteValues() throws Exception {
         EventQueue.invokeAndWait(() -> {
             var preferences = new eu.startales.spacepixels.config.SpacePixelsVisualizationPreferences();
-            var setting = new ApplicationSetting<>("autoStretchBlackSigma", "Auto Stretch Black Sigma", "sigma",
-                    "Black point below the image mean.", false, Double.class,
-                    () -> preferences.autoStretchBlackSigma, value -> preferences.autoStretchBlackSigma = value);
             JSpinner input = new JSpinner(new SpinnerNumberModel(1.0, 0.0, 10.0, 0.1));
             SpinnerModel model = input.getModel();
-            var binding = new ApplicationSettingBinding<>(setting,
+            var binding = new ApplicationSettingBinding<>("autoStretchBlackSigma", "Auto Stretch Black Sigma", "sigma",
+                    "Black point below the image mean.", false, Double.class,
+                    () -> preferences.autoStretchBlackSigma, value -> preferences.autoStretchBlackSigma = value,
                     () -> ((Number) input.getValue()).doubleValue(), input::setValue);
             preferences.autoStretchBlackSigma = 2.5;
             binding.load();
@@ -91,9 +94,14 @@ public class TypedDetectionSettingsTest {
             binding.apply();
             assertEquals(3.5, preferences.autoStretchBlackSigma, 0);
             assertSame(model, input.getModel());
-            assertThrows(IllegalArgumentException.class, () -> setting.write(Double.NaN));
+            assertThrows(IllegalArgumentException.class, () -> binding.write(Double.NaN));
+            var nonFiniteBinding = new ApplicationSettingBinding<>("autoStretchBlackSigma", "Auto Stretch Black Sigma", "sigma",
+                    "Black point below the image mean.", false, Double.class,
+                    () -> preferences.autoStretchBlackSigma, value -> preferences.autoStretchBlackSigma = value,
+                    () -> Double.NaN, input::setValue);
+            assertThrows(IllegalArgumentException.class, nonFiniteBinding::apply);
             assertEquals(3.5, preferences.autoStretchBlackSigma, 0);
-            assertTrue(setting.help().contains("sigma"));
+            assertTrue(binding.help().contains("sigma"));
         });
     }
 

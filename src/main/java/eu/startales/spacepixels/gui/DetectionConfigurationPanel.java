@@ -1057,16 +1057,17 @@ public class DetectionConfigurationPanel extends JPanel {
         chkEnableVariableStarDetection = addTypedCheckbox(panel, VariableStarsSettings.ENABLE_VARIABLE_STAR_DETECTION);
 
         panel.add(createSectionHeader("Report Presentation"));
-        spinVariableMaxCandidateCards = addApplicationInteger(panel, reportBindings, new ApplicationSetting<>(
+        spinVariableMaxCandidateCards = addApplicationInteger(panel, reportBindings,
                 "variableStarMaxCandidateCards", "Maximum Detailed Candidate Cards", "cards",
                 "Maximum variable-star cards with full light curves and cutouts in the report (default 40).<br>Set 60 for a longer report. The table, field maps and CSVs still include every candidate.",
-                false, Integer.class, () -> reportOptions().maxCandidateCards(), value -> setReportOptions(new VariableStarReportOptions(value, reportOptions().sortOrder()))),
+                false, () -> reportOptions().maxCandidateCards(),
+                value -> setReportOptions(new VariableStarReportOptions(value, reportOptions().sortOrder())),
                 1, VariableStarReportOptions.MAX_CANDIDATE_CARDS, 1);
-        cmbVariableStarSortOrder = addApplicationChoice(panel, reportBindings, new ApplicationSetting<>(
+        cmbVariableStarSortOrder = addApplicationChoice(panel, reportBindings,
                 "variableStarSortOrder", "Candidate Presentation Order", "",
                 "High confidence first; V numbers stay fixed.<br>Observed changes: up-and-down, dips and peaks, then larger Δmag.<br>Known periods: saved VSX matches; unknown periods last in each tier.",
                 false, VariableStarReportOptions.SortOrder.class, () -> reportOptions().sortOrder(),
-                value -> setReportOptions(new VariableStarReportOptions(reportOptions().maxCandidateCards(), value))),
+                value -> setReportOptions(new VariableStarReportOptions(reportOptions().maxCandidateCards(), value)),
                 VariableStarReportOptions.SortOrder.values());
 
         panel.add(Box.createVerticalStrut(10));
@@ -1109,10 +1110,8 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Frame Rejection"));
         cmbFrameRejection = new JComboBox<>(new DefaultComboBoxModel<>(FRAME_REJECTION_PRESETS));
         cmbFrameRejection.putClientProperty(SettingRow.PRESET_CHOOSER, true);
-        cmbFrameRejection.putClientProperty(SettingRow.SETTING_ID, "frameRejectionPreset");
-        cmbFrameRejection.putClientProperty(SettingRow.EXPERT_SETTING, false);
         UiStyle.inputWidth(cmbFrameRejection, 110);
-        addSettingRow(panel, "Strictness", "How readily frames that differ from the rest of the session are left out. Normal uses the default limits; Lenient keeps more frames, Strict leaves out more.<br>The individual limits are expert settings; changing one shows Custom.", cmbFrameRejection);
+        addSettingRow(panel, "frameRejectionPreset", "Strictness", "How readily frames that differ from the rest of the session are left out. Normal uses the default limits; Lenient keeps more frames, Strict leaves out more.<br>The individual limits are expert settings; changing one shows Custom.", false, cmbFrameRejection);
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Session Outlier Rejection (MAD)"));
@@ -1126,10 +1125,10 @@ public class DetectionConfigurationPanel extends JPanel {
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Auto-Tune"));
-        spinAutoTuneMaxCandidateFrames = addApplicationInteger(panel, tuningBindings, new ApplicationSetting<>(
+        spinAutoTuneMaxCandidateFrames = addApplicationInteger(panel, tuningBindings,
                 "autoTuneMaxCandidateFrames", "Frames Used by Auto-Tune (both tuners)", "frames",
                 "Most frames given to Auto-Tune. When the session has more, SpacePixels picks the best-quality, median-quality and evenly spaced frames. More frames give Auto-Tune more measurements on small sensors and a master stack closer to the real run; fewer frames use less memory on large sensors (about 120 MB per frame at 61 megapixels).",
-                true, Integer.class, () -> autoTuneMaxCandidateFrames, value -> autoTuneMaxCandidateFrames = value),
+                true, () -> autoTuneMaxCandidateFrames, value -> autoTuneMaxCandidateFrames = value,
                 SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES, 5000, 1);
 
         return panel;
@@ -1143,49 +1142,49 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createTabIntro("Visualization-only controls for exported reports and review imagery. These settings do not change detection results; they only affect presentation, contrast stretch, and animation cadence."));
 
         panel.add(createSectionHeader("Display Stretch & Animation"));
-        spinAutoBlackSigma = addApplicationDouble(panel, visualizationBindings, new ApplicationSetting<>(
+        spinAutoBlackSigma = addApplicationDouble(panel, visualizationBindings,
                 "autoStretchBlackSigma", "Auto Stretch Black Sigma", "sigma",
                 "Controls how far below the image mean the automatic black point is placed when stretching rendered imagery. Higher values darken the background more aggressively.",
-                false, Double.class, () -> visualization.getAutoStretchBlackSigma(), value -> visualization = visualization.withAutoStretchBlackSigma(value)),
+                false, () -> visualization.getAutoStretchBlackSigma(), value -> visualization = visualization.withAutoStretchBlackSigma(value),
                 0.0, 10.0, 0.1);
-        spinAutoWhiteSigma = addApplicationDouble(panel, visualizationBindings, new ApplicationSetting<>(
+        spinAutoWhiteSigma = addApplicationDouble(panel, visualizationBindings,
                 "autoStretchWhiteSigma", "Auto Stretch White Sigma", "sigma",
                 "Controls how far above the image mean the automatic white point is placed when stretching rendered imagery. Higher values preserve more bright-core detail but can reduce contrast on faint structure.",
-                false, Double.class, () -> visualization.getAutoStretchWhiteSigma(), value -> visualization = visualization.withAutoStretchWhiteSigma(value)),
+                false, () -> visualization.getAutoStretchWhiteSigma(), value -> visualization = visualization.withAutoStretchWhiteSigma(value),
                 0.1, 20.0, 0.1);
-        spinGifBlinkSpeed = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
+        spinGifBlinkSpeed = addApplicationInteger(panel, visualizationBindings,
                 "gifBlinkSpeedMs", "GIF Blink Speed (ms)", "ms",
                 "Frame delay used for exported animated GIFs. Lower values blink faster; higher values slow the inspection cadence.",
-                false, Integer.class, () -> visualization.getGifBlinkSpeedMs(), value -> visualization = visualization.withGifBlinkSpeedMs(value)),
+                false, () -> visualization.getGifBlinkSpeedMs(), value -> visualization = visualization.withGifBlinkSpeedMs(value),
                 50, 5000, 10);
 
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Annotations And Cropping"));
-        spinStreakScale = addApplicationDouble(panel, visualizationBindings, new ApplicationSetting<>(
+        spinStreakScale = addApplicationDouble(panel, visualizationBindings,
                 "streakLineScaleFactor", "Streak Line Scale Factor", "",
                 "Visualization-only setting that scales the length of the drawn streak annotation line.",
-                true, Double.class, () -> visualization.getStreakLineScaleFactor(), value -> visualization = visualization.withStreakLineScaleFactor(value)),
+                true, () -> visualization.getStreakLineScaleFactor(), value -> visualization = visualization.withStreakLineScaleFactor(value),
                 0.1, 20.0, 0.1);
-        spinStreakCentroidRad = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
+        spinStreakCentroidRad = addApplicationInteger(panel, visualizationBindings,
                 "streakCentroidBoxRadius", "Streak Centroid Box Radius", "pixels",
                 "Visualization-only setting that controls the size of the box drawn around a streak centroid.",
-                true, Integer.class, () -> visualization.getStreakCentroidBoxRadius(), value -> visualization = visualization.withStreakCentroidBoxRadius(value)),
+                true, () -> visualization.getStreakCentroidBoxRadius(), value -> visualization = visualization.withStreakCentroidBoxRadius(value),
                 1, 100, 1);
-        spinPointBoxRad = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
+        spinPointBoxRad = addApplicationInteger(panel, visualizationBindings,
                 "pointSourceMinBoxRadius", "Point Source Min Box Radius", "pixels",
                 "Visualization-only setting that sets the minimum radius of boxes drawn around point sources.",
-                true, Integer.class, () -> visualization.getPointSourceMinBoxRadius(), value -> visualization = visualization.withPointSourceMinBoxRadius(value)),
+                true, () -> visualization.getPointSourceMinBoxRadius(), value -> visualization = visualization.withPointSourceMinBoxRadius(value),
                 1, 50, 1);
-        spinBoxPad = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
+        spinBoxPad = addApplicationInteger(panel, visualizationBindings,
                 "dynamicBoxPadding", "Dynamic Box Padding", "pixels",
                 "Visualization-only setting that adds extra padding around automatically sized annotation boxes.",
-                true, Integer.class, () -> visualization.getDynamicBoxPadding(), value -> visualization = visualization.withDynamicBoxPadding(value)),
+                true, () -> visualization.getDynamicBoxPadding(), value -> visualization = visualization.withDynamicBoxPadding(value),
                 0, 50, 1);
-        spinCropPadding = addApplicationInteger(panel, visualizationBindings, new ApplicationSetting<>(
+        spinCropPadding = addApplicationInteger(panel, visualizationBindings,
                 "trackCropPadding", "Track Crop Border Padding", "pixels",
                 "Export-only setting that adds extra border around cropped track images.",
-                true, Integer.class, () -> visualization.getTrackCropPadding(), value -> visualization = visualization.withTrackCropPadding(value)),
+                true, () -> visualization.getTrackCropPadding(), value -> visualization = visualization.withTrackCropPadding(value),
                 0, 2000, 10);
 
         return panel;
@@ -1392,40 +1391,48 @@ public class DetectionConfigurationPanel extends JPanel {
 
     /** Binds an application double with its existing range and explicit runtime or profile owner. */
     private JSpinner addApplicationDouble(JPanel parent, List<ApplicationSettingBinding<?>> bindings,
-            ApplicationSetting<Double> setting, double min, double max, double step) {
-        JSpinner input = createSpinner(doubleSpinnerModel(setting.read(), min, max, step));
-        addApplicationBinding(parent, bindings, setting, input, () -> ((Number) input.getValue()).doubleValue(),
-                value -> setSpinnerValueClamped(input, value.doubleValue()));
+            String id, String title, String unit, String description, boolean expert,
+            java.util.function.Supplier<Double> getter, java.util.function.Consumer<Double> setter,
+            double min, double max, double step) {
+        JSpinner input = createSpinner(doubleSpinnerModel(getter.get(), min, max, step));
+        addApplicationBinding(parent, bindings, new ApplicationSettingBinding<>(
+                id, title, unit, description, expert, Double.class, getter, setter,
+                () -> ((Number) input.getValue()).doubleValue(),
+                value -> setSpinnerValueClamped(input, value.doubleValue())), input);
         return input;
     }
 
     /** Binds an application integer without adding an engine setting or changing its persistence format. */
     private JSpinner addApplicationInteger(JPanel parent, List<ApplicationSettingBinding<?>> bindings,
-            ApplicationSetting<Integer> setting, int min, int max, int step) {
-        JSpinner input = createSpinner(intSpinnerModel(setting.read(), min, max, step));
-        addApplicationBinding(parent, bindings, setting, input, () -> ((Number) input.getValue()).intValue(),
-                value -> setSpinnerValueClamped(input, value.intValue()));
+            String id, String title, String unit, String description, boolean expert,
+            java.util.function.Supplier<Integer> getter, java.util.function.Consumer<Integer> setter,
+            int min, int max, int step) {
+        JSpinner input = createSpinner(intSpinnerModel(getter.get(), min, max, step));
+        addApplicationBinding(parent, bindings, new ApplicationSettingBinding<>(
+                id, title, unit, description, expert, Integer.class, getter, setter,
+                () -> ((Number) input.getValue()).intValue(),
+                value -> setSpinnerValueClamped(input, value.intValue())), input);
         return input;
     }
 
     /** Binds a finite set of typed presentation choices without casting the selected item during apply. */
     private <Value> JComboBox<Value> addApplicationChoice(JPanel parent, List<ApplicationSettingBinding<?>> bindings,
-            ApplicationSetting<Value> setting, Value[] choices) {
+            String id, String title, String unit, String description, boolean expert,
+            Class<Value> type, java.util.function.Supplier<Value> getter, java.util.function.Consumer<Value> setter,
+            Value[] choices) {
         JComboBox<Value> input = new JComboBox<>(choices);
-        input.setSelectedItem(setting.read());
-        addApplicationBinding(parent, bindings, setting, input,
-                () -> setting.type().cast(input.getSelectedItem()), input::setSelectedItem);
+        input.setSelectedItem(getter.get());
+        addApplicationBinding(parent, bindings, new ApplicationSettingBinding<>(
+                id, title, unit, description, expert, type, getter, setter,
+                () -> type.cast(input.getSelectedItem()), input::setSelectedItem), input);
         return input;
     }
 
     /** Registers application identity, disclosure and load/apply at the row that owns the control. */
     private <Value> void addApplicationBinding(JPanel parent, List<ApplicationSettingBinding<?>> bindings,
-            ApplicationSetting<Value> setting, JComponent input,
-            java.util.function.Supplier<Value> current, java.util.function.Consumer<Value> display) {
-        input.putClientProperty(SettingRow.SETTING_ID, setting.id());
-        input.putClientProperty(SettingRow.EXPERT_SETTING, setting.expert());
-        addSettingRow(parent, setting.title(), setting.help(), input);
-        bindings.add(new ApplicationSettingBinding<>(setting, current, display));
+            ApplicationSettingBinding<Value> binding, JComponent input) {
+        addSettingRow(parent, binding.id(), binding.title(), binding.help(), binding.expert(), input);
+        bindings.add(binding);
     }
 
     /** Adds a typed boolean row using the same model later shared with the Overview analysis switch. */
@@ -1457,14 +1464,12 @@ public class DetectionConfigurationPanel extends JPanel {
     private <Value> void addTypedBinding(JPanel parent, DetectionSetting<Value> setting, JComponent input,
             java.util.function.Supplier<Value> current, java.util.function.Consumer<Value> display) {
         registerTypedBinding(setting, input, current, display);
-        addSettingRow(parent, setting.title(), setting.help(), input);
+        addSettingRow(parent, setting.id(), setting.title(), setting.help(), setting.expert(), input);
     }
 
     /** Registers one typed engine binding and its numeric editor for rule-driven alignment. */
     private <Value> void registerTypedBinding(DetectionSetting<Value> setting, JComponent input,
             java.util.function.Supplier<Value> current, java.util.function.Consumer<Value> display) {
-        input.putClientProperty(SettingRow.SETTING_ID, setting.id());
-        input.putClientProperty(SettingRow.EXPERT_SETTING, setting.expert());
         typedBindings.add(new DetectionSettingBinding<>(setting, current, display));
         if (input instanceof JSpinner spinner) {
             detectionInputs.put(setting.id(), spinner);
@@ -1472,12 +1477,12 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     /** Adds a setting row (title, description, input and reset button) and registers it with the navigator. */
-    private void addSettingRow(JPanel parent, String title, String description, JComponent input) {
+    private void addSettingRow(JPanel parent, String id, String title, String description, boolean expert, JComponent input) {
         JLabel titleLabel = new JLabel(title);
         JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(4), 0));
         inputWrapper.add(input);
         JPanel row = new SettingsRowPanel(titleLabel, description, inputWrapper);
-        SettingRow setting = new SettingRow(parent, row, titleLabel, title, description, input);
+        SettingRow setting = new SettingRow(parent, row, titleLabel, id, title, description, expert, input);
         inputWrapper.add(setting.resetButton());
         parent.add(row);
         settingRows.add(setting);
@@ -1494,7 +1499,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private List<String> applySettingsToMemory() {
         boolean wasSuppressed = suppressAutoApply;
         suppressAutoApply = true;
-        List<String> adjustments = List.of();
+        List<String> adjustments;
         try {
             commitAllSpinners();
             adjustments = normalizeDependentSpinners();
@@ -1504,9 +1509,6 @@ public class DetectionConfigurationPanel extends JPanel {
             tuningBindings.forEach(ApplicationSettingBinding::apply);
             reportBindings.forEach(ApplicationSettingBinding::apply);
             visualizationBindings.forEach(ApplicationSettingBinding::apply);
-
-        } catch (Exception ex) {
-            LOGGER.log(Level.WARNING, "Error applying settings to memory", ex);
         } finally {
             suppressAutoApply = wasSuppressed;
         }

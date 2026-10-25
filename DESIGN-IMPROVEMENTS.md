@@ -14,7 +14,7 @@ A fresh review of the whole application (about 50,000 lines of main code and 17,
 
 1. **State with more than one owner.** The rendering preferences and the session's frame list each lived in two or three places. Each copy then needed machinery to stay in step: write barriers, version checks, rollback, static caches and "capture" steps. Giving each piece of state one owner removes that machinery rather than adding to it. Both now have one owner (SP-02 and SP-04, 2026-10-24).
 2. **Layers kept for compatibility after compatibility stopped mattering.** The libraries are now developed together with the application, and old signatures need not survive. Still left over are chains of overloads that exist for older callers.
-3. **Mechanisms heavier than their use.** Examples were two near-identical write queues for small JSON files, now one (SP-09), and a binding framework whose application side wrote to global static fields. The statics are gone (SP-02); the bindings remain (SP-07).
+3. **Mechanisms heavier than their use.** Examples were two near-identical write queues for small JSON files, now one (SP-09), and a binding framework whose application side wrote to global static fields, now direct bindings without client-property indirection (SP-02 and SP-07).
 
 Line counts alone are not a problem. Large report section writers and panels are acceptable when they read top to bottom as one responsibility.
 
@@ -24,17 +24,16 @@ Line counts alone are not a problem. Large report section writers and panels are
 - **Commands** ([CommandAvailability](src/main/java/eu/startales/spacepixels/gui/CommandAvailability.java), `CommandAction`): pure rules over a `Facts` record, one Swing `Action` per command, re-checked when invoked. This is a clear and testable pattern; use it for any new command.
 - **Session handover** (`SessionOwner.replace(expected, candidate)`): simple, explicit and tested without windows.
 - **Viewers** (`SequenceViewerFrame` template method, newest request wins, `FrameView`, `StretchControls`, `ViewerSupport`): good reuse by composition.
-- **Typed detection setting definitions** (one table of `DetectionSetting` per settings page): explicit and searchable. Keep them; see SP-07 for the application-side bindings.
+- **Typed detection setting definitions** (one table of `DetectionSetting` per settings page): explicit and searchable.
 - **Staged file publication** (`StagedFile`, `AtomicReportFile`), and **boundary tests** (`DependencyRulesTest`, the opt-in GUI mechanics suite).
 - **The public API** (`SpacePixelsPipelineRequest` / `Result`, `DefaultSpacePixelsPipelineApi`): a request object in, a result object out, with no GUI.
 
 ### Recommended changes
 
-**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10 and SP-13 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-08, SP-11, SP-16 and SP-19. Their proposals and issue reviews below still apply.
+**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10, SP-13, SP-06, SP-05 and SP-07 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-08, SP-11, SP-16 and SP-19. Their proposals and issue reviews below still apply.
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
-| [SP-07](#sp-07-fail-fast-settings-apply-and-direct-setting-row-wiring) | Fail-fast settings apply and direct setting-row wiring | Low | Small |
 | [SP-08](#sp-08-one-report-entry-point-and-a-complete-report-context) | One report entry point and a complete report context | Medium | Medium |
 | [SP-11](#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Fewer FITS helper classes; immutable frame metadata | Low | Medium |
 | [SP-14](#sp-14-package-names-that-say-what-they-hold) | Package names that say what they hold | Low | Medium, mechanical |
@@ -45,28 +44,12 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 **Suggested order.**
 
-1. SP-08, then SP-07. The catalogue controller (SP-06), panel collaborators (SP-05), shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
+1. SP-08. The catalogue controller (SP-06), panel collaborators (SP-05), direct settings row wiring (SP-07), shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
 2. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
 Keep dependency maintenance (SP-21 and SP-22) separate from refactorings, according to each item's timing.
 
 Refactorings are intended to preserve behaviour. Evaluate the exceptions raised by the issue reviews, including SP-19's viewer lifetime and settings policy, as explicit behaviour decisions. Check implementation changes with the relevant unit and GUI mechanics tests. Items that touch detection or reports also need byte-identical deterministic `report-data.json`, `detection_config.json` and CSV content on the reference datasets, using the normalization and comparison method in DEVELOPER.md.
-
-### SP-07. Fail-fast settings apply and direct setting-row wiring
-
-**Problem.**
-- `applySettingsToMemory` catches every `Exception`, prints it with `System.err` and continues, which could allow a run or save (`checkedSettings`) to proceed with a partially applied configuration.
-- `SettingRow` receives its field ID and expert flag indirectly through `JComponent` client properties (`SETTING_ID`, `EXPERT_SETTING`) set just before `addSettingRow`.
-- `ApplicationSetting` is a 40-line record used only inline when constructing `ApplicationSettingBinding` for 11 controls in `DetectionConfigurationPanel`.
-
-**Proposal (reduced scope, 2026-10-25).**
-- Remove the `catch (Exception)` in `applySettingsToMemory` so binding or alignment failures surface immediately and prevent a run or save from proceeding with half-applied settings.
-- Pass `id` and `expert` directly to `SettingRow` and `addSettingRow` instead of passing them through `JComponent` client properties.
-- Fold `ApplicationSetting` into `ApplicationSettingBinding` (or inline the metadata at registration). Keep `DetectionSettingBinding` separate with its explicit `DetectionConfig` target parameter (used for `draft` pair alignment and loading from Auto-Tune / rule-aligned configs), and keep the distinct reset/revert lifecycles of `reportBindings`, `tuningBindings` and `visualizationBindings`.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- Preserve the typed `DetectionSetting` tables, hidden values, range checks, invalid-text handling, changed markers, saved baselines and pair-alignment policy.
-- Rejected from the original proposal: merging `DetectionSettingBinding` and `ApplicationSettingBinding` into one generic `SettingBinding<V>` or merging the three application binding lists, as `DetectionSettingBinding` operates on explicit `DetectionConfig` instances and the binding groups have different `Load Defaults` versus `Revert` lifecycles.
 
 ### SP-08. One report entry point and a complete report context
 

@@ -20,8 +20,6 @@ import java.util.function.BooleanSupplier;
  */
 final class SettingRow {
     static final String PRESET_CHOOSER = "spacepixels.presetChooser";
-    static final String SETTING_ID = "spacepixels.settingId";
-    static final String EXPERT_SETTING = "spacepixels.expertSetting";
 
     final JPanel parent;
     final JPanel row;
@@ -31,6 +29,7 @@ final class SettingRow {
     final JComponent input;
 
     private final JLabel titleLabel;
+    private final Boolean declaredExpert;
     private final Color normalTitleColor;
     private final JButton resetButton = new JButton("Reset");
     private Object savedValue;
@@ -42,14 +41,21 @@ final class SettingRow {
     /** Whether the row applies at all, for settings that only matter while another switch is on. */
     BooleanSupplier applies = () -> true;
 
-    /** Binds one row to its control; the row owns its reset action and accessible saved-state description. */
+    /** Binds one row to its control when the title serves as the identifier and the section determines expert visibility. */
     SettingRow(JPanel parent, JPanel row, JLabel titleLabel, String title, String description, JComponent input) {
+        this(parent, row, titleLabel, title, title, description, null, input);
+    }
+
+    /** Binds one row to its control with explicit setting identity and expert visibility. */
+    SettingRow(JPanel parent, JPanel row, JLabel titleLabel, String id, String title, String description,
+            Boolean expert, JComponent input) {
         this.parent = parent;
         this.row = row;
         this.titleLabel = titleLabel;
         this.title = title;
-        this.id = input.getClientProperty(SETTING_ID) instanceof String settingId ? settingId : title;
+        this.id = id != null ? id : title;
         this.description = description;
+        this.declaredExpert = expert;
         this.input = input;
         this.normalTitleColor = titleLabel.getForeground();
 
@@ -115,8 +121,7 @@ final class SettingRow {
 
     /** Definitions own visibility even if moved under another section; standalone rows may inherit their section. */
     boolean isExpert() {
-        Object declared = input.getClientProperty(EXPERT_SETTING);
-        return declared instanceof Boolean expert ? expert : section != null && section.expert;
+        return declaredExpert != null ? declaredExpert : section != null && section.expert;
     }
 
     void resetToSaved() {
