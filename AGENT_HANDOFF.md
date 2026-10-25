@@ -1,13 +1,13 @@
 # Agent Handoff
 
 - Owner: B
-- Phase: SELECT
-- Task: -
+- Phase: IMPLEMENT
+- Task: SP-08B
 - Implementer: B
 - Reviewer: C
-- Base: -
+- Base: 428776a06107b6f6fa4efe24315c0748ca109446
 - Implementation: -
 - Fix rounds: 0/2
-- Tests: SP-08A review rerun PASS: 100 report/failure/isolation tests, 0 failures. Reference comparison not rerun.
+- Tests: -
 - Quota visibility: UNKNOWN
-- Next action: SP-08A is approved. Agent B selects the next eligible task. A and C remain read-only.
+- Next action: Agent B moves report map rendering into ReportMaps and formatting helpers into ReportFormat, without changing report output. A and C remain read-only.
