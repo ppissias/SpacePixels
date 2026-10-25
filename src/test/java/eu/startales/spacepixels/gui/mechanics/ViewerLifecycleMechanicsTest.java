@@ -62,8 +62,66 @@ public class ViewerLifecycleMechanicsTest extends MechanicsTestCase {
     }
 
     @Test
-    public void disposingAViewerDropsThePendingResultAndDetachesListeners() throws Exception {
+    public void closingAViewerWithDisposeOnCloseDropsPendingResultAndDetachesListeners() throws Exception {
         checkClosingWhilePreparing(true);
+    }
+
+    @Test
+    public void disposingARegisteredViewerDirectlyWhilePreparingCancelsPendingResultAndDetachesListeners() throws Exception {
+        importSyntheticSequence();
+        StretchPanel stretch = application().getStretchPanel();
+        FitsFileInformation[] files = application().getSession().getFiles();
+        var catalogue = GuiActionRunner.execute(() -> application().getSession().getSkyCatalogue());
+        int catalogueListeners = GuiActionRunner.execute(() -> ViewerLifecycleProbe.catalogueListenerCount(catalogue));
+        int stretchListeners = GuiActionRunner.execute(() -> stretchListeners(stretch));
+
+        ViewerLifecycleProbe viewer = GuiActionRunner.execute(() -> {
+            ViewerLifecycleProbe created = new ViewerLifecycleProbe(true);
+            created.setSkyCatalogueModel(catalogue);
+            created.open(files, stretch);
+            application().getViewers().register(created);
+            return created;
+        });
+
+        try {
+            assertTrue(viewer.awaitStarted());
+            assertTrue(GuiActionRunner.execute(() -> ViewerLifecycleProbe.catalogueListenerCount(catalogue)) > catalogueListeners);
+            assertTrue(GuiActionRunner.execute(() -> stretchListeners(stretch)) > stretchListeners);
+            assertTrue(GuiActionRunner.execute(() -> application().getViewers().isRegistered(viewer)));
+
+            GuiActionRunner.execute(() -> {
+                viewer.dispose();
+                viewer.dispose();
+            });
+
+            robot().waitForIdle();
+
+            GuiActionRunner.execute(() -> {
+                assertEquals(1, viewer.releaseCount());
+                assertFalse(viewer.hasFrameReferences());
+                assertFalse(viewer.isDisplayable());
+                assertFalse(viewer.isShowing());
+                assertEquals(catalogueListeners, ViewerLifecycleProbe.catalogueListenerCount(catalogue));
+                assertEquals(stretchListeners, stretchListeners(stretch));
+                assertEquals(0, application().getViewers().count());
+                assertFalse(application().getViewers().isRegistered(viewer));
+            });
+
+            viewer.finishPreparation();
+            assertTrue(viewer.awaitFinished());
+            robot().waitForIdle();
+
+            GuiActionRunner.execute(() -> {
+                assertFalse(viewer.showsObsoleteResult());
+                assertFalse(viewer.hasFrameReferences());
+                assertEquals(1, viewer.releaseCount());
+                assertEquals(0, application().getViewers().count());
+            });
+            window().button(VisibleText.button("Detect Moving Targets")).requireEnabled();
+        } finally {
+            viewer.finishPreparation();
+            GuiActionRunner.execute(() -> viewer.dispose());
+        }
     }
 
     private void checkClosingWhilePreparing(boolean disposeOnClose) throws Exception {

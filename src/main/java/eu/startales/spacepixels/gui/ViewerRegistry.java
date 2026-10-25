@@ -49,7 +49,13 @@ public final class ViewerRegistry {
             WindowListener listener = new WindowAdapter() {
                 @Override
                 public void windowClosed(WindowEvent e) {
-                    unregister(viewer);
+                    try {
+                        viewer.closeForSessionChange();
+                    } catch (Exception ex) {
+                        logger.log(Level.WARNING, "Error closing session viewer on window closed: " + viewer, ex);
+                    } finally {
+                        unregister(viewer);
+                    }
                 }
             };
             window.addWindowListener(listener);
@@ -97,11 +103,12 @@ public final class ViewerRegistry {
     public void closeAll() {
         List<SessionViewer> snapshot = new ArrayList<>(viewers);
         for (SessionViewer viewer : snapshot) {
-            unregister(viewer);
             try {
                 viewer.closeForSessionChange();
             } catch (Exception e) {
                 logger.log(Level.WARNING, "Error closing session viewer: " + viewer, e);
+            } finally {
+                unregister(viewer);
             }
         }
     }

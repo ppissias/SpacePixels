@@ -115,6 +115,8 @@ public class ViewerRegistryTest {
 
         onEdt(() -> ref[0].dispose());
         onEdt(() -> {
+            assertTrue(ref[0].closed.get());
+            assertEquals(1, ref[0].closeCalls.get());
             assertFalse(registry.isRegistered(ref[0]));
             assertEquals(0, registry.count());
         });

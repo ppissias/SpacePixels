@@ -270,6 +270,12 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         close();
     }
 
+    @Override
+    public void dispose() {
+        close();
+        super.dispose();
+    }
+
     void close() {
         boolean active = open || loading;
         release();
@@ -278,7 +284,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
             stretch = null;
         }
         setVisible(false);
-        if (active) {
+        if (active && onClose != null) {
             onClose.run();
         }
     }

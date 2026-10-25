@@ -84,6 +84,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
 
     private StretchControls stretch;
     private boolean open;
+    private boolean cleanedUp = true;
     private int current;
     /** The frame whose result is shown, or -1. */
     private int shownIndex = -1;
@@ -307,6 +308,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         cursorReadout.reset(files, sky::solutionFor);
         sky.attach(files);
         open = true;
+        cleanedUp = false;
         shown = null;
         shownIndex = -1;
         view.clear();
@@ -321,10 +323,29 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         goTo(Math.max(0, Math.min(index, frameCount() - 1)));
     }
 
-    private void close() {
-        if (!open) {
+    @Override
+    public void dispose() {
+        cleanup();
+        super.dispose();
+    }
+
+    void close() {
+        if (!open && cleanedUp) {
             return;
         }
+        cleanup();
+        if (disposeOnClose) {
+            dispose();
+        } else {
+            setVisible(false);
+        }
+    }
+
+    private void cleanup() {
+        if (cleanedUp && !open && stretch == null && worker == null) {
+            return;
+        }
+        cleanedUp = true;
         open = false;
         if (worker != null) {
             worker.cancel(false);
@@ -341,11 +362,6 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
             stretch = null;
         }
         released();
-        if (disposeOnClose) {
-            dispose();
-        } else {
-            setVisible(false);
-        }
     }
 
     // ==========================================
@@ -441,7 +457,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
                     return;
                 }
                 worker = null;
-                if (!open) {
+                if (!open || !isDisplayable()) {
                     return;
                 }
                 if (index != current || refresh != refreshes) {
@@ -472,6 +488,9 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
     }
 
     private void show(int index, Result result) {
+        if (!open || !isDisplayable()) {
+            return;
+        }
         // The metadata can have been replaced (a WCS write) while the frame was prepared: show the current one.
         FitsFileInformation currentInfo = result.frame == null ? null : infoOf(index);
         if (currentInfo != null && result.frame.getInfo() != currentInfo && result.frame.getInfo() != null
