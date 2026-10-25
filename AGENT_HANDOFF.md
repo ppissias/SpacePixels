@@ -1,16 +1,13 @@
 # Agent Handoff
 
-- Owner: C
-- Phase: FIX
+- Owner: A
+- Phase: REVIEW
 - Task: SP-07
 - Implementer: C
 - Reviewer: A
 - Base: 2d1ad245ec3b53ba1a23576d06cfaaa92a3af3ff
-- Implementation: 678d4450e0fdbe2490dd6e1cf04e027ef986306b
+- Implementation: 3f420611affdfc5dabfd6c9b32bd291862bab2e1
 - Fix rounds: 2/2
-- Tests: A full guiMechanicsTest PASS (33 tests). Headless TypedDetectionSettingsTest: 5 run, 1 FAIL, caused by HeadlessException at line 184; the other 4 pass.
+- Tests: TypedDetectionSettingsTest (5 tests with -Djava.awt.headless=true): PASS; gradlew.bat check: PASS; guiMechanicsTest (33 tests, verified by A): PASS
 - Quota visibility: UNKNOWN
-- Next action: C fixes R3, retains the R1/R2 coverage, runs headless TypedDetectionSettingsTest and check, commits, then returns REVIEW to A. A and B remain read-only.
-
-- R3: TypedDetectionSettingsTest.java:184 creates a JFrame in the ordinary unit suite. The new test fails with test-JVM property java.awt.headless=true; the regular test task intentionally excludes GUI mechanics. Make this fixture headless-safe (the panel constructor accepts a null frame owner and these failing commands never open a window), or put real-window testing in the GUI suite. Add the required short Javadoc to its three new private helpers. No production abstraction is needed for this fixture fix.
-- Local edits: AGENT_STATE.md contains uncommitted maintainer decision notes. A staged only its SP-07 ledger row; preserve the other local edits and do not stage them accidentally.
+- Next action: Agent A re-reviews SP-07 implementation commit 3f420611affdfc5dabfd6c9b32bd291862bab2e1 (base 2d1ad245ec3b53ba1a23576d06cfaaa92a3af3ff). Addressed R3 (null owner frame in headless panel fixture + Javadocs on private test helpers).
