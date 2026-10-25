@@ -188,11 +188,26 @@ public class ApplicationWindow {
             logger.warning("Live report rendering proxy is unavailable. Static report links will still work.");
         }
 
-        mainApplicationPanel = new MainApplicationPanel(this);
-        configurationApplicationPanel = new ConfigurationPanel(this);
-        stretchPanel = new StretchPanel(this);
-
-        detectionConfigurationPanel = new DetectionConfigurationPanel(ApplicationWindow.this);
+        SessionAccess sessionAccess = new SessionAccess() {
+            @Override public ProcessingSession current() { return sessions.current(); }
+            @Override public boolean isCurrent(ProcessingSession session) { return sessions.isCurrent(session); }
+            @Override public <R> JobCoordinator.OutcomeHandler<R> forCurrent(JobCoordinator.OutcomeHandler<R> handler) {
+                return (handle, outcome) -> sessions.applyIfCurrent(handle.session(), () -> handler.handle(handle, outcome));
+            }
+        };
+        mainApplicationPanel = new MainApplicationPanel(frmIpodImage, blinkFrame, jobCoordinator, sessionAccess, storage,
+                applicationSettings, new FolderImport() {
+                    @Override public void choose() { chooseAndImportFolder(); }
+                    @Override public void importFolder(File folder) { ApplicationWindow.this.importFolder(folder); }
+                }, this::setSessionTabsEnabled);
+        configurationApplicationPanel = new ConfigurationPanel(applicationSettings, sessionAccess, mainApplicationPanel,
+                storage, () -> closing);
+        stretchPanel = new StretchPanel(sessionAccess, mainApplicationPanel, stretch -> new StretchedSequenceFrame(this, stretch));
+        detectionConfigurationPanel = new DetectionConfigurationPanel(sessionAccess, jobCoordinator, storage, frmIpodImage,
+                () -> closing, () -> tabbedPane.setSelectedComponent(detectionConfigurationPanel),
+                mainApplicationPanel, mainApplicationPanel);
+        mainApplicationPanel.attach(stretchPanel, detectionConfigurationPanel,
+                () -> tabbedPane.setSelectedComponent(detectionConfigurationPanel));
 
         // In the order the panels used to hear of a new session.
         addSessionListener(mainApplicationPanel::sessionChanged);

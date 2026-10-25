@@ -290,7 +290,7 @@ Owns:
 Responsibilities:
 
 - start the application
-- wire the four top-level tabs
+- wire the four top-level tabs, passing each panel its collaborators (session access, jobs, frame list, settings readout) rather than the window
 - launch import (the Import Aligned Frames… button in the Main tab or a folder dropped on the window; there is no menu bar), and show the "new version" notice in the Main tab's status bar
 - enable tabs after successful import
 - install the session an import job returns, and tell the panels through their `SessionListener`s

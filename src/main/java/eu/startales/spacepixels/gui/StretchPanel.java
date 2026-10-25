@@ -30,7 +30,9 @@ import java.util.prefs.Preferences;
  * linked, zoomable preview of the whole frame. The settings are remembered between sessions.
  */
 public class StretchPanel extends JPanel {
-    private final ApplicationWindow mainAppWindow;
+    private final SessionAccess sessions;
+    private final FrameList frames;
+    private final FullSizeViewer fullSize;
 
     // Controls
     private final JSlider stretchSlider = new JSlider();
@@ -66,8 +68,11 @@ public class StretchPanel extends JPanel {
 
     private StretchedSequenceFrame sequenceFrame;
 
-    public StretchPanel(ApplicationWindow mainAppWindow) {
-        this.mainAppWindow = mainAppWindow;
+    /** The frame list is the main panel. The full-size viewer is created by the window. */
+    public StretchPanel(SessionAccess sessions, FrameList frames, FullSizeViewer fullSize) {
+        this.sessions = sessions;
+        this.frames = frames;
+        this.fullSize = fullSize;
 
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(10, 20, 20, 20));
@@ -132,8 +137,8 @@ public class StretchPanel extends JPanel {
         // ==========================================
         previousButton.setToolTipText("Preview the previous frame.");
         nextButton.setToolTipText("Preview the next frame.");
-        previousButton.addActionListener(e -> mainAppWindow.getMainApplicationPanel().selectFrameOffset(-1));
-        nextButton.addActionListener(e -> mainAppWindow.getMainApplicationPanel().selectFrameOffset(1));
+        previousButton.addActionListener(e -> frames.selectFrameOffset(-1));
+        nextButton.addActionListener(e -> frames.selectFrameOffset(1));
         frameLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
         JLabel hint = new JLabel("Scroll to zoom, drag to pan, double-click to fit; both previews move together.");
         hint.setForeground(UIManager.getColor("Label.disabledForeground"));
@@ -168,7 +173,7 @@ public class StretchPanel extends JPanel {
         // LISTENERS
         // ==========================================
         stretchCheckbox.addItemListener(e -> {
-            mainAppWindow.getMainApplicationPanel().refreshCommands();
+            frames.refreshCommands();
         });
         displayStretchCheckbox.addItemListener(e -> {
             updateDisplayControls();
@@ -196,7 +201,7 @@ public class StretchPanel extends JPanel {
                 return;
             }
             if (isShowing()) {
-                mainAppWindow.getMainApplicationPanel().selectFirstFileIfNoneSelected();
+                frames.selectFirstFileIfNoneSelected();
                 updateFrameLabel();
                 triggerPreviewUpdate();
             } else {
@@ -335,9 +340,8 @@ public class StretchPanel extends JPanel {
     }
 
     private void updateFrameLabel() {
-        MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
-        int[] selection = mainPanel == null ? new int[]{-1, 0} : mainPanel.frameSelection();
-        FitsFileInformation selected = mainPanel == null ? null : mainPanel.getSelectedFileInformation();
+        int[] selection = frames.frameSelection();
+        FitsFileInformation selected = frames.getSelectedFileInformation();
         previousButton.setEnabled(selection[0] > 0);
         nextButton.setEnabled(selection[0] >= 0 && selection[0] < selection[1] - 1);
         frameLabel.setText(selection[0] < 0 || selected == null ? "No frame selected"
@@ -362,8 +366,8 @@ public class StretchPanel extends JPanel {
     }
 
     private void executePreviewTask() {
-        FitsFileInformation selected = mainAppWindow.getMainApplicationPanel().getSelectedFileInformation();
-        if (selected == null || mainAppWindow.getSession() == null) {
+        FitsFileInformation selected = frames.getSelectedFileInformation();
+        if (selected == null || sessions.current() == null) {
             clearPreviews("Import frames and select one to preview it");
             return;
         }
@@ -418,12 +422,12 @@ public class StretchPanel extends JPanel {
     }
 
     private void openFullSize() {
-        var session = mainAppWindow.getSession();
+        var session = sessions.current();
         FitsFileInformation[] files = session == null ? null : session.getFiles();
         if (files == null || files.length == 0) {
             return;
         }
-        FitsFileInformation selectedFile = mainAppWindow.getMainApplicationPanel().getSelectedFileInformation();
+        FitsFileInformation selectedFile = frames.getSelectedFileInformation();
         int startIndex = 0;
         if (selectedFile != null) {
             for (int i = 0; i < files.length; i++) {
@@ -434,7 +438,7 @@ public class StretchPanel extends JPanel {
             }
         }
         if (sequenceFrame == null) {
-            sequenceFrame = new StretchedSequenceFrame(mainAppWindow, this);
+            sequenceFrame = fullSize.create(this);
         }
         sequenceFrame.openSequence(files, startIndex);
     }

@@ -11,6 +11,8 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.ApplicationSettings;
+import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.util.AstrometryNetAccount;
 import eu.startales.spacepixels.util.FitsFileInformation;
 
@@ -25,6 +27,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -43,7 +46,11 @@ public class ConfigurationPanel extends JPanel {
     static final String[] LONGITUDE_KEYS = {"SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS"};
 
     // link to main window
-    private final ApplicationWindow mainAppWindow;
+    private final ApplicationSettings applicationSettings;
+    private final SessionAccess sessions;
+    private final FrameList frames;
+    private final ApplicationStorage storage;
+    private final BooleanSupplier closing;
     private final AstapInstallationCheck astapChecks;
     private final JButton astapCheckButton = new JButton("Check");
     private final JButton saveButton = new JButton("Save");
@@ -84,8 +91,14 @@ public class ConfigurationPanel extends JPanel {
     /** True while the fields are filled from the configuration, so the fill is not treated as an edit. */
     private boolean loading;
 
-    public ConfigurationPanel(ApplicationWindow mainAppWindow) {
-        this.mainAppWindow = mainAppWindow;
+    /** Astrometry settings. {@code frames} supplies the selected frame for "fill site from the header". */
+    public ConfigurationPanel(ApplicationSettings applicationSettings, SessionAccess sessions, FrameList frames,
+            ApplicationStorage storage, BooleanSupplier closing) {
+        this.applicationSettings = applicationSettings;
+        this.sessions = sessions;
+        this.frames = frames;
+        this.storage = storage;
+        this.closing = closing;
         astapChecks = new AstapInstallationCheck(this::astapChecked, this::astapCheckFailed);
 
         setLayout(new BorderLayout());
@@ -289,7 +302,7 @@ public class ConfigurationPanel extends JPanel {
 
             private void changed() {
                 String problem = validator.apply(field.getText().trim());
-                if (!loading && problem == null && mainAppWindow.getApplicationSettings() != null) {
+                if (!loading && problem == null && applicationSettings != null) {
                     apply.accept(field.getText().trim());
                     footerMessageLabel.setText(" ");
                 }
@@ -362,7 +375,7 @@ public class ConfigurationPanel extends JPanel {
     private String headerNote(String[] keys, String fieldText) {
         String[] header = headerValue(keys);
         if (header == null) {
-            if (mainAppWindow.getSession() == null) {
+            if (sessions.current() == null) {
                 return " ";
             }
             return fieldText.isEmpty() ? "Not set, and no site in the FITS headers." : "✓ Used for this session (no site in the FITS headers).";
@@ -392,7 +405,7 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private void fillSiteFromHeader() {
-        FitsFileInformation selected = mainAppWindow.getMainApplicationPanel().getSelectedFileInformation();
+        FitsFileInformation selected = frames.getSelectedFileInformation();
         FitsFileInformation[] files = selected != null ? new FitsFileInformation[]{selected} : importedFiles();
         String lat = null;
         String lon = null;
@@ -434,17 +447,17 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private void saveDefaults(boolean showError) {
-        if (mainAppWindow.isClosing()) return;
+        if (closing.getAsBoolean()) return;
         AppConfig snapshot = config().copy();
         long expectedVersion = ++saveVersion;
         saveButton.setEnabled(false);
         footerMessageLabel.setText("Saving application defaults...");
         starDepthStatus.setText("Saving...");
-        mainAppWindow.getStorage().submit("Application defaults", () -> {
-            mainAppWindow.getApplicationSettings().save(snapshot);
+        storage.submit("Application defaults", () -> {
+            applicationSettings.save(snapshot);
             return null;
         }).whenComplete((ignored, failure) -> EventQueue.invokeLater(() -> {
-            if (mainAppWindow.isClosing()) return;
+            if (closing.getAsBoolean()) return;
             if (failure == null) {
                 savedObservatoryCode = nullToEmpty(snapshot.observatoryCode);
                 savedLat = nullToEmpty(snapshot.siteLat);
@@ -543,7 +556,7 @@ public class ConfigurationPanel extends JPanel {
 
     /** Logs in to Astrometry.net with the chosen account on a worker thread. Nothing is uploaded. */
     private void checkAstrometryNet() {
-        if (mainAppWindow.isClosing() || astrometryCheck != null) {
+        if (closing.getAsBoolean() || astrometryCheck != null) {
             return;
         }
         AppConfig account = config().copy();
@@ -559,7 +572,7 @@ public class ConfigurationPanel extends JPanel {
 
             @Override
             protected void done() {
-                if (astrometryCheck != this || mainAppWindow.isClosing()) {
+                if (astrometryCheck != this || closing.getAsBoolean()) {
                     return;
                 }
                 astrometryCheck = null;
@@ -618,14 +631,14 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private void startAstapCheck(String path, boolean select) {
-        if (mainAppWindow.isClosing()) return;
+        if (closing.getAsBoolean()) return;
         astapCheckButton.setEnabled(false);
         showAstapStatus(true, "Checking ASTAP installation...");
         astapChecks.check(path, select);
     }
 
     private void astapChecked(AstapInstallationCheck.Request request, AstapInstallationCheck.Result result) {
-        if (mainAppWindow.isClosing()) return;
+        if (closing.getAsBoolean()) return;
         astapCheckButton.setEnabled(true);
         if (request.select()) {
             config().astapExecutablePath = request.path();
@@ -637,7 +650,7 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private void astapCheckFailed(AstapInstallationCheck.Request request, Throwable failure) {
-        if (mainAppWindow.isClosing()) return;
+        if (closing.getAsBoolean()) return;
         astapCheckButton.setEnabled(true);
         showAstapStatus(false, "Cannot check ASTAP: " + failure.getMessage());
         if (request.select()) {
@@ -680,7 +693,7 @@ public class ConfigurationPanel extends JPanel {
     // ==========================================
 
     private AppConfig config() {
-        return mainAppWindow.getApplicationSettings().getConfig();
+        return applicationSettings.getConfig();
     }
 
     void sessionChanged() {
@@ -689,7 +702,7 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private FitsFileInformation[] importedFiles() {
-        var session = mainAppWindow.getSession();
+        var session = sessions.current();
         return session == null ? null : session.getFiles();
     }
 

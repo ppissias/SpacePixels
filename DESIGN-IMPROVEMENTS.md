@@ -30,11 +30,10 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 ### Recommended changes
 
-**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10 and SP-13 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-05, SP-08, SP-11, SP-16 and SP-19. Their proposals and issue reviews below still apply.
+**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10 and SP-13 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-08, SP-11, SP-16 and SP-19. Their proposals and issue reviews below still apply.
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
-| [SP-05](#sp-05-give-panels-their-collaborators-not-the-whole-window) | Give panels their collaborators, not the whole window | Medium | Medium |
 | [SP-07](#sp-07-fail-fast-settings-apply-and-direct-setting-row-wiring) | Fail-fast settings apply and direct setting-row wiring | Low | Small |
 | [SP-08](#sp-08-one-report-entry-point-and-a-complete-report-context) | One report entry point and a complete report context | Medium | Medium |
 | [SP-11](#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Fewer FITS helper classes; immutable frame metadata | Low | Medium |
@@ -46,33 +45,12 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 **Suggested order.**
 
-1. SP-05. The catalogue controller (SP-06), shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
-2. Then SP-08, then SP-07.
-3. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
+1. SP-08, then SP-07. The catalogue controller (SP-06), panel collaborators (SP-05), shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
+2. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
 Keep dependency maintenance (SP-21 and SP-22) separate from refactorings, according to each item's timing.
 
 Refactorings are intended to preserve behaviour. Evaluate the exceptions raised by the issue reviews, including SP-19's viewer lifetime and settings policy, as explicit behaviour decisions. Check implementation changes with the relevant unit and GUI mechanics tests. Items that touch detection or reports also need byte-identical deterministic `report-data.json`, `detection_config.json` and CSV content on the reference datasets, using the normalization and comparison method in DEVELOPER.md.
-
-### SP-05. Give panels their collaborators, not the whole window
-
-**Problem.** Every panel receives the whole `ApplicationWindow` and reaches through its getters. The counts are from the review of 2026-10-23; SP-04 moved calls from `getImageProcessing` to `getSession`, and the totals are about the same:
-- `MainApplicationPanel` does so 82 times, including `getSession` 26 times, `getStretchPanel` 12 times and `getDetectionConfigurationPanel` 7 times.
-- `DetectionConfigurationPanel` does so 40 times, including `getMainApplicationPanel` 7 times.
-- `StretchPanel` calls `getMainApplicationPanel` 7 times.
-
-Panels call each other through the window, so `DetectionConfigurationPanel` and `MainApplicationPanel` depend on each other. For example, `publishActiveSettings` pushes eight spinner values, as positional parameters, into `MainApplicationPanel.showActiveDetectionSettings`.
-
-**Proposal.**
-- Each panel's constructor takes only what it uses: a session supplier, the `JobCoordinator`, the shared stretch settings, and narrow listener interfaces such as "settings changed" or "selection changed".
-- The window creates the panels and wires them together, and nothing else.
-- The settings page publishes the current `DetectionConfig`, not eight numbers.
-
-**Benefit.** Each panel's dependencies are visible in its constructor. There are no cycles between panels, and smaller parts can be tested.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- Prefer collaborators and listeners with specific responsibilities; replacing the window parameter with a generic context exposing the same getters would preserve the coupling.
-- A published `DetectionConfig` is mutable. Define whether listeners receive a snapshot or a borrowed read-only view, keep UI notifications on the EDT, and specify listener detachment. A session supplier is appropriate for UI commands, but admitted workers must retain their captured session and settings.
 
 ### SP-07. Fail-fast settings apply and direct setting-row wiring
 

@@ -16,7 +16,9 @@ import eu.startales.spacepixels.util.DetectionOverlays;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.IterativeDetectionRequest;
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.config.DetectionRunOptions;
+import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.util.StretchAlgorithm;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.SessionReports;
@@ -42,12 +44,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.prefs.Preferences;
 
 
-public class MainApplicationPanel extends JPanel {
+public class MainApplicationPanel extends JPanel implements ActiveSettingsReadout, FrameList {
 
     private static final Logger LOGGER = Logger.getLogger(MainApplicationPanel.class.getName());
 
@@ -56,8 +59,18 @@ public class MainApplicationPanel extends JPanel {
             + " borderColor: $Button.default.borderColor; margin: 6,16,6,16";
     private static final Color LINK_COLOR = new Color(120, 180, 255);
 
-    //link to main window
-    private final ApplicationWindow mainAppWindow;
+    private final JFrame windowFrame;
+    private final BlinkFrame blink;
+    private final JobCoordinator jobs;
+    private final SessionAccess sessions;
+    private final ApplicationStorage storage;
+    private final ApplicationSettings applicationSettings;
+    private final FolderImport folderImport;
+    private final Consumer<Boolean> sessionTabs;
+    /** The stretch and detection panels, wired once before the window is shown. */
+    private StretchPanel stretch;
+    private DetectionConfigurationPanel detectionSettings;
+    private Runnable showDetectionSettings;
 
     // --- NEW: PROGRESS DIALOG ---
     private final ProcessingProgressDialog progressDialog;
@@ -175,15 +188,26 @@ public class MainApplicationPanel extends JPanel {
 
     private DetectionSequenceFrame detectionSequenceFrame;
 
-    public MainApplicationPanel(ApplicationWindow mainAppWindow) {
-        this.mainAppWindow = mainAppWindow;
+    /**
+     * Builds the main panel from the window's session, jobs and import. The stretch and detection panels are attached
+     * afterwards; they do not exist yet.
+     */
+    public MainApplicationPanel(JFrame windowFrame, BlinkFrame blink, JobCoordinator jobs, SessionAccess sessions,
+            ApplicationStorage storage, ApplicationSettings applicationSettings, FolderImport folderImport,
+            Consumer<Boolean> sessionTabs) {
+        this.windowFrame = windowFrame;
+        this.blink = blink;
+        this.jobs = jobs;
+        this.sessions = sessions;
+        this.storage = storage;
+        this.applicationSettings = applicationSettings;
+        this.folderImport = folderImport;
+        this.sessionTabs = sessionTabs;
 
-        // --- NEW: PROGRESS DIALOG INITIALIZATION ---
-        // Pass the main app frame so the dialog knows who to lock and where to center itself
-        this.progressDialog = new ProcessingProgressDialog((JFrame) mainAppWindow.getFrame());
+        this.progressDialog = new ProcessingProgressDialog(windowFrame);
         restoreLiveViewPreference();
-        mainAppWindow.getBlinkFrame().setOnClose(this::blinkWindowClosed);
-        mainAppWindow.getJobCoordinator().setListener(new JobCoordinator.Listener() {
+        blink.setOnClose(this::blinkWindowClosed);
+        jobs.setListener(new JobCoordinator.Listener() {
             @Override
             public void jobStarted(JobHandle handle) {
                 JobTexts texts = JobTexts.of(handle.kind());
@@ -200,7 +224,7 @@ public class MainApplicationPanel extends JPanel {
                 }
                 setProgressBarWorking();
                 progressDialog.beginPreview(handle.kind() == JobKind.DETECTION || handle.kind() == JobKind.ITERATIVE_DETECTION);
-                progressDialog.offerCancel(handle.kind().cancellable() ? () -> mainAppWindow.getJobCoordinator().cancel() : null);
+                progressDialog.offerCancel(handle.kind().cancellable() ? () -> jobs.cancel() : null);
                 if (texts.indeterminate()) {
                     progressDialog.showIndeterminateProgress(texts.initializing());
                 } else {
@@ -208,7 +232,7 @@ public class MainApplicationPanel extends JPanel {
                 }
                 // Shown after this call returns: the dialog is modal and would hold the click until the job ends.
                 EventQueue.invokeLater(() -> {
-                    if (mainAppWindow.getJobCoordinator().current() == handle) {
+                    if (jobs.current() == handle) {
                         progressDialog.setVisible(true);
                     }
                 });
@@ -216,7 +240,7 @@ public class MainApplicationPanel extends JPanel {
 
             @Override
             public void jobProgress(JobHandle handle, int percent, String message) {
-                if (!mainAppWindow.isCurrentSession(handle.session())) return;
+                if (!sessions.isCurrent(handle.session())) return;
                 if (JobTexts.of(handle.kind()).initializing() == null) {
                     statusLabel.setText(message);
                 } else if (progressDialog.isVisible()) {
@@ -230,7 +254,7 @@ public class MainApplicationPanel extends JPanel {
                 progressDialog.endPreview();
                 setProgressBarIdle();
                 enableControlsProcessingFinished();
-                if (!mainAppWindow.isCurrentSession(handle.session())) return;
+                if (!sessions.isCurrent(handle.session())) return;
                 statusLabel.setText(outcome instanceof JobOutcome.Cancelled<?>
                         ? handle.kind().title() + " cancelled."
                         : JobTexts.of(handle.kind()).ended());
@@ -395,8 +419,8 @@ public class MainApplicationPanel extends JPanel {
 
         // Plate Solve and Blink follow the selection through refreshWorkflowStatus.
         table.getSelectionModel().addListSelectionListener(event -> {
-            if (mainAppWindow.getSession() != null) mainAppWindow.getSession().setSelection(getSelectedFilesInformation());
-            mainAppWindow.getStretchPanel().onFrameSelectionChanged();
+            if (sessions.current() != null) sessions.current().setSelection(getSelectedFilesInformation());
+            stretch.onFrameSelectionChanged();
             refreshWorkflowStatus();
         });
 
@@ -409,6 +433,13 @@ public class MainApplicationPanel extends JPanel {
     // THE SHARED COMMANDS
     // ==========================================
 
+    /** Wires the panels created after this one. Called once on the EDT before the window is shown. */
+    void attach(StretchPanel stretch, DetectionConfigurationPanel detectionSettings, Runnable showDetectionSettings) {
+        this.stretch = stretch;
+        this.detectionSettings = detectionSettings;
+        this.showDetectionSettings = showDetectionSettings;
+    }
+
     /** The facts the shared commands are enabled from, as they are now. */
     private CommandAvailability.Facts commandFacts() {
         int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
@@ -419,10 +450,10 @@ public class MainApplicationPanel extends JPanel {
                 solved++;
             }
         }
-        JobCoordinator coordinator = mainAppWindow.getJobCoordinator();
+        JobCoordinator coordinator = jobs;
         JobHandle running = coordinator == null ? null : coordinator.current();
         boolean blinking = blinkPlaying || (running != null && running.kind() == JobKind.BLINK);
-        StretchPanel stretchPanel = mainAppWindow.getStretchPanel();
+        StretchPanel stretchPanel = stretch;
         return new CommandAvailability.Facts(frames, !containsColorImages,
                 table == null ? 0 : table.getSelectedRowCount(), selectedRow >= 0 && isSolvedRow(selectedRow), solved,
                 stretchPanel != null && stretchPanel.isStretchEnabled(), uiLocked, blinking, skyController != null && skyController.isRunning());
@@ -437,7 +468,8 @@ public class MainApplicationPanel extends JPanel {
      * the sky catalogue is fetched, its command cancels the fetch. Call it when a fact changes outside this panel,
      * such as the batch-stretch switch.
      */
-    void refreshCommands() {
+    @Override
+    public void refreshCommands() {
         for (CommandAction action : commandActions) {
             action.refresh();
         }
@@ -452,12 +484,14 @@ public class MainApplicationPanel extends JPanel {
     }
 
     /** The Detect Moving Targets command, for the Overview's button and the Ctrl+D of the settings tab. */
-    Action detectAction() {
+    @Override
+    public Action detectAction() {
         return detectAction;
     }
 
     /** The Preview Frame command, for the Overview's button. */
-    Action previewAction() {
+    @Override
+    public Action previewAction() {
         return previewAction;
     }
 
@@ -473,7 +507,7 @@ public class MainApplicationPanel extends JPanel {
             return;
         }
         progressDialog.setPreviewPreference(preferences.getBoolean(LIVE_VIEW_PREFERENCE, true), shown ->
-                mainAppWindow.getStorage().submit("Live view", () -> {
+                storage.submit("Live view", () -> {
                     preferences.putBoolean(LIVE_VIEW_PREFERENCE, shown);
                     preferences.flush();
                     return null;
@@ -482,16 +516,16 @@ public class MainApplicationPanel extends JPanel {
 
     /** Detect Moving Targets, with the detection settings as they are now; a setting with invalid text stops it. */
     private void startDetection() {
-        DetectionConfigurationPanel configuration = mainAppWindow.getDetectionConfigurationPanel();
+        DetectionConfigurationPanel configuration = detectionSettings;
         DetectionConfig settings = configuration.checkedSettings("Detect Moving Targets did not start.");
         if (settings == null) {
             return;
         }
-        ProcessingSession owner = mainAppWindow.getSession();
+        ProcessingSession owner = sessions.current();
         if (owner == null) return;
-        GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
+        GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(windowFrame);
         DetectionTask detection = new DetectionTask(owner.getFiles(), settings,
-                DetectionRunOptions.capture(mainAppWindow.getApplicationSettings().getConfig(), configuration.autoTuneMaxCandidateFrames())
+                DetectionRunOptions.capture(applicationSettings.getConfig(), configuration.autoTuneMaxCandidateFrames())
                         .withVisualization(configuration.visualizationSettings()),
                 owner.getSkyCatalogue().snapshot(),
                 summary -> reportPrompt.confirm(summary, owner.hasPlateSolvedFrame(), 50, null, settings))
@@ -505,10 +539,10 @@ public class MainApplicationPanel extends JPanel {
 
     /** Blinks the selected frames, or stops the blink that is loading or playing. */
     private void startOrStopBlink() {
-        JobHandle running = mainAppWindow.getJobCoordinator().current();
+        JobHandle running = jobs.current();
         if (blinkPlaying || (running != null && running.kind() == JobKind.BLINK)) {
             // Stop: closing the window ends the blink, or the loading, which then stops at the next frame.
-            mainAppWindow.getBlinkFrame().close();
+            blink.close();
             return;
         }
         FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
@@ -516,12 +550,12 @@ public class MainApplicationPanel extends JPanel {
             return;
         }
         AtomicBoolean stop = new AtomicBoolean();
-        BlinkFrame blinkFrame = mainAppWindow.getBlinkFrame();
+        BlinkFrame blinkFrame = blink;
         BlinkImagesTask task = new BlinkImagesTask(selectedFitsFilesInfo, stop,
                 (read, total) -> EventQueue.invokeLater(() -> blinkFrame.showLoadProgress(read, total)));
-        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.BLINK,
-                mainAppWindow.getSession(), task,
-                mainAppWindow.forCurrentSession((handle, outcome) -> blinkLoaded(selectedFitsFilesInfo, outcome)));
+        JobCoordinator.Admission admission = jobs.start(JobKind.BLINK,
+                sessions.current(), task,
+                sessions.forCurrent((handle, outcome) -> blinkLoaded(selectedFitsFilesInfo, outcome)));
         if (!admission.admitted()) {
             statusLabel.setText(admission.refusal());
             return;
@@ -531,17 +565,17 @@ public class MainApplicationPanel extends JPanel {
     }
 
     private void chooseAndImportFolder() {
-        mainAppWindow.chooseAndImportFolder();
+        folderImport.choose();
     }
 
     /** Converts every frame to 16-bit monochrome in a new folder, stretched when the Image Stretch tab says so. */
     private void convertToMono() {
-        int stretchFactor = mainAppWindow.getStretchPanel().getStretchSlider().getValue();
-        int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
-        boolean stretchEnabled = mainAppWindow.getStretchPanel().isStretchEnabled();
-        StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
+        int stretchFactor = stretch.getStretchSlider().getValue();
+        int iterations = stretch.getStretchIterationsSlider().getValue();
+        boolean stretchEnabled = stretch.isStretchEnabled();
+        StretchAlgorithm algo = stretch.getStretchAlgorithm();
 
-        ProcessingSession owner = mainAppWindow.getSession();
+        ProcessingSession owner = sessions.current();
         if (owner == null) return;
         startJob(JobKind.CONVERT_TO_MONO, owner,
                 new BatchConvertMonoTask(owner.getBatchService(), stretchEnabled, stretchFactor, iterations, algo),
@@ -550,11 +584,11 @@ public class MainApplicationPanel extends JPanel {
 
     /** Writes stretched copies of every frame, with the Image Stretch tab's stretch. */
     private void batchStretch() {
-        int stretchFactor = mainAppWindow.getStretchPanel().getStretchSlider().getValue();
-        int iterations = mainAppWindow.getStretchPanel().getStretchIterationsSlider().getValue();
-        StretchAlgorithm algo = mainAppWindow.getStretchPanel().getStretchAlgorithm();
+        int stretchFactor = stretch.getStretchSlider().getValue();
+        int iterations = stretch.getStretchIterationsSlider().getValue();
+        StretchAlgorithm algo = stretch.getStretchAlgorithm();
 
-        ProcessingSession owner = mainAppWindow.getSession();
+        ProcessingSession owner = sessions.current();
         if (owner == null) return;
         startJob(JobKind.BATCH_STRETCH, owner, new BatchStretchTask(owner.getBatchService(), stretchFactor, iterations, algo),
                 this::showStretchOutcome);
@@ -562,20 +596,20 @@ public class MainApplicationPanel extends JPanel {
 
     /** Manual Transient Inspection, with the detection settings as they are now; a setting with invalid text stops it. */
     private void startTransientInspection() {
-        DetectionConfig settings = mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Manual Transient Inspection did not start.");
+        DetectionConfig settings = detectionSettings.checkedSettings("Manual Transient Inspection did not start.");
         if (settings == null) {
             return;
         }
-        ProcessingSession owner = mainAppWindow.getSession();
+        ProcessingSession owner = sessions.current();
         if (owner == null) return;
         startJob(JobKind.TRANSIENT_INSPECTION, owner, new ManualTransientInspectionTask(owner.getFiles(), settings), (handle, outcome) -> {
             if (outcome instanceof JobOutcome.Completed<ManualTransientInspectionTask.Result> completed) {
                 ManualTransientInspectionTask.Result result = completed.result();
                 TransientInspectionFrame frame = new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
-                        mainAppWindow.getStretchPanel());
+                        stretch);
                 frame.setSkyCatalogueModel(skyCatalogue());
-                frame.setMarkerSettings(() -> mainAppWindow.getDetectionConfigurationPanel().visualizationSettings());
-                if (!frame.open(mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getTrackOverlay())) {
+                frame.setMarkerSettings(() -> detectionSettings.visualizationSettings());
+                if (!frame.open(sessions.current() == null ? null : sessions.current().getTrackOverlay())) {
                     JOptionPane.showMessageDialog(null, "The detection kept no frames to inspect.",
                             "Manual Transient Inspection", JOptionPane.INFORMATION_MESSAGE);
                 }
@@ -586,28 +620,28 @@ public class MainApplicationPanel extends JPanel {
     }
 
     private void startIterativeDetection() {
-        File initial = mainAppWindow.getSession() == null || mainAppWindow.getSession().getFiles().length == 0 ? null
-                : new File(mainAppWindow.getSession().getFiles()[0].getFilePath()).getParentFile();
-        IterativeDetectionDialog dialog = new IterativeDetectionDialog((Window) mainAppWindow.getFrame(), initial);
+        File initial = sessions.current() == null || sessions.current().getFiles().length == 0 ? null
+                : new File(sessions.current().getFiles()[0].getFilePath()).getParentFile();
+        IterativeDetectionDialog dialog = new IterativeDetectionDialog((Window) windowFrame, initial);
         dialog.setVisible(true);
         IterativeDetectionDialog.Selection selected = dialog.selection();
         if (selected == null) return;
-        DetectionConfigurationPanel configuration = mainAppWindow.getDetectionConfigurationPanel();
+        DetectionConfigurationPanel configuration = detectionSettings;
         DetectionConfig settings = configuration.checkedSettings("Detect Iteratively did not start.");
         if (settings == null) return;
-        AppConfig application = mainAppWindow.getApplicationSettings().getConfig().copy();
+        AppConfig application = applicationSettings.getConfig().copy();
         IterativeDetectionRequest request = new IterativeDetectionRequest(selected.directory(), settings, application,
                 configuration.visualizationSettings(), selected.plan(),
                 selected.autoTuneProfile(), selected.autoTuneFrames(), selected.autoPrepare(), selected.keepNegative(), selected.availableFrames(),
-                mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getSkyCatalogue().snapshot());
-        GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(mainAppWindow.getFrame());
+                sessions.current() == null ? null : sessions.current().getSkyCatalogue().snapshot());
+        GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(windowFrame);
         IterativeDetectionTask task = new IterativeDetectionTask(request, (summary, files, passSettings) ->
                 reportPrompt.confirm(summary, java.util.Arrays.stream(files).anyMatch(FitsFileInformation::isWcsSolved),
                         50, "Iterative pass: " + files.length + " frames", passSettings))
                 .showingPreviews(progressDialog.previewSink());
-        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.ITERATIVE_DETECTION,
-                mainAppWindow.getSession(), task,
-                mainAppWindow.forCurrentSession((handle, outcome) -> showIterativeOutcome(outcome, task)));
+        JobCoordinator.Admission admission = jobs.start(JobKind.ITERATIVE_DETECTION,
+                sessions.current(), task,
+                sessions.forCurrent((handle, outcome) -> showIterativeOutcome(outcome, task)));
         if (!admission.admitted()) statusLabel.setText(admission.refusal());
     }
 
@@ -636,7 +670,7 @@ public class MainApplicationPanel extends JPanel {
         if (selectedFile == null) {
             return;
         }
-        ProcessingSession owner = mainAppWindow.getSession();
+        ProcessingSession owner = sessions.current();
         if (owner == null) return;
         startJob(JobKind.PLATE_SOLVE, owner, new PlateSolveTask(owner.getPlateSolveService(), selectedFile.getFilePath(),
                         astapSolveRadio.isSelected(), astrometryNetSolveRadio.isSelected()),
@@ -753,7 +787,8 @@ public class MainApplicationPanel extends JPanel {
     }
 
     /** Updates the status line of every group, and the commands with their disabled-button reasons. */
-    void refreshWorkflowStatus() {
+    @Override
+    public void refreshWorkflowStatus() {
         int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
         colourNotice.setVisible(frames > 0 && containsColorImages);
         // The import button is the primary action until frames are loaded, then an ordinary button for another dataset.
@@ -800,7 +835,8 @@ public class MainApplicationPanel extends JPanel {
     }
 
     /** Updates the configured analyses after settings apply, without committing editor text during selection changes. */
-    void showEnabledAnalyses(String enabled) {
+    @Override
+    public void showEnabledAnalyses(String enabled) {
         enabledAnalyses = enabled;
         refreshAnalysisScope();
     }
@@ -820,16 +856,16 @@ public class MainApplicationPanel extends JPanel {
     }
 
     /**
-     * The eight values the calibrated auto-tuner sets: detection sigma, grow and minimum pixels; master sigma,
-     * grow and minimum pixels; mask overlap; base star jitter, in pixels.
+     * Copies the eight Overview values during this EDT call and does not retain {@code config}.
      */
-    void showActiveDetectionSettings(double detectionSigma, double growSigma, int minPixels,
-                                     double masterSigma, double masterGrowSigma, int masterMinPixels,
-                                     double maskOverlap, double jitterPixels) {
-        activeDetectionValue.setText(String.format(Locale.US, "%.2f / %.2f / %d", detectionSigma, growSigma, minPixels));
-        activeMaskValue.setText(String.format(Locale.US, "%.2f / %.2f / %d", masterSigma, masterGrowSigma, masterMinPixels));
-        activeOverlapValue.setText(String.format(Locale.US, "%.2f", maskOverlap));
-        activeJitterValue.setText(String.format(Locale.US, "%.2f px", jitterPixels));
+    @Override
+    public void showActiveDetectionSettings(DetectionConfig config) {
+        activeDetectionValue.setText(String.format(Locale.US, "%.2f / %.2f / %d",
+                config.detectionSigmaMultiplier, config.growSigmaMultiplier, config.minDetectionPixels));
+        activeMaskValue.setText(String.format(Locale.US, "%.2f / %.2f / %d",
+                config.masterSigmaMultiplier, config.masterGrowSigmaMultiplier, config.masterMinDetectionPixels));
+        activeOverlapValue.setText(String.format(Locale.US, "%.2f", config.maxMaskOverlapFraction));
+        activeJitterValue.setText(String.format(Locale.US, "%.2f px", config.maxStarJitter));
     }
 
     /** Small rectangle of the active detection settings, with the link that opens Detection Settings. */
@@ -857,7 +893,7 @@ public class MainApplicationPanel extends JPanel {
                 "Base star jitter radius, in pixels. Detections that move less than this are treated as star jitter.");
         JButton editSettingsLink = AccessibleControls.link("Edit settings…", "Edit detection settings", () -> {
             if (!uiLocked) {
-                mainAppWindow.getTabbedPane().setSelectedComponent(mainAppWindow.getDetectionConfigurationPanel());
+                showDetectionSettings.run();
             }
         });
         editSettingsLink.setFont(small);
@@ -909,13 +945,13 @@ public class MainApplicationPanel extends JPanel {
     }
 
     private String detectionSettingsSummary() {
-        DetectionConfigurationPanel settings = mainAppWindow.getDetectionConfigurationPanel();
+        DetectionConfigurationPanel settings = detectionSettings;
         return settings == null ? "Manual settings" : settings.getSettingsSummary();
     }
 
     /** The saved auto-tune line for the imported dataset, or null when there is none. */
     private String savedAutoTuneLine() {
-        DetectionConfigurationPanel settings = mainAppWindow.getDetectionConfigurationPanel();
+        DetectionConfigurationPanel settings = detectionSettings;
         return settings == null ? null : settings.getSavedAutoTuneLine();
     }
 
@@ -1081,13 +1117,13 @@ public class MainApplicationPanel extends JPanel {
     /** Delegates catalogue fetch/cancel to the current session's workflow; EDT only. */
     private void onSkyCatalogueButton() {
         if (skyController != null) {
-            skyController.fetchOrCancel(mainAppWindow.getApplicationSettings().getConfig().skyCatalogueStarMagnitude());
+            skyController.fetchOrCancel(applicationSettings.getConfig().skyCatalogueStarMagnitude());
         }
     }
 
     /** The current session's model, or the empty model before an import. */
     private SkyCatalogueModel skyCatalogue() {
-        ProcessingSession session = mainAppWindow.getSession();
+        ProcessingSession session = sessions.current();
         return session == null ? emptySkyCatalogue : session.getSkyCatalogue();
     }
 
@@ -1095,9 +1131,9 @@ public class MainApplicationPanel extends JPanel {
     private void restoreSkyCatalogue() {
         if (skyController != null) skyController.close();
         skyController = null;
-        ProcessingSession session = mainAppWindow.getSession();
+        ProcessingSession session = sessions.current();
         if (session == null) return;
-        skyController = new SkyCatalogueController(session, () -> mainAppWindow.isCurrentSession(session),
+        skyController = new SkyCatalogueController(session, () -> sessions.isCurrent(session),
                 new SkyCatalogueController.Listener() {
                     /** Updates only Swing presentation from the controller's EDT-owned state. */
                     @Override public void changed() {
@@ -1165,8 +1201,8 @@ public class MainApplicationPanel extends JPanel {
                     .append(String.format(Locale.US, "<br>Stars to Gaia G %.1f", catalogue.starMagnitudeLimit))
                     .append(catalogue.starSource == null ? "" : " from " + catalogue.starSource)
                     .append(catalogue.fetchedAtUtc == null ? "" : ", fetched " + fetchedText(catalogue.fetchedAtUtc));
-            double depth = mainAppWindow.getSession() == null ? catalogue.starMagnitudeLimit
-                    : mainAppWindow.getApplicationSettings().getConfig().skyCatalogueStarMagnitude();
+            double depth = sessions.current() == null ? catalogue.starMagnitudeLimit
+                    : applicationSettings.getConfig().skyCatalogueStarMagnitude();
             if (Math.abs(depth - catalogue.starMagnitudeLimit) > 0.01) {
                 text.append(String.format(Locale.US, "<br><i>The star depth is now set to %.1f: fetch again to use it.</i>", depth));
             }
@@ -1229,7 +1265,7 @@ public class MainApplicationPanel extends JPanel {
     // ==========================================
 
     public FitsFileInformation[] getImportedFiles() {
-        ProcessingSession session = mainAppWindow.getSession();
+        ProcessingSession session = sessions.current();
         if (session == null) return null;
         FitsFileInformation[] files = session.getFiles();
         return files.length == 0 ? null : files;
@@ -1287,7 +1323,8 @@ public class MainApplicationPanel extends JPanel {
     }
 
     /** What the Auto-Tune command runs: show the Overview and start Auto-Tune there with its tuner and profile. */
-    void setAutoTuneCommand(Runnable openOverviewAndRunAutoTune) {
+    @Override
+    public void setAutoTuneCommand(Runnable openOverviewAndRunAutoTune) {
         this.openOverviewAndRunAutoTune = openOverviewAndRunAutoTune;
     }
 
@@ -1316,7 +1353,7 @@ public class MainApplicationPanel extends JPanel {
         if (detectionSequenceFrame != null) {
             detectionSequenceFrame.setSettingsEditable(true);
         }
-        mainAppWindow.setSessionTabsEnabled(mainAppWindow.getSession() != null);
+        sessionTabs.accept(sessions.current() != null);
     }
 
     /** While a job runs (or a blink plays), the window's controls and the session tabs are locked. */
@@ -1328,7 +1365,7 @@ public class MainApplicationPanel extends JPanel {
         if (detectionSequenceFrame != null) {
             detectionSequenceFrame.setSettingsEditable(false);
         }
-        mainAppWindow.setSessionTabsEnabled(false);
+        sessionTabs.accept(false);
     }
 
     /** Enables or disables every control of the panel for the lock; the commands follow their actions instead. */
@@ -1354,9 +1391,9 @@ public class MainApplicationPanel extends JPanel {
      * session is no longer the current one. When it cannot start now, the status bar says why.
      */
     <R> void startJob(JobKind kind, ProcessingSession owner, Job<R> job, JobCoordinator.OutcomeHandler<R> handler) {
-        if (owner == null || !mainAppWindow.isCurrentSession(owner)) return;
-        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(kind, owner, job,
-                mainAppWindow.forCurrentSession(handler));
+        if (owner == null || !sessions.isCurrent(owner)) return;
+        JobCoordinator.Admission admission = jobs.start(kind, owner, job,
+                sessions.forCurrent(handler));
         if (!admission.admitted()) {
             statusLabel.setText(admission.refusal());
         }
@@ -1369,7 +1406,7 @@ public class MainApplicationPanel extends JPanel {
      * them in an open Preview Frame. Null overlays (the detection did not finish) leave the last run's in place.
      */
     public void showDetectionOverlays(ProcessingSession owner, DetectionOverlays overlays) {
-        if (overlays == null || !mainAppWindow.isCurrentSession(owner)) {
+        if (overlays == null || !sessions.isCurrent(owner)) {
             return;
         }
         owner.setLastRun(overlays);
@@ -1381,7 +1418,7 @@ public class MainApplicationPanel extends JPanel {
     /** The end of Detect Moving Targets and Detect Iteratively: offers the report, or says what went wrong. */
     private void showDetectionOutcome(JobHandle handle, JobOutcome<File> outcome) {
         if (outcome instanceof JobOutcome.Completed<File> completed) {
-            if (mainAppWindow.isCurrentSession(handle.session())) {
+            if (sessions.isCurrent(handle.session())) {
                 showLastReport(completed.result());
             }
             promptUserToOpenReport(completed.result());
@@ -1391,12 +1428,14 @@ public class MainApplicationPanel extends JPanel {
     }
 
     /** Shows a line in the status bar, for an outcome handled outside this panel. */
-    void showStatus(String text) {
+    @Override
+    public void showStatus(String text) {
         statusLabel.setText(text);
     }
 
     /** Tells the user that a detection job was declined or failed, as the detection jobs always have. */
-    void showDetectionProblem(JobOutcome<?> outcome) {
+    @Override
+    public void showDetectionProblem(JobOutcome<?> outcome) {
         if (outcome instanceof JobOutcome.Failed<?> failed) {
             FailureDialog.show(this, "Error", "Detection failed: " + failed.reason(), failed.cause());
         } else if (outcome instanceof JobOutcome.Declined<?> declined) {
@@ -1430,15 +1469,15 @@ public class MainApplicationPanel extends JPanel {
         }
 
         // Invalid text in a settings field is shown there first, as for a run.
-        if (mainAppWindow.getDetectionConfigurationPanel().checkedSettings("Preview Frame did not open.") == null) {
+        if (detectionSettings.checkedSettings("Preview Frame did not open.") == null) {
             return;
         }
         if (detectionSequenceFrame == null) {
-            detectionSequenceFrame = new DetectionSequenceFrame(mainAppWindow);
+            detectionSequenceFrame = new DetectionSequenceFrame(windowFrame, sessions, detectionSettings);
             detectionSequenceFrame.setSettingsEditable(!uiLocked);
         }
 
-        detectionSequenceFrame.openSequence(allFiles, startIndex, mainAppWindow.getStretchPanel());
+        detectionSequenceFrame.openSequence(allFiles, startIndex, stretch);
     }
 
     // ==========================================
@@ -1451,10 +1490,10 @@ public class MainApplicationPanel extends JPanel {
             detectionSequenceFrame.closeForSessionChange();
             detectionSequenceFrame = null;
         }
-        mainAppWindow.getBlinkFrame().close();
+        blink.close();
         statusLabel.setText(files.length == 0 ? "No files loaded" : "Imported " + files.length + " file(s)");
         // The import names the new session's last report, if it has one.
-        showLastReport(mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getLastReport());
+        showLastReport(sessions.current() == null ? null : sessions.current().getLastReport());
     }
 
     void closeSessionViews() {
@@ -1466,7 +1505,7 @@ public class MainApplicationPanel extends JPanel {
             detectionSequenceFrame.closeForSessionChange();
             detectionSequenceFrame = null;
         }
-        mainAppWindow.getBlinkFrame().close();
+        blink.close();
     }
 
     /**
@@ -1474,7 +1513,7 @@ public class MainApplicationPanel extends JPanel {
      * at the end of a run, or after a restart. Null hides the link.
      */
     void showLastReport(File report) {
-        if (mainAppWindow.getSession() != null) mainAppWindow.getSession().setLastReport(report);
+        if (sessions.current() != null) sessions.current().setLastReport(report);
         if (report == null) {
             lastReportButton.setVisible(false);
             outputFolderButton.setVisible(false);
@@ -1493,7 +1532,7 @@ public class MainApplicationPanel extends JPanel {
 
     /** Opens the current session's completed output directory without starting or changing any analysis. */
     private void openOutputFolder() {
-        File report = mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getLastReport();
+        File report = sessions.current() == null ? null : sessions.current().getLastReport();
         File directory = SessionReports.outputDirectory(report);
         if (directory == null) {
             statusLabel.setText("The last report or its output folder was moved or deleted.");
@@ -1512,7 +1551,7 @@ public class MainApplicationPanel extends JPanel {
     }
 
     private void openLastReport() {
-        File lastReport = mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getLastReport();
+        File lastReport = sessions.current() == null ? null : sessions.current().getLastReport();
         if (lastReport == null) {
             return;
         }
@@ -1548,7 +1587,7 @@ public class MainApplicationPanel extends JPanel {
      * the main window's lock, as the loading job did; closing it ends the blink.
      */
     private void blinkLoaded(FitsFileInformation[] files, JobOutcome<BlinkSequence> outcome) {
-        BlinkFrame blinkFrame = mainAppWindow.getBlinkFrame();
+        BlinkFrame blinkFrame = blink;
         if (outcome instanceof JobOutcome.Completed<BlinkSequence> completed && !blinkStop.get()) {
             // Playing first, so the lock leaves Blink available as Stop Blinking.
             blinkPlaying = true;
@@ -1556,9 +1595,9 @@ public class MainApplicationPanel extends JPanel {
             statusLabel.setText("Blinking " + completed.result().getFrames().size()
                     + " frames. Close the blink window or click Stop Blinking to end.");
             blinkFrame.setSkyCatalogueModel(skyCatalogue());
-            blinkFrame.open(completed.result(), files, getImportedFiles(), mainAppWindow.getStretchPanel(),
-                    mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getTrackOverlay(),
-                    mainAppWindow.getSession() == null ? null : mainAppWindow.getSession().getVariableStarOverlay());
+            blinkFrame.open(completed.result(), files, getImportedFiles(), stretch,
+                    sessions.current() == null ? null : sessions.current().getTrackOverlay(),
+                    sessions.current() == null ? null : sessions.current().getVariableStarOverlay());
             return;
         }
         // Stopped, or failed: hides the window if it still shows the loading progress.
@@ -1603,10 +1642,10 @@ public class MainApplicationPanel extends JPanel {
 
             if (choice == JOptionPane.YES_OPTION) {
                 // Writing rewrites the whole frame, which takes a while for a large one: it is a job, off this thread.
-                ProcessingSession owner = mainAppWindow.getSession();
-                JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.WRITE_WCS, owner,
+                ProcessingSession owner = sessions.current();
+                JobCoordinator.Admission admission = jobs.start(JobKind.WRITE_WCS, owner,
                         new WriteWcsTask(owner.getPlateSolveService(), fileInfo.getFilePath(), result),
-                        mainAppWindow.forCurrentSession((handle, written) -> showWcsWriteOutcome(fileInfo, written)));
+                        sessions.forCurrent((handle, written) -> showWcsWriteOutcome(fileInfo, written)));
                 if (admission.admitted()) {
                     return;
                 }
@@ -1614,7 +1653,7 @@ public class MainApplicationPanel extends JPanel {
             } else {
                 statusLabel.setText("Plate solve completed; WCS was not written to the FITS header");
             }
-            mainAppWindow.getSession().getPlateSolveService().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
+            sessions.current().getPlateSolveService().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
         } else {
             String errorMsg = result != null ? result.getFailureReason() + " " + result.getWarning()
                     : outcome instanceof JobOutcome.Failed<PlateSolveResult> failed ? failed.reason() : "Internal Error";
@@ -1656,7 +1695,7 @@ public class MainApplicationPanel extends JPanel {
                         JOptionPane.QUESTION_MESSAGE);
                 if (choice == JOptionPane.YES_OPTION) {
                     statusLabel.setText("Importing converted mono directory");
-                    mainAppWindow.importFolder(generatedMonoDirectory);
+                    folderImport.importFolder(generatedMonoDirectory);
                 }
             } else {
                 JOptionPane.showMessageDialog(this,

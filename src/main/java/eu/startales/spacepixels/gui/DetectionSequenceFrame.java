@@ -47,26 +47,29 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
     private FitsFileInformation[] files;
     /** The settings of the frame being prepared, taken on the Swing thread just before. */
     private volatile DetectionConfig config;
-    private final ApplicationWindow mainAppWindow;
+    private final SessionAccess sessions;
+    private final DetectionConfigurationPanel detection;
     // The editor of each threshold, with the setting's title.
     private final Map<CheckedNumberEditor, String> editors = new LinkedHashMap<>();
     private final List<JSpinner> settingSpinners = new ArrayList<>();
     private final JLabel settingsNote = new JLabel(" ");
     private final Timer redetect = new Timer(REDETECT_DELAY_MILLIS, e -> refresh());
 
-    public DetectionSequenceFrame(ApplicationWindow mainAppWindow) {
+    /** Uses the open session and the detection panel's live settings. The panel is not retained past each read. */
+    public DetectionSequenceFrame(JFrame owner, SessionAccess sessions, DetectionConfigurationPanel detection) {
         super("Preview Frame", "detecting…", false, true);
-        this.mainAppWindow = mainAppWindow;
-        setMarkerSettings(() -> mainAppWindow.getDetectionConfigurationPanel().visualizationSettings());
+        this.sessions = sessions;
+        this.detection = detection;
+        setMarkerSettings(detection::visualizationSettings);
         redetect.setRepeats(false);
-        addControlRow(buildSettingsRow(mainAppWindow.getDetectionConfigurationPanel().perFrameDetectionSettings()));
-        setLocationRelativeTo(mainAppWindow.getFrame());
+        addControlRow(buildSettingsRow(detection.perFrameDetectionSettings()));
+        setLocationRelativeTo(owner);
     }
 
     /** Shows the frames of the session from {@code startIndex}. */
     public void openSequence(FitsFileInformation[] files, int startIndex, StretchPanel stretchPanel) {
         this.files = files;
-        if (mainAppWindow.getSession() != null) setSkyCatalogueModel(mainAppWindow.getSession().getSkyCatalogue());
+        if (sessions.current() != null) setSkyCatalogueModel(sessions.current().getSkyCatalogue());
         openAt(startIndex, stretchPanel, files);
         showLastRun();
     }
@@ -76,7 +79,7 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
         if (files == null || !isVisible()) {
             return;
         }
-        ProcessingSession session = mainAppWindow.getSession();
+        ProcessingSession session = sessions.current();
         setTrackOverlay(session == null ? null : session.getTrackOverlay(), files);
         setVariableStarOverlay(session == null ? null : session.getVariableStarOverlay(), files);
     }
@@ -177,7 +180,7 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
 
     @Override
     protected void preparing() {
-        config = mainAppWindow.getDetectionConfigurationPanel().settingsInUse();
+        config = detection.settingsInUse();
     }
 
     /** Reads the frame as the detection does (16-bit mono, the image HDU) and extracts its sources. */

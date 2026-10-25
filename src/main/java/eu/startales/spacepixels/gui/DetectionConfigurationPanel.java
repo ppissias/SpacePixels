@@ -12,6 +12,7 @@ package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.config.DetectionSettingsPresentation;
 import io.github.ppissias.jtransient.config.DetectionConfigRules;
+import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
@@ -52,6 +53,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -60,8 +62,14 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private static final Logger LOGGER = Logger.getLogger(DetectionConfigurationPanel.class.getName());
 
-    //link to main window
-    private final ApplicationWindow mainAppWindow;
+    private final SessionAccess sessions;
+    private final JobCoordinator jobs;
+    private final ApplicationStorage storage;
+    private final JFrame windowFrame;
+    private final BooleanSupplier closing;
+    private final Runnable showThisTab;
+    private final ActiveSettingsReadout readout;
+    private final FrameList frames;
 
     private volatile DetectionConfig jTransientConfig;
     private volatile int autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
@@ -163,9 +171,21 @@ public class DetectionConfigurationPanel extends JPanel {
     private String savedSnapshot;
     private boolean suppressAutoApply;
 
-    /** Builds the EDT-owned settings editor against the window's session and isolated persistence services. */
-    public DetectionConfigurationPanel(ApplicationWindow mainAppWindow) {
-        this.mainAppWindow = mainAppWindow;
+    /**
+     * Builds the EDT-owned settings editor. {@code readout} and {@code frames} are the main panel. Admitted jobs copy
+     * the session and settings at start; {@code sessions} is only for the EDT commands.
+     */
+    public DetectionConfigurationPanel(SessionAccess sessions, JobCoordinator jobs, ApplicationStorage storage,
+            JFrame windowFrame, BooleanSupplier closing, Runnable showThisTab, ActiveSettingsReadout readout,
+            FrameList frames) {
+        this.sessions = sessions;
+        this.jobs = jobs;
+        this.storage = storage;
+        this.windowFrame = windowFrame;
+        this.closing = closing;
+        this.showThisTab = showThisTab;
+        this.readout = readout;
+        this.frames = frames;
         loadPersistedSettings();
 
         setLayout(new BorderLayout());
@@ -187,11 +207,8 @@ public class DetectionConfigurationPanel extends JPanel {
 
         add(navigator, BorderLayout.CENTER);
         buildAnalyses(overviewPanel);
-        MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
-        if (mainPanel != null) {
-            overviewPanel.bindCommands(mainPanel.detectAction(), mainPanel.previewAction());
-            mainPanel.setAutoTuneCommand(this::openOverviewAndRunAutoTune);
-        }
+        overviewPanel.bindCommands(frames.detectAction(), frames.previewAction());
+        frames.setAutoTuneCommand(this::openOverviewAndRunAutoTune);
 
         setupFrameRejectionPreset();
         // Settings that only matter while their feature is on appear with it.
@@ -203,10 +220,8 @@ public class DetectionConfigurationPanel extends JPanel {
         navigator.setExtraChangedCount("Overview", () -> overviewPanel.unsavedCoreCount());
         navigator.finishBuilding();
         // Ctrl+D runs Detect Moving Targets here too: the main window's command, with its enabled state.
-        if (mainPanel != null) {
-            getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ctrl D"), "detectMovingTargets");
-            getActionMap().put("detectMovingTargets", mainPanel.detectAction());
-        }
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ctrl D"), "detectMovingTargets");
+        getActionMap().put("detectMovingTargets", frames.detectAction());
         getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("ctrl F"), "searchSettings");
         getActionMap().put("searchSettings", new AbstractAction() {
             @Override
@@ -357,7 +372,7 @@ public class DetectionConfigurationPanel extends JPanel {
      * kept while the frames and the settings that shape the stack stay the same.
      */
     private void openStarMaskExplorer() {
-        ProcessingSession owner = mainAppWindow.getSession();
+        ProcessingSession owner = sessions.current();
         FitsFileInformation[] files = owner == null ? null : owner.getFiles();
         if (files == null || files.length == 0) {
             return;
@@ -371,14 +386,11 @@ public class DetectionConfigurationPanel extends JPanel {
             showStarMaskExplorer(files, config);
             return;
         }
-        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.STAR_MASK_STACK, owner,
-                new StarMaskStackTask(files, config.clone()), mainAppWindow.forCurrentSession((handle, outcome) -> {
+        JobCoordinator.Admission admission = jobs.start(JobKind.STAR_MASK_STACK, owner,
+                new StarMaskStackTask(files, config.clone()), sessions.forCurrent((handle, outcome) -> {
                     if (!(outcome instanceof JobOutcome.Completed<JTransientEngine.MasterStackResult> completed)) {
-                        MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
-                        if (mainPanel != null) {
-                            mainPanel.showDetectionProblem(outcome);
-                        }
-                    } else if (mainAppWindow.isCurrentSession(handle.session())) {
+                        readout.showDetectionProblem(outcome);
+                    } else if (sessions.isCurrent(handle.session())) {
                         // Kept only for the session it was built for.
                         owner.setMasterStack(stackKey, completed.result());
                         showStarMaskExplorer(files, config);
@@ -395,11 +407,11 @@ public class DetectionConfigurationPanel extends JPanel {
         String sessionName = first.getParentFile() != null ? first.getParentFile().getName() : first.getName();
         StarMaskExplorerFrame.Settings current = new StarMaskExplorerFrame.Settings(
                 config.masterSigmaMultiplier, config.masterGrowSigmaMultiplier, config.masterMinDetectionPixels, config.maxStarJitter);
-        ProcessingSession owner = mainAppWindow.getSession();
-        new StarMaskExplorerFrame(mainAppWindow.getFrame(), sessionName, owner.getMasterStack(masterStackKey(config)), config,
+        ProcessingSession owner = sessions.current();
+        new StarMaskExplorerFrame(windowFrame, sessionName, owner.getMasterStack(masterStackKey(config)), config,
                 visualization, current,
                 settings -> {
-                    if (mainAppWindow.isCurrentSession(owner)) applyStarMaskSettings(settings);
+                    if (sessions.isCurrent(owner)) applyStarMaskSettings(settings);
                 }).setVisible(true);
     }
 
@@ -458,16 +470,13 @@ public class DetectionConfigurationPanel extends JPanel {
 
         @Override
         public void tuningStateChanged() {
-            MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
-            if (mainPanel != null) {
-                mainPanel.refreshWorkflowStatus();
-            }
+            readout.refreshWorkflowStatus();
         }
     }
 
     /** Shows the Overview page of this tab and runs Auto-Tune as its Run Auto-Tune button does. */
     private void openOverviewAndRunAutoTune() {
-        mainAppWindow.getTabbedPane().setSelectedComponent(this);
+        showThisTab.run();
         navigator.showPage("Overview");
         overviewPanel.runAutoTune();
     }
@@ -600,9 +609,9 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void runAutoTuner(AutoTuneProfile selectedProfile) {
-        FitsFileInformation[] selectedFiles = mainAppWindow.getMainApplicationPanel().getSelectedFilesInformation();
+        FitsFileInformation[] selectedFiles = frames.getSelectedFilesInformation();
         FitsFileInformation[] poolToUse = AutoTuneCandidatePoolBuilder.inputFrames(
-                mainAppWindow.getMainApplicationPanel().getImportedFiles(), selectedFiles);
+                frames.getImportedFiles(), selectedFiles);
 
         if (poolToUse == null || poolToUse.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
             JOptionPane.showMessageDialog(this,
@@ -622,9 +631,9 @@ public class DetectionConfigurationPanel extends JPanel {
                 settings,
                 autoTuneMaxCandidateFrames,
                 selectedProfile);
-        JobCoordinator.Admission admission = mainAppWindow.getJobCoordinator().start(JobKind.AUTO_TUNE,
-                mainAppWindow.getSession(), tuneTask,
-                mainAppWindow.forCurrentSession((handle, outcome) -> autoTuneFinished(outcome)));
+        JobCoordinator.Admission admission = jobs.start(JobKind.AUTO_TUNE,
+                sessions.current(), tuneTask,
+                sessions.forCurrent((handle, outcome) -> autoTuneFinished(outcome)));
         if (!admission.admitted()) {
             showFooterNote(admission.refusal(), true);
             return;
@@ -666,7 +675,7 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void offerDetectionProfileMigration(File profileToLoad, SpacePixelsDetectionProfile detectionProfile) {
-        if (mainAppWindow.isClosing()) return;
+        if (closing.getAsBoolean()) return;
         int choice = JOptionPane.showConfirmDialog(
                 this,
                 "Your saved detection profile has missing or unrecognized settings.\n\n"
@@ -683,10 +692,10 @@ public class DetectionConfigurationPanel extends JPanel {
 
         saveButton.setEnabled(false);
         showFooterNote("Migrating detection profile...");
-        mainAppWindow.getStorage().submit("Detection settings", () ->
+        storage.submit("Detection settings", () ->
                 SpacePixelsDetectionProfileIO.migrate(profileToLoad, detectionProfileFile, detectionProfile))
                 .whenComplete((backup, failure) -> EventQueue.invokeLater(() -> {
-                    if (mainAppWindow.isClosing()) return;
+                    if (closing.getAsBoolean()) return;
                     saveButton.setEnabled(true);
                     if (failure == null) {
                         showFooterNote("Detection profile migrated.");
@@ -715,7 +724,7 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void savePersistedSettings() {
-        if (mainAppWindow.isClosing() || !saveButton.isEnabled()) return;
+        if (closing.getAsBoolean() || !saveButton.isEnabled()) return;
         DetectionConfig settings = checkedSettings("Not saved.");
         if (settings == null) {
             return;
@@ -724,15 +733,15 @@ public class DetectionConfigurationPanel extends JPanel {
         SpacePixelsDetectionProfile profile = new SpacePixelsDetectionProfile(settings, autoTuneMaxCandidateFrames, reportOptions());
         SpacePixelsVisualizationPreferences preferences = SpacePixelsVisualizationPreferences.of(visualization);
         Runnable savedRows = navigator.captureSavedState();
-        ProcessingSession expectedSession = mainAppWindow.getSession();
+        ProcessingSession expectedSession = sessions.current();
         saveButton.setEnabled(false);
         showFooterNote("Saving settings...");
-        mainAppWindow.getStorage().submit("Detection settings", () -> {
+        storage.submit("Detection settings", () -> {
             SpacePixelsSettingsFiles.save(
                     detectionProfileFile, profile, visualizationPreferencesFile, preferences);
             return null;
         }).whenComplete((ignored, failure) -> EventQueue.invokeLater(() -> {
-            if (mainAppWindow.isClosing()) return;
+            if (closing.getAsBoolean()) return;
             saveButton.setEnabled(true);
             if (failure != null) {
                 showFooterNote("Not saved. " + failure.getMessage(), true);
@@ -741,7 +750,7 @@ public class DetectionConfigurationPanel extends JPanel {
             }
             rememberSavedState(profile, preferences, savedRows);
             boolean unchanged = savedSnapshot.equals(currentSnapshot());
-            if (unchanged && mainAppWindow.getSession() == expectedSession) overviewPanel.clearTunedMarkers();
+            if (unchanged && sessions.current() == expectedSession) overviewPanel.clearTunedMarkers();
             updateSavedState();
             showFooterNote("Saved to " + detectionProfileFile.getParent()
                     + (unchanged ? "" : "; newer edits remain unsaved."));
@@ -767,7 +776,7 @@ public class DetectionConfigurationPanel extends JPanel {
     DetectionConfig checkedSettings(String refusedAction) {
         JSpinner invalid = invalidInputToShow();
         if (invalid != null) {
-            mainAppWindow.getTabbedPane().setSelectedComponent(this);
+            showThisTab.run();
             // First, since revealing the setting can clear a filter, an edit that replaces the footer note.
             focusInput(invalid);
             this.refusedAction = refusedAction;
@@ -778,7 +787,7 @@ public class DetectionConfigurationPanel extends JPanel {
         List<DetectionConfigRules.Issue> issues = DetectionConfigRules.validate(jTransientConfig, DetectionConfigRules.Operation.CONFIGURATION);
         List<DetectionConfigRules.Issue> problems = issues.stream().filter(issue -> issue.severity() == DetectionConfigRules.Severity.ERROR).toList();
         if (!problems.isEmpty()) {
-            mainAppWindow.getTabbedPane().setSelectedComponent(this);
+            showThisTab.run();
             showFooterNote(refusedAction + " " + DetectionSettingsPresentation.issue(problems.getFirst()), true);
             return null;
         }
@@ -1510,20 +1519,8 @@ public class DetectionConfigurationPanel extends JPanel {
         if (spinDetectionSigma == null || spinMasterSigma == null || spinMaxMaskOverlapFraction == null || spinStarJitter == null) {
             return;
         }
-        MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
-        if (mainPanel == null) {
-            return;
-        }
-        mainPanel.showEnabledAnalyses(AnalysisScopeText.analyses(jTransientConfig));
-        mainPanel.showActiveDetectionSettings(
-                ((Number) spinDetectionSigma.getValue()).doubleValue(),
-                ((Number) spinGrowSigma.getValue()).doubleValue(),
-                ((Number) spinMinPixels.getValue()).intValue(),
-                ((Number) spinMasterSigma.getValue()).doubleValue(),
-                ((Number) spinMasterGrowSigma.getValue()).doubleValue(),
-                ((Number) spinMasterMinPix.getValue()).intValue(),
-                ((Number) spinMaxMaskOverlapFraction.getValue()).doubleValue(),
-                ((Number) spinStarJitter.getValue()).doubleValue());
+        readout.showEnabledAnalyses(AnalysisScopeText.analyses(jTransientConfig));
+        readout.showActiveDetectionSettings(jTransientConfig);
     }
 
     /** Puts each pair of settings back in order by moving the one its rule names, and says what was moved. */
@@ -1595,7 +1592,7 @@ public class DetectionConfigurationPanel extends JPanel {
     /** A new session, or none: the Overview shows it, and the master stack of the last one is dropped. */
     void sessionChanged(FitsFileInformation[] filesInfo) {
         if (filesInfo.length == 0) {
-            overviewPanel.setSession(mainAppWindow.getSession(), null, 0, 0, 0, false, null, new ArrayList<>());
+            overviewPanel.setSession(sessions.current(), null, 0, 0, 0, false, null, new ArrayList<>());
             return;
         }
         boolean existsColor = false;
@@ -1612,7 +1609,7 @@ public class DetectionConfigurationPanel extends JPanel {
             fileNames.add(new File(file.getFilePath()).getName());
         }
         boolean readyForTuning = !existsColor && filesInfo.length >= SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
-        overviewPanel.setSession(mainAppWindow.getSession(), sessionName, filesInfo.length, filesInfo[0].getSizeWidth(), filesInfo[0].getSizeHeight(),
+        overviewPanel.setSession(sessions.current(), sessionName, filesInfo.length, filesInfo[0].getSizeWidth(), filesInfo[0].getSizeHeight(),
                 readyForTuning, firstFile.getParentFile(), fileNames);
     }
 
@@ -1633,10 +1630,7 @@ public class DetectionConfigurationPanel extends JPanel {
         String message = completed ? "Auto-Tuning completed successfully."
                 : outcome instanceof JobOutcome.Failed<AutoTunerResult> failed ? failed.reason() : null;
         overviewPanel.tuneFinished(completed, message, result);
-        MainApplicationPanel mainPanel = mainAppWindow.getMainApplicationPanel();
-        if (mainPanel != null) {
-            mainPanel.showStatus(completed ? "Auto-Tuning completed successfully." : "Auto-Tuning failed or aborted.");
-        }
+        readout.showStatus(completed ? "Auto-Tuning completed successfully." : "Auto-Tuning failed or aborted.");
         if (outcome instanceof JobOutcome.Failed<AutoTunerResult> failed) {
             FailureDialog.show(this, "Auto-Tune Failed", "Auto-Tune failed: " + failed.reason(), failed.cause());
         }
@@ -1674,7 +1668,7 @@ public class DetectionConfigurationPanel extends JPanel {
         JScrollPane scrollPane = new JScrollPane(textArea);
         scrollPane.setPreferredSize(new Dimension(800, 600));
 
-        JDialog dialog = new JDialog(mainAppWindow.getFrame(), "Auto-Tuner Telemetry Report", true);
+        JDialog dialog = new JDialog(windowFrame, "Auto-Tuner Telemetry Report", true);
         dialog.getContentPane().add(scrollPane);
         dialog.pack();
         dialog.setLocationRelativeTo(this);
