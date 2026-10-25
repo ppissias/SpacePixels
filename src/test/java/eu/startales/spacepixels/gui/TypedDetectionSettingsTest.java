@@ -182,7 +182,7 @@ public class TypedDetectionSettingsTest {
                     @Override public void setAutoTuneCommand(Runnable openOverviewAndRunAutoTune) { }
                 };
                 DetectionConfigurationPanel panel = new DetectionConfigurationPanel(
-                        sessions, jobs, storage, new JFrame(), () -> false, () -> { }, readout, frameList);
+                        sessions, jobs, storage, null, () -> false, () -> { }, readout, frameList);
                 JSpinner spinDetectionSigma = privateField(panel, "spinDetectionSigma", JSpinner.class);
                 JSpinner spinGrowSigma = privateField(panel, "spinGrowSigma", JSpinner.class);
                 JButton saveButton = privateField(panel, "saveButton", JButton.class);
@@ -280,6 +280,7 @@ public class TypedDetectionSettingsTest {
         }
     }
 
+    /** Reads a private field from the given test fixture instance. */
     private static <T> T privateField(Object target, String name, Class<T> type) {
         try {
             var field = target.getClass().getDeclaredField(name);
@@ -290,6 +291,7 @@ public class TypedDetectionSettingsTest {
         }
     }
 
+    /** Writes a private field on the given test fixture instance. */
     private static void setPrivateField(Object target, String name, Object value) {
         try {
             var field = target.getClass().getDeclaredField(name);
@@ -300,6 +302,7 @@ public class TypedDetectionSettingsTest {
         }
     }
 
+    /** Invokes a private method on the given test fixture instance, unwrapping unchecked exceptions. */
     private static void invokePrivate(Object target, String name, Class<?>[] parameterTypes, Object... args) {
         try {
             var method = target.getClass().getDeclaredMethod(name, parameterTypes);
