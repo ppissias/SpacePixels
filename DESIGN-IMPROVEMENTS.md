@@ -30,19 +30,18 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 ### Recommended changes
 
-**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10, SP-13, SP-06, SP-05, SP-07, SP-08 and SP-11 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Pending: SP-16 and SP-19, followed by the mechanical SP-14 package move. Their proposals and issue reviews below still apply.
+**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10, SP-13, SP-06, SP-05, SP-07, SP-08, SP-11 and SP-19 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Pending: SP-16, followed by the mechanical SP-14 package move. SP-19 is reviewed. Their proposals and issue reviews below still apply.
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
 | [SP-14](#sp-14-package-names-that-say-what-they-hold) | Package names that say what they hold | Low | Medium, mechanical |
 | [SP-16](#sp-16-check-the-ui-at-larger-display-scaling) | Check the UI at larger display scaling | Low | Small |
-| [SP-19](#sp-19-finish-the-common-base-of-the-image-viewers) | Finish the common base of the image viewers | Medium | Medium |
 | [SP-21](#sp-21-upgrade-nom-tam-fits-after-the-dither-fix) | Upgrade nom-tam-fits after the dither fix | Low | Small |
 | [SP-22](#sp-22-upgrade-gson-to-2150) | Upgrade Gson to 2.15.0 | Low | Small |
 
 **Suggested order.**
 
-1. Finish SP-19; inspect scaling (SP-16) after the viewer controls settle. The catalogue controller, panel collaborators, direct settings rows, application I/O queue, session-owned services, report boundaries and FITS input helpers are in place.
+1. Inspect scaling (SP-16). The catalogue controller, panel collaborators, direct settings rows, application I/O queue, session-owned services, report boundaries, FITS input helpers and the shared viewer base are in place.
 2. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
 Keep dependency maintenance (SP-21 and SP-22) separate from refactorings, according to each item's timing.
@@ -66,52 +65,6 @@ What remains of the earlier visual-rules item. Inspect the empty and loaded main
 **Issue review (2026-10-24; evaluate before implementation).**
 - No additional architectural blocker was identified. Retain the real keyboard/focus checks while inspecting clipping, wrapping, scroll access and controls at each scale; visual consolidation must not alter the existing text-field and viewer-key rules.
 - Keep local layout fixes separate from changing viewer settings policy in SP-19, so their effects can be assessed independently.
-
-### SP-19. Finish the common base of the image viewers
-
-**Request (2026-10-23):** "I have another idea, related to the preview windows. To create a common base for all of them. Maybe they already have common mechanisms, but please check what we can have once, common for all of them."
-
-**Implementation.** SP-19A uses `FrameView` for the stretch previews and the star-mask stack, including the mask overlay, and moves `bindStretch` and the dataset-folder name into `ViewerSupport`. Blink stays its own window. SP-19B establishes `ViewerRegistry` and closes every viewer on import (fresh start, per D-01) and at exit, unregistering disposed windows and releasing workers and listeners. SP-19C remains.
-
-**What is shared already.**
-- `SequenceViewerFrame` is the base of Preview Frame, Manual Transient Inspection and the Image Stretch tab's sequence viewer (`StretchedSequenceFrame`). It is a template method that provides the window, stepping through frames, background preparation where the newest request wins, the overlays, and closing and releasing.
-- `FrameView` (zoom, pan, overlays and the cursor readout), `StretchControls` and `ViewerSupport` (key bindings, zoom controls, status bar and cursor readout) are used by those three windows and by Blink.
-
-**What is not shared:**
-
-| Window | Window class | Image component | Closed when the session changes |
-|---|---|---|---|
-| Preview Frame | `SequenceViewerFrame` | `FrameView` | Yes, by the main panel |
-| Manual Transient Inspection | `SequenceViewerFrame` | `FrameView` | **No** |
-| Image Stretch sequence | `SequenceViewerFrame` | `FrameView` | Yes, by the stretch panel |
-| Blink | its own `JFrame` (764 lines) | `FrameView` | Yes, by the main panel |
-| Star Mask Explorer | its own `JFrame` (443 lines) | `ZoomableImageView` | **No**; its Apply button checks the session |
-| Image Stretch tab preview | a panel | `ZoomableImageView` | Not applicable |
-
-**Findings and proposals:**
-1. **Two image components.** `ZoomableImageView` (288 lines) repeats `FrameView`'s zoom, pan and image pyramid (`levelFor` and the halved copies) for the Star Mask Explorer and the Image Stretch tab. Proposal: use `FrameView` everywhere, with an image overlay layer added for the star mask, and remove `ZoomableImageView`. Every image view then has the same keys, cursor readout and fit/100 % toggle.
-2. **Two ways to try settings.**
-   - Preview Frame's spinners edit the Detection Settings directly.
-   - The Star Mask Explorer keeps trial values, with an "Apply to Settings" button.
-
-   Each re-runs 300 ms after a change, with its own spinner code, and F13 would add a third window of this kind. Proposal:
-   - one small trial-settings row, used by all three windows: the spinners, the delayed re-run, the note about invalid text, Enter and Esc, and disabling while a job runs;
-   - one rule for whether a window edits the settings or offers "Apply to Settings". This is a decision point; F13 proposes Apply.
-3. **Each owner closes its own windows.** Preview Frame and Blink are closed by the main panel, and the Image Stretch sequence by the stretch panel. Manual Transient Inspection and the Star Mask Explorer are not closed at all: after a new import they stay open on the old session, and the inspection window keeps that session's frames in memory until it is closed by hand. Proposal: every viewer registers with one owner, the application window's session listeners, which closes them all on a session change and at exit.
-4. **Small duplicates.** `bindStretch` is identical in `SequenceViewerFrame` and `BlinkFrame`, and the session's name (its folder's name) is computed in three places. Move both into `ViewerSupport`.
-5. **Blink stays its own window.** It preloads every frame for smooth playback and has the frame list with its skip boxes, which does not fit the one-frame-at-a-time `SequenceViewerFrame`. Forcing it onto the base would add hooks for a single subclass. Blink keeps using the shared parts by composition, as now, and gains items 3 and 4. The Star Mask Explorer shows a single image and also stays its own window, gaining item 1.
-
-**In short:** the common base exists already. The work is to finish it, not to add another layer.
-
-**Order:**
-1. Item 3 first, since it changes what the user sees.
-2. Then items 1 and 4.
-3. Item 2 together with F13.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- **Viewer lifetime is a product decision.** DEVELOPER.md deliberately permits independent inspection windows to retain the old session's data. Closing every viewer on import changes that workflow; decide the desired policy explicitly and update the manual and lifecycle tests. Do not describe the existing choice as an accidental leak solely because buffers remain while a window is open.
-- The Preview Frame live-edit versus Apply policy is also a behaviour decision. Keep it separate from sharing image components and controls, and preserve real key/focus tests for each viewer.
-- A central viewer owner must unregister disposed windows and preserve cancellation, buffer release and listener detachment. Merely hiding all windows does not establish resource release. Keeping Blink separate by composition remains appropriate.
 
 ### SP-21. Upgrade nom-tam-fits after the dither fix
 
