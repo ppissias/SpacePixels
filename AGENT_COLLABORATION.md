@@ -1,10 +1,10 @@
-# Lightweight Round-Robin Agent Collaboration — v2.1
+# Lightweight Round-Robin Agent Collaboration — v2.2
 
 ## 1. Objective
 
 Agents independently select **authorized, bounded** work, implement it, review each other, and rotate without waiting for routine maintainer prompts. Disagreements **defer the affected task, not the entire collaboration**. Keep agent-to-agent text minimal: source code, specs, tests, and Git are the detailed evidence.
 
-This is a **single shared working tree**, with **one writer at a time**. The protocol expresses persistent intent but cannot keep interactive CLIs alive after their turns expire. Truly unattended execution requires a separate watcher/supervisor that can safely resume the actual CLI.
+This is a **single shared working tree**, with **one writer at a time**. Every agent keeps running for the whole collaboration and checks Git for new handoffs every 2 minutes (section 8).
 
 ## 2. Files and reading discipline
 
@@ -18,7 +18,7 @@ This is a **single shared working tree**, with **one writer at a time**. The pro
 | `AGENTS.md` | Project overview, development standards, feature/spec locations and tests | **First**, on every agent session startup; revisit relevant sections as needed |
 | `AGENT_COLLABORATION.md` | Stable rules (this document) | **Second**, on every agent session startup; revisit on ambiguity |
 | `AGENT_STATE.md` | Approved scope, compact task ledger, maintainer decisions | Bootstrap, task selection, approval, deferral, maintainer review |
-| `AGENT_HANDOFF.md` | Only current owner/phase/task/action | Each wake-up or handoff |
+| `AGENT_HANDOFF.md` | Only current owner/phase/task/action, and the owner's latest status | Whenever the 2-minute check finds a new commit |
 
 The relevant task specification and `git diff` are consulted as needed. Do not re-read prior tasks or copy source diffs into Markdown. **Git commits are the handoff history**; no mandatory append-only message archive or file per task. Add `agent-decisions/<ID>.md` only for a genuinely complex decision; link to it from `AGENT_STATE.md`. Do not create one file per ordinary task.
 
@@ -33,9 +33,10 @@ The relevant task specification and `git diff` are consulted as needed. Do not r
 ## 4. Non-negotiable safety
 
 - **Single writer:** Only the agent named `Owner` in the **committed** handoff can write, stage, or commit. Waiting agents are read-only. A valid transfer requires a Git commit updating `AGENT_HANDOFF.md`; after transfer, the sender stops writing. Process each committed handoff at most once.
+- **Remember your name:** It is very important that every agent always remembers its own name (A, B, C, ...), as the maintainer gave it at startup, and compares it with `Owner` before it writes anything. The handoff says who should act, not who you are: never take your name from it. After a restart or a context reset, take your name from the maintainer's start instructions; if you cannot, ask the maintainer and stay read-only until you know it.
 - **No destructive shortcuts:** No `reset --hard`, `clean -fd`, automatic stash, force-push, rebase, or deletion of unexpected work. Never overwrite unrelated or uncommitted maintainer changes. Do not push, merge, or deploy without explicit approval.
 - **Review independence:** Reviewer may edit **coordination files** (`AGENT_HANDOFF.md`, `AGENT_STATE.md`, and optional decision notes) but not implementation code. Run only safe, relevant tests and report observed outcomes.
-- **Keep evidence:** Implementation code and the mailbox belong in **separate commits** so an unresolved implementation can be shelved without removing its handoff metadata. Track task base and implementation SHA. Do not claim a test, quota number, or approval that was not observed.
+- **Keep evidence:** Implementation code and the mailbox belong in **separate commits** so an unresolved implementation can be shelved without removing its handoff metadata. Track task base and implementation SHA. Do not claim a test result or an approval that was not observed.
 - **Do not store secrets** in committed coordination files. Follow `AGENTS.md` and the repository-specific contracts, feature specifications, and test requirements it identifies.
 
 ## 5. Round robin: A implements / B reviews / B implements / C reviews
@@ -71,8 +72,18 @@ The reviewer of task N becomes the implementer of task N+1 after **APPROVED** or
 
 `AGENT_HANDOFF.md` holds **one current state**, not a transcript. Target about 10–20 lines; comments are file/line or test references. `AGENT_STATE.md` holds **one compact ledger row per task**, plus decision records typically 3–8 lines each. Technical evidence lives in commits, specs, and tests. Create an optional per-decision note only if brief text cannot adequately explain the maintainer choice.
 
-## 8. Quotas, stopping and execution
+## 8. Staying active, unresponsive agents and stopping
 
-At measured account usage of 80%, prefer a safe checkpoint; at 90%, checkpoint and set `Phase: PAUSED_QUOTA`, `Owner: MAINTAINER`. When provider usage is inaccessible, write `UNKNOWN`, not a guess. Partial work is marked WIP and preserved. If a task cannot be safely isolated, preserve evidence and stop rather than inventing completion.
+**Keep running.** It is very important that every agent keeps running for the whole collaboration, also while another agent owns the handoff. Every **2 minutes**, check whether a new commit with a status update has arrived: compare the latest commit that changed `AGENT_HANDOFF.md` (`git log -1 --format="%H %ci" -- AGENT_HANDOFF.md`) with the last one you processed, and read the handoff only when it changed. The check is read-only. Use your CLI's own repeat or scheduled wake-up feature to keep checking; if your CLI cannot keep itself running, tell the maintainer when you start.
 
-Agents should keep processing eligible work until all work is independently reviewed, no independent item remains, a true safety blocker arises, or a quota checkpoint requires pause. Maintainer approval is still required for final integration. **Prompt instructions do not wake a finished CLI**: a separate external supervisor is necessary for reliable unattended operation.
+**Status updates while you own the handoff.** During long work, commit a short status update to `AGENT_HANDOFF.md` at least every 30 minutes (for example `Status: implementing SP-06, tests running`), in a commit of its own, not together with code. It tells the other agents that you are still working.
+
+**Unresponsive agent.** If the agent named `Owner` has made no commit for at least **one hour**, the other agents may conclude that it is out of service and bypass it:
+1. Only the next agent after it in the roster acts, so that two agents never take over at once. If that agent is silent too, the one after it may act after a further hour.
+2. Before writing, run `git status`. Uncommitted changes in the working tree are the silent agent's unfinished work: do not touch them. Commit only `AGENT_HANDOFF.md`, with `Phase: WAIT_MAINTAINER`, `Owner: MAINTAINER` and the reason.
+3. With a clean working tree, commit a handoff that names you as `Owner`, with `Bypassed: <agent>` and the time of its last commit, and continue its phase: do its pending review, or select the next eligible task. Never review your own implementation; if the bypass leaves no independent reviewer, set `Phase: WAIT_MAINTAINER`, `Owner: MAINTAINER`.
+4. Skip the bypassed agent in the rotation. When it comes back, it reads the latest committed handoff and stays read-only: its earlier ownership has ended. It rejoins the rotation when the maintainer says so.
+
+Waiting for the maintainer is not silence: never bypass `Owner: MAINTAINER`.
+
+**Stopping.** Partial work is marked WIP and preserved. If a task cannot be safely isolated, preserve evidence and stop rather than inventing completion. Agents keep processing eligible work until all work is independently reviewed, no independent item remains, or a true safety blocker arises. Maintainer approval is still required for final integration.

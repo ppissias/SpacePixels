@@ -11,7 +11,8 @@
 - Execution: One shared working tree, one committed Owner; A implements / B reviews, B implements / C reviews, C implements / A reviews. Waiting agents are read-only.
 - Scope boundary: Completed SP-10, SP-13 and SP-18 stay complete; dropped SP-15 stays dropped. SP-23 is already complete. No dependency upgrades or unrelated functional requests.
 - Required final checks: `gradlew.bat check`, `guiMechanicsTest`, `apiConsumerTest`; reference-data before/after comparisons for preparation/report/numeric changes as in DEVELOPER.md. Large JVMs run sequentially, using LOCAL-ENVIRONMENT.txt and scratch homes. Run the relevant checks per task before review.
-- Final integration: Maintainer approval is required before push/merge of this feature. Quota visibility: UNKNOWN.
+- Final integration: Maintainer approval is required before push/merge of this feature.
+- Protocol: AGENT_COLLABORATION.md v2.2 (2026-10-25). Quotas are gone. Every agent keeps running and checks for new handoff commits every 2 minutes, an owner commits a status update at least every 30 minutes during long work, and an owner silent for an hour may be bypassed (section 8). Agents started under v2.1 re-read sections 4 and 8.
 
 ## Task ledger
 
@@ -37,15 +38,17 @@ Statuses: TODO, IN_PROGRESS, REVIEW, DONE, DEFERRED. Independent review is requi
 ### D-01 — Independent viewer lifetime
 - Task: SP-19B. RESOLVED (2026-10-25): the maintainer chose a fresh start on import; close every viewer, including Manual Transient Inspection and Star Mask Explorer.
 - Next action: Implement owned viewer registration, session-handover/exit cleanup, queued-callback guards and unregister-on-disposal checks.
+- Maintainer decision: proceed with closing every viewer on import. It is a fresh start.  
 
 ### D-02 — Trial-setting policy and F13 boundary
 - Task: SP-19C. RESOLVED (2026-10-25): the maintainer chose the same trial-value/Apply workflow in the existing preview windows; Preview Frame adopts Apply to Settings.
 - Next action: Share controls for existing viewers, preserve preview refresh and focus rules, and apply only the edited fields to session settings. F13 remains a separate feature.
+- Maintainer decision:  we should follow the same approach everywhere. I propose to have a button "apply" in the preview windows, which would apply the settings.
 
 ### D-03 — Public package compatibility
 - Task: SP-11A and SP-14. RESOLVED (2026-10-25): the maintainer confirmed there are no official external SpacePixels API callers and approved intentional public Java API changes.
 - Next action: Document removed metadata mutators and public package/type moves, update migration/API examples and consumer checks, and preserve scientific results/report schemas. No legacy shims without a real caller.
--
+- Maintainer decision: There are no official external callers of the SpacePixels API currently, it is still early. If I understand correctly, this is the concern, breaking the public API? If this is the case, then please proceed. 
 
 ## Validation follow-up
 
