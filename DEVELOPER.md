@@ -112,7 +112,13 @@ The main paths through the code:
 - **GUI:** a `gui` command → `JobCoordinator` runs a `tasks` job → `util` services → JTransient or JPlateSolve.
 - **Headless:** `api` and `tools` → `util` services → JTransient.
 
-**Input contract.** Detection consumes aligned, equally sized monochrome frames with unsigned-16-bit pixels (`BZERO=32768`, `BSCALE=1`) in `short[][]` buffers. `FitsFileInformation` carries each frame's immutable metadata, unmodifiable header map and construction-time normalised timing. Compressed FITS can have an empty primary HDU, so use the HDU helper (`FitsImages.getImageHDU`). Preparation keeps timing and WCS headers, the registration padding, and the sequence-wide offset recorded in `SPOFFSET`.
+**Input contract.** Detection consumes aligned, equally sized monochrome frames with unsigned-16-bit pixels (`BZERO=32768`, `BSCALE=1`) in `short[][]` buffers. `FitsFileInformation` carries each frame's immutable metadata, unmodifiable header map and construction-time normalised timing. Compressed FITS can have an empty primary HDU, so use the HDU helper (`FitsInput.getImageHDU`). Preparation keeps timing and WCS headers, the registration padding, and the sequence-wide offset recorded in `SPOFFSET`.
+
+`FitsInput` owns discovery, image-HDU selection, format/readiness inspection and sequence validation. Its `Input` facts
+come from one inspection per file, on the importer's optional owned executor. Strict headless loading checks readiness
+before cohort consistency; interactive import preserves its sequence checks before conversion offers.
+`FitsPreparation` writes prepared copies through `FitsPixelConverter`; `XisfImageConverter` remains separate.
+These are static helpers; `FitsImportService` and `FitsBatchService` retain their instance-owned work.
 
 ## How a user action runs
 

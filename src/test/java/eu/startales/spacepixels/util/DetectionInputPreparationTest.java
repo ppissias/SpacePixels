@@ -118,7 +118,7 @@ public class DetectionInputPreparationTest {
 
         for (File fitsFile : fitsFiles) {
             try (Fits fits = new Fits(fitsFile)) {
-                BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
+                BasicHDU<?> hdu = FitsInput.getImageHDU(fits);
                 assertEquals(16, hdu.getHeader().getIntValue("BITPIX", 0));
                 assertEquals(2, hdu.getAxes().length);
                 assertTrue(hdu.getKernel() instanceof short[][]);
@@ -153,7 +153,7 @@ public class DetectionInputPreparationTest {
     public void preparationKeepsValuesBelowZeroByOffsettingEveryFrame() throws Exception {
         File prepared = assertScaledPreparation(new short[][]{{-6000, 0, 2000}}, 10000.0, 2.0, true, new int[]{0, 12000, 16000});
         try (Fits fits = new Fits(prepared)) {
-            assertEquals(2000, FitsImages.getImageHDU(fits).getHeader().getIntValue("SPOFFSET"));
+            assertEquals(2000, FitsInput.getImageHDU(fits).getHeader().getIntValue("SPOFFSET"));
         }
     }
 
@@ -161,7 +161,7 @@ public class DetectionInputPreparationTest {
     public void signed16BitWithoutValuesBelowZeroIsConvertedWithoutAnOffset() throws Exception {
         File prepared = assertScaledPreparation(new short[][]{{0, 1200, 30000}}, 0.0, 1.0, true, new int[]{0, 1200, 30000});
         try (Fits fits = new Fits(prepared)) {
-            assertFalse(FitsImages.getImageHDU(fits).getHeader().containsKey("SPOFFSET"));
+            assertFalse(FitsInput.getImageHDU(fits).getHeader().containsKey("SPOFFSET"));
         }
     }
 
@@ -187,7 +187,7 @@ public class DetectionInputPreparationTest {
         assertTrue(prepared.isInputWasPrepared());
         File preparedFile = new File(prepared.getPreparedInputDirectory(), "scaled.fit");
         try (Fits fits = new Fits(preparedFile)) {
-            BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
+            BasicHDU<?> hdu = FitsInput.getImageHDU(fits);
             short[][] data = (short[][]) hdu.getKernel();
             assertEquals(32768.0, hdu.getHeader().getDoubleValue("BZERO"), 0.0);
             assertEquals(1.0, hdu.getHeader().getDoubleValue("BSCALE"), 0.0);

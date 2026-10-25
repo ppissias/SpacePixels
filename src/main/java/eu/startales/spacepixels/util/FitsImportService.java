@@ -42,17 +42,17 @@ public final class FitsImportService implements AutoCloseable {
 
     /** Reads and validates a fresh frame array; null interaction requires detection readiness before sequence checks. */
     public FitsFileInformation[] readFiles() throws Exception {
-        File[] files = FitsFiles.list(directory);
-        FitsPreparationService.Input[] inputs = FitsPreparationService.inspect(files, executor, interaction == null);
+        File[] files = FitsInput.list(directory);
+        FitsInput.Input[] inputs = FitsInput.inspect(files, executor, interaction == null);
         if (interaction == null) {
             return metadata(inputs, "Headless import");
         }
-        FitsPreparationService.Input reference = inputs[0];
+        FitsInput.Input reference = inputs[0];
         if (reference.compressed()) {
-            FitsFormatChecker.FitsFormat compressedFormat = reference.format();
+            FitsInput.FitsFormat compressedFormat = reference.format();
             boolean conversionRequired = Math.abs(reference.bitpix()) == 32
                     || (reference.bitpix() == 16 && !reference.unsigned16Bit());
-            if (conversionRequired && compressedFormat != FitsFormatChecker.FitsFormat.UNSUPPORTED) {
+            if (conversionRequired && compressedFormat != FitsInput.FitsFormat.UNSUPPORTED) {
                 boolean color = reference.axes().length == 3;
                 int choice = interaction.confirm(
                         "These compressed images also need conversion to standard unsigned 16-bit pixels.\n\n"
@@ -85,11 +85,11 @@ public final class FitsImportService implements AutoCloseable {
         }
 
         // --- THE GATEKEEPER: Check the format of the first file ---
-        FitsFormatChecker.FitsFormat format = reference.format();
+        FitsInput.FitsFormat format = reference.format();
 
-        if ((format == FitsFormatChecker.FitsFormat.MONO_16BIT || format == FitsFormatChecker.FitsFormat.COLOR_16BIT)
+        if ((format == FitsInput.FitsFormat.MONO_16BIT || format == FitsInput.FitsFormat.COLOR_16BIT)
                 && !reference.unsigned16Bit()) {
-            boolean color = format == FitsFormatChecker.FitsFormat.COLOR_16BIT;
+            boolean color = format == FitsInput.FitsFormat.COLOR_16BIT;
             int choice = interaction.confirm(
                     dialogParagraphs("These 16-bit images store their pixels with BZERO " + headerNumber(reference.bzero())
                                     + " and BSCALE " + headerNumber(reference.bscale()) + ". "
@@ -107,7 +107,7 @@ public final class FitsImportService implements AutoCloseable {
             LOGGER.info("User declined 16-bit standardization. Clearing the active import.");
             return new FitsFileInformation[0];
 
-        } else if (format == FitsFormatChecker.FitsFormat.MONO_32BIT_FLOAT || format == FitsFormatChecker.FitsFormat.MONO_32BIT_INT) {
+        } else if (format == FitsInput.FitsFormat.MONO_32BIT_FLOAT || format == FitsInput.FitsFormat.MONO_32BIT_INT) {
             int choice = interaction.confirm(
                     "These images appear to be 32-bit.\nSpacePixels' transient detection engine is highly optimized for 16-bit monochrome files.\n\n" +
                             "Would you like to automatically standardize this sequence to 16-bit Mono?",
@@ -121,7 +121,7 @@ public final class FitsImportService implements AutoCloseable {
             LOGGER.info("User declined 32-bit mono standardization. Clearing the active import.");
             return new FitsFileInformation[0];
 
-        } else if (format == FitsFormatChecker.FitsFormat.COLOR_32BIT_FLOAT || format == FitsFormatChecker.FitsFormat.COLOR_32BIT_INT) {
+        } else if (format == FitsInput.FitsFormat.COLOR_32BIT_FLOAT || format == FitsInput.FitsFormat.COLOR_32BIT_INT) {
             int choice = interaction.confirm(
                     "These images are 32-bit Color.\nSpacePixels' transient detection engine requires 16-bit monochrome files.\n\n" +
                             "Would you like to extract the Luminance (16-bit Mono) and save a 16-bit Color version?",
@@ -134,7 +134,7 @@ public final class FitsImportService implements AutoCloseable {
 
             LOGGER.info("User declined 32-bit color standardization. Clearing the active import.");
             return new FitsFileInformation[0];
-        } else if (format == FitsFormatChecker.FitsFormat.UNSUPPORTED) {
+        } else if (format == FitsInput.FitsFormat.UNSUPPORTED) {
             interaction.error( "Unsupported FITS format detected. SpacePixels supports 16-bit and 32-bit FITS files.", "Import Error");
             return new FitsFileInformation[0];
         }
@@ -144,10 +144,10 @@ public final class FitsImportService implements AutoCloseable {
     }
 
     /** Returns validated metadata in frame order without keeping it in the importer. */
-    private static FitsFileInformation[] metadata(FitsPreparationService.Input[] inputs, String stage) throws IOException {
+    private static FitsFileInformation[] metadata(FitsInput.Input[] inputs, String stage) throws IOException {
         FitsFileInformation[] metadata = Arrays.stream(inputs)
-                .map(FitsPreparationService.Input::information).toArray(FitsFileInformation[]::new);
-        FitsSequenceValidator.validateAndSort(metadata);
+                .map(FitsInput.Input::information).toArray(FitsFileInformation[]::new);
+        FitsInput.validateAndSort(metadata);
         DebugOutput.println("Validated and loaded metadata for " + metadata.length + " FITS files.");
         logFitsTimestampDiagnostics(stage, metadata);
         return metadata;

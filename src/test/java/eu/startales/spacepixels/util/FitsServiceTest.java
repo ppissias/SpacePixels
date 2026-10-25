@@ -174,8 +174,8 @@ public class FitsServiceTest {
         assertTrue(interaction.questions.contains("Pixel Values Below Zero"));
         File converted = new File(input, "_16bit_converted/sample_16bit.fit");
         try (Fits source = new Fits(original); Fits result = new Fits(converted)) {
-            BasicHDU<?> before = FitsImages.getImageHDU(source);
-            BasicHDU<?> after = FitsImages.getImageHDU(result);
+            BasicHDU<?> before = FitsInput.getImageHDU(source);
+            BasicHDU<?> after = FitsInput.getImageHDU(result);
             assertRows(FitsPixelConverter.standardizeTo16BitMono(before.getKernel(), before.getHeader(), offset),
                     (short[][]) after.getKernel());
             assertEquals(offset, after.getHeader().getIntValue("SPOFFSET"));
@@ -198,8 +198,8 @@ public class FitsServiceTest {
             assertThrows(RedirectImportException.class, importer::readFiles);
         }
         try (Fits source = new Fits(original); Fits result = new Fits(new File(input, "_16bit_converted/sample_16bit.fit"))) {
-            BasicHDU<?> before = FitsImages.getImageHDU(source);
-            BasicHDU<?> after = FitsImages.getImageHDU(result);
+            BasicHDU<?> before = FitsInput.getImageHDU(source);
+            BasicHDU<?> after = FitsInput.getImageHDU(result);
             assertRows(FitsPixelConverter.standardizeTo16BitMono(before.getKernel(), before.getHeader(), 0),
                     (short[][]) after.getKernel());
             assertEquals(0, after.getHeader().getIntValue("SPOFFSET", 0));
@@ -227,16 +227,16 @@ public class FitsServiceTest {
             var redirect = assertThrows(RedirectImportException.class, importer::readFiles);
             assertEquals("_16bit_mono", redirect.getNewDirectory().getName());
         }
-        for (File original : FitsFiles.list(input)) {
+        for (File original : FitsInput.list(input)) {
             String stem = original.getName().replace(".fit", "");
             try (Fits source = new Fits(original);
                  Fits color = new Fits(new File(input, "_16bit_color/" + stem + "_16bit_color.fit"));
                  Fits mono = new Fits(new File(input, "_16bit_mono/" + stem + "_16bit_mono.fit"))) {
-                BasicHDU<?> image = FitsImages.getImageHDU(source);
+                BasicHDU<?> image = FitsInput.getImageHDU(source);
                 short[][][] expected = FitsPixelConverter.standardizeTo16BitColor(image.getKernel(), image.getHeader(), 0);
-                short[][][] actual = (short[][][]) FitsImages.getImageHDU(color).getKernel();
+                short[][][] actual = (short[][][]) FitsInput.getImageHDU(color).getKernel();
                 for (int channel = 0; channel < expected.length; channel++) assertRows(expected[channel], actual[channel]);
-                assertRows(FitsPixelConverter.extractLuminance(expected), (short[][]) FitsImages.getImageHDU(mono).getKernel());
+                assertRows(FitsPixelConverter.extractLuminance(expected), (short[][]) FitsInput.getImageHDU(mono).getKernel());
             }
         }
     }
@@ -260,7 +260,7 @@ public class FitsServiceTest {
             assertEquals("_uncompressed", redirect.getNewDirectory().getName());
         }
         try (Fits converted = new Fits(new File(input, "_uncompressed/sample.fit"))) {
-            assertRows(pixels, (short[][]) FitsImages.getImageHDU(converted).getKernel());
+            assertRows(pixels, (short[][]) FitsInput.getImageHDU(converted).getKernel());
         }
         try (FitsImportService importer = new FitsImportService(new File(input, "_uncompressed"), null)) {
             assertEquals(1, importer.readFiles().length);
@@ -270,7 +270,7 @@ public class FitsServiceTest {
     @Test
     public void batchMonoAndStretchKeepPixelsOriginalsAndLegacyOutputNames() throws Exception {
         File input = SyntheticDatasetFactory.createColor16FitsSequence(folder.getRoot().toPath(), "batch", 2).toFile();
-        File original = FitsFiles.list(input)[0];
+        File original = FitsInput.list(input)[0];
         byte[] untouched = Files.readAllBytes(original.toPath());
         FitsBatchService batch = new FitsBatchService(input, new FitsVisualizationRenderer());
         File generated = batch.batchConvertToMono(true, 10, 2, StretchAlgorithm.ASINH, null);
@@ -279,14 +279,14 @@ public class FitsServiceTest {
         try (Fits source = new Fits(original);
              Fits mono = new Fits(new File(input, "_mono/" + stem + "_mono.fit"));
              Fits stretched = new Fits(new File(input, "_mono_stretched/" + stem + "_mono_stretch.fit"))) {
-            BasicHDU<?> image = FitsImages.getImageHDU(source);
+            BasicHDU<?> image = FitsInput.getImageHDU(source);
             short[][] expected = FitsPixelConverter.extractLuminance(
                     FitsPixelConverter.standardizeTo16BitColor(image.getKernel(), image.getHeader()));
-            assertRows(expected, (short[][]) FitsImages.getImageHDU(mono).getKernel());
+            assertRows(expected, (short[][]) FitsInput.getImageHDU(mono).getKernel());
             try (Fits expectedFits = FitsPixelConverter.createFitsFromData(expected, image.getHeader())) {
                 new FitsVisualizationRenderer().stretchFitsImage(expectedFits, 10, 2, StretchAlgorithm.ASINH);
-                assertRows((short[][]) FitsImages.getImageHDU(expectedFits).getKernel(),
-                        (short[][]) FitsImages.getImageHDU(stretched).getKernel());
+                assertRows((short[][]) FitsInput.getImageHDU(expectedFits).getKernel(),
+                        (short[][]) FitsInput.getImageHDU(stretched).getKernel());
             }
         }
         batch.batchStretch(10, 2, StretchAlgorithm.ASINH, null);

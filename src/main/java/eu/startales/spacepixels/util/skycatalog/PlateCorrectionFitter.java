@@ -17,7 +17,7 @@ import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.PlateSolutionCorrection;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
 import eu.startales.spacepixels.util.WcsSolutionResolver;
-import eu.startales.spacepixels.util.FitsImages;
+import eu.startales.spacepixels.util.FitsInput;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.core.SourceExtractor;
@@ -292,7 +292,7 @@ public final class PlateCorrectionFitter {
     /** The frame's 16-bit data; for a colour frame its middle plane. Null for other data. */
     static short[][] readMono(File file) throws IOException {
         try (Fits fits = new Fits(file)) {
-            Object kernel = FitsImages.getImageHDU(fits).getKernel();
+            Object kernel = FitsInput.getImageHDU(fits).getKernel();
             if (kernel instanceof short[][]) {
                 return (short[][]) kernel;
             }

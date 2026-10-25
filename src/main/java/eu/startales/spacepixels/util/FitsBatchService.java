@@ -28,7 +28,7 @@ public final class FitsBatchService {
      * can offer to import it. With {@code stretch}, stretched mono derivatives are written beside the mono copies.
      */
     public File batchConvertToMono(boolean stretch, int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
-        File[] fitsFileInformation = FitsFiles.list(directory);
+        File[] fitsFileInformation = FitsInput.list(directory);
         File generatedMonoDirectory = null;
 
         int total = fitsFileInformation.length;
@@ -40,7 +40,7 @@ public final class FitsBatchService {
             }
 
             try (Fits originalFits = new Fits(fileInfo)) {
-                BasicHDU<?> imageHDU = FitsImages.getImageHDU(originalFits);
+                BasicHDU<?> imageHDU = FitsInput.getImageHDU(originalFits);
 
                 // Check if it's already mono to save time
                 int naxis = imageHDU.getHeader().getIntValue("NAXIS");
@@ -72,7 +72,7 @@ public final class FitsBatchService {
 
     /** Writes stretched copies of all images in the folder, color or mono. */
     public void batchStretch(int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
-        File[] fitsFileInformation = FitsFiles.list(directory);
+        File[] fitsFileInformation = FitsInput.list(directory);
 
         int total = fitsFileInformation.length;
         for (int fileIndex = 0; fileIndex < total; fileIndex++) {
@@ -98,7 +98,7 @@ public final class FitsBatchService {
     }
 
     private Fits convertToMono(Fits colorFITSImage) throws FitsException, IOException {
-        BasicHDU<?> originalHDU = FitsImages.getImageHDU(colorFITSImage);
+        BasicHDU<?> originalHDU = FitsInput.getImageHDU(colorFITSImage);
         Object monoKernelData = FitsPixelConverter.extractLuminance(
                 FitsPixelConverter.standardizeTo16BitColor(originalHDU.getKernel(), originalHDU.getHeader()));
         return FitsPixelConverter.createFitsFromData(monoKernelData, originalHDU.getHeader());
@@ -127,7 +127,7 @@ public final class FitsBatchService {
             if (progress != null) progress.onProgressUpdate(percent, "Decompressing " + file.getName() + "...");
 
             try (Fits originalFits = new Fits(file)) {
-                BasicHDU<?> imageHDU = FitsImages.getImageHDU(originalFits);
+                BasicHDU<?> imageHDU = FitsInput.getImageHDU(originalFits);
 
                 if (imageHDU != null) {
                     Fits decompressedFits = new Fits();
@@ -158,14 +158,14 @@ public final class FitsBatchService {
             File monoDirectory = new File(file.getParentFile(), isColor ? "_16bit_mono" : "_16bit_converted");
             Files.createDirectories(monoDirectory.toPath());
             File monoOutput = new File(monoDirectory,
-                    FitsPreparationService.preparedFilename(file, isColor ? "_16bit_mono" : "_16bit"));
+                    FitsPreparation.preparedFilename(file, isColor ? "_16bit_mono" : "_16bit"));
             File colorOutput = null;
             if (isColor) {
                 File colorDirectory = new File(file.getParentFile(), "_16bit_color");
                 Files.createDirectories(colorDirectory.toPath());
-                colorOutput = new File(colorDirectory, FitsPreparationService.preparedFilename(file, "_16bit_color"));
+                colorOutput = new File(colorDirectory, FitsPreparation.preparedFilename(file, "_16bit_color"));
             }
-            FitsPreparationService.standardizeFile(file, addedOffset, monoOutput, colorOutput);
+            FitsPreparation.standardizeFile(file, addedOffset, monoOutput, colorOutput);
             if (colorOutput != null) printFitsDebugInfo("CONVERTED 16-BIT COLOR", colorOutput);
             printFitsDebugInfo(isColor ? "CONVERTED 16-BIT LUMINANCE" : "CONVERTED 16-BIT MONO", monoOutput);
             if (targetDir == null) targetDir = monoDirectory;
@@ -178,7 +178,7 @@ public final class FitsBatchService {
             return;
         }
         try (Fits fits = new Fits(fitsFile)) {
-            BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
+            BasicHDU<?> hdu = FitsInput.getImageHDU(fits);
             Header header = hdu.getHeader();
             Object kernel = hdu.getKernel();
 

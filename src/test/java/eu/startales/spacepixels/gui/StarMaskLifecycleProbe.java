@@ -3,7 +3,7 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.FitsImages;
+import eu.startales.spacepixels.util.FitsInput;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
@@ -77,7 +77,7 @@ public final class StarMaskLifecycleProbe {
         for (int index = 0; index < files.length; index++) {
             FitsFileInformation info = files[index];
             try (Fits fits = new Fits(info.getFilePath())) {
-                frames.add(new ImageFrame(index, info.getFileName(), (short[][]) FitsImages.getImageHDU(fits).getKernel(),
+                frames.add(new ImageFrame(index, info.getFileName(), (short[][]) FitsInput.getImageHDU(fits).getKernel(),
                         info.getObservationTimestamp(), info.getExposureDurationMillis()));
             }
         }

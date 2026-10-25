@@ -58,8 +58,8 @@ public final class IterativeDetectionPipelineService {
 
     public static int countInputFiles(File directory) throws IOException {
         if (!directory.isDirectory()) throw new IOException("Choose an existing input directory.");
-        FitsSequenceValidator.validateDirectoryExtensions(directory);
-        File[] files = directory.listFiles(file -> file.isFile() && FitsSequenceValidator.imageExtension(file.getName()) != null);
+        FitsInput.validateDirectoryExtensions(directory);
+        File[] files = directory.listFiles(file -> file.isFile() && FitsInput.imageExtension(file.getName()) != null);
         if (files == null) throw new IOException("Could not list input directory: " + directory);
         return files.length;
     }

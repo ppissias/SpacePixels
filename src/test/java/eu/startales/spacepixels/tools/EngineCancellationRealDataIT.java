@@ -3,7 +3,7 @@ package eu.startales.spacepixels.tools;
 import eu.startales.spacepixels.util.Cancellation;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.FitsImportService;
-import eu.startales.spacepixels.util.FitsImages;
+import eu.startales.spacepixels.util.FitsInput;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.GsonBuilder;
@@ -125,7 +125,7 @@ public class EngineCancellationRealDataIT {
                 for (int index = 0; index < files.length; index++) {
                     FitsFileInformation info = files[index];
                     try (Fits fits = new Fits(info.getFilePath())) {
-                        Object pixels = FitsImages.getImageHDU(fits).getKernel();
+                        Object pixels = FitsInput.getImageHDU(fits).getKernel();
                         assertTrue("Use a prepared 16-bit monochrome dataset.", pixels instanceof short[][]);
                         frames.add(new ImageFrame(index, info.getFileName(), (short[][]) pixels,
                                 info.getObservationTimestamp(), info.getExposureDurationMillis()));

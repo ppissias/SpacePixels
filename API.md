@@ -27,7 +27,7 @@ Other `eu.startales.spacepixels.*` packages should be treated as internal implem
 
 As authorized under maintainer decision D-03, `eu.startales.spacepixels.util.FitsFileInformation` is `final` and deeply immutable:
 
-- **Mutators and snapshots removed:** `setSizeWidth(...)`, `setSizeHeight(...)`, `setFitsHeader(...)`, and `snapshot()` have been removed. Existing callers should not mutate metadata instances in place or rely on shallow copies.
+- **Mutators and snapshots removed:** `setFilePath(...)`, `setFileName(...)`, `setMonochrome(...)`, `setSizeWidth(...)`, `setSizeHeight(...)` and `snapshot()` have been removed. This is an intentional source and binary API break: update callers and recompile. `getFitsHeader()` returns an unmodifiable map; build a new map and replace the descriptor instead of calling `put`, `putAll` or `clear` on it.
 - **Construction:** Use `new FitsFileInformation(filePath, fileName, monochrome, sizeWidth, sizeHeight, fitsHeader)` to construct frame descriptors. The constructor freezes the header map into an unmodifiable map (preserving null commentary card values) and normalises ISO-8601 observation timestamps at construction time.
 - **Copy with updated header:** Use `fileInfo.withFitsHeader(updatedHeaderMap)` to produce an updated descriptor (for example when applying a newly computed WCS solution) without mutating existing descriptors.
 - **Container protection:** Array getters in results (`result.getFilesInformation()`) clone the array container to protect ordering, while individual descriptors remain shared and immutable.

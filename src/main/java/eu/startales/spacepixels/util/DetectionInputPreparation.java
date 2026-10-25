@@ -86,7 +86,7 @@ public final class DetectionInputPreparation {
         if (!inputDirectory.exists() || !inputDirectory.isDirectory()) {
             throw new IOException("Input path is not a directory: " + inputDirectory.getAbsolutePath());
         }
-        FitsSequenceValidator.validateDirectoryExtensions(inputDirectory);
+        FitsInput.validateDirectoryExtensions(inputDirectory);
 
         if (!autoPrepare) {
             return new PreparedDirectory(inputDirectory, inputDirectory, false, null);
@@ -97,11 +97,11 @@ public final class DetectionInputPreparation {
         File workingDirectory = XisfImageConverter.prepareDirectoryForFitsImport(inputDirectory,
                 (percentage, message) -> emitProgress(progressListener, scaleProgress(percentage, 5, 70), message));
         boolean inputWasPrepared = !inputDirectory.equals(workingDirectory);
-        File[] fitsFiles = FitsFiles.list(workingDirectory);
+        File[] fitsFiles = FitsInput.list(workingDirectory);
 
         emitProgress(progressListener, 72, "Validating whether the FITS inputs are already detection-ready...");
-        FitsPreparationService.Input[] inputs = FitsPreparationService.inspect(fitsFiles, null, false);
-        if (Arrays.stream(inputs).allMatch(FitsPreparationService.Input::detectionReady)) {
+        FitsInput.Input[] inputs = FitsInput.inspect(fitsFiles, null, false);
+        if (Arrays.stream(inputs).allMatch(FitsInput.Input::detectionReady)) {
             emitProgress(progressListener, 100, "Input directory is already ready for 16-bit monochrome detection.");
             return new PreparedDirectory(inputDirectory, workingDirectory, inputWasPrepared, null);
         }
@@ -126,8 +126,8 @@ public final class DetectionInputPreparation {
                 emitProgress(progressListener,
                         scaleProgress(fileIndex + 1, fitsFiles.length, 75, 100),
                         "Preparing " + fitsFile.getName() + " for mono 16-bit detection...");
-                File outputFile = new File(preparedOutputDirectory, FitsPreparationService.preparedFilename(fitsFile, ""));
-                FitsPreparationService.standardizeFile(fitsFile, addedOffset, outputFile, null);
+                File outputFile = new File(preparedOutputDirectory, FitsPreparation.preparedFilename(fitsFile, ""));
+                FitsPreparation.standardizeFile(fitsFile, addedOffset, outputFile, null);
             }
         } catch (Exception failure) {
             // A stopped or failed conversion leaves a partial copy that nothing refers to.

@@ -135,7 +135,7 @@ public final class BlinkSequence {
     /** Reads a frame as SpacePixels displays it: 16-bit data as stored, other formats converted to 16 bits. */
     public static Frame load(FitsFileInformation info) throws IOException {
         try (Fits fits = new Fits(new File(info.getFilePath()))) {
-            BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
+            BasicHDU<?> hdu = FitsInput.getImageHDU(fits);
             Object kernel = hdu.getKernel();
             short[][][] planes;
             if (kernel instanceof short[][]) {

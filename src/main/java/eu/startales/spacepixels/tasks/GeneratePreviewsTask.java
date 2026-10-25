@@ -13,7 +13,7 @@ package eu.startales.spacepixels.tasks;
 import nom.tam.fits.Fits;
 import eu.startales.spacepixels.util.FitsVisualizationRenderer;
 import eu.startales.spacepixels.util.StretchAlgorithm;
-import eu.startales.spacepixels.util.FitsImages;
+import eu.startales.spacepixels.util.FitsInput;
 
 import java.awt.image.BufferedImage;
 import java.util.concurrent.Callable;
@@ -53,7 +53,7 @@ public class GeneratePreviewsTask implements Callable<BufferedImage[]> {
     @Override
     public BufferedImage[] call() throws Exception {
         try (Fits fitsImage = new Fits(filePath)) {
-            Object kernelData = FitsImages.getImageHDU(fitsImage).getKernel();
+            Object kernelData = FitsInput.getImageHDU(fitsImage).getKernel();
 
             // The whole frame, reduced to display size; the stretch statistics then cover the whole frame too.
             Object previewData = reduce(kernelData, MAX_PREVIEW_SIDE);

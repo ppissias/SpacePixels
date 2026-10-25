@@ -93,8 +93,8 @@ public class FitsPixelConverterTest {
         assertFalse(FitsPixelConverter.canHoldNegativeValues(header(32, 2147483648.0, 1.0)));
         assertTrue(FitsPixelConverter.canHoldNegativeValues(header(-32, 0.0, 1.0)));
         assertFalse(FitsPixelConverter.canHoldNegativeValues(header(8, 0.0, 1.0)));
-        assertTrue(FitsPixelConverter.isUnsigned16Bit(header(16, 32768.0, 1.0)));
-        assertFalse(FitsPixelConverter.isUnsigned16Bit(header(16, 0.0, 1.0)));
+        assertTrue(FitsInput.isUnsigned16Bit(header(16, 32768.0, 1.0)));
+        assertFalse(FitsInput.isUnsigned16Bit(header(16, 0.0, 1.0)));
     }
 
     @Test

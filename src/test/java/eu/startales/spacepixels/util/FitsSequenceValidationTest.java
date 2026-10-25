@@ -261,7 +261,7 @@ public class FitsSequenceValidationTest {
     @Test
     public void compressedFitsSuffixesAreDistinctToPreventStemCollisions() {
         File[] files = {new File("frame.fit.fz"), new File("frame.fits.fz")};
-        assertThrows(IOException.class, () -> FitsSequenceValidator.validateExtensions(files));
+        assertThrows(IOException.class, () -> FitsInput.validateExtensions(files));
     }
 
     @Test

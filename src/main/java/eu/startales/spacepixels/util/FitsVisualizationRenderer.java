@@ -24,7 +24,7 @@ public final class FitsVisualizationRenderer {
     /** Stretches the image data of an opened FITS file in place, as Batch Stretch does. */
     public void stretchFitsImage(Fits fitsImage, int stretchFactor, int iterations, StretchAlgorithm algo)
             throws FitsException, IOException {
-        BasicHDU<?> hdu = FitsImages.getImageHDU(fitsImage);
+        BasicHDU<?> hdu = FitsInput.getImageHDU(fitsImage);
         Object kernelData = hdu.getKernel();
 
         if (kernelData instanceof short[][]) {

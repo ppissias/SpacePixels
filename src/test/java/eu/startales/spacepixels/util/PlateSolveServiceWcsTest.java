@@ -73,7 +73,7 @@ public class PlateSolveServiceWcsTest {
         assertFalse(updatedHeader.containsKey("WCS_LINK"));
 
         try (Fits updatedFits = new Fits(fitsPath.toFile())) {
-            Header header = FitsImages.getImageHDU(updatedFits).getHeader();
+            Header header = FitsInput.getImageHDU(updatedFits).getHeader();
 
             assertEquals(2, header.getIntValue("WCSAXES"));
             assertEquals(42.25d, header.getDoubleValue("CRPIX1"), 1.0e-9);
@@ -103,7 +103,7 @@ public class PlateSolveServiceWcsTest {
         solver.updateFitsHeaderWithWCS(fitsPath.toString(), createStandardWcsSolveInfo());
 
         try (Fits updatedFits = new Fits(fitsPath.toFile())) {
-            BasicHDU<?> hdu = FitsImages.getImageHDU(updatedFits);
+            BasicHDU<?> hdu = FitsInput.getImageHDU(updatedFits);
             Header header = hdu.getHeader();
 
             assertEquals(2, header.getIntValue("WCSAXES"));
@@ -137,7 +137,7 @@ public class PlateSolveServiceWcsTest {
         }
 
         try (Fits unchangedFits = new Fits(fitsPath.toFile())) {
-            Header header = FitsImages.getImageHDU(unchangedFits).getHeader();
+            Header header = FitsInput.getImageHDU(unchangedFits).getHeader();
             assertEquals("M81", header.getStringValue("OBJECT"));
             assertFalse(header.containsKey("CTYPE1"));
         }
@@ -181,7 +181,7 @@ public class PlateSolveServiceWcsTest {
         }
 
         try (Fits unchangedFits = new Fits(fitsPath.toFile())) {
-            Header header = FitsImages.getImageHDU(unchangedFits).getHeader();
+            Header header = FitsInput.getImageHDU(unchangedFits).getHeader();
             assertFalse(header.containsKey("CTYPE1"));
             assertFalse(header.containsKey("CRVAL1"));
         }

@@ -10,7 +10,7 @@
 package eu.startales.spacepixels.tasks;
 
 import eu.startales.spacepixels.util.FitsFileInformation;
-import eu.startales.spacepixels.util.FitsImages;
+import eu.startales.spacepixels.util.FitsInput;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 import nom.tam.fits.Fits;
@@ -43,7 +43,7 @@ final class SessionFrameLoader {
             }
             File currentFile = new File(filesInfo[i].getFilePath());
             try (Fits fitsFile = new Fits(currentFile)) {
-                Object kernel = FitsImages.getImageHDU(fitsFile).getKernel();
+                Object kernel = FitsInput.getImageHDU(fitsFile).getKernel();
                 if (!(kernel instanceof short[][])) {
                     throw new Exception("Cannot process: Expected short[][]");
                 }

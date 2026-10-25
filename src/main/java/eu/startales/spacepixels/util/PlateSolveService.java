@@ -177,7 +177,7 @@ public final class PlateSolveService implements AutoCloseable {
         try (StagedFile staged = new StagedFile(originalFile)) {
             int[] axes;
             try (Fits fits = new Fits(originalFile)) {
-                BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
+                BasicHDU<?> hdu = FitsInput.getImageHDU(fits);
                 if (hdu == null || hdu.getHeader() == null) {
                     throw new IOException("Could not locate an image header in " + originalFile.getName());
                 }
@@ -206,7 +206,7 @@ public final class PlateSolveService implements AutoCloseable {
     /** Fails unless the written copy holds an image of the expected size with all of its data present. */
     static void checkReadsBack(File written, int[] expectedAxes, String name) throws IOException, FitsException {
         try (Fits fits = new Fits(written)) {
-            BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
+            BasicHDU<?> hdu = FitsInput.getImageHDU(fits);
             boolean complete = hdu != null
                     && Arrays.equals(hdu.getAxes(), expectedAxes)
                     && hdu.getData().getFileOffset() + hdu.getData().getSize() <= written.length();
@@ -311,7 +311,7 @@ public final class PlateSolveService implements AutoCloseable {
 
     private List<HeaderCard> readWcsHeaderCards(File wcsFitsFile) throws Exception {
         try (Fits wcsFits = new Fits(wcsFitsFile)) {
-            BasicHDU<?> hdu = FitsImages.getImageHDU(wcsFits);
+            BasicHDU<?> hdu = FitsInput.getImageHDU(wcsFits);
             if (hdu == null || hdu.getHeader() == null) {
                 return Collections.emptyList();
             }

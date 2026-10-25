@@ -30,11 +30,10 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 ### Recommended changes
 
-**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10, SP-13, SP-06, SP-05 and SP-07 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-08, SP-11, SP-16 and SP-19. Their proposals and issue reviews below still apply.
+**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10, SP-13, SP-06, SP-05, SP-07 and SP-08 (completed 2026-10-25). The immutable metadata and session-owned WCS replacement part of SP-11 is also reviewed. SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Pending: SP-11 helper consolidation, SP-16 and SP-19, followed by the mechanical SP-14 package move. Their proposals and issue reviews below still apply.
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
-| [SP-08](#sp-08-one-report-entry-point-and-a-complete-report-context) | One report entry point and a complete report context | Medium | Medium |
 | [SP-11](#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Fewer FITS helper classes; immutable frame metadata | Low | Medium |
 | [SP-14](#sp-14-package-names-that-say-what-they-hold) | Package names that say what they hold | Low | Medium, mechanical |
 | [SP-16](#sp-16-check-the-ui-at-larger-display-scaling) | Check the UI at larger display scaling | Low | Small |
@@ -44,37 +43,12 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 **Suggested order.**
 
-1. SP-08. The catalogue controller (SP-06), panel collaborators (SP-05), direct settings row wiring (SP-07), shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
+1. Finish SP-11 and SP-19; inspect scaling (SP-16) after the viewer controls settle. The catalogue controller, panel collaborators, direct settings rows, application I/O queue, session-owned services and report boundaries are in place.
 2. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
 Keep dependency maintenance (SP-21 and SP-22) separate from refactorings, according to each item's timing.
 
 Refactorings are intended to preserve behaviour. Evaluate the exceptions raised by the issue reviews, including SP-19's viewer lifetime and settings policy, as explicit behaviour decisions. Check implementation changes with the relevant unit and GUI mechanics tests. Items that touch detection or reports also need byte-identical deterministic `report-data.json`, `detection_config.json` and CSV content on the reference datasets, using the normalization and comparison method in DEVELOPER.md.
-
-### SP-08. One report entry point and a complete report context
-
-**Implementation split.** SP-08A implements the request/entry point, complete context and shared test construction.
-SP-08B moves map rendering to `ReportMaps` and text formatting to `ReportFormat`. The proposal remains pending until both parts are reviewed.
-
-**Problem.**
-- `DetectionReportGenerator` (1,523 lines) is an all-static class that holds data types, image rendering (mask overlays, global maps, drift map, mosaics, cluster maps), text formatting and the export orchestration. 27 classes call its static helpers.
-- The export has one entry, `exportTrackVisualizations`, with eight positional parameters. The API and the GUI reach it through `StandardDetectionPipelineService` (`run`, or `runDetectionPipeline` and `exportDetectionReport`) and its private export overload.
-- `DetectionReportContext` takes 20 constructor parameters, copied one by one from the `PipelineResult`. Six more fields are set after construction.
-- The context also has fallback branches "for isolated section callers": `data == null ? category.id(..) : data.finding(..)` and `runContext == null ? defaults`. That is production code kept only so tests can build sections without a full context.
-
-**Proposal.**
-- One `ReportExporter` with a single `export(ReportRequest)`: the request holds the result, frames, files, run context and inclusion.
-- A context factory that builds `DetectionReportContext` completely from the `PipelineResult` and `ReportData`. Tests use the same factory, so the fallback branches go.
-- Move map rendering to a `ReportMaps` class and formatting to `ReportFormat`.
-
-**Benefit.** One way into the report, a context that is always complete, and section writers that depend on two small helpers instead of the whole generator.
-
-**Verification.** Byte-identical report folders, minus the generation time, on the reference datasets.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- A complete context should distinguish valid absence (no WCS, catalogue or optional analysis) from an uninitialized context. Keep no-WCS, empty-result and partial-inclusion cases covered when deleting test-only fallback construction paths.
-- **Clarify byte comparison.** `PipelineDiagnosticsSectionWriter.writeStageTimings` writes measured engine and stage durations into HTML. Excluding generation time alone cannot make independent report folders byte-identical. List and normalize volatile timing fields, compare deterministic outputs and rendered assets exactly, and assess performance separately, as in DEVELOPER.md.
-- Preserve cancellation cleanup, atomic HTML publication and report-failure messages when replacing the overloads. Keep handing a run's overlays over before the report decision and export (SP-04, step 1), so they still survive a declined, failed or cancelled report.
 
 ### SP-11. Fewer FITS helper classes; immutable frame metadata
 

@@ -197,7 +197,7 @@ Internal processing services.
 
 Important classes:
 
-- `FitsImportService`, `FitsPreparationService`, `FitsBatchService`, `FitsFiles`, `FitsImages`
+- `FitsImportService`, `FitsInput`, `FitsPreparation`, `FitsBatchService`
 - `FitsImportInteraction` (decisions/progress; implemented on the EDT by `gui.GuiFitsImportInteraction`)
 - `DetectionInputPreparation`
 - `StandardDetectionPipelineService`
@@ -207,7 +207,7 @@ Important classes:
 - `AutoTunerRunner`
 - `PlateSolveService`
 - `FitsFileInformation`
-- `FitsFormatChecker`
+- `FitsInput` (storage format classification)
 - `FitsPixelConverter`
 - `FitsVisualizationRenderer`
 - `DisplayImageRenderer`
@@ -221,7 +221,7 @@ Important classes:
 
 Callers use these services directly; there is no forwarding facade. All `util` sources, including reporting/catalogue helpers, have no Swing/GUI dependencies; headless AWT image rendering remains permitted. Shared HDU discovery and directory listing are separate helpers. Each `FitsImportService` owns its bounded pool for one import attempt, and its caller closes it. Classes across GUI, session, FITS and reporting packages log non-fatal problems through their own `java.util.logging.Logger` instances (`WARNING` or `SEVERE`) and send optional diagnostic output through `DebugOutput`.
 
-Compressed 32-bit and signed/scaled 16-bit import selects combined preparation using the actual decompressed image HDU metadata. The existing batch standardizer reads compressed pixels through `FitsPreparationService`, writes final unsigned mono/color copies directly and preserves the shared sequence-wide offset/zero-padding policy. Already-standard unsigned 16-bit compressed input retains decompression-only behavior. GUI decisions stay in `FitsImportInteraction`; strict headless import continues to refuse non-ready input.
+Compressed 32-bit and signed/scaled 16-bit import selects combined preparation using the actual decompressed image HDU metadata. The existing batch standardizer reads compressed pixels through `FitsPreparation`, writes final unsigned mono/color copies directly and preserves the shared sequence-wide offset/zero-padding policy. Already-standard unsigned 16-bit compressed input retains decompression-only behavior. GUI decisions stay in `FitsImportInteraction`; strict headless import continues to refuse non-ready input.
 
 The window explicitly injects `gui.GuiFitsImportInteraction` through `FitsImportTask` into `FitsImportService` and its exposure-group decision (`FitsImportService.offerToImportLargestExposureGroup`). An importer without interaction validates strictly and never creates dialogs. `MainApplicationPanel` injects `gui.GuiDetectionReportPrompt` callbacks into normal/iterative jobs; only this GUI adapter builds the report-size question on the EDT. The threshold remains 50, and iterative callbacks use each pass's subset/WCS and effective config. Accepted choices replace only the summary's `ReportInclusion`, consumed by export, not the measurements/config. Default task constructors are noninteractive threshold guards; explicit null report callbacks permit export without asking. A declined import preserves the current session. These boundaries are protected by recursive dependency tests and dialog/job tests.
 
@@ -539,9 +539,9 @@ GUI import may prompt for:
 - importing the largest exposure group into a working subdirectory when exposure times differ
 - color-to-mono conversion through the main UI
 
-`FitsPreparationService` supplies the same sequence inspection, readiness facts and copied header metadata to interactive import, strict headless loading and automatic API preparation. Interactive and strict imports use the existing bounded import pool; automatic preparation inspects serially. `FitsSequenceValidator` checks those facts before conversion: uniform dimensions, channel layout/sample type, all-or-none usable timestamps, and one exposure group. FITS also compares `BZERO`/`BSCALE` and compression. `XisfImageConverter.validateSequence` performs the corresponding pre-conversion XISF checks. Exposure durations may differ within 2% (at least 0.1 s); missing durations form a separate group. The GUI can copy the largest exposure group to a working subdirectory; headless runs reject the mixed sequence.
+`FitsInput` supplies the same sequence inspection, readiness facts and copied header metadata to interactive import, strict headless loading and automatic API preparation. Interactive and strict imports use the existing bounded import pool; automatic preparation inspects serially. `FitsInput` checks those facts before conversion: uniform dimensions, channel layout/sample type, all-or-none usable timestamps, and one exposure group. FITS also compares `BZERO`/`BSCALE` and compression. `XisfImageConverter.validateSequence` performs the corresponding pre-conversion XISF checks. Exposure durations may differ within 2% (at least 0.1 s); missing durations form a separate group. The GUI can copy the largest exposure group to a working subdirectory; headless runs reject the mixed sequence.
 
-`FitsPreparationService.standardizeFile` owns normalization, optional colour output, luminance extraction and staged FITS writes for both `FitsBatchService` and `DetectionInputPreparation`. GUI conversions preserve their `_16bit_converted`, `_16bit_mono` and `_16bit_color` folders and suffixes; automatic preparation preserves its `_spacepixels_prepared_mono16_*` layout. Interaction and negative-value policy remain with the caller. Compressed input that is already unsigned 16-bit is only decompressed (to `_uncompressed`); other compressed input is converted in one step, as described for the `util` package above.
+`FitsPreparation.standardizeFile` owns normalization, optional colour output, luminance extraction and staged FITS writes for both `FitsBatchService` and `DetectionInputPreparation`. GUI conversions preserve their `_16bit_converted`, `_16bit_mono` and `_16bit_color` folders and suffixes; automatic preparation preserves its `_spacepixels_prepared_mono16_*` layout. Interaction and negative-value policy remain with the caller. Compressed input that is already unsigned 16-bit is only decompressed (to `_uncompressed`); other compressed input is converted in one step, as described for the `util` package above.
 
 The engine receives unsigned-16-bit-equivalent pixels (`BZERO` 32768, `BSCALE` 1), represented in signed Java shorts. A conversion offset is shared across frames and recorded in `SPOFFSET`, while row-end zero padding stays zero. The GUI path is interactive and may redirect the active import directory to a generated working directory.
 

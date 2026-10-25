@@ -119,7 +119,7 @@ public final class StandardDetectionPipelineService {
 
             File currentFile = new File(cachedFileInfo[i].getFilePath());
             try (Fits fitsFile = new Fits(currentFile)) {
-                BasicHDU<?> hdu = FitsImages.getImageHDU(fitsFile);
+                BasicHDU<?> hdu = FitsInput.getImageHDU(fitsFile);
                 Object kernel = hdu.getKernel();
 
                 if (!(kernel instanceof short[][])) {

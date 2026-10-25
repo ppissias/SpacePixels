@@ -6,7 +6,7 @@ import eu.startales.spacepixels.jobs.JobCoordinator;
 import eu.startales.spacepixels.jobs.JobKind;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
-import eu.startales.spacepixels.util.FitsImages;
+import eu.startales.spacepixels.util.FitsInput;
 import eu.startales.spacepixels.util.PlateSolveService;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import nom.tam.fits.Fits;
@@ -44,7 +44,7 @@ public class WriteWcsJobTest {
             assertEquals("50.5", ((JobOutcome.Completed<Map<String, String>>) outcome).result().get("CRPIX1"));
         }
         try (Fits fits = new Fits(frame)) {
-            Header header = FitsImages.getImageHDU(fits).getHeader();
+            Header header = FitsInput.getImageHDU(fits).getHeader();
             assertEquals("RA---TAN", header.getStringValue("CTYPE1"));
         }
         assertFalse(sidecar.exists());

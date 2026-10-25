@@ -254,12 +254,12 @@ public class IterativeDetectionRunTest {
     }
 
     static void addMovingTargetAndRejectedFrame(File source) throws Exception {
-        File[] frames = FitsFiles.list(source);
+        File[] frames = FitsInput.list(source);
         int[][] kernel = {{0, 1, 2, 1, 0}, {1, 3, 5, 3, 1}, {2, 5, 9, 5, 2}, {1, 3, 5, 3, 1}, {0, 1, 2, 1, 0}};
         for (int frameIndex = 0; frameIndex < frames.length; frameIndex++) {
             nom.tam.fits.Fits converted;
             try (nom.tam.fits.Fits original = new nom.tam.fits.Fits(frames[frameIndex])) {
-                var image = FitsImages.getImageHDU(original);
+                var image = FitsInput.getImageHDU(original);
                 short[][] pixels = (short[][]) image.getKernel();
                 if (frameIndex == 4) for (short[] row : pixels) Arrays.fill(row, (short) 640);
                 int center = 15 + frameIndex * 6;

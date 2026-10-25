@@ -189,7 +189,7 @@ public class HeadlessApiConsumerTest {
         assertEquals("210.0", updated.getFitsHeader().get("CRVAL1"));
 
         // Verify mutators and snapshot() were removed
-        for (String removedMethod : new String[]{"setSizeWidth", "setSizeHeight", "setFitsHeader", "snapshot"}) {
+        for (String removedMethod : new String[]{"setFilePath", "setFileName", "setMonochrome", "setSizeWidth", "setSizeHeight", "snapshot"}) {
             for (java.lang.reflect.Method m : FitsFileInformation.class.getDeclaredMethods()) {
                 assertNotEquals("Method " + removedMethod + " should be removed", removedMethod, m.getName());
             }

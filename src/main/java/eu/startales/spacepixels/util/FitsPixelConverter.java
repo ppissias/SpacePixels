@@ -72,16 +72,6 @@ final class FitsPixelConverter {
         return updatedFits;
     }
 
-    /** True for the layout the detection reads directly: 16-bit integers stored as unsigned (BZERO 32768, BSCALE 1). */
-    static boolean isUnsigned16Bit(Header header) {
-        return isUnsigned16Bit(header.getIntValue("BITPIX", 0), header.getDoubleValue("BZERO", 0.0),
-                header.getDoubleValue("BSCALE", 1.0));
-    }
-
-    static boolean isUnsigned16Bit(int bitpix, double bzero, double bscale) {
-        return bitpix == 16 && bzero == 32768.0 && bscale == 1.0;
-    }
-
     /** Whether the stored values can stand for pixels below zero once BZERO and BSCALE are applied. */
     static boolean canHoldNegativeValues(Header header) {
         int bitpix = header.getIntValue("BITPIX", 0);
@@ -224,7 +214,7 @@ final class FitsPixelConverter {
                 progress.accept((int) Math.round(100.0 * i / files.length));
             }
             try (Fits fits = new Fits(files[i])) {
-                BasicHDU<?> hdu = FitsImages.getImageHDU(fits);
+                BasicHDU<?> hdu = FitsInput.getImageHDU(fits);
                 if (hdu == null || !canHoldNegativeValues(hdu.getHeader())) {
                     continue;
                 }
