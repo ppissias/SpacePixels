@@ -36,7 +36,12 @@ public class TrialSettingsMechanicsTest extends MechanicsTestCase {
         FrameFixture preview = openPreview();
         JSpinner trial = spinner(preview, "Detection Sigma");
         assertNotSame(sigma.getModel(), trial.getModel());
-        GuiActionRunner.execute(() -> trial.setValue(2.0));
+        GuiActionRunner.execute(() -> {
+            JSpinner trialGrow = spinner(preview, "Grow Sigma (Hysteresis)");
+            trialGrow.setValue(2.0);
+            trialGrow.setValue(3.0);
+            trial.setValue(2.0);
+        });
         assertNumber(sigma, 5);
         GuiActionRunner.execute(() -> {
             grow.setValue(1.0);

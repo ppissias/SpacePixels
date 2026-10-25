@@ -205,10 +205,10 @@ final class TrialSettingsControls {
         showNote();
     }
 
-    /** Marks only the user's changed input, aligns its trial pair, and schedules the preview refresh. */
+    /** Tracks the user's current change, clearing a restored baseline before automatic pair alignment. */
     private void changed(Entry edited) {
         if (adjusting) return;
-        edited.edited = true;
+        edited.edited = !Objects.equals(edited.baseline, edited.spinner.getValue());
         message = null;
         alignValues();
         refreshPending = true;
@@ -314,7 +314,9 @@ final class TrialSettingsControls {
             for (Entry entry : entries) {
                 Object previous = entry.spinner.getValue();
                 if (!commit(entry)) return false;
-                if (!Objects.equals(previous, entry.spinner.getValue())) entry.edited = true;
+                if (!Objects.equals(previous, entry.spinner.getValue())) {
+                    entry.edited = !Objects.equals(entry.baseline, entry.spinner.getValue());
+                }
             }
         } finally {
             adjusting = false;

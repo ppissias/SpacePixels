@@ -18,6 +18,39 @@ import static org.junit.Assert.*;
 
 /** Checks trial isolation, selective merging and typed-value commits without opening a window. */
 public class TrialSettingsControlsTest {
+    /** A restored spinner or typed edit stays clean when another trial later aligns its value automatically. */
+    @Test public void returningToBaselineClearsTheEditBeforeLaterPairAlignment() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            for (boolean typed : new boolean[]{false, true}) {
+                DetectionConfig live = config();
+                AtomicReference<Map<String, Number>> delta = new AtomicReference<>();
+                TrialSettingsControls controls = controls(live, delta);
+                JComponent row = controls.horizontal();
+                try {
+                    JSpinner grow = spinner(row, "Grow Sigma (Hysteresis)");
+                    if (typed) {
+                        field(grow).setText("2.0");
+                        grow.commitEdit();
+                        field(grow).setText("3.0");
+                        grow.commitEdit();
+                    } else {
+                        grow.setValue(2.0);
+                        grow.setValue(3.0);
+                    }
+                    spinner(row, "Detection Sigma").setValue(2.0);
+                    live.growSigmaMultiplier = 1.0;
+                    button(row, "Apply to Settings").doClick();
+                    assertEquals(Set.of("detectionSigmaMultiplier"), delta.get().keySet());
+                    assertEquals("the restored edit cannot overwrite a newer live value", 1.0, live.growSigmaMultiplier, 0);
+                } catch (java.text.ParseException invalidFixture) {
+                    throw new AssertionError(invalidFixture);
+                } finally {
+                    controls.stop();
+                }
+            }
+        });
+    }
+
     /** Delayed refresh waits for the application job to unlock and cannot run after the viewer closes. */
     @Test public void delayedRefreshPausesForAJobAndStopsOnClose() throws Exception {
         AtomicInteger refreshes = new AtomicInteger();
