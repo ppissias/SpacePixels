@@ -30,11 +30,10 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 ### Recommended changes
 
-**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09 and SP-04 apart from one decision. Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-05, SP-06, SP-08, SP-11, SP-13, SP-15, SP-16 and SP-19. Their proposals and issue reviews below still apply.
+**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09 and SP-04. SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-05, SP-06, SP-08, SP-11, SP-13, SP-15, SP-16 and SP-19. Their proposals and issue reviews below still apply.
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
-| [SP-04](#sp-04-retire-the-imageprocessing-facade) | Retire the `ImageProcessing` facade: done; decide the few-frame result policy | Medium | Small |
 | [SP-05](#sp-05-give-panels-their-collaborators-not-the-whole-window) | Give panels their collaborators, not the whole window | Medium | Medium |
 | [SP-06](#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Move the sky-catalogue workflow out of the main panel | Medium | Small |
 | [SP-07](#sp-07-one-binding-type-for-settings-rows) | One binding type for settings rows | Low | Small |
@@ -50,29 +49,11 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 **Suggested order.**
 1. SP-10 and SP-18 are done apart from their follow-ups: evaluate SP-10's differing variants as a numerical decision, and take SP-18's follow-ups when nom-tam-fits 1.23.1 is out. Keep both separate from refactorings.
-2. Then SP-06, which both agents chose as the next item, then SP-05. Decide SP-04's few-frame policy on its own. The shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
+2. Then SP-06, which both agents chose as the next item, then SP-05. The shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
 3. Then SP-08, then SP-07 and SP-15.
 4. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
 Refactorings are intended to preserve behaviour. Evaluate the exceptions raised by the issue reviews, including SP-19's viewer lifetime and settings policy, as explicit behaviour decisions. Check implementation changes with the relevant unit and GUI mechanics tests. Items that touch detection or reports also need byte-identical deterministic `report-data.json`, `detection_config.json` and CSV content on the reference datasets, using the normalization and comparison method in DEVELOPER.md.
-
-### SP-04. Retire the ImageProcessing facade
-
-**Done (2026-10-24), apart from one decision.** The facade and `SessionFrames` are gone, and nothing forwards in their place. Each service has an explicit owner. The session owns its frames, its last run's overlays, its plate solver and the batch service of its folder. Runs take their frames and options when they are admitted. A finished detection's overlays reach the session whatever becomes of the report. The headless API owns and closes its own importer. HIGH_LEVEL_DESIGN.md (the jobs, session and `util` sections) and DEVELOPER.md describe the result. The reports stayed byte-identical through the batch command and the window's detection job.
-
-**Decision needed: the few-frame result policy.** DEVELOPER.md lists this as its one current exception to "JTransient owns detection".
-- **What happens now.** When fewer than 3 frames survive quality control, `StandardDetectionPipelineService` passes the engine's result through `DetectionPipelineSupport.suppressLatePhaseOutputsWhenTooFewFramesRemain`. That method builds a new `PipelineResult`:
-  - It empties the tracks, anomalies, slow-mover candidates and residual analysis.
-  - It sets the track and anomaly counts in the telemetry to 0, and removes the tracker and slow-mover telemetry.
-  - It keeps the stacks, the star mask, the drift points, the data area and the transient lists.
-  - The fields it does not copy fall back to the builder's defaults, so the slow-mover analysis and stack, the variable-star analysis and the camera-fixed groups are dropped as well. That may not be intended.
-  - The report then says that the multi-frame sections were skipped (`PipelineDiagnosticsSectionWriter`, `DetectionReportGenerator`).
-- **Options.**
-  1. Move the rule into JTransient. The engine itself stops after quality control when too few frames remain, and returns an explicit "too few frames" result. This needs a JTransient item and its own engine checks.
-  2. Keep it in SpacePixels as a documented report policy, copy every field explicitly, and decide which results survive (for example the camera-fixed groups).
-  3. Remove it, and let the report show whatever the engine finds with one or two frames.
-- **Before deciding.** Find inputs that reach the rule: a session where quality control keeps one or two frames, and check whether any reference dataset does. Compare the engine's own result with the rewritten one.
-- **Then.** Implement the chosen option with the real-data comparison from DEVELOPER.md, update the "Current exceptions" note in DEVELOPER.md, and remove SP-04 from this file.
 
 ### SP-05. Give panels their collaborators, not the whole window
 
