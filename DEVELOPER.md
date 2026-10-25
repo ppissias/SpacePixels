@@ -123,7 +123,9 @@ Eleven workflows use the job pattern: import, Convert to Mono, Batch Stretch, pl
 3. **The work, on a worker.** The task reports progress through `JobContext.progress` and returns a `JobOutcome`: `Completed`, `Declined`, `Cancelled` or `Failed`. Cancel makes the next progress report throw `JobCancelledException`; engine tasks also bind JTransient's `CancellationScope`, which stops computation between reports. An exception becomes `Failed`, except out-of-memory, which closes the application with a message.
 4. **The outcome, on the EDT,** arrives exactly once after the window is unlocked, and is applied only if its session is still the current one (`ApplicationWindow.forCurrentSession`).
 
-Blink is the exception: loading the frames is the job, and the blink window then keeps the main window locked until it closes. Work outside the job slot has its own owner: the sky-catalogue fetch and correction fit (a session-owned worker), session and preference writes (single-thread writers owned by the window), ASTAP checks, stretch previews and viewer preparation (newest request wins).
+Blink is the exception: loading the frames is the job, and the blink window then keeps the main window locked until it closes. Work outside the job slot has its own owner: the sky-catalogue fetch and correction fit (`gui.SkyCatalogueController`, with one executor per session and a future per request), session and preference writes (single-thread writers owned by the window), ASTAP checks, stretch previews and viewer preparation (newest request wins).
+
+The catalogue controller owns its progress timer and delivers model changes and status on the EDT. Delivery checks the request identity and the current session even after cancellation, replacement or shutdown. The session owns a non-blocking shutdown callback, with no dependency on the GUI; closing it cancels work, shuts down the executor, stops the timer and detaches the view. A catalogue completed before its correction remains available and saves independently of the fit outcome.
 
 ## The session
 

@@ -30,12 +30,11 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 ### Recommended changes
 
-**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10 and SP-13 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-05, SP-06, SP-08, SP-11, SP-16 and SP-19. Their proposals and issue reviews below still apply.
+**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10 and SP-13 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-05, SP-08, SP-11, SP-16 and SP-19. Their proposals and issue reviews below still apply.
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
 | [SP-05](#sp-05-give-panels-their-collaborators-not-the-whole-window) | Give panels their collaborators, not the whole window | Medium | Medium |
-| [SP-06](#sp-06-move-the-sky-catalogue-workflow-out-of-the-main-panel) | Move the sky-catalogue workflow out of the main panel | Medium | Small |
 | [SP-07](#sp-07-fail-fast-settings-apply-and-direct-setting-row-wiring) | Fail-fast settings apply and direct setting-row wiring | Low | Small |
 | [SP-08](#sp-08-one-report-entry-point-and-a-complete-report-context) | One report entry point and a complete report context | Medium | Medium |
 | [SP-11](#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Fewer FITS helper classes; immutable frame metadata | Low | Medium |
@@ -47,7 +46,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 **Suggested order.**
 
-1. SP-06, which both agents chose as the next item, then SP-05. The shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
+1. SP-05. The catalogue controller (SP-06), shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
 2. Then SP-08, then SP-07.
 3. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
@@ -74,16 +73,6 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 **Issue review (2026-10-24; evaluate before implementation).**
 - Prefer collaborators and listeners with specific responsibilities; replacing the window parameter with a generic context exposing the same getters would preserve the coupling.
 - A published `DetectionConfig` is mutable. Define whether listeners receive a snapshot or a borrowed read-only view, keep UI notifications on the EDT, and specify listener detachment. A session supplier is appropriate for UI commands, but admitted workers must retain their captured session and settings.
-
-### SP-06. Move the sky-catalogue workflow out of the main panel
-
-**Problem.** `MainApplicationPanel` holds about 300 lines of the sky-catalogue and correction workflow. They manage a raw `Thread` through a one-element array, check identity by thread and session, and run their own progress timer. `ProcessingSession` has three methods only for that thread (`ownSkyCatalogueWorker`, `ownsSkyCatalogueWorker`, `releaseSkyCatalogueWorker`). This is a second background-work mechanism inside a view.
-
-**Proposal.** A `SkyCatalogueController` in `gui` with one `ExecutorService` and a `Future` per session: start, cancel, and progress and results delivered on the EDT. Closing the session cancels the future. The panel only shows status.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- Cancelling a `Future` does not retract EDT callbacks already queued. Preserve the task/session checks currently in `showSkyFetchStage`, `skyFetchFinished` and `correctionFinished`, including replacement work within the same session.
-- Specify who owns and shuts down the executor, stops its progress timer and detaches listeners. Check cancellation, task replacement, session handover and shutdown with a delayed result. A GUI controller must not introduce a dependency from the headless `session` package back to `gui`.
 
 ### SP-07. Fail-fast settings apply and direct setting-row wiring
 

@@ -44,7 +44,8 @@ public final class ProcessingSession implements AutoCloseable {
     private volatile DetectionOverlays lastRun;
     private String masterStackKey;
     private JTransientEngine.MasterStackResult masterStack;
-    private Thread skyCatalogueWorker;
+    /** Non-blocking shutdown supplied by the desktop workflow; the session has no dependency on its GUI owner. */
+    private Runnable closeSkyCatalogueWork;
     private volatile boolean closed;
 
     /** A session without application storage, for headless use and tests; it owns and closes {@code plateSolver}. */
@@ -183,18 +184,12 @@ public final class ProcessingSession implements AutoCloseable {
 
     public boolean isClosed() { return closed; }
 
-    public void ownSkyCatalogueWorker(Thread worker) {
+    /** Owns one non-blocking catalogue-workflow shutdown, replacing any previous owner; register while open. */
+    public void ownSkyCatalogueWork(Runnable shutdown) {
         requireOpen();
-        if (skyCatalogueWorker != null && skyCatalogueWorker != worker) skyCatalogueWorker.interrupt();
-        skyCatalogueWorker = Objects.requireNonNull(worker);
-    }
-
-    public boolean ownsSkyCatalogueWorker(Thread worker) {
-        return !closed && skyCatalogueWorker == worker;
-    }
-
-    public void releaseSkyCatalogueWorker(Thread worker) {
-        if (skyCatalogueWorker == worker) skyCatalogueWorker = null;
+        Objects.requireNonNull(shutdown);
+        if (closeSkyCatalogueWork != null) closeSkyCatalogueWork.run();
+        closeSkyCatalogueWork = shutdown;
     }
 
     private void requireOpen() {
@@ -205,21 +200,23 @@ public final class ProcessingSession implements AutoCloseable {
     public void close() {
         if (closed) return;
         closed = true;
-        skyCatalogue.close();
-        if (skyCatalogueWorker != null) {
-            skyCatalogueWorker.interrupt();
-            skyCatalogueWorker = null;
-        }
         try {
-            plateSolver.close();
+            skyCatalogue.close();
+            Runnable shutdown = closeSkyCatalogueWork;
+            closeSkyCatalogueWork = null;
+            if (shutdown != null) shutdown.run();
         } finally {
-            masterStack = null;
-            masterStackKey = null;
-            autoTune.clear();
-            selection = List.of();
-            files = new FitsFileInformation[0];
-            lastReport = null;
-            lastRun = null;
+            try {
+                plateSolver.close();
+            } finally {
+                masterStack = null;
+                masterStackKey = null;
+                autoTune.clear();
+                selection = List.of();
+                files = new FitsFileInformation[0];
+                lastReport = null;
+                lastRun = null;
+            }
         }
     }
 }

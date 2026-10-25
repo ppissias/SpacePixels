@@ -193,7 +193,7 @@ public class ProcessingSessionTest {
     }
 
     @Test
-    public void closingASessionInterruptsItsSkyWorkerAndClearsItsRunState() throws Exception {
+    public void closingASessionStopsItsSkyWorkflowAndClearsItsRunState() throws Exception {
         ProcessingSession session = session("work", settings());
         java.util.concurrent.CountDownLatch started = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.CountDownLatch stopped = new java.util.concurrent.CountDownLatch(1);
@@ -211,14 +211,17 @@ public class ProcessingSessionTest {
         DetectionOverlays lastRun = new DetectionOverlays(TrackOverlay.from(PipelineResult.builder().build()), null);
         session.setLastRun(lastRun);
         assertSame(lastRun.tracks(), session.getTrackOverlay());
-        session.ownSkyCatalogueWorker(worker);
+        AtomicInteger shutdowns = new AtomicInteger();
+        session.ownSkyCatalogueWork(() -> {
+            shutdowns.incrementAndGet();
+            worker.interrupt();
+        });
         worker.start();
         try {
             assertTrue(started.await(2, java.util.concurrent.TimeUnit.SECONDS));
-            assertTrue(session.ownsSkyCatalogueWorker(worker));
             session.close();
             assertTrue(stopped.await(2, java.util.concurrent.TimeUnit.SECONDS));
-            assertFalse(session.ownsSkyCatalogueWorker(worker));
+            assertEquals(1, shutdowns.get());
             assertTrue(session.getSelection().isEmpty());
             assertTrue(session.getAutoTune().isEmpty());
             assertThrows(IllegalStateException.class, () -> session.setLastReport(new File("late")));
@@ -227,10 +230,36 @@ public class ProcessingSessionTest {
                     () -> session.setLastRun(lastRun));
             assertNull(session.getTrackOverlay());
             session.close();
+            assertEquals(1, shutdowns.get());
         } finally {
             worker.interrupt();
             worker.join(2000);
             session.close();
         }
+    }
+
+    /** Replacing the workflow releases its predecessor, and closing releases only the new owner once. */
+    @Test public void catalogueWorkflowOwnershipFollowsTheSessionLifetime() throws Exception {
+        ProcessingSession session = session("catalogue-owner", settings());
+        AtomicInteger first = new AtomicInteger();
+        AtomicInteger second = new AtomicInteger();
+        session.ownSkyCatalogueWork(first::incrementAndGet);
+        session.ownSkyCatalogueWork(second::incrementAndGet);
+        assertEquals(1, first.get());
+        assertEquals(0, second.get());
+        session.close();
+        session.close();
+        assertEquals(1, second.get());
+        assertThrows(IllegalStateException.class, () -> session.ownSkyCatalogueWork(() -> { }));
+    }
+
+    /** A faulty desktop shutdown hook cannot prevent solver shutdown and release of the session's frames. */
+    @Test public void catalogueShutdownFailureStillReleasesTheSession() throws Exception {
+        ProcessingSession session = session("catalogue-shutdown-failure", settings());
+        session.ownSkyCatalogueWork(() -> { throw new IllegalStateException("shutdown failed"); });
+        assertThrows(IllegalStateException.class, session::close);
+        assertTrue(session.isClosed());
+        assertEquals(0, session.getFiles().length);
+        session.close();
     }
 }
