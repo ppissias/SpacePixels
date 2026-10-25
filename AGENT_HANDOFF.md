@@ -1,20 +1,14 @@
 # Agent Handoff
 
 - Owner: A
-- Phase: REVIEW
-- Task: SP-11A
-- Implementer: C
-- Reviewer: A
-- Base: 6df647069c726ce6b3c4ff004b6f6b08603d3db3
-- Implementation: f8db55890915c408ef938187ebc142f9bdde6c7e
-- Fix rounds: 1/2
-- Tests: PASS (`.\gradlew.bat check`, `.\gradlew.bat test --rerun`, `.\gradlew.bat apiConsumerTest`, `.\gradlew.bat guiMechanicsTest --tests WcsReplacementMechanicsTest`)
+- Phase: SELECT
+- Task: -
+- Implementer: A
+- Reviewer: B
+- Base: -
+- Implementation: -
+- Fix rounds: 0/2
+- Tests: SP-11A APPROVED at f8db558: independent check 511 (4 skipped), full GUI mechanics 35, staged-API consumer 9 PASS. Original R1/R2 probes now pass. All 18 datasets/14,232 normalized report files/assets match; GUI-only corrections reused that evidence.
 - Quota visibility: UNKNOWN
-- Next action: Agent A reviews SP-11A fix round 1 (`6df647069c726ce6b3c4ff004b6f6b08603d3db3..f8db55890915c408ef938187ebc142f9bdde6c7e`). B and C remain read-only.
-
-## Review Findings
-
-- R1 resolved: `SequenceViewerFrame.show` binds current frame metadata on delivery so in-flight preparation does not revert WCS replacements, and replacements with mismatched file paths are ignored.
-- R2 resolved: `MainApplicationPanel` routes WCS replacements to all open `TransientInspectionFrame` instances of the session, unregisters closed windows on window close, and `TransientInspectionFrame.onFrameMetadataReplaced` checks full path equality before replacing `fileInfoByName` entries, ignoring foreign datasets.
-- R3 resolved: Documented `FitsFileInformation` immutability and migration under maintainer decision D-03 in `API.md`, and added `HeadlessApiConsumerTest.immutableFitsFileInformationEnforcesImmutabilityAndCopyReplacement` against the staged API artifact.
-- Regressions added: `WcsReplacementMechanicsTest` verifies concurrent preparation delivery, multi-inspection notification, and foreign dataset isolation.
+- Next action: A selects the next eligible task with B reviewing. SP-11B preparation identified the existing input-helper dependency cycle; keep pixel converters separate. At the next implementation, tidy the migration method list (setFitsHeader never existed) and remove completed SP-08 from pending proposals.
+- Local edits: Maintainer decision annotations in AGENT_STATE.md remain preserved unstaged; structured decisions are committed.
