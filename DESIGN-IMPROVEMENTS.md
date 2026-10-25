@@ -30,11 +30,10 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 ### Recommended changes
 
-**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10, SP-13, SP-06, SP-05, SP-07 and SP-08 (completed 2026-10-25). The immutable metadata and session-owned WCS replacement part of SP-11 is also reviewed. SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Pending: SP-11 helper consolidation, SP-16 and SP-19, followed by the mechanical SP-14 package move. Their proposals and issue reviews below still apply.
+**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10, SP-13, SP-06, SP-05, SP-07, SP-08 and SP-11 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Pending: SP-16 and SP-19, followed by the mechanical SP-14 package move. Their proposals and issue reviews below still apply.
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
-| [SP-11](#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Fewer FITS helper classes; immutable frame metadata | Low | Medium |
 | [SP-14](#sp-14-package-names-that-say-what-they-hold) | Package names that say what they hold | Low | Medium, mechanical |
 | [SP-16](#sp-16-check-the-ui-at-larger-display-scaling) | Check the UI at larger display scaling | Low | Small |
 | [SP-19](#sp-19-finish-the-common-base-of-the-image-viewers) | Finish the common base of the image viewers | Medium | Medium |
@@ -43,31 +42,12 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 **Suggested order.**
 
-1. Finish SP-11 and SP-19; inspect scaling (SP-16) after the viewer controls settle. The catalogue controller, panel collaborators, direct settings rows, application I/O queue, session-owned services and report boundaries are in place.
+1. Finish SP-19; inspect scaling (SP-16) after the viewer controls settle. The catalogue controller, panel collaborators, direct settings rows, application I/O queue, session-owned services, report boundaries and FITS input helpers are in place.
 2. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
 
 Keep dependency maintenance (SP-21 and SP-22) separate from refactorings, according to each item's timing.
 
 Refactorings are intended to preserve behaviour. Evaluate the exceptions raised by the issue reviews, including SP-19's viewer lifetime and settings policy, as explicit behaviour decisions. Check implementation changes with the relevant unit and GUI mechanics tests. Items that touch detection or reports also need byte-identical deterministic `report-data.json`, `detection_config.json` and CSV content on the reference datasets, using the normalization and comparison method in DEVELOPER.md.
-
-### SP-11. Fewer FITS helper classes; immutable frame metadata
-
-**Implementation split.** SP-11A makes `FitsFileInformation` immutable with construction-time normalised timestamps and session-owned WCS metadata replacement. SP-11B covers the FITS input helper consolidation and naming. The proposal remains pending until both parts are reviewed.
-
-**Problem.**
-- FITS input is spread over small static classes: `FitsFiles` (32 lines), `FitsImages`, `FitsFormatChecker`, `FitsSequenceValidator`, `FitsPreparationService` (all static, despite the name), `FitsPixelConverter` and `DetectionInputPreparation`.
-- "Service" means an instance with collaborators in some classes and a static utility in others.
-- `FitsFileInformation` (445 lines) is mutable. Callers protect themselves with `snapshot()` and array copies, for example in `ReportRunContext` and `ProcessingSession.getFiles()`.
-
-**Proposal.**
-- Merge discovery, HDU access, format check and sequence validation into one `FitsInput` class. Keep the converters separate.
-- Name static helpers consistently, and keep "Service" for instances.
-- Make `FitsFileInformation` immutable, with timestamps normalised when it is built. The defensive copies can then go.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- **Keep container protection.** Immutable frame objects eliminate deep metadata copying, but callers can still replace or reorder elements of a returned array. Keep array copies or expose immutable collections; freeze the header map too.
-- `MainApplicationPanel.showWcsWriteOutcome` currently updates a frame's header in place. Define a session-owned metadata replacement operation that updates the table, selection and dependent viewers after a successful WCS write. Test that existing runs keep their snapshots while new work sees the new solution.
-- Separate metadata immutability from helper consolidation. Discovery, HDU decoding and sequence validation have different responsibilities; merge them only if the resulting dependency structure is clearer, not because there are several small files.
 
 ### SP-14. Package names that say what they hold
 
