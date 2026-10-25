@@ -32,6 +32,8 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.List;
 import java.util.Locale;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * The picture of the session at the top of the report: the median stack at screen size, with switchable layers
@@ -40,6 +42,8 @@ import java.util.Locale;
  * frame pixels, so they stay sharp at any size. Clicking the picture opens the full-size stack.
  */
 final class SessionPictureSectionWriter {
+
+    private static final Logger LOGGER = Logger.getLogger(SessionPictureSectionWriter.class.getName());
 
     static final String STACK_FILE = "session_stack.jpg";
     static final String MASK_FILE = "session_star_mask.png";
@@ -62,7 +66,7 @@ final class SessionPictureSectionWriter {
         try (PrintWriter writer = new PrintWriter(section)) {
             writePicture(writer, context, localRescueTracks);
         } catch (RuntimeException e) {
-            System.err.println("Failed to write the session picture: " + e);
+            LOGGER.log(Level.WARNING, "Failed to write the session picture", e);
             report.println("<div class='astro-note'>The session picture could not be written: "
                     + DetectionReportGenerator.escapeHtml(String.valueOf(e)) + "</div>");
             return;

@@ -5,12 +5,16 @@ import nom.tam.fits.Header;
 import nom.tam.fits.BasicHDU;
 
 import java.io.File;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Lightweight FITS header probe that classifies supported monochrome and color formats without
  * reading the full pixel array into memory.
  */
 public class FitsFormatChecker {
+
+    private static final Logger LOGGER = Logger.getLogger(FitsFormatChecker.class.getName());
 
     /**
      * Supported FITS storage layouts recognized by the import pipeline.
@@ -44,9 +48,9 @@ public class FitsFormatChecker {
 
             return format(bitpix, isColor);
         } catch (Exception e) {
-            if (DebugOutput.isEnabled()) {
-                e.printStackTrace();
-            }
+            LOGGER.log(Level.WARNING, "Failed to inspect FITS format of " + fitsFile, e);
+
+
         }
         return FitsFormat.UNSUPPORTED;
     }

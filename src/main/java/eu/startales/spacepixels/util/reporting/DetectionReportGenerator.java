@@ -43,12 +43,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Main entry point for exporting detection reports, their companion visualization assets, and the iterative index
  * pages that link multiple report runs together.
  */
 public class DetectionReportGenerator {
+
+    private static final Logger LOGGER = Logger.getLogger(DetectionReportGenerator.class.getName());
 
     public static final String detectionReportName = "detection_report.html";
 
@@ -159,7 +163,7 @@ public class DetectionReportGenerator {
             int maskY = masterMask.length;
             int maskX = maskY > 0 && masterMask[0] != null ? masterMask[0].length : 0;
             if (maskY != height || maskX != width) {
-                System.err.println("CRITICAL: masterMask dimensions " + maskX + "x" + maskY
+                LOGGER.log(Level.SEVERE, "masterMask dimensions " + maskX + "x" + maskY
                         + " do NOT match masterStackData dimensions " + width + "x" + height + "!");
             }
         }

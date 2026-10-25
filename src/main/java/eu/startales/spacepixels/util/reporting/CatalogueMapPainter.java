@@ -22,6 +22,8 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Path2D;
 import java.awt.image.BufferedImage;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Paints the names people know onto a full-size map of the frame: Messier, NGC, IC and Sharpless objects with their
@@ -29,6 +31,8 @@ import java.awt.image.BufferedImage;
  * numbers are left out.
  */
 final class CatalogueMapPainter {
+
+    private static final Logger LOGGER = Logger.getLogger(CatalogueMapPainter.class.getName());
 
     static final Color DEEP_SKY_COLOR = new Color(255, 215, 70);
     static final Color NAMED_STAR_COLOR = new Color(235, 235, 255);
@@ -47,7 +51,7 @@ final class CatalogueMapPainter {
         try {
             return paintObjects(map, catalogue, transformer);
         } catch (RuntimeException e) {
-            System.err.println("Failed to paint the sky catalogue on the map: " + e);
+            LOGGER.log(Level.WARNING, "Failed to paint the sky catalogue on the map", e);
             return 0;
         }
     }

@@ -29,12 +29,16 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Centralizes image rendering helpers used by report sections to crop frames, annotate detections, and persist PNG
  * or GIF visualizations.
  */
 final class TrackVisualizationRenderer {
+
+    private static final Logger LOGGER = Logger.getLogger(TrackVisualizationRenderer.class.getName());
 
     private TrackVisualizationRenderer() {
     }
@@ -48,7 +52,7 @@ final class TrackVisualizationRenderer {
 
     static void saveLosslessPng(BufferedImage image, File outputFile) throws IOException {
         if (image == null) {
-            System.err.println("Warning: Attempted to save a null image. Skipping.");
+            LOGGER.log(Level.WARNING, "Attempted to save a null image. Skipping.");
             return;
         }
 

@@ -45,10 +45,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.prefs.Preferences;
 
 
 public class MainApplicationPanel extends JPanel {
+
+    private static final Logger LOGGER = Logger.getLogger(MainApplicationPanel.class.getName());
 
     /** Look of the primary action (Detect Moving Targets): accent colours of the look and feel, larger and bold. */
     static final String PRIMARY_BUTTON_STYLE = "font: +2 bold; background: $Button.default.background; foreground: $Button.default.foreground;"
@@ -639,7 +643,7 @@ public class MainApplicationPanel extends JPanel {
 
     /** Plate-solves the selected frame; the result belongs to that file, wherever its row is when the solve ends. */
     private void solveSelectedFrame() {
-        ApplicationWindow.logger.info("Will try to solve image");
+        LOGGER.info("Will try to solve image");
         FitsFileInformation selectedFile = getSelectedFileInformation();
         if (selectedFile == null) {
             return;
@@ -703,7 +707,7 @@ public class MainApplicationPanel extends JPanel {
         }
 
         // The commands follow: Convert to Mono for colour frames, the detection commands for monochrome ones.
-        ApplicationWindow.logger.info(containsColorImages ? "Color images detected." : "All images are Monochrome.");
+        LOGGER.info(containsColorImages ? "Color images detected." : "All images are Monochrome.");
         // Plate solving updates the table; keep the solved count current.
         model.addTableModelListener(e -> refreshWorkflowStatus());
         refreshWorkflowStatus();
@@ -1133,7 +1137,7 @@ public class MainApplicationPanel extends JPanel {
                 } catch (InterruptedException e) {
                     cancelled = true;
                 } catch (RuntimeException e) {
-                    ApplicationWindow.logger.log(java.util.logging.Level.WARNING, "Sky catalogue fetch failed", e);
+                    LOGGER.log(Level.WARNING, "Sky catalogue fetch failed", e);
                     failure = e.getMessage();
                 }
                 SkyCatalogue fetched = result;
@@ -1155,7 +1159,7 @@ public class MainApplicationPanel extends JPanel {
             } catch (InterruptedException e) {
                 cancelled = true;
             } catch (IOException | RuntimeException e) {
-                ApplicationWindow.logger.log(java.util.logging.Level.WARNING, "Plate solution check failed", e);
+                LOGGER.log(Level.WARNING, "Plate solution check failed", e);
                 failure = e.getMessage();
             }
             PlateSolutionCorrection fitted = correction;
@@ -1212,7 +1216,7 @@ public class MainApplicationPanel extends JPanel {
             skyFetchProblem = result.problems.isEmpty() ? null : String.join("\n", result.problems);
             owner.saveCatalogue(result, problem -> {
                 if (problem != null && mainAppWindow.isCurrentSession(owner) && owner.getSkyCatalogue().get() == result) {
-                    ApplicationWindow.logger.log(java.util.logging.Level.WARNING, "Cannot save the sky catalogue in " + folder, problem);
+                    LOGGER.log(Level.WARNING, "Cannot save the sky catalogue in " + folder, problem);
                     skyFetchProblem = "The catalogue could not be saved (" + problem.getMessage() + "); it lasts until SpacePixels closes.";
                     refreshWorkflowStatus();
                 }
@@ -1765,7 +1769,7 @@ public class MainApplicationPanel extends JPanel {
         }
         PlateSolveResult result = outcome instanceof JobOutcome.Completed<PlateSolveResult> completed ? completed.result() : null;
         if (result != null && result.isSuccess()) {
-            ApplicationWindow.logger.info(result.toString());
+            LOGGER.info(result.toString());
             statusLabel.setText("Image was successfully plate-solved");
 
             int choice = JOptionPane.showConfirmDialog(this,

@@ -23,6 +23,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * What the frames say about the night and the equipment: seeing and focus, transparency and sky brightness per frame;
@@ -34,6 +36,8 @@ import java.util.Map;
  * by 180 degrees for the field maps, since tilt, coma and vignetting belong to the camera, not to the sky.
  */
 final class NightEquipment {
+
+    private static final Logger LOGGER = Logger.getLogger(NightEquipment.class.getName());
 
     /** Stars measured at most, spread over the field. */
     private static final int MAX_STARS = 2000;
@@ -191,7 +195,7 @@ final class NightEquipment {
             result.millis = System.currentTimeMillis() - start;
             return result;
         } catch (RuntimeException e) {
-            System.err.println("Failed to measure the night and equipment: " + e);
+            LOGGER.log(Level.WARNING, "Failed to measure the night and equipment", e);
             NightEquipment empty = new NightEquipment();
             empty.millis = System.currentTimeMillis() - start;
             return empty;

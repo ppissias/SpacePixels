@@ -5,6 +5,7 @@ import nom.tam.fits.*;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -232,7 +233,7 @@ public final class FitsBatchService {
             DebugOutput.println("-----------------------------------");
 
         } catch (Exception failure) {
-            System.err.println("Debug read failed for " + fitsFile.getName() + ": " + failure.getMessage());
+            LOGGER.log(Level.WARNING, "Debug read failed for " + fitsFile.getName(), failure);
         }
     }
 

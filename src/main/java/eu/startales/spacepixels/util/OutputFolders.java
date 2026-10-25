@@ -16,6 +16,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 /**
@@ -23,6 +25,8 @@ import java.util.stream.Stream;
  * the folder it was writing without touching another run's output.
  */
 final class OutputFolders {
+
+    private static final Logger LOGGER = Logger.getLogger(OutputFolders.class.getName());
 
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 
@@ -40,7 +44,7 @@ final class OutputFolders {
             folder = new File(parent, name + "_" + number);
         }
         if (!folder.mkdirs()) {
-            System.err.println("Could not create the output folder " + folder.getAbsolutePath() + ". Check the folder permissions.");
+            LOGGER.log(Level.WARNING, "Could not create the output folder " + folder.getAbsolutePath() + ". Check the folder permissions.");
         }
         return folder;
     }
@@ -71,7 +75,7 @@ final class OutputFolders {
                 Files.deleteIfExists(path);
             }
         } catch (IOException | UncheckedIOException e) {
-            System.err.println("Could not remove the unfinished folder " + folder.getAbsolutePath() + ": " + e.getMessage());
+            LOGGER.log(Level.WARNING, "Could not remove the unfinished folder " + folder.getAbsolutePath(), e);
         }
     }
 }

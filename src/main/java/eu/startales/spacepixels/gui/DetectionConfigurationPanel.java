@@ -52,9 +52,13 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /** Owns typed detection and application settings bindings, preserving hidden profile fields and shared viewer models. */
 public class DetectionConfigurationPanel extends JPanel {
+
+    private static final Logger LOGGER = Logger.getLogger(DetectionConfigurationPanel.class.getName());
 
     //link to main window
     private final ApplicationWindow mainAppWindow;
@@ -649,11 +653,11 @@ public class DetectionConfigurationPanel extends JPanel {
                         SwingUtilities.invokeLater(() -> offerDetectionProfileMigration(profileToLoad, migrationProfile));
                     }
                 } catch (Exception e) {
-                    System.err.println("Failed to inspect detection profile for migration: " + e.getMessage());
+                    LOGGER.log(Level.WARNING, "Failed to inspect detection profile for migration", e);
                 }
                 return;
             } catch (Exception e) {
-                System.err.println("Failed to load detection profile, falling back to defaults: " + e.getMessage());
+                LOGGER.log(Level.WARNING, "Failed to load detection profile, falling back to defaults", e);
             }
         }
         jTransientConfig = new DetectionConfig();
@@ -706,7 +710,7 @@ public class DetectionConfigurationPanel extends JPanel {
         try (FileReader reader = new FileReader(visualizationPreferencesFile)) {
             visualization = SpacePixelsVisualizationPreferencesIO.load(reader).applyTo(visualization);
         } catch (Exception e) {
-            System.err.println("Failed to load visualization preferences, falling back to defaults: " + e.getMessage());
+            LOGGER.log(Level.WARNING, "Failed to load visualization preferences, falling back to defaults", e);
         }
     }
 
@@ -1493,7 +1497,7 @@ public class DetectionConfigurationPanel extends JPanel {
             visualizationBindings.forEach(ApplicationSettingBinding::apply);
 
         } catch (Exception ex) {
-            System.err.println("Error applying settings to memory: " + ex.getMessage());
+            LOGGER.log(Level.WARNING, "Error applying settings to memory", ex);
         } finally {
             suppressAutoApply = wasSuppressed;
         }

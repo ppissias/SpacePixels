@@ -26,6 +26,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * How deep each frame goes. In four small patches of the field, the Gaia stars down to magnitude 20.5 are matched
@@ -36,6 +38,8 @@ import java.util.Map;
  * goes less deep.
  */
 final class FieldDepth {
+
+    private static final Logger LOGGER = Logger.getLogger(FieldDepth.class.getName());
 
     /** Stars per group (sorted by magnitude) at least, and the most groups. */
     private static final int MIN_GROUP_STARS = 20;
@@ -108,7 +112,7 @@ final class FieldDepth {
         try {
             return measureFrames(context, telemetry);
         } catch (RuntimeException e) {
-            System.err.println("Failed to measure the field depth: " + e);
+            LOGGER.log(Level.WARNING, "Failed to measure the field depth", e);
             return new FieldDepth();
         }
     }

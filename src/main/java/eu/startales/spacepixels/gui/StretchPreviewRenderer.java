@@ -17,6 +17,7 @@ import java.awt.image.BufferedImage;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Renders the previews of the Image Stretch tab one request at a time, as Preview Frame prepares its frames. A request
@@ -25,6 +26,8 @@ import java.util.logging.Level;
  * are called on the event thread.
  */
 final class StretchPreviewRenderer {
+
+    private static final Logger LOGGER = Logger.getLogger(StretchPreviewRenderer.class.getName());
 
     /** What to preview: a frame of a session and a stretch. Every request is a new object; only the newest is shown. */
     static final class Request {
@@ -124,7 +127,7 @@ final class StretchPreviewRenderer {
                 try {
                     previews = get();
                 } catch (ExecutionException e) {
-                    ApplicationWindow.logger.log(Level.WARNING, "Preview generation failed", e.getCause() != null ? e.getCause() : e);
+                    LOGGER.log(Level.WARNING, "Preview generation failed", e.getCause() != null ? e.getCause() : e);
                     previews = new Previews(request, null, null, null, null);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();

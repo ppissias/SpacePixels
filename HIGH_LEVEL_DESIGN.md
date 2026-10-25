@@ -215,10 +215,11 @@ Important classes:
 - `WcsSolutionResolver`
 - `SkyMath` (angle wrapping and clamped-haversine angular separation in degrees and arcseconds)
 - `Statistics` (NaN-ignoring standard medians and upper-middle order-statistic medians)
+- `DebugOutput` (optional `-Dspacepixels.debug=true` diagnostic output and per-operation `DiagnosticContext` scopes)
 - `XisfImageConverter`
 - `StagedFile` (safe replacement of a file; see section 7)
 
-Callers use these services directly; there is no forwarding facade. All `util` sources, including reporting/catalogue helpers, have no Swing/GUI dependencies; headless AWT image rendering remains permitted. Shared HDU discovery and directory listing are separate helpers. Each `FitsImportService` owns its bounded pool for one import attempt, and its caller closes it. Solver/converter services own their loggers rather than loading the application window.
+Callers use these services directly; there is no forwarding facade. All `util` sources, including reporting/catalogue helpers, have no Swing/GUI dependencies; headless AWT image rendering remains permitted. Shared HDU discovery and directory listing are separate helpers. Each `FitsImportService` owns its bounded pool for one import attempt, and its caller closes it. Classes across GUI, session, FITS and reporting packages log non-fatal problems through their own `java.util.logging.Logger` instances (`WARNING` or `SEVERE`) and send optional diagnostic output through `DebugOutput`.
 
 Compressed 32-bit and signed/scaled 16-bit import selects combined preparation using the actual decompressed image HDU metadata. The existing batch standardizer reads compressed pixels through `FitsPreparationService`, writes final unsigned mono/color copies directly and preserves the shared sequence-wide offset/zero-padding policy. Already-standard unsigned 16-bit compressed input retains decompression-only behavior. GUI decisions stay in `FitsImportInteraction`; strict headless import continues to refuse non-ready input.
 

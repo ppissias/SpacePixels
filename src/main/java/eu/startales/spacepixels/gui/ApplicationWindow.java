@@ -84,7 +84,7 @@ public class ApplicationWindow {
             EventQueue::invokeLater,
             () -> mainApplicationPanel != null && mainApplicationPanel.isUiLocked());
 
-    public static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
+    private static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
 
     private final BlinkFrame blinkFrame = new BlinkFrame();
     private final JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);

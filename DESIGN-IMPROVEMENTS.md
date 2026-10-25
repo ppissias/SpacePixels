@@ -30,7 +30,7 @@ Line counts alone are not a problem. Large report section writers and panels are
 
 ### Recommended changes
 
-**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04 and SP-10 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-05, SP-06, SP-08, SP-11, SP-13, SP-15, SP-16 and SP-19. Their proposals and issue reviews below still apply.
+**Design-improvements cycle (2026-10-24, branch `feature/design-improvements`).** Done and independently reviewed: SP-20, SP-02, SP-09, SP-04, SP-10 and SP-13 (completed 2026-10-25). SP-04's last decision, the few-frame rule, then moved into JTransient (2026-10-25). Their results are described in DEVELOPER.md and HIGH_LEVEL_DESIGN.md, and the completed items are removed here. Not started in the cycle: SP-05, SP-06, SP-08, SP-11, SP-16 and SP-19. Their proposals and issue reviews below still apply.
 
 | ID | Change | Priority | Size |
 |---|---|---|---|
@@ -39,18 +39,20 @@ Line counts alone are not a problem. Large report section writers and panels are
 | [SP-07](#sp-07-fail-fast-settings-apply-and-direct-setting-row-wiring) | Fail-fast settings apply and direct setting-row wiring | Low | Small |
 | [SP-08](#sp-08-one-report-entry-point-and-a-complete-report-context) | One report entry point and a complete report context | Medium | Medium |
 | [SP-11](#sp-11-fewer-fits-helper-classes-immutable-frame-metadata) | Fewer FITS helper classes; immutable frame metadata | Low | Medium |
-| [SP-13](#sp-13-one-way-to-report-problems-and-diagnostics) | One way to report problems and diagnostics | Low | Small |
 | [SP-14](#sp-14-package-names-that-say-what-they-hold) | Package names that say what they hold | Low | Medium, mechanical |
-| [SP-15](#sp-15-pass-the-live-view-sink-with-the-run) | Pass the live-view sink with the run | Low | Small |
 | [SP-16](#sp-16-check-the-ui-at-larger-display-scaling) | Check the UI at larger display scaling | Low | Small |
-| [SP-18](#sp-18-upgrade-the-dependencies) | Upgrade the dependencies: done; follow-ups for nom-tam-fits 1.23.1 and Gson 2.15.0 | Low | Small |
 | [SP-19](#sp-19-finish-the-common-base-of-the-image-viewers) | Finish the common base of the image viewers | Medium | Medium |
+| [SP-21](#sp-21-upgrade-nom-tam-fits-after-the-dither-fix) | Upgrade nom-tam-fits after the dither fix | Low | Small |
+| [SP-22](#sp-22-upgrade-gson-to-2150) | Upgrade Gson to 2.15.0 | Low | Small |
+| [SP-23](#sp-23-replace-deprecated-fits-hdu-creation) | Replace deprecated FITS HDU creation | Low | Small |
 
 **Suggested order.**
-1. SP-18 is done apart from its follow-ups when nom-tam-fits 1.23.1 is out. Keep dependency upgrades separate from refactorings.
-2. Then SP-06, which both agents chose as the next item, then SP-05. The shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
-3. Then SP-08, then SP-07 and SP-15.
-4. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
+
+1. SP-06, which both agents chose as the next item, then SP-05. The shared application I/O queue (SP-09) and session-owned services (SP-04) are in place.
+2. Then SP-08, then SP-07.
+3. Do SP-14 last: it is mechanical, and renaming first would only make the other changes harder to review.
+
+Keep dependency maintenance (SP-21–SP-23) separate from refactorings, according to each item's timing.
 
 Refactorings are intended to preserve behaviour. Evaluate the exceptions raised by the issue reviews, including SP-19's viewer lifetime and settings policy, as explicit behaviour decisions. Check implementation changes with the relevant unit and GUI mechanics tests. Items that touch detection or reports also need byte-identical deterministic `report-data.json`, `detection_config.json` and CSV content on the reference datasets, using the normalization and comparison method in DEVELOPER.md.
 
@@ -139,20 +141,6 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 - `MainApplicationPanel.showWcsWriteOutcome` currently updates a frame's header in place. Define a session-owned metadata replacement operation that updates the table, selection and dependent viewers after a successful WCS write. Test that existing runs keep their snapshots while new work sees the new solution.
 - Separate metadata immutability from helper consolidation. Discovery, HDU decoding and sequence validation have different responsibilities; merge them only if the resulting dependency structure is clearer, not because there are several small files.
 
-### SP-13. One way to report problems and diagnostics
-
-**Problem.** Problems are reported in four ways:
-- `System.err.println`, in about 15 places, for example in `DetectionConfigurationPanel`, `OutputFolders` and several report writers;
-- `printStackTrace`, in `FitsFormatChecker`;
-- `java.util.logging`, in `PlateSolveService`, `ApplicationSettings` and `SessionOwner`;
-- `DebugOutput`.
-
-**Proposal.** Report problems with `java.util.logging` (WARNING or SEVERE), and send diagnostics only through `DebugOutput`. If JTransient adopts JT-04, diagnostics can become `java.util.logging` at FINE too, and `DebugOutput` shrinks to setting that level.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- Consolidating problem logging is reasonable, but logging must not replace propagation of a failure that the caller needs to handle or cause the same error to be reported at every layer.
-- Evaluate JT-04 before depending on it. Per-operation diagnostics and explicit disabled policies are documented API behaviour and are tested with independent concurrent engines. A process-wide logger level is not an equivalent replacement simply because the desktop admits one job. Preserve caller isolation or explicitly decide and document the contract change.
-
 ### SP-14. Package names that say what they hold
 
 **Problem.** `util` (55 classes) is the application's core, not a set of utilities. It holds the services, domain types (`PlateSolutionCorrection`, `TrackOverlay`, `VariableStarOverlay`, `ExposureGroup`, `BlinkSequence`), FITS input/output and WCS. `util.reporting` (52 classes) is a subsystem, not a utility.
@@ -163,16 +151,6 @@ Panels call each other through the window, so `DetectionConfigurationPanel` and 
 - Update `build.gradle` source-set and resource include patterns as well as Java imports and `DependencyRulesTest`; the headless artifact currently explicitly includes `util/**`.
 - `FitsFileInformation` and visualization/run-option types are exposed through public request/result signatures. Moving them changes consumer APIs even if the implementation move is mechanical. Identify those breaks, update API examples and release documentation, and run `check` plus the isolated `apiConsumerTest` against the staged artifact.
 
-### SP-15. Pass the live-view sink with the run
-
-**Problem.** `RunPreviewScope` binds the live view's sink to the run's thread with a `ThreadLocal`, so the loading loop and report writers can offer pictures without a parameter. It was a reasonable shortcut when nothing else was passed explicitly. After S14, the run already carries explicit options.
-
-**Proposal.** After SP-08, carry the sink in the run request, an empty sink for API and CLI runs, and remove the `ThreadLocal` scope. Low priority: the scope is small and contained.
-
-**Issue review (2026-10-24; evaluate before implementation).**
-- Preserve lazy rendering: `RunPreviewSink.wantsPreview` is checked before constructing a picture, and `LiveFindings` currently creates no observer/worker for an absent sink. An empty sink must retain that no-work behaviour for API/CLI runs.
-- Specify the sink's lifetime, worker-thread calls and failure isolation, and ensure completed requests do not retain windows or frame buffers. Keep this change narrow and low priority.
-
 ### SP-16. Check the UI at larger display scaling
 
 What remains of the earlier visual-rules item. Inspect the empty and loaded main window, the settings pages, the Astrometry Config tab, the viewers and the progress dialog at 100, 150 and 200 % display scaling and with a larger base font. Fix the local widths and font sizes found in the Overview status, the table HTML and the viewer controls. Layout tests cover forms and base fonts; display scaling of the whole window has not been inspected.
@@ -180,16 +158,6 @@ What remains of the earlier visual-rules item. Inspect the empty and loaded main
 **Issue review (2026-10-24; evaluate before implementation).**
 - No additional architectural blocker was identified. Retain the real keyboard/focus checks while inspecting clipping, wrapping, scroll access and controls at each scale; visual consolidation must not alter the existing text-field and viewer-key rules.
 - Keep local layout fixes separate from changing viewer settings policy in SP-19, so their effects can be assessed independently.
-
-### SP-18. Upgrade the dependencies
-
-**Done (2026-10-24)** in all three repositories: Gradle 9.8.2, nom-tam-fits 1.23.0, Gson 2.14.0 and FlatLaf 3.7.2. The reference outputs stayed byte-identical, saved settings files load unchanged, and compressed frames were checked against cfitsio (through astropy). Spinners keep the caret when they gain the focus, as before 3.6 (`UiStyle.spinner`). Each commit message holds its checks. What remains:
-
-- **nom-tam-fits 1.23.1** (expected around 2026-12-15) fixes the dither sequence at blank and zero pixels (#908). With 1.23.0, dithered floating-point `.fz` frames still differ from cfitsio by about one quantization step in tiles that contain blank or zero pixels: 1 ADU after SpacePixels' 16-bit conversion, on a few hundred pixels of a frame. Integer frames are exact. Upgrade when it is released, and repeat the comparison with cfitsio.
-- **Gson 2.15.0** was published on 2026-10-24, hours before the upgrade, and changes the default `Map` type to `LinkedHashMap`. Take it at the next upgrade, with the round trip of saved settings files.
-- **`FitsFactory.hduFactory(Object)`** is deprecated since nom-tam-fits 1.22 and used in `FitsPixelConverter`, `XisfImageConverter` and `ArtificialStarInjector`. Replace it before a release removes it.
-- **Java.** JTransient and JPlateSolve stay at release 21: a library that runs on the older LTS reaches more users. The application could move to Java 25 (LTS) as its runtime, and as the runtime bundled by the installer, since the newest LTS gets security updates longest. Decide it with [F06](FEATURE-REQUESTS.md#f06-windows-installer).
-- **JUnit** stays at 4.13.2, the last JUnit 4. Moving the tests to JUnit 6 would change nothing in the application, and the GUI mechanics tests would have to move to AssertJ Swing's Jupiter variant. If it is done later, run the JUnit 4 tests on the Vintage engine and migrate test classes as they are touched.
 
 ### SP-19. Finish the common base of the image viewers
 
@@ -235,6 +203,28 @@ What remains of the earlier visual-rules item. Inspect the empty and loaded main
 - The Preview Frame live-edit versus Apply policy is also a behaviour decision. Keep it separate from sharing image components and controls, and preserve real key/focus tests for each viewer.
 - A central viewer owner must unregister disposed windows and preserve cancellation, buffer release and listener detachment. Merely hiding all windows does not establish resource release. Keeping Blink separate by composition remains appropriate.
 
+### SP-21. Upgrade nom-tam-fits after the dither fix
+
+**Deferred until the upstream fix is released.** Follow-up to the completed [SP-18 upgrade](DEVELOPER.md#dependencies). Upgrade nom-tam-fits to 1.23.1 when available, after confirming the fix for the dither sequence at blank and zero pixels (#908).
+
+With 1.23.0, dithered floating-point `.fz` frames still differ from cfitsio by about one quantization step in tiles that contain blank or zero pixels: 1 ADU after SpacePixels' 16-bit conversion, on a few hundred pixels of a frame. Integer frames are exact.
+
+**Verification.** Coordinate the upgrade across the repositories that use nom-tam-fits, repeat the comparison with cfitsio (through astropy), and run the reference-data regression in DEVELOPER.md. Report any changed pixels and detection results before committing.
+
+### SP-22. Upgrade Gson to 2.15.0
+
+**Deferred to the next dependency update.** Follow-up to the completed [SP-18 upgrade](DEVELOPER.md#dependencies). Upgrade Gson from 2.14.0 to 2.15.0 in all three repositories, reviewing its change of the default `Map` type to `LinkedHashMap`.
+
+**Verification.** Round-trip saved settings files and check that their values and compatibility are preserved; run the relevant tests and reference-data comparisons from DEVELOPER.md.
+
+### SP-23. Replace deprecated FITS HDU creation
+
+**Pending maintenance, before the deprecated API is removed.** Follow-up to the completed [SP-18 upgrade](DEVELOPER.md#dependencies). `FitsFactory.hduFactory(Object)` is deprecated since nom-tam-fits 1.22 and remains in `FitsPixelConverter`, `XisfImageConverter` and `ArtificialStarInjector`.
+
+Replace these calls with the supported HDU creation API while preserving pixel values and headers. Keep this change separate from the dependency upgrades.
+
+**Verification.** Run the relevant conversion and injection tests and the reference-data regression in DEVELOPER.md, comparing FITS pixels, headers and deterministic outputs.
+
 ## Removed from the previous plan (2026-10-23)
 
 - **S16, prepared diagnostic states and re-export.** Dropped. No code path renders a saved result again, so nothing would read the prepared states twice.
@@ -242,3 +232,4 @@ What remains of the earlier visual-rules item. Inspect the empty and loaded main
 - **D12, shared visual rules.** Reduced to SP-16.
 - **The target architecture map, the pattern table, the ownership table and the "constraints" list.** What still applies is in DEVELOPER.md, as principles, patterns and things to avoid.
 - **The completed-work archive and the request register.** Removed. Git history keeps them.
+- **SP-15, pass the live-view sink with the run.** Dropped (2026-10-25). `RunPreviewScope` stays: the job opens and closes it, a headless run passes no sink, and the report image savers offer a picture without a parameter. Revisit only if report images are written on another thread.

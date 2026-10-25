@@ -24,12 +24,16 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Emits the session header, navigation and overview at the top of the report, and the processing
  * diagnostics (quality control, configuration, masks, extraction, linking) collapsed near its end.
  */
 final class PipelineDiagnosticsSectionWriter {
+
+    private static final Logger LOGGER = Logger.getLogger(PipelineDiagnosticsSectionWriter.class.getName());
 
     private PipelineDiagnosticsSectionWriter() {
     }
@@ -602,7 +606,7 @@ final class PipelineDiagnosticsSectionWriter {
                     reportContext.config,
                     reportContext.autoTuneMaxCandidateFrames(), reportContext.settings.getVariableStarReportOptions());
         } catch (Exception e) {
-            System.err.println("Failed to write config JSON: " + e.getMessage());
+            LOGGER.log(Level.WARNING, "Failed to write config JSON", e);
         }
 
         report.println("<div class='panel'>");
