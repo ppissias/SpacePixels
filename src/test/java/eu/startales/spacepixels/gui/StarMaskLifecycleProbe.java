@@ -30,7 +30,7 @@ public final class StarMaskLifecycleProbe {
         DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
         viewer = new StarMaskExplorerFrame(owner, "Lifecycle test", stack, config, VisualizationSettings.defaults(),
                 new StarMaskExplorerFrame.Settings(config.masterSigmaMultiplier, config.masterGrowSigmaMultiplier,
-                        config.masterMinDetectionPixels, config.maxStarJitter), settings -> { },
+                        config.masterMinDetectionPixels, config.maxStarJitter), changes -> config.clone(),
                 (pixels, settings, maskSettings) -> {
                     started.countDown();
                     try {

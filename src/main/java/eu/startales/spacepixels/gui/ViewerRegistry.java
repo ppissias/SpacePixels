@@ -33,6 +33,7 @@ public final class ViewerRegistry {
     private static final Logger logger = Logger.getLogger(ViewerRegistry.class.getName());
 
     private final List<SessionViewer> viewers = new ArrayList<>();
+    private boolean settingsEditable = true;
     private final Map<Window, WindowListener> windowListeners = new IdentityHashMap<>();
 
     /**
@@ -45,6 +46,7 @@ public final class ViewerRegistry {
         }
 
         viewers.add(viewer);
+        viewer.setSettingsEditable(settingsEditable);
         if (viewer instanceof Window window) {
             WindowListener listener = new WindowAdapter() {
                 @Override
@@ -78,6 +80,12 @@ public final class ViewerRegistry {
                 window.removeWindowListener(listener);
             }
         }
+    }
+
+    /** Applies the application's current job lock to every trial viewer, including viewers registered during delivery. */
+    public void setSettingsEditable(boolean editable) {
+        settingsEditable = editable;
+        for (SessionViewer viewer : new ArrayList<>(viewers)) viewer.setSettingsEditable(editable);
     }
 
     /** The number of currently registered viewers. */

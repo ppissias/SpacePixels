@@ -11,6 +11,7 @@ package eu.startales.spacepixels.gui;
 
 import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.config.VisualizationSettings;
+import eu.startales.spacepixels.config.CoreDetectionSettings;
 import eu.startales.spacepixels.util.DisplayImageRenderer;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.MasterReferenceAnalyzer;
@@ -28,8 +29,9 @@ import java.awt.image.IndexColorModel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Shows the session's master stack with the stationary-star veto mask the detection run would use, for trial star
@@ -74,21 +76,15 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
 
     private short[][] stack;
     private final DetectionConfig baseConfig;
-    private final Settings initial;
-    private final Consumer<Settings> apply;
     private final ComputeMask computeMask;
 
     private final FrameView view = new FrameView();
-    private final JSpinner sigmaSpinner;
-    private final JSpinner growSpinner;
-    private final JSpinner minPixelsSpinner;
-    private final JSpinner jitterSpinner;
+    private final TrialSettingsControls trials;
     private final JLabel coverageLabel = new JLabel(" ");
     private final JLabel starsLabel = new JLabel(" ");
     private final JLabel largestLabel = new JLabel(" ");
     private final JLabel statusLabel = new JLabel(" ");
     private final JLabel widthLabel = new JLabel(" ");
-    private final Timer debounce;
     private final AtomicInteger generation = new AtomicInteger();
     private MaskStatistics initialStatistics;
     private SwingWorker<Object[], Void> worker;
@@ -97,29 +93,28 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
     /** Shows the master stack with the display stretch of {@code visualization}. */
     StarMaskExplorerFrame(Window owner, String sessionName, JTransientEngine.MasterStackResult stackResult,
                           DetectionConfig baseConfig, VisualizationSettings visualization, Settings initial,
-                          Consumer<Settings> apply) {
+                          Function<Map<String, Number>, DetectionConfig> apply) {
         this(owner, sessionName, stackResult, baseConfig, visualization, initial, apply, StarMaskExplorerFrame::computeMask);
     }
 
     StarMaskExplorerFrame(Window owner, String sessionName, JTransientEngine.MasterStackResult stackResult,
                           DetectionConfig baseConfig, VisualizationSettings visualization, Settings initial,
-                          Consumer<Settings> apply, ComputeMask computeMask) {
+                          Function<Map<String, Number>, DetectionConfig> apply, ComputeMask computeMask) {
         super("Star Mask Explorer · " + sessionName);
         AppIcon.apply(this);
         this.stack = stackResult.masterStack;
         this.baseConfig = baseConfig.clone();
-        this.initial = initial;
-        this.apply = apply;
         this.computeMask = computeMask;
 
-        sigmaSpinner = spinner(new SpinnerNumberModel(initial.masterSigma, 0.5, 15.0, 0.1));
-        growSpinner = spinner(new SpinnerNumberModel(initial.masterGrowSigma, 0.0, 15.0, 0.1));
-        minPixelsSpinner = spinner(new SpinnerNumberModel(initial.masterMinPixels, 1, 2000, 1));
-        jitterSpinner = spinner(new SpinnerNumberModel(initial.starJitter, 0.0, 20.0, 0.1));
-        debounce = new Timer(300, e -> recompute());
-        debounce.setRepeats(false);
+        trials = new TrialSettingsControls(List.of(
+                new TrialSettingsControls.Input(CoreDetectionSettings.MASTER_SIGMA_MULTIPLIER, initial.masterSigma, 0.5, 15.0, 0.1),
+                new TrialSettingsControls.Input(CoreDetectionSettings.MASTER_GROW_SIGMA_MULTIPLIER, initial.masterGrowSigma, 0.0, 15.0, 0.1),
+                new TrialSettingsControls.Input(CoreDetectionSettings.MASTER_MIN_DETECTION_PIXELS, initial.masterMinPixels, 1, 2000, 1),
+                new TrialSettingsControls.Input(CoreDetectionSettings.MAX_STAR_JITTER, initial.starJitter, 0.0, 20.0, 0.1)),
+                baseConfig, () -> { updateWideningLabel(); recompute(); }, view::requestFocusInWindow, apply);
 
         view.setPlaceholder("Rendering the master stack…");
+        view.getAccessibleContext().setAccessibleName("Star Mask Explorer image");
         view.setToolTipText("Scroll to zoom down to single pixels, drag to pan, double-click to switch between fit and 100 %.");
         // Full resolution: zooming in shows the real pixels of the master stack.
         view.setFocusable(true);
@@ -150,28 +145,10 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         panel.add(left(muted(basisText(stackResult))));
         panel.add(Box.createVerticalStrut(10));
 
-        JPanel grid = new JPanel(new GridBagLayout());
-        addRow(grid, 0, "Master Sigma", sigmaSpinner,
-                "Detection threshold for the stars of the mask. Lower values mask more faint stars.");
-        addRow(grid, 1, "Master Grow Sigma", growSpinner,
-                "How far each masked star grows outward; 0 uses Master Sigma. Lower values cover more of the star wings.");
-        addRow(grid, 2, "Master Min Pixels", minPixelsSpinner,
-                "Smallest star included in the mask. Lower values include fainter, smaller stars.");
-        addRow(grid, 3, "Star Jitter Radius", jitterSpinner,
-                "The mask is widened around every star by round(jitter / 2) pixels, at least 1. "
-                        + "The widening therefore changes only in steps: at 3.0, 5.0, 7.0 and so on.");
-        GridBagConstraints c = new GridBagConstraints();
-        c.gridx = 0;
-        c.gridy = 4;
-        c.gridwidth = 2;
-        c.anchor = GridBagConstraints.WEST;
-        c.insets = new Insets(0, 0, 3, 0);
+        panel.add(left(trials.grid()));
         widthLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
-        grid.add(widthLabel, c);
-        jitterSpinner.addChangeListener(e -> updateWideningLabel());
         updateWideningLabel();
-        grid.setMaximumSize(grid.getPreferredSize());
-        panel.add(left(grid));
+        panel.add(left(widthLabel));
 
         JCheckBox showMask = new JCheckBox("Show mask", true);
         showMask.addItemListener(e -> view.setImageOverlayVisible(showMask.isSelected()));
@@ -179,21 +156,15 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         JButton holdButton = new JButton("Hold to See the Stack Only");
         holdButton.setToolTipText("Press and hold (or hold the Space bar) to hide the mask and see the median stack; release to see the mask again.");
         holdButton.getModel().addChangeListener(e -> view.setImageOverlayVisible(showMask.isSelected() && !holdButton.getModel().isPressed()));
-        JRootPane root = getRootPane();
-        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("pressed SPACE"), "hideMask");
-        root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("released SPACE"), "showMask");
-        root.getActionMap().put("hideMask", new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent e) {
-                view.setImageOverlayVisible(false);
-            }
-        });
-        root.getActionMap().put("showMask", new AbstractAction() {
-            @Override
-            public void actionPerformed(java.awt.event.ActionEvent e) {
+        ViewerSupport.bind(getRootPane(), "pressed SPACE", "hideMask", () -> view.setImageOverlayVisible(false));
+        ViewerSupport.bind(getRootPane(), "released SPACE", "showMask", () -> view.setImageOverlayVisible(showMask.isSelected()));
+        view.addFocusListener(new java.awt.event.FocusAdapter() {
+            /** Ending image focus also ends a held Space comparison, even if its key release goes to another control. */
+            @Override public void focusLost(java.awt.event.FocusEvent event) {
                 view.setImageOverlayVisible(showMask.isSelected());
             }
         });
+        ViewerSupport.bind(getRootPane(), "ESCAPE", "close", this::dispose);
         JPanel maskRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         maskRow.add(showMask);
         maskRow.add(Box.createHorizontalStrut(10));
@@ -214,28 +185,14 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         panel.add(left(statusLabel));
 
         panel.add(Box.createVerticalGlue());
-        JButton resetButton = new JButton("Reset");
-        resetButton.setToolTipText("Return to the values from the Detection Settings.");
-        resetButton.addActionListener(e -> {
-            sigmaSpinner.setValue(initial.masterSigma);
-            growSpinner.setValue(initial.masterGrowSigma);
-            minPixelsSpinner.setValue(initial.masterMinPixels);
-            jitterSpinner.setValue(initial.starJitter);
-        });
-        JButton applyButton = new JButton("Apply to Settings");
-        applyButton.setToolTipText("Use these four values in the Detection Settings (as manual changes).");
-        applyButton.addActionListener(e -> {
-            apply.accept(currentSettings());
-            statusLabel.setText("Applied to the Detection Settings.");
-        });
+        panel.add(left(trials.actions()));
         JButton closeButton = new JButton("Close");
         closeButton.addActionListener(e -> dispose());
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        buttons.add(resetButton);
-        buttons.add(applyButton);
         buttons.add(closeButton);
         buttons.setMaximumSize(new Dimension(Integer.MAX_VALUE, buttons.getPreferredSize().height));
         panel.add(left(buttons));
+        ViewerSupport.prepareControls(panel);
         return panel;
     }
 
@@ -254,8 +211,10 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
     }
 
     private Settings currentSettings() {
-        return new Settings(((Number) sigmaSpinner.getValue()).doubleValue(), ((Number) growSpinner.getValue()).doubleValue(),
-                ((Number) minPixelsSpinner.getValue()).intValue(), ((Number) jitterSpinner.getValue()).doubleValue());
+        return new Settings(trials.value(CoreDetectionSettings.MASTER_SIGMA_MULTIPLIER).doubleValue(),
+                trials.value(CoreDetectionSettings.MASTER_GROW_SIGMA_MULTIPLIER).doubleValue(),
+                trials.value(CoreDetectionSettings.MASTER_MIN_DETECTION_PIXELS).intValue(),
+                trials.value(CoreDetectionSettings.MAX_STAR_JITTER).doubleValue());
     }
 
     // ==========================================
@@ -317,6 +276,12 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         return new Object[]{statistics(stars, mask), overlayLevels(mask, MASK_COLOR)};
     }
 
+    /** Pauses trial edits and Apply while an application job owns the settings. */
+    @Override
+    public void setSettingsEditable(boolean editable) {
+        trials.setEditable(editable);
+    }
+
     @Override
     public void closeForSessionChange() {
         dispose();
@@ -327,7 +292,7 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         if (!closed) {
             closed = true;
             generation.incrementAndGet();
-            debounce.stop();
+            trials.stop();
             if (worker != null) {
                 worker.cancel(false);
                 worker = null;
@@ -412,35 +377,13 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
 
     /** Shows how many pixels the jitter radius widens the mask by, and where the next step is. */
     private void updateWideningLabel() {
-        int radius = MasterVetoMask.dilationRadius(((Number) jitterSpinner.getValue()).doubleValue());
+        int radius = MasterVetoMask.dilationRadius(trials.value(CoreDetectionSettings.MAX_STAR_JITTER).doubleValue());
         widthLabel.setText("Mask widened by " + radius + " px · next step at " + (2 * radius + 1) + ".0");
     }
 
     // ==========================================
     // HELPERS
     // ==========================================
-
-    private JSpinner spinner(SpinnerNumberModel model) {
-        JSpinner spinner = UiStyle.spinner(model);
-        spinner.setPreferredSize(new Dimension(90, 26));
-        spinner.addChangeListener(e -> debounce.restart());
-        return spinner;
-    }
-
-    private static void addRow(JPanel grid, int row, String title, JSpinner spinner, String tooltip) {
-        JLabel label = new JLabel(title);
-        label.setToolTipText(tooltip);
-        spinner.setToolTipText(tooltip);
-        GridBagConstraints c = new GridBagConstraints();
-        c.gridy = row;
-        c.anchor = GridBagConstraints.WEST;
-        c.insets = new Insets(3, 0, 3, 12);
-        c.gridx = 0;
-        grid.add(label, c);
-        c.gridx = 1;
-        c.weightx = 1;
-        grid.add(spinner, c);
-    }
 
     private static JLabel muted(String text) {
         JLabel label = new JLabel("<html><div style='width: 230px;'>" + text + "</div></html>");

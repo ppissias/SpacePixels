@@ -467,9 +467,10 @@ Runs the source detection on the selected frame with the current settings and sh
 To try the per-frame settings on the frame itself, use **Detection Sigma**, **Grow Sigma (Hysteresis)** and **Min Detection Pixels** under the buttons:
 - Click the arrows, or click into a field, type a value and press Enter; Esc discards a typed value. Enter, Esc or a click on the frame gives the keys back to the window.
 - The frame is detected again a moment after the change.
-- They are the settings of the Detection Settings tab, not a copy: a change here is marked as unsaved there, and **Save** keeps it.
+- These are trial values. **Apply to Settings** copies only the fields you edited to Detection Settings; changes made elsewhere to other fields are kept. Applied changes are unsaved until you use **Save** there. The usual rules keep paired thresholds in order.
+- **Reset** restores the values from when the preview opened, without applying them. Closing discards unapplied trials; reopening starts with the current Detection Settings.
 - Text that is not a valid value is outlined in red, a note says what to enter, and the frame keeps the last valid value.
-- While a job runs, the three fields are locked, like the Detection Settings tab.
+- While a job runs, the fields, Reset and Apply are locked, like the Detection Settings tab.
 
 After a full detection, **Show tracks** (T) draws that run's tracks as Blink does, and with variable-star photometry **Show variable stars** (V) draws its candidates, with the same labels and hover details as Blink. They are the positions that run measured: changing the single-frame preview settings does not change them, and showing them detects nothing again. Run the full detection again to update them. A run that ends while Preview Frame is open makes its tracks available there at once.
 
@@ -483,7 +484,7 @@ Both windows, and **Show full size** on the Image Stretch tab, work like the bli
 
 ### Annotate: stars, deep-sky objects and variable stars
 
-Viewer shortcuts apply while the image has keyboard focus. **Tab** and **Shift+Tab** reach the viewer controls; Space operates a focused button or checkbox, and arrow keys edit a focused slider, number or list without changing frames. **Escape** from a control returns to the image; Escape on the image closes the viewer. Clicking the image also restores navigation. Preview's numeric fields retain Enter to apply and Escape to discard a typed value.
+Viewer shortcuts apply while the image has keyboard focus. **Tab** and **Shift+Tab** reach the viewer controls; Space operates a focused button or checkbox, and arrow keys edit a focused slider, number or list without changing frames. **Escape** from a control returns to the image; Escape on the image closes the viewer. Clicking the image also restores navigation. The previews' numeric fields use Enter to preview a typed value and Escape to discard unfinished text; Apply to Settings changes the session settings.
 
 ![Annotate at 100 %: the open cluster NGC 2236, Gaia stars and catalogued variables](docs/images/manual/ui-annotate.jpg)
 
@@ -524,7 +525,7 @@ When a field has few bright stars, SpacePixels fetches fainter Gaia stars for th
 
 ![Star Mask Explorer](docs/images/manual/star-mask-explorer.jpg)
 
-**Test Star Mask…** on the Overview (under the star mask settings) shows the star mask exactly as a detection run builds it, in orange over the median stack of your frames. Change the master sigma, grow, minimum pixels and star jitter radius and see how much of the sky is masked; scroll to zoom down to single pixels, and hold **Hold to See the Stack Only** to compare with the stack. **Apply to Settings** copies the values to the detection settings. A deeper mask (lower sigma) hides more faint stars and their noise, but an object crossing a masked area is not detected there.
+**Test Star Mask…** on the Overview (under the star mask settings) shows the star mask exactly as a detection run builds it, in orange over the median stack of your frames. Change the master sigma, grow, minimum pixels and star jitter radius and see how much of the sky is masked; scroll to zoom down to single pixels, and hold **Hold to See the Stack Only** to compare with the stack. **Apply to Settings** copies only the fields edited in this window; other current detection settings are kept. Enter previews a typed value and Escape discards unfinished text. Invalid text is explained beside the controls. Reset restores the opening trial values without applying them, and closing discards unapplied changes. The trial controls and Apply pause while an application job runs. A deeper mask (lower sigma) hides more faint stars and their noise, but an object crossing a masked area is not detected there.
 
 ### Image Stretch
 

@@ -21,4 +21,8 @@ public interface SessionViewer {
      * detaching listeners.
      */
     void closeForSessionChange();
+
+    /** Pauses settings edits during application jobs; viewers without trial inputs have nothing to disable. */
+    default void setSettingsEditable(boolean editable) {
+    }
 }

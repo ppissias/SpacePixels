@@ -345,7 +345,7 @@ Owns:
 - the Overview page (`AutoTuneOverviewPanel`) and the page navigation (`SettingsNavigator`)
 - the saved value of every setting row (`SettingRow`) and of the Overview core settings, taken after loading and after each Save; changes are marked against it
 - the Overview's Preview Frame button, which opens the Main tab's Preview Frame (`DetectionSequenceFrame`)
-- the per-frame thresholds that Preview Frame edits on this tab's spinner models (`perFrameDetectionSettings()`), and the copy of the settings in use it detects each frame with (`settingsInUse()`)
+- the detached per-frame trial input specifications used by Preview Frame (`perFrameDetectionSettings()`), and the copy of the settings in use it detects each frame with (`settingsInUse()`)
 - Auto-Tune launch through `AutoTuneTask`
 - applying every edit to the session right away, the unsaved-changes indicator, and Revert to the last saved state
 - binding paired controls to JTransient rule IDs, consuming `LEGACY_GUI` alignment while applying an edit, and explaining the returned changes in the footer
@@ -646,7 +646,7 @@ MainApplicationPanel
 -> detection markers drawn by FrameView
 ```
 
-The Overview's Preview Frame button opens the same window. Its Detection Sigma, Grow Sigma and Min Detection Pixels fields are the settings of the Detection Settings tab, and a change detects the frame on show again.
+The Overview's Preview Frame button opens the same window. Its Detection Sigma, Grow Sigma and Min Detection Pixels fields are independent trial values; changing them detects the shown frame again. Apply to Settings merges only explicitly edited fields into the current settings page.
 
 Manual transient inspection:
 
@@ -716,7 +716,7 @@ Common-motion filtering has its own switch and runs before local rescue and acti
 
 ### Shared frame viewers
 
-Blink, Preview Frame, Manual Transient Inspection and Show full size share `FrameView`, `StretchControls` and `ViewerSupport`. `SequenceViewerFrame` prepares one frame at a time on a `SwingWorker`, rejects obsolete worker results, and releases listeners on disposal. `BlinkSequence` holds 16-bit frames, histograms and half-size display copies. Stretch controls share their models with the main stretch panel and must detach on disposal. Detection overlays use the last standard-run results, including variable-star positions when available. Preview Frame prepares each frame with `DetectionConfigurationPanel.settingsInUse()`, a copy taken on the EDT just before (`SequenceViewerFrame.preparing`). It edits Detection Sigma, Grow Sigma and Min Detection Pixels on the tab's own spinner models (`perFrameDetectionSettings()`), and `refresh()` detects the frame on show again 300 ms after the last change. Window keys bound through `ViewerSupport.bind` do not fire while a text field has the focus.
+Blink, Preview Frame, Manual Transient Inspection and Show full size share `FrameView`, `StretchControls` and `ViewerSupport`. `SequenceViewerFrame` prepares one frame at a time on a `SwingWorker`, rejects obsolete worker results, and releases listeners on disposal. `BlinkSequence` holds 16-bit frames, histograms and half-size display copies. Stretch controls share their models with the main stretch panel and must detach on disposal. Detection overlays use the last standard-run results, including variable-star positions when available. Preview Frame prepares each frame with `DetectionConfigurationPanel.settingsInUse()`, a copy taken on the EDT just before (`SequenceViewerFrame.preparing`). It takes detached specifications for Detection Sigma, Grow Sigma and Min Detection Pixels (`perFrameDetectionSettings()`), and TrialSettingsControls detects the shown frame again 300 ms after a trial edit. The same controls serve Star Mask Explorer: checked text, Enter/Escape, Reset and selective Apply. Apply uses current settings and normal pair rules, and changes no saved baseline. Trial pair alignment does not mark untouched fields edited. ViewerRegistry pauses every trial window during application jobs; closing stops delayed work and reopening Preview Frame reloads current values. Window keys bound through `ViewerSupport.bind` do not fire while a text field has the focus.
 
 The shared **Stretch display** button model selects stretched or full-range linear display, defaults to on, and is saved as `stretch.enabled` in the existing Java preferences node. Off disables the stretch controls while retaining their values; viewers use `DisplayStretch.linearLookupTable`, preserving RGB channels even when Extreme is selected. Preview requests capture this flag so obsolete stretched results cannot replace a newer linear request. **Enable batch stretch** remains a separate disk-output option and uses the chosen algorithm/parameters independently of the display flag.
 

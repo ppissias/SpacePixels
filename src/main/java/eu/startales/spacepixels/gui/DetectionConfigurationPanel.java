@@ -340,21 +340,36 @@ public class DetectionConfigurationPanel extends JPanel {
         return terms;
     }
 
-    /** A setting that another window edits together with this tab: its spinner there shares the model. */
-    record SharedSetting(String title, String description, SpinnerNumberModel model) {
-    }
-
-    /**
-     * The per-frame detection thresholds, for Preview Frame: Detection Sigma, Grow Sigma and Min Detection Pixels.
-     * A spinner on one of their models edits the setting itself, so its edits are ordinary edits of this tab.
-     */
-    List<SharedSetting> perFrameDetectionSettings() {
-        List<SharedSetting> settings = new ArrayList<>();
+    /** Detached input specifications for Preview Frame's three per-frame trial thresholds. */
+    List<TrialSettingsControls.Input> perFrameDetectionSettings() {
+        List<TrialSettingsControls.Input> settings = new ArrayList<>();
         for (JSpinner spinner : new JSpinner[]{spinDetectionSigma, spinGrowSigma, spinMinPixels}) {
-            DetectionSetting<?> setting = coreDefinitions.get(spinner);
-            settings.add(new SharedSetting(setting.title(), setting.help(), (SpinnerNumberModel) spinner.getModel()));
+            settings.add(TrialSettingsControls.Input.copyOf(coreDefinitions.get(spinner), (SpinnerNumberModel) spinner.getModel()));
         }
         return settings;
+    }
+
+    /** Merges only edited preview fields on the EDT; normal pair rules apply without advancing the saved baseline. */
+    DetectionConfig applyTrialSettings(Map<String, Number> changes) {
+        if (closing.getAsBoolean() || jobs.current() != null) return null;
+        Map<JSpinner, Number> values = new LinkedHashMap<>();
+        for (Map.Entry<String, Number> change : changes.entrySet()) {
+            JSpinner input = detectionInputs.get(change.getKey());
+            DetectionSetting<? extends Number> setting = coreDefinitions.get(input);
+            if (setting == null || change.getValue() == null || !Double.isFinite(change.getValue().doubleValue())) {
+                throw new IllegalArgumentException("Unknown or invalid preview setting: " + change.getKey());
+            }
+            values.put(input, setting.type().cast(change.getValue()));
+        }
+        boolean wasSuppressed = suppressAutoApply;
+        suppressAutoApply = true;
+        try {
+            values.forEach(JSpinner::setValue);
+        } finally {
+            suppressAutoApply = wasSuppressed;
+        }
+        onSettingEdited();
+        return settingsInUse();
     }
 
     /** The analyses of a run, each switched on the Overview and in step with the checkbox on its detailed tab. */
@@ -418,18 +433,8 @@ public class DetectionConfigurationPanel extends JPanel {
         ProcessingSession owner = sessions.current();
         StarMaskExplorerFrame frame = viewers.register(new StarMaskExplorerFrame(windowFrame, sessionName, owner.getMasterStack(masterStackKey(config)), config,
                 visualization, current,
-                settings -> {
-                    if (sessions.isCurrent(owner)) applyStarMaskSettings(settings);
-                }));
+                changes -> sessions.isCurrent(owner) ? applyTrialSettings(changes) : null));
         frame.setVisible(true);
-    }
-
-    /** Writes the explorer's values into the settings (they then count as manual changes). */
-    private void applyStarMaskSettings(StarMaskExplorerFrame.Settings settings) {
-        setSpinnerValueClamped(spinMasterSigma, settings.masterSigma);
-        setSpinnerValueClamped(spinMasterGrowSigma, settings.masterGrowSigma);
-        setSpinnerValueClamped(spinMasterMinPix, settings.masterMinPixels);
-        setSpinnerValueClamped(spinStarJitter, settings.starJitter);
     }
 
     /** The settings that shape the master stack: everything except the star mask values the explorer varies. */

@@ -23,51 +23,43 @@ import io.github.ppissias.jtransient.core.SourceExtractor;
 import nom.tam.fits.Fits;
 
 import javax.swing.*;
-import java.awt.*;
-import java.awt.event.ActionEvent;
 import java.io.File;
-import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 /**
  * Preview Frame: runs the source extraction of the detection on one frame at a time and shows what it finds. Steps
  * through all frames of the session, starting at the selected one. Each frame is detected with the settings in use
- * when it is prepared. The per-frame thresholds can be changed here: they are the settings of the Detection Settings
- * tab, and the frame on show is detected again shortly after a change.
+ * when it is prepared, with this window's three trial thresholds. Changes refresh this preview only; Apply to
+ * Settings copies edited values into the current session, preserving other settings. Closing discards unapplied trials.
  */
 public class DetectionSequenceFrame extends SequenceViewerFrame {
-
-    /** How long after the last change of a threshold the frame is detected again, so holding an arrow detects once. */
-    private static final int REDETECT_DELAY_MILLIS = 300;
 
     private FitsFileInformation[] files;
     /** The settings of the frame being prepared, taken on the Swing thread just before. */
     private volatile DetectionConfig config;
     private final SessionAccess sessions;
     private final DetectionConfigurationPanel detection;
-    // The editor of each threshold, with the setting's title.
-    private final Map<CheckedNumberEditor, String> editors = new LinkedHashMap<>();
-    private final List<JSpinner> settingSpinners = new ArrayList<>();
-    private final JLabel settingsNote = new JLabel(" ");
-    private final Timer redetect = new Timer(REDETECT_DELAY_MILLIS, e -> refresh());
+    private final TrialSettingsControls trials;
+    private final ProcessingSession ownerSession;
 
-    /** Uses the open session and the detection panel's live settings. The panel is not retained past each read. */
+    /** Captures the session identity; trial controls copy values while each preparation reads fresh other settings. */
     public DetectionSequenceFrame(JFrame owner, SessionAccess sessions, DetectionConfigurationPanel detection) {
         super("Preview Frame", "detecting…", false, true);
         this.sessions = sessions;
         this.detection = detection;
         setMarkerSettings(detection::visualizationSettings);
-        redetect.setRepeats(false);
-        addControlRow(buildSettingsRow(detection.perFrameDetectionSettings()));
+        ownerSession = sessions.current();
+        trials = new TrialSettingsControls(detection.perFrameDetectionSettings(), detection.settingsInUse(),
+                this::refresh, this::focusFrame,
+                changes -> sessions.isCurrent(ownerSession) ? detection.applyTrialSettings(changes) : null);
+        addControlRow(trials.horizontal());
         setLocationRelativeTo(owner);
     }
 
     /** Shows the frames of the session from {@code startIndex}. */
     public void openSequence(FitsFileInformation[] files, int startIndex, StretchPanel stretchPanel) {
+        if (this.files == null) trials.load(detection.settingsInUse());
         this.files = files == null ? null : files.clone();
         if (sessions.current() != null) setSkyCatalogueModel(sessions.current().getSkyCatalogue());
         openAt(startIndex, stretchPanel, this.files);
@@ -98,84 +90,10 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
         setVariableStarOverlay(session == null ? null : session.getVariableStarOverlay(), files);
     }
 
-    /** Whether the thresholds can be changed here: not while a job runs, as on the Detection Settings tab. */
-    void setSettingsEditable(boolean editable) {
-        for (JSpinner spinner : settingSpinners) {
-            spinner.setEnabled(editable);
-        }
-    }
-
-    // ==========================================
-    // THE DETECTION SETTINGS
-    // ==========================================
-
-    /**
-     * A spinner for each threshold, on the model of the setting itself. Clicking an arrow leaves the keys on the
-     * frame; clicking into the field lets you type a value, which Enter applies and Esc discards.
-     */
-    private JComponent buildSettingsRow(List<DetectionConfigurationPanel.SharedSetting> settings) {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        for (DetectionConfigurationPanel.SharedSetting setting : settings) {
-            JSpinner spinner = UiStyle.spinner(setting.model());
-            CheckedNumberEditor editor = new CheckedNumberEditor(spinner,
-                    setting.model().getValue() instanceof Integer ? "#0" : "#0.0", this::showSettingsNote);
-            spinner.setEditor(editor);
-            spinner.setRequestFocusEnabled(false);
-            JFormattedTextField field = editor.getTextField();
-            field.setColumns(4);
-            bindFieldKey(field, "ENTER", "applyValue", () -> {
-                try {
-                    field.commitEdit();
-                    focusFrame();
-                } catch (ParseException e) {
-                    // The text stays, outlined in red, and the note says what to enter.
-                    UIManager.getLookAndFeel().provideErrorFeedback(field);
-                }
-            });
-            bindFieldKey(field, "ESCAPE", "discardValue", () -> {
-                field.setValue(field.getValue());
-                focusFrame();
-            });
-            spinner.addChangeListener(e -> redetect.restart());
-
-            String tooltip = "<html><div style='width: 320px;'>" + setting.description() + "</div></html>";
-            JLabel label = new JLabel(setting.title());
-            AccessibleControls.label(label, spinner, setting.description());
-            label.setToolTipText(tooltip);
-            spinner.setToolTipText(tooltip);
-            editors.put(editor, setting.title());
-            settingSpinners.add(spinner);
-            row.add(label);
-            row.add(spinner);
-            row.add(Box.createHorizontalStrut(6));
-        }
-        row.add(settingsNote);
-        showSettingsNote();
-        return row;
-    }
-
-    private static void bindFieldKey(JFormattedTextField field, String key, String name, Runnable action) {
-        field.getInputMap().put(KeyStroke.getKeyStroke(key), name);
-        field.getActionMap().put(name, new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                action.run();
-            }
-        });
-    }
-
-    /** Says what to enter while a field holds invalid text; meanwhile the frame is detected with the last valid value. */
-    private void showSettingsNote() {
-        for (Map.Entry<CheckedNumberEditor, String> entry : editors.entrySet()) {
-            if (!entry.getKey().isTextValid()) {
-                Color error = UIManager.getColor("Actions.Red");
-                settingsNote.setForeground(error != null ? error : new Color(0xDB5860));
-                settingsNote.setText(entry.getValue() + ": " + entry.getKey().expected() + ". The frame keeps the last valid value.");
-                return;
-            }
-        }
-        settingsNote.setForeground(UIManager.getColor("Label.disabledForeground"));
-        settingsNote.setText("The session's detection settings, as on the Detection Settings tab · Enter applies a typed value");
+    /** Enables trial edits and Apply only while the application has no active job or blink. */
+    @Override
+    public void setSettingsEditable(boolean editable) {
+        trials.setEditable(editable);
     }
 
     // ==========================================
@@ -194,7 +112,7 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
 
     @Override
     protected void preparing() {
-        config = detection.settingsInUse();
+        config = trials.snapshot(detection.settingsInUse());
     }
 
     /** Reads the frame as the detection does (16-bit mono, the image HDU) and extracts its sources. */
@@ -234,12 +152,7 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
     /** Lets go of the frames; a field left with invalid text shows its value again. */
     @Override
     protected void released() {
-        redetect.stop();
-        for (CheckedNumberEditor editor : editors.keySet()) {
-            if (!editor.isTextValid()) {
-                editor.getTextField().setValue(editor.getTextField().getValue());
-            }
-        }
+        trials.stop();
         files = null;
         config = null;
     }

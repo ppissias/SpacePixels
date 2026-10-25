@@ -1369,9 +1369,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         uiLocked = false;
         setControlsEnabled(this, true);
         refreshWorkflowStatus();
-        if (detectionSequenceFrame != null) {
-            detectionSequenceFrame.setSettingsEditable(true);
-        }
+        viewers.setSettingsEditable(true);
         sessionTabs.accept(sessions.current() != null);
     }
 
@@ -1380,10 +1378,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         uiLocked = true;
         setControlsEnabled(this, false);
         refreshCommands();
-        // The settings do not change while a job runs: the Detection Settings tab is locked, and so is Preview Frame.
-        if (detectionSequenceFrame != null) {
-            detectionSequenceFrame.setSettingsEditable(false);
-        }
+        // Trial values and Apply follow the same job lock as the Detection Settings tab.
+        viewers.setSettingsEditable(false);
         sessionTabs.accept(false);
     }
 
@@ -1468,8 +1464,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private void enableControlsProcessingBlinkingFinished() { unlockUI(); }
 
     /**
-     * Opens Preview Frame on the selected frame. It detects each frame with the settings in use at that moment, and
-     * changes its per-frame thresholds itself. The Detection Settings button uses this same window.
+     * Opens Preview Frame on the selected frame. Its per-frame trial thresholds refresh the preview; Apply merges
+     * edited values into the current settings. The Detection Settings button uses this same window.
      */
     void previewSelectedFrame() {
         FitsFileTableModel model = (FitsFileTableModel) table.getModel();
