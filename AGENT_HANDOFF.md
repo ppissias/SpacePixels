@@ -1,13 +1,13 @@
 # Agent Handoff
 
 - Owner: A
-- Phase: SELECT
-- Task: -
+- Phase: IMPLEMENT
+- Task: SP-19C
 - Implementer: A
 - Reviewer: B
-- Base: -
+- Base: 5cab700ac7664a0755249afdfd77500000c6d87c
 - Implementation: -
 - Fix rounds: 0/2
-- Tests: SP-19B approved through 73a87799d3373ab4000a786464b648f259fbfd63. Independent check 516 (4 skipped), consumer 9 PASS; full GUI 36/37 PASS. Account-save assertion also fails on the pre-SP-19B desktop; tracked as a baseline validation follow-up. Original disposal probe PASS.
+- Tests: Planned: trial-isolation/selective-Apply regressions, invalid text and real keyboard/focus checks, viewer lifecycle/job-locking checks, check, GUI mechanics and API consumer checks. Baseline account-save failure remains separately tracked.
 - Quota visibility: UNKNOWN
-- Next action: A selects the next eligible authorized task, SP-19C. B and C remain read-only.
+- Next action: A shares the existing previews' trial-setting controls and adopts trial values plus Apply to Settings (D-02), merging only edited fields against current settings. Preserve computation, debounce, focus and close cleanup. F13 is outside scope. B and C remain read-only.
