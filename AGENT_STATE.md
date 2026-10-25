@@ -1,4 +1,4 @@
-# Agent State — design improvements collaboration
+# Agent State â€” design improvements collaboration
 
 ## Collaboration
 
@@ -19,28 +19,29 @@
 | --- | --- | --- | --- | --- |
 | SP-06 | Extract the sky-catalogue workflow | - | DONE | Reviewed `bd173bee9374516eddb947d327657cde4180c63a`. Reran SkyCatalogueControllerTest 9, ProcessingSessionTest 10, DependencyRulesTest 9: PASS. GUI mechanics not rerun (they move the mouse); implementer recorded SessionMechanicsTest and SessionIoMechanicsTest PASS. No code change in review. |
 | SP-05 | Give panels specific collaborators and listeners | SP-06 | DONE | Reviewed `9ba8f6072feac587fe62dc98b6f51d0ed3d1d186`. Reran DependencyRulesTest and gui unit suites (93 tests across 22 suites): PASS. Implementer recorded test 502 PASS (4 skipped) and guiMechanicsTest 33 PASS. Borrowed DetectionConfig read on EDT without retention; jobs keep captured session/settings at admission. No code change in review. |
-| SP-08 | Complete report request/context and consolidate entry points | - | TODO | Accept review cautions for valid absence, cancellation, atomic publication and explicit volatile-field normalization. |
-| SP-07 | Fail-fast settings apply and direct row wiring | SP-05 | REVIEW | Addressed R1-R3 in `3f420611affdfc5dabfd6c9b32bd291862bab2e1` (base `2d1ad245ec3b53ba1a23576d06cfaaa92a3af3ff`): direct SettingRow/Overview metadata in `AllTypedSettingsMechanicsTest`, fail-fast regression test in `TypedDetectionSettingsTest` made headless-safe (`null` owner frame + helper Javadocs). Headless `TypedDetectionSettingsTest` (5 tests) PASS, `gradlew.bat check` PASS, `guiMechanicsTest` (33 tests) PASS. Next: A reviews `3f420611affdfc5dabfd6c9b32bd291862bab2e1`. |
-| SP-11A | Immutable frame metadata and session-owned WCS replacement | - | TODO | Retain array/container and header-map protection; preserve admitted run snapshots. |
+| SP-08A | One report request/entry point and a complete context (SP-08) | - | TODO | First bounded report task; preserve valid absence, cancellation, atomic publication and deterministic reference outputs. |
+| SP-08B | Separate report map rendering and formatting helpers (SP-08) | SP-08A | TODO | Complete the remaining SP-08 helper consolidation; reuse verified baseline products where comparison remains equivalent. |
+| SP-07 | Fail-fast settings apply and direct row wiring | SP-05 | DONE | A reviewed `3f420611affdfc5dabfd6c9b32bd291862bab2e1` (including `b73aa00` and `678d445`). Normal check PASS (503 tests, 4 skipped), headless TypedDetectionSettingsTest 5 PASS, full GUI mechanics 33 PASS. R1/R2/R3 resolved; no implementation edits in review. |
+| SP-11A | Immutable frame metadata and session-owned WCS replacement | - | TODO | Public Java API changes approved (D-03); retain array/container and header-map protection and admitted-run snapshots. |
 | SP-11B | Clarify FITS input helpers and static naming | SP-11A | TODO | Consolidate only where responsibility/dependencies become clearer; keep converters separate. |
 | SP-19A | Shared image component and small viewer helpers | SP-05 | TODO | Preserve real keyboard/focus behavior, cancellation and listener release; Blink stays separate by composition. |
-| SP-19B | Viewer ownership and lifetime policy | SP-19A | TODO | Decision D-01 must be settled before changing independent viewer lifetime. |
-| SP-19C | Shared trial-setting controls and edit/apply policy | SP-19A | TODO | Decision D-02; existing viewers only unless the maintainer explicitly includes F13. |
-| SP-16 | Inspect/fix 100%, 150%, 200% scaling and larger font | SP-05, SP-07, SP-19A | TODO | Inspect empty/loaded window, settings, Astrometry Config, viewers and progress; retain real focus checks. |
-| SP-14 | Move core code into domain packages | All other eligible in-scope work | TODO | Last mechanical step; decision D-03, source/resource patterns, API examples, release docs and consumer check. |
+| SP-19B | Viewer ownership and lifetime policy | SP-19A | TODO | D-01 RESOLVED: close every viewer on import and at exit; unregister disposed windows and release their work/listeners. |
+| SP-19C | Shared trial-setting controls and edit/apply policy | SP-19A | TODO | D-02 RESOLVED: trial values plus Apply to Settings in existing preview windows; F13 remains outside this scope. |
+| SP-16 | Inspect/fix 100%, 150%, 200% scaling and larger font | SP-05, SP-07, SP-19A, SP-19C | TODO | Inspect the final empty/loaded window, settings, Astrometry Config, viewers and progress; retain real focus checks. |
+| SP-14 | Move core code into domain packages | All other eligible in-scope work | TODO | Last mechanical step; public Java API changes approved (D-03), with source/resource patterns, migration/API examples, release docs and consumer checks. |
 
-Statuses: TODO, IN_PROGRESS, REVIEW, DONE, DEFERRED. Independent review is required for DONE. Split SP-11 and SP-19 rows together cover their original items; do not remove the parent proposal before all its authorized parts are accounted for.
+Statuses: TODO, IN_PROGRESS, REVIEW, DONE, DEFERRED. Independent review is required for DONE. Split SP-08, SP-11 and SP-19 rows together cover their original items; do not remove the parent proposal before all its authorized parts are accounted for.
 
 ## Maintainer decisions
 
-### D-01 — Independent viewer lifetime
-- Task: SP-19B. OPEN: proposal closes every viewer on import; DEVELOPER.md deliberately permits independent inspection windows to retain the old session.
-- Next action: Audit affected viewers and present the concrete workflow change for an explicit choice before implementation. Keep independent work moving.
+### D-01 â€” Independent viewer lifetime
+- Task: SP-19B. RESOLVED (2026-10-25): the maintainer chose a fresh start on import; close every viewer, including Manual Transient Inspection and Star Mask Explorer.
+- Next action: Implement owned viewer registration, session-handover/exit cleanup, queued-callback guards and unregister-on-disposal checks.
 
-### D-02 — Trial-setting policy and F13 boundary
-- Task: SP-19C. OPEN: Preview Frame edits live settings; Star Mask Explorer uses Apply. The proposal ties consolidation to F13, which is not otherwise in this scope.
-- Next action: Present a bounded common-control plan for the existing viewers and obtain the edit/apply choice. Do not silently implement F13.
+### D-02 â€” Trial-setting policy and F13 boundary
+- Task: SP-19C. RESOLVED (2026-10-25): the maintainer chose the same trial-value/Apply workflow in the existing preview windows; Preview Frame adopts Apply to Settings.
+- Next action: Share controls for existing viewers, preserve preview refresh and focus rules, and apply only the edited fields to session settings. F13 remains a separate feature.
 
-### D-03 — Public package compatibility
-- Task: SP-14. OPEN: moving exposed frame/run-option types changes public Java imports.
-- Next action: Inventory the exact public type moves and propose an explicit compatibility/release decision before changing those packages. No compatibility shims without a real caller.
+### D-03 â€” Public package compatibility
+- Task: SP-11A and SP-14. RESOLVED (2026-10-25): the maintainer confirmed there are no official external SpacePixels API callers and approved intentional public Java API changes.
+- Next action: Document removed metadata mutators and public package/type moves, update migration/API examples and consumer checks, and preserve scientific results/report schemas. No legacy shims without a real caller.

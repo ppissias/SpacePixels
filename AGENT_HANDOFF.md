@@ -1,13 +1,15 @@
 # Agent Handoff
 
 - Owner: A
-- Phase: REVIEW
-- Task: SP-07
-- Implementer: C
-- Reviewer: A
-- Base: 2d1ad245ec3b53ba1a23576d06cfaaa92a3af3ff
-- Implementation: 3f420611affdfc5dabfd6c9b32bd291862bab2e1
-- Fix rounds: 2/2
-- Tests: TypedDetectionSettingsTest (5 tests with -Djava.awt.headless=true): PASS; gradlew.bat check: PASS; guiMechanicsTest (33 tests, verified by A): PASS
+- Phase: SELECT
+- Task: -
+- Implementer: A
+- Reviewer: B
+- Base: -
+- Implementation: -
+- Fix rounds: 0/2
+- Tests: SP-07 approved at 3f420611affdfc5dabfd6c9b32bd291862bab2e1. A normal check PASS (503 tests, 4 skipped), headless TypedDetectionSettingsTest 5 PASS, full guiMechanicsTest 33 PASS.
 - Quota visibility: UNKNOWN
-- Next action: Agent A re-reviews SP-07 implementation commit 3f420611affdfc5dabfd6c9b32bd291862bab2e1 (base 2d1ad245ec3b53ba1a23576d06cfaaa92a3af3ff). Addressed R3 (null owner frame in headless panel fixture + Javadocs on private test helpers).
+- Next action: A selects SP-08A (report entry/context), with B as reviewer; SP-08B covers the subsequent maps/formatting helpers. D-01/D-02/D-03 are resolved from the maintainer's local decision notes. B and C remain read-only.
+- Validation note: A blanket headless run hit 10 pre-existing dialog/view tests outside SP-07; the focused settings logic now passes headlessly. Use the normal project check for the full desktop-capable unit suite.
+- Local edits: Original maintainer decision annotations in AGENT_STATE.md remain unmodified and unstaged; their choices are captured in the committed decision fields.
