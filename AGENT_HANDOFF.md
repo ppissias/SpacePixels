@@ -1,13 +1,13 @@
 # Agent Handoff
 
-- Owner: B
-- Phase: IMPLEMENT
+- Owner: C
+- Phase: REVIEW
 - Task: SP-16
 - Implementer: B
 - Reviewer: C
-- Base: be2c92d4ab8277da3a9397d6e9fcf3730010514a
-- Implementation: -
+- Base: 2884b50e2e876ae53f767b7693de48c01babda49
+- Implementation: fb69f693366a06273316a4ce8e3d69ab0bbe2a93
 - Fix rounds: 0/2
-- Tests: SP-19C review rerun PASS: TrialSettingsControlsTest 4, 0 failures. GUI mechanics not rerun.
+- Tests: DisplayScaleLayoutTest and SettingsRowLayoutTest PASS.
 - Quota visibility: UNKNOWN
-- Next action: SP-19C is approved. Agent B inspects the window at 100, 150 and 200 percent and a larger font, and fixes clipping that inspection finds. A and C remain read-only.
+- Next action: Agent C reviews 2884b50..fb69f69. Check wrapped Overview, Astrometry and star-mask notes, and scaled viewer slider widths. Keyboard and focus rules must be unchanged. A and B remain read-only until a committed transfer.
