@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util;
 
+import eu.startales.spacepixels.util.reporting.ReportExporter;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import org.junit.Rule;
 import org.junit.Test;
@@ -51,9 +52,9 @@ public class OutputFoldersTest {
     @Test
     public void theLatestReportIsTheNewestFinishedPage() throws IOException {
         assertNull(SessionReports.latest(folder.getRoot()));
-        File older = page(folder.newFolder("detections_20261019_100000"), DetectionReportGenerator.detectionReportName, 1_000_000L);
+        File older = page(folder.newFolder("detections_20261019_100000"), ReportExporter.REPORT_FILE_NAME, 1_000_000L);
         File iterative = page(folder.newFolder("iterative_detections_20261019_110000"), "index.html", 3_000_000L);
-        page(folder.newFolder("detections_20261019_120000"), DetectionReportGenerator.detectionReportName, 2_000_000L);
+        page(folder.newFolder("detections_20261019_120000"), ReportExporter.REPORT_FILE_NAME, 2_000_000L);
         // Cancelled or failed: no page, so not a report.
         folder.newFolder("detections_20261020_090000");
         page(folder.newFolder("other"), "index.html", 9_000_000L);

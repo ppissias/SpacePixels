@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.engine.PipelineResult;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.util.WcsCoordinateTransformer;
@@ -51,28 +52,13 @@ public class ReportSectionFailureTest {
     }
 
     private static DetectionReportContext context(File exportDir, short[][] masterStack) {
-        return new DetectionReportContext(
-                VisualizationSettings.defaults().withAutoStretchBlackSigma(3.0).withAutoStretchWhiteSigma(10.0).withGifBlinkSpeedMs(100)
+        return ReportContextFixtures.create(VisualizationSettings.defaults().withAutoStretchBlackSigma(3.0).withAutoStretchWhiteSigma(10.0).withGifBlinkSpeedMs(100)
                         .withTrackCropPadding(10).withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f),
                 exportDir,
                 Collections.emptyList(),
                 null,
                 new DetectionConfig(),
-                null,
-                masterStack,
-                null,
-                null,
-                null,
-                null,
-                Collections.emptyList(),
-                Collections.emptyList(),
-                null,
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList());
+                PipelineResult.builder().masterStackData(masterStack).build());
     }
 
     private static Map<String, String> header() {

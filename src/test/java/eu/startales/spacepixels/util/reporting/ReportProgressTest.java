@@ -38,6 +38,6 @@ public class ReportProgressTest {
         progress.step(0, 2, "preparing");
         progress.next();
         assertEquals(1, reports.size());
-        ReportProgress.NONE.step(0, 1, "nothing listens");
+        new ReportProgress(null).step(0, 1, "nothing listens");
     }
 }

@@ -45,11 +45,12 @@ public class TrackFindingIndexTest {
 
         var overlay = TrackOverlay.from(PipelineResult.builder().tracks(input).build());
         assertEquals(List.of("T1", "T2", "ST1"), overlay.getTracks().stream().map(track -> track.label).toList());
-        var context = new DetectionReportContext(VisualizationSettings.defaults(), new File("."), List.of(),
-                new FitsFileInformation[0], new DetectionConfig(), AstrometryContextFactory.buildContext(new FitsFileInformation[0], null, null),
-                null, null, null, null, null, List.of(), List.of(), null, List.of(), List.of(), List.of(),
-                index.singleStreaks(), index.streakTracks(), index.movingTargets());
-        context.data = ReportData.create(context, null, null, List.of(), ReportInclusion.all());
+        var context = ReportContextFixtures.create(VisualizationSettings.defaults(),
+                new File("."),
+                List.of(),
+                new FitsFileInformation[0],
+                new DetectionConfig(),
+                PipelineResult.builder().tracks(java.util.stream.Stream.of(index.movingTargets(), index.streakTracks(), index.singleStreaks()).flatMap(List::stream).toList()).build());
         assertEquals(List.of("T1", "T2", "ST1", "S1", "S2", "S3", "S4"),
                 context.data.findings.stream().map(ReportData.Finding::id).toList());
         assertEquals("finding-st1", context.findingAnchor(FindingCategory.STREAK_TRACK, 1));

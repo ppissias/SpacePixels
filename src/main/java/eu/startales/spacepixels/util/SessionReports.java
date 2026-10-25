@@ -7,6 +7,7 @@
  */
 package eu.startales.spacepixels.util;
 
+import eu.startales.spacepixels.util.reporting.ReportExporter;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 
 import java.io.File;
@@ -29,7 +30,7 @@ public final class SessionReports {
         File latest = null;
         for (File child : children) {
             String name = child.getName();
-            File page = name.startsWith("detections_") ? new File(child, DetectionReportGenerator.detectionReportName)
+            File page = name.startsWith("detections_") ? new File(child, ReportExporter.REPORT_FILE_NAME)
                     : name.startsWith("iterative_detections_") ? new File(child, "index.html") : null;
             if (page != null && page.isFile() && (latest == null || page.lastModified() > latest.lastModified())) {
                 latest = page;

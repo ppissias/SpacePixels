@@ -69,8 +69,7 @@ final class AnomalySectionWriter {
                 bounds.fixedCenterX, bounds.fixedCenterY, bounds.trackBoxWidth, bounds.trackBoxHeight);
         double[] levels = DisplayImageRenderer.displayLevels(eventCrop,
                 context.settings.getAutoStretchBlackSigma(), context.settings.getAutoStretchWhiteSigma());
-        List<Integer> neighbours = context.data != null ? context.data.neighbours(point.sourceFrameIndex)
-                : List.of(point.sourceFrameIndex - 1, point.sourceFrameIndex, point.sourceFrameIndex + 1);
+        List<Integer> neighbours = context.data.neighbours(point.sourceFrameIndex);
         Integer before = null, after = null;
         for (int index : neighbours) {
             if (index < 0 || index >= context.rawFrames.size()) continue;

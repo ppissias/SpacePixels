@@ -280,7 +280,7 @@ final class SessionPictureSectionWriter {
     }
 
     static String variablesLayer(DetectionReportContext context, int width, int height) {
-        if (context.data == null || context.data.variableCandidates.isEmpty()) return null;
+        if (context.data.variableCandidates.isEmpty()) return null;
         StringBuilder svg = new StringBuilder(svgStart("variables", width, height, true).replace("data-layer='variables'", "data-layer='variables' data-category='V'"));
         for (var f : context.data.findings) {
             if (f.starId() == null) continue;

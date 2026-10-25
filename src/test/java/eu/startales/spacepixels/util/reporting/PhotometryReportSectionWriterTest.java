@@ -173,7 +173,7 @@ public class PhotometryReportSectionWriterTest {
         StringWriter output = new StringWriter();
         try (PrintWriter writer = new PrintWriter(output)) {
             DetectionReportDocumentWriter.appendDetectionReportStart(writer);
-            PhotometryReportSectionWriter.writeSection(writer, context(config, rawFrames, exportDir, result.masterStackData), result.variableStarAnalysis);
+            PhotometryReportSectionWriter.writeSection(writer, context(config, rawFrames, exportDir, result.masterStackData, result.variableStarAnalysis), result.variableStarAnalysis);
             writer.println("</body></html>");
         }
         Files.write(new File(exportDir, "photometry_preview.html").toPath(), output.toString().getBytes("UTF-8"));
@@ -181,32 +181,17 @@ public class PhotometryReportSectionWriterTest {
     }
 
     private static DetectionReportContext context(DetectionConfig config, List<short[][]> rawFrames, File exportDir) {
-        return context(config, rawFrames, exportDir, null);
+        return context(config, rawFrames, exportDir, null, null);
     }
 
-    private static DetectionReportContext context(DetectionConfig config, List<short[][]> rawFrames, File exportDir, short[][] masterStack) {
-        return new DetectionReportContext(
-                VisualizationSettings.defaults().withAutoStretchBlackSigma(3.0).withAutoStretchWhiteSigma(10.0).withGifBlinkSpeedMs(100)
+    private static DetectionReportContext context(DetectionConfig config, List<short[][]> rawFrames, File exportDir, short[][] masterStack, VariableStarAnalysis analysis) {
+        return ReportContextFixtures.create(VisualizationSettings.defaults().withAutoStretchBlackSigma(3.0).withAutoStretchWhiteSigma(10.0).withGifBlinkSpeedMs(100)
                         .withTrackCropPadding(10).withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f),
                 exportDir,
                 rawFrames,
                 null,
                 config,
-                null,
-                masterStack,
-                null,
-                null,
-                null,
-                null,
-                Collections.emptyList(),
-                Collections.emptyList(),
-                null,
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList());
+                PipelineResult.builder().masterStackData(masterStack).variableStarAnalysis(analysis).build());
     }
 
     /** Isolated Gaussian stars, a transparency wave, random seeing and one sinusoidal variable. */

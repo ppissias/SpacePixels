@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.engine.PipelineResult;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.AnomalyDetection;
 import io.github.ppissias.jtransient.model.AnomalyType;
@@ -36,11 +37,10 @@ public class AnomalySectionWriterTest {
     private static final long START = Instant.parse("2026-10-01T00:00:00Z").toEpochMilli();
 
     @Test public void satelliteQueryCoversTheWholeExposureIncludingFractionalSecondsAndFitsFallback() throws Exception {
-        var context = context(5, 2, AnomalyType.PEAK_SIGMA);
+        var context = context(5, 2, AnomalyType.PEAK_SIGMA, files -> files[2].getFitsHeader().put("EXPTIME", "120.25"));
         var point = context.anomalies.get(0).object;
         point.timestamp = -1;
         point.exposureDuration = -1;
-        context.fitsFiles[2].getFitsHeader().put("EXPTIME", "120.25");
         var target = SatCheckerQueryTargetFactory.buildAnomalySatCheckerQueryTarget(context.astrometryContext, point);
         assertNotNull(target);
         assertEquals(START + 240_000, target.startTimestampMillis);
@@ -68,28 +68,31 @@ public class AnomalySectionWriterTest {
                 WcsSolutionResolver.resolveUncorrected(null, context.fitsFiles), null, null, null, START);
         html = AstrometryIdentificationHtmlBuilder.buildAnomalySatCheckerHtml(noSite, point, "slot", "result.json");
         assertTrue(html.contains("observing location"));
+        context = context(1, 0, AnomalyType.PEAK_SIGMA, files -> files[0].getFitsHeader().remove("EXPTIME"));
+        point = context.anomalies.get(0).object;
         point.exposureDuration = -1;
-        context.fitsFiles[0].getFitsHeader().remove("EXPTIME");
         assertNull(SatCheckerQueryTargetFactory.buildAnomalySatCheckerQueryTarget(context.astrometryContext, point));
         html = render(context);
         assertTrue(html.contains("exposure length and sky position are required"));
         assertFalse(html.contains("data-provider='satchecker'"));
         assertTrue(html.contains("<dt>Exposure end</dt><dd>Unknown</dd>"));
-        context.fitsFiles[0].getFitsHeader().put("EXPTIME", "60");
-        context.fitsFiles[0].getFitsHeader().remove("DATE-OBS");
+        context = context(1, 0, AnomalyType.PEAK_SIGMA, files -> {
+            files[0].getFitsHeader().put("EXPTIME", "60");
+            files[0].getFitsHeader().remove("DATE-OBS");
+        });
+        point = context.anomalies.get(0).object;
         point.timestamp = -1;
         assertNull(SatCheckerQueryTargetFactory.buildAnomalySatCheckerQueryTarget(context.astrometryContext, point));
         assertTrue(render(context).contains("<dt>Exposure start</dt><dd>Unknown</dd>"));
     }
 
     @Test public void comparisonSkipsRejectedFramesAndUsesOneStretchWithoutChangingMeasurements() throws Exception {
-        var context = context(5, 2, AnomalyType.INTEGRATED_SIGMA);
         var telemetry = new PipelineTelemetry();
         for (int index : List.of(1, 3)) {
             var stat = new PipelineTelemetry.FrameQualityStat(); stat.frameIndex = index; stat.rejected = true;
             telemetry.frameQualityStats.add(stat);
         }
-        context.data = ReportData.create(context, telemetry, null, List.of(), ReportInclusion.all());
+        var context = context(5, 2, AnomalyType.INTEGRATED_SIGMA, List.of(), 0, 3, telemetry);
         String measurements = new Gson().toJson(context.anomalies);
         var point = context.anomalies.get(0).object;
         var bounds = new TrackCropGeometry.CropBounds(point, context.settings.getTrackCropPadding());
@@ -175,6 +178,24 @@ public class AnomalySectionWriterTest {
      */
     private DetectionReportContext context(int count, int event, AnomalyType type,
                                            List<Integer> trackFrames, double offset, double trackFwhm) throws Exception {
+        return context(count, event, type, trackFrames, offset, trackFwhm, null);
+    }
+
+    /** Captures metadata edits before creating the run context, as real report callers do. */
+    private DetectionReportContext context(int count, int event, AnomalyType type,
+            java.util.function.Consumer<FitsFileInformation[]> metadata) throws Exception {
+        return context(count, event, type, List.of(), 0, 3, null, metadata);
+    }
+
+    /** Builds a report fixture with quality telemetry and ordinary metadata. */
+    private DetectionReportContext context(int count, int event, AnomalyType type,
+                                           List<Integer> trackFrames, double offset, double trackFwhm, PipelineTelemetry telemetry) throws Exception {
+        return context(count, event, type, trackFrames, offset, trackFwhm, telemetry, files -> {});
+    }
+
+    /** Captures metadata and observer options before building the complete production report model. */
+    private DetectionReportContext context(int count, int event, AnomalyType type,
+                                           List<Integer> trackFrames, double offset, double trackFwhm, PipelineTelemetry telemetry, java.util.function.Consumer<FitsFileInformation[]> metadata) throws Exception {
         FitsFileInformation[] files = new FitsFileInformation[count];
         List<short[][]> frames = new ArrayList<>();
         for (int i = 0; i < count; i++) {
@@ -188,6 +209,7 @@ public class AnomalySectionWriterTest {
             for (short[] row : pixels) Arrays.fill(row, (short) (1000 + 500 * i - 32768));
             frames.add(pixels);
         }
+        metadata.accept(files);
         frames.get(event)[60][80] = (short) (12000 - 32768);
         var point = new DetectedObject(80, 60, 10000, 9);
         point.sourceFrameIndex = event; point.sourceFilename = files[event].getFileName();
@@ -208,12 +230,14 @@ public class AnomalySectionWriterTest {
             }
             tracks.add(track);
         }
-        var astrometry = new DetectionReportAstrometry.Context(files, WcsSolutionResolver.resolveUncorrected(null, files),
-                new DetectionReportAstrometry.ObserverSite(0, 0, 0, "Test location"), null, null, START);
-        return new DetectionReportContext(VisualizationSettings.defaults().withAutoStretchBlackSigma(3).withAutoStretchWhiteSigma(10).withTrackCropPadding(90)
-                .withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1),
-                temporary.newFolder(), frames, files, new DetectionConfig(), astrometry, frames.get(0), null,
-                new boolean[120][160], null, null, List.of(), List.of(), null, List.of(), List.of(),
-                List.of(anomaly), List.of(), List.of(), tracks);
+        var options = new eu.startales.spacepixels.config.DetectionRunOptions("", "0", "0",
+                VisualizationSettings.defaults().withAutoStretchBlackSigma(3).withAutoStretchWhiteSigma(10).withTrackCropPadding(90)
+                .withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1), 50);
+        return ReportContextFixtures.createWithOptions(options,
+                temporary.newFolder(),
+                frames,
+                files,
+                new DetectionConfig(),
+                PipelineResult.builder().telemetry(telemetry).masterStackData(frames.get(0)).masterVetoMask(new boolean[120][160]).anomalies(List.of(anomaly)).tracks(tracks).build());
     }
 }

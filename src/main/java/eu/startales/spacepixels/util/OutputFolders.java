@@ -24,7 +24,7 @@ import java.util.stream.Stream;
  * The folders a run writes its report into. Every run gets a folder of its own, so a run that is stopped can remove
  * the folder it was writing without touching another run's output.
  */
-final class OutputFolders {
+public final class OutputFolders {
 
     private static final Logger LOGGER = Logger.getLogger(OutputFolders.class.getName());
 
@@ -54,7 +54,7 @@ final class OutputFolders {
      * the file has no parent) and returns it. It is never the folder of another run, even when two runs start in the
      * same second.
      */
-    static File createDetectionsDirectory(File anyFitsFile) {
+    public static File createDetectionsDirectory(File anyFitsFile) {
         File parentDir = anyFitsFile.getParentFile();
         if (parentDir == null) {
             parentDir = new File(System.getProperty("user.dir"));
@@ -65,7 +65,7 @@ final class OutputFolders {
     }
 
     /** Removes a folder a stopped run created and did not finish, with everything in it. A failure is only reported. */
-    static void deleteUnfinished(File folder) {
+    public static void deleteUnfinished(File folder) {
         if (folder == null || !folder.isDirectory()) {
             return;
         }

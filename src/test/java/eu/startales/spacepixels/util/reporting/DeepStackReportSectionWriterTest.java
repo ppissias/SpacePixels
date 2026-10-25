@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.engine.PipelineResult;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Track;
@@ -112,28 +113,13 @@ public class DeepStackReportSectionWriterTest {
     }
 
     private String render(SlowMoverAnalysis analysis, DetectionConfig config, List<Track> movingTargets) throws Exception {
-        DetectionReportContext context = new DetectionReportContext(
-                VisualizationSettings.defaults().withAutoStretchBlackSigma(3.0).withAutoStretchWhiteSigma(10.0).withGifBlinkSpeedMs(100)
+        DetectionReportContext context = ReportContextFixtures.create(VisualizationSettings.defaults().withAutoStretchBlackSigma(3.0).withAutoStretchWhiteSigma(10.0).withGifBlinkSpeedMs(100)
                         .withTrackCropPadding(10).withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f),
                 temporaryFolder.newFolder(),
                 Collections.emptyList(),
                 null,
                 config,
-                null,
-                null,
-                null,
-                null,
-                analysis.maximumStackData,
-                analysis.medianMask,
-                analysis.candidates,
-                Collections.singletonList(analysis.candidates.get(0).object),
-                analysis.telemetry,
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                movingTargets);
+                PipelineResult.builder().tracks(movingTargets).slowMoverAnalysis(new io.github.ppissias.jtransient.core.SlowMoverAnalysis(analysis.maximumStackData, analysis.medianMask, analysis.candidates, analysis.telemetry)).build());
         StringWriter output = new StringWriter();
         DeepStackReportSectionWriter.writeSection(new PrintWriter(output), context);
         return output.toString();

@@ -60,7 +60,7 @@ final class ReportLookupCacheStore {
         }
 
         Path reportFileName = reportPath.getFileName();
-        if (reportFileName == null || !DetectionReportGenerator.detectionReportName.equals(reportFileName.toString())) {
+        if (reportFileName == null || !ReportExporter.REPORT_FILE_NAME.equals(reportFileName.toString())) {
             throw new IllegalArgumentException("Report sidecar caching only supports detection_report.html.");
         }
         if (!Files.isRegularFile(reportPath)) {

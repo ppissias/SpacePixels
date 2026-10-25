@@ -1,5 +1,7 @@
 package eu.startales.spacepixels.util;
 
+import eu.startales.spacepixels.util.reporting.ReportExporter;
+import eu.startales.spacepixels.util.reporting.ReportRequest;
 import com.google.gson.JsonParser;
 import eu.startales.spacepixels.api.DefaultSpacePixelsPipelineApi;
 import eu.startales.spacepixels.api.SpacePixelsPipelineRequest;
@@ -102,7 +104,9 @@ public class DetectionRunIsolationTest {
             }, options, null);
             assertEquals(admittedSigma, execution.getEffectiveConfig().detectionSigmaMultiplier, 0);
             assertSame(options, execution.getReportContext().options());
-            File report = detection.exportDetectionReport(execution, null);
+            File report = ReportExporter.export(new ReportRequest(execution.getPipelineResult(),
+                    execution.getRawFramesForExport(), execution.getFilesInformation(), null,
+                    execution.getEffectiveConfig(), execution.getReportContext(), null, null));
             var profile = JsonParser.parseString(Files.readString(new File(report.getParentFile(), "detection_config.json").toPath())).getAsJsonObject();
             assertEquals(19, profile.get("autoTuneMaxCandidateFrames").getAsInt());
             assertEquals(admittedSigma, profile.get("detectionSigmaMultiplier").getAsDouble(), 0);

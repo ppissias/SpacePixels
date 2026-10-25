@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.engine.PipelineResult;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -106,11 +107,13 @@ public class VariableStarMapWriterTest {
     }
 
     private static String render(File dir, short[][] stack, VariableStarAnalysis analysis, List<StarLightCurve> candidates) throws Exception {
-        DetectionReportContext context = new DetectionReportContext(
-                VisualizationSettings.defaults().withAutoStretchBlackSigma(3).withAutoStretchWhiteSigma(10).withGifBlinkSpeedMs(100)
-                        .withTrackCropPadding(10).withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1), dir, List.of(), null,
-                new DetectionConfig(), null, stack, null, null, null, null, List.of(), List.of(), null,
-                List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+        DetectionReportContext context = ReportContextFixtures.create(VisualizationSettings.defaults().withAutoStretchBlackSigma(3).withAutoStretchWhiteSigma(10).withGifBlinkSpeedMs(100)
+                        .withTrackCropPadding(10).withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1),
+                dir,
+                List.of(),
+                null,
+                new DetectionConfig(),
+                PipelineResult.builder().masterStackData(stack).variableStarAnalysis(analysis).build());
         StringWriter output = new StringWriter();
         VariableStarMapWriter.write(new PrintWriter(output), context, analysis, candidates);
         return output.toString();

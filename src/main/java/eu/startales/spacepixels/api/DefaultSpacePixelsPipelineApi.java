@@ -7,6 +7,8 @@
  */
 package eu.startales.spacepixels.api;
 
+import eu.startales.spacepixels.util.reporting.ReportExporter;
+import eu.startales.spacepixels.util.reporting.ReportRequest;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.util.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.util.AutoTunerRunner;
@@ -91,8 +93,10 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
             File exportDirectory = null;
             if (request.isGenerateReport()) {
                 emitProgress(progressListener, 90, "Exporting tracks and generating HTML report...");
-                reportFile = detection.exportDetectionReport(executionData,
-                        (percentage, message) -> emitScaledProgress(progressListener, 90, 100, percentage, message));
+                reportFile = ReportExporter.export(new ReportRequest(executionData.getPipelineResult(),
+                        executionData.getRawFramesForExport(), executionData.getFilesInformation(), null,
+                        executionData.getEffectiveConfig(), executionData.getReportContext(), null,
+                        (percentage, message) -> emitScaledProgress(progressListener, 90, 100, percentage, message)));
                 if (reportFile == null) {
                     throw new SpacePixelsPipelineException("Pipeline completed without producing an export report.");
                 }

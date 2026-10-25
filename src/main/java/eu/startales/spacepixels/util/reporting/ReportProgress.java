@@ -16,9 +16,6 @@ import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
  */
 final class ReportProgress {
 
-    /** For a report written without a listener. */
-    static final ReportProgress NONE = new ReportProgress(null);
-
     private final TransientEngineProgressListener listener;
     private int from;
     private int to;

@@ -101,7 +101,7 @@ All packages are under `eu.startales.spacepixels`.
 | `session` | The imported dataset: identity, owned state and handover; the application I/O queue; no Swing | `ProcessingSession`, `SessionOwner`, `SkyCatalogueModel`, `AutoTuneState`, `ApplicationStorage` |
 | `config` | Application settings, detection profiles, visualization settings and their files; the typed setting definitions | `ApplicationSettings`, `AppConfig`, `SpacePixelsDetectionProfileIO`, `DetectionSetting`, `DetectionRunOptions`, `VisualizationSettings` |
 | `util` | The processing services: import and preparation, FITS and XISF, WCS, the detection pipelines, plate solving | `FitsImportService`, `FitsBatchService`, `StandardDetectionPipelineService`, `IterativeDetectionPipelineService`, `PlateSolveService`, `StagedFile` |
-| `util.reporting` | The HTML report, its model, section writers and the live lookup proxy | `DetectionReportGenerator`, `ReportData`, `FindingCategory`, the `…SectionWriter` classes |
+| `util.reporting` | The HTML report, its model, section writers and the live lookup proxy | `ReportExporter`, `ReportRequest`, `ReportData`, `FindingCategory`, the `…SectionWriter` classes |
 | `util.skycatalog` | Fetching and storing the sky catalogue; the plate-solution correction fit | `SkyCatalogueClient`, `SkyCatalogueStore`, `PlateCorrectionFitter` |
 | `api`, `tools` | The public Java API and the command-line tools | `DefaultSpacePixelsPipelineApi`, `SpacePixelsPipelineRequest`, `BatchDetectionCli` |
 
@@ -178,11 +178,20 @@ Preview Frame (`DetectionSequenceFrame`), Manual Transient Inspection (`Transien
 
 ## The report
 
-`DetectionReportGenerator.exportTrackVisualizations` writes the report into a new folder per run:
+`ReportExporter.export(ReportRequest)` is the single normal-report entry point. The API and the standard/iterative
+detection services pass the engine result, shared image buffers, copied metadata/configuration, captured run context,
+inclusion and progress in one request. Export resolves its folder, builds the complete context, writes the report and
+removes unfinished output on cancellation. Detection overlays are delivered before the report decision and export.
 
-1. **Model:** `DetectionReportContext` holds the inputs. `ReportData` holds the finding identities and frame selection, and is also written as `report-data.json`. `FindingCategory` owns each category's prefix, label, anchor rule, colour and inclusion option, so cards, maps, CSVs, overlays and the report question agree.
+The report has three stages:
+
+1. **Model:** `DetectionReportContext.create` normalizes optional engine analyses and initializes every shared field, including `ReportData`, before section rendering. Tests use the same factory. Missing WCS, catalogue or optional analysis is a valid captured absence; it never triggers live settings or session-file reads. `ReportData` holds the finding identities and frame selection, and is also written as `report-data.json`. `FindingCategory` owns each category's prefix, label, anchor rule, colour and inclusion option, so cards, maps, CSVs, overlays and the report question agree.
 2. **Sections:** one writer per section, such as `TargetVisualizationSectionWriter`, `AnomalySectionWriter` and `PhotometryReportSectionWriter`.
 3. **Publish:** the HTML is published only when complete (`AtomicReportFile`).
+
+`DetectionReportGenerator` currently retains map/format helpers and the iterative index; their extraction is SP-08B.
+Internal Java callers migrate from `exportTrackVisualizations` and the service's `exportDetectionReport` overloads to
+`ReportExporter.export(new ReportRequest(...))`; the supported `api` surface and report schemas are unchanged.
 
 The report never changes the engine's results. When the engine stops after quality control because it kept fewer than three frames (`PipelineResult.tooFewFrames`), the report says so and shows the quality-control results. Its live lookups (SatChecker, JPL, SkyBoT) go through `ReportLookupProxyServer`, a small localhost server owned by the window. `report-data.json` is versioned. Its frame numbers are one-based, and its finding IDs are local to the report.
 

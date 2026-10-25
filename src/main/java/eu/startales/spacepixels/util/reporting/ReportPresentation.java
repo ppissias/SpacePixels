@@ -28,12 +28,12 @@ final class ReportPresentation {
         out.println("<div class='report-controls'><button type='button' class='id-link' id='report-animation-toggle' aria-pressed='false'>Pause animations</button>"
                 + "<button type='button' class='id-link' id='report-previous'>Previous finding</button>"
                 + "<label>Finding <select id='report-finding-select'><option value=''>Choose a finding</option>");
-        if (context.data != null) for (var f : context.data.findings) {
+        for (var f : context.data.findings) {
             out.println("<option value='" + f.anchor() + "'>" + f.id() + " · " + f.category() + "</option>");
         }
         out.println("</select></label><button type='button' class='id-link' id='report-next'>Next finding</button>"
                 + "<a href='report-data.json' class='id-link' download>Report data JSON</a></div>");
-        if (context.data != null) out.println("<script type='application/json' id='report-findings-data'>"
+        out.println("<script type='application/json' id='report-findings-data'>"
                 + new Gson().toJson(context.data.findings) + "</script>");
     }
 

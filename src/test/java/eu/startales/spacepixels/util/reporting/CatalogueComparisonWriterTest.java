@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.engine.PipelineResult;
 import com.google.gson.JsonObject;
 import eu.startales.spacepixels.util.FitsFileInformation;
 import eu.startales.spacepixels.util.skycatalog.SkyCatalogue;
@@ -62,8 +63,12 @@ public class CatalogueComparisonWriterTest {
         PipelineTelemetry.PhotometryTelemetry telemetry = new PipelineTelemetry.PhotometryTelemetry();
         telemetry.frames.add(frame(0, "a.fit", 100));
         VariableStarAnalysis analysis = new VariableStarAnalysis(new PhotometricReadiness(), List.of(star), telemetry);
-        DetectionReportContext context = new DetectionReportContext(null, null, null, files, new DetectionConfig(),
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        DetectionReportContext context = ReportContextFixtures.create(null,
+                null,
+                null,
+                files,
+                new DetectionConfig(),
+                PipelineResult.builder().build());
         Constructor<SessionCatalogue> constructor = SessionCatalogue.class.getDeclaredConstructor(SkyCatalogue.class, long.class);
         constructor.setAccessible(true);
         SessionCatalogue catalogue = constructor.newInstance(new SkyCatalogue(), 0L);

@@ -40,18 +40,18 @@ public class VariableStarPresentationTest {
         }
         SkyCatalogueStore.save(input, catalogue);
         String before = gson.toJson(analysis);
-        var observed = context(temporary.newFolder(), files, new VariableStarReportOptions(1, VariableStarReportOptions.SortOrder.OBSERVED_CHANGES));
+        var observed = context(temporary.newFolder(), files, new VariableStarReportOptions(1, VariableStarReportOptions.SortOrder.OBSERVED_CHANGES), analysis);
         var plan = observed.variablePresentation(analysis);
         assertEquals(List.of(2, 1, 3), plan.ordered.stream().map(s -> s.id).toList());
         assertEquals(2, plan.number(cycle)); assertTrue(plan.hasCard(cycle)); assertFalse(plan.hasCard(steady));
-        var periods = context(temporary.newFolder(), files, new VariableStarReportOptions(40, VariableStarReportOptions.SortOrder.SHORTEST_PERIOD));
+        var periods = context(temporary.newFolder(), files, new VariableStarReportOptions(40, VariableStarReportOptions.SortOrder.SHORTEST_PERIOD), analysis);
         assertEquals(List.of(2, 1, 3), periods.variablePresentation(analysis).ordered.stream().map(s -> s.id).toList());
-        var largest = context(temporary.newFolder(), files, new VariableStarReportOptions(40, VariableStarReportOptions.SortOrder.LARGEST_VARIATION));
+        var largest = context(temporary.newFolder(), files, new VariableStarReportOptions(40, VariableStarReportOptions.SortOrder.LARGEST_VARIATION), analysis);
         assertEquals(List.of(1, 2, 3), largest.variablePresentation(analysis).ordered.stream().map(s -> s.id).toList());
-        var significance = context(temporary.newFolder(), files, new VariableStarReportOptions(40, VariableStarReportOptions.SortOrder.SIGNIFICANCE));
+        var significance = context(temporary.newFolder(), files, new VariableStarReportOptions(40, VariableStarReportOptions.SortOrder.SIGNIFICANCE), analysis);
         assertEquals(List.of(1, 2, 3), significance.variablePresentation(analysis).ordered.stream().map(s -> s.id).toList());
         catalogue.variables.remove(0); SkyCatalogueStore.save(input, catalogue);
-        periods = context(temporary.newFolder(), files, new VariableStarReportOptions(40, VariableStarReportOptions.SortOrder.SHORTEST_PERIOD));
+        periods = context(temporary.newFolder(), files, new VariableStarReportOptions(40, VariableStarReportOptions.SortOrder.SHORTEST_PERIOD), analysis);
         assertEquals("Unknown periods follow known periods within each tier", List.of(2, 1, 3),
                 periods.variablePresentation(analysis).ordered.stream().map(s -> s.id).toList());
         assertEquals(before, gson.toJson(analysis));
@@ -83,10 +83,10 @@ public class VariableStarPresentationTest {
         for (var options : List.of(new VariableStarReportOptions(40, VariableStarReportOptions.SortOrder.SIGNIFICANCE),
                 new VariableStarReportOptions(60, VariableStarReportOptions.SortOrder.LARGEST_VARIATION))) {
             File output = temporary.newFolder(); var app = new AppConfig();
-            DetectionReportGenerator.exportTrackVisualizations(result, frames, files, output, config,
+            ReportExporter.export(new ReportRequest(result, frames, files, output, config,
                     ReportRunContext.capture(DetectionRunOptions.capture(app, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES)
                             .withVariableStarReportOptions(options), files),
-                    ReportInclusion.all(), null);
+                    ReportInclusion.all(), null));
             String html = Files.readString(new File(output, "detection_report.html").toPath());
             assertEquals(options.maxCandidateCards(), count(html, "id='variable-v[0-9]+'"));
             var ids = new HashSet<String>(); var matches = Pattern.compile("(?<![\\w-])id=['\"]([^'\"]+)['\"]").matcher(html);
@@ -122,7 +122,7 @@ public class VariableStarPresentationTest {
         analysis = gson.fromJson(snapshot, VariableStarAnalysis.class);
         var files = files(temporary.newFolder());
         var context = context(temporary.newFolder(), files,
-                new VariableStarReportOptions(1, VariableStarReportOptions.SortOrder.SIGNIFICANCE));
+                new VariableStarReportOptions(1, VariableStarReportOptions.SortOrder.SIGNIFICANCE), analysis);
         var presentation = context.variablePresentation(analysis);
         assertEquals(List.of(10, 30), presentation.identities.stream().map(star -> star.id).toList());
         assertEquals("V1", presentation.label(possible));
@@ -132,7 +132,6 @@ public class VariableStarPresentationTest {
         telemetry.photometryTelemetry = analysis.telemetry;
         telemetry.totalFramesLoaded = 9;
         telemetry.totalFramesKept = 9;
-        context.data = ReportData.create(context, telemetry, analysis, List.of(), ReportInclusion.all());
         assertEquals("variable-v2", context.findingAnchor(FindingCategory.VARIABLE_STAR, 2));
         assertEquals("variable-candidates", context.findingAnchor(FindingCategory.VARIABLE_STAR, 1));
     }
@@ -163,11 +162,15 @@ public class VariableStarPresentationTest {
             h.put("CRVAL1","150"); h.put("CRVAL2","20"); h.put("CD1_1","-0.0004166667");h.put("CD1_2","0");h.put("CD2_1","0");h.put("CD2_2","0.0004166667");
         } return files;
     }
-    private DetectionReportContext context(File output, FitsFileInformation[] files, VariableStarReportOptions options) {
-        return new DetectionReportContext(VisualizationSettings.defaults().withAutoStretchBlackSigma(3).withAutoStretchWhiteSigma(10).withGifBlinkSpeedMs(100)
+    private DetectionReportContext context(File output, FitsFileInformation[] files, VariableStarReportOptions options, VariableStarAnalysis analysis) {
+        return ReportContextFixtures.create(VisualizationSettings.defaults().withAutoStretchBlackSigma(3).withAutoStretchWhiteSigma(10).withGifBlinkSpeedMs(100)
                 .withTrackCropPadding(10).withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1)
-                .withVariableStarReportOptions(options),output,List.of(),files,
-                new DetectionConfig(),AstrometryContextFactory.buildContext(files, null, null),null,null,null,null,null,List.of(),List.of(),null,List.of(),List.of(),List.of(),List.of(),List.of(),List.of());
+                .withVariableStarReportOptions(options),
+                output,
+                List.of(),
+                files,
+                new DetectionConfig(),
+                PipelineResult.builder().variableStarAnalysis(analysis).build());
     }
     private short[][] stack() { short[][] pixels = new short[120][160]; for (int y=0;y<120;y++)for(int x=0;x<160;x++)pixels[y][x]=(short)(-32000+(x*y)%100);return pixels; }
     private int count(String text, String regex) { int count=0;var m=Pattern.compile(regex).matcher(text);while(m.find())count++;return count; }

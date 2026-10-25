@@ -44,7 +44,7 @@ final class GlobalMapsSectionWriter {
                 && localRescueTracks.isEmpty()
                 && reportContext.localActivityClusters.isEmpty()
                 && reportContext.slowMoverCandidates.isEmpty()
-                && (reportContext.data == null || reportContext.data.variableCandidates.isEmpty())) {
+                && (reportContext.data.variableCandidates.isEmpty())) {
             return;
         }
 
@@ -82,7 +82,7 @@ final class GlobalMapsSectionWriter {
                 Math.max(1, (int) Math.round(height * displayWidth / (double) width))), new File(reportContext.exportDir, "report_map_background.png"));
         report.println("<div class='report-map'><div class='map-category-controls'>");
         java.util.Map<String, String> categories = new java.util.LinkedHashMap<>();
-        if (reportContext.data != null) for (var finding : reportContext.data.findings) {
+        for (var finding : reportContext.data.findings) {
             FindingCategory category = finding.categoryDescriptor();
             if (category.onDetectionMap()) categories.putIfAbsent(category.prefix(), category.label());
         }
@@ -118,11 +118,11 @@ final class GlobalMapsSectionWriter {
                 reportContext.slowMoverCandidates.size(),
                 reportContext.anomalies.size(),
                 reportContext.singleStreaks.size(),
-                reportContext.data != null ? reportContext.data.variableCandidates.size() : 0, interactive);
+                reportContext.data.variableCandidates.size(), interactive);
     }
 
     private static void paintVariableCandidates(BufferedImage map, ReportData data) {
-        if (data == null || data.variableCandidates.isEmpty()) return;
+        if (data.variableCandidates.isEmpty()) return;
         var graphics = map.createGraphics();
         try {
             graphics.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);

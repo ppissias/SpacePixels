@@ -43,10 +43,6 @@ final class SessionCatalogue {
         return context.catalogue();
     }
 
-    static SessionCatalogue load(DetectionReportContext context) {
-        return load(context.fitsFiles, context.astrometryContext);
-    }
-
     /** Loads the catalogue of the frames' folder once for the supplied resolved run metadata. */
     static SessionCatalogue load(FitsFileInformation[] files, DetectionReportAstrometry.Context astrometry) {
         return of(files, astrometry, SkyCatalogueStore::load);

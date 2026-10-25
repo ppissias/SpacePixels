@@ -64,7 +64,7 @@ public class ReportExportConsistencyTest {
         var config = new DetectionConfig(); config.enableVariableStarDetection = true; config.enableSlowMoverDetection = false;
         String measurements = new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(analysis);
         File included = temporary.newFolder("included");
-        DetectionReportGenerator.exportTrackVisualizations(result, frames, files, included, config, runContext(files), ReportInclusion.all(), null);
+        ReportExporter.export(new ReportRequest(result, frames, files, included, config, runContext(files), ReportInclusion.all(), null));
         String html = Files.readString(new File(included, "detection_report.html").toPath());
         assertTrue(html.contains("mixed filters")); assertTrue(html.contains("photometry-error-bar"));
         assertTrue(html.contains("loading='lazy'"));
@@ -78,7 +78,7 @@ public class ReportExportConsistencyTest {
         assertTrue(Files.readString(new File(included, "photometry_stars.csv").toPath()).contains(",candidate_label,ra_deg,dec_deg,vsx_matches,nearest_vsx_arcsec"));
         assertTrue(new File(included, "moving_track_1_star_centric.gif.poster.png").isFile());
         File excluded = temporary.newFolder("excluded");
-        DetectionReportGenerator.exportTrackVisualizations(result, frames, files, excluded, config, runContext(files), new ReportInclusion(true, false, false, false, false, false, false), null);
+        ReportExporter.export(new ReportRequest(result, frames, files, excluded, config, runContext(files), new ReportInclusion(true, false, false, false, false, false, false), null));
         html = Files.readString(new File(excluded, "detection_report.html").toPath());
         assertFalse(html.contains("V1 (0.60 mag)")); assertFalse(html.contains("<section id='variables'>"));
         assertFalse(Files.readString(new File(excluded, "report-data.json").toPath()).contains("Variable-star candidate"));
@@ -97,7 +97,7 @@ public class ReportExportConsistencyTest {
                 .maximumStackData(frames.get(0))
                 .variableStarAnalysis(analysis)
                 .build();
-        DetectionReportGenerator.exportTrackVisualizations(noTracks, frames, files, variablesOnly, config, runContext(files), ReportInclusion.all(), null);
+        ReportExporter.export(new ReportRequest(noTracks, frames, files, variablesOnly, config, runContext(files), ReportInclusion.all(), null));
         html = Files.readString(new File(variablesOnly, "detection_report.html").toPath());
         assertTrue(html.contains("Map of All Detections"));
         assertTrue(html.contains("data-report-category='V'"));
@@ -148,8 +148,8 @@ public class ReportExportConsistencyTest {
         String original = new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(residual);
         for (boolean rescue : List.of(false, true)) for (boolean motion : List.of(false, true)) {
             File export = temporary.newFolder("rescue-" + rescue + "-motion-" + motion);
-            DetectionReportGenerator.exportTrackVisualizations(result, frames, files, export, config, runContext(files),
-                    new ReportInclusion(true, false, rescue, false, motion, false, false), null);
+            ReportExporter.export(new ReportRequest(result, frames, files, export, config, runContext(files),
+                    new ReportInclusion(true, false, rescue, false, motion, false, false), null));
             String html = Files.readString(new File(export, "detection_report.html").toPath());
             String data = Files.readString(new File(export, "report-data.json").toPath());
             assertEquals(rescue, html.contains("id='finding-lr1'"));

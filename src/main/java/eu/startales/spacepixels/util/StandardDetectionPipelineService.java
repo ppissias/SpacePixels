@@ -9,7 +9,8 @@ package eu.startales.spacepixels.util;
 
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.util.reporting.ReportRunContext;
-import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
+import eu.startales.spacepixels.util.reporting.ReportExporter;
+import eu.startales.spacepixels.util.reporting.ReportRequest;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
@@ -71,8 +72,11 @@ public final class StandardDetectionPipelineService {
         File reportFile;
         try {
             // Writing the report takes 90-99%.
-            reportFile = exportDetectionReport(executionData, reportInclusion, progressListener == null ? null
-                    : (percent, message) -> progressListener.onProgressUpdate(90 + percent / 10, message), outputDirectory);
+            reportFile = ReportExporter.export(new ReportRequest(executionData.getPipelineResult(),
+                    executionData.getRawFramesForExport(), executionData.getFilesInformation(), outputDirectory,
+                    executionData.getEffectiveConfig(), executionData.getReportContext(), reportInclusion,
+                    progressListener == null ? null
+                            : (percent, message) -> progressListener.onProgressUpdate(90 + percent / 10, message)));
         } catch (IOException | RuntimeException e) {
             if (Cancellation.isCancellation(e)) {
                 throw e;
@@ -166,45 +170,4 @@ public final class StandardDetectionPipelineService {
         return new PipelineExecutionData(result, effectiveConfig, cachedFileInfo, rawFramesForExport, reportContext);
     }
 
-    /**
-     * Writes the full report into a new {@code detections_} folder; {@code progressListener} (which may be null) hears
-     * 0-99%. When it stops the report with a cancel ({@link Cancellation}), the unfinished folder is removed.
-     */
-    public File exportDetectionReport(PipelineExecutionData executionData,
-                                      TransientEngineProgressListener progressListener) throws IOException {
-        return exportDetectionReport(executionData, ReportInclusion.all(), progressListener, null);
-    }
-
-    private File exportDetectionReport(PipelineExecutionData executionData, ReportInclusion inclusion,
-                               TransientEngineProgressListener progressListener, File outputDirectory) throws IOException {
-        if (executionData == null) {
-            throw new IllegalArgumentException("executionData must not be null");
-        }
-
-        FitsFileInformation[] filesInformation = executionData.getFilesInformation();
-        if (filesInformation.length == 0) {
-            return null;
-        }
-
-        File exportDir = outputDirectory == null
-                ? OutputFolders.createDetectionsDirectory(new File(filesInformation[0].getFilePath())) : outputDirectory;
-        java.nio.file.Files.createDirectories(exportDir.toPath());
-        try {
-            DetectionReportGenerator.exportTrackVisualizations(
-                    executionData.getPipelineResult(),
-                    executionData.getRawFramesForExport(),
-                    filesInformation,
-                    exportDir,
-                    executionData.getEffectiveConfig(),
-                    executionData.getReportContext(),
-                    inclusion,
-                    progressListener);
-        } catch (IOException | RuntimeException e) {
-            if (Cancellation.isCancellation(e)) {
-                OutputFolders.deleteUnfinished(exportDir);
-            }
-            throw e;
-        }
-        return new File(exportDir, DetectionReportGenerator.detectionReportName);
-    }
 }

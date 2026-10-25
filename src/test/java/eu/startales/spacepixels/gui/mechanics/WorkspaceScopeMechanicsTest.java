@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.gui.mechanics;
 
+import eu.startales.spacepixels.util.reporting.ReportExporter;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import eu.startales.spacepixels.util.reporting.DetectionReportGenerator;
 import org.assertj.swing.edt.GuiActionRunner;
@@ -15,7 +16,7 @@ public class WorkspaceScopeMechanicsTest extends MechanicsTestCase {
         var directory = SyntheticDatasetFactory.createMono16FitsSequence(folder.newFolder("frames").toPath(),
                 "session", 5);
         var output = Files.createDirectory(directory.resolve("detections_saved"));
-        var report = Files.writeString(output.resolve(DetectionReportGenerator.detectionReportName), "<html>Saved report</html>");
+        var report = Files.writeString(output.resolve(ReportExporter.REPORT_FILE_NAME), "<html>Saved report</html>");
         GuiActionRunner.execute(() -> application().importFolder(directory.toFile()));
         waitFor("session imported", () -> GuiActionRunner.execute(() -> application().getSession() != null));
         GuiActionRunner.execute(() -> window().table().target().setRowSelectionInterval(0, 0));

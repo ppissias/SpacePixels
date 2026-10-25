@@ -233,12 +233,13 @@ Report export, report-side rendering, WCS-aware report context, and live report 
 
 Main facade:
 
-- `DetectionReportGenerator`
+- `ReportExporter.export(ReportRequest)`
 
 Supporting groups:
 
 - document and model:
-  - `DetectionReportContext`
+  - `ReportRequest` (owned small input snapshots; shared image buffers and engine result)
+  - `DetectionReportContext` (complete factory-built inputs and report model)
   - `DetectionReportSummary`
   - `ReportData` (stable finding identities and JSON/CSV exports)
   - `AtomicReportFile`
@@ -419,9 +420,9 @@ Responsibilities:
 - preserve raw frame arrays needed by report export
 - create an effective config through `DetectionPipelineSupport`
 - call `JTransientEngine.runPipeline(...)`; when it keeps fewer than three frames, the engine stops after quality control and marks the result `tooFewFrames`, which the report presents as it is
-- hand the run's `DetectionOverlays` (tracks and variable-star candidates, no image buffers) to the caller as soon as the engine returns, before the report decision; Detect Moving Targets keeps them, iterative passes pass no receiver, and the API, which calls `runDetectionPipeline` and `exportDetectionReport` itself, does not ask for them
+- hand the run's `DetectionOverlays` (tracks and variable-star candidates, no image buffers) to the caller as soon as the engine returns, before the report decision; Detect Moving Targets keeps them, iterative passes pass no receiver, and the API, which calls `runDetectionPipeline` and `ReportExporter.export` itself, does not ask for them
 - optionally run the UI detection-count safety prompt (`DetectionSafetyPrompt`, given a `DetectionSummary`) before report generation
-- export the standard report through `DetectionReportGenerator`
+- export the standard report through `ReportExporter.export(ReportRequest)`
 
 ### `IterativeDetectionPipelineService`
 
@@ -455,9 +456,15 @@ Design constraint:
 
 - Auto-Tune has no shared state, so API calls can run concurrently in one JVM, memory permitting.
 
-### `DetectionReportGenerator`
+### `ReportExporter` and the report context
 
-Report export facade.
+`ReportExporter.export(ReportRequest)` owns normal report orchestration. A request snapshots configuration,
+frame metadata and the frame-list container; the large image buffers and engine result are shared by ownership.
+The context factory normalizes optional outputs and initializes its final model and fields before any section uses
+them. Each export owns its progress counter. Section fixtures use this same construction path, so finding identities
+and quality-filtered frame choices always come from the prepared model.
+
+`DetectionReportGenerator` retains visualization helpers and iterative index generation pending SP-08B.
 
 Responsibilities:
 
@@ -471,7 +478,7 @@ Responsibilities:
 - publish HTML, JSON and CSV text artifacts through `AtomicReportFile` (built on `StagedFile`), checking write errors before replacing final files
 - emit testable `report-lookups.js` and `report-interactions.js` resources; GIF exports include PNG posters for pause/reduced-motion controls
 
-`ReportData` describes report presentation; it never changes the JTransient result. `DetectionReportContext` loads its catalogue once per export. The run's `VisualizationSettings` applies throughout image rendering. Long moving/streak GIFs stream images one at a time. Motion/lookup calculations use exposure midpoint times, while observing-span duration remains a separate metric. Detection-quality rejections are shared by all inspection animations.
+`ReportData` describes report presentation; it never changes the JTransient result. `DetectionReportContext` uses the catalogue and WCS captured once by `ReportRunContext` at run admission, including their valid absence. The run's `VisualizationSettings` applies throughout image rendering. Long moving/streak GIFs stream images one at a time. Motion/lookup calculations use exposure midpoint times, while observing-span duration remains a separate metric. Detection-quality rejections are shared by all inspection animations.
 
 The HTML places the results first. After the variable stars, a collapsed Likely Artifacts group holds the camera-fixed groups and then the common-motion groups, in pipeline order; local rescue candidates stay with the results. Diagnostics also starts collapsed, and links into a collapsed group open it. The HTML links maps to object cards, separates measured variable candidates from catalogue layers, and exposes navigation, filters and animation controls. Photometry exports append report labels and sky/catalogue identification columns. Lookup responses are validated before normalization; only successful responses are cached, refresh bypasses saved results, and save failures remain visible.
 
@@ -559,7 +566,7 @@ DetectionTask (GUI) / DefaultSpacePixelsPipelineApi (API, CLI)
 -> JTransientEngine.runPipeline(...)
 -> PipelineResult (PipelineExecutionData), DetectionOverlays to the caller
 -> DetectionSafetyPrompt
--> DetectionReportGenerator
+-> ReportExporter
 ```
 
 The effective config is a clone of the caller config. JTransient builds the slow-mover maximum stack from quality-filtered frames.
@@ -621,7 +628,7 @@ Writing a solution into a frame changes the user's own file:
 Report export later resolves WCS through:
 
 ```text
-DetectionReportGenerator
+ReportExporter
 -> DetectionReportAstrometry
 -> WcsSolutionResolver
 -> WcsCoordinateTransformer
@@ -656,7 +663,7 @@ MainApplicationPanel
 
 ```text
 PipelineResult + raw frames + metadata + config + app config
--> DetectionReportGenerator
+-> ReportExporter
 -> DetectionReportContext / DetectionReportSummary
 -> section writers
 -> renderers and GIF writer

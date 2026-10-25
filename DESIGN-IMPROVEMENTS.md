@@ -53,6 +53,9 @@ Refactorings are intended to preserve behaviour. Evaluate the exceptions raised 
 
 ### SP-08. One report entry point and a complete report context
 
+**Implementation split.** SP-08A implements the request/entry point, complete context and shared test construction.
+SP-08B retains map-rendering and formatting extraction. The proposal remains pending until both parts are reviewed.
+
 **Problem.**
 - `DetectionReportGenerator` (1,523 lines) is an all-static class that holds data types, image rendering (mask overlays, global maps, drift map, mosaics, cluster maps), text formatting and the export orchestration. 27 classes call its static helpers.
 - The export has one entry, `exportTrackVisualizations`, with eight positional parameters. The API and the GUI reach it through `StandardDetectionPipelineService` (`run`, or `runDetectionPipeline` and `exportDetectionReport`) and its private export overload.

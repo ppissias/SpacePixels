@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.util.reporting;
 
+import io.github.ppissias.jtransient.engine.PipelineResult;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Pixel;
@@ -80,28 +81,13 @@ public class UnclassifiedTransientSectionWriterTest {
                 Collections.singletonList(rescued),
                 null,
                 1.0);
-        DetectionReportContext context = new DetectionReportContext(
-                VisualizationSettings.defaults().withGifBlinkSpeedMs(100).withTrackCropPadding(10).withTrackObjectCentricCropSize(100)
+        DetectionReportContext context = ReportContextFixtures.create(VisualizationSettings.defaults().withGifBlinkSpeedMs(100).withTrackCropPadding(10).withTrackObjectCentricCropSize(100)
                         .withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f),
                 exportDirectory,
                 Collections.emptyList(),
                 null,
                 new DetectionConfig(),
-                null,
-                medianStack,
-                null,
-                null,
-                null,
-                null,
-                Collections.emptyList(),
-                Collections.emptyList(),
-                null,
-                Collections.singletonList(rescue),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList(),
-                Collections.emptyList());
+                PipelineResult.builder().masterStackData(medianStack).residualTransientAnalysis(new io.github.ppissias.jtransient.core.ResidualTransientAnalysis(Collections.singletonList(rescue), Collections.emptyList())).build());
         List<List<DetectedObject>> allTransients = Arrays.asList(
                 Collections.singletonList(classified),
                 Arrays.asList(remaining, rescued));
@@ -185,13 +171,13 @@ public class UnclassifiedTransientSectionWriterTest {
                                  List<CameraFixedRejector.Group> cameraFixed,
                                  ReportInclusion inclusion) throws Exception {
         short[][] medianStack = new short[40][40];
-        DetectionReportContext context = new DetectionReportContext(
-                VisualizationSettings.defaults().withGifBlinkSpeedMs(100).withTrackCropPadding(10).withTrackObjectCentricCropSize(100)
+        DetectionReportContext context = ReportContextFixtures.create(VisualizationSettings.defaults().withGifBlinkSpeedMs(100).withTrackCropPadding(10).withTrackObjectCentricCropSize(100)
                         .withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f),
-                temporaryFolder.newFolder(), Collections.emptyList(), null, new DetectionConfig(), null, medianStack,
-                null, null, null, null, Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(),
-                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
-                Collections.emptyList());
+                temporaryFolder.newFolder(),
+                Collections.emptyList(),
+                null,
+                new DetectionConfig(),
+                PipelineResult.builder().masterStackData(medianStack).build());
         StringWriter html = new StringWriter();
         UnclassifiedTransientSectionWriter.writeSection(new PrintWriter(html), context, allTransients, unclassified,
                 Collections.emptySet(), residual, cameraFixed, inclusion);
@@ -215,12 +201,13 @@ public class UnclassifiedTransientSectionWriterTest {
             rawFrames.add(pixels);
         }
         DetectedObject flash = detection(60, 50, 1);
-        DetectionReportContext context = new DetectionReportContext(
-                VisualizationSettings.defaults().withGifBlinkSpeedMs(100).withTrackCropPadding(10).withTrackObjectCentricCropSize(100)
+        DetectionReportContext context = ReportContextFixtures.create(VisualizationSettings.defaults().withGifBlinkSpeedMs(100).withTrackCropPadding(10).withTrackObjectCentricCropSize(100)
                         .withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f),
-                exportDirectory, rawFrames, null, new DetectionConfig(), null, rawFrames.get(0), null, null, null, null,
-                Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(),
-                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+                exportDirectory,
+                rawFrames,
+                null,
+                new DetectionConfig(),
+                PipelineResult.builder().masterStackData(rawFrames.get(0)).build());
         List<List<DetectedObject>> transients = Arrays.asList(
                 Collections.emptyList(), Collections.singletonList(flash), Collections.emptyList(), Collections.emptyList());
         StringWriter html = new StringWriter();
@@ -256,13 +243,14 @@ public class UnclassifiedTransientSectionWriterTest {
     public void detectionsBeyondTheAnimationLimitShowTheStaticCutout() throws Exception {
         File exportDirectory = temporaryFolder.newFolder();
         short[][] pixels = new short[40][40];
-        DetectionReportContext context = new DetectionReportContext(
-                VisualizationSettings.defaults().withGifBlinkSpeedMs(100).withTrackCropPadding(10)
+        DetectionReportContext context = ReportContextFixtures.create(VisualizationSettings.defaults().withGifBlinkSpeedMs(100).withTrackCropPadding(10)
                         .withTrackObjectCentricCropSize(100).withTargetCircleRadius(12).withTargetCircleStrokeWidth(1.0f)
                         .withMaxAnimatedMarkers(0),
-                exportDirectory, Collections.singletonList(pixels), null, new DetectionConfig(), null, pixels, null, null, null, null,
-                Collections.emptyList(), Collections.emptyList(), null, Collections.emptyList(), Collections.emptyList(),
-                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+                exportDirectory,
+                Collections.singletonList(pixels),
+                null,
+                new DetectionConfig(),
+                PipelineResult.builder().masterStackData(pixels).build());
         List<List<DetectedObject>> transients = Collections.singletonList(Collections.singletonList(detection(20, 20, 0)));
         StringWriter html = new StringWriter();
 
