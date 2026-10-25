@@ -8,6 +8,7 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
+import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.assertj.swing.edt.GuiActionRunner;
 import org.junit.Test;
@@ -38,19 +39,42 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
             SpacePixelsDetectionProfileIO.write(writer, new SpacePixelsDetectionProfile(seed, 30));
         }
         reopenWindow();
-        importSyntheticSequence();
-        window().tabbedPane().selectTab("Detection Settings");
-        Map<String, JComponent> inputs = GuiActionRunner.execute(() -> inputs(application().getDetectionConfigurationPanel()));
+        var directory = SyntheticDatasetFactory.createMono16FitsSequence(folder.newFolder("frames").toPath(),
+                "session", SyntheticDatasetFactory.DEFAULT_FRAME_COUNT).toFile();
+        GuiActionRunner.execute(() -> application().importFolder(directory));
+        waitFor("session imported", () -> GuiActionRunner.execute(() -> application().getSession() != null));
+        GuiActionRunner.execute(() -> application().getTabbedPane()
+                .setSelectedComponent(application().getDetectionConfigurationPanel()));
+        Map<String, ControlMetadata> controls = GuiActionRunner.execute(() -> controls(application().getDetectionConfigurationPanel()));
+        Map<String, JComponent> inputs = controls.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().input(), (first, second) -> first, LinkedHashMap::new));
         assertEquals("78 engine fields, 11 application fields and the rejection preset", 90, inputs.size());
         for (DetectionSetting<?> setting : DetectionSettings.all()) {
-            assertNotNull(setting.id(), inputs.get(setting.id()));
-            assertEquals(setting.expert(), inputs.get(setting.id()).getClientProperty("spacepixels.expertSetting"));
+            assertNotNull(setting.id(), controls.get(setting.id()));
+            assertEquals(setting.expert(), controls.get(setting.id()).expert());
         }
+        Map<String, Boolean> expectedApplicationExpert = Map.ofEntries(
+                Map.entry("variableStarMaxCandidateCards", false),
+                Map.entry("variableStarSortOrder", false),
+                Map.entry("frameRejectionPreset", false),
+                Map.entry("autoTuneMaxCandidateFrames", true),
+                Map.entry("autoStretchBlackSigma", false),
+                Map.entry("autoStretchWhiteSigma", false),
+                Map.entry("gifBlinkSpeedMs", false),
+                Map.entry("streakLineScaleFactor", true),
+                Map.entry("streakCentroidBoxRadius", true),
+                Map.entry("pointSourceMinBoxRadius", true),
+                Map.entry("dynamicBoxPadding", true),
+                Map.entry("trackCropPadding", true));
+        expectedApplicationExpert.forEach((id, expert) -> {
+            assertNotNull(id, controls.get(id));
+            assertEquals(id, expert, controls.get(id).expert());
+        });
         GuiActionRunner.execute(() -> inputs.forEach((id, input) -> {
             if (!id.equals("frameRejectionPreset")) change(input);
         }));
         Map<String, Object> expected = GuiActionRunner.execute(() -> values(inputs));
-        window().button(VisibleText.button("Save")).click();
+        GuiActionRunner.execute(() -> window().button(VisibleText.button("Save")).target().doClick());
         waitFor("all typed settings saved", () -> showingLabel("Saved settings").contains("Saved settings"));
         SpacePixelsDetectionProfile saved;
         try (FileReader reader = new FileReader(profileFile())) {
@@ -77,9 +101,9 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         GuiActionRunner.execute(() -> inputs.forEach((id, input) -> {
             if (!id.equals("frameRejectionPreset")) change(input);
         }));
-        window().button(VisibleText.button("Revert")).click();
+        GuiActionRunner.execute(() -> window().button(VisibleText.button("Revert")).target().doClick());
         assertValues(expected, GuiActionRunner.execute(() -> values(inputs)));
-        window().button(VisibleText.button("Load Defaults")).click();
+        GuiActionRunner.execute(() -> window().button(VisibleText.button("Load Defaults")).target().doClick());
         Map<String, Object> defaults = GuiActionRunner.execute(() -> values(inputs));
         DetectionConfig defaultConfig = new DetectionConfig();
         for (DetectionSetting<?> setting : DetectionSettings.all()) {
@@ -88,27 +112,68 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         sameValue("default report card limit", VariableStarReportOptions.DEFAULT.maxCandidateCards(), defaults.get("variableStarMaxCandidateCards"));
         assertEquals(VariableStarReportOptions.DEFAULT.sortOrder(), defaults.get("variableStarSortOrder"));
         sameValue("tuning limit is independent of detection defaults", expected.get("autoTuneMaxCandidateFrames"), defaults.get("autoTuneMaxCandidateFrames"));
-        window().button(VisibleText.button("Revert")).click();
+        GuiActionRunner.execute(() -> window().button(VisibleText.button("Revert")).target().doClick());
         assertValues(expected, GuiActionRunner.execute(() -> values(inputs)));
         reopenWindow();
         Map<String, Object> reloaded = GuiActionRunner.execute(() -> values(inputs(application().getDetectionConfigurationPanel())));
         assertValues(expected, reloaded);
     }
 
+    /** Carries a mounted control and its direct expert-disclosure metadata from the settings panel. */
+    private record ControlMetadata(JComponent input, boolean expert) {
+    }
+
     /** Locates controls by their stable field identity, including expert and temporarily inapplicable rows. */
     private static Map<String, JComponent> inputs(Container root) {
-        Map<String, JComponent> result = new LinkedHashMap<>();
-        collectInputs(root, result);
+        return controls(root).entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().input(), (first, second) -> first, LinkedHashMap::new));
+    }
+
+    /** Reads direct row and Overview metadata and verifies every registered input is mounted in the panel tree. */
+    private static Map<String, ControlMetadata> controls(Container root) {
+        Set<JComponent> mounted = new java.util.HashSet<>();
+        collectMountedComponents(root, mounted);
+        Map<String, ControlMetadata> result = new LinkedHashMap<>();
+        try {
+            var coreField = root.getClass().getDeclaredField("coreDefinitions");
+            coreField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Map<JSpinner, DetectionSetting<?>> coreDefinitions = (Map<JSpinner, DetectionSetting<?>>) coreField.get(root);
+            coreDefinitions.forEach((spinner, setting) -> {
+                assertTrue("Core control not mounted: " + setting.id(), mounted.contains(spinner));
+                assertNull("Duplicate input identity " + setting.id(),
+                        result.put(setting.id(), new ControlMetadata(spinner, setting.expert())));
+            });
+            var rowsField = root.getClass().getDeclaredField("settingRows");
+            rowsField.setAccessible(true);
+            java.util.List<?> rows = (java.util.List<?>) rowsField.get(root);
+            for (Object row : rows) {
+                var idField = row.getClass().getDeclaredField("id");
+                idField.setAccessible(true);
+                String id = (String) idField.get(row);
+                var inputField = row.getClass().getDeclaredField("input");
+                inputField.setAccessible(true);
+                JComponent input = (JComponent) inputField.get(row);
+                var isExpertMethod = row.getClass().getDeclaredMethod("isExpert");
+                isExpertMethod.setAccessible(true);
+                boolean expert = (Boolean) isExpertMethod.invoke(row);
+                assertTrue("Row control not mounted: " + id, mounted.contains(input));
+                assertNull("Duplicate input identity " + id,
+                        result.put(id, new ControlMetadata(input, expert)));
+            }
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException(failure);
+        }
         return result;
     }
 
-    /** Visits the component tree without relying on private spinner names or page layout. */
-    private static void collectInputs(Container root, Map<String, JComponent> result) {
+    /** Visits the component tree to verify every registered control is present in the container hierarchy. */
+    private static void collectMountedComponents(Container root, Set<JComponent> mounted) {
         for (Component component : root.getComponents()) {
-            if (component instanceof JComponent input && input.getClientProperty("spacepixels.settingId") instanceof String id) {
-                assertNull("Duplicate input identity " + id, result.put(id, input));
+            if (component instanceof JComponent input) {
+                mounted.add(input);
             }
-            if (component instanceof Container nested) collectInputs(nested, result);
+            if (component instanceof Container nested) collectMountedComponents(nested, mounted);
         }
     }
 
