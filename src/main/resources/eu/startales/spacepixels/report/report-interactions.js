@@ -45,7 +45,7 @@
     });
   }
 
-  // Animation metadata and controls
+  // Animation metadata and speed / step controls
   const animationsDataEl = doc.getElementById('report-animations-data');
   let animationsMeta = {};
   if (animationsDataEl) {
@@ -73,6 +73,13 @@
   let paused = false;
   const activePlayers = [];
   const fallbackGifs = [];
+  const allUnconvertedGifs = new Set();
+
+  function setGifPaused(img, isPaused) {
+    if (!img.dataset.animationSource) img.dataset.animationSource = img.getAttribute('src');
+    const source = img.dataset.animationSource;
+    img.src = isPaused ? source + '.poster.png' : source;
+  }
 
   function pauseAnimations(value) {
     paused = value;
@@ -83,9 +90,11 @@
     if (stepPrevBtn) stepPrevBtn.disabled = !paused;
     if (stepNextBtn) stepNextBtn.disabled = !paused;
 
+    for (const img of allUnconvertedGifs) {
+      setGifPaused(img, paused);
+    }
     for (const img of fallbackGifs) {
-      if (!img.dataset.animationSource) img.dataset.animationSource = img.getAttribute('src');
-      img.src = paused ? img.dataset.animationSource + '.poster.png' : img.dataset.animationSource;
+      setGifPaused(img, paused);
     }
 
     if (!paused) {
@@ -111,13 +120,7 @@
     });
   }
 
-  for (const img of animations) {
-    const rawSrc = img.getAttribute('src');
-    if (!rawSrc) continue;
-    const fileName = rawSrc.split('/').pop().split('?')[0];
-    const meta = animationsMeta[fileName] || animationsMeta[rawSrc];
-
-    // Ensure a clear GIF download link exists near the animation
+  function attachGifLink(img, rawSrc) {
     const container = img.closest('.sky-orientation-figure, figure, div');
     if (container) {
       const hasGifLink = container.querySelector('.animation-gif-link') ||
@@ -137,72 +140,158 @@
         }
       }
     }
+  }
+
+  // Check reduced motion initially
+  if (root.matchMedia) {
+    const motionQuery = root.matchMedia('(prefers-reduced-motion: reduce)');
+    if (motionQuery.matches) {
+      paused = true;
+      if (toggle) {
+        toggle.textContent = 'Play animations';
+        toggle.setAttribute('aria-pressed', 'true');
+      }
+      if (stepPrevBtn) stepPrevBtn.disabled = false;
+      if (stepNextBtn) stepNextBtn.disabled = false;
+    }
+    if (motionQuery.addEventListener) {
+      motionQuery.addEventListener('change', e => {
+        if (e.matches) pauseAnimations(true);
+      });
+    }
+  }
+
+  // Setup animations with deferred sheet loading
+  for (const img of animations) {
+    const rawSrc = img.getAttribute('src');
+    if (!rawSrc) continue;
+    const fileName = rawSrc.split('/').pop().split('?')[0];
+    const meta = animationsMeta[fileName] || animationsMeta[rawSrc];
+
+    attachGifLink(img, rawSrc);
+    allUnconvertedGifs.add(img);
+
+    // Apply current pause state immediately to the source GIF element
+    if (paused) {
+      setGifPaused(img, true);
+    }
 
     if (!meta || !meta.columns || !meta.rows || !meta.frameCount) {
       fallbackGifs.push(img);
       continue;
     }
 
-    const sheetUrl = rawSrc + '.sheet.png';
-    const sheetImg = new root.Image();
-    sheetImg.onload = function () {
-      const canvas = doc.createElement('canvas');
-      canvas.width = meta.frameWidth;
-      canvas.height = meta.frameHeight;
-      canvas.className = 'animation-sheet-canvas' + (img.className ? ' ' + img.className : '');
-      if (img.style.cssText) canvas.style.cssText = img.style.cssText;
-      if (img.id) canvas.id = img.id;
-      canvas.setAttribute('role', 'img');
-      const alt = img.getAttribute('alt') || 'Animation';
-      canvas.setAttribute('aria-label', alt);
-      if (img.title) canvas.title = img.title;
+    let loadStarted = false;
+    function startSheetLoad() {
+      if (loadStarted) return;
+      loadStarted = true;
 
-      const ctx = canvas.getContext('2d');
-      const player = {
-        canvas: canvas,
-        ctx: ctx,
-        sheet: sheetImg,
-        meta: meta,
-        currentFrame: 0,
-        lastFrameTime: root.performance ? root.performance.now() : Date.now(),
-        visible: true,
-        drawFrame: function (frameIndex) {
-          this.currentFrame = ((frameIndex % meta.frameCount) + meta.frameCount) % meta.frameCount;
-          const col = this.currentFrame % meta.columns;
-          const row = Math.floor(this.currentFrame / meta.columns);
-          const sx = col * meta.frameWidth;
-          const sy = row * meta.frameHeight;
-          this.ctx.clearRect(0, 0, meta.frameWidth, meta.frameHeight);
-          this.ctx.drawImage(this.sheet, sx, sy, meta.frameWidth, meta.frameHeight, 0, 0, meta.frameWidth, meta.frameHeight);
-        },
-        step: function (delta) {
-          this.drawFrame(this.currentFrame + delta);
+      const sheetUrl = rawSrc + '.sheet.png';
+      const sheetImg = new root.Image();
+
+      sheetImg.onload = function () {
+        allUnconvertedGifs.delete(img);
+        const canvas = doc.createElement('canvas');
+        canvas.width = meta.frameWidth;
+        canvas.height = meta.frameHeight;
+        canvas.className = 'animation-sheet-canvas' + (img.className ? ' ' + img.className : '');
+        if (img.style.cssText) canvas.style.cssText = img.style.cssText;
+        if (img.id) canvas.id = img.id;
+        canvas.setAttribute('role', 'img');
+        const alt = img.getAttribute('alt') || 'Animation';
+        canvas.setAttribute('aria-label', alt);
+        if (img.title) canvas.title = img.title;
+
+        const ctx = canvas.getContext('2d');
+        const player = {
+          canvas: canvas,
+          ctx: ctx,
+          sheet: sheetImg,
+          meta: meta,
+          currentFrame: 0,
+          lastFrameTime: root.performance ? root.performance.now() : Date.now(),
+          visible: true,
+          drawFrame: function (frameIndex) {
+            this.currentFrame = ((frameIndex % meta.frameCount) + meta.frameCount) % meta.frameCount;
+            const col = this.currentFrame % meta.columns;
+            const row = Math.floor(this.currentFrame / meta.columns);
+            const sx = col * meta.frameWidth;
+            const sy = row * meta.frameHeight;
+            this.ctx.clearRect(0, 0, meta.frameWidth, meta.frameHeight);
+            this.ctx.drawImage(this.sheet, sx, sy, meta.frameWidth, meta.frameHeight, 0, 0, meta.frameWidth, meta.frameHeight);
+          },
+          step: function (delta) {
+            this.drawFrame(this.currentFrame + delta);
+          }
+        };
+
+        player.drawFrame(0);
+        img.replaceWith(canvas);
+        activePlayers.push(player);
+
+        if (root.IntersectionObserver) {
+          player.visible = false;
+          const playObserver = new root.IntersectionObserver(entries => {
+            for (const entry of entries) {
+              if (entry.target === canvas) {
+                player.visible = entry.isIntersecting;
+                if (player.visible) {
+                  player.lastFrameTime = root.performance ? root.performance.now() : Date.now();
+                }
+              }
+            }
+          });
+          playObserver.observe(canvas);
         }
       };
 
-      player.drawFrame(0);
-      img.replaceWith(canvas);
-      activePlayers.push(player);
+      sheetImg.onerror = function () {
+        fallbackGifs.push(img);
+        setGifPaused(img, paused);
+      };
 
-      if (root.IntersectionObserver) {
-        player.visible = false;
-        const observer = new root.IntersectionObserver(entries => {
-          for (const entry of entries) {
-            if (entry.target === canvas) {
-              player.visible = entry.isIntersecting;
-              if (player.visible) {
-                player.lastFrameTime = root.performance ? root.performance.now() : Date.now();
-              }
-            }
+      sheetImg.src = sheetUrl;
+    }
+
+    // Check if image is inside a closed details element
+    const details = img.closest('details');
+    const isInsideClosedDetails = details && !details.open;
+
+    if (root.IntersectionObserver && !isInsideClosedDetails) {
+      const loadObserver = new root.IntersectionObserver(entries => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            loadObserver.disconnect();
+            startSheetLoad();
           }
-        });
-        observer.observe(canvas);
-      }
-    };
-    sheetImg.onerror = function () {
-      fallbackGifs.push(img);
-    };
-    sheetImg.src = sheetUrl;
+        }
+      });
+      loadObserver.observe(img);
+    } else if (isInsideClosedDetails) {
+      // Defer loading until details element is toggled open
+      const onToggle = function () {
+        if (details.open) {
+          details.removeEventListener('toggle', onToggle);
+          if (root.IntersectionObserver) {
+            const loadObserver = new root.IntersectionObserver(entries => {
+              for (const entry of entries) {
+                if (entry.isIntersecting) {
+                  loadObserver.disconnect();
+                  startSheetLoad();
+                }
+              }
+            });
+            loadObserver.observe(img);
+          } else {
+            startSheetLoad();
+          }
+        }
+      };
+      details.addEventListener('toggle', onToggle);
+    } else {
+      // Direct load if no observer and not inside closed details
+      startSheetLoad();
+    }
   }
 
   function tick(timestamp) {
@@ -230,15 +319,6 @@
   for (const img of doc.querySelectorAll('img')) {
     if (!img.classList.contains('sp-base')) img.loading = 'lazy';
     img.decoding = 'async';
-  }
-  if (root.matchMedia) {
-    const motionQuery = root.matchMedia('(prefers-reduced-motion: reduce)');
-    if (motionQuery.matches) pauseAnimations(true);
-    if (motionQuery.addEventListener) {
-      motionQuery.addEventListener('change', e => {
-        if (e.matches) pauseAnimations(true);
-      });
-    }
   }
 
   // Per-category switches operate on the vector layers, leaving the measured image unchanged.
@@ -313,4 +393,15 @@
     svg.addEventListener('pointerup', () => { drag = null; });
     svg.addEventListener('pointercancel', () => { drag = null; });
   }
+
+  // Diagnostic handle for test runners and automation
+  root.SpacePixelsAnimations = {
+    getPaused: function() { return paused; },
+    getSpeed: function() { return currentSpeed; },
+    getActivePlayers: function() { return activePlayers; },
+    getFallbackGifs: function() { return fallbackGifs; },
+    getUnconvertedGifs: function() { return allUnconvertedGifs; },
+    pauseAnimations: pauseAnimations,
+    step: function(delta) { for (const p of activePlayers) p.step(delta); }
+  };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

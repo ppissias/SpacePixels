@@ -62,11 +62,16 @@ final class TrackVisualizationRenderer {
         offerPreview(image, outputFile);
     }
 
-    static void saveAnimatedGif(List<BufferedImage> frames, File outputFile, VisualizationSettings settings) throws IOException {
-        GifSequenceWriter.saveAnimatedGif(frames, outputFile, settings.getGifBlinkSpeedMs());
+    static AnimationMetadata saveAnimatedGif(List<BufferedImage> frames, File outputFile, VisualizationSettings settings) throws IOException {
+        return saveAnimatedGif(frames, outputFile, settings, null);
+    }
+
+    static AnimationMetadata saveAnimatedGif(List<BufferedImage> frames, File outputFile, VisualizationSettings settings, AnimationRegistry registry) throws IOException {
+        AnimationMetadata meta = GifSequenceWriter.saveAnimatedGif(frames, outputFile, settings.getGifBlinkSpeedMs(), registry);
         if (!frames.isEmpty()) {
             offerPreview(frames.get(0), outputFile);
         }
+        return meta;
     }
 
     /**

@@ -41,8 +41,6 @@ public final class ReportExporter {
         } catch (IOException | RuntimeException failure) {
             if (Cancellation.isCancellation(failure)) OutputFolders.deleteUnfinished(exportDir);
             throw failure;
-        } finally {
-            AnimationRegistry.clear(exportDir);
         }
         return new File(exportDir, REPORT_FILE_NAME);
     }
@@ -135,7 +133,7 @@ public final class ReportExporter {
                     fieldDepth);
 
             ReportClientScriptWriter.appendLiveReportRenderingScript(report);
-            ReportPresentation.appendAnimationsData(report, reportContext.exportDir);
+            ReportPresentation.appendAnimationsData(report, reportContext);
             ReportPresentation.appendScript(report);
             report.printf(Locale.US, "<p class='astro-note'>SpacePixels %s · JTransient %s · Generated %s · Report preparation %.2f s</p>%n",
                     ReportPresentation.version("spacepixels"), ReportPresentation.version("jtransient"), reportContext.data.generatedAtUtc,

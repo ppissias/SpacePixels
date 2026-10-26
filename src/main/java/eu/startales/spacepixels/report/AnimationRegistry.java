@@ -9,56 +9,63 @@
  */
 package eu.startales.spacepixels.report;
 
-import java.io.File;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Thread-safe registry that collects animation metadata per output directory during report export.
+ * Report-owned registry collecting animation metadata during a single report export operation.
+ * Instances are owned by {@link DetectionReportContext}, ensuring bounded lifetime without global state
+ * and isolating concurrent export operations.
  */
 public final class AnimationRegistry {
 
-    private static final Map<String, Map<String, AnimationMetadata>> REGISTRY = new ConcurrentHashMap<>();
+    private final Map<String, AnimationMetadata> animations = new ConcurrentHashMap<>();
 
-    private AnimationRegistry() {
+    /**
+     * Creates a new animation registry for an export operation.
+     */
+    public AnimationRegistry() {
     }
 
-    private static String normalizeDir(File dir) {
-        if (dir == null) {
-            return "";
+    /**
+     * Registers animation metadata for an exported animation asset.
+     *
+     * @param metadata the animation metadata to register
+     */
+    public void register(AnimationMetadata metadata) {
+        if (metadata != null) {
+            animations.put(metadata.fileName(), metadata);
         }
-        try {
-            return dir.getCanonicalPath();
-        } catch (Exception e) {
-            return dir.getAbsolutePath();
-        }
     }
 
-    public static void register(File dir, AnimationMetadata metadata) {
-        if (metadata == null) {
-            return;
-        }
-        String key = normalizeDir(dir);
-        REGISTRY.computeIfAbsent(key, k -> new ConcurrentHashMap<>()).put(metadata.fileName(), metadata);
+    /**
+     * Returns an unmodifiable snapshot of all animations registered during this export.
+     *
+     * @return map of filename to animation metadata
+     */
+    public Map<String, AnimationMetadata> getAnimations() {
+        return Collections.unmodifiableMap(new LinkedHashMap<>(animations));
     }
 
-    public static Map<String, AnimationMetadata> getAnimations(File dir) {
-        String key = normalizeDir(dir);
-        Map<String, AnimationMetadata> map = REGISTRY.get(key);
-        if (map == null || map.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        return new LinkedHashMap<>(map);
+    /**
+     * Checks whether an animation with the specified filename has been registered.
+     *
+     * @param fileName filename of the animation asset
+     * @return true if registered
+     */
+    public boolean contains(String fileName) {
+        return animations.containsKey(Objects.requireNonNull(fileName, "fileName"));
     }
 
-    public static void clear(File dir) {
-        String key = normalizeDir(dir);
-        REGISTRY.remove(key);
-    }
-
-    public static void clearAll() {
-        REGISTRY.clear();
+    /**
+     * Returns the total count of animations registered during this export.
+     *
+     * @return number of animations
+     */
+    public int size() {
+        return animations.size();
     }
 }

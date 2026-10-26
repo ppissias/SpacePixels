@@ -711,7 +711,7 @@ final class PipelineDiagnosticsSectionWriter {
         TrackVisualizationRenderer.saveLosslessPng(driftImg, new File(reportContext.exportDir, "dither_drift_map.png"));
 
         String cornerGifFile = "dither_corners_sampled.gif";
-        GifSequenceWriter.saveAnimatedGif(cornerFrames, new File(reportContext.exportDir, cornerGifFile), reportContext.settings.getGifBlinkSpeedMs());
+        GifSequenceWriter.saveAnimatedGif(cornerFrames, new File(reportContext.exportDir, cornerGifFile), reportContext.settings.getGifBlinkSpeedMs(), reportContext.animations);
 
         report.println("<div class='panel'>");
         report.println("<h2>Dither & Sensor Drift Diagnostics</h2>");

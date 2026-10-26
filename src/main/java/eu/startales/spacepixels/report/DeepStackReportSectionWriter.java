@@ -196,7 +196,7 @@ final class DeepStackReportSectionWriter {
                 graphics.drawString(TrackVisualizationRenderer.frameLabel(context, frameIndex), 8, 16); graphics.dispose();
                 gifFrames.add(image);
             }
-            GifSequenceWriter.saveAnimatedGif(gifFrames, new File(context.exportDir, gifFileName), context.settings.getGifBlinkSpeedMs());
+            GifSequenceWriter.saveAnimatedGif(gifFrames, new File(context.exportDir, gifFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
         }
 
         report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.SLOW_MOVER, candidateNumber) + "' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");

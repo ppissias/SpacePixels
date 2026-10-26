@@ -164,7 +164,7 @@ final class TargetVisualizationSectionWriter {
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createStarCentricHighlightedFrame(
                     context.rawFrames.get(point.sourceFrameIndex), cropBounds, point, context.settings, Color.WHITE,
                     null, TrackVisualizationRenderer.frameLabel(context, point.sourceFrameIndex), false)).iterator(),
-                    new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs());
+                    new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
             SkyOrientationOverlay streakTrackOverlay = buildSkyOrientationOverlay(
                     context.astrometryContext,
                     cropBounds.fixedCenterX,
@@ -235,11 +235,11 @@ final class TargetVisualizationSectionWriter {
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createCroppedDisplayImage(
                     context.rawFrames.get(point.sourceFrameIndex), (int) Math.round(point.x), (int) Math.round(point.y),
                     context.settings.getTrackObjectCentricCropSize(), context.settings.getTrackObjectCentricCropSize(), context.settings)).iterator(),
-                    new File(context.exportDir, objectFileName), context.settings.getGifBlinkSpeedMs());
+                    new File(context.exportDir, objectFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createStarCentricHighlightedFrame(
                     context.rawFrames.get(point.sourceFrameIndex), cropBounds, point, context.settings, Color.WHITE, null,
                     TrackVisualizationRenderer.frameLabel(context, point.sourceFrameIndex), false)).iterator(),
-                    new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs());
+                    new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
 
             double[] meanCenter = computeTrackMeanPixelCenter(track);
             SkyOrientationOverlay movingObjectOverlay = meanCenter != null

@@ -84,7 +84,7 @@ final class AnomalySectionWriter {
         writeComparisonFrame(report, context, point, bounds, levels, after, "After", prefix + "_after.png", animation);
         report.println("</div>");
         String gif = prefix + "_context.gif";
-        TrackVisualizationRenderer.saveAnimatedGif(animation, new File(context.exportDir, gif), context.settings);
+        TrackVisualizationRenderer.saveAnimatedGif(animation, new File(context.exportDir, gif), context.settings, context.animations);
         report.println("<figure class='anomaly-blink'><a href='" + gif + "' target='_blank'>"
                 + "<img loading='lazy' decoding='async' src='" + gif + "' alt='Blink comparison of the event and available neighbouring frames' /></a>"
                 + "<figcaption>Blink comparison &middot; <a href='" + gif + "' target='_blank'>Open GIF</a></figcaption></figure></div>");

@@ -48,8 +48,9 @@ final class ReportPresentation {
                 + new Gson().toJson(context.data.findings) + "</script>");
     }
 
-    static void appendAnimationsData(PrintWriter out, File exportDir) {
-        Map<String, AnimationMetadata> map = AnimationRegistry.getAnimations(exportDir);
+    static void appendAnimationsData(PrintWriter out, DetectionReportContext context) {
+        Map<String, AnimationMetadata> map = context != null && context.animations != null
+                ? context.animations.getAnimations() : Collections.emptyMap();
         out.println("<script type='application/json' id='report-animations-data'>");
         out.println(new Gson().toJson(map));
         out.println("</script>");

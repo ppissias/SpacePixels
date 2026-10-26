@@ -60,6 +60,7 @@ final class DetectionReportContext {
     final List<ResidualTransientAnalysis.CommonMotionGroup> commonMotionGroups;
     final List<Track> localRescueTracks;
     final DetectionReportSummary summary;
+    final AnimationRegistry animations;
     private VariableStarPresentation variablePresentation;
 
     /** Builds every shared report input and model before a section can use the context. */
@@ -152,6 +153,7 @@ final class DetectionReportContext {
         this.cameraFixedGroups = FindingCategory.CAMERA_FIXED.included(inclusion)
                 ? result.cameraFixedGroups : Collections.emptyList();
         this.dataAreaText = DataAreaPresentation.describe(result.dataArea, pipelineTelemetry);
+        this.animations = new AnimationRegistry();
         this.data = ReportData.create(this, pipelineTelemetry, result.variableStarAnalysis, commonMotionGroups, inclusion);
     }
 
