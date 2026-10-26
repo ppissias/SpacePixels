@@ -181,15 +181,65 @@
       continue;
     }
 
+    const lastSlash = rawSrc.lastIndexOf('/');
+    const baseDir = lastSlash >= 0 ? rawSrc.substring(0, lastSlash + 1) : '';
+    const sheetUrls = (meta.sheets && meta.sheets.length > 0)
+      ? meta.sheets.map(s => (s.startsWith('/') || s.startsWith('http://') || s.startsWith('https://')) ? s : baseDir + s)
+      : [rawSrc + '.sheet.png'];
+
+    const perPage = (meta.columns && meta.rows) ? (meta.columns * meta.rows) : meta.frameCount;
+    const pageCount = sheetUrls.length;
+    const loadedPages = {};
+    const loadingPages = {};
+    const pageAccessOrder = [];
+    const MAX_LOADED_PAGES = 3;
+
+    function retainPage(p, imgObj) {
+      loadedPages[p] = imgObj;
+      const idx = pageAccessOrder.indexOf(p);
+      if (idx >= 0) pageAccessOrder.splice(idx, 1);
+      pageAccessOrder.push(p);
+
+      while (pageAccessOrder.length > MAX_LOADED_PAGES) {
+        const oldest = pageAccessOrder.shift();
+        if (oldest !== p) {
+          delete loadedPages[oldest];
+        }
+      }
+    }
+
+    function loadPage(p, onLoaded, onError) {
+      if (loadedPages[p]) {
+        retainPage(p, loadedPages[p]);
+        if (onLoaded) onLoaded(loadedPages[p]);
+        return;
+      }
+      if (loadingPages[p]) {
+        if (onLoaded) loadingPages[p].callbacks.push(onLoaded);
+        return;
+      }
+      const entry = { callbacks: onLoaded ? [onLoaded] : [] };
+      loadingPages[p] = entry;
+
+      const pageImg = new root.Image();
+      pageImg.onload = function () {
+        delete loadingPages[p];
+        retainPage(p, pageImg);
+        for (const cb of entry.callbacks) cb(pageImg);
+      };
+      pageImg.onerror = function () {
+        delete loadingPages[p];
+        if (onError) onError();
+      };
+      pageImg.src = sheetUrls[p];
+    }
+
     let loadStarted = false;
     function startSheetLoad() {
       if (loadStarted) return;
       loadStarted = true;
 
-      const sheetUrl = rawSrc + '.sheet.png';
-      const sheetImg = new root.Image();
-
-      sheetImg.onload = function () {
+      loadPage(0, function (page0Img) {
         allUnconvertedGifs.delete(img);
         const canvas = doc.createElement('canvas');
         canvas.width = meta.frameWidth;
@@ -206,19 +256,40 @@
         const player = {
           canvas: canvas,
           ctx: ctx,
-          sheet: sheetImg,
           meta: meta,
+          sheetUrls: sheetUrls,
+          loadedPages: loadedPages,
           currentFrame: 0,
           lastFrameTime: root.performance ? root.performance.now() : Date.now(),
           visible: true,
           drawFrame: function (frameIndex) {
             this.currentFrame = ((frameIndex % meta.frameCount) + meta.frameCount) % meta.frameCount;
-            const col = this.currentFrame % meta.columns;
-            const row = Math.floor(this.currentFrame / meta.columns);
+            const p = Math.floor(this.currentFrame / perPage);
+            const localIndex = this.currentFrame % perPage;
+            const col = localIndex % meta.columns;
+            const row = Math.floor(localIndex / meta.columns);
             const sx = col * meta.frameWidth;
             const sy = row * meta.frameHeight;
-            this.ctx.clearRect(0, 0, meta.frameWidth, meta.frameHeight);
-            this.ctx.drawImage(this.sheet, sx, sy, meta.frameWidth, meta.frameHeight, 0, 0, meta.frameWidth, meta.frameHeight);
+
+            if (loadedPages[p]) {
+              retainPage(p, loadedPages[p]);
+              this.ctx.clearRect(0, 0, meta.frameWidth, meta.frameHeight);
+              this.ctx.drawImage(loadedPages[p], sx, sy, meta.frameWidth, meta.frameHeight, 0, 0, meta.frameWidth, meta.frameHeight);
+            } else {
+              loadPage(p, imgObj => {
+                if (Math.floor(this.currentFrame / perPage) === p) {
+                  this.ctx.clearRect(0, 0, meta.frameWidth, meta.frameHeight);
+                  this.ctx.drawImage(imgObj, sx, sy, meta.frameWidth, meta.frameHeight, 0, 0, meta.frameWidth, meta.frameHeight);
+                }
+              });
+            }
+
+            if (pageCount > 1) {
+              const nextP = (p + 1) % pageCount;
+              if (!loadedPages[nextP] && !loadingPages[nextP]) {
+                loadPage(nextP);
+              }
+            }
           },
           step: function (delta) {
             this.drawFrame(this.currentFrame + delta);
@@ -243,14 +314,10 @@
           });
           playObserver.observe(canvas);
         }
-      };
-
-      sheetImg.onerror = function () {
+      }, function () {
         fallbackGifs.push(img);
         setGifPaused(img, paused);
-      };
-
-      sheetImg.src = sheetUrl;
+      });
     }
 
     // Check if image is inside a closed details element

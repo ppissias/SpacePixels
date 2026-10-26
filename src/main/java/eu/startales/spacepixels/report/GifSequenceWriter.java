@@ -16,6 +16,7 @@ import java.awt.Graphics2D;
 import java.awt.image.RenderedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.awt.image.BufferedImage;
@@ -197,15 +198,15 @@ public class GifSequenceWriter implements AutoCloseable {
             }
         }
 
-        // Build the frame sheet from the written GIF sequence, reading one frame at a time to maintain bounded memory
-        AnimationMetadata metadata = buildSheetFromGif(outputFile, parent, delayMs, type);
+        // Build the frame sheet(s) from the written GIF sequence, reading one frame at a time to maintain bounded memory
+        AnimationMetadata metadata = buildSheetsFromGif(outputFile, parent, delayMs, type);
         if (registry != null && metadata != null) {
             registry.register(metadata);
         }
         return metadata;
     }
 
-    private static AnimationMetadata buildSheetFromGif(File gifFile, File parent, int delayMs, int defaultType) throws IOException {
+    private static AnimationMetadata buildSheetsFromGif(File gifFile, File parent, int delayMs, int defaultType) throws IOException {
         Iterator<ImageReader> readers = ImageIO.getImageReadersByFormatName("gif");
         if (!readers.hasNext()) {
             throw new IOException("No GIF Image Readers Exist");
@@ -218,47 +219,67 @@ public class GifSequenceWriter implements AutoCloseable {
 
             int frameWidth = reader.getWidth(0);
             int frameHeight = reader.getHeight(0);
-            int columns = (int) Math.ceil(Math.sqrt(count));
-            int rows = (int) Math.ceil((double) count / columns);
 
-            int targetSheetWidth = columns * frameWidth;
-            int targetSheetHeight = rows * frameHeight;
+            int colsPerPage = Math.max(1, MAX_SHEET_DIMENSION / frameWidth);
+            int rowsPerPage = Math.max(1, MAX_SHEET_DIMENSION / frameHeight);
+            int framesPerPage = colsPerPage * rowsPerPage;
 
-            double scale = 1.0;
-            if (targetSheetWidth > MAX_SHEET_DIMENSION || targetSheetHeight > MAX_SHEET_DIMENSION) {
-                scale = Math.min((double) MAX_SHEET_DIMENSION / targetSheetWidth, (double) MAX_SHEET_DIMENSION / targetSheetHeight);
+            int columns;
+            int rows;
+            int pageCount;
+
+            if (count <= framesPerPage) {
+                pageCount = 1;
+                columns = (int) Math.ceil(Math.sqrt(count));
+                if (columns > colsPerPage) {
+                    columns = colsPerPage;
+                }
+                rows = (int) Math.ceil((double) count / columns);
+            } else {
+                columns = colsPerPage;
+                rows = rowsPerPage;
+                pageCount = (int) Math.ceil((double) count / framesPerPage);
             }
 
-            int scaledFrameWidth = Math.max(1, (int) Math.floor(frameWidth * scale));
-            int scaledFrameHeight = Math.max(1, (int) Math.floor(frameHeight * scale));
-            int sheetWidth = columns * scaledFrameWidth;
-            int sheetHeight = rows * scaledFrameHeight;
+            int perPageCapacity = columns * rows;
+            List<String> sheetNames = new ArrayList<>(pageCount);
 
-            BufferedImage sheet = new BufferedImage(sheetWidth, sheetHeight, defaultType);
-            Graphics2D g = sheet.createGraphics();
-            try {
-                for (int i = 0; i < count; i++) {
-                    BufferedImage frame = reader.read(i);
-                    int col = i % columns;
-                    int row = i / columns;
-                    int x = col * scaledFrameWidth;
-                    int y = row * scaledFrameHeight;
-                    if (scale < 1.0) {
-                        g.drawImage(frame, x, y, scaledFrameWidth, scaledFrameHeight, null);
-                    } else {
+            for (int p = 0; p < pageCount; p++) {
+                int startFrame = p * perPageCapacity;
+                int endFrame = Math.min(count, (p + 1) * perPageCapacity);
+                int framesOnThisPage = endFrame - startFrame;
+                int pageRows = (int) Math.ceil((double) framesOnThisPage / columns);
+
+                int sheetWidth = columns * frameWidth;
+                int sheetHeight = pageRows * frameHeight;
+
+                BufferedImage sheet = new BufferedImage(sheetWidth, sheetHeight, defaultType);
+                Graphics2D g = sheet.createGraphics();
+                try {
+                    for (int i = startFrame; i < endFrame; i++) {
+                        BufferedImage frame = reader.read(i);
+                        int localIndex = i - startFrame;
+                        int col = localIndex % columns;
+                        int row = localIndex / columns;
+                        int x = col * frameWidth;
+                        int y = row * frameHeight;
                         g.drawImage(frame, x, y, null);
                     }
+                } finally {
+                    g.dispose();
                 }
-            } finally {
-                g.dispose();
+
+                String sheetFileName = (pageCount == 1)
+                        ? gifFile.getName() + ".sheet.png"
+                        : gifFile.getName() + ".sheet-" + p + ".png";
+                File sheetFile = parent != null ? new File(parent, sheetFileName) : new File(sheetFileName);
+                if (!ImageIO.write(sheet, "png", sheetFile)) {
+                    throw new IOException("No PNG writer for animation sheet: " + sheetFileName);
+                }
+                sheetNames.add(sheetFileName);
             }
 
-            File sheetFile = parent != null ? new File(parent, gifFile.getName() + ".sheet.png") : new File(gifFile.getName() + ".sheet.png");
-            if (!ImageIO.write(sheet, "png", sheetFile)) {
-                throw new IOException("No PNG writer for animation sheet");
-            }
-
-            return new AnimationMetadata(gifFile.getName(), count, columns, rows, scaledFrameWidth, scaledFrameHeight, delayMs);
+            return new AnimationMetadata(gifFile.getName(), count, columns, rows, frameWidth, frameHeight, delayMs, sheetNames);
         } finally {
             reader.dispose();
         }

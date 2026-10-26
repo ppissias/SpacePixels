@@ -8,7 +8,9 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import static org.junit.Assert.*;
 
 public class GifSequenceWriterTest {
@@ -142,13 +144,78 @@ public class GifSequenceWriterTest {
 
         assertNotNull(meta);
         assertEquals(120, meta.frameCount());
+        assertEquals(frameDim, meta.frameWidth());
+        assertEquals(frameDim, meta.frameHeight());
         assertTrue("Output GIF must exist", output.isFile());
         assertTrue("Poster must exist", new File(output + ".poster.png").isFile());
 
-        File sheetFile = new File(output + ".sheet.png");
-        assertTrue("Sheet must exist", sheetFile.isFile());
-        BufferedImage sheet = ImageIO.read(sheetFile);
-        assertTrue("Sheet width must not exceed MAX_SHEET_DIMENSION (2048)", sheet.getWidth() <= GifSequenceWriter.MAX_SHEET_DIMENSION);
-        assertTrue("Sheet height must not exceed MAX_SHEET_DIMENSION (2048)", sheet.getHeight() <= GifSequenceWriter.MAX_SHEET_DIMENSION);
+        assertEquals(8, meta.sheets().size());
+        for (String sheetName : meta.sheets()) {
+            File sheetFile = new File(temporary.getRoot(), sheetName);
+            assertTrue("Sheet file must exist: " + sheetName, sheetFile.isFile());
+            BufferedImage sheet = ImageIO.read(sheetFile);
+            assertTrue("Sheet width must not exceed MAX_SHEET_DIMENSION (2048)", sheet.getWidth() <= GifSequenceWriter.MAX_SHEET_DIMENSION);
+            assertTrue("Sheet height must not exceed MAX_SHEET_DIMENSION (2048)", sheet.getHeight() <= GifSequenceWriter.MAX_SHEET_DIMENSION);
+        }
+    }
+
+    @Test
+    public void multiSheetSequenceRetainsNativeDimensionsAndCompactMarkers() throws Exception {
+        int totalFrames = 20;
+        int frameDim = 512;
+        int markerFrame = 17;
+        int markerLocalX = 15;
+        int markerLocalY = 25;
+
+        List<BufferedImage> frames = new ArrayList<>();
+        for (int i = 0; i < totalFrames; i++) {
+            BufferedImage img = new BufferedImage(frameDim, frameDim, BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = img.createGraphics();
+            try {
+                g.setColor(Color.BLACK);
+                g.fillRect(0, 0, frameDim, frameDim);
+            } finally {
+                g.dispose();
+            }
+            if (i == markerFrame) {
+                img.setRGB(markerLocalX, markerLocalY, Color.WHITE.getRGB());
+            }
+            frames.add(img);
+        }
+
+        File output = new File(temporary.getRoot(), "multisheet_marker.gif");
+        AnimationMetadata meta = GifSequenceWriter.saveAnimatedGif(frames, output, 150);
+
+        assertNotNull(meta);
+        assertEquals(totalFrames, meta.frameCount());
+        assertEquals("Native frameWidth must be preserved", frameDim, meta.frameWidth());
+        assertEquals("Native frameHeight must be preserved", frameDim, meta.frameHeight());
+        assertEquals("Must require 2 sheets for 20 frames of 512x512", 2, meta.sheets().size());
+
+        File sheet0File = new File(temporary.getRoot(), meta.sheets().get(0));
+        File sheet1File = new File(temporary.getRoot(), meta.sheets().get(1));
+        assertTrue(sheet0File.isFile());
+        assertTrue(sheet1File.isFile());
+
+        BufferedImage sheet0 = ImageIO.read(sheet0File);
+        BufferedImage sheet1 = ImageIO.read(sheet1File);
+
+        assertTrue(sheet0.getWidth() <= GifSequenceWriter.MAX_SHEET_DIMENSION);
+        assertTrue(sheet0.getHeight() <= GifSequenceWriter.MAX_SHEET_DIMENSION);
+        assertTrue(sheet1.getWidth() <= GifSequenceWriter.MAX_SHEET_DIMENSION);
+        assertTrue(sheet1.getHeight() <= GifSequenceWriter.MAX_SHEET_DIMENSION);
+
+        // Frame 17 is on sheet 1 at local index 1 (col 1, row 0 in a 4-column grid)
+        int cols = meta.columns();
+        int localIndex = markerFrame - 16;
+        int col = localIndex % cols;
+        int row = localIndex / cols;
+        int markerGlobalX = col * frameDim + markerLocalX;
+        int markerGlobalY = row * frameDim + markerLocalY;
+
+        assertEquals("Compact 1-pixel marker must be preserved exactly in native resolution sheet",
+                Color.WHITE.getRGB(), sheet1.getRGB(markerGlobalX, markerGlobalY));
+        assertEquals("Background next to marker must remain black",
+                Color.BLACK.getRGB(), sheet1.getRGB(markerGlobalX + 1, markerGlobalY));
     }
 }

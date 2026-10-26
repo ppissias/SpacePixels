@@ -343,3 +343,54 @@ test('speed control and frame stepping when paused', async () => {
   h.speedSelect.dispatchEvent('change');
   assert.equal(h.sandbox.SpacePixelsAnimations.getSpeed(), 2.0);
 });
+
+test('multi-page sheets load on demand and step across page boundaries', async () => {
+  const h = createHarness({
+    autoIntersect: true,
+    metadata: {
+      'multi.gif': {
+        fileName: 'multi.gif',
+        frameCount: 20,
+        columns: 4,
+        rows: 4,
+        frameWidth: 100,
+        frameHeight: 100,
+        delayMs: 200,
+        sheets: ['multi.gif.sheet-0.png', 'multi.gif.sheet-1.png']
+      }
+    }
+  });
+  const img = new h.MockElement('img');
+  img.setAttribute('src', 'multi.gif');
+  img.src = 'multi.gif';
+  h.sandbox.document.querySelectorAll = sel => sel === 'img[src$=".gif"]' || sel === 'img' ? [img] : [];
+
+  vm.createContext(h.sandbox);
+  vm.runInContext(source, h.sandbox);
+
+  await new Promise(r => setTimeout(r, 10));
+
+  const players = h.sandbox.SpacePixelsAnimations.getActivePlayers();
+  assert.equal(players.length, 1);
+  const player = players[0];
+
+  assert.equal(player.canvas.width, 100, 'Canvas must match native frameWidth');
+  assert.equal(player.canvas.height, 100, 'Canvas must match native frameHeight');
+  assert.equal(player.currentFrame, 0);
+
+  // Pause animations so we can step
+  h.toggleBtn.dispatchEvent('click');
+  assert.equal(h.sandbox.SpacePixelsAnimations.getPaused(), true);
+
+  // Step across page boundary (page 0 has 16 frames: 0..15; frame 16 is on page 1)
+  for (let i = 0; i < 16; i++) {
+    h.stepNextBtn.dispatchEvent('click');
+  }
+  assert.equal(player.currentFrame, 16);
+
+  await new Promise(r => setTimeout(r, 10));
+
+  // Step backward across page boundary (back to frame 15 on page 0)
+  h.stepPrevBtn.dispatchEvent('click');
+  assert.equal(player.currentFrame, 15);
+});
