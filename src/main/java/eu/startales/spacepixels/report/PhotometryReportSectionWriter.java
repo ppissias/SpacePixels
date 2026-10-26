@@ -729,7 +729,7 @@ public final class PhotometryReportSectionWriter {
         } else {
             report.println("<p class='compact-note'>High-confidence candidates passed every check; possible candidates failed exactly one. "
                     + "Each light curve is drawn with three constant stars of similar brightness offset below it, on the same scale, so you can see what a constant star looks like in this session. "
-                    + "Cutouts show the star in its brightest and faintest usable frame with the same display stretch.</p>");
+                    + "Cutouts show the star in its brightest and faintest usable frame with matched local backgrounds and transparency on one display scale.</p>");
             report.println("<p class='compact-note'><strong>Observed variation in this session</strong> is the 95th minus the 5th percentile of the usable differential magnitudes. "
                     + "It describes the observed time span, rather than a full-cycle amplitude. Catalogue ranges and amplitudes use the listed passbands; "
                     + "differences in filter, time coverage and phase limit direct comparisons.</p>");
@@ -1374,8 +1374,7 @@ public final class PhotometryReportSectionWriter {
     }
 
     /**
-     * Crops around the star in its brightest and faintest usable frame, rendered with one shared
-     * linear stretch so the brightness difference is visible.
+     * Crops the brightest and faintest usable frames, matching local sky and transparency on a shared display span.
      */
     private static String cutouts(DetectionReportContext context, VariableStarAnalysis analysis, StarLightCurve star, int number) throws IOException {
         int brightest = -1;
@@ -1400,25 +1399,56 @@ public final class PhotometryReportSectionWriter {
         short[][] brightCrop = TrackVisualizationRenderer.robustEdgeAwareCrop(brightFrame, cx, cy, size, size);
         short[][] faintCrop = TrackVisualizationRenderer.robustEdgeAwareCrop(faintFrame, cx, cy, size, size);
 
-        double[] values = new double[size * size];
-        int k = 0;
-        for (short[] row : brightCrop) for (short v : row) values[k++] = PixelEncoding.toShiftedPositiveInt(v);
-        double[] sorted = Arrays.copyOf(values, k);
-        Arrays.sort(sorted);
-        double black = sorted[sorted.length / 2];
-        double white = sorted[sorted.length - 1];
+        PipelineTelemetry.PhotometryFrameStat b = analysis.frames.get(brightest);
+        PipelineTelemetry.PhotometryFrameStat f = analysis.frames.get(faintest);
+        MatchedCutouts images = matchedCutouts(brightCrop, faintCrop, b.zeroPoint, f.zeroPoint);
 
         String brightName = "photometry_v" + number + "_brightest.png";
         String faintName = "photometry_v" + number + "_faintest.png";
-        TrackVisualizationRenderer.saveLosslessPng(sharedStretch(brightCrop, black, white), new File(context.exportDir, brightName));
-        TrackVisualizationRenderer.saveLosslessPng(sharedStretch(faintCrop, black, white), new File(context.exportDir, faintName));
+        TrackVisualizationRenderer.saveLosslessPng(images.brightest(), new File(context.exportDir, brightName));
+        TrackVisualizationRenderer.saveLosslessPng(images.faintest(), new File(context.exportDir, faintName));
 
-        PipelineTelemetry.PhotometryFrameStat b = analysis.frames.get(brightest);
-        PipelineTelemetry.PhotometryFrameStat f = analysis.frames.get(faintest);
         return "<div style='display:flex; gap:12px;'>"
                 + cutoutHtml(brightName, String.format(Locale.US, "Brightest: frame %d (%s mag)", b.frameIndex + 1, formatMag(star.deltaMag[brightest], 3)))
                 + cutoutHtml(faintName, String.format(Locale.US, "Faintest: frame %d (%s mag)", f.frameIndex + 1, formatMag(star.deltaMag[faintest], 3)))
-                + "</div><p class='compact-note'>These are raw frame cutouts with one shared stretch. Brightest and faintest refer to the transparency-corrected light curve; clouds, exposure and seeing can change the appearance of the raw images.</p>";
+                + "</div><p class='compact-note'>Local sky backgrounds are matched on one shared display scale. "
+                + (images.transparencyCorrected()
+                    ? "The faintest image is scaled to the brightest frame's transparency using their ensemble zero-point difference. "
+                    : "Transparency correction is unavailable for these frames. ")
+                + "Brightest and faintest refer to the corrected light curve. Measurements are unchanged; seeing can still change the star's appearance.</p>";
+    }
+
+    /** Display-only images with independent buffers and an explicit indication of available transparency evidence. */
+    record MatchedCutouts(BufferedImage brightest, BufferedImage faintest, boolean transparencyCorrected) {}
+
+    /**
+     * Matches local sky and zero-point transparency without changing the borrowed unsigned-short crop buffers.
+     * The shared contrast span comes from the brightest crop; zero points are ensemble magnitudes.
+     */
+    static MatchedCutouts matchedCutouts(short[][] bright, short[][] faint, double brightZeroPoint, double faintZeroPoint) {
+        double brightSky = localSky(bright);
+        double faintSky = localSky(faint);
+        double white = brightSky;
+        for (short[] row : bright) for (short value : row) {
+            white = Math.max(white, PixelEncoding.toShiftedPositiveInt(value));
+        }
+        double span = Math.max(1.0, white - brightSky);
+        // The ensemble model is m_observed = m_star + Z; convert its difference back to a flux multiplier.
+        double scale = Math.pow(10.0, 0.4 * (faintZeroPoint - brightZeroPoint));
+        boolean corrected = Double.isFinite(brightZeroPoint) && Double.isFinite(faintZeroPoint)
+                && Double.isFinite(scale) && scale > 0;
+        return new MatchedCutouts(sharedStretch(bright, brightSky, span, 1.0),
+                sharedStretch(faint, faintSky, span, corrected ? scale : 1.0), corrected);
+    }
+
+    /** Estimates local sky in shifted ADU, accounting for gradients that a frame-wide median misses. */
+    private static double localSky(short[][] crop) {
+        int[] values = new int[crop.length * crop[0].length];
+        int count = 0;
+        for (short[] row : crop) for (short value : row) values[count++] = PixelEncoding.toShiftedPositiveInt(value);
+        Arrays.sort(values);
+        int middle = values.length / 2;
+        return values.length % 2 == 0 ? 0.5 * (values[middle - 1] + values[middle]) : values[middle];
     }
 
     private static short[][] rawFrame(DetectionReportContext context, PipelineTelemetry.PhotometryFrameStat frame) {
@@ -1429,14 +1459,14 @@ public final class PhotometryReportSectionWriter {
         return context.rawFrames.get(index);
     }
 
-    private static BufferedImage sharedStretch(short[][] crop, double black, double white) {
+    /** Renders sky-subtracted, transparency-scaled signal with the shared ADU span and existing square-root curve. */
+    private static BufferedImage sharedStretch(short[][] crop, double black, double span, double fluxScale) {
         int h = crop.length;
         int w = crop[0].length;
         BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_BYTE_GRAY);
-        double span = Math.max(1.0, white - black);
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                double t = (PixelEncoding.toShiftedPositiveInt(crop[y][x]) - black) / span;
+                double t = (PixelEncoding.toShiftedPositiveInt(crop[y][x]) - black) * fluxScale / span;
                 t = Math.sqrt(Math.max(0.0, Math.min(1.0, t)));
                 int g = (int) Math.round(255 * t);
                 image.getRaster().setSample(x, y, 0, g);

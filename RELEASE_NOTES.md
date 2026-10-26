@@ -6,6 +6,8 @@ Not released yet.
 
 ### Changed
 
+- **Variable-star cutouts (F14).** Brightest/faintest pictures now match their local sky backgrounds and use the ensemble zero-point difference to normalize transparency on one shared display scale. This makes their brightness comparison agree with the corrected light curve; photometry, light curves and data exports are unchanged.
+
 - **Live view during detection (F10).** The progress window shows at most one new picture every 3 seconds, including when the stage changes. Source extraction, tracking and photometry can show a picture of the work in progress, and only when the view would display it. A short stage may show nothing. The pictures are not repeated in a loop. Detection results are unchanged.
 
 - **Dataset quality warnings (F16).** Import and both detection workflows offer recommended cancellation or an explicit override for sampled hot-pixel/alignment warnings. Alignment now matches coherent star centroids, handles normalized floating-point images, and avoids mistaking brightness changes for star shifts. Inspection responds to cancellation and reports read failures. Headless callers can inspect the warning result or select fail-fast policy.

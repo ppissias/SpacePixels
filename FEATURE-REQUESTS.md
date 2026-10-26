@@ -11,7 +11,6 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Agreed. The matching policy is to be proposed. |
 | [F12](#f12-newer-flatlaf-features) | Newer FlatLaf features | Proposed; FlatLaf 3.7.2 is in use |
 | [F13](#f13-manual-transient-inspection-with-trial-per-frame-settings) | Manual Transient Inspection with trial per-frame settings | Decided. Same trial policy as the other viewers. |
-| [F14](#f14-matching-backgrounds-in-the-variable-star-cutouts) | Matching backgrounds in the variable-star cutouts | Decided. Same background and same transparency. |
 | [F15](#f15-clean-moving-object-animations-to-download-narrow-or-wide) | Clean moving-object animations to download, narrow or wide | Decided. Moving objects only; written with the report. |
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
 | [F02](#f02-session-summary-and-multiple-night-warning) | Session summary and multiple-night warning | Deferred |
@@ -163,32 +162,6 @@ So, with the frame selection and the mask kept, re-detecting a frame with new pe
 - With other per-frame settings, they equal those of a new `detectTransients` call with those settings (tests on synthetic frames and on one real dataset).
 - The reference is built once per window.
 - A new import closes the window (SP-19).
-
-## F14. Matching backgrounds in the variable-star cutouts
-
-**Request (2026-10-25):** "On variable stars, it shows 2 images, the brightest frame and the faintest frame, however these are apparently stretched differently sometimes and it shows a very different background. If we can at least ensure that we do the same stretching on both."
-
-**What the report does today.** Each variable-star card shows the star cut out of its brightest and its faintest usable frame (`PhotometryReportSectionWriter.cutouts`). Both cutouts already get one shared stretch in raw pixel values: the black point is the median of the brightest cutout, the white point its brightest pixel, with a square-root curve. So the stretch is the same, but the frames are not:
-- The sky level changes during a night (twilight, moon, haze, altitude, gradients). A frame whose sky lies above or below the shared black point shows a lighter or darker background.
-- A less transparent frame also shows every star dimmer.
-- The brightest and faintest frames come from the transparency-corrected light curve, so they are often frames with different sky conditions.
-
-This explanation follows from the code; confirm it on a card that shows the problem before changing anything.
-
-**Proposal.** The engine already records, for every frame, the median local sky of the measured stars (`PhotometryFrameStat.skyMedian`) and the ensemble zero point (`zeroPoint`).
-1. **Same background.** Set each cutout's black point at its own sky level, and keep one shared span (white minus black) from the brightest frame. Both backgrounds then look the same, and the star's brightness above the sky still compares directly.
-2. **Same transparency.** Also scale the faintest cutout by the zero-point difference between the two frames, so that constant stars look alike and only the variable changes. The pictures then show what the corrected light curve says, and the caption says so.
-
-Only the pictures change. Measurements, light curves, CSVs and `report-data.json` stay as they are.
-
-**Decision (made):** "I Agree with both points."
-
-Both steps are in scope. Each cutout's black point is its own sky level, with one shared span from the brightest frame, and the faintest cutout is also scaled by the zero-point difference between the two frames. The caption says so.
-
-**Acceptance.**
-- On dc-reg (DK Per, Mis V1395) and klangwolke-2, the two cutouts of each card show the same background level: the cutouts' medians differ by at most a few grey levels.
-- With step 2, a constant star cut out the same way from both frames looks the same.
-- Apart from these pictures, the reports on the reference datasets stay byte-identical.
 
 ## F15. Clean moving-object animations to download, narrow or wide
 

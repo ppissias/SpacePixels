@@ -209,6 +209,8 @@ The report has three stages:
 `ReportMaps` draws the map and mask pictures, and `ReportFormat` formats report text. `DetectionReportGenerator` keeps the iterative index.
 Internal Java callers use `ReportExporter.export(new ReportRequest(...))`; the supported `api` surface and report schemas are unchanged.
 
+Variable-star brightest/faintest cutouts use each crop's median as its local sky, with one shared span from the brightest crop's maximum minus its sky. A frame's `PhotometryFrameStat.skyMedian` summarizes the field; local gradients can leave unequal cutout backgrounds when that field-wide statistic is used directly. The faintest crop's sky-subtracted signal is multiplied by `10^(0.4 * (Z_faint - Z_bright))`, using the ensemble magnitude zero points, before the existing square-root display curve. Nonfinite zero points leave the flux scale unchanged and the caption says the correction is unavailable. This is display-only: source pixels, photometry, light curves, CSVs and findings are not modified.
+
 The report never changes the engine's results. When the engine stops after quality control because it kept fewer than three frames (`PipelineResult.tooFewFrames`), the report says so and shows the quality-control results. Its live lookups (SatChecker, JPL, SkyBoT) go through `ReportLookupProxyServer`, a small localhost server owned by the window. `report-data.json` is versioned. Its frame numbers are one-based, and its finding IDs are local to the report.
 
 ## Headless: the API and the command line

@@ -79,6 +79,8 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(html.contains("Scatter ratio"));
         assertTrue(html.contains("Variable candidates across the field"));
         assertTrue(html.contains("href='photometry_candidate_map_full.svg' target='_blank'"));
+        assertTrue(html.contains("Local sky backgrounds are matched"));
+        assertTrue(html.contains("ensemble zero-point difference"));
         assertFalse(html.contains("Nearby comparison stars do not share the pattern"));
         assertFalse(html.contains("jumpiness"));
         assertFalse(html.contains("Tilt X"));
