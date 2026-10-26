@@ -104,17 +104,22 @@ public class DefaultSpacePixelsPipelineApiTest {
         assertTrue(result.getCalibrationWarning().contains("hot-pixel density"));
     }
 
-    @Test(expected = SpacePixelsPipelineException.class)
+    /** Strict policy rejects the quality warning itself, before detection or report output. */
+    @Test
     public void uncalibratedDatasetFailsWhenConfigured() throws Exception {
         Path tempRoot = Files.createTempDirectory("spacepixels-api-uncalibrated-fail");
         Path sequenceDirectory = SyntheticDatasetFactory.createUncalibratedMono16FitsSequence(tempRoot, "uncal", FRAME_COUNT, 50);
 
-        new DefaultSpacePixelsPipelineApi().run(
+        var failure = org.junit.Assert.assertThrows(SpacePixelsPipelineException.class, () -> new DefaultSpacePixelsPipelineApi().run(
                 SpacePixelsPipelineRequest.builder(sequenceDirectory.toFile())
                         .detectionConfig(SyntheticDatasetFactory.createSyntheticDetectionConfig())
                         .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
                         .generateReport(false)
                         .failIfUncalibratedOrMisaligned(true)
-                        .build());
+                        .build()));
+        assertTrue(failure.getMessage(), failure.getMessage().startsWith("Pipeline rejected dataset:"));
+        assertTrue(failure.getMessage(), failure.getMessage().contains("hot-pixel density"));
+        assertEquals(0, sequenceDirectory.toFile().listFiles(file -> file.isDirectory()
+                && file.getName().startsWith("detections_")).length);
     }
 }

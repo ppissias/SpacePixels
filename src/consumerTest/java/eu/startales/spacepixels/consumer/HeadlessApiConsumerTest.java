@@ -36,6 +36,21 @@ public class HeadlessApiConsumerTest {
     @Rule
     public final TemporaryFolder folder = new TemporaryFolder();
 
+    /** The separately resolved artifact exposes warning-only and strict dataset-quality policies. */
+    @Test public void datasetQualityPolicyIsAvailableInThePublishedApi() throws Exception {
+        Path input = SyntheticDatasetFactory.createUncalibratedMono16FitsSequence(
+                folder.getRoot().toPath(), "spikes", 5, 50);
+        var warning = new DefaultSpacePixelsPipelineApi().run(SpacePixelsPipelineRequest.builder(input.toFile())
+                .detectionConfig(SyntheticDatasetFactory.createSyntheticDetectionConfig())
+                .generateReport(false).build());
+        assertTrue(warning.hasCalibrationWarning());
+        assertTrue(warning.getCalibrationWarning().contains("hot-pixel density"));
+        var failure = assertThrows(eu.startales.spacepixels.api.SpacePixelsPipelineException.class,
+                () -> new DefaultSpacePixelsPipelineApi().run(SpacePixelsPipelineRequest.builder(input.toFile())
+                        .failIfUncalibratedOrMisaligned(true).generateReport(false).build()));
+        assertTrue(failure.getMessage().startsWith("Pipeline rejected dataset:"));
+    }
+
     /** Proves the consumer loads a real API/CLI JAR, with no desktop, workflow or look-and-feel classes. */
     @Test
     public void publishedRuntimeIsHeadlessAndHasNoDesktopClasses() throws Exception {

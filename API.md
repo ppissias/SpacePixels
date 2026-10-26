@@ -135,6 +135,14 @@ were bias- or dark-subtracted without a pedestal contain. `NegativeValueHandling
 - `AUTO_PREPARE_TO_16BIT_MONO`
   Use this when the input may be an XISF-only directory, color FITS, or supported FITS data that is not already 16-bit monochrome, and you want SpacePixels to normalize it into a new detection-ready directory first.
 
+## Sampled calibration and alignment warnings
+
+The prepared sequence is checked for sharp sensor defects and coherent star displacement before Auto-Tune or detection. The default request policy keeps processing and records any warning in `SpacePixelsPipelineResult.getCalibrationWarning()` (`null` when none was found); `hasCalibrationWarning()` tests its presence. The batch command prints this warning as well as the report location.
+
+Use `.failIfUncalibratedOrMisaligned(true)` on the request builder to reject a flagged sequence with `SpacePixelsPipelineException` before tuning, detection or report export. The default is `false`. An unreadable sample fails inspection; cancellation remains cancellation. No desktop dialog is created by the API.
+
+The inspector samples the first, middle and last frames. It requires a coherent displacement of at least three optical stars before reporting a registration shift; dimming or missing stars alone are not a measured displacement. A clean result means no sampled warning was found, not that every frame is certified calibrated and aligned. The check does not edit input pixels, engine settings or findings.
+
 ## Example: basic pipeline run with report export
 
 ```java

@@ -17,6 +17,18 @@ public class BatchDetectionCliTest {
 
     private static final int FRAME_COUNT = 5;
 
+    /** The CLI records the default quality warning and still publishes the explicitly permitted run. */
+    @Test public void suspiciousFramesProduceACommandOutputWarning() throws Exception {
+        Path root = Files.createTempDirectory("spacepixels-cli-quality-warning");
+        Path frames = SyntheticDatasetFactory.createUncalibratedMono16FitsSequence(root, "spikes", FRAME_COUNT, 50);
+        Path profile = SyntheticDatasetFactory.writeDetectionProfile(root, "profile.json",
+                SyntheticDatasetFactory.createSyntheticDetectionConfig());
+        ExecutionResult result = executeCli(frames, profile);
+        assertEquals(result.stderr, 0, result.exitCode);
+        assertTrue(result.stdout, result.stdout.contains("Warning: Uncalibrated hot-pixel density"));
+        assertTrue(result.stdout, result.stdout.contains("Report file:"));
+    }
+
     @Test
     public void executeReturnsZeroForReadyMono16Sequence() throws Exception {
         Path tempRoot = Files.createTempDirectory("spacepixels-cli-mono16");

@@ -1,4 +1,5 @@
 package eu.startales.spacepixels.report;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.util.SkyMath;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Track;
@@ -6,6 +7,8 @@ import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 
 import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -164,7 +167,7 @@ final class TargetVisualizationSectionWriter {
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createStarCentricHighlightedFrame(
                     context.rawFrames.get(point.sourceFrameIndex), cropBounds, point, context.settings, Color.WHITE,
                     null, TrackVisualizationRenderer.frameLabel(context, point.sourceFrameIndex), false)).iterator(),
-                    new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs());
+                    new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
             SkyOrientationOverlay streakTrackOverlay = buildSkyOrientationOverlay(
                     context.astrometryContext,
                     cropBounds.fixedCenterX,
@@ -232,14 +235,27 @@ final class TargetVisualizationSectionWriter {
 
             String objectFileName = "moving_track_" + counter + "_object_centric.gif";
             String starFileName = "moving_track_" + counter + "_star_centric.gif";
+            String cleanNarrowFileName = "moving_track_" + counter + "_clean_narrow.gif";
+            String cleanWideFileName = "moving_track_" + counter + "_clean_wide.gif";
+
+            int[] frameDims = extractFrameDimensions(context);
+            int[] wideDimensions = computeWideSourceDimensions(cropBounds.trackBoxWidth, cropBounds.trackBoxHeight, frameDims[0], frameDims[1]);
+
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createCroppedDisplayImage(
                     context.rawFrames.get(point.sourceFrameIndex), (int) Math.round(point.x), (int) Math.round(point.y),
                     context.settings.getTrackObjectCentricCropSize(), context.settings.getTrackObjectCentricCropSize(), context.settings)).iterator(),
-                    new File(context.exportDir, objectFileName), context.settings.getGifBlinkSpeedMs());
+                    new File(context.exportDir, objectFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createStarCentricHighlightedFrame(
                     context.rawFrames.get(point.sourceFrameIndex), cropBounds, point, context.settings, Color.WHITE, null,
                     TrackVisualizationRenderer.frameLabel(context, point.sourceFrameIndex), false)).iterator(),
-                    new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs());
+                    new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
+            GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createCroppedDisplayImage(
+                    context.rawFrames.get(point.sourceFrameIndex), cropBounds.fixedCenterX, cropBounds.fixedCenterY,
+                    cropBounds.trackBoxWidth, cropBounds.trackBoxHeight, context.settings)).iterator(),
+                    new File(context.exportDir, cleanNarrowFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
+            GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> createWideDownloadFrame(
+                    context.rawFrames.get(point.sourceFrameIndex), cropBounds, wideDimensions, context.settings)).iterator(),
+                    new File(context.exportDir, cleanWideFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
 
             double[] meanCenter = computeTrackMeanPixelCenter(track);
             SkyOrientationOverlay movingObjectOverlay = meanCenter != null
@@ -281,6 +297,12 @@ final class TargetVisualizationSectionWriter {
                     "Track Shape Map",
                     null,
                     movingTrackFrameOverlay));
+            report.println("</div>");
+
+            report.println("<div class='download-controls' style='margin-top: 8px; margin-bottom: 16px;'>");
+            report.println("<strong style='color: #ccc;'>Download animation:</strong> <a class='id-link' href='"
+                    + cleanNarrowFileName + "' download='" + cleanNarrowFileName + "' target='_blank'>Narrow</a> <a class='id-link' href='"
+                    + cleanWideFileName + "' download='" + cleanWideFileName + "' target='_blank'>Wide</a>");
             report.println("</div>");
 
             report.println("<div style='margin-bottom: 20px;'>");
@@ -797,6 +819,64 @@ final class TargetVisualizationSectionWriter {
 
     private static String formatDecimal(double value, int decimals) {
         return String.format(Locale.US, "%." + decimals + "f", value);
+    }
+
+    /**
+     * Computes the wide source field: twice the narrow crop, at least 400 pixels per side when the frame permits.
+     * The output resolution limit is applied after cropping, so it cannot remove either end of a long track.
+     */
+    static int[] computeWideSourceDimensions(int narrowWidth, int narrowHeight, int frameWidth, int frameHeight) {
+        int targetWidth = narrowWidth * 2;
+        int targetHeight = narrowHeight * 2;
+        int wideWidth = Math.max(400, targetWidth);
+        int wideHeight = Math.max(400, targetHeight);
+        if (frameWidth > 0) {
+            wideWidth = Math.min(wideWidth, frameWidth);
+        }
+        if (frameHeight > 0) {
+            wideHeight = Math.min(wideHeight, frameHeight);
+        }
+        return new int[]{wideWidth, wideHeight};
+    }
+
+    /** Renders the complete wide field, scaling its resolution proportionally to at most 1000 pixels per side. */
+    private static BufferedImage createWideDownloadFrame(short[][] pixels, TrackCropGeometry.CropBounds bounds,
+                                                         int[] sourceDimensions, VisualizationSettings settings) {
+        BufferedImage field = TrackVisualizationRenderer.createCroppedDisplayImage(pixels,
+                bounds.fixedCenterX, bounds.fixedCenterY, sourceDimensions[0], sourceDimensions[1], settings);
+        double scale = Math.min(1.0, 1000.0 / Math.max(field.getWidth(), field.getHeight()));
+        if (scale == 1.0) {
+            return field;
+        }
+        int width = Math.max(1, (int) Math.round(field.getWidth() * scale));
+        int height = Math.max(1, (int) Math.round(field.getHeight() * scale));
+        BufferedImage output = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = output.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.drawImage(field, 0, 0, width, height, null);
+        } finally {
+            graphics.dispose();
+        }
+        return output;
+    }
+
+    private static int[] extractFrameDimensions(DetectionReportContext context) {
+        if (context.rawFrames != null) {
+            for (short[][] frame : context.rawFrames) {
+                if (frame != null && frame.length > 0 && frame[0] != null && frame[0].length > 0) {
+                    return new int[]{frame[0].length, frame.length};
+                }
+            }
+        }
+        if (context.fitsFiles != null) {
+            for (FitsFileInformation fits : context.fitsFiles) {
+                if (fits != null && fits.getSizeWidth() > 0 && fits.getSizeHeight() > 0) {
+                    return new int[]{fits.getSizeWidth(), fits.getSizeHeight()};
+                }
+            }
+        }
+        return new int[]{0, 0};
     }
 
     private static final class SkyOrientationOverlay {

@@ -133,6 +133,7 @@ public final class ReportExporter {
                     fieldDepth);
 
             ReportClientScriptWriter.appendLiveReportRenderingScript(report);
+            ReportPresentation.appendAnimationsData(report, reportContext);
             ReportPresentation.appendScript(report);
             report.printf(Locale.US, "<p class='astro-note'>SpacePixels %s · JTransient %s · Generated %s · Report preparation %.2f s</p>%n",
                     ReportPresentation.version("spacepixels"), ReportPresentation.version("jtransient"), reportContext.data.generatedAtUtc,

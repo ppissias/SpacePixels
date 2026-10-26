@@ -408,7 +408,7 @@ final class ResidualReviewSectionWriter {
         if (gifFrames.isEmpty()) {
             return false;
         }
-        TrackVisualizationRenderer.saveAnimatedGif(gifFrames, new File(context.exportDir, fileName), context.settings);
+        TrackVisualizationRenderer.saveAnimatedGif(gifFrames, new File(context.exportDir, fileName), context.settings, context.animations);
         return true;
     }
 
@@ -612,7 +612,7 @@ final class ResidualReviewSectionWriter {
                         true);
                 contextFrames.add(frameImage);
             }
-            TrackVisualizationRenderer.saveAnimatedGif(contextFrames, new File(context.exportDir, contextGifFileName), context.settings);
+            TrackVisualizationRenderer.saveAnimatedGif(contextFrames, new File(context.exportDir, contextGifFileName), context.settings, context.animations);
         }
 
         String candidateBadge = buildLocalRescueBadge(candidate.kind);
@@ -731,7 +731,7 @@ final class ResidualReviewSectionWriter {
                         true);
                 contextFrames.add(frameImage);
             }
-            TrackVisualizationRenderer.saveAnimatedGif(contextFrames, new File(context.exportDir, contextGifFileName), context.settings);
+            TrackVisualizationRenderer.saveAnimatedGif(contextFrames, new File(context.exportDir, contextGifFileName), context.settings, context.animations);
         }
 
         ResidualTransientAnalysis.LocalTransientMetrics metrics = cluster.metrics;

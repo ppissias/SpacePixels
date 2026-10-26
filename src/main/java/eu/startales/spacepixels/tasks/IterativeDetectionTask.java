@@ -18,6 +18,7 @@ import eu.startales.spacepixels.detection.IterativeDetectionRequest;
 import eu.startales.spacepixels.detection.IterativeDetectionPipelineService;
 import eu.startales.spacepixels.detection.RunPreviewScope;
 import eu.startales.spacepixels.detection.RunPreviewSink;
+import eu.startales.spacepixels.detection.PreFlightSafetyPrompt;
 
 import java.io.File;
 
@@ -25,6 +26,7 @@ import java.io.File;
 public class IterativeDetectionTask implements Job<File> {
     private final IterativeDetectionRequest request;
     private final IterativeDetectionPipelineService.ReportPrompt reportPrompt;
+    private final PreFlightSafetyPrompt preFlight;
     private final IterativeDetectionPipelineService pipeline = new IterativeDetectionPipelineService();
     /** Where the run's live-view pictures go; null makes none. */
     private RunPreviewSink previews;
@@ -37,8 +39,16 @@ public class IterativeDetectionTask implements Job<File> {
     /** Creates independent passes with an explicit report decision; null exports without asking. */
     public IterativeDetectionTask(IterativeDetectionRequest request,
                                   IterativeDetectionPipelineService.ReportPrompt reportPrompt) {
+        this(request, reportPrompt, null);
+    }
+
+    /** Captures the desktop quality decision; a null callback retains noninteractive warning-only behavior. */
+    public IterativeDetectionTask(IterativeDetectionRequest request,
+                                  IterativeDetectionPipelineService.ReportPrompt reportPrompt,
+                                  PreFlightSafetyPrompt preFlight) {
         this.request = java.util.Objects.requireNonNull(request);
         this.reportPrompt = reportPrompt;
+        this.preFlight = preFlight;
     }
 
     public File getIndexFile() { return pipeline.getIndexFile(); }
@@ -59,6 +69,8 @@ public class IterativeDetectionTask implements Job<File> {
     }
 
     private JobOutcome<File> runCancellable(JobContext context) throws Exception {
-        return JobOutcome.completed(pipeline.run(request, reportPrompt, context::progress));
+        File report = pipeline.run(request, reportPrompt, context::progress, preFlight);
+        return report == null ? JobOutcome.declined("Iterative detection declined after the dataset quality warning.")
+                : JobOutcome.completed(report);
     }
 }

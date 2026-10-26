@@ -6,6 +6,16 @@ Not released yet.
 
 ### Changed
 
+- **Manual Transient Inspection (F13).** The window keeps the master star mask, including its jitter footprint, from its first pass. Trying Detection Sigma, Grow Sigma or Minimum Pixels re-detects only the frame on show. Cached results account for all detection settings, including background clipping and mask overlap. Apply to Settings copies the edited values. If the master settings change while the window is open, it says so and keeps the reference until the window is opened again. Closing during re-detection lets the cancelled worker close its engine safely.
+
+- **Clean moving-object downloads (F15).** Narrow and Wide GIFs contain no highlight circle or frame label. Wide shows twice the narrow field where the input frame permits and scales the complete picture to at most 1000 pixels per side, preserving both ends of long tracks.
+
+- **Variable-star cutouts (F14).** Brightest/faintest pictures now match their local sky backgrounds and use the ensemble zero-point difference to normalize transparency on one shared display scale. This makes their brightness comparison agree with the corrected light curve; photometry, light curves and data exports are unchanged.
+
+- **Live view during detection (F10).** The progress window shows at most one new picture every 3 seconds, including when the stage changes. Source extraction, tracking and photometry can show a picture of the work in progress, and only when the view would display it. A short stage may show nothing. The pictures are not repeated in a loop. Detection results are unchanged.
+
+- **Dataset quality warnings (F16).** Import and both detection workflows offer recommended cancellation or an explicit override for sampled hot-pixel/alignment warnings. Alignment now matches coherent star centroids, handles normalized floating-point images, and avoids mistaking brightness changes for star shifts. Inspection responds to cancellation and reports read failures. Headless callers can inspect the warning result or select fail-fast policy.
+
 - **Large text and display scaling.** Viewer controls wrap onto additional rows, and the star-mask sidebar scrolls when needed. The main workflow area keeps the frame table visible; Astrometry guidance and the Overview page reflow, with local horizontal scrolling for the wide Auto-Tune results table. Tab reveals controls below a scrollable viewport.
 - **Compressed (.fz) frames are decoded more exactly.** nom-tam-fits 1.23.0 fixes the decoding of 32-bit PLIO frames and of quantized floating-point frames: their blank pixels, and the rounding of frames without dithering. Integer frames (RICE, GZIP, HCOMPRESS) decode as before. Frames from 16-bit cameras are unaffected.
 - **A dataset folder that cannot be written.** When the plate-solution correction or the sky catalogue cannot be saved there, for example in a read-only folder, it stays in use until SpacePixels closes, in the viewers and in the reports, and the window says it was not saved. Before, a correction that could not be saved was switched back, and a catalogue that could not be saved was missing from the reports. A detection also no longer waits for a pending save before it starts.

@@ -43,6 +43,8 @@ Supported files: FITS (`.fit`, `.fits`, `.fts`), compressed FITS (`.fz`) and XIS
 
 Compressed 32-bit and signed/scaled 16-bit FITS offer **Combined FITS Preparation**: decompression and conversion write the final unsigned 16-bit files directly, preserving the compressed originals. Mono output goes in `_16bit_converted`; colour input produces `_16bit_mono` and `_16bit_color`. There is no intermediate uncompressed 32-bit folder. The existing negative-value choice applies once to the whole sequence, and the completion prompt can load the final mono folder. Compressed images already in standard unsigned 16-bit format only need decompression into `_uncompressed`.
 
+SpacePixels samples the first, middle and last frames for unusually sharp hot pixels and a consistent shift of the stars. At import and before **Detect Moving Targets** or **Detect Iteratively**, suspicious data opens a warning with **Cancel (Recommended)** and **Proceed Anyway**. Cancel keeps the existing session; a detection declined at pre-flight creates no report. These sample checks do not certify every frame: missing stars alone do not prove bad alignment, and you should still use calibrated, registered inputs.
+
 A typical source is the folder of registered frames that your stacking program writes before it stacks them (for example the `r_*.fit` files of Siril or the registered frames of PixInsight).
 
 With Deep Sky Stacker, open Stacking Settings and choose **Standard Mode** on the **Result** tab. The registered frames then keep a dark border where a frame was shifted which is useful for the analysis done by SpacePixels. On the **Intermediate Files** tab, tick **Create a registered/calibrated file for each light frame**, choose **FITS Files**, and leave **Compress FITS files** unticked. Import the folder of those frames. Screenshots of both settings are on the [Deep Sky Stacker export settings](https://github.com/ppissias/SpacePixels/wiki/Deep-Sky-Stacker-export-settings) page of the project wiki.
@@ -148,10 +150,11 @@ The result is also written next to the frames, as `auto_tune.json`, in the same 
 
 Click **Detect Moving Targets**, on the Overview or on the Main tab (or press **Ctrl+D**). A progress window shows each stage.
 
-Below the progress bar, the **Live view** shows a small picture of the work under way, at most one new picture every few seconds:
+Below the progress bar, the **Live view** shows a small picture of the work under way. A new picture appears at most once every 3 seconds, including when the stage changes. A short stage may show nothing, and the last picture stays until a new one is allowed. Nothing is repeated in a loop.
 - a frame as it loads, with its number and observation time;
+- during source extraction, the frame just processed, with detected sources ringed;
 - the stationary-sky reference (the median of the kept frames) once the detection has built it;
-- what the detection has found so far, as each stage finishes: the star mask over the reference, slow-mover candidates, moving objects (their first, middle and last frame side by side), streaks and anomalies, local-rescue candidates, and variable-star candidates beside their light curve. When a stage finds several, up to eight are shown in turn. They are marked **provisional**: later stages and your report choices can still leave a finding out. The caption gives the counts so far, and a stage that finds nothing says so;
+- one picture from the running stage: a slow-mover candidate, the star mask or a track found so far, a local-rescue candidate, the photometry frame being measured, or a variable-star candidate beside its light curve when photometry finishes. They are marked **provisional**: later stages and your report choices can still leave a finding out. The caption gives the counts so far, and a stage that finds nothing says so;
 - the report's pictures, such as the track map and object crops, as they are written.
 
 The text above the picture is the progress. **Hide picture** removes the view and the work of making its pictures, and SpacePixels remembers the choice. **Detect Iteratively** shows the same view, clears it at the start of each pass and names the pass in the caption. The pictures are copies for display only: the detection results and the report are the same with the view shown or hidden.
@@ -211,7 +214,7 @@ Below the cards is **the session**: the median stack of the frames kept, with sw
 
 Click the picture for the full-size stack.
 
-The toolbar provides **Previous finding**, **Next finding**, a finding selector, **Pause animations** and **Report data JSON**. Pausing freezes the GIF previews and the inspector animation; their image links still open the original files. Reports honour the browser's reduced-motion preference. Most images below the first picture load as you scroll. Mixed exposures and filters are identified in the session header.
+The toolbar provides **Pause animations**, **‹ Step** and **Step ›** (active while paused to step frame by frame), an interactive **Speed** control (from 0.25× to 4×, with the SpacePixels GIF Blink Speed setting as the default 1× starting speed), **Previous finding**, **Next finding**, a finding selector, and **Report data JSON**. Animations are rendered dynamically from image frame sheets, allowing immediate speed adjustment of all animations at once without reloading the page. Pausing freezes playback and enables frame stepping. Each animation also includes a dedicated **GIF** badge link to download or open the standalone GIF. Reports honour the browser's reduced-motion preference. Most images below the first picture load as you scroll. Mixed exposures and filters are identified in the session header.
 
 `report-data.json` contains the included findings, their labels and card anchors, pixel/sky positions, and observed frame numbers. Labels are local to this report, not permanent identities across runs. Optional groups left out of the report are also left out of this export. The footer records application/engine versions, export time and report preparation time.
 
@@ -236,6 +239,7 @@ Each object has a card with its times, speed and direction, and:
 - **Object Centric**: an animation that follows the object (the stars move);
 - **Star Centric**: an animation of the field (the object moves), with the object circled;
 - **Track Shape Map**: the positions of each frame;
+- **Download animation**: clean star-centric animated GIFs without overlays (no highlight circle or frame label) available in **Narrow** (the star-centric crop) and **Wide** (twice that field, with at least 400 source pixels per side where the frame permits). Wide keeps the complete track and scales the picture proportionally to at most 1000 pixels per side;
 - **Pixel Evolution**: the object in every frame, so you can check that it is the same object each time;
 - the sky position and the identification buttons (see [Identifying objects](#5-identifying-objects)).
 
@@ -277,7 +281,7 @@ Everything that was detected but did not become a result is shown here, coloured
 
 ### Light curves and exports
 
-Candidate light curves have **Zoom in**, **Zoom out** and **Reset** controls; drag a zoomed chart to pan. Error bars show the engine's estimated sky-noise uncertainty, which is a lower bound rather than total uncertainty. Brightest/faintest cutouts use a common stretch but show raw frames; clouds, exposure and seeing can affect their appearance even when the differential light curve is corrected for transparency.
+Candidate light curves have **Zoom in**, **Zoom out** and **Reset** controls; drag a zoomed chart to pan. Error bars show the engine's estimated sky-noise uncertainty, which is a lower bound rather than total uncertainty. Brightest/faintest cutouts match their local sky backgrounds on one shared contrast scale. The faintest image is scaled by the ensemble zero-point difference to match the brightest frame's transparency, so the pictures compare the corrected brightness change. Seeing can still change star shapes. This display adjustment leaves measurements and light curves unchanged; the caption says when a transparency correction is unavailable.
 
 The **Variable candidates across the field** picture circles every reported candidate on the median stack: blue for high confidence, orange for possible. Labels prefer a VSX name, then a proper name or Gaia DR3 designation from the general star catalogue, with the V number as fallback. Hover for the V number to find its table row or card. Click the picture to open a full-size image with compact differential light curves beside the stars. The curves have a lightly translucent background, no axes, tick labels or grid, and just one **Δmag** number: the observed variation in mag, as in the table. Brighter is up. Each curve has its own magnitude scale, so compare the numbers rather than their visual heights. Flagged or missing measurements leave gaps. The image works offline and includes candidates beyond the configured detailed-card limit.
 
@@ -480,7 +484,7 @@ After a full detection, **Show tracks** (T) draws that run's tracks as Blink doe
 
 ![Manual Transient Inspection: the comet is the only transient left in this frame](docs/images/manual/ui-inspection.jpg)
 
-Runs the detection on all frames of the session (not only the selected ones) and shows, frame by frame, every detection left after the star mask: the candidates for moving objects, before they are linked into tracks. Useful to judge the noise, or to find a faint object by eye that did not form a track. Above, at 200 %, the comet is the only transient left in its frame. The frames stay in memory until you close the window. After a full detection on the session, **Show tracks** (T) draws that run's tracks over these frames, as in Blink.
+Runs the detection on all frames of the session (not only the selected ones) and shows, frame by frame, every detection left after the star mask: the candidates for moving objects, before they are linked into tracks. The three per-frame thresholds can be tried without rebuilding the master mask; only the frame on show is re-detected, and Apply to Settings copies the edited values. Edits to other per-frame extraction and filtering settings take effect when a frame is shown again. If the master settings change while the window is open, it says so and keeps the reference, including its jitter radius, until you reopen it. Useful to judge the noise, or to find a faint object by eye that did not form a track. Above, at 200 %, the comet is the only transient left in its frame. The frames stay in memory until you close the window. After a full detection on the session, **Show tracks** (T) draws that run's tracks over these frames, as in Blink.
 
 Both windows, and **Show full size** on the Image Stretch tab, work like the blink window: the same stretch as the Image Stretch tab, the same zoom (Fit, 100 %, 200 %, 400 %, scroll to zoom, drag to pan, double-click), and the same status bar with the frame, its time since the first frame, and under the cursor the pixel position, value and, on a plate-solved frame, RA and Dec. **Show detections** (D) hides the markers to see the frame underneath. From 100 % zoom the detected pixels are tinted too. When there are too many detections on screen to tell apart, the markers are left out until you zoom in. Esc closes the window.
 

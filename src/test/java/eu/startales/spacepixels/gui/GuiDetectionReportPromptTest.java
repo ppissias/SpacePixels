@@ -14,6 +14,25 @@ import static org.junit.Assert.*;
 
 /** Tests desktop report contents and EDT handoff without requiring a visible desktop. */
 public class GuiDetectionReportPromptTest {
+    /** Quality questions reach the EDT and proceed only for the explicit override, including dismissal. */
+    @Test(timeout = 10_000)
+    public void qualityWarningChoicesAreDispatchedAndFailClosed() {
+        var inspection = new eu.startales.spacepixels.fits.FrameCalibrationInspector.InspectionResult(
+                true, false, 40, 242, 0, "sensor defects");
+        for (int answer : new int[]{-1, 0, 1}) {
+            AtomicBoolean asked = new AtomicBoolean();
+            GuiDetectionReportPrompt prompt = new GuiDetectionReportPrompt(panel -> {
+                throw new AssertionError("Not a report question");
+            }, panel -> {
+                assertTrue(SwingUtilities.isEventDispatchThread());
+                asked.set(true);
+                return answer;
+            });
+            assertEquals(answer == 1, prompt.confirmPreFlight(inspection));
+            assertTrue(asked.get());
+        }
+    }
+
     /** Preserves row-to-checkbox mapping and report counts without changing analysis settings. */
     @Test
     public void localRescueAndCommonMotionCanBeUncheckedOnTheirOwnRows() throws Exception {

@@ -139,6 +139,34 @@ public final class LiveFindingPictures {
         return picture;
     }
 
+    /** Rings full-frame positions on a thumbnail. The coordinates are not changed. */
+    public static BufferedImage withRings(BufferedImage thumbnail, int fullWidth, int fullHeight,
+                                          double[] x, double[] y, Color ring) {
+        int width = thumbnail.getWidth();
+        int height = thumbnail.getHeight();
+        BufferedImage picture = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = picture.createGraphics();
+        try {
+            graphics.drawImage(thumbnail, 0, 0, null);
+            if (fullWidth <= 0 || fullHeight <= 0 || x == null || y == null) {
+                return picture;
+            }
+            graphics.setColor(ring);
+            graphics.setStroke(new BasicStroke(2f));
+            double scaleX = width / (double) fullWidth;
+            double scaleY = height / (double) fullHeight;
+            int count = Math.min(x.length, y.length);
+            for (int i = 0; i < count; i++) {
+                int px = (int) Math.round(x[i] * scaleX);
+                int py = (int) Math.round(y[i] * scaleY);
+                graphics.drawOval(px - 4, py - 4, 8, 8);
+            }
+        } finally {
+            graphics.dispose();
+        }
+        return picture;
+    }
+
     private static int blend(int base, int tint, double weight) {
         int red = (int) Math.round(((base >> 16) & 0xFF) * (1 - weight) + ((tint >> 16) & 0xFF) * weight);
         int green = (int) Math.round(((base >> 8) & 0xFF) * (1 - weight) + ((tint >> 8) & 0xFF) * weight);

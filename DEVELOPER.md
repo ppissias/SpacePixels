@@ -123,6 +123,12 @@ before cohort consistency; interactive import preserves its sequence checks befo
 `FitsPreparation` writes prepared copies through `FitsPixelConverter`; `XisfImageConverter` remains separate.
 These are static helpers; `FitsImportService` and `FitsBatchService` retain their instance-owned work.
 
+`FrameCalibrationInspector` reads the first/middle/last frame without changing pixels. The existing sharp-spike criterion (above sky + 10 sigma, four-neighbour excess sum below 0.25 of the peak) warns at at least 5 spikes/MP and 30 spikes in a sample. These measured limits differ from the provisional 35/MP and 300-spike proposal: the positive reference has 242 such strict spikes (38.12/MP), while all 17 clean references have at most 15 (1.66/MP). The full 18-dataset warning classifications were independently checked on 2026-10-26 and are unchanged by the correctness fixes.
+
+Alignment uses spaced optical-peak centroids, requiring at least three matches and half of the smaller star set to support one translation above 2.5 pixels. Missing or dimmer stars do not become artificial offsets. Floating samples keep their physical noise scale; only known unsigned-integer samples use integer histogram bins. Pixel-row and matching checks observe `CancellationScope`; unreadable samples fail rather than returning a clean verdict.
+
+Interactive import can decline before session replacement. Both desktop detection workflows supply `PreFlightSafetyPrompt` before tuning/passes; cancellation is the default, with an explicit override. Headless imports log warnings; the public API exposes warning-only or fail-fast policy. Benchmark tests require the explicit `spacepixels.testdata.root` property and never fall back to a machine-specific path.
+
 ## How a user action runs
 
 Eleven workflows use the job pattern: import, Convert to Mono, Batch Stretch, plate solve, writing the WCS header, Blink, Auto-Tune, Detect, Detect Iteratively, Manual Transient Inspection and the Test Star Mask stack.
@@ -181,7 +187,9 @@ The catalogue controller owns its progress timer and delivers model changes and 
 
 ## Frame viewers
 
-Preview Frame (`DetectionSequenceFrame`), Manual Transient Inspection (`TransientInspectionFrame`) and Show full size (`StretchedSequenceFrame`) extend `SequenceViewerFrame`. Each prepares one frame at a time in `prepare(...)` on a `SwingWorker`, and the newest request wins. Blink (`BlinkFrame`) is built from the same parts: `FrameView` draws, `StretchControls` shares the stretch with the Image Stretch tab, `ViewerSupport` provides the keys and status bar, and `SkyAnnotations` draws catalogue labels. Blink, Preview Frame and Manual Transient Inspection can show the last run's tracks (T) from the session's `TrackOverlay`; nothing is detected again.
+Preview Frame (`DetectionSequenceFrame`), Manual Transient Inspection (`TransientInspectionFrame`) and Show full size (`StretchedSequenceFrame`) extend `SequenceViewerFrame`. Each prepares one frame at a time in `prepare(...)` on a `SwingWorker`, and the newest request wins. Blink (`BlinkFrame`) is built from the same parts: `FrameView` draws, `StretchControls` shares the stretch with the Image Stretch tab, `ViewerSupport` provides the keys and status bar, and `SkyAnnotations` draws catalogue labels. Blink, Preview Frame and Manual Transient Inspection can show the last run's tracks (T) from the session's `TrackOverlay`. Manual Transient Inspection keeps the master reference from its first pass and re-detects only the frame on show when its trial per-frame settings change.
+
+`TransientInspectionDetector` owns that window's cache, keyed by the kept frame and a serialized snapshot of the complete `DetectionConfig`. Each cache miss creates and closes its own engine on the preparation worker. Closing the window clears the cache without waiting for computation or closing a running engine; the cancelled worker finishes its engine cleanup. Cache locks cover only lookups and updates, and a late result cannot repopulate a closed cache. Re-detection borrows the original star mask, including its original jitter footprint.
 
 **Closing a viewer** cancels pending preparation, drops its result, detaches the catalogue and shared stretch listeners (`StretchControls` must detach, or the shared models keep the window and its buffers), and releases its frames. All viewers register with `ViewerRegistry`, which unregisters disposed windows and closes every viewer on session change and at exit.
 
@@ -202,6 +210,10 @@ The report has three stages:
 
 `ReportMaps` draws the map and mask pictures, and `ReportFormat` formats report text. `DetectionReportGenerator` keeps the iterative index.
 Internal Java callers use `ReportExporter.export(new ReportRequest(...))`; the supported `api` surface and report schemas are unchanged.
+
+Moving-object clean Wide downloads crop twice the narrow source field, with a minimum of 400 source pixels per side when available and dimensions bounded by the input frame. The complete field is then scaled proportionally to at most 1000 output pixels per side. This separates sky coverage from output resolution, so the size limit cannot crop the ends of a long track. Narrow downloads and the annotated animations keep their existing geometry.
+
+Variable-star brightest/faintest cutouts use each crop's median as its local sky, with one shared span from the brightest crop's maximum minus its sky. A frame's `PhotometryFrameStat.skyMedian` summarizes the field; local gradients can leave unequal cutout backgrounds when that field-wide statistic is used directly. The faintest crop's sky-subtracted signal is multiplied by `10^(0.4 * (Z_faint - Z_bright))`, using the ensemble magnitude zero points, before the existing square-root display curve. Nonfinite zero points leave the flux scale unchanged and the caption says the correction is unavailable. This is display-only: source pixels, photometry, light curves, CSVs and findings are not modified.
 
 The report never changes the engine's results. When the engine stops after quality control because it kept fewer than three frames (`PipelineResult.tooFewFrames`), the report says so and shows the quality-control results. Its live lookups (SatChecker, JPL, SkyBoT) go through `ReportLookupProxyServer`, a small localhost server owned by the window. `report-data.json` is versioned. Its frame numbers are one-based, and its finding IDs are local to the report.
 

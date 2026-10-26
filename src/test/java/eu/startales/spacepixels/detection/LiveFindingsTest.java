@@ -52,25 +52,11 @@ public class LiveFindingsTest {
         assertTrue(previews.get(0).caption().startsWith("Stationary-sky reference"));
         assertTrue(previews.get(0).caption().contains("2 stationary stars"));
         RunPreview tracking = previews.get(1);
-        assertEquals(5, tracking.slides().size());
-        for (RunPreview slide : tracking.slides()) {
-            assertNotNull(slide.image());
-            assertTrue(slide.image().getWidth() <= 420 && slide.image().getHeight() <= 420);
-            assertTrue(slide.caption(), slide.caption().endsWith("1 moving object, 1 streak, 2 anomalies so far"));
-        }
-        // The star mask comes first: a quarter of the field.
-        assertTrue(tracking.slides().get(0).caption(), tracking.slides().get(0).caption()
-                .startsWith("Star mask: stationary stars cover 25.0 % of the field"));
-        for (RunPreview slide : tracking.slides().subList(1, 5)) {
-            assertTrue(slide.caption(), slide.caption().contains("provisional"));
-        }
-        assertTrue(tracking.slides().get(1).caption().startsWith("Moving-object candidate · 5 frames"));
-        assertTrue(tracking.slides().get(2).caption().startsWith("Streak · frame 3"));
-        // The strongest anomaly comes first.
-        assertTrue(tracking.slides().get(3).caption().startsWith("Anomaly (sharp glint) · frame 2"));
-        assertTrue(tracking.slides().get(4).caption().startsWith("Anomaly (broad flash) · frame 4"));
-        assertTrue("A moving object is a three-crop strip", tracking.slides().get(1).image().getWidth()
-                > tracking.slides().get(2).image().getWidth());
+        assertTrue(tracking.slides().isEmpty());
+        assertNotNull(tracking.image());
+        assertTrue(tracking.image().getWidth() <= 420 && tracking.image().getHeight() <= 420);
+        assertTrue(tracking.caption(), tracking.caption().startsWith("Star mask: stationary stars cover 25.0 % of the field"));
+        assertTrue(tracking.caption(), tracking.caption().endsWith("1 moving object, 1 streak, 2 anomalies so far"));
     }
 
     @Test
@@ -113,7 +99,7 @@ public class LiveFindingsTest {
         findings.stageFinished(new PipelineStage.Photometry(true, analysis));
         findings.finishPictures();
         RunPreview photometry = previews.get(previews.size() - 1);
-        assertEquals(1, photometry.slides().size());
+        assertTrue(photometry.slides().isEmpty());
         assertTrue(photometry.caption().startsWith("Variable-star candidate · high confidence · provisional"));
         assertTrue(photometry.caption().endsWith("1 variable-star candidate so far"));
         assertTrue("The light curve sits beside the crop", photometry.image().getWidth() > photometry.image().getHeight());

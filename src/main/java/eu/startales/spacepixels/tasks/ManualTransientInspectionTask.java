@@ -12,6 +12,8 @@ import io.github.ppissias.jtransient.engine.FrameTransients;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
+import io.github.ppissias.jtransient.engine.TransientInspection;
+import io.github.ppissias.jtransient.engine.TransientReference;
 
 import java.util.List;
 import java.util.Objects;
@@ -20,7 +22,8 @@ import java.util.Objects;
 public class ManualTransientInspectionTask implements Job<ManualTransientInspectionTask.Result> {
 
     /** The frames, the transients left in each and the files they came from. */
-    public record Result(List<ImageFrame> frames, List<FrameTransients> transients, FitsFileInformation[] files) {
+    public record Result(List<ImageFrame> frames, List<FrameTransients> transients, FitsFileInformation[] files,
+                         TransientReference reference) {
     }
 
     private final FitsFileInformation[] files;
@@ -52,8 +55,8 @@ public class ManualTransientInspectionTask implements Job<ManualTransientInspect
             TransientEngineProgressListener progressListener =
                     (percentage, message) -> context.progress(20 + (int) (percentage * 0.8), message);
 
-            List<FrameTransients> cleanTransients = engine.detectTransients(framesForLibrary, config, progressListener);
-            return JobOutcome.completed(new Result(framesForLibrary, cleanTransients, filesInfo));
+            TransientInspection inspection = engine.inspectTransients(framesForLibrary, config, progressListener);
+            return JobOutcome.completed(new Result(framesForLibrary, inspection.frames(), filesInfo, inspection.reference()));
         } finally {
             engine.shutdown();
         }

@@ -7,5 +7,6 @@ import eu.startales.spacepixels.fits.FrameCalibrationInspector;
  */
 @FunctionalInterface
 public interface PreFlightSafetyPrompt {
+    /** Called on the run's worker before detection or tuning; false declines the run without producing reports. */
     boolean shouldProceed(FrameCalibrationInspector.InspectionResult inspection);
 }

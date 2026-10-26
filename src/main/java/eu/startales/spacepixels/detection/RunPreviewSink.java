@@ -15,8 +15,15 @@ package eu.startales.spacepixels.detection;
  */
 public interface RunPreviewSink {
 
-    /** Whether a picture would be shown now. A stage change is shown at once; other pictures may be throttled. */
+    /**
+     * Whether a picture would be shown now. At most one picture is accepted every few seconds, including when the
+     * phase changes. The flag remains so existing callers compile; it does not bypass the clock.
+     */
     boolean wantsPreview(boolean stageChange);
+
+    /** Drops a picture that was handed over and not yet shown, for example when the next phase starts. */
+    default void dropPending() {
+    }
 
     /** Hands over a picture; it must return at once and never fail the run. */
     void preview(RunPreview preview);

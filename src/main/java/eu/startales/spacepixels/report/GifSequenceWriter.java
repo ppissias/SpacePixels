@@ -12,17 +12,25 @@ package eu.startales.spacepixels.report;
 import javax.imageio.*;
 import javax.imageio.metadata.*;
 import javax.imageio.stream.*;
+import java.awt.Graphics2D;
 import java.awt.image.RenderedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.awt.image.BufferedImage;
 
 /**
  * Small ImageIO-based helper for writing animated GIF sequences used by report previews and blink visualizations.
+ * Incrementally streams frames to the GIF sequence to preserve bounded memory and support buffer reuse, while
+ * also generating single-frame posters and bounded-dimension frame sheets (.sheet.png) for in-browser playback.
  */
 public class GifSequenceWriter implements AutoCloseable {
+
+    /** Maximum allowed dimension (width or height) for generated frame sheet grids to prevent excessive memory usage. */
+    public static final int MAX_SHEET_DIMENSION = 2048;
+
     protected ImageWriter gifWriter;
     protected ImageWriteParam imageWriteParam;
     protected IIOMetadata imageMetaData;
@@ -36,7 +44,6 @@ public class GifSequenceWriter implements AutoCloseable {
      * @param loopContinuously Whether the GIF should loop infinitely.
      */
     public GifSequenceWriter(ImageOutputStream outputStream, int imageType, int timeBetweenFramesMS, boolean loopContinuously) throws IOException {
-        // Find a GIF writer
         Iterator<ImageWriter> iter = ImageIO.getImageWritersBySuffix("gif");
         if (!iter.hasNext()) {
             throw new IIOException("No GIF Image Writers Exist");
@@ -79,12 +86,23 @@ public class GifSequenceWriter implements AutoCloseable {
         imageMetaData.setFromTree(metaFormatName, root);
     }
 
+    /**
+     * Appends a single frame to the animated GIF sequence.
+     *
+     * @param img the frame to append
+     * @throws IOException if an error occurs while writing
+     */
     public void writeToSequence(RenderedImage img) throws IOException {
         gifWriter.writeToSequence(new IIOImage(img, null, imageMetaData), imageWriteParam);
     }
 
+    @Override
     public void close() throws IOException {
-        try { gifWriter.endWriteSequence(); } finally { gifWriter.dispose(); }
+        try {
+            gifWriter.endWriteSequence();
+        } finally {
+            gifWriter.dispose();
+        }
     }
 
     private static IIOMetadataNode getNode(IIOMetadataNode rootNode, String nodeName) {
@@ -99,33 +117,186 @@ public class GifSequenceWriter implements AutoCloseable {
         return node;
     }
 
-    // =========================================================================
-    // HELPER METHOD: Call this single method to do all the work!
-    // =========================================================================
-    public static void saveAnimatedGif(List<BufferedImage> frames, File outputFile, int delayMs) throws IOException {
-        if (frames == null || frames.isEmpty()) return;
-        saveAnimatedGif(frames.iterator(), outputFile, delayMs);
+    /**
+     * Saves a list of frames as an animated GIF, poster, and frame sheet.
+     *
+     * @param frames     the list of frames
+     * @param outputFile destination GIF file
+     * @param delayMs    delay between frames in milliseconds
+     * @return animation metadata describing the sequence and sheet layout, or null if frames are empty
+     * @throws IOException if writing fails
+     */
+    public static AnimationMetadata saveAnimatedGif(List<BufferedImage> frames, File outputFile, int delayMs) throws IOException {
+        return saveAnimatedGif(frames, outputFile, delayMs, null);
     }
 
-    public static void saveAnimatedGif(Iterator<BufferedImage> frames, File outputFile, int delayMs) throws IOException {
-        if (!frames.hasNext()) return;
+    /**
+     * Saves a list of frames as an animated GIF, poster, and frame sheet, registering metadata with the given registry.
+     *
+     * @param frames     the list of frames
+     * @param outputFile destination GIF file
+     * @param delayMs    delay between frames in milliseconds
+     * @param registry   optional report-owned animation registry
+     * @return animation metadata describing the sequence and sheet layout, or null if frames are empty
+     * @throws IOException if writing fails
+     */
+    public static AnimationMetadata saveAnimatedGif(List<BufferedImage> frames, File outputFile, int delayMs, AnimationRegistry registry) throws IOException {
+        if (frames == null || frames.isEmpty()) return null;
+        return saveAnimatedGif(frames.iterator(), outputFile, delayMs, registry);
+    }
+
+    /**
+     * Streams frames from an iterator to an animated GIF, poster, and frame sheet.
+     * Frames are written incrementally to preserve bounded memory and support buffer reuse.
+     *
+     * @param frames     iterator yielding frames
+     * @param outputFile destination GIF file
+     * @param delayMs    delay between frames in milliseconds
+     * @return animation metadata describing the sequence and sheet layout, or null if frames are empty
+     * @throws IOException if writing fails
+     */
+    public static AnimationMetadata saveAnimatedGif(Iterator<BufferedImage> frames, File outputFile, int delayMs) throws IOException {
+        return saveAnimatedGif(frames, outputFile, delayMs, null);
+    }
+
+    /**
+     * Streams frames from an iterator to an animated GIF, poster, and frame sheet, registering metadata with the given registry.
+     * Frames are written incrementally to preserve bounded memory and support buffer reuse.
+     *
+     * @param frames     iterator yielding frames
+     * @param outputFile destination GIF file
+     * @param delayMs    delay between frames in milliseconds
+     * @param registry   optional report-owned animation registry
+     * @return animation metadata describing the sequence and sheet layout, or null if frames are empty
+     * @throws IOException if writing fails
+     */
+    public static AnimationMetadata saveAnimatedGif(Iterator<BufferedImage> frames, File outputFile, int delayMs, AnimationRegistry registry) throws IOException {
+        if (frames == null || !frames.hasNext()) return null;
+
         BufferedImage first = frames.next();
-
-        try (ImageOutputStream output = new FileImageOutputStream(outputFile);
-             GifSequenceWriter writer = new GifSequenceWriter(
-                output,
-                first.getType(),
-                delayMs,
-                true // Loop continuously
-        )) {
-
-        // Write every frame to the file
-        writer.writeToSequence(first);
-        while (frames.hasNext()) writer.writeToSequence(frames.next());
-
+        int type = first.getType();
+        if (type == 0) {
+            type = first.getColorModel().hasAlpha() ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB;
         }
-        if (!ImageIO.write(first, "png", new File(outputFile.getParentFile(), outputFile.getName() + ".poster.png"))) {
+
+        File parent = outputFile.getParentFile();
+        File posterFile = parent != null ? new File(parent, outputFile.getName() + ".poster.png") : new File(outputFile.getName() + ".poster.png");
+
+        // Make an explicit copy of the first frame for the poster so subsequent buffer reuse cannot mutate it
+        BufferedImage posterCopy = copyImage(first);
+        if (!ImageIO.write(posterCopy, "png", posterFile)) {
             throw new IOException("No PNG writer for animation poster");
         }
+
+        // Stream frames incrementally to GIF so each frame is written before the caller can mutate the buffer,
+        // and without accumulating uncompressed frames in heap memory.
+        try (ImageOutputStream output = new FileImageOutputStream(outputFile);
+             GifSequenceWriter writer = new GifSequenceWriter(output, type, delayMs, true)) {
+            writer.writeToSequence(first);
+            while (frames.hasNext()) {
+                writer.writeToSequence(frames.next());
+            }
+        }
+
+        // Build the frame sheet(s) from the written GIF sequence, reading one frame at a time to maintain bounded memory
+        AnimationMetadata metadata = buildSheetsFromGif(outputFile, parent, delayMs, type);
+        if (registry != null && metadata != null) {
+            registry.register(metadata);
+        }
+        return metadata;
+    }
+
+    private static AnimationMetadata buildSheetsFromGif(File gifFile, File parent, int delayMs, int defaultType) throws IOException {
+        Iterator<ImageReader> readers = ImageIO.getImageReadersByFormatName("gif");
+        if (!readers.hasNext()) {
+            throw new IOException("No GIF Image Readers Exist");
+        }
+        ImageReader reader = readers.next();
+        try (ImageInputStream input = ImageIO.createImageInputStream(gifFile)) {
+            reader.setInput(input, false, true);
+            int count = reader.getNumImages(true);
+            if (count <= 0) return null;
+
+            int frameWidth = reader.getWidth(0);
+            int frameHeight = reader.getHeight(0);
+
+            int colsPerPage = Math.max(1, MAX_SHEET_DIMENSION / frameWidth);
+            int rowsPerPage = Math.max(1, MAX_SHEET_DIMENSION / frameHeight);
+            int framesPerPage = colsPerPage * rowsPerPage;
+
+            int columns;
+            int rows;
+            int pageCount;
+
+            if (count <= framesPerPage) {
+                pageCount = 1;
+                columns = (int) Math.ceil(Math.sqrt(count));
+                if (columns > colsPerPage) {
+                    columns = colsPerPage;
+                }
+                rows = (int) Math.ceil((double) count / columns);
+            } else {
+                columns = colsPerPage;
+                rows = rowsPerPage;
+                pageCount = (int) Math.ceil((double) count / framesPerPage);
+            }
+
+            int perPageCapacity = columns * rows;
+            List<String> sheetNames = new ArrayList<>(pageCount);
+
+            for (int p = 0; p < pageCount; p++) {
+                int startFrame = p * perPageCapacity;
+                int endFrame = Math.min(count, (p + 1) * perPageCapacity);
+                int framesOnThisPage = endFrame - startFrame;
+                int pageRows = (int) Math.ceil((double) framesOnThisPage / columns);
+
+                int sheetWidth = columns * frameWidth;
+                int sheetHeight = pageRows * frameHeight;
+
+                BufferedImage sheet = new BufferedImage(sheetWidth, sheetHeight, defaultType);
+                Graphics2D g = sheet.createGraphics();
+                try {
+                    for (int i = startFrame; i < endFrame; i++) {
+                        BufferedImage frame = reader.read(i);
+                        int localIndex = i - startFrame;
+                        int col = localIndex % columns;
+                        int row = localIndex / columns;
+                        int x = col * frameWidth;
+                        int y = row * frameHeight;
+                        g.drawImage(frame, x, y, null);
+                    }
+                } finally {
+                    g.dispose();
+                }
+
+                String sheetFileName = (pageCount == 1)
+                        ? gifFile.getName() + ".sheet.png"
+                        : gifFile.getName() + ".sheet-" + p + ".png";
+                File sheetFile = parent != null ? new File(parent, sheetFileName) : new File(sheetFileName);
+                if (!ImageIO.write(sheet, "png", sheetFile)) {
+                    throw new IOException("No PNG writer for animation sheet: " + sheetFileName);
+                }
+                sheetNames.add(sheetFileName);
+            }
+
+            return new AnimationMetadata(gifFile.getName(), count, columns, rows, frameWidth, frameHeight, delayMs, sheetNames);
+        } finally {
+            reader.dispose();
+        }
+    }
+
+    private static BufferedImage copyImage(BufferedImage src) {
+        int type = src.getType();
+        if (type == 0) {
+            type = src.getColorModel().hasAlpha() ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB;
+        }
+        BufferedImage copy = new BufferedImage(src.getWidth(), src.getHeight(), type);
+        Graphics2D g = copy.createGraphics();
+        try {
+            g.drawImage(src, 0, 0, null);
+        } finally {
+            g.dispose();
+        }
+        return copy;
     }
 }
