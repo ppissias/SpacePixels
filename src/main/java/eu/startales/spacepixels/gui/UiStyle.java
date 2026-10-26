@@ -34,6 +34,19 @@ final class UiStyle {
         return color == null ? Color.LIGHT_GRAY : color;
     }
 
+    /** Readable link text for dark and light surfaces, with an optional appearance-file override. */
+    static Color linkColor() {
+        Color color = UIManager.getColor("SpacePixels.linkForeground");
+        if (color == null) color = UIManager.getColor("Component.linkColor");
+        return color == null ? helpColor() : color;
+    }
+
+    /** Image canvases stay dark in every theme, so their placeholder text must not inherit a light theme's black text. */
+    static Color imageTextColor() {
+        Color color = UIManager.getColor("SpacePixels.imageForeground");
+        return color == null ? Color.WHITE : color;
+    }
+
     /** Converts logical application spacing to the current FlatLaf user scale. */
     static int space(int logicalPixels) {
         return UIScale.scale(logicalPixels);

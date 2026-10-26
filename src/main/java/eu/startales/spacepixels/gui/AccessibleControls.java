@@ -14,7 +14,7 @@ final class AccessibleControls {
     static JButton link(String text, String accessibleName, Runnable action) {
         JButton button = new JButton(text);
         button.putClientProperty("JButton.buttonType", "borderless");
-        button.setForeground(DetectionConfigurationPanel.accentColor());
+        button.setForeground(UiStyle.linkColor());
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         button.getAccessibleContext().setAccessibleName(accessibleName);
         button.addActionListener(event -> action.run());

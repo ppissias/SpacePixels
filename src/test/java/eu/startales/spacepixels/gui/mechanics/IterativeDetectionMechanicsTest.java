@@ -20,6 +20,16 @@ public class IterativeDetectionMechanicsTest extends MechanicsTestCase {
     public void configurationBeforeImportPreviewsPassesAndExplainsManualSettings() throws Exception {
         File source = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "source", 40).toFile();
         JDialog dialog = openConfiguration();
+        GuiActionRunner.execute(() -> dialog.setSize(80, 60));
+        robot().waitForIdle();
+        GuiActionRunner.execute(() -> {
+            assertTrue("Dialog minimum width is enforced", dialog.getWidth() >= dialog.getMinimumSize().width);
+            assertTrue("Dialog minimum height is enforced", dialog.getHeight() >= dialog.getMinimumSize().height);
+            JButton run = button(dialog, "Run iterations");
+            assertEquals("Run remains fully visible at minimum size", run.getHeight(), run.getVisibleRect().height);
+            var start = VisibleText.spinnerByLabel(dialog, "Start frames");
+            assertEquals("Form fields remain visible at minimum size", start.getHeight(), start.getVisibleRect().height);
+        });
         GuiActionRunner.execute(() -> {
             field(dialog, "Source directory").setText(source.getAbsolutePath());
             VisibleText.spinnerByLabel(dialog, "Increase by").setValue(10);

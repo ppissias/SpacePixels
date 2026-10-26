@@ -204,7 +204,7 @@ public class ConfigurationPanel extends JPanel {
         saveButton.setToolTipText("Keep the site values for the next start.");
         saveButton.addActionListener(e -> saveSite());
 
-        footerMessageLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        footerMessageLabel.setForeground(UiStyle.helpColor());
         JPanel footerLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         footerLeft.add(fillSiteButton);
         footerLeft.add(Box.createHorizontalStrut(14));
@@ -469,7 +469,7 @@ public class ConfigurationPanel extends JPanel {
             updateSavedState();
             if (saveVersion != expectedVersion) return;
             saveButton.setEnabled(true);
-            starDepthStatus.setForeground(failure == null ? UIManager.getColor("Label.disabledForeground") : warningColor());
+            starDepthStatus.setForeground(failure == null ? UiStyle.helpColor() : warningColor());
             starDepthStatus.setText(failure == null ? "✓ Saved · used by the next Fetch Sky Catalogue"
                     : "Cannot save: " + failure.getMessage());
             footerMessageLabel.setText(failure == null ? "Saved application defaults."
@@ -499,7 +499,7 @@ public class ConfigurationPanel extends JPanel {
             footerStateLabel.setForeground(warningColor());
             footerStateLabel.setText("● Unsaved application defaults (in use)");
         } else {
-            footerStateLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+            footerStateLabel.setForeground(UiStyle.helpColor());
             footerStateLabel.setText("✓ Saved settings in use");
         }
     }
@@ -614,7 +614,7 @@ public class ConfigurationPanel extends JPanel {
     // ==========================================
 
     private void chooseAstap() {
-        JFileChooser fc = new JFileChooser();
+        JFileChooser fc = WindowSizing.fileChooser(null);
         fc.setFileSelectionMode(JFileChooser.FILES_ONLY);
         fc.setDialogTitle("ASTAP executable");
         if (fc.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
@@ -672,7 +672,7 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private void showAstapStatus(boolean ok, String text) {
-        astapStatusLabel.setForeground(ok ? UIManager.getColor("Label.disabledForeground") : warningColor());
+        astapStatusLabel.setForeground(ok ? UiStyle.helpColor() : warningColor());
         boolean download = text.contains("Download");
         astapStatusLabel.setText(wrapStatus(text));
         astapStatusLabel.setToolTipText(download ? ASTAP_DOWNLOAD_URL : null);
@@ -725,7 +725,7 @@ public class ConfigurationPanel extends JPanel {
             label.setForeground(warningColor());
             label.setText(problem);
         } else {
-            label.setForeground(UIManager.getColor("Label.disabledForeground"));
+            label.setForeground(UiStyle.helpColor());
             label.setText(note);
         }
     }

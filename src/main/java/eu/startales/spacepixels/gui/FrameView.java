@@ -600,10 +600,23 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private void drawZoomLabel(Graphics2D g2) {
         if (link.zoom <= 1.0) return;
         String label = String.format(Locale.US, "%.0f %%", zoomPercent());
+        g2.setFont(UiStyle.bodyFont());
+        drawNote(g2, label, UiStyle.space(6), Color.WHITE);
+    }
+
+    /** Height of one image-overlay note, including padding, at the selected interface font size. */
+    private static int noteHeight(Graphics2D g2) {
+        return g2.getFontMetrics().getHeight() + UiStyle.space(8);
+    }
+
+    /** A readable backdrop fitted to its current font instead of a fixed 18-pixel rectangle. */
+    private static void drawNote(Graphics2D g2, String text, int y, Color foreground) {
+        int x = UiStyle.space(6), padding = UiStyle.space(4);
+        FontMetrics metrics = g2.getFontMetrics();
         g2.setColor(new Color(10, 12, 20, 190));
-        g2.fillRect(6, 6, g2.getFontMetrics().stringWidth(label) + 10, 18);
-        g2.setColor(Color.WHITE);
-        g2.drawString(label, 11, 19);
+        g2.fillRect(x, y, metrics.stringWidth(text) + 2 * padding, noteHeight(g2));
+        g2.setColor(foreground);
+        g2.drawString(text, x + padding, y + padding + metrics.getAscent());
     }
 
     @Override
@@ -618,7 +631,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                 return;
             }
             if (frame == null || tables == null) {
-                g2.setColor(UIManager.getColor("Label.disabledForeground"));
+                g2.setFont(UiStyle.bodyFont());
+                g2.setColor(UiStyle.imageTextColor());
                 FontMetrics metrics = g2.getFontMetrics();
                 g2.drawString(placeholder, (getWidth() - metrics.stringWidth(placeholder)) / 2, getHeight() / 2);
                 return;
@@ -722,7 +736,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         java.awt.Shape clip = g2.getClip();
         g2.clip(new java.awt.geom.Rectangle2D.Double(left, top, frame.getWidth() * scale, frame.getHeight() * scale));
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setFont(g2.getFont().deriveFont(Font.BOLD, 12f));
+        g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
         for (VariableStarOverlay.Candidate candidate : visible) {
             double x = left + (candidate.x + 0.5) * scale;
             double y = top + (candidate.y + 0.5) * scale;
@@ -781,7 +795,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         // Circles grow with the zoom, more slowly than the stars, so they stay around them.
         double circleZoom = Math.max(1, Math.pow(scale, 0.75));
-        g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 11f));
+        g2.setFont(UiStyle.bodyFont());
         g2.setStroke(new BasicStroke(1.2f));
         boolean labelStars = skyPreferences.names() && stars.size() <= MAX_LABELLED_STARS;
         for (SkyMark mark : stars) {
@@ -850,11 +864,11 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             double radius = 16 * circleZoom;
             g2.setColor(SKY_NAMED_STAR_COLOR);
             g2.draw(new Ellipse2D.Double(x - radius, y - radius, 2 * radius, 2 * radius));
-            g2.setFont(g2.getFont().deriveFont(Font.BOLD, 13f));
+            g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
             if (skyPreferences.names()) {
                 drawLabel(g2, mark.label, x + radius + 4, y - radius / 2, SKY_NAMED_STAR_COLOR);
             }
-            g2.setFont(g2.getFont().deriveFont(Font.PLAIN, 11f));
+            g2.setFont(UiStyle.bodyFont());
             drawn.add(mark);
         }
         g2.setClip(screenClip);
@@ -872,12 +886,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         }
         if (!clipped.isEmpty()) {
             String note = "Showing " + String.join(", ", clipped) + " on screen · zoom in for more";
-            g2.setFont(g2.getFont().deriveFont(Font.BOLD, 12f));
-            int noteY = getHeight() - 26;
-            g2.setColor(new Color(10, 12, 20, 190));
-            g2.fillRect(6, noteY, g2.getFontMetrics().stringWidth(note) + 10, 18);
-            g2.setColor(SKY_STAR_COLOR);
-            g2.drawString(note, 11, noteY + 13);
+            g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
+            drawNote(g2, note, getHeight() - noteHeight(g2) - UiStyle.space(6), SKY_STAR_COLOR);
         }
     }
 
@@ -913,7 +923,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         double left = left(scale);
         double top = top(scale);
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setFont(g2.getFont().deriveFont(Font.BOLD, 12f));
+        g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
         double ring = Math.max(9, 4 * scale);
         for (TrackOverlay.Track track : overlay.getTracks()) {
             Color color = track.streak ? STREAK_COLOR : MOVING_COLOR;
@@ -983,11 +993,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         // Too many markers to tell apart would only cover the frame: say so instead, until zoomed in.
         if (visible.size() > (double) getWidth() * getHeight() / MIN_SCREEN_AREA_PER_MARKER) {
             String note = String.format(Locale.US, "%,d detections on screen · zoom in to see them", visible.size());
-            g2.setFont(g2.getFont().deriveFont(Font.BOLD, 12f));
-            g2.setColor(new Color(10, 12, 20, 190));
-            g2.fillRect(6, 30, g2.getFontMetrics().stringWidth(note) + 10, 18);
-            g2.setColor(DETECTION_POINT_COLOR);
-            g2.drawString(note, 11, 43);
+            g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
+            drawNote(g2, note, noteHeight(g2) + UiStyle.space(12), DETECTION_POINT_COLOR);
             return;
         }
         for (DetectedObject object : visible) {

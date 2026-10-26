@@ -191,14 +191,14 @@ final class SettingsNavigator extends JPanel {
         lastGroup = group;
         navModel.addElement(new NavItem(null, page));
 
-        page.emptyLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        page.emptyLabel.setForeground(UiStyle.helpColor());
         page.emptyLabel.setBorder(new EmptyBorder(10, 0, 0, 0));
         page.emptyLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         page.emptyLabel.setVisible(false);
         content.add(page.emptyLabel);
 
         // Points to the expert settings of the page while they are hidden; a click shows them.
-        page.expertHint.setForeground(UIManager.getColor("Label.disabledForeground"));
+        page.expertHint.setForeground(UiStyle.helpColor());
         page.expertHint.setBorder(new EmptyBorder(10, 0, 0, 0));
         page.expertHint.setAlignmentX(Component.LEFT_ALIGNMENT);
         page.expertHint.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -440,7 +440,7 @@ final class SettingsNavigator extends JPanel {
         if (details.isEmpty()) {
             return section.title;
         }
-        return "<html>" + section.title + "&nbsp;&nbsp;<span style='font-size: 0.8em; font-weight: normal; color: #999999;'>"
+        return "<html>" + section.title + "&nbsp;&nbsp;<span style='font-weight: normal;'>"
                 + details + "</span></html>";
     }
 
@@ -461,8 +461,8 @@ final class SettingsNavigator extends JPanel {
             NavItem item = (NavItem) value;
             if (item.page == null) {
                 JLabel heading = (JLabel) super.getListCellRendererComponent(list, item.heading, index, false, false);
-                heading.setFont(heading.getFont().deriveFont(Font.BOLD, heading.getFont().getSize2D() - 1f));
-                heading.setForeground(UIManager.getColor("Label.disabledForeground"));
+                heading.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
+                heading.setForeground(UiStyle.helpColor());
                 heading.setBorder(new EmptyBorder(index == 0 ? 2 : 10, 6, 2, 6));
                 return heading;
             }
@@ -472,7 +472,7 @@ final class SettingsNavigator extends JPanel {
             JLabel label = (JLabel) super.getListCellRendererComponent(list, page.title + suffix, index, isSelected, cellHasFocus);
             label.setBorder(new EmptyBorder(3, page.group == null ? 6 : 16, 3, 6));
             if (filtering && page.matchCount == 0 && !isSelected) {
-                label.setForeground(UIManager.getColor("Label.disabledForeground"));
+                label.setForeground(UiStyle.helpColor());
             }
             label.setToolTipText(!filtering && page.changedCount > 0
                     ? page.changedCount + (page.changedCount == 1 ? " setting" : " settings") + " changed since the last save"

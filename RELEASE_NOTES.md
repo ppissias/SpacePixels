@@ -6,6 +6,8 @@ Not released yet.
 
 ### Changed
 
+- **Appearance.** A new tab offers Dark, High contrast dark and Light themes, interface sizes from 100% to 300%, Restore defaults, and an optional editable FlatLaf properties file. Saving offers Restart now or Later; automatic restart waits for running work and saves. Inputs use compact widths. Viewer and popup windows protect their controls with font-aware minimum sizes, with scrolling when the display cannot fit everything. Help text, active settings, charts and image-viewer annotations follow readable colours and the selected font size. Appearance preferences are saved separately in `spacepixels_appearance.json`; the distribution includes an example stylesheet.
+
 - **Manual Transient Inspection (F13).** The window keeps the master star mask, including its jitter footprint, from its first pass. Trying Detection Sigma, Grow Sigma or Minimum Pixels re-detects only the frame on show. Cached results account for all detection settings, including background clipping and mask overlap. Apply to Settings copies the edited values. If the master settings change while the window is open, it says so and keeps the reference until the window is opened again. Closing during re-detection lets the cancelled worker close its engine safely.
 
 - **Clean moving-object downloads (F15).** Narrow and Wide GIFs contain no highlight circle or frame label. Wide shows twice the narrow field where the input frame permits and scales the complete picture to at most 1000 pixels per side, preserving both ends of long tracks.

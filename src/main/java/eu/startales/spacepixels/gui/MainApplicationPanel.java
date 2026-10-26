@@ -57,7 +57,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     /** Look of the primary action (Detect Moving Targets): accent colours of the look and feel, larger and bold. */
     static final String PRIMARY_BUTTON_STYLE = "font: +2 bold; background: $Button.default.background; foreground: $Button.default.foreground;"
             + " borderColor: $Button.default.borderColor; margin: 6,16,6,16";
-    private static final Color LINK_COLOR = new Color(120, 180, 255);
 
     private final JFrame windowFrame;
     private final BlinkFrame blink;
@@ -320,7 +319,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         JPanel inspectGroup = workflowGroup("3  Inspect", inspectStatus,
                 buttonRow(blinkButton, detectSingleButton),
                 buttonRow(manualTransientInspectionButton));
-        detectStatus.setForeground(UIManager.getColor("Label.disabledForeground"));
+        detectStatus.setForeground(UiStyle.helpColor());
         detectStatus.setBorder(BorderFactory.createEmptyBorder(6, 2, 0, 0));
         detectStatus.setAlignmentX(Component.LEFT_ALIGNMENT);
         // The note wraps under the button. Its own preferred width must not push the Detect button away.
@@ -357,7 +356,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         detectColumn.add(settingsCard);
         // A button, so the keyboard reaches it, drawn like the Edit settings… link.
         lastReportButton.putClientProperty("JButton.buttonType", "borderless");
-        lastReportButton.setForeground(LINK_COLOR);
+        lastReportButton.setForeground(UiStyle.linkColor());
         lastReportButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         lastReportButton.setHorizontalAlignment(SwingConstants.LEFT);
         lastReportButton.setMargin(new Insets(2, 2, 2, 2));
@@ -801,7 +800,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         group.add(Box.createVerticalGlue());
         if (status != null) {
             status.setAlignmentX(Component.LEFT_ALIGNMENT);
-            status.setForeground(UIManager.getColor("Label.disabledForeground"));
+            status.setForeground(UiStyle.helpColor());
             status.setBorder(BorderFactory.createEmptyBorder(4, 4, 0, 0));
             group.add(status);
         }
@@ -901,9 +900,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
 
     /** Small rectangle of the active detection settings, with the link that opens Detection Settings. */
     private JComponent activeSettingsCard() {
-        Font small = UIManager.getFont("Label.font");
-        small = small == null ? new Font(Font.SANS_SERIF, Font.PLAIN, 11) : small.deriveFont(Math.max(10f, small.getSize2D() - 2f));
-        Color nameColor = UIManager.getColor("Label.disabledForeground");
+        Font small = UiStyle.bodyFont();
+        Color nameColor = UiStyle.helpColor();
         JPanel card = new JPanel(new GridBagLayout());
         Color border = UIManager.getColor("Component.borderColor");
         card.setBorder(BorderFactory.createCompoundBorder(
@@ -928,7 +926,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             }
         });
         editSettingsLink.setFont(small);
-        editSettingsLink.setForeground(LINK_COLOR);
+        editSettingsLink.setForeground(UiStyle.linkColor());
         editSettingsLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         editSettingsLink.setToolTipText("Open Detection Settings to change these values.");
         c.gridy = 4;
@@ -1054,7 +1052,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 label.setHorizontalAlignment(SwingConstants.CENTER);
                 label.setText(hasLink ? String.valueOf(value) : "");
                 if (!isSelected) {
-                    label.setForeground(hasLink ? LINK_COLOR : table.getForeground());
+                    label.setForeground(hasLink ? UiStyle.linkColor() : table.getForeground());
                 }
                 label.setToolTipText(hasLink ? "Open the FITS site coordinates in Google Earth Web" : null);
                 return label;

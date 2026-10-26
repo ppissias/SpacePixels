@@ -238,6 +238,8 @@ tasks.withType(JavaExec).configureEach {
 
 // Opt-in larger heap for real-data diagnostic tests, e.g. -PtestMaxHeap=6g
 tasks.withType(Test).configureEach {
+    // Restart tests fork an isolated application host rather than relaunching the Gradle test worker.
+    doFirst { systemProperty 'spacepixels.test.classpath', classpath.asPath }
     if (project.hasProperty('testMaxHeap')) {
         maxHeapSize = project.property('testMaxHeap')
     }

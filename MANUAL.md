@@ -69,7 +69,7 @@ At larger display scales or text sizes, controls wrap onto more rows. If the mai
 
 ![SpacePixels at start](docs/images/manual/ui-start.png)
 
-The window has four tabs:
+The window has five tabs:
 
 | Tab | What it is for |
 |---|---|
@@ -77,12 +77,23 @@ The window has four tabs:
 | **Astrometry Config** | the plate solver and your observing site |
 | **Image Stretch** | how frames are displayed in the viewers |
 | **Detection Settings** | Auto-Tune and every detection setting |
+| **Appearance** | desktop colours, interface size and an optional custom style file |
 
 **Astrometry Config** is available before import, so you can choose ASTAP and enter your observing site first. Unsaved valid defaults stay in use when another folder is imported; importing does not save or discard them. **Image Stretch** and **Detection Settings** open once frames are imported. A colour dataset shows a persistent information notice: you can blink, stretch, convert to mono and use astrometry. **Preview Frame**, **Manual Transient Inspection**, **Auto-Tune** and detection (including variable-star photometry) require monochrome frames. Use **Convert to Mono**, then import the new mono folder. **1 Prepare**, **2 Astrometry** and **3 Inspect** each have a status line underneath that tells you what is ready and what is missing; when a button is greyed out, its tooltip says why.
 
 **Detect** is split in two. On the left, **Auto-Tune Settings** has a short note under it: which settings are in use, and, after this folder has a saved auto-tune, when that auto-tune was run. On the right are **Detect Moving Targets**, **Detect Iteratively**, and a small box with the detection settings now in use: detection and star-mask sigma, grow and minimum pixels, the mask overlap, and the star jitter. **Edit settings…** at the bottom of that box opens Detection Settings.
 
 The **User Manual** link at the right end of the tab bar opens this manual in your browser.
+
+### Appearance and readable text
+
+Open **Appearance**, which is available before importing frames. Choose **Dark**, **High contrast dark** (white text and clear borders on a near-black background), or **Light**. **Interface size (%)** ranges from 100 to 300 and enlarges text and controls together. It applies in addition to operating-system display scaling and any launcher scaling option.
+
+Click **Save appearance**, then choose **Restart now** or **Later**. Restart now waits for any running task and pending saves before reopening SpacePixels automatically. Later keeps the current appearance until you next start the application. The selected size and colours are applied before any windows open. **Restore defaults** selects Dark at 100% and clears the custom style file; click Save and restart to keep that choice. The preferences are saved independently as `spacepixels_appearance.json` in your home folder. Image zoom, image stretch and the HTML report retain their separate presentation controls.
+
+Appearance inputs keep compact widths that fit their values and options. Viewer and configuration windows have minimum sizes based on their controls and the current font size. On a display too small for all controls at once, scroll or Tab through the control area to reach the rest.
+
+For an editable stylesheet, copy `config/appearance-example.properties` from the distribution to a writable location, edit it, and select it with **Browse…**. The example is intended for Dark or High contrast dark. The UTF-8 file uses FlatLaf properties such as `@background`, `@foreground`, `SpacePixels.helpForeground`, `SpacePixels.linkForeground` and `defaultFont`; unspecified values come from the selected theme. Save and restart after editing the file. Relative paths are resolved in your home folder. **Clear** removes the override when you next save. If the file cannot be read, startup uses the selected built-in theme and explains the problem on Appearance; a failed save keeps the previous preferences.
 
 ---
 
