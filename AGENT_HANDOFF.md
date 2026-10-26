@@ -1,13 +1,15 @@
 # Agent Handoff
 
-- Owner: A
-- Phase: IMPLEMENT
+- Owner: B
+- Phase: REVIEW
 - Task: F16 correctness verification and necessary corrections
 - Implementer: A
-- Reviewer: B (if correction code is required)
-- Base: 755580dea91f08d2eb3e9da025bc6068ec241001 (F16); previous implementation base 87b33b8a6b7305e91ad0a166baee1140faa40cba
-- Implementation: -
+- Reviewer: B
+- Base: 87b33b8a6b7305e91ad0a166baee1140faa40cba (before F16)
+- Prior F16: 755580dea91f08d2eb3e9da025bc6068ec241001
+- Implementation: 0b30b64f0b13e444d3434ed5aa54ace6dc34c330 (corrective changes)
 - Fix rounds: 0/2
-- Tests: Independent 18-dataset inspection preserves the positive warning and leaves all 17 clean datasets unflagged. Normalized-float shifts, faded stationary stars and cancellation defects reproduced before corrections and resolved after. Import/API/CLI/decline and real-dialog keyboard tests PASS. Full checks rerunning after a tiny-image boundary correction.
-- Status: A is completing F16 corrective regression coverage: coherent centroids, float units, cancellation/failure handling, iterative pre-flight and API documentation. Other agents remain read-only.
-- Next action: Verify F16 warning handling and calibration/alignment heuristics on synthetic and reference data; correct material defects, then resume standard A -> B -> C collaboration. Other agents stay read-only until a committed transfer.
+- Tests: check/apiConsumerTest PASS (543 unit tests, 7 skips; 10 consumer); explicit reference inspector PASS (12 tests, all 18 datasets); GUI warning and iterative mechanics PASS (3 tests). Synthetic/copied real shifts 4 and 15 px warn; stationary 10-percent brightness does not. No full detection/report parity run claimed for these inspector changes.
+- Status: A completed and committed the corrective implementation. Working tree clean at transfer; A/C remain read-only.
+- Review request: Independently review complete F16 behavior against the original decided spec in base history, especially sharp-spike threshold evidence, coherent/float alignment, cancellation and failure propagation, and import/standard/iterative/API/CLI warning policy. Group material findings only.
+- Next action: After APPROVED, update F16 to DONE and continue immediately as implementer B with the next eligible F10/F11/F13/F14/F15 task; reviewer C. A remains active for fixes and the next C -> A review turn.

@@ -10,7 +10,7 @@
 - Overall: IN_PROGRESS
 - Execution: One shared working tree, one committed Owner.
 - Restart (2026-10-26): The maintainer asked Agent A to check F16 correctness first, implement necessary corrections, then continue the authorized collaboration. The overnight handoff is explicitly stale and replaced. The 00:50 restriction has expired; use the standard A -> B -> C rotation.
-- Scope boundary: Only features F10, F11, F13, F14, F15, and F16. F16 is completed and committed on baseline. JTransient library changes are authorized where required for F10 (API-1) and F13 (API-2).
+- Scope boundary: Only features F10, F11, F13, F14, F15, and F16. F16 corrections are awaiting independent review. JTransient library changes are authorized where required for F10 (API-1) and F13 (API-2).
 - Required checks: `gradlew.bat check`, `apiConsumerTest`; real-dataset and unit tests per feature specification.
 - Protocol: [AGENT_COLLABORATION.md](AGENT_COLLABORATION.md) v2.2. Every agent keeps running and checks for handoff commits every 2 minutes.
 
@@ -18,7 +18,7 @@
 
 | ID | Task / spec | Depends on | Status | Evidence / deviations / next action |
 | --- | --- | --- | --- | --- |
-| F16 | Uncalibrated and misaligned frame detection with user warning | - | IN_PROGRESS | A checks baseline `755580dea91f08d2eb3e9da025bc6068ec241001` against the decided warning/override, import/pre-flight, reference-data and API/GUI requirements; necessary corrections are authorized. Prior implementer recorded check and consumer PASS; independent verification pending. |
+| F16 | Uncalibrated and misaligned frame detection with user warning | - | REVIEW | A correction `0b30b64f0b13e444d3434ed5aa54ace6dc34c330` over prior F16 `755580d`; B reviews the complete F16 behavior from pre-feature base `87b33b8`. Check/consumer PASS (543 unit, 7 skips; 10 consumer), explicit reference inspector PASS (12 tests/all 18 datasets), GUI warning/iterative PASS (3). Sharp-spike limits retained after measured positive 242 / 38.12 per MP versus clean maximum 15 / 1.66; floating units, coherent shifts, cancellation/failures and iterative gate corrected. Current behavior in API.md, MANUAL.md and DEVELOPER.md; original decided spec in base Git history. |
 | F10 | Live view: pictures of the running phase, one every 3 s | - | TODO | Overnight turn was interrupted without code changes. Implement JTransient API-1 (stageStarted, wantsUpdate check, thread-safe in-stage snapshots) and the SpacePixels 3-second clock after F16 correctness verification. |
 | F11 | Animation speed control in the report | - | TODO | Write image frame sheets alongside GIFs; add single persistent playback speed control (0.25x–4x) and pause frame-stepping to report. |
 | F13 | Manual Transient Inspection with trial per-frame settings | - | TODO | Implement JTransient API-2 (re-detect transients against kept reference) and SpacePixels trial spinners / Apply to Settings in TransientInspectionFrame. |
