@@ -1,14 +1,16 @@
 # Agent Handoff
 
-- Owner: B
-- Phase: IMPLEMENT
+- Owner: C
+- Phase: REVIEW
 - Task: F10
 - Implementer: B
 - Reviewer: C
-- Base: dfa4b4160e0401ec2c80cb14f8db332eddd979a1
-- Implementation: -
+- Base: 260aa9412eefa833e2f47658b9b05f5c765a3cb3
+- Implementation: 60ade5b2da8fafb675a259b41749289ec7372e67
+- JTransient: 0c5a38c53e74bcab8db9378a2b9a21dca42d5f74 on main (API-1)
 - Fix rounds: 0/2
-- Tests: F16 approved. B reran FrameCalibrationInspectorTest 12 (0 skipped, 18 datasets), CalibrationSafetyTest 3, GuiDetectionReportPromptTest 10, DefaultSpacePixelsPipelineApiTest 5, BatchDetectionCliTest 3, apiConsumerTest 10: PASS. GUI mechanics not rerun.
+- Tests: LiveFindingsTest 6, ProcessingProgressDialogTest 10, PipelineStageObserverTest 4 PASS. One in-stage snapshot does not change the detection JSON. GUI mechanics and klangwolke-2 live-view timing were not run.
 - Quota visibility: UNKNOWN
-- Status: F16 review approved. B is implementing F10 (one live-view picture from the running phase about every 3 seconds).
-- Next action: B implements JTransient API-1 and the SpacePixels 3-second clock, then hands review to C. A remains read-only.
+- Status: F10 is implemented and ready for review. A and B stay read-only.
+- Review request: Review the 3-second clock including stage changes, pending-picture drop on phase start, and that extraction, tracking and photometry build a snapshot only after wantsUpdate. Confirm hidden and headless runs build nothing and detection results stay unchanged.
+- Next action: C approves or returns one grouped set of material findings. After approval, C implements the next eligible item and A reviews.
