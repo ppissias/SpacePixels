@@ -44,27 +44,202 @@
       jump();
     });
   }
+
+  // Animation metadata and controls
+  const animationsDataEl = doc.getElementById('report-animations-data');
+  let animationsMeta = {};
+  if (animationsDataEl) {
+    try {
+      animationsMeta = JSON.parse(animationsDataEl.textContent || '{}') || {};
+    } catch (e) {
+      animationsMeta = {};
+    }
+  }
+
+  const speedSelect = doc.getElementById('report-animation-speed');
+  let currentSpeed = speedSelect ? (parseFloat(speedSelect.value) || 1.0) : 1.0;
+  if (speedSelect) {
+    speedSelect.addEventListener('change', () => {
+      currentSpeed = parseFloat(speedSelect.value) || 1.0;
+      doc.dispatchEvent(new CustomEvent('spacepixels-animation-speed', {detail: {speed: currentSpeed}}));
+    });
+  }
+
+  const stepPrevBtn = doc.getElementById('report-animation-step-prev');
+  const stepNextBtn = doc.getElementById('report-animation-step-next');
+
   const animations = Array.from(doc.querySelectorAll('img[src$=".gif"]'));
   const toggle = doc.getElementById('report-animation-toggle');
   let paused = false;
+  const activePlayers = [];
+  const fallbackGifs = [];
+
   function pauseAnimations(value) {
     paused = value;
-    for (const img of animations) {
-      if (!img.dataset.animationSource) img.dataset.animationSource = img.getAttribute('src');
-      img.src = paused ? img.dataset.animationSource + '.poster.png' : img.dataset.animationSource;
-    }
     if (toggle) {
       toggle.textContent = paused ? 'Play animations' : 'Pause animations';
       toggle.setAttribute('aria-pressed', String(paused));
     }
-    doc.dispatchEvent(new CustomEvent('spacepixels-animation-state', {detail: {paused}}));
+    if (stepPrevBtn) stepPrevBtn.disabled = !paused;
+    if (stepNextBtn) stepNextBtn.disabled = !paused;
+
+    for (const img of fallbackGifs) {
+      if (!img.dataset.animationSource) img.dataset.animationSource = img.getAttribute('src');
+      img.src = paused ? img.dataset.animationSource + '.poster.png' : img.dataset.animationSource;
+    }
+
+    if (!paused) {
+      const now = root.performance ? root.performance.now() : Date.now();
+      for (const p of activePlayers) {
+        p.lastFrameTime = now;
+      }
+    }
+    doc.dispatchEvent(new CustomEvent('spacepixels-animation-state', {detail: {paused, speed: currentSpeed}}));
   }
   if (toggle) toggle.addEventListener('click', () => pauseAnimations(!paused));
+
+  if (stepPrevBtn) {
+    stepPrevBtn.addEventListener('click', () => {
+      if (!paused) return;
+      for (const p of activePlayers) p.step(-1);
+    });
+  }
+  if (stepNextBtn) {
+    stepNextBtn.addEventListener('click', () => {
+      if (!paused) return;
+      for (const p of activePlayers) p.step(1);
+    });
+  }
+
+  for (const img of animations) {
+    const rawSrc = img.getAttribute('src');
+    if (!rawSrc) continue;
+    const fileName = rawSrc.split('/').pop().split('?')[0];
+    const meta = animationsMeta[fileName] || animationsMeta[rawSrc];
+
+    // Ensure a clear GIF download link exists near the animation
+    const container = img.closest('.sky-orientation-figure, figure, div');
+    if (container) {
+      const hasGifLink = container.querySelector('.animation-gif-link') ||
+                         (container.parentElement && container.parentElement.querySelector('.animation-gif-link'));
+      if (!hasGifLink) {
+        const link = doc.createElement('a');
+        link.href = rawSrc;
+        link.target = '_blank';
+        link.className = 'animation-gif-link';
+        link.textContent = 'GIF';
+        link.title = 'Open or save animated GIF';
+        const caption = container.parentElement ? container.parentElement.querySelector('small, figcaption') : null;
+        if (caption) {
+          caption.appendChild(link);
+        } else {
+          container.appendChild(link);
+        }
+      }
+    }
+
+    if (!meta || !meta.columns || !meta.rows || !meta.frameCount) {
+      fallbackGifs.push(img);
+      continue;
+    }
+
+    const sheetUrl = rawSrc + '.sheet.png';
+    const sheetImg = new root.Image();
+    sheetImg.onload = function () {
+      const canvas = doc.createElement('canvas');
+      canvas.width = meta.frameWidth;
+      canvas.height = meta.frameHeight;
+      canvas.className = 'animation-sheet-canvas' + (img.className ? ' ' + img.className : '');
+      if (img.style.cssText) canvas.style.cssText = img.style.cssText;
+      if (img.id) canvas.id = img.id;
+      canvas.setAttribute('role', 'img');
+      const alt = img.getAttribute('alt') || 'Animation';
+      canvas.setAttribute('aria-label', alt);
+      if (img.title) canvas.title = img.title;
+
+      const ctx = canvas.getContext('2d');
+      const player = {
+        canvas: canvas,
+        ctx: ctx,
+        sheet: sheetImg,
+        meta: meta,
+        currentFrame: 0,
+        lastFrameTime: root.performance ? root.performance.now() : Date.now(),
+        visible: true,
+        drawFrame: function (frameIndex) {
+          this.currentFrame = ((frameIndex % meta.frameCount) + meta.frameCount) % meta.frameCount;
+          const col = this.currentFrame % meta.columns;
+          const row = Math.floor(this.currentFrame / meta.columns);
+          const sx = col * meta.frameWidth;
+          const sy = row * meta.frameHeight;
+          this.ctx.clearRect(0, 0, meta.frameWidth, meta.frameHeight);
+          this.ctx.drawImage(this.sheet, sx, sy, meta.frameWidth, meta.frameHeight, 0, 0, meta.frameWidth, meta.frameHeight);
+        },
+        step: function (delta) {
+          this.drawFrame(this.currentFrame + delta);
+        }
+      };
+
+      player.drawFrame(0);
+      img.replaceWith(canvas);
+      activePlayers.push(player);
+
+      if (root.IntersectionObserver) {
+        player.visible = false;
+        const observer = new root.IntersectionObserver(entries => {
+          for (const entry of entries) {
+            if (entry.target === canvas) {
+              player.visible = entry.isIntersecting;
+              if (player.visible) {
+                player.lastFrameTime = root.performance ? root.performance.now() : Date.now();
+              }
+            }
+          }
+        });
+        observer.observe(canvas);
+      }
+    };
+    sheetImg.onerror = function () {
+      fallbackGifs.push(img);
+    };
+    sheetImg.src = sheetUrl;
+  }
+
+  function tick(timestamp) {
+    if (!paused) {
+      const now = timestamp || (root.performance ? root.performance.now() : Date.now());
+      for (const p of activePlayers) {
+        if (!p.visible) continue;
+        const effectiveDelay = p.meta.delayMs / currentSpeed;
+        const elapsed = now - p.lastFrameTime;
+        if (elapsed >= effectiveDelay) {
+          const frames = Math.floor(elapsed / effectiveDelay);
+          p.lastFrameTime = now - (elapsed % effectiveDelay);
+          p.step(frames);
+        }
+      }
+    }
+    if (root.requestAnimationFrame) {
+      root.requestAnimationFrame(tick);
+    }
+  }
+  if (root.requestAnimationFrame) {
+    root.requestAnimationFrame(tick);
+  }
+
   for (const img of doc.querySelectorAll('img')) {
     if (!img.classList.contains('sp-base')) img.loading = 'lazy';
     img.decoding = 'async';
   }
-  if (root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches) pauseAnimations(true);
+  if (root.matchMedia) {
+    const motionQuery = root.matchMedia('(prefers-reduced-motion: reduce)');
+    if (motionQuery.matches) pauseAnimations(true);
+    if (motionQuery.addEventListener) {
+      motionQuery.addEventListener('change', e => {
+        if (e.matches) pauseAnimations(true);
+      });
+    }
+  }
 
   // Per-category switches operate on the vector layers, leaving the measured image unchanged.
   for (const button of doc.querySelectorAll('[data-report-category]')) {

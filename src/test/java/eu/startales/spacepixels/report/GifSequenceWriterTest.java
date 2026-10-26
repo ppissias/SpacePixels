@@ -13,7 +13,7 @@ import static org.junit.Assert.*;
 public class GifSequenceWriterTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder();
 
-    @Test public void streamsFramesInOrderAndSavesTheFirstFrameAsItsPoster() throws Exception {
+    @Test public void streamsFramesInOrderAndSavesTheFirstFrameAsItsPosterAndSheet() throws Exception {
         Color[] colors = {Color.RED, Color.GREEN, Color.BLUE};
         Iterator<BufferedImage> frames = new Iterator<>() {
             int next;
@@ -37,5 +37,26 @@ public class GifSequenceWriterTest {
             } finally { reader.dispose(); }
         }
         assertEquals(Color.RED.getRGB(), ImageIO.read(new File(output + ".poster.png")).getRGB(4, 4));
+
+        File sheetFile = new File(output + ".sheet.png");
+        assertTrue("Sheet PNG must exist", sheetFile.isFile());
+        BufferedImage sheet = ImageIO.read(sheetFile);
+        // 3 frames: columns = ceil(sqrt(3)) = 2, rows = ceil(3/2) = 2 -> 16x16
+        assertEquals(16, sheet.getWidth());
+        assertEquals(16, sheet.getHeight());
+        assertEquals(Color.RED.getRGB(), sheet.getRGB(4, 4));
+        assertEquals(Color.GREEN.getRGB(), sheet.getRGB(12, 4));
+        assertEquals(Color.BLUE.getRGB(), sheet.getRGB(4, 12));
+
+        var metaMap = AnimationRegistry.getAnimations(temporary.getRoot());
+        assertTrue(metaMap.containsKey("stream.gif"));
+        AnimationMetadata meta = metaMap.get("stream.gif");
+        assertEquals("stream.gif", meta.fileName());
+        assertEquals(3, meta.frameCount());
+        assertEquals(2, meta.columns());
+        assertEquals(2, meta.rows());
+        assertEquals(8, meta.frameWidth());
+        assertEquals(8, meta.frameHeight());
+        assertEquals(300, meta.delayMs());
     }
 }

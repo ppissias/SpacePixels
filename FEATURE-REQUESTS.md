@@ -9,7 +9,6 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F04](#f04-mcp-agent-services) | MCP agent services over HTTP | Agreed: HTTP. The services table awaits agreement. |
 | [F06](#f06-windows-installer) | Windows installer with a bundled Java runtime | Agreed. Decision points listed. |
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Agreed. The matching policy is to be proposed. |
-| [F11](#f11-animation-speed-control-in-the-report) | Animation speed control in the report | Decided. Frame sheets and GIFs; one speed control. |
 | [F12](#f12-newer-flatlaf-features) | Newer FlatLaf features | Proposed; FlatLaf 3.7.2 is in use |
 | [F13](#f13-manual-transient-inspection-with-trial-per-frame-settings) | Manual Transient Inspection with trial per-frame settings | Decided. Same trial policy as the other viewers. |
 | [F14](#f14-matching-backgrounds-in-the-variable-star-cutouts) | Matching backgrounds in the variable-star cutouts | Decided. Same background and same transparency. |
@@ -93,32 +92,6 @@ Basic iterative detection is implemented: independent runs over growing subsets 
 **Next step.** Propose the matching and evidence-selection policy for agreement before implementing.
 
 **Acceptance.** One finding seen in several passes, distinct nearby objects, split tracks, conflicting measurements, changed or missing inputs, different fields with matching file names, missing WCS and older summary-only reports. Chosen measurements stay traceable, ambiguous associations stay visible, unique counts are justified, and the individual reports are unchanged.
-
-## F11. Animation speed control in the report
-
-**Request (2026-10-23):** "Another functional feature I want to explore, is having an adjustable animation speed in the report. I know we have an adjustable speed in the report generation settings in SpacePixels, but I wanted to check if could override that at the report."
-
-**Why the current files cannot do it.** The report's animations are animated GIFs, written by `GifSequenceWriter`. The frame delay comes from "GIF Blink Speed (ms)" and is written into each file. Browsers play a GIF at its own delays and offer no way to change them. The report's "Pause animations" button only swaps each GIF for its `.poster.png`.
-
-**Options:**
-1. **Frame sheets played by the report (chosen).** For each animation, also write its frames as one image sheet: a grid of frames. The report's script plays the sheets, for example from 0.25× to 4×. The speed control is the one decided below.
-   - The report can also step through an animation frame by frame while paused, which a GIF cannot do.
-   - The setting in SpacePixels becomes the starting speed.
-   - It works for a report opened from disk, since the script only shows images and reads no files.
-   - Long sequences, such as the corner-drift animation, need the grid layout, because browsers limit very wide images.
-2. **Decode the GIFs in the browser** (`ImageDecoder`). This needs no new files. However, the script must read the GIF bytes, which browsers block for a report opened from disk, and browser support is uneven. Not recommended.
-3. **Write each GIF at two or three speeds.** Simple, but it multiplies the size of the animations and offers only fixed steps. Not recommended.
-
-**Decision (made):** "Lets proceed with option 1. Please include the GIFs as well and have a link in the report for the animated gif. Please have one control for the whole report, which would be always visible on top (like we have not some controls always visible)."
-
-- **Frame sheets (option 1).** The report plays the image sheets, with frame stepping while an animation is paused. The GIF setting in SpacePixels is the starting speed.
-- **GIFs stay.** Each animation also keeps its GIF, and the report links to that GIF so it can be opened or saved on its own.
-- **One control.** One speed control for the whole report, always visible at the top, in the same way as the controls that stay visible now.
-
-**Acceptance.**
-- The speed changes all animations at once, without reloading the report.
-- Pause and the browser's "reduced motion" setting still work.
-- The report's growth in size is measured on klangwolke-2.
 
 ## F12. Newer FlatLaf features
 

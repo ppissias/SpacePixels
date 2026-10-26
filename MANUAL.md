@@ -214,7 +214,7 @@ Below the cards is **the session**: the median stack of the frames kept, with sw
 
 Click the picture for the full-size stack.
 
-The toolbar provides **Previous finding**, **Next finding**, a finding selector, **Pause animations** and **Report data JSON**. Pausing freezes the GIF previews and the inspector animation; their image links still open the original files. Reports honour the browser's reduced-motion preference. Most images below the first picture load as you scroll. Mixed exposures and filters are identified in the session header.
+The toolbar provides **Pause animations**, **‹ Step** and **Step ›** (active while paused to step frame by frame), an interactive **Speed** control (from 0.25× to 4×, with the SpacePixels GIF Blink Speed setting as the default 1× starting speed), **Previous finding**, **Next finding**, a finding selector, and **Report data JSON**. Animations are rendered dynamically from image frame sheets, allowing immediate speed adjustment of all animations at once without reloading the page. Pausing freezes playback and enables frame stepping. Each animation also includes a dedicated **GIF** badge link to download or open the standalone GIF. Reports honour the browser's reduced-motion preference. Most images below the first picture load as you scroll. Mixed exposures and filters are identified in the session header.
 
 `report-data.json` contains the included findings, their labels and card anchors, pixel/sky positions, and observed frame numbers. Labels are local to this report, not permanent identities across runs. Optional groups left out of the report are also left out of this export. The footer records application/engine versions, export time and report preparation time.
 

@@ -12,15 +12,18 @@ package eu.startales.spacepixels.report;
 import javax.imageio.*;
 import javax.imageio.metadata.*;
 import javax.imageio.stream.*;
+import java.awt.Graphics2D;
 import java.awt.image.RenderedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.awt.image.BufferedImage;
 
 /**
  * Small ImageIO-based helper for writing animated GIF sequences used by report previews and blink visualizations.
+ * Also generates single-frame posters and frame sheets (grids) for in-browser playback and speed control.
  */
 public class GifSequenceWriter implements AutoCloseable {
     protected ImageWriter gifWriter;
@@ -104,28 +107,71 @@ public class GifSequenceWriter implements AutoCloseable {
     // =========================================================================
     public static void saveAnimatedGif(List<BufferedImage> frames, File outputFile, int delayMs) throws IOException {
         if (frames == null || frames.isEmpty()) return;
-        saveAnimatedGif(frames.iterator(), outputFile, delayMs);
+        saveAnimatedGifList(frames, outputFile, delayMs);
     }
 
     public static void saveAnimatedGif(Iterator<BufferedImage> frames, File outputFile, int delayMs) throws IOException {
-        if (!frames.hasNext()) return;
-        BufferedImage first = frames.next();
+        if (frames == null || !frames.hasNext()) return;
+        List<BufferedImage> frameList = new ArrayList<>();
+        while (frames.hasNext()) {
+            frameList.add(frames.next());
+        }
+        saveAnimatedGifList(frameList, outputFile, delayMs);
+    }
+
+    private static void saveAnimatedGifList(List<BufferedImage> frameList, File outputFile, int delayMs) throws IOException {
+        if (frameList.isEmpty()) return;
+        BufferedImage first = frameList.get(0);
+        int type = first.getType();
+        if (type == 0) {
+            type = first.getColorModel().hasAlpha() ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB;
+        }
 
         try (ImageOutputStream output = new FileImageOutputStream(outputFile);
              GifSequenceWriter writer = new GifSequenceWriter(
                 output,
-                first.getType(),
+                type,
                 delayMs,
                 true // Loop continuously
         )) {
-
-        // Write every frame to the file
-        writer.writeToSequence(first);
-        while (frames.hasNext()) writer.writeToSequence(frames.next());
-
+            for (BufferedImage frame : frameList) {
+                writer.writeToSequence(frame);
+            }
         }
-        if (!ImageIO.write(first, "png", new File(outputFile.getParentFile(), outputFile.getName() + ".poster.png"))) {
+
+        File parent = outputFile.getParentFile();
+        File posterFile = parent != null ? new File(parent, outputFile.getName() + ".poster.png") : new File(outputFile.getName() + ".poster.png");
+        if (!ImageIO.write(first, "png", posterFile)) {
             throw new IOException("No PNG writer for animation poster");
         }
+
+        int count = frameList.size();
+        int frameWidth = first.getWidth();
+        int frameHeight = first.getHeight();
+        int columns = (int) Math.ceil(Math.sqrt(count));
+        int rows = (int) Math.ceil((double) count / columns);
+        int sheetWidth = columns * frameWidth;
+        int sheetHeight = rows * frameHeight;
+
+        BufferedImage sheet = new BufferedImage(sheetWidth, sheetHeight, type);
+        Graphics2D g = sheet.createGraphics();
+        try {
+            for (int i = 0; i < count; i++) {
+                int col = i % columns;
+                int row = i / columns;
+                g.drawImage(frameList.get(i), col * frameWidth, row * frameHeight, null);
+            }
+        } finally {
+            g.dispose();
+        }
+
+        File sheetFile = parent != null ? new File(parent, outputFile.getName() + ".sheet.png") : new File(outputFile.getName() + ".sheet.png");
+        if (!ImageIO.write(sheet, "png", sheetFile)) {
+            throw new IOException("No PNG writer for animation sheet");
+        }
+
+        File targetDir = parent != null ? parent.getAbsoluteFile() : new File(".").getAbsoluteFile();
+        AnimationRegistry.register(targetDir, new AnimationMetadata(
+                outputFile.getName(), count, columns, rows, frameWidth, frameHeight, delayMs));
     }
 }
