@@ -98,13 +98,13 @@ SpacePixels uses FlatLaf 3.7.2 (`FlatDarkLaf`) since the completed [SP-18 upgrad
 
 **Worth using, most valuable first:**
 1. **Native file dialogs** (`SystemFileChooser`, 3.7). The three `JFileChooser`s would open the Windows Explorer dialog, with its recent places, quick access and search. They choose the import folder, the folder for iterative detection and the ASTAP executable. Glob filters arrived in 3.7.1.
-2. **Text styles instead of local font sizes.** SpacePixels derives fonts in 57 places (`deriveFont`, `new Font`). FlatLaf's style classes (`h1` to `h4`, `large`, `medium`, `small` and `mini`, set with `FlatLaf.styleClass`) follow the base font and the display scaling, which is what [SP-16](DESIGN-IMPROVEMENTS.md#sp-16-check-the-ui-at-larger-display-scaling) needs. Since 3.7, the check-box and radio-button icons scale with them too.
-3. **The zooming API** (3.7, FlatLaf PR #1051). It could give a zoom in and zoom out (Ctrl + and Ctrl –) for the whole window, useful on small or high-resolution screens and at the telescope. The changelog gives no details, so check the API before planning on it.
+2. **Text styles instead of local font sizes.** Some controls still derive fonts locally (`deriveFont`, `new Font`). FlatLaf's style classes (`h1` to `h4`, `large`, `medium`, `small` and `mini`, set with `FlatLaf.styleClass`) follow the base font and the display scaling. Appearance now supplies the shared body/heading fonts and startup scaling; replacing the remaining local styles is optional cleanup. Since 3.7, the check-box and radio-button icons scale with them too.
+3. **The zooming API** (3.7). The implemented Appearance tab uses `UIScale.setZoomFactor` before constructing windows, with a saved 100–300% interface size. Optional live Ctrl + / Ctrl – shortcuts remain a separate proposal; they would need to update custom layout dimensions as well as standard components.
 4. **Readability** (3.6). FlatLaf Dark's text is brighter, and scroll-bar thumbs are rounded on Windows. Both came with the upgrade.
 5. **Row highlighting.** Rounded table selection (3.5), and alternate row colours (tables already had them; lists and trees since 3.6), for the frame table and Blink's frame list.
 6. **A green outline** (`JComponent.outline = success`, 3.6), for example for a value that Auto-Tune set. It would sit next to the red outline already used for invalid text.
 
-**Not useful now.** The title-bar height option, icon-only tabs, JIDE tabs, and the macOS and Linux items. FlatLaf does not follow the Windows light or dark theme. SpacePixels stays dark, which suits night use.
+**Not useful now.** The title-bar height option, icon-only tabs, JIDE tabs, and the macOS and Linux items. Appearance now offers dark, high-contrast dark and light themes; automatic following of the operating system's theme is not implemented.
 
 **Behaviour changes checked during the upgrade (2026-10-24):**
 - **Selection on focus** (3.6): FlatLaf selects a spinner's whole value when it gains the focus, by Tab or by a click. The maintainer kept the earlier behaviour, where the caret stays where the user puts it: `UiStyle.spinner` sets the select-all policy to never. Selecting the value on focus remains an option.

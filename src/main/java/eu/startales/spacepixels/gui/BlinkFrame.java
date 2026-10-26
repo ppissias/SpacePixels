@@ -117,9 +117,11 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         SwingUtilities.replaceUIInputMap(split, JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, null);
         center.add(split, BLINK_CARD);
         center.add(buildLoadingPanel(), LOADING_CARD);
-        contentPane.add(controls, BorderLayout.NORTH);
+        contentPane.add(WindowSizing.viewerControls(controls), BorderLayout.NORTH);
         contentPane.add(center, BorderLayout.CENTER);
         contentPane.add(statusBar, BorderLayout.SOUTH);
+        view.setMinimumSize(new Dimension(UiStyle.space(240), UiStyle.space(160)));
+        WindowSizing.install(this, 700, 400);
 
         // Only the frame view takes the keyboard focus: a focused button would take Space for itself.
         ViewerSupport.prepareControls(controls);
@@ -411,7 +413,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         framesHint.setLineWrap(true);
         framesHint.setWrapStyleWord(true);
         framesHint.setFont(UIManager.getFont("Label.font"));
-        framesHint.setForeground(UIManager.getColor("Label.disabledForeground"));
+        framesHint.setForeground(UiStyle.helpColor());
 
         JPanel panel = new JPanel(new BorderLayout(0, 4));
         panel.setBorder(new EmptyBorder(0, 0, 0, 4));
@@ -435,9 +437,9 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         Dimension barSize = new Dimension(380, loadBar.getPreferredSize().height);
         loadBar.setPreferredSize(barSize);
         loadBar.setMaximumSize(barSize);
-        loadFileLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        loadFileLabel.setForeground(UiStyle.helpColor());
         JLabel note = new JLabel("Each frame is read once; the blink then plays from memory.");
-        note.setForeground(UIManager.getColor("Label.disabledForeground"));
+        note.setForeground(UiStyle.helpColor());
         JButton cancelButton = new JButton("Cancel");
         cancelButton.setFocusable(false);
         cancelButton.setToolTipText("Stop reading the frames (Esc).");

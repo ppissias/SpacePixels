@@ -117,9 +117,11 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         JComponent controls = buildControls();
         JComponent statusBar = ViewerSupport.statusBar(frameLabel, cursorLabel, "← → previous / next frame · "
                 + (showsDetections ? "D detections · T tracks · " : "") + "A annotate · C correct plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
-        contentPane.add(controls, BorderLayout.NORTH);
+        contentPane.add(WindowSizing.viewerControls(controls), BorderLayout.NORTH);
         contentPane.add(view, BorderLayout.CENTER);
         contentPane.add(statusBar, BorderLayout.SOUTH);
+        view.setMinimumSize(new Dimension(UiStyle.space(240), UiStyle.space(160)));
+        WindowSizing.install(this, 600, 380);
 
         ViewerSupport.prepareControls(controls);
         ViewerSupport.prepareControls(statusBar);

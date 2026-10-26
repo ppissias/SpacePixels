@@ -52,9 +52,24 @@ final class ViewerSupport {
 
     /** The frame description in the middle, the cursor on the right and the keys underneath. */
     static JComponent statusBar(JLabel frameLabel, JLabel cursorLabel, String keyHint) {
-        JLabel hint = new WrappingHelpLabel(keyHint, 1400);
+        WrappingHelpLabel hint = new WrappingHelpLabel(keyHint, 1400);
         hint.setForeground(UiStyle.helpColor());
-        JPanel status = new JPanel(new BorderLayout(12, 2));
+        // Footer height follows the actual window width rather than the original wide-window hint width.
+        JPanel status = new JPanel(new BorderLayout(12, 2)) {
+            /** Wraps the shortcut help before measuring a narrow window's footer. */
+            @Override public Dimension getPreferredSize() {
+                int width = getWidth() > 0 ? getWidth() : UiStyle.space(600);
+                hint.wrapAt(Math.max(100, width - getInsets().left - getInsets().right));
+                return super.getPreferredSize();
+            }
+
+            /** A smaller height must not clip the frame information or wrapped shortcut text. */
+            @Override public Dimension getMinimumSize() {
+                Dimension size = super.getMinimumSize();
+                size.height = Math.max(size.height, getPreferredSize().height);
+                return size;
+            }
+        };
         status.add(frameLabel, BorderLayout.CENTER);
         status.add(cursorLabel, BorderLayout.EAST);
         status.add(hint, BorderLayout.SOUTH);

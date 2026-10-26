@@ -209,7 +209,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         controls.add(runButton);
         box.add(left(controls));
 
-        lastRunLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        lastRunLabel.setForeground(UiStyle.helpColor());
         lastRunLabel.setBorder(new EmptyBorder(8, 2, 6, 0));
         box.add(left(lastRunLabel));
 
@@ -254,7 +254,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         tableScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, tableSize.height));
         box.add(left(tableScroll));
 
-        tableNoteLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        tableNoteLabel.setForeground(UiStyle.helpColor());
         tableNoteLabel.setBorder(new EmptyBorder(6, 2, 0, 0));
         box.add(left(tableNoteLabel));
 

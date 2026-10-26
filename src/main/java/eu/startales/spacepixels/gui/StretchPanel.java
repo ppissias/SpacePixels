@@ -121,8 +121,8 @@ public class StretchPanel extends JPanel {
         algorithmRow.add(resetButton);
         controls.add(left(algorithmRow));
 
-        stretchIntensityLabel.setFont(stretchIntensityLabel.getFont().deriveFont(Font.BOLD, 12f));
-        stretchIterationsLabel.setFont(stretchIterationsLabel.getFont().deriveFont(Font.BOLD, 12f));
+        stretchIntensityLabel.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
+        stretchIterationsLabel.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
         JPanel slidersRow = new JPanel(new GridLayout(1, 2, 40, 0));
         slidersRow.setBorder(new EmptyBorder(6, 0, 6, 0));
         slidersRow.add(sliderPanel(stretchIntensityLabel, stretchSlider));
@@ -146,9 +146,9 @@ public class StretchPanel extends JPanel {
         nextButton.setToolTipText("Preview the next frame.");
         previousButton.addActionListener(e -> frames.selectFrameOffset(-1));
         nextButton.addActionListener(e -> frames.selectFrameOffset(1));
-        frameLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        frameLabel.setForeground(UiStyle.helpColor());
         JLabel hint = new JLabel("Scroll to zoom, drag to pan, double-click to fit; both previews move together.");
-        hint.setForeground(UIManager.getColor("Label.disabledForeground"));
+        hint.setForeground(UiStyle.helpColor());
 
         JPanel previewHeader = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         previewHeader.add(createSectionHeader("Preview"));
@@ -516,7 +516,7 @@ public class StretchPanel extends JPanel {
 
     private static JPanel titled(JLabel label, JComponent view, JComponent below) {
         JPanel panel = new JPanel(new BorderLayout(0, 5));
-        label.setForeground(UIManager.getColor("Label.disabledForeground"));
+        label.setForeground(UiStyle.helpColor());
         panel.add(label, BorderLayout.NORTH);
         panel.add(view, BorderLayout.CENTER);
         if (below != null) {
@@ -532,7 +532,7 @@ public class StretchPanel extends JPanel {
 
     private JLabel createSectionHeader(String title) {
         JLabel headerLabel = new JLabel(title);
-        headerLabel.setFont(headerLabel.getFont().deriveFont(Font.BOLD, 16f));
+        headerLabel.setFont(UiStyle.sectionFont());
         headerLabel.setForeground(DetectionConfigurationPanel.accentColor());
         headerLabel.setBorder(new EmptyBorder(10, 0, 6, 0));
         headerLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -582,7 +582,8 @@ public class StretchPanel extends JPanel {
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
-            int textHeight = 16;
+            g2.setFont(UiStyle.bodyFont());
+            int textHeight = g2.getFontMetrics().getHeight() + UiStyle.space(4);
             int plotHeight = getHeight() - textHeight - 2;
             g2.setColor(new Color(0x14121f));
             g2.fillRect(0, 0, getWidth(), plotHeight);
@@ -603,7 +604,7 @@ public class StretchPanel extends JPanel {
                 }
                 double black = total == 0 ? 0 : 100.0 * histogram[0] / total;
                 double white = total == 0 ? 0 : 100.0 * histogram[255] / total;
-                g2.setColor(UIManager.getColor("Label.disabledForeground"));
+                g2.setColor(UiStyle.helpColor());
                 g2.drawString(String.format(Locale.US, "Clipped: %.1f %% black · %.1f %% white", black, white), 2, getHeight() - 4);
             }
             g2.dispose();

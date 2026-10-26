@@ -65,7 +65,9 @@ final class AutoTuneChartDialog extends JDialog {
 
         JPanel tradeoffBox = titled("Stars found against false detections", tradeoffPanel);
         JPanel recoveryBox = titled("Test stars recovered by the chosen setting", recoveryPanel);
-        JPanel charts = new JPanel(new GridLayout(2, 1, 0, 8));
+        JPanel charts = new WidthTrackingPanel();
+        charts.setLayout(new GridLayout(2, 1, 0, UiStyle.space(8)));
+        charts.setPreferredSize(new Dimension(UiStyle.space(680), UiStyle.space(520)));
         charts.setBorder(BorderFactory.createEmptyBorder(0, 12, 8, 12));
         charts.add(tradeoffBox);
         charts.add(recoveryBox);
@@ -76,10 +78,12 @@ final class AutoTuneChartDialog extends JDialog {
         footer.add(close);
 
         getContentPane().add(header, BorderLayout.NORTH);
-        getContentPane().add(charts, BorderLayout.CENTER);
+        getContentPane().add(new JScrollPane(charts), BorderLayout.CENTER);
         getContentPane().add(footer, BorderLayout.SOUTH);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
-        setSize(760, 720);
+        Rectangle screen = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+        setSize(Math.min(UiStyle.space(760), screen.width - 30), Math.min(UiStyle.space(720), screen.height - 40));
+        WindowSizing.install(this, 600, 400);
         setLocationRelativeTo(owner);
         showProfile((AutoTuneProfile) profileCombo.getSelectedItem());
     }
@@ -154,7 +158,7 @@ final class AutoTuneChartDialog extends JDialog {
                 g.setColor(BUDGET);
                 g.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f, new float[]{5f, 4f}, 0f));
                 g.drawLine(x, y0, x, y1);
-                g.setFont(getFont().deriveFont(11f));
+                g.setFont(UiStyle.bodyFont());
                 g.drawString("budget", x + 4, y0 + 12);
             }
             SigmaChoice chosenChoice = null;
@@ -187,8 +191,8 @@ final class AutoTuneChartDialog extends JDialog {
                 marks.add(new Mark(px, py, tip(chosenChoice, true)));
             }
             if (hidden > 0) {
-                g.setColor(UIManager.getColor("Label.disabledForeground"));
-                g.setFont(getFont().deriveFont(11f));
+                g.setColor(UiStyle.helpColor());
+                g.setFont(UiStyle.bodyFont());
                 String note = hidden + (hidden == 1 ? " detection sigma was" : " detection sigmas were")
                         + " too noisy to show at this scale.";
                 g.drawString(note, x0, getHeight() - 6);
@@ -235,7 +239,7 @@ final class AutoTuneChartDialog extends JDialog {
             g.setColor(OUTSIDE);
             g.setStroke(new BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f, new float[]{4f, 4f}, 0f));
             g.drawLine(x0, yHalf, x1, yHalf);
-            g.setFont(getFont().deriveFont(11f));
+            g.setFont(UiStyle.bodyFont());
             g.drawString("half found", x0 + 4, yHalf - 4);
             int[] xs = new int[n];
             int[] ys = new int[n];
@@ -292,7 +296,7 @@ final class AutoTuneChartDialog extends JDialog {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-            paintChart(g2, 58, 16, getWidth() - 16, getHeight() - 42);
+            paintChart(g2, UiStyle.space(70), UiStyle.space(26), getWidth() - UiStyle.space(16), getHeight() - UiStyle.space(48));
             g2.dispose();
         }
 
@@ -320,15 +324,15 @@ final class AutoTuneChartDialog extends JDialog {
             g.setColor(fg);
             g.drawLine(x0, y0, x0, y1);
             g.drawLine(x0, y1, x1, y1);
-            g.setFont(getFont().deriveFont(11f));
+            g.setFont(UiStyle.bodyFont());
             for (int i = 0; i <= 4; i++) {
                 double value = yMin + (yMax - yMin) * i / 4.0;
                 String label = String.format(Locale.US, "%.0f", value);
                 int y = yPixel(value);
                 g.drawString(label, x0 - g.getFontMetrics().stringWidth(label) - 6, y + 4);
             }
-            g.drawString(xLabel, x0, getHeight() - 22);
-            g.drawString(yLabel, x0, 12);
+            g.drawString(xLabel, x0, getHeight() - UiStyle.space(18));
+            g.drawString(yLabel, x0, g.getFontMetrics().getAscent() + UiStyle.space(2));
         }
 
         int xPixel(double value) {
@@ -350,8 +354,9 @@ final class AutoTuneChartDialog extends JDialog {
         }
 
         void drawMessage(Graphics2D g, String message) {
-            g.setColor(UIManager.getColor("Label.disabledForeground"));
-            g.drawString(message, 16, 28);
+            g.setColor(UiStyle.helpColor());
+            g.setFont(UiStyle.bodyFont());
+            g.drawString(message, UiStyle.space(16), UiStyle.space(28));
         }
     }
 

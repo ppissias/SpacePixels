@@ -129,6 +129,8 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         Rectangle screen = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
         setSize(Math.min(1400, screen.width - 80), Math.min(900, screen.height - 80));
+        view.setMinimumSize(new Dimension(UiStyle.space(240), UiStyle.space(160)));
+        WindowSizing.install(this, 640, 420);
         setLocationRelativeTo(owner);
 
         statusLabel.setText("Computing the mask…");
@@ -153,7 +155,7 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         panel.add(Box.createVerticalStrut(10));
 
         panel.add(left(trials.grid()));
-        widthLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        widthLabel.setForeground(UiStyle.helpColor());
         updateWideningLabel();
         panel.add(left(widthLabel));
 
@@ -187,7 +189,7 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         panel.add(left(starsLabel));
         panel.add(left(largestLabel));
         panel.add(Box.createVerticalStrut(8));
-        statusLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        statusLabel.setForeground(UiStyle.helpColor());
         panel.add(left(statusLabel));
 
         panel.add(Box.createVerticalGlue());
@@ -199,7 +201,8 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         panel.add(left(buttons));
         ViewerSupport.prepareControls(panel);
         // Reserve the bar's width before BorderLayout sizes the sidebar; its arrival must not force sideways scrolling.
-        JScrollPane scroll = new JScrollPane(panel, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        JScrollPane scroll = WindowSizing.form(panel);
+        scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         scroll.setBorder(null);
         return scroll;
     }
@@ -395,7 +398,7 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
 
     private static JLabel muted(String text) {
         WrappingHelpLabel label = new WrappingHelpLabel(text, 230);
-        label.setForeground(UIManager.getColor("Label.disabledForeground"));
+        label.setForeground(UiStyle.helpColor());
         return label;
     }
 

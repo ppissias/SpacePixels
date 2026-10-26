@@ -181,7 +181,7 @@ public final class GuiDetectionReportPrompt {
         choice.gridx = 2;
         choice.anchor = GridBagConstraints.WEST;
         choice.insets = new Insets(2, 0, 2, 0);
-        Color quiet = UIManager.getColor("Label.disabledForeground");
+        Color quiet = UiStyle.helpColor();
         JLabel included = label("", false);
         int row = 0;
         boolean anyChoice = false;

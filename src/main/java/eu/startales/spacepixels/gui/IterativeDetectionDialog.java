@@ -37,12 +37,13 @@ final class IterativeDetectionDialog extends JDialog {
     IterativeDetectionDialog(Window owner, File initialDirectory) {
         super(owner, "Iterative detection configuration", ModalityType.APPLICATION_MODAL);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
-        JPanel form = new JPanel(new GridBagLayout());
+        JPanel form = new WidthTrackingPanel();
+        form.setLayout(new GridBagLayout());
         form.setBorder(new EmptyBorder(16, 16, 16, 16));
         JPanel source = new JPanel(new BorderLayout(8, 0));
         JButton browse = new JButton("Browse…");
         browse.addActionListener(event -> {
-            JFileChooser chooser = new JFileChooser(directory.getText().isBlank() ? null : new File(directory.getText()));
+            JFileChooser chooser = WindowSizing.fileChooser(directory.getText().isBlank() ? null : new File(directory.getText()));
             chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
             chooser.setDialogTitle("Choose iterative source directory");
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) directory.setText(chooser.getSelectedFile().getAbsolutePath());
@@ -81,7 +82,7 @@ final class IterativeDetectionDialog extends JDialog {
         run.setEnabled(false);
         buttons.add(cancel);
         buttons.add(run);
-        add(form, BorderLayout.CENTER);
+        add(WindowSizing.form(form), BorderLayout.CENTER);
         add(buttons, BorderLayout.SOUTH);
         getRootPane().setDefaultButton(run);
         getRootPane().registerKeyboardAction(event -> dispose(), KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -106,6 +107,7 @@ final class IterativeDetectionDialog extends JDialog {
         updateTuning();
         if (initialDirectory != null) directory.setText(initialDirectory.getAbsolutePath());
         pack();
+        WindowSizing.install(this, 640, 420);
         setLocationRelativeTo(owner);
     }
 

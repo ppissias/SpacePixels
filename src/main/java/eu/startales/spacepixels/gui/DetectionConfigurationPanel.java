@@ -255,7 +255,7 @@ public class DetectionConfigurationPanel extends JPanel {
         });
 
         footerStateLabel.setBorder(new EmptyBorder(0, 4, 0, 12));
-        footerMessageLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+        footerMessageLabel.setForeground(UiStyle.helpColor());
         JPanel footerText = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         footerText.add(footerStateLabel);
         footerText.add(footerMessageLabel);
@@ -586,7 +586,7 @@ public class DetectionConfigurationPanel extends JPanel {
             footerStateLabel.setText("● Unsaved changes");
             footerStateLabel.setToolTipText("The changes are already in use for this session. Save keeps them for the next start; Revert discards them.");
         } else {
-            footerStateLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
+            footerStateLabel.setForeground(UiStyle.helpColor());
             footerStateLabel.setText("✓ Saved settings in use");
             footerStateLabel.setToolTipText(null);
         }
@@ -926,7 +926,7 @@ public class DetectionConfigurationPanel extends JPanel {
         boolean problem = invalid != null || footerNoteIsProblem;
         Color error = UIManager.getColor("Actions.Red");
         footerMessageLabel.setForeground(problem ? (error != null ? error : new Color(0xDB5860))
-                : UIManager.getColor("Label.disabledForeground"));
+                : UiStyle.helpColor());
         footerMessageLabel.setText(invalid == null ? footerNote
                 : (refusedAction == null ? "" : refusedAction + " ") + inputProblem(invalid));
     }
@@ -1678,7 +1678,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private void showTelemetryReportWindow(String reportText) {
         JTextArea textArea = new JTextArea(reportText);
         textArea.setEditable(false);
-        textArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, UiStyle.bodyFont().getSize()));
         textArea.setMargin(new java.awt.Insets(10, 10, 10, 10));
 
         JScrollPane scrollPane = new JScrollPane(textArea);
@@ -1687,6 +1687,7 @@ public class DetectionConfigurationPanel extends JPanel {
         JDialog dialog = new JDialog(windowFrame, "Auto-Tuner Telemetry Report", true);
         dialog.getContentPane().add(scrollPane);
         dialog.pack();
+        WindowSizing.install(dialog, 600, 400);
         dialog.setLocationRelativeTo(this);
         dialog.setVisible(true);
     }

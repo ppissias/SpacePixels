@@ -9,7 +9,6 @@
  */
 package eu.startales.spacepixels.gui;
 
-import com.formdev.flatlaf.FlatDarkLaf;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import eu.startales.spacepixels.jobs.Job;
@@ -69,7 +68,14 @@ public class ApplicationWindow {
     private final ApplicationSettings applicationSettings = ApplicationSettings.loadDefault();
     private final SessionOwner sessions = new SessionOwner();
     private final ApplicationStorage storage;
+    private final AppearanceSettings startupAppearance;
+    private final String appearanceWarning;
+    private final ApplicationRestart.Launcher restartLauncher;
     private boolean closing;
+    private boolean restartRequested;
+    private boolean preparingRestart;
+    private Runnable saveWindowPlacement;
+    private final Timer restartCheck = new Timer(100, event -> restartWhenIdle());
 
     private volatile MainApplicationPanel mainApplicationPanel;
     private volatile ConfigurationPanel configurationApplicationPanel;
@@ -82,7 +88,7 @@ public class ApplicationWindow {
     private final JobCoordinator jobCoordinator = new JobCoordinator(
             work -> new Thread(work, "SpacePixels-job").start(),
             EventQueue::invokeLater,
-            () -> mainApplicationPanel != null && mainApplicationPanel.isUiLocked());
+            () -> restartRequested || preparingRestart || mainApplicationPanel != null && mainApplicationPanel.isUiLocked());
 
     private static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
 
@@ -128,15 +134,14 @@ public class ApplicationWindow {
             }
         });
 
+        AppearanceTheme.Prepared appearance = AppearanceTheme.load(AppearanceSettings.defaultFile());
+        ApplicationRestart.Launcher restart = ApplicationRestart.currentProcess(args);
         EventQueue.invokeLater(() -> {
             try {
-                UIManager.put("Component.arc", 10);
-                UIManager.put("Button.arc", 10);
-                UIManager.put("AccentColor", "#4285f4");
-                FlatDarkLaf.setup();
+                String warning = AppearanceTheme.install(appearance);
                 AppIcon.installForApplication();
 
-                ApplicationWindow window = new ApplicationWindow();
+                ApplicationWindow window = new ApplicationWindow(new ApplicationStorage(), appearance.settings(), warning, restart);
                 window.frmIpodImage.setVisible(true);
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to initialize application UI", e);
@@ -151,7 +156,21 @@ public class ApplicationWindow {
 
     /** Uses the application-owned queue, also allowing delayed stores in GUI mechanics tests. */
     public ApplicationWindow(ApplicationStorage storage) {
+        this(storage, AppearanceSettings.defaults(), null);
+    }
+
+    /** Uses appearance prepared before any window components were constructed; never reads theme files on the EDT. */
+    ApplicationWindow(ApplicationStorage storage, AppearanceSettings startupAppearance, String appearanceWarning) {
+        this(storage, startupAppearance, appearanceWarning, ApplicationRestart.currentProcess(new String[0]));
+    }
+
+    /** Injects restart preparation so lifecycle tests can exercise failures without exiting their test JVM. */
+    ApplicationWindow(ApplicationStorage storage, AppearanceSettings startupAppearance, String appearanceWarning,
+                      ApplicationRestart.Launcher restartLauncher) {
         this.storage = java.util.Objects.requireNonNull(storage);
+        this.startupAppearance = java.util.Objects.requireNonNull(startupAppearance);
+        this.appearanceWarning = appearanceWarning;
+        this.restartLauncher = java.util.Objects.requireNonNull(restartLauncher);
         initialize();
     }
 
@@ -163,7 +182,7 @@ public class ApplicationWindow {
         frmIpodImage.setTitle("SpacePixels" + " " + version);
         AppIcon.apply(frmIpodImage);
         // Resizable, sized to the screen or restored from the last session.
-        WindowPlacement.install(frmIpodImage, storage);
+        saveWindowPlacement = WindowPlacement.install(frmIpodImage, storage);
         frmIpodImage.setResizable(true);
         frmIpodImage.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frmIpodImage.addWindowListener(new WindowAdapter() {
@@ -222,6 +241,8 @@ public class ApplicationWindow {
         tabbedPane.addTab("Astrometry Config", configurationApplicationPanel);
         tabbedPane.addTab("Image Stretch", stretchPanel);
         tabbedPane.addTab("Detection Settings", detectionConfigurationPanel);
+        tabbedPane.addTab("Appearance", new AppearancePanel(startupAppearance, appearanceWarning,
+                AppearanceSettings.defaultFile(), storage, () -> closing, this::requestRestart));
 
         configurationApplicationPanel.refreshComponents();
         setTabEnabled(configurationApplicationPanel, true);
@@ -266,6 +287,8 @@ public class ApplicationWindow {
 
     private void closeSessionResources() {
         closing = true;
+        restartCheck.stop();
+        restartRequested = false;
         jobCoordinator.cancel();
         viewers.closeAll();
         if (configurationApplicationPanel != null) configurationApplicationPanel.close();
@@ -277,9 +300,24 @@ public class ApplicationWindow {
 
     /** Drains the shared queue on a shutdown worker, then reports unsaved data and closes on the EDT. */
     private void finishStorage(boolean exit) {
+        finishStorage(exit, null);
+    }
+
+    /** The restart helper is committed only after accepted writes drain; it cannot relaunch before this JVM exits. */
+    private void finishStorage(boolean exit, ApplicationRestart.Pending restart) {
         new Thread(() -> {
             try {
                 storage.finish();
+                String restartProblem = null;
+                if (restart != null) {
+                    try { restart.commit(); }
+                    catch (java.io.IOException failure) {
+                        restart.close();
+                        restartProblem = "Appearance is saved, but automatic restart failed. Start SpacePixels again manually.\n"
+                                + failure.getMessage();
+                    }
+                }
+                String problem = restartProblem;
                 EventQueue.invokeLater(() -> {
                     if (storage.getSessionWriteFailure() != null) {
                         JOptionPane.showMessageDialog(frmIpodImage,
@@ -294,6 +332,8 @@ public class ApplicationWindow {
                         JOptionPane.showMessageDialog(frmIpodImage, details.toString(),
                                 "Settings save error", JOptionPane.WARNING_MESSAGE);
                     }
+                    if (problem != null) JOptionPane.showMessageDialog(frmIpodImage, problem,
+                            "Restart unavailable", JOptionPane.WARNING_MESSAGE);
                     frmIpodImage.dispose();
                     if (exit) System.exit(0);
                 });
@@ -304,8 +344,9 @@ public class ApplicationWindow {
                             "Session metadata or settings have not finished saving. Wait and try closing again?\n" + failure.getMessage(),
                             "Pending writes", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
                     if (answer == JOptionPane.YES_OPTION) {
-                        finishStorage(exit);
+                        finishStorage(exit, restart);
                     } else {
+                        if (restart != null) restart.close();
                         frmIpodImage.dispose();
                         if (exit) System.exit(1);
                     }
@@ -314,10 +355,48 @@ public class ApplicationWindow {
         }, "SpacePixels-session-shutdown").start();
     }
 
+    /** Requests an explicit restart without cancelling a running detection, import or report write. Called on the EDT. */
+    void requestRestart() {
+        if (closing || restartRequested || preparingRestart) return;
+        restartRequested = true;
+        mainApplicationPanel.showStatus("Appearance saved. SpacePixels will restart when the current task finishes.");
+        restartCheck.start();
+        restartWhenIdle();
+    }
+
+    /** Waits for the job outcome, then prepares the replacement on a worker before releasing the current session. */
+    private void restartWhenIdle() {
+        if (closing || !restartRequested || preparingRestart || jobCoordinator.current() != null) return;
+        restartCheck.stop();
+        preparingRestart = true;
+        new Thread(() -> {
+            try {
+                ApplicationRestart.Pending pending = restartLauncher.prepare();
+                EventQueue.invokeLater(() -> {
+                    if (closing) { pending.close(); return; }
+                    saveWindowPlacement.run();
+                    closing = true;
+                    closeSessionResources();
+                    finishStorage(true, pending);
+                });
+            } catch (Exception failure) {
+                EventQueue.invokeLater(() -> {
+                    preparingRestart = false;
+                    restartRequested = false;
+                    if (closing) return;
+                    mainApplicationPanel.showStatus("Appearance saved. Please restart SpacePixels manually.");
+                    JOptionPane.showMessageDialog(frmIpodImage,
+                            "Automatic restart could not start. Your appearance is saved and this window can stay open.\n"
+                                    + failure.getMessage(), "Restart unavailable", JOptionPane.WARNING_MESSAGE);
+                });
+            }
+        }, "SpacePixels-restart-prepare").start();
+    }
+
     /** Asks for a folder of aligned frames and imports it. */
     public void chooseAndImportFolder() {
         logger.info("Will try to import FITS/XISF files.");
-        final JFileChooser fc = new JFileChooser();
+        final JFileChooser fc = WindowSizing.fileChooser(null);
         fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         fc.setDialogTitle("Folder containing aligned FITS or XISF images");
         if (fc.showOpenDialog(frmIpodImage) == JFileChooser.APPROVE_OPTION) {
@@ -587,13 +666,13 @@ public class ApplicationWindow {
     private void installManualLink() {
         JButton manualLink = AccessibleControls.link("User Manual", "Open SpacePixels user manual",
                 () -> openInBrowser(MANUAL_URL));
-        manualLink.setForeground(DetectionConfigurationPanel.accentColor());
+        manualLink.setForeground(UiStyle.linkColor());
         manualLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         manualLink.setToolTipText("Open the SpacePixels user manual in your browser: workflows, the report and examples.");
         manualLink.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
         updateNoticeLabel.setFont(updateNoticeLabel.getFont().deriveFont(Font.BOLD));
-        updateNoticeLabel.setForeground(Color.WHITE);
-        updateNoticeLabel.setBackground(DetectionConfigurationPanel.accentColor());
+        updateNoticeLabel.setForeground(UIManager.getColor("Button.default.foreground"));
+        updateNoticeLabel.setBackground(UIManager.getColor("Button.default.background"));
         updateNoticeLabel.setBorder(BorderFactory.createEmptyBorder(3, 10, 3, 10));
         updateNoticeLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         updateNoticeLabel.setVisible(false);

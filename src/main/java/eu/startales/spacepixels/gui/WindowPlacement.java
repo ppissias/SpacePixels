@@ -44,8 +44,8 @@ final class WindowPlacement {
     private WindowPlacement() {
     }
 
-    /** Applies the restored or default placement and saves the placement when the window closes. */
-    static void install(JFrame frame, ApplicationStorage storage) {
+    /** Applies placement and returns the same once-only EDT save used by normal closure and automatic restart. */
+    static Runnable install(JFrame frame, ApplicationStorage storage) {
         Preferences preferences = preferences();
         Rectangle usable = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
         frame.setMinimumSize(new java.awt.Dimension(Math.min(MIN_WIDTH, usable.width), Math.min(MIN_HEIGHT, usable.height)));
@@ -76,11 +76,16 @@ final class WindowPlacement {
                 }
             }
         });
-        frame.addWindowListener(new WindowAdapter() {
+        /** Captures the last normal bounds before either close path seals the storage queue. */
+        class SavePlacement extends WindowAdapter implements Runnable {
             private boolean saving;
 
+            /** A normal window-manager close uses the same snapshot as an explicit restart. */
             @Override
-            public void windowClosing(WindowEvent e) {
+            public void windowClosing(WindowEvent e) { run(); }
+
+            /** Queues the placement once, while the shared application storage still accepts writes. */
+            @Override public void run() {
                 if (saving) return;
                 saving = true;
                 Rectangle snapshot = new Rectangle(normalBounds[0]);
@@ -90,7 +95,10 @@ final class WindowPlacement {
                     return null;
                 });
             }
-        });
+        }
+        SavePlacement save = new SavePlacement();
+        frame.addWindowListener(save);
+        return save;
     }
 
     /** 85 % of the usable screen area, capped for large screens, never larger than the screen, centred. */
