@@ -123,6 +123,12 @@ before cohort consistency; interactive import preserves its sequence checks befo
 `FitsPreparation` writes prepared copies through `FitsPixelConverter`; `XisfImageConverter` remains separate.
 These are static helpers; `FitsImportService` and `FitsBatchService` retain their instance-owned work.
 
+`FrameCalibrationInspector` reads the first/middle/last frame without changing pixels. The existing sharp-spike criterion (above sky + 10 sigma, four-neighbour excess sum below 0.25 of the peak) warns at at least 5 spikes/MP and 30 spikes in a sample. These measured limits differ from the provisional 35/MP and 300-spike proposal: the positive reference has 242 such strict spikes (38.12/MP), while all 17 clean references have at most 15 (1.66/MP). The full 18-dataset warning classifications were independently checked on 2026-10-26 and are unchanged by the correctness fixes.
+
+Alignment uses spaced optical-peak centroids, requiring at least three matches and half of the smaller star set to support one translation above 2.5 pixels. Missing or dimmer stars do not become artificial offsets. Floating samples keep their physical noise scale; only known unsigned-integer samples use integer histogram bins. Pixel-row and matching checks observe `CancellationScope`; unreadable samples fail rather than returning a clean verdict.
+
+Interactive import can decline before session replacement. Both desktop detection workflows supply `PreFlightSafetyPrompt` before tuning/passes; cancellation is the default, with an explicit override. Headless imports log warnings; the public API exposes warning-only or fail-fast policy. Benchmark tests require the explicit `spacepixels.testdata.root` property and never fall back to a machine-specific path.
+
 ## How a user action runs
 
 Eleven workflows use the job pattern: import, Convert to Mono, Batch Stretch, plate solve, writing the WCS header, Blink, Auto-Tune, Detect, Detect Iteratively, Manual Transient Inspection and the Test Star Mask stack.

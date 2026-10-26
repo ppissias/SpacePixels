@@ -668,7 +668,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(windowFrame);
         IterativeDetectionTask task = new IterativeDetectionTask(request, (summary, files, passSettings) ->
                 reportPrompt.confirm(summary, java.util.Arrays.stream(files).anyMatch(FitsFileInformation::isWcsSolved),
-                        50, "Iterative pass: " + files.length + " frames", passSettings))
+                        50, "Iterative pass: " + files.length + " frames", passSettings), reportPrompt::confirmPreFlight)
                 .showingPreviews(progressDialog.previewSink());
         JobCoordinator.Admission admission = jobs.start(JobKind.ITERATIVE_DETECTION,
                 sessions.current(), task,

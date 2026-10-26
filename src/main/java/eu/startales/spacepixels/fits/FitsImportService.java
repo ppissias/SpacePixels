@@ -154,6 +154,7 @@ public final class FitsImportService implements AutoCloseable {
         return metadata;
     }
 
+    /** Checks sample pixels on the import worker; dismissal declines import, while unreadable samples fail it. */
     private FitsFileInformation[] checkCalibration(FitsFileInformation[] metadata) {
         if (metadata == null || metadata.length == 0) {
             return metadata;

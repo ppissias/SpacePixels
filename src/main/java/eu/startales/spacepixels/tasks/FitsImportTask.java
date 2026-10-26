@@ -22,6 +22,7 @@ import eu.startales.spacepixels.fits.MixedExposureException;
 import eu.startales.spacepixels.fits.RedirectImportException;
 import eu.startales.spacepixels.report.SessionReports;
 import eu.startales.spacepixels.fits.XisfImageConverter;
+import io.github.ppissias.jtransient.execution.CancellationScope;
 
 import java.io.File;
 import java.util.logging.Logger;
@@ -64,6 +65,14 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
 
     @Override
     public JobOutcome<Result> run(JobContext context) throws Exception {
+        try (CancellationScope cancellation = CancellationScope.open(context::isCancelled)) {
+            CancellationScope.check();
+            return runCancellable(context);
+        }
+    }
+
+    /** Runs import and its pixel inspection under the job's cooperative cancellation scope. */
+    private JobOutcome<Result> runCancellable(JobContext context) throws Exception {
         File folder = directory;
         while (true) {
             try {

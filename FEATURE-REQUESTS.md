@@ -17,7 +17,6 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F15](#f15-clean-moving-object-animations-to-download-narrow-or-wide) | Clean moving-object animations to download, narrow or wide | Decided. Moving objects only; written with the report. |
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
 | [F02](#f02-session-summary-and-multiple-night-warning) | Session summary and multiple-night warning | Deferred |
-| [F16](#f16-uncalibrated-and-misaligned-frame-detection-with-user-warning) | Uncalibrated and misaligned frame detection with user warning | Decided. Confirm the thresholds on the datasets. |
 | [F05](#f05-small-star-visibility-in-stretch-previews) | Small-star visibility in stretch previews | Deferred |
 
 ## F04. MCP agent services
@@ -298,48 +297,6 @@ The card gets a "Download animation" control with **Narrow** and **Wide** links.
 - The narrow file's frames equal the star-centric animation's frames apart from the circle and the label.
 - The wide file has the same centre and more sky.
 - The findings and `report-data.json` are unchanged, and the report's growth in size is measured.
-
-## F16. Uncalibrated and misaligned frame detection with user warning
-
-**Request (2026-10-25):** "it seems that whynot-nocalibration-wrongdrift , is not well aligned and this is problematic for the detection process. Can we detect not well calibrated frames and issue a warning to the user? These should not be processed."
-
-### Problem analysis
-
-Datasets with uncalibrated frames (no dark/bias subtraction or cosmetic hot-pixel correction) or poor registration corrupt the transient detection pipeline, producing massive amounts of false positives:
-- **Case study (`whynot-nocalibration-wrongdrift`):** 61 raw DSLR frames (Canon EOS 300D) registered by Siril with a slow steady tracking drift (~22 px total drift across the run). Star registration itself is accurate (shifts < 1 px), but because dark calibration was omitted, the sensor retains thousands of hot and warm pixels (> 2,000 sub-pixel spikes per frame). As the telescope drifts against the stars, the sensor defects move across the registered image at a constant rate, which the moving-object linker misinterprets as hundreds of real objects. A run on this dataset generated **946 findings**, including **232 false moving-target tracks** and **652 camera-fixed groups**.
-- **Misaligned frames:** When star alignment fails or unaligned raw frames are accidentally supplied to the pipeline, every unaligned star leaks through the median reference subtraction and triggers false detections across the entire field.
-- **Current behaviour:** SpacePixels checks sequence consistency (dimensions, BITPIX, exposure times, timestamps) on import, but performs no checks for hot-pixel saturation, calibration defects, or star alignment quality before admitting the run. The pipeline runs to completion, generating hundreds of misleading report findings and consuming substantial compute time.
-
-### Proposed detection methods
-
-1. **Uncalibrated frame detector (Hot-pixel spike density):**
-   - Sample the first and middle frames during import/pre-flight inspection.
-   - Measure isolated sub-pixel spikes: pixels where value > median + 10 sigma and value - max(8 neighbors) > 3 sigma. Unlike real optical stars that follow a Gaussian/Airy PSF spanning multiple pixels (FWHM >= 1.5 px), hot pixels are single-pixel spikes with FWHM < 1.0 px.
-   - On calibrated reference datasets (klangwolke-2, m101-reg, helix-reg, Apophis), spike density is low (<= 15 spikes/MP). On uncalibrated frames like whynot-nocalibration-wrongdrift, spike density is exceptionally high (> 50 spikes/MP, hundreds to thousands of raw spikes).
-   - If spike density exceeds a threshold (e.g., > 35 spikes/MP or > 300 isolated spikes per frame), flag the dataset as **Uncalibrated (high hot-pixel density)**.
-
-2. **Misaligned frame detector (Star registration consistency):**
-   - Fast cross-correlation or bright-star centroid matching between the reference frame and subsequent frames (sampling e.g. first, middle, last, or all frames).
-   - If the detected star shift exceeds a threshold (e.g. > 2.5 px), flag the dataset as **Misaligned Frames (registration failure or unaligned sequence)**.
-
-3. **User warning and gate:**
-   - **Desktop UI (Import and Pre-Detection):** Display a clear warning dialog:
-     - *"Warning: The selected dataset appears uncalibrated (high density of hot pixels) [or not properly aligned]. Processing uncalibrated or drifting frames can produce hundreds of false detections. Do you want to cancel the import or proceed anyway?"*
-     - If the user chooses to cancel, the run is declined ("These should not be processed").
-   - **CLI and Headless API:** Output a warning log and either fail fast (e.g., `FAIL_IF_UNCALIBRATED`) or record the warning in the pipeline result summary.
-
-**Decision (made):** "1. Agreed, 2. Agreed, 3. Agreed - but lets do some tests on the various datasets to confirm we can detect them without false positives."
-
-1. **Warning with an override.** In the window, a warning dialog offers Cancel (recommended) and Proceed Anyway. In the headless API and the command line, a setting defaults to recording a warning in the result and in the command output.
-2. **Where the check runs.** At import, and again as a pre-flight check before the heavy processing starts.
-3. **Thresholds, after a false-positive check.** Test these limits on the reference datasets before treating them as final: more than 35 hot-pixel spikes per megapixel and more than 300 spikes in a frame, and a star-centroid offset above 2.5 px. Calibrated, well-aligned sessions must stay unflagged.
-
-### Acceptance
-
-- `whynot-nocalibration-wrongdrift` is reliably detected as uncalibrated, triggering the warning dialog.
-- Clean reference datasets (`klangwolke-1`, `klangwolke-2`, `m101-reg`, `m31-*-reg`, `helix-reg`, `Apophis`, `Africano`, `Eagle-noisy`) are NOT falsely flagged.
-- Artificially unaligned frames (shifted by > 3 px) are reliably flagged as misaligned.
-- Tests cover both detection heuristics and UI/API warning handling.
 
 ## F01. Slow-mover and per-frame tuning relation
 

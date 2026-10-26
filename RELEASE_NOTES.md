@@ -6,6 +6,8 @@ Not released yet.
 
 ### Changed
 
+- **Dataset quality warnings (F16).** Import and both detection workflows offer recommended cancellation or an explicit override for sampled hot-pixel/alignment warnings. Alignment now matches coherent star centroids, handles normalized floating-point images, and avoids mistaking brightness changes for star shifts. Inspection responds to cancellation and reports read failures. Headless callers can inspect the warning result or select fail-fast policy.
+
 - **Large text and display scaling.** Viewer controls wrap onto additional rows, and the star-mask sidebar scrolls when needed. The main workflow area keeps the frame table visible; Astrometry guidance and the Overview page reflow, with local horizontal scrolling for the wide Auto-Tune results table. Tab reveals controls below a scrollable viewport.
 - **Compressed (.fz) frames are decoded more exactly.** nom-tam-fits 1.23.0 fixes the decoding of 32-bit PLIO frames and of quantized floating-point frames: their blank pixels, and the rounding of frames without dithering. Integer frames (RICE, GZIP, HCOMPRESS) decode as before. Frames from 16-bit cameras are unaffected.
 - **A dataset folder that cannot be written.** When the plate-solution correction or the sky catalogue cannot be saved there, for example in a read-only folder, it stays in use until SpacePixels closes, in the viewers and in the reports, and the window says it was not saved. Before, a correction that could not be saved was switched back, and a catalogue that could not be saved was missing from the reports. A detection also no longer waits for a pending save before it starts.

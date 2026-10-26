@@ -72,13 +72,19 @@ public final class IterativeDetectionPipelineService {
 
     public File run(IterativeDetectionRequest request, ReportPrompt prompt,
                     TransientEngineProgressListener progress) throws Exception {
+        return run(request, prompt, progress, null);
+    }
+
+    /** Confirms sampled quality warnings on the worker before tuning or any pass; null records warnings only. */
+    public File run(IterativeDetectionRequest request, ReportPrompt prompt,
+                    TransientEngineProgressListener progress, PreFlightSafetyPrompt preFlight) throws Exception {
         indexFile = null;
         emit(progress, 0, "Preparing iterative input...");
         DetectionInputPreparation.PreparedDirectory preparation = DetectionInputPreparation.prepareInputDirectory(
                 request.directory(), request.autoPrepare(), request.keepNegativeValues(),
                 (percent, message) -> emit(progress, percent / 10, message));
         try {
-            return runPrepared(request, preparation.getPreparedInputDirectory(), prompt, progress);
+            return runPrepared(request, preparation.getPreparedInputDirectory(), prompt, progress, preFlight);
         } catch (Exception failure) {
             // A cancelled run that published no index leaves nothing behind, including the copy it converted.
             if (Cancellation.isCancellation(failure) && indexFile == null) {
@@ -89,13 +95,17 @@ public final class IterativeDetectionPipelineService {
     }
 
     private File runPrepared(IterativeDetectionRequest request, File prepared, ReportPrompt prompt,
-                             TransientEngineProgressListener progress) throws Exception {
+                             TransientEngineProgressListener progress, PreFlightSafetyPrompt preFlight) throws Exception {
         FitsFileInformation[] files;
         try (FitsImportService importer = new FitsImportService(prepared, null, null)) {
             files = importer.readFiles();
         }
         if (request.expectedFrameCount() > 0 && files.length != request.expectedFrameCount()) {
             throw new IOException("The dataset frame count changed. Reopen the iterative configuration to review the passes.");
+        }
+        if (preFlight != null) {
+            var inspection = eu.startales.spacepixels.fits.FrameCalibrationInspector.inspect(files);
+            if (inspection.hasWarning() && !preFlight.shouldProceed(inspection)) return null;
         }
         List<Integer> counts = request.plan().frameCounts(files.length);
         DetectionConfig config = request.config();

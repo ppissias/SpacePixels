@@ -63,15 +63,10 @@ public class DetectionTask implements Job<File> {
      */
     public DetectionTask(FitsFileInformation[] files, DetectionConfig config, DetectionRunOptions options,
                          SkySnapshot sky, DetectionSafetyPrompt safetyPrompt) {
-        this.files = files == null ? null : files.clone();
-        this.config = DetectionConfigRules.snapshot(config,
-                DetectionConfigRules.Operation.CONFIGURATION);
-        this.options = Objects.requireNonNull(options);
-        this.sky = sky;
-        this.safetyPrompt = safetyPrompt;
-        this.preFlightPrompt = null;
+        this(files, config, options, sky, safetyPrompt, null);
     }
 
+    /** Captures the quality decision alongside the admitted inputs; the callback runs on the job worker. */
     public DetectionTask(FitsFileInformation[] files, DetectionConfig config, DetectionRunOptions options,
                          SkySnapshot sky, DetectionSafetyPrompt safetyPrompt, PreFlightSafetyPrompt preFlightPrompt) {
         this.files = files == null ? null : files.clone();
@@ -107,9 +102,9 @@ public class DetectionTask implements Job<File> {
     }
 
     private JobOutcome<File> runCancellable(JobContext context) throws Exception {
-        if (preFlightPrompt != null && files != null && files.length > 0) {
+        if (files != null && files.length > 0) {
             FrameCalibrationInspector.InspectionResult inspection = FrameCalibrationInspector.inspect(files);
-            if (inspection.hasWarning() && !preFlightPrompt.shouldProceed(inspection)) {
+            if (inspection.hasWarning() && preFlightPrompt != null && !preFlightPrompt.shouldProceed(inspection)) {
                 return JobOutcome.declined("Detection cancelled by user: " + inspection.summary());
             }
         }

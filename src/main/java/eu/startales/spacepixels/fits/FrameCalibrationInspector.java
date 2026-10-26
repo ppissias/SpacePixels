@@ -2,20 +2,20 @@ package eu.startales.spacepixels.fits;
 
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
+import io.github.ppissias.jtransient.execution.CancellationScope;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.io.IOException;
+import java.util.concurrent.CancellationException;
 
 /**
  * Inspects sample frames of a sequence for calibration defects (uncalibrated sensor hot pixels)
  * and registration consistency (inter-frame star alignment shift).
  */
 public final class FrameCalibrationInspector {
-    private static final Logger LOGGER = Logger.getLogger(FrameCalibrationInspector.class.getName());
 
     public static final double DEFAULT_HOT_PIXEL_RATIO_MAX = 0.25;
     public static final double DEFAULT_HOT_PIXEL_DENSITY_THRESHOLD = 5.0; // spikes per Megapixel
@@ -23,6 +23,7 @@ public final class FrameCalibrationInspector {
     public static final double DEFAULT_MISALIGNMENT_SHIFT_THRESHOLD = 2.5; // pixels
     public static final double DEFAULT_PEAK_SIGMA_MULTIPLIER = 10.0;
 
+    /** Prevents construction of this stateless sample inspector. */
     private FrameCalibrationInspector() {
     }
 
@@ -37,17 +38,20 @@ public final class FrameCalibrationInspector {
             double starShiftPixels,
             String warningMessage
     ) {
+        /** Reports that no sampled warning was found; this is not a calibration certificate. */
         public static InspectionResult clean() {
             return new InspectionResult(false, false, 0.0, 0, 0.0, null);
         }
 
+        /** Whether a sampled calibration or alignment warning needs a caller decision. */
         public boolean hasWarning() {
             return isUncalibrated || isMisaligned;
         }
 
+        /** Plain text for logs, API results and command output. */
         public String summary() {
             if (!hasWarning()) {
-                return "Sequence is calibrated and aligned.";
+                return "No calibration or alignment warning found in the sampled frames.";
             }
             List<String> parts = new ArrayList<>();
             if (isUncalibrated) {
@@ -61,6 +65,7 @@ public final class FrameCalibrationInspector {
             return String.join("; ", parts);
         }
 
+        /** Explains the sampled evidence and the recommended cancellation in a desktop dialog. */
         public String warningDialogText() {
             if (!hasWarning()) {
                 return "";
@@ -92,6 +97,7 @@ public final class FrameCalibrationInspector {
      * Inspects sample frames from the metadata array.
      */
     public static InspectionResult inspect(FitsFileInformation[] filesInfo) {
+        CancellationScope.check();
         if (filesInfo == null || filesInfo.length == 0) {
             return InspectionResult.clean();
         }
@@ -106,6 +112,7 @@ public final class FrameCalibrationInspector {
      * Inspects sample frames from the file array. Streams one frame at a time to keep memory bounded.
      */
     public static InspectionResult inspect(File[] files) {
+        CancellationScope.check();
         if (files == null || files.length == 0) {
             return InspectionResult.clean();
         }
@@ -126,15 +133,16 @@ public final class FrameCalibrationInspector {
             List<ReferenceStar> referenceStars = null;
 
             for (int i = 0; i < sampleIndices.length; i++) {
+                CancellationScope.check();
                 int sIdx = sampleIndices[i];
                 File sampleFile = files[sIdx];
-                if (sampleFile == null || !sampleFile.isFile()) continue;
+                if (sampleFile == null || !sampleFile.isFile()) throw new IOException("A sampled frame is unavailable.");
 
                 try (Fits fits = new Fits(sampleFile)) {
                     BasicHDU<?> hdu = FitsInput.getImageHDU(fits);
-                    if (hdu == null) continue;
+                    if (hdu == null) throw new IOException("A sampled frame has no image HDU.");
                     PixelGrid grid = wrapGrid(hdu.getKernel(), hdu.getHeader());
-                    if (grid == null) continue;
+                    if (grid == null) throw new IOException("A sampled frame has an unsupported pixel layout.");
 
                     int w = grid.width();
                     int h = grid.height();
@@ -147,22 +155,13 @@ public final class FrameCalibrationInspector {
                         maxDensity = hp.density;
                     }
 
-                    // Alignment analysis
+                    // Match a coherent star displacement, independently of the frames' brightness.
+                    FrameStats stats = computeFrameStats(grid);
+                    List<ReferenceStar> stars = findReferenceStars(grid, stats);
                     if (i == 0) {
-                        if (sampleIndices.length >= 2) {
-                            FrameStats stats0 = computeFrameStats(grid);
-                            if (stats0.median > 0 || stats0.sigma > 1.0f) {
-                                referenceStars = findReferenceStars(grid, stats0);
-                            }
-                        }
-                    } else if (referenceStars != null && !referenceStars.isEmpty()) {
-                        FrameStats stats = computeFrameStats(grid);
-                        if (stats.median > 0 || stats.sigma > 1.0f) {
-                            double shift = measureStarShift(grid, referenceStars, stats);
-                            if (shift > maxStarShift) {
-                                maxStarShift = shift;
-                            }
-                        }
+                        referenceStars = stars;
+                    } else if (referenceStars != null) {
+                        maxStarShift = Math.max(maxStarShift, measureStarShift(referenceStars, stars));
                     }
                 }
             }
@@ -178,14 +177,18 @@ public final class FrameCalibrationInspector {
 
             return new InspectionResult(false, false, maxDensity, maxHotPixels, maxStarShift, null);
 
+        } catch (CancellationException cancelled) {
+            throw cancelled;
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Frame calibration inspection failed: " + e.getMessage(), e);
-            return InspectionResult.clean();
+            CancellationScope.check();
+            throw new IllegalStateException("Frame calibration inspection failed: " + e.getMessage(), e);
         }
     }
 
+    /** Counts isolated peaks in one frame and expresses their density per megapixel. */
     private record HotPixelStats(int count, double density) {}
 
+    /** Measures sharp sensor spikes without modifying pixels; cancellation is checked on every row. */
     private static HotPixelStats analyzeHotPixels(PixelGrid grid, double megapixel) {
         int h = grid.height();
         int w = grid.width();
@@ -194,6 +197,7 @@ public final class FrameCalibrationInspector {
 
         int count = 0;
         for (int y = 1; y < h - 1; y++) {
+            CancellationScope.check();
             for (int x = 1; x < w - 1; x++) {
                 float val = grid.get(x, y);
                 if (val > threshold) {
@@ -214,27 +218,19 @@ public final class FrameCalibrationInspector {
         return new HotPixelStats(count, density);
     }
 
+    /** Background level and robust lower-half noise estimate, in the image's physical units. */
     private record FrameStats(float median, float sigma) {}
 
+    /** Estimates sky and noise while preserving fractional or negative floating-point units. */
     private static FrameStats computeFrameStats(PixelGrid grid) {
         int h = grid.height();
         int w = grid.width();
-        boolean is16BitRange = true;
-        for (int y = 0; y < Math.min(h, 20); y++) {
-            for (int x = 0; x < Math.min(w, 20); x++) {
-                float v = grid.get(x, y);
-                if (v < 0 || v > 65535 || Float.isNaN(v)) {
-                    is16BitRange = false;
-                    break;
-                }
-            }
-            if (!is16BitRange) break;
-        }
-
-        if (is16BitRange) {
+        // Histogram bins are valid only for known unsigned integer storage, never normalized floating data.
+        if (grid.unsigned16()) {
             int[] hist = new int[65536];
             long total = 0;
             for (int y = 0; y < h; y++) {
+                CancellationScope.check();
                 for (int x = 0; x < w; x++) {
                     int v = (int) grid.get(x, y);
                     if (v >= 0 && v < 65536) {
@@ -272,6 +268,7 @@ public final class FrameCalibrationInspector {
             int step = Math.max(1, (int) Math.sqrt((w * (double) h) / 50000.0));
             List<Float> samples = new ArrayList<>(50000);
             for (int y = 0; y < h; y += step) {
+                CancellationScope.check();
                 for (int x = 0; x < w; x += step) {
                     float v = grid.get(x, y);
                     if (Float.isFinite(v)) {
@@ -284,17 +281,19 @@ public final class FrameCalibrationInspector {
             int n = samples.size();
             float median = samples.get(n / 2);
             float p16 = samples.get((int) (n * 0.1587));
-            float sigma = Math.max(1.0f, median - p16);
+            float sigma = Math.max(Math.ulp(median), median - p16);
             return new FrameStats(median, sigma);
         }
     }
 
-    private record ReferenceStar(int x, int y, float peak) {}
+    /** A bright extended peak with a background-subtracted local centroid. */
+    private record ReferenceStar(double x, double y, float peak) {}
 
+    /** Selects up to 32 spaced optical peaks; isolated sensor spikes cannot become alignment references. */
     private static List<ReferenceStar> findReferenceStars(PixelGrid grid, FrameStats stats) {
         int h = grid.height();
         int w = grid.width();
-        int margin = Math.min(50, Math.min(w, h) / 6);
+        int margin = Math.max(1, Math.min(50, Math.min(w, h) / 6));
         if (h <= margin * 2 || w <= margin * 2) {
             return List.of();
         }
@@ -304,6 +303,7 @@ public final class FrameCalibrationInspector {
         float minPeak = 15.0f * stats.sigma;
 
         for (int y = margin; y < h - margin; y += step) {
+            CancellationScope.check();
             for (int x = margin; x < w - margin; x += step) {
                 int cellMaxY = y;
                 int cellMaxX = x;
@@ -322,7 +322,7 @@ public final class FrameCalibrationInspector {
                 }
 
                 float peak = cellMaxVal - stats.median;
-                if (peak > minPeak && cellMaxVal < 60000) {
+                if (peak > minPeak && (!grid.unsigned16() || cellMaxVal < 60000)) {
                     boolean isLocalMax = true;
                     for (int dy = -1; dy <= 1; dy++) {
                         for (int dx = -1; dx <= 1; dx++) {
@@ -340,7 +340,16 @@ public final class FrameCalibrationInspector {
                                 + (grid.get(cellMaxX - 1, cellMaxY) - stats.median)
                                 + (grid.get(cellMaxX + 1, cellMaxY) - stats.median);
                         if (ortho / peak >= 0.4f) {
-                            candidates.add(new ReferenceStar(cellMaxX, cellMaxY, peak));
+                            double weight = 0, weightedX = 0, weightedY = 0;
+                            for (int dy = -1; dy <= 1; dy++) {
+                                for (int dx = -1; dx <= 1; dx++) {
+                                    double value = Math.max(0, grid.get(cellMaxX + dx, cellMaxY + dy) - stats.median);
+                                    weight += value;
+                                    weightedX += value * (cellMaxX + dx);
+                                    weightedY += value * (cellMaxY + dy);
+                                }
+                            }
+                            candidates.add(new ReferenceStar(weightedX / weight, weightedY / weight, peak));
                         }
                     }
                 }
@@ -360,7 +369,7 @@ public final class FrameCalibrationInspector {
             }
             if (!tooClose) {
                 chosen.add(star);
-                if (chosen.size() >= 8) {
+                if (chosen.size() >= 32) {
                     break;
                 }
             }
@@ -368,71 +377,73 @@ public final class FrameCalibrationInspector {
         return chosen;
     }
 
-    private static double measureStarShift(PixelGrid grid, List<ReferenceStar> stars0, FrameStats stats) {
-        if (stars0 == null || stars0.isEmpty()) return 0.0;
-        int h = grid.height();
-        int w = grid.width();
-        int radius = Math.min(8, Math.max(3, Math.min(w, h) / 10));
-        List<Double> shifts = new ArrayList<>();
-
-        for (ReferenceStar star : stars0) {
-            int sx = star.x;
-            int sy = star.y;
-            if (sy - radius < 1 || sy + radius + 2 >= h || sx - radius < 1 || sx + radius + 2 >= w) {
-                continue;
-            }
-
-            int bestX = sx;
-            int bestY = sy;
-            float bestVal = -Float.MAX_VALUE;
-
-            for (int cy = sy - radius; cy <= sy + radius; cy++) {
-                for (int cx = sx - radius; cx <= sx + radius; cx++) {
-                    float v = grid.get(cx, cy);
-                    if (v > bestVal) {
-                        bestVal = v;
-                        bestX = cx;
-                        bestY = cy;
+    /** Finds a displacement supported by at least three stars and half of the smaller reference set. */
+    private static double measureStarShift(List<ReferenceStar> reference, List<ReferenceStar> current) {
+        int required = Math.max(3, (Math.min(reference.size(), current.size()) + 1) / 2);
+        int bestCount = 0;
+        double bestShift = 0;
+        for (ReferenceStar origin : reference) {
+            CancellationScope.check();
+            for (ReferenceStar destination : current) {
+                double dx = destination.x - origin.x;
+                double dy = destination.y - origin.y;
+                List<Double> offsetsX = new ArrayList<>();
+                List<Double> offsetsY = new ArrayList<>();
+                for (ReferenceStar first : reference) {
+                    ReferenceStar nearest = null;
+                    double distance = 2.0 * 2.0;
+                    for (ReferenceStar second : current) {
+                        double errorX = second.x - first.x - dx;
+                        double errorY = second.y - first.y - dy;
+                        double error = errorX * errorX + errorY * errorY;
+                        if (error < distance) {
+                            nearest = second;
+                            distance = error;
+                        }
+                    }
+                    if (nearest != null) {
+                        offsetsX.add(nearest.x - first.x);
+                        offsetsY.add(nearest.y - first.y);
                     }
                 }
-            }
-
-            float peak = bestVal - stats.median;
-            boolean isLocalMax = true;
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dx = -1; dx <= 1; dx++) {
-                    if (dx == 0 && dy == 0) continue;
-                    if (grid.get(bestX + dx, bestY + dy) > bestVal) {
-                        isLocalMax = false;
-                        break;
-                    }
+                int matches = offsetsX.size();
+                if (matches < required || matches < bestCount) continue;
+                double shift = Math.hypot(median(offsetsX), median(offsetsY));
+                if (matches > bestCount || shift < bestShift) {
+                    bestCount = matches;
+                    bestShift = shift;
                 }
-                if (!isLocalMax) break;
-            }
-
-            if (isLocalMax && peak >= 0.3f * star.peak) {
-                int dx = bestX - sx;
-                int dy = bestY - sy;
-                shifts.add(Math.sqrt(dx * dx + dy * dy));
-            } else {
-                shifts.add((double) radius);
             }
         }
-
-        if (shifts.isEmpty()) return 0.0;
-        shifts.sort(Double::compare);
-        int n = shifts.size();
-        return n % 2 == 1 ? shifts.get(n / 2) : 0.5 * (shifts.get(n / 2 - 1) + shifts.get(n / 2));
+        // Missing stars provide insufficient alignment evidence; they are not a measured eight-pixel shift.
+        return bestCount >= required ? bestShift : 0;
     }
 
+    /** Returns the median of a nonempty offset list in physical pixels. */
+    private static double median(List<Double> values) {
+        values.sort(Double::compare);
+        int n = values.size();
+        return n % 2 == 1 ? values.get(n / 2) : 0.5 * (values.get(n / 2 - 1) + values.get(n / 2));
+    }
+
+    /** Read-only access to one image plane, with explicit unsigned-integer histogram eligibility. */
     private interface PixelGrid {
+        /** Width in pixels. */
         int width();
+        /** Height in pixels. */
         int height();
+        /** Physical pixel value after FITS scaling. */
         float get(int x, int y);
+        /** Whether every value has the unsigned 16-bit integer storage contract. */
+        default boolean unsigned16() { return false; }
     }
 
+    /** Adapts a numeric FITS plane (or first colour plane), retaining its physical scale and no copied buffers. */
     private static PixelGrid wrapGrid(Object kernel, nom.tam.fits.Header header) {
         if (kernel == null) return null;
+        if (kernel instanceof Object[] planes && planes.length > 0 && planes[0] instanceof Object[]) {
+            return wrapGrid(planes[0], header);
+        }
         double bzero = header == null ? 0.0 : header.getDoubleValue("BZERO", 0.0);
         double bscale = header == null ? 1.0 : header.getDoubleValue("BSCALE", 1.0);
 
@@ -443,6 +454,7 @@ public final class FrameCalibrationInspector {
                 @Override public int width() { return w; }
                 @Override public int height() { return h; }
                 @Override public float get(int x, int y) { return (float) (sData[y][x] * bscale + bzero); }
+                @Override public boolean unsigned16() { return bscale == 1.0 && bzero == 32768.0; }
             };
         }
         if (kernel instanceof float[][] fData) {
@@ -470,16 +482,6 @@ public final class FrameCalibrationInspector {
                 @Override public int width() { return w; }
                 @Override public int height() { return h; }
                 @Override public float get(int x, int y) { return (float) (dData[y][x] * bscale + bzero); }
-            };
-        }
-        if (kernel instanceof short[][][] colorData) {
-            short[][] sData = colorData[0];
-            int h = sData.length;
-            int w = sData[0].length;
-            return new PixelGrid() {
-                @Override public int width() { return w; }
-                @Override public int height() { return h; }
-                @Override public float get(int x, int y) { return (float) (sData[y][x] * bscale + bzero); }
             };
         }
         return null;

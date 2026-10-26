@@ -36,6 +36,7 @@ public final class SpacePixelsPipelineResult {
     private final File reportFile;
     private final String calibrationWarning;
 
+    /** Captures a result with independent metadata/configuration containers and optional sampled quality evidence. */
     public SpacePixelsPipelineResult(File originalInputDirectory,
                                      File preparedInputDirectory,
                                      boolean inputWasPrepared,
@@ -48,21 +49,12 @@ public final class SpacePixelsPipelineResult {
                                      PipelineResult pipelineResult,
                                      File exportDirectory,
                                      File reportFile) {
-        this.originalInputDirectory = originalInputDirectory;
-        this.preparedInputDirectory = preparedInputDirectory;
-        this.inputWasPrepared = inputWasPrepared;
-        this.filesInformation = filesInformation == null ? new FitsFileInformation[0] : filesInformation.clone();
-        this.baseConfig = baseConfig == null ? null : baseConfig.clone();
-        this.effectiveConfig = effectiveConfig == null ? null : effectiveConfig.clone();
-        this.autoTuneApplied = autoTuneApplied;
-        this.autoTuneProfileUsed = autoTuneProfileUsed;
-        this.autoTuneTelemetryReport = autoTuneTelemetryReport;
-        this.pipelineResult = pipelineResult;
-        this.exportDirectory = exportDirectory;
-        this.reportFile = reportFile;
-        this.calibrationWarning = null;
+        this(originalInputDirectory, preparedInputDirectory, inputWasPrepared, filesInformation,
+                baseConfig, effectiveConfig, autoTuneApplied, autoTuneProfileUsed, autoTuneTelemetryReport,
+                pipelineResult, exportDirectory, reportFile, null);
     }
 
+    /** Captures a result with independent metadata/configuration containers and optional sampled quality evidence. */
     public SpacePixelsPipelineResult(File originalInputDirectory,
                                      File preparedInputDirectory,
                                      boolean inputWasPrepared,
@@ -193,21 +185,17 @@ public final class SpacePixelsPipelineResult {
         return exportDirectory;
     }
 
-    /**
-     * Returns the generated HTML report file.
-     *
-     * <p>This file lives under {@link #getExportDirectory()} when report generation is enabled.
-     *
-     * @return HTML report file, or {@code null} when report generation was disabled
-     */
+    /** Sampled calibration/alignment warning recorded under the default warning-only API policy, or null. */
     public String getCalibrationWarning() {
         return calibrationWarning;
     }
 
+    /** Whether the input samples produced a calibration or alignment warning. */
     public boolean hasCalibrationWarning() {
         return calibrationWarning != null;
     }
 
+    /** Returns the generated HTML report, or null when reporting was disabled. */
     public File getReportFile() {
         return reportFile;
     }

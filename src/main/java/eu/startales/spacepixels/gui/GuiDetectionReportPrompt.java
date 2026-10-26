@@ -26,16 +26,28 @@ import static eu.startales.spacepixels.detection.DetectionSummary.offerInReport;
 public final class GuiDetectionReportPrompt {
     private static final Logger LOGGER = Logger.getLogger(GuiDetectionReportPrompt.class.getName());
     private final ToIntFunction<JComponent> confirmation;
+    private final ToIntFunction<JComponent> preFlightConfirmation;
 
     /** Attaches modal report questions to the initiating window. */
     public GuiDetectionReportPrompt(Component parent) {
         this(panel -> JOptionPane.showConfirmDialog(parent, panel, "Detection summary",
-                JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE));
+                JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE),
+                panel -> {
+                    String[] options = {"Cancel Detection (Recommended)", "Proceed Anyway"};
+                    return JOptionPane.showOptionDialog(parent, panel, "Pre-Detection Quality Warning",
+                            JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[0]);
+                });
     }
 
     /** Supplies the modal answer separately so EDT dispatch and choices can be tested without a window. */
     GuiDetectionReportPrompt(ToIntFunction<JComponent> confirmation) {
+        this(confirmation, panel -> 0);
+    }
+
+    /** Supplies report and quality answers separately; quality option zero or dismissal declines the run. */
+    GuiDetectionReportPrompt(ToIntFunction<JComponent> confirmation, ToIntFunction<JComponent> preFlightConfirmation) {
         this.confirmation = java.util.Objects.requireNonNull(confirmation);
+        this.preFlightConfirmation = java.util.Objects.requireNonNull(preFlightConfirmation);
     }
 
     /**
@@ -74,11 +86,9 @@ public final class GuiDetectionReportPrompt {
         if (Thread.currentThread().isInterrupted()) return false;
         if (inspection == null || !inspection.hasWarning()) return true;
         FutureTask<Boolean> question = new FutureTask<>(() -> {
-            String[] options = {"Cancel Detection (Recommended)", "Proceed Anyway"};
-            int choice = JOptionPane.showOptionDialog(null, inspection.warningDialogText(),
-                    "Pre-Detection Quality Warning", JOptionPane.DEFAULT_OPTION,
-                    JOptionPane.WARNING_MESSAGE, null, options, options[0]);
-            return choice == 1;
+            JPanel panel = new JPanel(new java.awt.BorderLayout());
+            panel.add(new JLabel(inspection.warningDialogText()));
+            return preFlightConfirmation.applyAsInt(panel) == 1;
         });
         if (SwingUtilities.isEventDispatchThread()) question.run(); else SwingUtilities.invokeLater(question);
         try {
