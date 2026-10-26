@@ -5,7 +5,7 @@
 - Task: F13
 - Implementer: B
 - Reviewer: C
-- Base: ac2dbb2395636f056fea4866527f402c0ba54c6e
+- Base: d06601adc608d281f6b81b71e7176c1927d3aa50
 - Implementation: -
 - Fix rounds: 0/2
 - Tests: F14 approved. B reran PhotometryCutoutTest 3 and PhotometryReportSectionWriterTest 5: PASS at 2026-10-26 11:05. The dc-reg card check did not run; that dataset has no variable-star cards.
