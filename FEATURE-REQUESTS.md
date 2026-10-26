@@ -10,7 +10,6 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F06](#f06-windows-installer) | Windows installer with a bundled Java runtime | Agreed. Decision points listed. |
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Agreed. The matching policy is to be proposed. |
 | [F12](#f12-newer-flatlaf-features) | Newer FlatLaf features | Proposed; FlatLaf 3.7.2 is in use |
-| [F15](#f15-clean-moving-object-animations-to-download-narrow-or-wide) | Clean moving-object animations to download, narrow or wide | Decided. Moving objects only; written with the report. |
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
 | [F02](#f02-session-summary-and-multiple-night-warning) | Session summary and multiple-night warning | Deferred |
 | [F05](#f05-small-star-visibility-in-stretch-previews) | Small-star visibility in stretch previews | Deferred |
@@ -111,34 +110,6 @@ SpacePixels uses FlatLaf 3.7.2 (`FlatDarkLaf`) since the completed [SP-18 upgrad
 - **Selection on focus** (3.6): FlatLaf selects a spinner's whole value when it gains the focus, by Tab or by a click. The maintainer kept the earlier behaviour, where the caret stays where the user puts it: `UiStyle.spinner` sets the select-all policy to never. Selecting the value on focus remains an option.
 - **Progress bars** (3.5): FlatLaf would log a warning when an indeterminate progress bar changes off the Swing thread. The GUI mechanics suite, which runs imports and detections, logs none.
 - **Rendering on Windows** (3.5.2): FlatLaf turns off Direct3D on-screen rendering, against ghosting on some graphics drivers. A full redraw of a viewer showing a 61-MPix frame in a 1600 × 1000 window takes about 4.8 ms instead of 4.3 ms, which is not noticeable.
-
-## F15. Clean moving-object animations to download, narrow or wide
-
-**Request (2026-10-25):** "Add a function on the report, for moving object detections, to be able to download a star centric animated gif of the area without the overlay (i.e. without the frame information and the circle), and to have the choice to download a narrow animated gif (smaller dimentions) or a mode wide one (larget dimensions) including more sky."
-
-**What the report does today.** Each moving-object card has two animations (`TargetVisualizationSectionWriter`):
-- **Object-centric:** the crop follows the object (`trackObjectCentricCropSize`, 200 px by default), with no overlay.
-- **Star-centric:** one crop, fixed on the sky, around the whole track (the track's extent plus `trackCropPadding`). It draws a white circle on the detection and a "Frame N · time" label in the corner.
-
-Both use the run's display stretch and GIF speed. There is no clean copy of the star-centric animation, and no wider view.
-
-**Proposal.** Write two more GIFs for each moving-object card. They have the same frames, stretch and speed as the star-centric animation, without the circle and the label:
-- **Narrow:** the star-centric crop.
-- **Wide:** the same centre, with more sky around it.
-
-The card gets a "Download animation" control with **Narrow** and **Wide** links. A link with the `download` attribute saves the file. Check that this works in a report opened from disk; otherwise the link opens the GIF, and the user saves it from there. Cards past the report's limit of animated detections have no animations, so they get no download either.
-
-**Decision (made):** "1. moving objects only. 2. agreed. 3.write them with the report, we do not have so many moving object tracks."
-
-1. **Which findings.** Moving objects only.
-2. **How wide.** Twice the narrow crop's width and height, at least 400 × 400 px and at most 1000 × 1000 px, kept inside the frame.
-3. **When they are written.** With the report. Measure the growth on klangwolke-2.
-
-**Acceptance.**
-- Each eligible card offers both downloads, and the files show no circle and no label.
-- The narrow file's frames equal the star-centric animation's frames apart from the circle and the label.
-- The wide file has the same centre and more sky.
-- The findings and `report-data.json` are unchanged, and the report's growth in size is measured.
 
 ## F01. Slow-mover and per-frame tuning relation
 

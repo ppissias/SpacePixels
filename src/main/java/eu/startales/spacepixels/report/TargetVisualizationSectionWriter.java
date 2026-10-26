@@ -232,6 +232,12 @@ final class TargetVisualizationSectionWriter {
 
             String objectFileName = "moving_track_" + counter + "_object_centric.gif";
             String starFileName = "moving_track_" + counter + "_star_centric.gif";
+            String cleanNarrowFileName = "moving_track_" + counter + "_clean_narrow.gif";
+            String cleanWideFileName = "moving_track_" + counter + "_clean_wide.gif";
+
+            int[] frameDims = extractFrameDimensions(context);
+            int[] wideDimensions = computeWideDimensions(cropBounds.trackBoxWidth, cropBounds.trackBoxHeight, frameDims[0], frameDims[1]);
+
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createCroppedDisplayImage(
                     context.rawFrames.get(point.sourceFrameIndex), (int) Math.round(point.x), (int) Math.round(point.y),
                     context.settings.getTrackObjectCentricCropSize(), context.settings.getTrackObjectCentricCropSize(), context.settings)).iterator(),
@@ -240,6 +246,14 @@ final class TargetVisualizationSectionWriter {
                     context.rawFrames.get(point.sourceFrameIndex), cropBounds, point, context.settings, Color.WHITE, null,
                     TrackVisualizationRenderer.frameLabel(context, point.sourceFrameIndex), false)).iterator(),
                     new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
+            GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createCroppedDisplayImage(
+                    context.rawFrames.get(point.sourceFrameIndex), cropBounds.fixedCenterX, cropBounds.fixedCenterY,
+                    cropBounds.trackBoxWidth, cropBounds.trackBoxHeight, context.settings)).iterator(),
+                    new File(context.exportDir, cleanNarrowFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
+            GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createCroppedDisplayImage(
+                    context.rawFrames.get(point.sourceFrameIndex), cropBounds.fixedCenterX, cropBounds.fixedCenterY,
+                    wideDimensions[0], wideDimensions[1], context.settings)).iterator(),
+                    new File(context.exportDir, cleanWideFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
 
             double[] meanCenter = computeTrackMeanPixelCenter(track);
             SkyOrientationOverlay movingObjectOverlay = meanCenter != null
@@ -281,6 +295,12 @@ final class TargetVisualizationSectionWriter {
                     "Track Shape Map",
                     null,
                     movingTrackFrameOverlay));
+            report.println("</div>");
+
+            report.println("<div class='download-controls' style='margin-top: 8px; margin-bottom: 16px;'>");
+            report.println("<strong style='color: #ccc;'>Download animation:</strong> <a class='id-link' href='"
+                    + cleanNarrowFileName + "' download='" + cleanNarrowFileName + "' target='_blank'>Narrow</a> <a class='id-link' href='"
+                    + cleanWideFileName + "' download='" + cleanWideFileName + "' target='_blank'>Wide</a>");
             report.println("</div>");
 
             report.println("<div style='margin-bottom: 20px;'>");
@@ -797,6 +817,42 @@ final class TargetVisualizationSectionWriter {
 
     private static String formatDecimal(double value, int decimals) {
         return String.format(Locale.US, "%." + decimals + "f", value);
+    }
+
+    /**
+     * Computes the wide animation dimensions for moving objects: twice the narrow crop dimensions,
+     * bounded to at least 400x400 and at most 1000x1000, and kept within frame bounds when known.
+     */
+    static int[] computeWideDimensions(int narrowWidth, int narrowHeight, int frameWidth, int frameHeight) {
+        int targetWidth = narrowWidth * 2;
+        int targetHeight = narrowHeight * 2;
+        int wideWidth = Math.min(1000, Math.max(400, targetWidth));
+        int wideHeight = Math.min(1000, Math.max(400, targetHeight));
+        if (frameWidth > 0) {
+            wideWidth = Math.min(wideWidth, frameWidth);
+        }
+        if (frameHeight > 0) {
+            wideHeight = Math.min(wideHeight, frameHeight);
+        }
+        return new int[]{wideWidth, wideHeight};
+    }
+
+    private static int[] extractFrameDimensions(DetectionReportContext context) {
+        if (context.rawFrames != null) {
+            for (short[][] frame : context.rawFrames) {
+                if (frame != null && frame.length > 0 && frame[0] != null && frame[0].length > 0) {
+                    return new int[]{frame[0].length, frame.length};
+                }
+            }
+        }
+        if (context.fitsFiles != null) {
+            for (FitsFileInformation fits : context.fitsFiles) {
+                if (fits != null && fits.getSizeWidth() > 0 && fits.getSizeHeight() > 0) {
+                    return new int[]{fits.getSizeWidth(), fits.getSizeHeight()};
+                }
+            }
+        }
+        return new int[]{0, 0};
     }
 
     private static final class SkyOrientationOverlay {

@@ -239,6 +239,7 @@ Each object has a card with its times, speed and direction, and:
 - **Object Centric**: an animation that follows the object (the stars move);
 - **Star Centric**: an animation of the field (the object moves), with the object circled;
 - **Track Shape Map**: the positions of each frame;
+- **Download animation**: clean star-centric animated GIFs without overlays (no highlight circle or frame label) available in **Narrow** (the star-centric crop) and **Wide** (twice the narrow crop size, bounded between 400 × 400 and 1000 × 1000 px and kept within the frame);
 - **Pixel Evolution**: the object in every frame, so you can check that it is the same object each time;
 - the sky position and the identification buttons (see [Identifying objects](#5-identifying-objects)).
 
