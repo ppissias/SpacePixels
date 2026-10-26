@@ -23,20 +23,14 @@ Other `eu.startales.spacepixels.*` packages should be treated as internal implem
 - `io.github.ppissias.jtransient.engine.PipelineResult`
 - `eu.startales.spacepixels.fits.FitsFileInformation`
 
-### Frame metadata migration (SP-11A, SP-14)
+### Frame metadata (`FitsFileInformation`)
 
-Under SP-14 and maintainer decision D-03, the public frame descriptor type moved from `eu.startales.spacepixels.util.FitsFileInformation` to `eu.startales.spacepixels.fits.FitsFileInformation`. This is an intentional source and binary API break: external callers must update their `import` statements and recompile against the new package. Legacy compatibility shims or redirects in `eu.startales.spacepixels.util` have intentionally not been retained.
+`eu.startales.spacepixels.fits.FitsFileInformation` represents immutable metadata for an imported frame:
 
-In addition, `eu.startales.spacepixels.fits.FitsFileInformation` is `final` and deeply immutable (SP-11A):
-
-- **Package migration:** Change `import eu.startales.spacepixels.util.FitsFileInformation;` to `import eu.startales.spacepixels.fits.FitsFileInformation;` and recompile. Methods on `SpacePixelsPipelineResult` (`getFilesInformation()`, etc.) and internal services return or accept the new package type.
-
-- **Mutators and snapshots removed:** `setFilePath(...)`, `setFileName(...)`, `setMonochrome(...)`, `setSizeWidth(...)`, `setSizeHeight(...)` and `snapshot()` have been removed. This is an intentional source and binary API break: update callers and recompile. `getFitsHeader()` returns an unmodifiable map; build a new map and replace the descriptor instead of calling `put`, `putAll` or `clear` on it.
+- **Immutability:** `FitsFileInformation` is `final` and deeply immutable. `getFitsHeader()` returns an unmodifiable map.
 - **Construction:** Use `new FitsFileInformation(filePath, fileName, monochrome, sizeWidth, sizeHeight, fitsHeader)` to construct frame descriptors. The constructor freezes the header map into an unmodifiable map (preserving null commentary card values) and normalises ISO-8601 observation timestamps at construction time.
 - **Copy with updated header:** Use `fileInfo.withFitsHeader(updatedHeaderMap)` to produce an updated descriptor (for example when applying a newly computed WCS solution) without mutating existing descriptors.
 - **Container protection:** Array getters in results (`result.getFilesInformation()`) clone the array container to protect ordering, while individual descriptors remain shared and immutable.
-
-The internal import service, `fits.FitsImportService`, creates no Swing adapters (S13). Each one reads one folder for one import attempt and is closed by its caller to stop its metadata pool. `readFiles()` returns fresh caller-owned metadata and keeps no frame cache; headless callers read once and retain that array. The API creates no plate solver. Without interaction, readiness is checked before sequence consistency; desktop code supplies `FitsImportInteraction` explicitly and checks sequence consistency before offering conversion. This does not change the supported pipeline request/result surface, preparation policy or API report behavior; API execution continues without report-size questions.
 
 ## Dependency
 
@@ -50,9 +44,9 @@ implementation 'eu.startales.spacepixels:spacepixels:<version>'
 
 JTransient is an `api` dependency because its configuration and result types appear in the supported API. FITS, Gson and JPlateSolve remain `implementation` dependencies: consumers still receive them transitively at runtime, but they are not exposed on the compile classpath. The internal `platesolve.PlateSolveService` exposes solver types, but it is not a supported embedding contract; consumers using it must declare their own compile dependency. Promoting JPlateSolve to `api` would be appropriate only if solver types enter the supported public API.
 
-Original coordinate formats and supported `eu.startales.spacepixels.api` package interfaces are preserved; there is no separate `spacepixels-core` module or publication. As authorized under D-03, core implementation classes moved from `util` and `util.reporting` into dedicated domain packages (`fits`, `detection`, `platesolve`, `skycatalog`, `report`, `report.lookup`), and the public metadata class moved from `eu.startales.spacepixels.util.FitsFileInformation` to `eu.startales.spacepixels.fits.FitsFileInformation`, requiring external callers to update imports and recompile. The desktop application is still built by `run`/`installDist`, using an unpublished desktop companion JAR and GUI-only dependencies. A Maven API JAR is not a standalone desktop application or a shaded dependency bundle. Headless AWT image/report rendering still requires the JDK's `java.desktop` module; run servers with `-Djava.awt.headless=true` rather than removing that module. Java 21 is the compilation baseline.
+The desktop application is built separately by `run`/`installDist`, using an unpublished desktop companion JAR and GUI-only dependencies. A Maven API JAR is not a standalone desktop application or a shaded dependency bundle. Headless AWT image/report rendering still requires the JDK's `java.desktop` module; run servers with `-Djava.awt.headless=true` rather than removing that module. Java 21 is the compilation baseline.
 
-F11 prepares this artifact and a local Central bundle; it does not assert that this source version or its JA-01-capable JTransient dependency has been released to Central. Before distribution, verify the actual published dependency pair under JA-11. `gradlew.bat apiConsumerTest` (also run by `mavenCentralBundle`) validates a separately resolved headless consumer against a local staging repository, without project/composite substitution; when using local siblings it stages their real binaries/generated POMs as test inputs, not a public-release certification. See [PUBLISHING.md](PUBLISHING.md).
+`gradlew.bat apiConsumerTest` validates a separately resolved headless consumer against a local staging repository. See [PUBLISHING.md](PUBLISHING.md) for publishing and verification details.
 
 ## What the API does
 
@@ -74,17 +68,17 @@ That means:
 
 Library consumers should use `getExportDirectory()` and `getReportFile()` rather than guessing the output path.
 
-The report directory also contains `report-data.json` (schema version 1): generation time, application/engine versions, included groups, rejected frame numbers and findings. A finding has a report-local `id`, `category`, HTML `anchor`, pixel position, optional sky position, observed `frames`, and optional variable-star `starId`/`tier`. Frame numbers in this file are one-based. Empty frame lists on maximum-stack candidates mean per-frame evidence is unavailable; they do not mean zero support. IDs are not persistent identities across reports or iterations. Input paths and observing-site coordinates are not included in this JSON. Existing photometry CSV columns are retained; report labels and identification columns are appended.
+The report directory also contains `report-data.json` (schema version 1): generation time, application/engine versions, included groups, rejected frame numbers and findings. A finding has a report-local `id`, `category`, HTML `anchor`, pixel position, optional sky position, observed `frames`, and optional variable-star `starId`/`tier`. Frame numbers in this file are one-based. Empty frame lists on maximum-stack candidates mean per-frame evidence is unavailable; they do not mean zero support. IDs are not persistent identities across reports or iterations. Input paths and observing-site coordinates are not included in this JSON. Photometry CSV exports include detection report labels and identification columns.
 
-Report cards, maps, CSV labels and viewer overlays share category-owned identity rules. Track grouping retains engine order for multi-frame tracks and the existing frame/file/position order for single-frame streaks. Variable IDs follow exported candidate order, not presentation sorting or card limits; candidates without a card link to the variable table. This consolidation does not change the JSON schema or export filenames.
+Report cards, maps, CSV labels and viewer overlays share category-owned identity rules. Track grouping retains engine order for multi-frame tracks and frame/file/position order for single-frame streaks. Variable IDs follow exported candidate order, not presentation sorting or card limits; candidates without a card link to the variable table.
 
 ## Run options and isolation
 
-`SpacePixelsPipelineRequest.Builder.runOptions(DetectionRunOptions)` supplies the observing-site fallback, the immutable `VisualizationSettings` and the Auto-Tune candidate-frame limit. The existing `autoTuneMaxCandidateFrames` and `variableStarReportOptions` setters override those values when called afterwards.
+`SpacePixelsPipelineRequest.Builder.runOptions(DetectionRunOptions)` supplies the observing-site fallback, the immutable `VisualizationSettings` and the Auto-Tune candidate-frame limit. The `autoTuneMaxCandidateFrames` and `variableStarReportOptions` setters override those values when called afterwards.
 
 `VisualizationSettings` (package `eu.startales.spacepixels.config`) holds every choice about how report pictures are drawn: the display stretch, the GIF speed, crop sizes and target circles, the detection marker sizes, the most animated detections, and the variable-star presentation. None of them changes a detection result. Start from `VisualizationSettings.defaults()` and replace values with its `with…` methods, for example `VisualizationSettings.defaults().withAutoStretchWhiteSigma(4.0).withGifBlinkSpeedMs(200)`, then pass the value to `DetectionRunOptions.withVisualization(..)`. `DetectionRunOptions.capture(AppConfig, int)` takes only the observing site from the `AppConfig` and uses the built-in visualization settings. Site latitude/longitude strings keep the application's decimal-degree/cardinal syntax; FITS site cards still take priority. Invalid or absent configured coordinates retain the existing no-site behavior.
 
-API requests use built-in rendering defaults and no configured observing site unless supplied explicitly. They do not load user-home preferences or modify desktop rendering/tuning defaults. The batch CLI reads the saved visualization preferences once at startup and passes them in its run options. This replaces the API's former implicit preference lookup; callers needing a particular site or presentation should supply run options.
+API requests use built-in rendering defaults and no configured observing site unless supplied explicitly. They do not load user-home preferences or modify desktop rendering/tuning defaults. The batch CLI reads the saved visualization preferences once at startup and passes them in its run options. Callers needing a particular site or presentation should supply run options.
 
 After input preparation, each ordinary run captures FITS metadata, the active plate correction and the matching saved catalogue before pixel loading/detection. The execution data carries this context into report export and viewer overlays. Later settings edits or catalogue/correction-file replacements affect subsequent runs. Iterative passes share admitted application options and each resolve their own input context before detection. This capture owns metadata/catalogue data, not duplicate image buffers, and does not implement saved-run restoration or diagnostic re-export.
 
@@ -256,7 +250,7 @@ Typical usage patterns:
 - inspect `getPreparedInputDirectory()` when `AUTO_PREPARE_TO_16BIT_MONO` is enabled
 - inspect `getReportFile()` when `generateReport(true)` is enabled
 
-JTransient's raw `PipelineResult` exposes slow-mover candidates as maximum-stack morphology footprints, not confirmed tracks. `slowMoverAnalysis.maximumStackData` is the shared maximum stack, and `slowMoverAnalysis.medianMask` is the exact mask of independently extracted median-stack source pixels. Candidate overlap is the fraction of candidate raw pixels inside that mask. The compatibility fields `slowMoverStackData`, `slowMoverMedianVetoMask`, and `SlowMoverAnalysis.medianVetoMask` refer to those same products despite their older names.
+JTransient's raw `PipelineResult` exposes slow-mover candidates as maximum-stack morphology footprints, not confirmed tracks. `slowMoverAnalysis.maximumStackData` is the shared maximum stack, and `slowMoverAnalysis.medianMask` is the exact mask of independently extracted median-stack source pixels. Candidate overlap is the fraction of candidate raw pixels inside that mask.
 
 Each slow-mover candidate's diagnostics include `frameSupportPercentage` (usable frames with localized signal inside its footprint) and `stationaryLikelihoodPercentage` (supported positions clustered near one location), plus supported/usable frame counts and availability flags. Check `frameSupportAvailable` and `stationaryLikelihoodAvailable` before displaying a percentage: a numeric frame-support value can exist even when too few frames make it unavailable. Stationary likelihood is a heuristic, not a calibrated probability or motion confirmation. `DetectionConfig.slowMoverMinFrameSupport` defaults to `40.0` and `slowMoverMaxStationaryLikelihood` to `60.0`: a candidate is rejected when its frame support is below 40 % or its stationary likelihood is above 60 %. Each gate applies only when its value is available, and `0.0` and `100.0` turn the gates off; `PipelineTelemetry.SlowMoverTelemetry` also exposes effective thresholds, rejection counts, and accepted-candidate score lists.
 
@@ -270,9 +264,9 @@ Common-motion filtering precedes optional local rescue and activity clustering a
 
 `SpacePixelsPipelineApi.run(...)` throws `SpacePixelsPipelineException` when input preparation, validation, Auto-Tune, pipeline execution, or report generation fails.
 
-Request construction snapshots an explicitly supplied `DetectionConfig` with JTransient's `DetectionConfigRules.Operation.CONFIGURATION`. Non-finite numbers, including hidden/disabled settings, throw `DetectionConfigRules.InvalidConfigurationException` from `build()`, before `run`; its `issues()` contain rule, stage and field identifiers. Profile loading uses the same validation and wraps this exception as an `IOException` cause. Finite legacy profiles and sentinels are not silently aligned or newly rejected.
+Request construction snapshots an explicitly supplied `DetectionConfig` with JTransient's `DetectionConfigRules.Operation.CONFIGURATION`. Non-finite numbers, including hidden/disabled settings, throw `DetectionConfigRules.InvalidConfigurationException` from `build()`, before `run`; its `issues()` contain rule, stage and field identifiers. Profile loading uses the same validation and wraps this exception as an `IOException` cause. Profiles and sentinels are not silently aligned or rejected.
 
-Call `DetectionConfigRules.validate(config, operation[, timing])` for advisory issues, or explicitly request `align` and inspect its adjustments before building a request. Engine execution validates only the captured operation's read set; GUI spinner ranges are not extra API restrictions. SpacePixels uses detached `tune` results, including unsuccessful tuning fallbacks. Configuration warnings are available from the shared validator, not a new pipeline-result warnings property. See JTransient's [configuration contract](../JTransient/PIPELINE.md#configuration-snapshots-and-shared-rules).
+Call `DetectionConfigRules.validate(config, operation[, timing])` for advisory issues, or explicitly request `align` and inspect its adjustments before building a request. Engine execution validates only the captured operation's read set; GUI spinner ranges are not extra API restrictions. SpacePixels uses detached `tune` results, including unsuccessful tuning fallbacks. Configuration warnings are available from the shared validator. See JTransient's [configuration contract](../JTransient/PIPELINE.md#configuration-snapshots-and-shared-rules).
 
 Example: 
 
@@ -294,7 +288,7 @@ try {
 - `AUTO_PREPARE_TO_16BIT_MONO` is more forgiving and is best when input format may vary.
 - The API returns a defensive copy for exposed configs and FITS metadata arrays.
 - The API is quiet by default; problems are thrown or logged as `java.util.logging` warnings. Engine/tuner diagnostics capture `spacepixels.debug` per run through a scoped sink; an explicit caller `DiagnosticContext` policy takes precedence. No shared engine/tuner debug flags or mutable tuning defaults are changed.
-- The public artifact currently contains GUI code as well, but GUI classes are not part of the supported API contract.
+- The public API artifact is headless and contains no GUI classes.
 - Auto-Tune uses independent per-operation options. Use the engine/solver versions selected for this SpacePixels release; arbitrary older replacement JARs are not supported.
 
 
@@ -309,7 +303,7 @@ try {
 
 The default is 40 detailed cards and `OBSERVED_CHANGES`. Other orders are `LARGEST_VARIATION` and `SIGNIFICANCE`; high confidence always comes before possible. The valid card range is 1–1,000. Known periods come from the saved session catalogue; this does not enable period estimation. IDs and measured CSV values are independent of presentation order, and every candidate remains in the table/maps/CSV exports.
 
-The batch CLI reads `variableStarMaxCandidateCards` and `variableStarSortOrder` from the flat SpacePixels detection profile. Older profiles use the defaults. These are application fields, not JTransient detection settings. For example:
+The batch CLI reads `variableStarMaxCandidateCards` and `variableStarSortOrder` from the flat SpacePixels detection profile. Profiles that omit these fields use the defaults. These are application fields, not JTransient detection settings. For example:
 
 ```json
 {
