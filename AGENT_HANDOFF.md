@@ -1,12 +1,13 @@
 # Agent Handoff
 
-- Owner: B
+- Owner: A
 - Phase: IMPLEMENT
-- Task: F10
-- Implementer: B
-- Reviewer: C
-- Base: 755580dea91f08d2eb3e9da025bc6068ec241001
+- Task: F16 correctness verification and necessary corrections
+- Implementer: A
+- Reviewer: B (if correction code is required)
+- Base: 755580dea91f08d2eb3e9da025bc6068ec241001 (F16); previous implementation base 87b33b8a6b7305e91ad0a166baee1140faa40cba
 - Implementation: -
-- Tests: check 525 (4 skipped), consumer 9 PASS on baseline.
-- Status: Setup complete. Agent B has started implementing F10 (live view pictures of the running phase, 3 s clock, JTransient API-1). Special maintainer rule: Agent A must not receive work until 00:50; rotation is strictly B <-> C until 00:50.
-- Next action: Agent B implements F10 in JTransient and SpacePixels, verifies tests, and commits code.
+- Fix rounds: 0/2
+- Tests: Previous implementer recorded check 525 (4 skipped), consumer 9 PASS. A has not yet rerun these checks.
+- Status: The maintainer explicitly replaced the stale overnight handoff and assigned A to check F16 before continuing F10/F11/F13/F14/F15. Shared working trees were clean at restart.
+- Next action: Verify F16 warning handling and calibration/alignment heuristics on synthetic and reference data; correct material defects, then resume standard A -> B -> C collaboration. Other agents stay read-only until a committed transfer.
