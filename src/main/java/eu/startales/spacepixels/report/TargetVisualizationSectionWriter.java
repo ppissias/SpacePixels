@@ -1,4 +1,5 @@
 package eu.startales.spacepixels.report;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.util.SkyMath;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Track;
@@ -6,6 +7,8 @@ import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 
 import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -236,7 +239,7 @@ final class TargetVisualizationSectionWriter {
             String cleanWideFileName = "moving_track_" + counter + "_clean_wide.gif";
 
             int[] frameDims = extractFrameDimensions(context);
-            int[] wideDimensions = computeWideDimensions(cropBounds.trackBoxWidth, cropBounds.trackBoxHeight, frameDims[0], frameDims[1]);
+            int[] wideDimensions = computeWideSourceDimensions(cropBounds.trackBoxWidth, cropBounds.trackBoxHeight, frameDims[0], frameDims[1]);
 
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createCroppedDisplayImage(
                     context.rawFrames.get(point.sourceFrameIndex), (int) Math.round(point.x), (int) Math.round(point.y),
@@ -250,9 +253,8 @@ final class TargetVisualizationSectionWriter {
                     context.rawFrames.get(point.sourceFrameIndex), cropBounds.fixedCenterX, cropBounds.fixedCenterY,
                     cropBounds.trackBoxWidth, cropBounds.trackBoxHeight, context.settings)).iterator(),
                     new File(context.exportDir, cleanNarrowFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
-            GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createCroppedDisplayImage(
-                    context.rawFrames.get(point.sourceFrameIndex), cropBounds.fixedCenterX, cropBounds.fixedCenterY,
-                    wideDimensions[0], wideDimensions[1], context.settings)).iterator(),
+            GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> createWideDownloadFrame(
+                    context.rawFrames.get(point.sourceFrameIndex), cropBounds, wideDimensions, context.settings)).iterator(),
                     new File(context.exportDir, cleanWideFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
 
             double[] meanCenter = computeTrackMeanPixelCenter(track);
@@ -820,14 +822,14 @@ final class TargetVisualizationSectionWriter {
     }
 
     /**
-     * Computes the wide animation dimensions for moving objects: twice the narrow crop dimensions,
-     * bounded to at least 400x400 and at most 1000x1000, and kept within frame bounds when known.
+     * Computes the wide source field: twice the narrow crop, at least 400 pixels per side when the frame permits.
+     * The output resolution limit is applied after cropping, so it cannot remove either end of a long track.
      */
-    static int[] computeWideDimensions(int narrowWidth, int narrowHeight, int frameWidth, int frameHeight) {
+    static int[] computeWideSourceDimensions(int narrowWidth, int narrowHeight, int frameWidth, int frameHeight) {
         int targetWidth = narrowWidth * 2;
         int targetHeight = narrowHeight * 2;
-        int wideWidth = Math.min(1000, Math.max(400, targetWidth));
-        int wideHeight = Math.min(1000, Math.max(400, targetHeight));
+        int wideWidth = Math.max(400, targetWidth);
+        int wideHeight = Math.max(400, targetHeight);
         if (frameWidth > 0) {
             wideWidth = Math.min(wideWidth, frameWidth);
         }
@@ -835,6 +837,28 @@ final class TargetVisualizationSectionWriter {
             wideHeight = Math.min(wideHeight, frameHeight);
         }
         return new int[]{wideWidth, wideHeight};
+    }
+
+    /** Renders the complete wide field, scaling its resolution proportionally to at most 1000 pixels per side. */
+    private static BufferedImage createWideDownloadFrame(short[][] pixels, TrackCropGeometry.CropBounds bounds,
+                                                         int[] sourceDimensions, VisualizationSettings settings) {
+        BufferedImage field = TrackVisualizationRenderer.createCroppedDisplayImage(pixels,
+                bounds.fixedCenterX, bounds.fixedCenterY, sourceDimensions[0], sourceDimensions[1], settings);
+        double scale = Math.min(1.0, 1000.0 / Math.max(field.getWidth(), field.getHeight()));
+        if (scale == 1.0) {
+            return field;
+        }
+        int width = Math.max(1, (int) Math.round(field.getWidth() * scale));
+        int height = Math.max(1, (int) Math.round(field.getHeight() * scale));
+        BufferedImage output = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = output.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.drawImage(field, 0, 0, width, height, null);
+        } finally {
+            graphics.dispose();
+        }
+        return output;
     }
 
     private static int[] extractFrameDimensions(DetectionReportContext context) {

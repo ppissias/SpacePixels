@@ -26,42 +26,110 @@ import java.util.Map;
 
 import static org.junit.Assert.*;
 
+/** Verifies clean moving-target downloads, their sky coverage and their report links. */
 public class TargetVisualizationSectionWriterTest {
 
     @Rule
     public TemporaryFolder temporary = new TemporaryFolder();
 
     @Test
-    public void computeWideDimensionsEnforcesClampingAndFrameBounds() {
+    public void wideSourceDimensionsPreserveContextBeforeResolutionIsLimited() {
         // Clamping up to at least 400x400 when 2x is smaller
-        int[] dimsSmall = TargetVisualizationSectionWriter.computeWideDimensions(100, 150, 2000, 2000);
+        int[] dimsSmall = TargetVisualizationSectionWriter.computeWideSourceDimensions(100, 150, 2000, 2000);
         assertEquals(400, dimsSmall[0]);
         assertEquals(400, dimsSmall[1]);
 
         // 2x scaling when within [400, 1000]
-        int[] dimsNormal = TargetVisualizationSectionWriter.computeWideDimensions(250, 300, 2000, 2000);
+        int[] dimsNormal = TargetVisualizationSectionWriter.computeWideSourceDimensions(250, 300, 2000, 2000);
         assertEquals(500, dimsNormal[0]);
         assertEquals(600, dimsNormal[1]);
 
-        // Clamping down to at most 1000x1000 when 2x is larger
-        int[] dimsLarge = TargetVisualizationSectionWriter.computeWideDimensions(600, 700, 2000, 2000);
-        assertEquals(1000, dimsLarge[0]);
-        assertEquals(1000, dimsLarge[1]);
+        // The sky field must not be reduced by the output resolution limit.
+        int[] dimsLarge = TargetVisualizationSectionWriter.computeWideSourceDimensions(600, 700, 2000, 2000);
+        assertEquals(1200, dimsLarge[0]);
+        assertEquals(1400, dimsLarge[1]);
 
         // Clamping to frame bounds when frame is smaller than 1000
-        int[] dimsFrameLimited = TargetVisualizationSectionWriter.computeWideDimensions(300, 300, 500, 450);
+        int[] dimsFrameLimited = TargetVisualizationSectionWriter.computeWideSourceDimensions(300, 300, 500, 450);
         assertEquals(500, dimsFrameLimited[0]);
         assertEquals(450, dimsFrameLimited[1]);
 
         // Clamping to frame bounds even when frame is smaller than 400
-        int[] dimsTinyFrame = TargetVisualizationSectionWriter.computeWideDimensions(100, 100, 300, 250);
+        int[] dimsTinyFrame = TargetVisualizationSectionWriter.computeWideSourceDimensions(100, 100, 300, 250);
         assertEquals(300, dimsTinyFrame[0]);
         assertEquals(250, dimsTinyFrame[1]);
 
-        // Unspecified frame bounds (0) fall back to [400, 1000] clamping
-        int[] dimsNoFrame = TargetVisualizationSectionWriter.computeWideDimensions(100, 150, 0, 0);
+        // Unspecified frame bounds (0) retain the requested sky field.
+        int[] dimsNoFrame = TargetVisualizationSectionWriter.computeWideSourceDimensions(100, 150, 0, 0);
         assertEquals(400, dimsNoFrame[0]);
         assertEquals(400, dimsNoFrame[1]);
+    }
+
+    /** Long horizontal and vertical tracks stay visible in every wide frame even beyond the 1000-pixel limit. */
+    @Test
+    public void wideDownloadsKeepBothEndsOfLongTracksAndLimitOnlyOutputResolution() throws Exception {
+        for (boolean vertical : new boolean[]{false, true}) {
+            DetectionReportContext context = longTrackContext(vertical);
+            try (PrintWriter writer = new PrintWriter(new StringWriter())) {
+                TargetVisualizationSectionWriter.writeSection(writer, context);
+            }
+            List<BufferedImage> narrow = readGifFrames(new File(context.exportDir, "moving_track_1_clean_narrow.gif"));
+            List<BufferedImage> wide = readGifFrames(new File(context.exportDir, "moving_track_1_clean_wide.gif"));
+            assertEquals(3, wide.size());
+            assertTrue("the fixture exceeds the output cap", Math.max(narrow.get(0).getWidth(), narrow.get(0).getHeight()) > 1000);
+            for (int frame = 0; frame < 3; frame++) {
+                assertTrue("the narrow fixture contains the target", containsBrightTarget(narrow.get(frame)));
+                assertTrue("wide frame " + frame + " retains the target", containsBrightTarget(wide.get(frame)));
+                assertTrue(wide.get(frame).getWidth() <= 1000);
+                assertTrue(wide.get(frame).getHeight() <= 1000);
+                assertEquals(1000, Math.max(wide.get(frame).getWidth(), wide.get(frame).getHeight()));
+            }
+        }
+    }
+
+    /** Builds a track spanning 1400 pixels, with a compact bright target and no other bright objects. */
+    private DetectionReportContext longTrackContext(boolean vertical) throws Exception {
+        int width = vertical ? 600 : 1800;
+        int height = vertical ? 1800 : 600;
+        List<short[][]> rawFrames = new ArrayList<>();
+        FitsFileInformation[] files = new FitsFileInformation[3];
+        Track track = new Track();
+        for (int index = 0; index < 3; index++) {
+            short[][] pixels = new short[height][width];
+            for (short[] row : pixels) java.util.Arrays.fill(row, (short) 100);
+            int position = 100 + index * 700;
+            int x = vertical ? 300 : position;
+            int y = vertical ? position : 300;
+            for (int dy = -2; dy <= 2; dy++) {
+                for (int dx = -2; dx <= 2; dx++) pixels[y + dy][x + dx] = 2000;
+            }
+            rawFrames.add(pixels);
+            files[index] = new FitsFileInformation("frame" + index + ".fit", "frame" + index + ".fit", true, width, height,
+                    Map.of("DATE-OBS", "2026-10-01T00:0" + (2 * index) + ":00", "EXPTIME", "120"));
+            DetectedObject point = new DetectedObject(x, y, 1000, 8);
+            point.sourceFrameIndex = index;
+            point.timestamp = files[index].getObservationTimestamp();
+            point.exposureDuration = files[index].getExposureDurationMillis();
+            track.addPoint(point);
+        }
+        var telemetry = new PipelineTelemetry();
+        telemetry.totalFramesLoaded = telemetry.totalFramesKept = 3;
+        var result = PipelineResult.builder().tracks(List.of(track)).telemetry(telemetry)
+                .masterStackData(rawFrames.get(0)).masterStars(List.of()).slowMoverCandidates(List.of())
+                .anomalies(List.of()).allTransients(List.of()).unclassifiedTransients(List.of())
+                .driftPoints(List.of()).maximumStackData(rawFrames.get(0)).build();
+        return ReportContextFixtures.create(VisualizationSettings.defaults(), temporary.newFolder(), rawFrames,
+                files, new DetectionConfig(), result);
+    }
+
+    /** The clean fixture has only one bright source, so any bright pixel proves the target remains in view. */
+    private static boolean containsBrightTarget(BufferedImage image) {
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                if (((image.getRGB(x, y) >> 16) & 255) > 200) return true;
+            }
+        }
+        return false;
     }
 
     @Test
@@ -157,7 +225,7 @@ public class TargetVisualizationSectionWriterTest {
         List<BufferedImage> wideFrames = readGifFrames(wideGifFile);
         assertEquals("Wide GIF must have 3 frames", 3, wideFrames.size());
 
-        int[] expectedWideDims = TargetVisualizationSectionWriter.computeWideDimensions(
+        int[] expectedWideDims = TargetVisualizationSectionWriter.computeWideSourceDimensions(
                 cropBounds.trackBoxWidth, cropBounds.trackBoxHeight, width, height);
         assertEquals("Wide GIF width must match expected wide width", expectedWideDims[0], wideFrames.get(0).getWidth());
         assertEquals("Wide GIF height must match expected wide height", expectedWideDims[1], wideFrames.get(0).getHeight());
@@ -191,6 +259,7 @@ public class TargetVisualizationSectionWriterTest {
                 context.animations.contains("moving_track_1_clean_wide.gif"));
     }
 
+    /** Decodes the written GIF so coverage checks exercise the downloadable artifact itself. */
     private static List<BufferedImage> readGifFrames(File gifFile) throws Exception {
         List<BufferedImage> frames = new ArrayList<>();
         Iterator<ImageReader> readers = ImageIO.getImageReadersByFormatName("gif");

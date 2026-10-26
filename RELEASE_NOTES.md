@@ -6,7 +6,9 @@ Not released yet.
 
 ### Changed
 
-- **Manual Transient Inspection (F13).** The window keeps the master star mask from its first pass. Trying Detection Sigma, Grow Sigma or Minimum Pixels re-detects only the frame on show. Apply to Settings copies the edited values. If the master settings change while the window is open, it says so and keeps the reference until the window is opened again.
+- **Manual Transient Inspection (F13).** The window keeps the master star mask, including its jitter footprint, from its first pass. Trying Detection Sigma, Grow Sigma or Minimum Pixels re-detects only the frame on show. Cached results account for all detection settings, including background clipping and mask overlap. Apply to Settings copies the edited values. If the master settings change while the window is open, it says so and keeps the reference until the window is opened again. Closing during re-detection lets the cancelled worker close its engine safely.
+
+- **Clean moving-object downloads (F15).** Narrow and Wide GIFs contain no highlight circle or frame label. Wide shows twice the narrow field where the input frame permits and scales the complete picture to at most 1000 pixels per side, preserving both ends of long tracks.
 
 - **Variable-star cutouts (F14).** Brightest/faintest pictures now match their local sky backgrounds and use the ensemble zero-point difference to normalize transparency on one shared display scale. This makes their brightness comparison agree with the corrected light curve; photometry, light curves and data exports are unchanged.
 

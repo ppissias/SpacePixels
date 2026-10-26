@@ -1,19 +1,29 @@
 # Agent State — features collaboration
 
-## Collaboration
+## Completed collaboration
 
 - Goal: Implement features F10, F11, F13, F14, F15, and F16 from [FEATURE-REQUESTS.md](FEATURE-REQUESTS.md) as authorized by the maintainer on 2026-10-25.
 - Specs: [FEATURE-REQUESTS.md](FEATURE-REQUESTS.md), [DEVELOPER.md](DEVELOPER.md), [HIGH_LEVEL_DESIGN.md](HIGH_LEVEL_DESIGN.md), and JTransient's [FEATURE-REQUESTS.md](../JTransient/FEATURE-REQUESTS.md).
 - Branch: `feature/features-collaboration`
 - Feature baseline: `755580dea91f08d2eb3e9da025bc6068ec241001`
 - Agents (ordered): B=maintainer-started Agent B; C=maintainer-started Agent C (Agent A is out per maintainer instruction on 2026-10-26).
-- Overall: IN_PROGRESS
+- Overall: COMPLETE
 - Execution: One shared working tree, one committed Owner.
 - Restart (2026-10-26): The maintainer asked Agent A to check F16 correctness first, implement necessary corrections, then continue the authorized collaboration. The overnight handoff is explicitly stale and replaced. The 00:50 restriction has expired.
 - Active team (2026-10-26 13:56): Maintainer instructed that Agent A is out; no more work is given to Agent A. Collaboration is between Agent B and Agent C only (B reviews C, C reviews B).
-- Scope boundary: Only features F10, F11, F13, F14, F15, and F16. All six are independently reviewed. Agent A is bypassed until the maintainer says A has rejoined. JTransient library changes were authorized for F10 (API-1) and F13 (API-2).
+- Scope boundary: Features F10, F11, F13, F14, F15, and F16 completed their independent collaboration reviews. The maintainer subsequently assigned Agent A the standalone branch review and the bounded fixes below. JTransient library changes were authorized for F10 (API-1) and F13 (API-2).
 - Required checks: `gradlew.bat check`, `apiConsumerTest`; real-dataset and unit tests per feature specification.
-- Protocol: [AGENT_COLLABORATION.md](AGENT_COLLABORATION.md) v2.2. Every agent keeps running and checks for handoff commits every 2 minutes.
+- Protocol used during collaboration: [AGENT_COLLABORATION.md](AGENT_COLLABORATION.md) v2.2. The collaboration has ended; no agent handoff remains pending.
+
+## Branch review follow-up (2026-10-26)
+
+- The maintainer authorized fixes for review findings 1–4, then explicitly excluded findings 5–6 (old-phase live previews and display cadence). F10 is unchanged by this follow-up. Commit, push and merge into `master` are authorized after validation.
+- F13's kept star mask is now applied directly, including its opening jitter footprint. Companion JTransient commit: `51ca96ba8804627056135e0a1dcb6e2582365926`.
+- `TransientInspectionDetector` caches by the complete detection configuration. Every cache miss owns and closes its engine on the worker. Closing the viewer releases its cache immediately and cannot shut down an active engine or accept a late cache update.
+- F15 separates the wide source field from output resolution. It crops twice the narrow field where the frame permits, then scales proportionally to at most 1000 pixels per side, retaining the ends of long tracks.
+- Validation: SpacePixels `check` (554 tests, 7 skipped), `apiConsumerTest`, JTransient `check` (269 tests), `apiConsumer`, and six GUI mechanics checks passed. A deterministic actual-viewer disposal probe also passed while its re-detection worker was held active, followed by successful cancellation cleanup.
+- Real data: all 32 kept `m5-reg` frames have byte-identical opening, normal and trial detections versus the baseline. Changing master jitter now preserves trial detections. A background-clipping edit produces 90 fresh detections instead of reusing 13 cached detections, and restoring settings reuses the opening result.
+- The full `klangwolke-2` before/after exports keep all 195 findings, the configuration, every CSV, and all PNG/GIF assets unchanged. HTML differs only in explicitly measured generation/timing fields; report-data differs only in generation time. Long horizontal and vertical track GIF regression tests cover the crop correction.
 
 ## Task ledger
 

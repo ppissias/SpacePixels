@@ -10,13 +10,13 @@
 package eu.startales.spacepixels.gui;
 
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.TransientReference;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.fits.BlinkSequence;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.detection.TrackOverlay;
+import eu.startales.spacepixels.detection.TransientInspectionDetector;
 import eu.startales.spacepixels.util.DebugOutput;
 import io.github.ppissias.jtransient.engine.FrameTransients;
 import io.github.ppissias.jtransient.engine.ImageFrame;
@@ -40,8 +40,7 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
     private final DetectionConfigurationPanel detection;
     private final TrialSettingsControls trials;
     private final JLabel masterNote = new JLabel(" ");
-    private final JTransientEngine engine = new JTransientEngine();
-    private final Map<String, List<DetectedObject>> detectedBySettings = new HashMap<>();
+    private final TransientInspectionDetector detector;
     private volatile DetectionConfig trialConfig;
     private List<FrameTransients> allTransients;
     private final Map<String, FitsFileInformation> fileInfoByName = new HashMap<>();
@@ -62,7 +61,7 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
         addControlRow(trials.horizontal());
         masterNote.setFont(UiStyle.bodyFont());
         addControlRow(masterNote);
-        rememberOpening(detection.settingsInUse());
+        detector = new TransientInspectionDetector(reference, this.allTransients, detection.settingsInUse());
         if (filesInfo != null) {
             for (FitsFileInformation info : filesInfo) {
                 if (info != null && info.getFileName() != null) {
@@ -138,13 +137,6 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
         trials.setEditable(editable);
     }
 
-    /** Remembers the opening detection, so the first view does not extract the frame again. */
-    private void rememberOpening(DetectionConfig settings) {
-        for (int index = 0; index < allTransients.size(); index++) {
-            detectedBySettings.put(cacheKey(index, settings), allTransients.get(index).transients);
-        }
-    }
-
     @Override
     protected void preparing() {
         trialConfig = trials.snapshot(detection.settingsInUse());
@@ -168,8 +160,7 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
             return Result.problem("The image data of " + transients.filename + " was not found.");
         }
         DetectionConfig settings = trialConfig;
-        List<DetectedObject> objects = detectedBySettings.computeIfAbsent(cacheKey(index, settings), key ->
-                DebugOutput.withEngineDiagnostics(() -> engine.redetectFrame(reference, index, settings).transients));
+        List<DetectedObject> objects = DebugOutput.withEngineDiagnostics(() -> detector.detect(index, settings));
         if (objects == null) {
             objects = Collections.emptyList();
         }
@@ -183,18 +174,11 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
         return Result.of(display, objects, count + (count == 1 ? " transient" : " transients"));
     }
 
-    /** The three trial values identify a cached detection of one frame. */
-    private static String cacheKey(int index, DetectionConfig settings) {
-        return index + ":" + settings.detectionSigmaMultiplier + ":" + settings.growSigmaMultiplier + ":"
-                + settings.minDetectionPixels;
-    }
-
     @Override
     protected void released() {
         trials.stop();
-        engine.shutdown();
+        detector.close();
         frameByName.clear();
         allTransients = Collections.emptyList();
-        detectedBySettings.clear();
     }
 }
