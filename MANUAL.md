@@ -150,10 +150,11 @@ The result is also written next to the frames, as `auto_tune.json`, in the same 
 
 Click **Detect Moving Targets**, on the Overview or on the Main tab (or press **Ctrl+D**). A progress window shows each stage.
 
-Below the progress bar, the **Live view** shows a small picture of the work under way, at most one new picture every few seconds:
+Below the progress bar, the **Live view** shows a small picture of the work under way. A new picture appears at most once every 3 seconds, including when the stage changes. A short stage may show nothing, and the last picture stays until a new one is allowed. Nothing is repeated in a loop.
 - a frame as it loads, with its number and observation time;
+- during source extraction, the frame just processed, with detected sources ringed;
 - the stationary-sky reference (the median of the kept frames) once the detection has built it;
-- what the detection has found so far, as each stage finishes: the star mask over the reference, slow-mover candidates, moving objects (their first, middle and last frame side by side), streaks and anomalies, local-rescue candidates, and variable-star candidates beside their light curve. When a stage finds several, up to eight are shown in turn. They are marked **provisional**: later stages and your report choices can still leave a finding out. The caption gives the counts so far, and a stage that finds nothing says so;
+- one picture from the running stage: a slow-mover candidate, the star mask or a track found so far, a local-rescue candidate, the photometry frame being measured, or a variable-star candidate beside its light curve when photometry finishes. They are marked **provisional**: later stages and your report choices can still leave a finding out. The caption gives the counts so far, and a stage that finds nothing says so;
 - the report's pictures, such as the track map and object crops, as they are written.
 
 The text above the picture is the progress. **Hide picture** removes the view and the work of making its pictures, and SpacePixels remembers the choice. **Detect Iteratively** shows the same view, clears it at the start of each pass and names the pass in the caption. The pictures are copies for display only: the detection results and the report are the same with the view shown or hidden.

@@ -9,7 +9,6 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F04](#f04-mcp-agent-services) | MCP agent services over HTTP | Agreed: HTTP. The services table awaits agreement. |
 | [F06](#f06-windows-installer) | Windows installer with a bundled Java runtime | Agreed. Decision points listed. |
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Agreed. The matching policy is to be proposed. |
-| [F10](#f10-live-view-pictures-of-the-running-phase) | Live view: pictures of the running phase, one every 3 s | Direction decided. Design proposed. |
 | [F11](#f11-animation-speed-control-in-the-report) | Animation speed control in the report | Decided. Frame sheets and GIFs; one speed control. |
 | [F12](#f12-newer-flatlaf-features) | Newer FlatLaf features | Proposed; FlatLaf 3.7.2 is in use |
 | [F13](#f13-manual-transient-inspection-with-trial-per-frame-settings) | Manual Transient Inspection with trial per-frame settings | Decided. Same trial policy as the other viewers. |
@@ -94,58 +93,6 @@ Basic iterative detection is implemented: independent runs over growing subsets 
 **Next step.** Propose the matching and evidence-selection policy for agreement before implementing.
 
 **Acceptance.** One finding seen in several passes, distinct nearby objects, split tracks, conflicting measurements, changed or missing inputs, different fields with matching file names, missing WCS and older summary-only reports. Chosen measurements stay traceable, ambiguous associations stay visible, unique counts are justified, and the individual reports are unchanged.
-
-## F10. Live view: pictures of the running phase
-
-The live view in the progress dialog shows the frames as they load, each engine stage's findings while the detection runs, and the report's pictures as they are written (see the manual and HIGH_LEVEL_DESIGN.md).
-
-**Decision (made, 2026-10-23):** "What I had in mind, was that it shows specific images from the current phase it is currently. So if it does photometry, it should show something related to photometry. There should be a general rule, not to change too frequently the images, so say every 3 seconds a new image from the current phase. So each phase, should send an update every 3 seconds more or less. If we have a small dataset, it is natural not to show anything for some phases, for them to be skipped, if it is less than 3 seconds from the last update. Overall it is working well, I just wanted to make sure it will work like this. I also wanted to check with you, that we implement it efficiently and only send updates when needed from the engine."
-
-This settles the earlier open question about the report phase: the report is one more phase, under the same rule.
-
-### How it works today, and why it loops
-
-- **Pictures arrive when a stage ends.** The engine hands a stage's results to the observer once, when the stage *finishes*. `LiveFindings` turns them into up to 8 slides. The dialog turns the slides every 3 s and starts again after the last (`slideIndex % size`), until the next stage finishes. So while photometry runs, the tracking findings go round. After a stage with few findings, the same two or three pictures come back many times.
-- **Stage changes skip the clock.** A stage change bypasses the 3 s rule (`wantsPreview(true)`), so on a small dataset the stages replace each other within a fraction of a second.
-- **Long stretches show nothing new.** Source extraction takes 0–40 % of the engine's time, and tracking and photometry run long too, but the engine reports only finished stages. During those stretches nothing new can be shown.
-
-**The efficiency is already good, and the proposal keeps it:**
-- The engine calls the observer only when one is given; headless and API runs pass none.
-- Each call passes references, not copies.
-- `LiveFindings` copies a few positions only when the dialog wants a picture, and renders on its own thread.
-- A hidden picture costs nothing.
-
-### Proposed design
-
-1. **One clock, no exceptions.** The dialog accepts at most one picture every 3 s, stage changes included. A picture is made only when it would be shown, so there is no queue of slides and no rotation, and nothing loops. If a phase has nothing new, its last picture stays.
-2. **Pictures belong to the running phase.** When a phase starts, pictures still pending from the previous phase are dropped. A phase that ends before the clock allows a picture shows none.
-3. **The engine is asked, not told.** At the points where a long stage already reports progress, the engine first asks the observer whether it wants an update. The check is cheap: a time comparison. Only when the answer is yes does the engine hand over a small snapshot. This is the "only send updates when needed" part: on a 33-frame run, the engine builds about one snapshot every 3 s instead of one per frame.
-4. **What each phase shows.** Every picture stays marked *provisional*, as now:
-
-| Phase | Picture, each time the clock allows one |
-|---|---|
-| Loading | The frame just loaded (as now) |
-| Source extraction | The frame just processed, with its detected sources ringed |
-| Frame selection and reference | The median reference, with the stationary stars |
-| Slow movers | A slow-mover candidate on the maximum stack |
-| Tracking | The star mask, then the tracks, streaks and anomalies found so far, one at a time |
-| Residual analysis | A local-rescue candidate |
-| Photometry | The frame being measured, with its stars ringed; at the end, a variable-star candidate with its light curve |
-| Report | The report picture just written (as now) |
-
-5. **Engine side.** This needs JTransient's [API-1](../JTransient/FEATURE-REQUESTS.md#api-requests-from-spacepixels): a stage-start notification, and the "do you want an update?" check with snapshots inside source extraction, tracking and photometry. Source extraction runs on worker threads, so the check must be thread-safe and let only one worker through each time the clock allows a picture.
-
-**Remaining checks:**
-- the dialog at 150 % and 200 % display scaling;
-- cancelling during each stage, on real data;
-- the run time with the live view shown, hidden and off, which must stay the same.
-
-**Acceptance.**
-- No picture repeats, and no two pictures come within 3 s of each other.
-- On klangwolke-2, each long phase (extraction, tracking, photometry and the report) shows pictures of its own.
-- On a small dataset, short phases are skipped.
-- With the view hidden, and in headless runs, the engine builds no snapshot (counted in a test).
-- The results stay byte-identical.
 
 ## F11. Animation speed control in the report
 

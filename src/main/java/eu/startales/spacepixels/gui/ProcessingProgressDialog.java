@@ -290,13 +290,23 @@ public class ProcessingProgressDialog extends JDialog {
                 if (!previewWanted) {
                     return false;
                 }
-                long now = System.nanoTime();
-                long last = lastAccepted.get();
-                if (!stageChange && last != 0 && now - last < PREVIEW_INTERVAL_NANOS) {
-                    return false;
+                while (true) {
+                    long last = lastAccepted.get();
+                    long now = System.nanoTime();
+                    if (last != 0 && now - last < PREVIEW_INTERVAL_NANOS) {
+                        return false;
+                    }
+                    long stamp = now == 0 ? 1 : now;
+                    if (lastAccepted.compareAndSet(last, stamp)) {
+                        return true;
+                    }
                 }
-                lastAccepted.set(now == 0 ? 1 : now);
-                return true;
+            }
+
+            /** A new phase must not show a picture that belonged to the previous one. */
+            @Override
+            public void dropPending() {
+                pending.set(null);
             }
 
             @Override

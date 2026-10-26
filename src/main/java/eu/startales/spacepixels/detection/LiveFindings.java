@@ -14,6 +14,7 @@ import eu.startales.spacepixels.report.LiveFindingPictures;
 import eu.startales.spacepixels.report.LiveFindingPictures.Spot;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
 import io.github.ppissias.jtransient.core.SlowMoverCandidateResult;
+import io.github.ppissias.jtransient.engine.LiveSnapshot;
 import io.github.ppissias.jtransient.engine.PipelineStage;
 import io.github.ppissias.jtransient.engine.PipelineStageObserver;
 import io.github.ppissias.jtransient.model.AnomalyDetection;
@@ -88,12 +89,37 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
         return sink == null ? null : new LiveFindings(sink, frames, settings);
     }
 
+    /** A new phase drops a picture that belonged to the previous one and has not been shown yet. */
+    @Override
+    public void stageStarted(String stage) {
+        sink.dropPending();
+    }
+
+    /** Reserves the dialog's one picture slot. The engine builds a snapshot only after this returns true. */
+    @Override
+    public boolean wantsUpdate() {
+        return sink.wantsPreview(false);
+    }
+
+    /** Draws a snapshot the engine already reserved. It does not ask for another clock slot. */
+    @Override
+    public void liveUpdate(LiveSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        try {
+            worker.execute(() -> render(() -> snapshotPicture(snapshot)));
+        } catch (RejectedExecutionException closed) {
+            // The run has ended; the picture is no longer wanted.
+        }
+    }
+
     @Override
     public void stageFinished(PipelineStage stage) {
         if (stage instanceof PipelineStage.MasterReference masterReference) {
             reference = masterReference.medianStack();
         }
-        if (stage instanceof PipelineStage.CommonMotion || !sink.wantsPreview(true)) {
+        if (stage instanceof PipelineStage.CommonMotion || !sink.wantsPreview(false)) {
             return;
         }
         Supplier<RunPreview> picture = switch (stage) {
@@ -150,12 +176,9 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
             spots.add(Spot.of(candidate.object));
         }
         return () -> {
-            List<RunPreview> slides = new ArrayList<>();
-            for (Spot spot : spots) {
-                slides.add(RunPreview.of(LiveFindingPictures.crop(maximumStack, spot, LiveFindingPictures.SLOW_MOVER, null, settings),
-                        "Slow-mover candidate · maximum stack · " + PROVISIONAL + "\n" + total));
-            }
-            return RunPreview.slides(slides);
+            Spot spot = spots.get(0);
+            return RunPreview.of(LiveFindingPictures.crop(maximumStack, spot, LiveFindingPictures.SLOW_MOVER, null, settings),
+                    "Slow-mover candidate · maximum stack · " + PROVISIONAL + "\n" + total);
         };
     }
 
@@ -179,7 +202,7 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
         boolean hasMask = median != null && median.length > 0 && starMask != null && starMask.length == median.length;
         if (pointTracks.isEmpty() && streakTracks.isEmpty() && anomalies.isEmpty()) {
             String none = "No moving objects, streaks or anomalies found";
-            return hasMask ? () -> RunPreview.slides(List.of(starMask(median, starMask, none)))
+            return hasMask ? () -> starMask(median, starMask, none)
                     : () -> RunPreview.captionOnly(none + " · picture from the previous stage");
         }
 
@@ -204,18 +227,15 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
                     ? "Anomaly (broad flash)" : "Anomaly (sharp glint)") + " · frame " + (spot.frame() + 1) + " · " + PROVISIONAL));
         }
         return () -> {
-            List<RunPreview> slides = new ArrayList<>();
             if (hasMask) {
-                slides.add(starMask(median, starMask, total));
+                return starMask(median, starMask, total);
             }
-            for (Finding finding : findings) {
-                BufferedImage image = finding.spots().size() > 1
-                        ? LiveFindingPictures.strip(frames, finding.spots(), finding.ring(), settings)
-                        : LiveFindingPictures.crop(frames.get(finding.spots().get(0).frame()), finding.spots().get(0),
-                        finding.ring(), "Frame " + (finding.spots().get(0).frame() + 1), settings);
-                slides.add(RunPreview.of(PreviewThumbnails.fit(image), finding.caption() + "\n" + total));
-            }
-            return RunPreview.slides(slides);
+            Finding finding = findings.get(0);
+            BufferedImage image = finding.spots().size() > 1
+                    ? LiveFindingPictures.strip(frames, finding.spots(), finding.ring(), settings)
+                    : LiveFindingPictures.crop(frames.get(finding.spots().get(0).frame()), finding.spots().get(0),
+                    finding.ring(), "Frame " + (finding.spots().get(0).frame() + 1), settings);
+            return RunPreview.of(PreviewThumbnails.fit(image), finding.caption() + "\n" + total);
         };
     }
 
@@ -254,13 +274,10 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
             return null;
         }
         return () -> {
-            List<RunPreview> slides = new ArrayList<>();
-            for (Finding finding : findings) {
-                Spot spot = finding.spots().get(0);
-                slides.add(RunPreview.of(LiveFindingPictures.crop(frames.get(spot.frame()), spot, finding.ring(),
-                        "Frame " + (spot.frame() + 1), settings), finding.caption() + "\n" + total));
-            }
-            return RunPreview.slides(slides);
+            Finding finding = findings.get(0);
+            Spot spot = finding.spots().get(0);
+            return RunPreview.of(LiveFindingPictures.crop(frames.get(spot.frame()), spot, finding.ring(),
+                    "Frame " + (spot.frame() + 1), settings), finding.caption() + "\n" + total);
         };
     }
 
@@ -292,14 +309,30 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
                     + " · " + PROVISIONAL);
         }
         return () -> {
-            List<RunPreview> slides = new ArrayList<>();
-            for (int index = 0; index < spots.size(); index++) {
-                BufferedImage crop = LiveFindingPictures.crop(median, spots.get(index), LiveFindingPictures.VARIABLE_STAR, null, settings);
-                slides.add(RunPreview.of(PreviewThumbnails.fit(LiveFindingPictures.withLightCurve(crop, curves.get(index))),
-                        captions.get(index) + "\n" + total));
-            }
-            return RunPreview.slides(slides);
+            BufferedImage crop = LiveFindingPictures.crop(median, spots.get(0), LiveFindingPictures.VARIABLE_STAR, null, settings);
+            return RunPreview.of(PreviewThumbnails.fit(LiveFindingPictures.withLightCurve(crop, curves.get(0))),
+                    captions.get(0) + "\n" + total);
         };
+    }
+
+    /** One frame of the running phase, with the snapshot's sources ringed. */
+    private RunPreview snapshotPicture(LiveSnapshot snapshot) {
+        short[][] image = frame(snapshot.frameIndex());
+        if (image == null || image.length == 0) {
+            return RunPreview.captionOnly(snapshot.caption());
+        }
+        BufferedImage thumbnail = PreviewThumbnails.frame(image, settings.getAutoStretchBlackSigma(), settings.getAutoStretchWhiteSigma());
+        BufferedImage ringed = LiveFindingPictures.withRings(thumbnail, image[0].length, image.length,
+                snapshot.x(), snapshot.y(), LiveFindingPictures.MOVING_OBJECT);
+        return RunPreview.of(ringed, snapshot.caption());
+    }
+
+    /** The run's frame for a sequence index, or null when this run does not have it. */
+    private short[][] frame(int sequenceIndex) {
+        if (sequenceIndex >= 0 && sequenceIndex < frames.size()) {
+            return frames.get(sequenceIndex);
+        }
+        return null;
     }
 
     private static String count(int count, String one, String many) {

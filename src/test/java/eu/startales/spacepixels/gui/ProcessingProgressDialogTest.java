@@ -118,11 +118,11 @@ public class ProcessingProgressDialogTest {
     }
 
     @Test
-    public void picturesAreThrottledButAStageChangeIsShownAtOnce() throws Exception {
+    public void picturesStayThreeSecondsApartIncludingAStageChange() throws Exception {
         RunPreviewSink sink = beginJob(true);
         assertTrue(sink.wantsPreview(false));
         assertFalse("a second picture within the interval is not made", sink.wantsPreview(false));
-        assertTrue("a stage change is shown at once", sink.wantsPreview(true));
+        assertFalse("a stage change waits for the same clock", sink.wantsPreview(true));
     }
 
     @Test

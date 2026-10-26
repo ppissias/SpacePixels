@@ -6,6 +6,8 @@ Not released yet.
 
 ### Changed
 
+- **Live view during detection (F10).** The progress window shows at most one new picture every 3 seconds, including when the stage changes. Source extraction, tracking and photometry can show a picture of the work in progress, and only when the view would display it. A short stage may show nothing. The pictures are not repeated in a loop. Detection results are unchanged.
+
 - **Dataset quality warnings (F16).** Import and both detection workflows offer recommended cancellation or an explicit override for sampled hot-pixel/alignment warnings. Alignment now matches coherent star centroids, handles normalized floating-point images, and avoids mistaking brightness changes for star shifts. Inspection responds to cancellation and reports read failures. Headless callers can inspect the warning result or select fail-fast policy.
 
 - **Large text and display scaling.** Viewer controls wrap onto additional rows, and the star-mask sidebar scrolls when needed. The main workflow area keeps the frame table visible; Astrometry guidance and the Overview page reflow, with local horizontal scrolling for the wide Auto-Tune results table. Tab reveals controls below a scrollable viewport.
