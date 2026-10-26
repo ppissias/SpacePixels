@@ -315,15 +315,27 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
         };
     }
 
-    /** One frame of the running phase, with the snapshot's sources ringed. */
+    /** One frame of the running phase, or a candidate star crop with light curve when provided. */
     private RunPreview snapshotPicture(LiveSnapshot snapshot) {
+        if (snapshot.curve() != null && snapshot.curve().length > 0
+                && snapshot.x().length == 1 && snapshot.y().length == 1) {
+            short[][] image = reference != null ? reference : frame(snapshot.frameIndex());
+            if (image == null || image.length == 0) {
+                return RunPreview.captionOnly(snapshot.caption());
+            }
+            Spot spot = new Spot(snapshot.x()[0], snapshot.y()[0], 4, -1);
+            BufferedImage crop = LiveFindingPictures.crop(image, spot, LiveFindingPictures.VARIABLE_STAR, null, settings);
+            BufferedImage withCurve = LiveFindingPictures.withLightCurve(crop, snapshot.curve());
+            return RunPreview.of(PreviewThumbnails.fit(withCurve), snapshot.caption());
+        }
         short[][] image = frame(snapshot.frameIndex());
         if (image == null || image.length == 0) {
             return RunPreview.captionOnly(snapshot.caption());
         }
         BufferedImage thumbnail = PreviewThumbnails.frame(image, settings.getAutoStretchBlackSigma(), settings.getAutoStretchWhiteSigma());
+        Color ringColor = "Photometry".equals(snapshot.phase()) ? LiveFindingPictures.VARIABLE_STAR : LiveFindingPictures.MOVING_OBJECT;
         BufferedImage ringed = LiveFindingPictures.withRings(thumbnail, image[0].length, image.length,
-                snapshot.x(), snapshot.y(), LiveFindingPictures.MOVING_OBJECT);
+                snapshot.x(), snapshot.y(), ringColor);
         return RunPreview.of(ringed, snapshot.caption());
     }
 

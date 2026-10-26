@@ -7,6 +7,7 @@ import io.github.ppissias.jtransient.model.AnomalyType;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Track;
 import io.github.ppissias.jtransient.photometry.PhotometricReadiness;
+import io.github.ppissias.jtransient.engine.LiveSnapshot;
 import io.github.ppissias.jtransient.photometry.StarLightCurve;
 import io.github.ppissias.jtransient.photometry.VariabilityTier;
 import io.github.ppissias.jtransient.photometry.VariableStarAnalysis;
@@ -103,6 +104,37 @@ public class LiveFindingsTest {
         assertTrue(photometry.caption().startsWith("Variable-star candidate · high confidence · provisional"));
         assertTrue(photometry.caption().endsWith("1 variable-star candidate so far"));
         assertTrue("The light curve sits beside the crop", photometry.image().getWidth() > photometry.image().getHeight());
+    }
+
+    @Test
+    public void liveSnapshotWithCurveDrawsCropBesideLightCurve() throws Exception {
+        List<RunPreview> previews = new CopyOnWriteArrayList<>();
+        LiveFindings findings = new LiveFindings(sink(previews, true), frames(4));
+        findings.stageFinished(new PipelineStage.MasterReference(image(), List.of()));
+        LiveSnapshot snapshot = new LiveSnapshot("Photometry", -1,
+                "Variable star candidate · high confidence · provisional",
+                new double[]{50.0}, new double[]{60.0}, new double[]{0.0, -0.15, 0.2, -0.05});
+        findings.liveUpdate(snapshot);
+        findings.finishPictures();
+        assertEquals(2, previews.size());
+        RunPreview preview = previews.get(1);
+        assertEquals("Variable star candidate · high confidence · provisional", preview.caption());
+        assertNotNull(preview.image());
+        assertTrue("The light curve sits beside the crop", preview.image().getWidth() > preview.image().getHeight());
+    }
+
+    @Test
+    public void liveSnapshotWithoutCurveDrawsFrameWithGreenRings() throws Exception {
+        List<RunPreview> previews = new CopyOnWriteArrayList<>();
+        LiveFindings findings = new LiveFindings(sink(previews, true), frames(4));
+        LiveSnapshot snapshot = new LiveSnapshot("Photometry", 0, "Photometry · frame 1 · provisional",
+                new double[]{30.0, 70.0}, new double[]{40.0, 80.0});
+        findings.liveUpdate(snapshot);
+        findings.finishPictures();
+        assertEquals(1, previews.size());
+        RunPreview preview = previews.get(0);
+        assertEquals("Photometry · frame 1 · provisional", preview.caption());
+        assertNotNull(preview.image());
     }
 
     @Test
