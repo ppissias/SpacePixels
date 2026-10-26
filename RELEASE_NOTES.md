@@ -6,6 +6,8 @@ Not released yet.
 
 ### Changed
 
+- **Manual Transient Inspection (F13).** The window keeps the master star mask from its first pass. Trying Detection Sigma, Grow Sigma or Minimum Pixels re-detects only the frame on show. Apply to Settings copies the edited values. If the master settings change while the window is open, it says so and keeps the reference until the window is opened again.
+
 - **Variable-star cutouts (F14).** Brightest/faintest pictures now match their local sky backgrounds and use the ensemble zero-point difference to normalize transparency on one shared display scale. This makes their brightness comparison agree with the corrected light curve; photometry, light curves and data exports are unchanged.
 
 - **Live view during detection (F10).** The progress window shows at most one new picture every 3 seconds, including when the stage changes. Source extraction, tracking and photometry can show a picture of the work in progress, and only when the view would display it. A short stage may show nothing. The pictures are not repeated in a loop. Detection results are unchanged.

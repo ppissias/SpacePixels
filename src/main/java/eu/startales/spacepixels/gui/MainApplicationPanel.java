@@ -635,7 +635,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             if (outcome instanceof JobOutcome.Completed<ManualTransientInspectionTask.Result> completed) {
                 ManualTransientInspectionTask.Result result = completed.result();
                 TransientInspectionFrame frame = viewers.register(new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
-                        stretch));
+                        stretch, result.reference(), detectionSettings, sessions));
                 frame.setSkyCatalogueModel(skyCatalogue());
                 frame.setMarkerSettings(() -> detectionSettings.visualizationSettings());
                 if (frame.open(sessions.current() == null ? null : sessions.current().getTrackOverlay())) {

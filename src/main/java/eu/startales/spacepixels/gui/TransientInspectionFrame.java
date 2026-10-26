@@ -9,16 +9,23 @@
  */
 package eu.startales.spacepixels.gui;
 
+import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.JTransientEngine;
+import io.github.ppissias.jtransient.engine.TransientReference;
 import io.github.ppissias.jtransient.model.DetectedObject;
+import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.fits.BlinkSequence;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.detection.TrackOverlay;
+import eu.startales.spacepixels.util.DebugOutput;
 import io.github.ppissias.jtransient.engine.FrameTransients;
 import io.github.ppissias.jtransient.engine.ImageFrame;
 
+import javax.swing.JLabel;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -29,14 +36,33 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
 
     private final StretchPanel stretchPanel;
     private final FitsFileInformation[] filesInfo;
+    private final TransientReference reference;
+    private final DetectionConfigurationPanel detection;
+    private final TrialSettingsControls trials;
+    private final JLabel masterNote = new JLabel(" ");
+    private final JTransientEngine engine = new JTransientEngine();
+    private final Map<String, List<DetectedObject>> detectedBySettings = new HashMap<>();
+    private volatile DetectionConfig trialConfig;
     private List<FrameTransients> allTransients;
     private final Map<String, FitsFileInformation> fileInfoByName = new HashMap<>();
     private final Map<String, ImageFrame> frameByName = new HashMap<>();
 
     public TransientInspectionFrame(List<ImageFrame> frames, List<FrameTransients> allTransients,
-                                    FitsFileInformation[] filesInfo, StretchPanel stretchPanel) {
+                                    FitsFileInformation[] filesInfo, StretchPanel stretchPanel,
+                                    TransientReference reference, DetectionConfigurationPanel detection,
+                                    SessionAccess sessions) {
         super("Manual Transient Inspection", "preparing…", true, true);
+        this.reference = reference;
+        this.detection = detection;
         this.allTransients = allTransients != null ? allTransients : Collections.emptyList();
+        ProcessingSession ownerSession = sessions.current();
+        trials = new TrialSettingsControls(detection.perFrameDetectionSettings(), detection.settingsInUse(),
+                this::refresh, this::focusFrame,
+                changes -> sessions.isCurrent(ownerSession) ? detection.applyTrialSettings(changes) : null);
+        addControlRow(trials.horizontal());
+        masterNote.setFont(UiStyle.bodyFont());
+        addControlRow(masterNote);
+        rememberOpening(detection.settingsInUse());
         if (filesInfo != null) {
             for (FitsFileInformation info : filesInfo) {
                 if (info != null && info.getFileName() != null) {
@@ -106,6 +132,34 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
         return info;
     }
 
+    /** Enables trial edits only while the application has no active job. */
+    @Override
+    public void setSettingsEditable(boolean editable) {
+        trials.setEditable(editable);
+    }
+
+    /** Remembers the opening detection, so the first view does not extract the frame again. */
+    private void rememberOpening(DetectionConfig settings) {
+        for (int index = 0; index < allTransients.size(); index++) {
+            detectedBySettings.put(cacheKey(index, settings), allTransients.get(index).transients);
+        }
+    }
+
+    @Override
+    protected void preparing() {
+        trialConfig = trials.snapshot(detection.settingsInUse());
+        DetectionConfig live = detection.settingsInUse();
+        boolean masterChanged = live.masterSigmaMultiplier != reference.masterSigmaMultiplier()
+                || live.masterGrowSigmaMultiplier != reference.masterGrowSigmaMultiplier()
+                || live.masterMinDetectionPixels != reference.masterMinDetectionPixels()
+                || live.maxStarJitter != reference.maxStarJitter();
+        masterNote.setText(masterChanged
+                ? "The Detection Settings tab's master values now differ. Reopening this window rebuilds the reference."
+                : String.format(Locale.US, "Master mask: sigma %.2f, grow %.2f, minimum pixels %d, jitter %.1f px",
+                reference.masterSigmaMultiplier(), reference.masterGrowSigmaMultiplier(),
+                reference.masterMinDetectionPixels(), reference.maxStarJitter()));
+    }
+
     @Override
     protected Result prepare(int index) {
         FrameTransients transients = allTransients.get(index);
@@ -113,8 +167,12 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
         if (frame == null) {
             return Result.problem("The image data of " + transients.filename + " was not found.");
         }
-        List<DetectedObject> objects = transients.transients != null
-                ? transients.transients : Collections.emptyList();
+        DetectionConfig settings = trialConfig;
+        List<DetectedObject> objects = detectedBySettings.computeIfAbsent(cacheKey(index, settings), key ->
+                DebugOutput.withEngineDiagnostics(() -> engine.redetectFrame(reference, index, settings).transients));
+        if (objects == null) {
+            objects = Collections.emptyList();
+        }
         int count = 0;
         for (DetectedObject object : objects) {
             if (!object.isNoise) {
@@ -125,9 +183,18 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
         return Result.of(display, objects, count + (count == 1 ? " transient" : " transients"));
     }
 
+    /** The three trial values identify a cached detection of one frame. */
+    private static String cacheKey(int index, DetectionConfig settings) {
+        return index + ":" + settings.detectionSigmaMultiplier + ":" + settings.growSigmaMultiplier + ":"
+                + settings.minDetectionPixels;
+    }
+
     @Override
     protected void released() {
+        trials.stop();
+        engine.shutdown();
         frameByName.clear();
         allTransients = Collections.emptyList();
+        detectedBySettings.clear();
     }
 }

@@ -10,7 +10,6 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F06](#f06-windows-installer) | Windows installer with a bundled Java runtime | Agreed. Decision points listed. |
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Agreed. The matching policy is to be proposed. |
 | [F12](#f12-newer-flatlaf-features) | Newer FlatLaf features | Proposed; FlatLaf 3.7.2 is in use |
-| [F13](#f13-manual-transient-inspection-with-trial-per-frame-settings) | Manual Transient Inspection with trial per-frame settings | Decided. Same trial policy as the other viewers. |
 | [F15](#f15-clean-moving-object-animations-to-download-narrow-or-wide) | Clean moving-object animations to download, narrow or wide | Decided. Moving objects only; written with the report. |
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
 | [F02](#f02-session-summary-and-multiple-night-warning) | Session summary and multiple-night warning | Deferred |
@@ -112,56 +111,6 @@ SpacePixels uses FlatLaf 3.7.2 (`FlatDarkLaf`) since the completed [SP-18 upgrad
 - **Selection on focus** (3.6): FlatLaf selects a spinner's whole value when it gains the focus, by Tab or by a click. The maintainer kept the earlier behaviour, where the caret stays where the user puts it: `UiStyle.spinner` sets the select-all policy to never. Selecting the value on focus remains an option.
 - **Progress bars** (3.5): FlatLaf would log a warning when an indeterminate progress bar changes off the Swing thread. The GUI mechanics suite, which runs imports and detections, logs none.
 - **Rendering on Windows** (3.5.2): FlatLaf turns off Direct3D on-screen rendering, against ghosting on some graphics drivers. A full redraw of a viewer showing a 61-MPix frame in a 1600 × 1000 window takes about 4.8 ms instead of 4.3 ms, which is not noticeable.
-
-## F13. Manual Transient Inspection with trial per-frame settings
-
-**Request (2026-10-23):** "Specifically for the unclassified transient inspection, I have a good idea. I would like to have also there the control for the detection sigma, grow sigma and min pixels, like the preview frame window. It would also show the master sigma relevant values, but we would not be able to change them. But [t]he logic would be the following, that it would re-run the detection, keeping the master mask (as we have not changed the master values) and show the transients with these settings. This is a way for the user to experiment with a stable master map, various detection sigma options and see the effect in transient production visually. So the first time we start the window, it will calculate the master map, but then if we change the detection sigma or detection pixel size, it does not have to do that again. Can you check what needs to be changed in order to achieve this?"
-
-### What the window does today
-
-`ManualTransientInspectionTask` loads every frame and calls `JTransientEngine.detectTransients`, which:
-1. extracts the sources of every frame with the per-frame settings;
-2. selects the frames by quality;
-3. builds the median reference and its stationary stars with the master settings;
-4. vetoes each frame's detections against the star mask.
-
-The window receives only the transients of each frame. The reference, the master stars and the mask stay inside the engine and are discarded.
-
-### Why the idea works, and gives exact results
-
-The three per-frame settings (Detection Sigma, Grow Sigma and Min Pixels) are used only by the per-frame extraction:
-- frame selection uses its own quality settings;
-- the reference and the star mask use the master settings;
-- the veto treats each frame on its own.
-
-So, with the frame selection and the mask kept, re-detecting a frame with new per-frame settings gives exactly the transients that a new Manual Transient Inspection with those settings would give. A test should hold the engine to that.
-
-### What changes
-
-- **JTransient** ([API-2](../JTransient/FEATURE-REQUESTS.md#api-requests-from-spacepixels)) needs two calls:
-  - The first does what `detectTransients` does, and also returns a kept reference: the kept frames, their data areas, the master stars, the star mask and the master settings used.
-  - The second re-detects one frame against that reference with new per-frame settings, using the pipeline's own extraction and veto.
-
-  The veto is internal to the engine today, so this has to be an engine API rather than SpacePixels calling the extractor itself.
-- **SpacePixels:**
-  - **Controls.** `TransientInspectionFrame` gets the three spinners, re-detecting 300 ms after a change, as Preview Frame does, and Apply to Settings under the same trial policy decided below. Next to them is a read-only line with the values the mask was built with: master sigma, master grow sigma, master minimum pixels, and the star jitter that widens the mask.
-  - **What is re-detected.** Only the frame on show is re-detected, in the background; the viewer already prepares frames off the Swing thread, and the newest request wins. Each other frame is re-detected when it is shown, so a change costs one frame's extraction, not the whole set's.
-  - **Caching.** Re-detected frames are kept per setting while the window is open, so stepping back is instant.
-  - **Count line.** It shows the settings in use, and the frame's transient count updates.
-  - **Memory.** The window already holds all frames. The kept reference adds the master stars and the star mask, at one byte per pixel (about 61 MB for a 61-MPix sensor).
-
-**Decision (made):** "for point 1. I remember we have a policy now on ther other previous windows, please use the same policy. I agreee with options 2 and 3."
-
-1. **Trial settings follow the existing viewer policy.** Preview Frame and Star Mask Explorer keep trial values and copy only the edited fields with Apply to Settings. This window uses that same policy.
-2. **One frame per change.** Only the frame on show is re-detected.
-3. **Master settings changed while the window is open.** The window keeps its reference and says that the Detection Settings tab's master values now differ. Reopening the window rebuilds the reference.
-
-### Acceptance
-
-- With the starting settings, the re-detected transients equal those of the first run (a test).
-- With other per-frame settings, they equal those of a new `detectTransients` call with those settings (tests on synthetic frames and on one real dataset).
-- The reference is built once per window.
-- A new import closes the window (SP-19).
 
 ## F15. Clean moving-object animations to download, narrow or wide
 
