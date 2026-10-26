@@ -5,7 +5,7 @@
 - Task: F10
 - Implementer: B
 - Reviewer: C
-- Base: 0a02cbca1f2e165a5366787c5d59e0d90472cddc
+- Base: dfa4b4160e0401ec2c80cb14f8db332eddd979a1
 - Implementation: -
 - Fix rounds: 0/2
 - Tests: F16 approved. B reran FrameCalibrationInspectorTest 12 (0 skipped, 18 datasets), CalibrationSafetyTest 3, GuiDetectionReportPromptTest 10, DefaultSpacePixelsPipelineApiTest 5, BatchDetectionCliTest 3, apiConsumerTest 10: PASS. GUI mechanics not rerun.
