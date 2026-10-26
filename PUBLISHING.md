@@ -10,6 +10,35 @@ The same single Gradle project builds the desktop application separately. `run`,
 
 The API artifact compiles for Java 21 and supplies matching sources, Javadocs, POM and Gradle module metadata. JTransient is a compile/API dependency because public requests/results expose its types. FITS, Gson and JPlateSolve are runtime-transitive implementation dependencies; JPlateSolve does not need `api` scope for the supported detection API. Headless AWT/`java.desktop` remains necessary for images/reports. See [API.md](API.md#dependency) for the embedding boundary.
 
+## Windows installer
+
+Build on Windows x64 with a 64-bit JDK 21 selected by `JAVA_HOME`. The JDK supplies `jpackage` and `jlink`. Building the installer also requires the WiX 3 build tools (`candle.exe` and `light.exe`); WiX is not needed by the installed application.
+
+```powershell
+.\gradlew.bat windowsAppImage
+.\gradlew.bat windowsInstaller -PwixHome="<WiX tools folder>"
+```
+
+`windowsAppImage` creates `build/windows/image/SpacePixels/`. `windowsInstaller` creates the image if needed, then writes `build/installers/SpacePixels-<installer-version>.exe`. WiX can instead be configured with `wixHome` in git-ignored `gradle.properties`, `WIX_HOME`, `WIX`, or PATH. Ordinary builds and archive distributions do not require Windows or WiX.
+
+The image contains the desktop and headless JARs, their dependencies, the distributed profiles, the appearance example, the application license and a private Java 21 runtime with its legal notices. It has two launchers:
+
+- `SpacePixels.exe` opens the desktop without a console.
+- `spacepixels-batch.exe` runs the batch CLI in a console. For example, from the installation folder: `.\spacepixels-batch.exe "<sequence folder>" "app\config\default_detection_profile.json"`.
+
+Both retain the distribution's `-XX:MaxRAMPercentage=80.0 -XX:+UseG1GC` defaults. Launcher options are in `app/SpacePixels.cfg` and `app/spacepixels-batch.cfg`; an upgrade can replace these application files. The bundled runtime retains `java.exe` and `javaw.exe`, which the Appearance restart helper needs. The ICO is generated from the existing application PNGs.
+
+Setup is unsigned and installs per user, with a directory chooser and optional Start menu and desktop shortcuts. A later installer upgrades the same installation. Keep the upgrade UUID in `gradle/windows-installer.gradle` unchanged across releases. The application version `2026.10-04` maps to Windows installer version `26.10.4`; `-PwindowsInstallerVersion=major.minor.build` overrides the mapping, with maximum components `255.255.65535`. Use a higher installer version for an upgrade; the application continues to display its own version.
+
+Local composite libraries are suitable for development builds. Before distributing an installer, complete the [selected-artifact release checks](docs/release-artifacts.md) and build with those exact published libraries, with both local composite flags disabled. This installer does not bypass that release gate or introduce an automatic updater. Code signing remains a separate release step.
+
+Before release, check the actual EXE on a clean Windows account or disposable VM with neither Java nor WiX installed:
+
+1. Install to a folder containing spaces and check the directory and shortcut choices.
+2. Launch the desktop, run a small analysis, open its report and test Appearance's restart. Also run the batch launcher with the installed example profile.
+3. Save settings, then close the application and upgrade an older installer using the same upgrade UUID and a higher version. Check that settings still load.
+4. Uninstall through Windows Installed apps and verify that home settings and image datasets remain. The installer owns only its application files.
+
 ## Maven Central publishing
 
 SpacePixels is configured to generate a Maven Central-compatible upload bundle with:

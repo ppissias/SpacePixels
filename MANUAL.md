@@ -51,9 +51,13 @@ With Deep Sky Stacker, open Stacking Settings and choose **Standard Mode** on th
 
 ### Installing
 
-1. Install Java 21 or newer.
-2. Download the latest release from [SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases) and unpack it.
-3. Start `StartSpacePixels.bat` (Windows) or `./StartSpacePixels` (Linux, macOS).
+**Windows installer:** download `SpacePixels-<version>.exe` from [SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases) and run it. It includes its own Java 21 runtime; Java and WiX do not need to be installed on your computer. Setup installs for your Windows account, lets you choose the folder, and offers Start menu and desktop shortcuts. Start **SpacePixels** from a shortcut or the installed `SpacePixels.exe`.
+
+The first installer is unsigned, so Windows may show a SmartScreen notice. For an installer downloaded from the project's release page, **More info → Run anyway** proceeds. A new release is installed by running its installer; close SpacePixels first. Uninstall it through Windows **Installed apps**. Upgrades and uninstall leave settings in your home folder and your image datasets in place.
+
+**ZIP/TAR distribution (Windows, Linux and macOS):** install Java 21 or newer, download and unpack the archive, then start `StartSpacePixels.bat` (Windows) or `./StartSpacePixels` (Linux, macOS). These archives use your installed Java.
+
+The Windows installer also includes `spacepixels-batch.exe` for command-line analysis. Its example profile is `app/config/default_detection_profile.json` under the installation folder; the archive's profile is `config/default_detection_profile.json`.
 
 SpacePixels may use up to 80 % of the computer's memory. 8 GB of RAM is enough for typical cameras; very large sensors (60 MPix and more) with 30 or more frames need about 16 GB. When a newer release exists, a blue **New version** button appears at the top right of the window, next to **User Manual**; click it to open the releases page.
 
@@ -93,7 +97,7 @@ Click **Save appearance**, then choose **Restart now** or **Later**. Restart now
 
 Appearance inputs keep compact widths that fit their values and options. Viewer and configuration windows have minimum sizes based on their controls and the current font size. On a display too small for all controls at once, scroll or Tab through the control area to reach the rest.
 
-For an editable stylesheet, copy `config/appearance-example.properties` from the distribution to a writable location, edit it, and select it with **Browse…**. The example is intended for Dark or High contrast dark. The UTF-8 file uses FlatLaf properties such as `@background`, `@foreground`, `SpacePixels.helpForeground`, `SpacePixels.linkForeground` and `defaultFont`; unspecified values come from the selected theme. Save and restart after editing the file. Relative paths are resolved in your home folder. **Clear** removes the override when you next save. If the file cannot be read, startup uses the selected built-in theme and explains the problem on Appearance; a failed save keeps the previous preferences.
+For an editable stylesheet, copy `config/appearance-example.properties` from the archive (or `app/config/appearance-example.properties` from the Windows installation) to a writable location, edit it, and select it with **Browse…**. The example is intended for Dark or High contrast dark. The UTF-8 file uses FlatLaf properties such as `@background`, `@foreground`, `SpacePixels.helpForeground`, `SpacePixels.linkForeground` and `defaultFont`; unspecified values come from the selected theme. Save and restart after editing the file. Relative paths are resolved in your home folder. **Clear** removes the override when you next save. If the file cannot be read, startup uses the selected built-in theme and explains the problem on Appearance; a failed save keeps the previous preferences.
 
 ---
 

@@ -1,0 +1,154 @@
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+
+// Native Windows packaging is opt-in; ordinary builds never require WiX or a Windows host.
+def windowsRoot = layout.buildDirectory.dir('windows')
+def inputDirectory = windowsRoot.map { it.dir('input') }
+def resourcesDirectory = windowsRoot.map { it.dir('resources') }
+def imageDirectory = windowsRoot.map { it.dir('image') }
+def applicationImage = imageDirectory.map { it.dir('SpacePixels') }
+def iconFile = resourcesDirectory.map { it.file('SpacePixels.ico') }
+def batchProperties = resourcesDirectory.map { it.file('spacepixels-batch.properties') }
+// Keep this identity across releases so Windows upgrades the existing per-user installation.
+def upgradeUuid = '653582dd-afb5-4d57-8b05-b8c2e7447fc8'
+def installerVersion = providers.gradleProperty('windowsInstallerVersion').orElse(providers.provider {
+    def release = project.version.toString() =~ /^(20\d{2})\.(\d{1,2})-(\d+)$/
+    if (!release.matches()) {
+        throw new GradleException('Cannot map the release version; supply -PwindowsInstallerVersion=major.minor.build.')
+    }
+    "${release[0][1].toInteger() - 2000}.${release[0][2].toInteger()}.${release[0][3].toInteger()}"
+})
+def installerFile = installerVersion.map { layout.buildDirectory.file("installers/SpacePixels-${it}.exe").get().asFile }
+def jvmOptions = providers.provider { application.applicationDefaultJvmArgs.toList() }
+def mainJar = tasks.named('desktopJar', Jar).flatMap { it.archiveFile }.map { it.asFile.name }
+def cliJar = tasks.named('jar', Jar).flatMap { it.archiveFile }.map { it.asFile.name }
+
+// Deletions are confined to this project's build directory, including when buildDir is overridden.
+def removeGenerated = { File target ->
+    def root = layout.buildDirectory.get().asFile.toPath().toAbsolutePath().normalize()
+    def path = target.toPath().toAbsolutePath().normalize()
+    if (path == root || !path.startsWith(root)) throw new GradleException('Refusing to replace output outside the build directory.')
+    delete(target)
+}
+def packagingJava = {
+    if (!System.getProperty('os.name').startsWith('Windows') || System.getProperty('os.arch') != 'amd64') {
+        throw new GradleException('Windows packaging requires a Windows x64 build machine.')
+    }
+    if (JavaVersion.current() != JavaVersion.VERSION_21) {
+        throw new GradleException('Run Windows packaging with a 64-bit JDK 21; JAVA_HOME selects the bundled runtime.')
+    }
+    def executable = new File(System.getProperty('java.home'), 'bin/jpackage.exe')
+    if (!executable.isFile()) throw new GradleException('The selected JDK does not contain jpackage.exe.')
+    def parts = installerVersion.get().split(/\./, -1)
+    if (parts.length != 3 || parts.any { !(it ==~ /\d+/) } ||
+            parts[0].toBigInteger() > 255 || parts[1].toBigInteger() > 255 || parts[2].toBigInteger() > 65535) {
+        throw new GradleException('Windows installer versions must be major.minor.build (maximum 255.255.65535).')
+    }
+    executable
+}
+def wixDirectory = {
+    def configured = providers.gradleProperty('wixHome').orElse(providers.environmentVariable('WIX_HOME'))
+            .orElse(providers.environmentVariable('WIX')).orNull
+    def candidates = configured ? [file(configured), new File(file(configured), 'bin')] :
+            (System.getenv('PATH') ?: '').split(File.pathSeparator).findAll { it }.collect { file(it) }
+    def bin = candidates.find { new File(it, 'candle.exe').isFile() && new File(it, 'light.exe').isFile() }
+    if (bin == null) {
+        throw new GradleException('WiX 3 build tools were not found. Extract/install WiX 3.14 and use ' +
+                '-PwixHome=<folder>, WIX_HOME, or add its bin folder to PATH. The setup EXE alone is not enough.')
+    }
+    bin
+}
+
+def prepareInput = tasks.register('prepareWindowsInput', Sync) {
+    dependsOn tasks.named('installDist')
+    into inputDirectory
+    // Flat JAR input lets jpackage generate the complete classpath for both desktop and batch launchers.
+    from(tasks.named('installDist').map { new File(it.destinationDir, 'lib') }) { include '*.jar' }
+    from(tasks.named('installDist').map { it.destinationDir }) { include 'config/**', 'LICENSE' }
+}
+
+def prepareResources = tasks.register('prepareWindowsResources') {
+    def sizes = [16, 24, 32, 48, 64, 128, 256]
+    def icons = sizes.collect { file("src/main/resources/eu/startales/spacepixels/gui/icons/spacepixels-${it}.png") }
+    inputs.files(icons)
+    inputs.property('jvmOptions', jvmOptions)
+    inputs.property('cliJar', cliJar)
+    outputs.files(iconFile, batchProperties)
+    doLast {
+        resourcesDirectory.get().asFile.mkdirs()
+        // ICO supports embedded PNG entries; retain the existing pixels at each native icon size.
+        def pngs = icons.collect { it.bytes }
+        int offset = 6 + 16 * sizes.size()
+        def ico = ByteBuffer.allocate(offset + pngs.sum { it.length }).order(ByteOrder.LITTLE_ENDIAN)
+        ico.putShort((short) 0).putShort((short) 1).putShort((short) sizes.size())
+        sizes.eachWithIndex { size, index ->
+            ico.put((byte) (size == 256 ? 0 : size)).put((byte) (size == 256 ? 0 : size))
+                    .put((byte) 0).put((byte) 0).putShort((short) 1).putShort((short) 32)
+                    .putInt(pngs[index].length).putInt(offset)
+            offset += pngs[index].length
+        }
+        pngs.each { ico.put(it) }
+        iconFile.get().asFile.bytes = ico.array()
+        def launcher = new Properties()
+        launcher.setProperty('main-jar', cliJar.get())
+        launcher.setProperty('main-class', 'eu.startales.spacepixels.tools.BatchDetectionCli')
+        launcher.setProperty('java-options', (jvmOptions.get() + ['-Djava.awt.headless=true']).join(' '))
+        launcher.setProperty('win-console', 'true')
+        launcher.setProperty('win-menu', 'false')
+        launcher.setProperty('win-shortcut', 'false')
+        batchProperties.get().asFile.withOutputStream { launcher.store(it, 'Console batch launcher; no menu or desktop entry.') }
+    }
+}
+
+tasks.register('windowsAppImage', Exec) {
+    group = 'distribution'
+    description = 'Builds SpacePixels.exe, its batch launcher and a private Java 21 runtime (Windows x64).'
+    dependsOn prepareInput, prepareResources
+    inputs.dir(inputDirectory)
+    inputs.files(iconFile, batchProperties)
+    inputs.property('installerVersion', installerVersion)
+    inputs.property('jvmOptions', jvmOptions)
+    inputs.property('packagingJdk', System.getProperty('java.home'))
+    inputs.property('packagingJavaVersion', System.getProperty('java.runtime.version'))
+    outputs.dir(applicationImage)
+    doFirst {
+        def packager = packagingJava()
+        removeGenerated(applicationImage.get().asFile)
+        def options = [packager, '--type', 'app-image', '--name', 'SpacePixels',
+                '--input', inputDirectory.get().asFile, '--dest', imageDirectory.get().asFile,
+                '--main-jar', mainJar.get(), '--main-class', application.mainClass.get(),
+                '--app-version', installerVersion.get(), '--vendor', 'SpacePixels',
+                '--description', 'Astronomical moving-object and transient detection',
+                '--icon', iconFile.get().asFile, '--add-launcher', "spacepixels-batch=${batchProperties.get().asFile}",
+                // Retain java/javaw: Appearance restart uses an owned helper JVM from this private runtime.
+                '--jlink-options', '--strip-debug --no-man-pages --no-header-files']
+        jvmOptions.get().each { options.addAll(['--java-options', it]) }
+        commandLine(options)
+    }
+}
+
+tasks.register('windowsInstaller', Exec) {
+    group = 'distribution'
+    description = 'Builds an unsigned per-user Windows EXE installer with Java and optional shortcuts (WiX 3).'
+    dependsOn tasks.named('windowsAppImage')
+    inputs.dir(applicationImage)
+    inputs.file('LICENSE')
+    inputs.property('installerVersion', installerVersion)
+    inputs.property('upgradeUuid', upgradeUuid)
+    outputs.file(installerFile)
+    doFirst {
+        def packager = packagingJava()
+        def wix = wixDirectory()
+        def pathKey = environment.keySet().find { it.equalsIgnoreCase('PATH') } ?: 'PATH'
+        environment(pathKey, wix.absolutePath + File.pathSeparator + (System.getenv('PATH') ?: ''))
+        removeGenerated(installerFile.get())
+        commandLine(packager, '--type', 'exe', '--name', 'SpacePixels',
+                '--app-image', applicationImage.get().asFile, '--dest', installerFile.get().parentFile,
+                '--app-version', installerVersion.get(), '--vendor', 'SpacePixels',
+                '--description', 'Astronomical moving-object and transient detection',
+                '--about-url', 'https://github.com/ppissias/SpacePixels',
+                '--license-file', file('LICENSE'), '--win-per-user-install', '--win-dir-chooser',
+                '--win-menu', '--win-menu-group', 'SpacePixels', '--win-shortcut', '--win-shortcut-prompt',
+                '--win-upgrade-uuid', upgradeUuid)
+    }
+}

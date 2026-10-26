@@ -7,7 +7,7 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | ID | Request | Status |
 |---|---|---|
 | [F04](#f04-mcp-agent-services) | MCP agent services over HTTP | Agreed: HTTP. The services table awaits agreement. |
-| [F06](#f06-windows-installer) | Windows installer with a bundled Java runtime | Agreed. Decision points listed. |
+| [F06](#f06-windows-installer) | Windows installer with a bundled Java runtime | Implemented locally; clean Windows acceptance pending. |
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Agreed. The matching policy is to be proposed. |
 | [F12](#f12-newer-flatlaf-features) | Newer FlatLaf features | Proposed; FlatLaf 3.7.2 is in use |
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
@@ -60,15 +60,7 @@ A normal install, launch, upgrade and uninstall on Windows; other platforms can 
 
 It does not include an automatic updater; a new release is installed by running the new installer. A Gradle plugin (for example the Badass Runtime plugin, which suits a non-modular application) or a plain `jpackage` task can build it from the existing distribution.
 
-**Decision points before starting:**
-
-1. **Installer version number.** Windows installers need a version of the form major.minor.build with major and minor at most 255. `2026.10-04` does not fit. Proposal: the installer uses `26.10.4` for `2026.10-04`, and the application keeps showing its own version.
-2. **Memory.** The launcher keeps today's `-XX:MaxRAMPercentage=80.0 -XX:+UseG1GC`. A user can change it in the launcher's `.cfg` file. Proposal: keep it.
-3. **Command-line tool.** Proposal: also install the batch tool as a console launcher (`spacepixels-batch`), at no extra cost.
-4. **Icon.** An `.ico` is needed. Proposal: build it from the existing `spacepixels-16`…`256` PNG icons.
-5. **Where the installer is built.** On a Windows machine with WiX: the maintainer's PC, or a Windows GitHub Actions runner. Proposal: a Gradle task on the maintainer's PC first; CI can come later.
-6. **Unsigned release.** Windows SmartScreen warns about an unsigned download ("Windows protected your PC" → More info → Run anyway). The manual should say so until signing is added.
-7. **Bundled Java runtime.** Decide whether the application and its installer use Java 21 or Java 25. This is an optional runtime upgrade; JTransient and JPlateSolve retain Java 21 compatibility. The packaging details above describe JDK 21 and must be checked against the selected packaging JDK.
+**Implementation status (2026-10-26).** The recovered `feature/windows-installer` work supplies opt-in `windowsAppImage` and `windowsInstaller` Gradle tasks. The unsigned EXE has been built locally. The implementation uses Java 21, maps `2026.10-04` to `26.10.4`, keeps the current memory options, includes a console batch launcher, generates its ICO from the existing icons, and uses a fixed upgrade UUID with per-user installation and optional shortcuts. Build and release instructions are in [PUBLISHING.md](PUBLISHING.md#windows-installer); user instructions are in [MANUAL.md](MANUAL.md#installing). Signing, CI and a runtime upgrade remain separate work.
 
 **Acceptance.** On a clean Windows machine: install, launch, run a small analysis and open its report, upgrade from a previous version, and uninstall while saved profiles and data stay.
 

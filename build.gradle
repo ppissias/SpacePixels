@@ -424,6 +424,7 @@ tasks.register('mavenCentralBundle') {
 apply from: 'gradle/api-artifact.gradle'
 apply from: 'gradle/api-consumer.gradle'
 apply from: 'gradle/release-artifacts.gradle'
+apply from: 'gradle/windows-installer.gradle'
 
 // The isolated API consumer build runs when the Central bundle is prepared (bundleCentralPortal), not on every check.
 tasks.named('check') {

@@ -1,2 +1,5 @@
 useLocalJTransientBuild=false
 useLocalJPlateSolveBuild=false
+
+# Optional Windows installer build: WiX 3 folder containing candle.exe and light.exe.
+# wixHome=<WiX tools folder>

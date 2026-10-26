@@ -87,7 +87,15 @@ Add `-PspacepixelsDebug` (or `-Dspacepixels.debug=true` on a plain `java` comman
 
 FITS HDU creation uses the public `Fits.makeHDU(Object)` API in pixel conversion, XISF import, artificial-star injection and test fixtures (SP-23, completed 2026-10-25). It replaces the deprecated `FitsFactory.hduFactory(Object)` calls while preserving pixel and header handling.
 
-Remaining dependency maintenance is tracked separately as SP-21 and SP-22 in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md). The optional application runtime choice belongs to [F06, Windows installer](FEATURE-REQUESTS.md#f06-windows-installer); JTransient and JPlateSolve retain Java 21 compatibility.
+Remaining dependency maintenance is tracked separately as SP-21 and SP-22 in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md). The Windows installer bundles Java 21; JTransient and JPlateSolve retain Java 21 compatibility. A runtime upgrade remains a separate choice.
+
+### Windows installer
+
+`gradle/windows-installer.gradle` supplies two opt-in Windows x64 tasks: `windowsAppImage` produces `build/windows/image/SpacePixels/SpacePixels.exe` and a private Java runtime; `windowsInstaller` wraps that image in `build/installers/SpacePixels-<installer-version>.exe`. Use a 64-bit JDK 21. The installer task also needs WiX 3 build tools (`candle.exe`, `light.exe`), found through `-PwixHome=<folder>`, `WIX_HOME`, `WIX`, or PATH. Store local paths in git-ignored `gradle.properties`, not in the build script. See [PUBLISHING.md](PUBLISHING.md#windows-installer) for commands and release validation.
+
+The tasks reuse `installDist`'s complete JAR set, profiles, appearance example and license. The multi-size ICO embeds the existing PNG icons without changing their pixels. `jpackage` links the packaging JDK's Java 21 runtime; native `java`/`javaw` commands are retained for Appearance's helper-based restart, and runtime legal notices stay included. The GUI launcher has no console; `spacepixels-batch.exe` has one and shares the bundled runtime. Both keep the existing memory/G1 options.
+
+Installer choices settle F06's initial defaults: per-user installation and directory selection, optional desktop and Start menu shortcuts, unsigned output, local Gradle builds, and upgrades through a new installer. The fixed upgrade UUID must not change between releases. Application `2026.10-04` maps to Windows version `26.10.4`; `-PwindowsInstallerVersion=major.minor.build` can override it (Windows limits: 255.255.65535). Only application files belong to the installer; home settings and datasets are never installer payload or cleanup targets. No automatic updater or Java runtime upgrade is introduced.
 
 ## The packages
 
