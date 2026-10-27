@@ -166,10 +166,11 @@ The result is also written next to the frames, as `auto_tune.json`, in the same 
 Click **Detect Moving Targets**, on the Overview or on the Main tab (or press **Ctrl+D**). A progress window shows each stage.
 
 Below the progress bar, the **Live view** shows a small picture of the work under way. A new picture appears at most once every 3 seconds, including when the stage changes. A short stage may show nothing, and the last picture stays until a new one is allowed. Nothing is repeated in a loop.
+
 - a frame as it loads, with its number and observation time;
 - during source extraction, the frame just processed, with detected sources ringed;
 - the stationary-sky reference (the median of the kept frames) once the detection has built it;
-- one picture from the running stage: a slow-mover candidate, the star mask or a track found so far, a local-rescue candidate, the photometry frame being measured, or a variable-star candidate beside its light curve when photometry finishes. They are marked **provisional**: later stages and your report choices can still leave a finding out. The caption gives the counts so far, and a stage that finds nothing says so;
+- one picture from the running stage: a slow-mover candidate, the star mask or a track found so far, a local-rescue candidate, or photometry measurements. During photometry the view cycles through sampled stars and can show a variable-star crop beside its current light curve; a candidate and its curve can also appear when photometry finishes. Candidates are marked **provisional**: later stages and your report choices can still leave a finding out. The caption gives the counts so far, and a stage that finds nothing says so;
 - the report's pictures, such as the track map and object crops, as they are written.
 
 The text above the picture is the progress. **Hide picture** removes the view and the work of making its pictures, and SpacePixels remembers the choice. **Detect Iteratively** shows the same view, clears it at the start of each pass and names the pass in the caption. The pictures are copies for display only: the detection results and the report are the same with the view shown or hidden.
@@ -585,7 +586,13 @@ Results are written in an `iterative_detections_*` folder beside the source file
 
 ### Command line
 
-The `batchDetect` tool runs the detection without the window, for example to process many sessions:
+The batch tool runs detection without the window, for example to process many sessions. From a Windows installation folder:
+
+```powershell
+.\spacepixels-batch.exe "C:\astro\session1" "app\config\default_detection_profile.json" --auto-tune high
+```
+
+From an unpacked Windows archive:
 
 ```
 bin\batchDetect.bat "C:\astro\session1" "config\default_detection_profile.json" --auto-tune high

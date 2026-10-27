@@ -136,7 +136,7 @@ For the underlying detection logic and the meaning of the engine configuration o
 - Provides an iterative detection mode for large datasets and very slow targets.
 - Auto-tunes the detection settings for each session. The default calibrated tuner measures false detections and sensitivity on the session's own frames and offers four profiles: low, medium, high (the default) and maximum (as sensitive as possible, for small sensors or targeted searches for a faint object). The original score-based tuner is still available.
 - Optionally measures the photometry of the stationary stars and reports variable-star candidates with light curves, readiness checks and a lookup in the AAVSO VSX catalogue. Switch it on under Analyses in This Run on the Detection Settings Overview; plate-solve one frame so candidates can be matched against VSX.
-- Generates an HTML report with diagnostics, GIFs, geometric overlays, global maps, object-identification links, and optional AI-themed summary sections.
+- Generates an HTML report with diagnostics, GIFs, geometric overlays, global maps and object-identification links.
 - Supports manual transient inspection and frame-by-frame single-image detection preview, where the per-frame detection thresholds can be tried directly on the frame.
 - Long jobs, such as a detection run or Auto-Tune, can be cancelled from their progress window.
 - Blinks aligned frames for traditional visual inspection.
@@ -163,35 +163,20 @@ For setup, request/result behavior, and usage examples, see [API.md](API.md).
 
 ## Installation and launch
 
-SpacePixels requires Java 21 or newer.
-
-<p><strong>Prerequisite:</strong> Java 21 must be installed on your system.</p>
-<p>
-  Please make sure you have Java 21 installed. Download Java: 
-  <a href="https://www.oracle.com/java/technologies/downloads/" target="_blank" rel="noopener noreferrer">
-    Oracle Java
-  </a> or
-  <a href="https://adoptium.net/temurin/releases/?version=21" target="_blank" rel="noopener noreferrer">
-    Eclipse Temurin
-  </a>
-  
-
-</p>
-
 ### Running a release build
 
-Download the latest packaged release from:
+Download a package from [SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases).
 
-[SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases)
+**Windows installer:** run `SpacePixels-<version>.exe`. It includes Java 21, installs for your Windows account and offers desktop and Start menu shortcuts. Launch the installed **SpacePixels** shortcut or `SpacePixels.exe`. See the [manual's installation instructions](MANUAL.md#installing) for unsigned-installer notices, upgrades and uninstalling.
 
-Then unzip / untar and run:
+**ZIP/TAR archives:** install Java 21 or newer, for example [Eclipse Temurin](https://adoptium.net/temurin/releases/?version=21) or [Oracle Java](https://www.oracle.com/java/technologies/downloads/), then unpack the archive and run:
 
 - Windows: `StartSpacePixels.bat`
 - Linux/macOS: `./StartSpacePixels`
 
 ### Running from source
 
-From the project root:
+Use JDK 21. From the project root:
 
 - Windows: `gradlew.bat run`
 - Linux/macOS: `./gradlew run`
@@ -201,9 +186,11 @@ To generate a local distribution with launch scripts:
 - Windows: `gradlew.bat installDist`
 - Linux/macOS: `./gradlew installDist`
 
+On Windows x64, `gradlew.bat windowsAppImage` builds an application folder with its own runtime; distribute the entire `build/windows/image/SpacePixels` folder. `gradlew.bat windowsInstaller` wraps it in an EXE installer and also requires WiX 3. See [PUBLISHING.md](PUBLISHING.md#windows-installer).
+
 ### Console output
 
-SpacePixels prints only problems to the console; the batch detector also prints the path of the report it wrote. For diagnostics (progress, per-frame statistics, timings and the detection engine's debug output), start the JVM with `-Dspacepixels.debug=true`: for a release build set `JAVA_OPTS=-Dspacepixels.debug=true` before running the launcher, and from source add `-PspacepixelsDebug` to the Gradle command.
+SpacePixels prints only problems to the console; the batch detector also prints the path of the report it wrote. For diagnostics (progress, per-frame statistics, timings and the detection engine's debug output), start the JVM with `-Dspacepixels.debug=true`. Archive launchers accept `JAVA_OPTS=-Dspacepixels.debug=true`; native Windows launchers use `java-options=-Dspacepixels.debug=true` under `[JavaOptions]` in `app/SpacePixels.cfg` or `app/spacepixels-batch.cfg`. From source, add `-PspacepixelsDebug` to the Gradle command.
 
 ## Typical GUI workflow
 
@@ -236,9 +223,9 @@ The standard pipeline exports an HTML session report plus PNG and GIF assets. De
 
 ## Command-line utilities
 
-`build.gradle` keeps the generated application launcher in `bin`, adds dedicated command-line tool launchers there, and ships top-level `StartSpacePixels` wrappers that delegate to the generated launcher.
+The Windows installer includes `spacepixels-batch.exe` beside `SpacePixels.exe`, with its example profile at `app/config/default_detection_profile.json`.
 
-After building or unpacking a distribution, you should find:
+Archive distributions keep the generated application and tool launchers in `bin`, with top-level `StartSpacePixels` wrappers that delegate to the generated launcher. After building or unpacking an archive, you should find:
 
 - Release root:
   - `StartSpacePixels.bat`
@@ -256,9 +243,15 @@ After building or unpacking a distribution, you should find:
 
 ### Headless batch detection
 
-Use either the packaged `batchDetect` launcher or the Gradle task.
+Use the native Windows `spacepixels-batch.exe`, the archive's `batchDetect` launcher or the Gradle task.
 
-Packaged launcher examples:
+From a Windows installation folder:
+
+```powershell
+.\spacepixels-batch.exe "C:\astro\sequence" "app\config\default_detection_profile.json" --auto-tune high
+```
+
+Archive launcher examples:
 
 - Windows:
   - `bin\\batchDetect.bat "C:\\astro\\sequence" "config\\default_detection_profile.json"`
@@ -280,7 +273,7 @@ With the Gradle task, `-PbatchMaxHeap=8g` sets a fixed JVM heap instead of the d
 
 ### Artificial star injection
 
-Use either the packaged `injectStars` launcher or the Gradle task.
+Use either the archive's `injectStars` launcher or the Gradle task.
 
 Packaged launcher examples:
 

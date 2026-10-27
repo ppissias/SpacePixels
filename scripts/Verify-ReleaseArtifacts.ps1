@@ -40,7 +40,7 @@ foreach ($library in @($engine, $solver)) {
 
 $selectedArguments = @('-PuseLocalJTransientBuild=false', '-PuseLocalJPlateSolveBuild=false',
     "-PjTransientVersion=$engineVersion", "-PjPlateSolveVersion=$solverVersion", "-PreleaseValidationRepository=$repository")
-Invoke-ProjectGradle $workspace ($selectedArguments + @('check'))
+Invoke-ProjectGradle $workspace ($selectedArguments + @('check', 'apiConsumerTest'))
 Invoke-ProjectGradle $workspace ($selectedArguments + @('-PapiConsumerMetadata=pom', 'apiConsumerTest'))
 
 Write-Output "Verified selected JTransient $engineVersion and JPlateSolve $solverVersion with this SpacePixels build."

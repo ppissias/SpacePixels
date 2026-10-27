@@ -19,7 +19,10 @@ tasks.register('verifyReleaseArtifacts') {
         if (gradle.includedBuilds.any { it.name in ['JTransient', 'JPlateSolve'] }) {
             throw new GradleException('Artifact verification requires both local library build flags=false.')
         }
-        def components = configurations.runtimeClasspath.incoming.resolutionResult.allComponents
+        // Resolve the JARs as well as metadata: a POM alone is not a usable release dependency.
+        def runtime = configurations.runtimeClasspath
+        runtime.resolve()
+        def components = runtime.incoming.resolutionResult.allComponents
         selectedLibraries.each { group, version ->
             def library = components.find { it.moduleVersion?.group == group }
             if (library == null || library.id instanceof org.gradle.api.artifacts.component.ProjectComponentIdentifier ||

@@ -83,11 +83,11 @@ Add `-PspacepixelsDebug` (or `-Dspacepixels.debug=true` on a plain `java` comman
 
 ### Dependencies
 
-**SP-18 is complete (2026-10-24).** The coordinated dependency upgrade established Gradle 9.8.2, nom-tam-fits 1.23.0, Gson 2.14.0 and FlatLaf 3.7.2 across the repositories that use them. Reference outputs stayed byte-identical, saved settings files loaded unchanged, and compressed frames were compared with cfitsio through astropy. `UiStyle.spinner` preserves the earlier caret-on-focus behaviour. The upgrade commits record the checks.
+The build uses Gradle 9.8.2, nom-tam-fits 1.23.0, Gson 2.14.0 and FlatLaf 3.7.2. `UiStyle.spinner` keeps the caret where the user puts it when a number field gains focus.
 
-FITS HDU creation uses the public `Fits.makeHDU(Object)` API in pixel conversion, XISF import, artificial-star injection and test fixtures (SP-23, completed 2026-10-25). It replaces the deprecated `FitsFactory.hduFactory(Object)` calls while preserving pixel and header handling.
+FITS HDU creation uses the public `Fits.makeHDU(Object)` API in pixel conversion, XISF import, artificial-star injection and test fixtures.
 
-Remaining dependency maintenance is tracked separately as SP-21 and SP-22 in [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md). The Windows installer bundles Java 21; JTransient and JPlateSolve retain Java 21 compatibility. A runtime upgrade remains a separate choice.
+The application and both libraries compile for Java 21. The Windows installer bundles a Java 21 runtime.
 
 ### Windows installer
 
@@ -95,7 +95,7 @@ Remaining dependency maintenance is tracked separately as SP-21 and SP-22 in [DE
 
 The tasks reuse `installDist`'s complete JAR set, profiles, appearance example and license. The multi-size ICO embeds the existing PNG icons without changing their pixels. `jpackage` links the packaging JDK's Java 21 runtime; native `java`/`javaw` commands are retained for Appearance's helper-based restart, and runtime legal notices stay included. The GUI launcher has no console; `spacepixels-batch.exe` has one and shares the bundled runtime. Both keep the existing memory/G1 options.
 
-Installer choices settle F06's initial defaults: per-user installation and directory selection, optional desktop and Start menu shortcuts, unsigned output, local Gradle builds, and upgrades through a new installer. The fixed upgrade UUID must not change between releases. Application `2026.10-04` maps to Windows version `26.10.4`; `-PwindowsInstallerVersion=major.minor.build` can override it (Windows limits: 255.255.65535). Only application files belong to the installer; home settings and datasets are never installer payload or cleanup targets. No automatic updater or Java runtime upgrade is introduced.
+The installer uses per-user installation and directory selection, optional desktop and Start menu shortcuts, unsigned output, local Gradle builds, and upgrades through a new installer. The fixed upgrade UUID must not change between releases. Application `2026.10-04` maps to Windows version `26.10.4`; `-PwindowsInstallerVersion=major.minor.build` can override it (Windows limits: 255.255.65535). Home settings and datasets are kept outside the installation folder and are not installer payload or cleanup targets. There is no automatic updater.
 
 ## The packages
 
@@ -131,7 +131,7 @@ before cohort consistency; interactive import preserves its sequence checks befo
 `FitsPreparation` writes prepared copies through `FitsPixelConverter`; `XisfImageConverter` remains separate.
 These are static helpers; `FitsImportService` and `FitsBatchService` retain their instance-owned work.
 
-`FrameCalibrationInspector` reads the first/middle/last frame without changing pixels. The existing sharp-spike criterion (above sky + 10 sigma, four-neighbour excess sum below 0.25 of the peak) warns at at least 5 spikes/MP and 30 spikes in a sample. These measured limits differ from the provisional 35/MP and 300-spike proposal: the positive reference has 242 such strict spikes (38.12/MP), while all 17 clean references have at most 15 (1.66/MP). The full 18-dataset warning classifications were independently checked on 2026-10-26 and are unchanged by the correctness fixes.
+`FrameCalibrationInspector` reads the first/middle/last frame without changing pixels. Its sharp-spike criterion (above sky + 10 sigma, four-neighbour excess sum below 0.25 of the peak) warns at at least 5 spikes/MP and 30 spikes in a sample.
 
 Alignment uses spaced optical-peak centroids, requiring at least three matches and half of the smaller star set to support one translation above 2.5 pixels. Missing or dimmer stars do not become artificial offsets. Floating samples keep their physical noise scale; only known unsigned-integer samples use integer histogram bins. Pixel-row and matching checks observe `CancellationScope`; unreadable samples fail rather than returning a clean verdict.
 
@@ -157,7 +157,7 @@ The catalogue controller owns its progress timer and delivers model changes and 
 `SessionOwner` holds the current `ProcessingSession`. A session has a UUID and owns its frame metadata (`ProcessingSession.replaceFrameHeader` replaces a frame's `FitsFileInformation` after a WCS write while existing runs keep their snapshots), selection, sky catalogue and correction (`SkyCatalogueModel`), Auto-Tune state, master-stack cache, last report and last run's overlays, and the services that work on its frames: its plate solver (`PlateSolveService`) and the batch operations on its folder (`FitsBatchService`). Large image buffers are shared by ownership, never deep-copied.
 
 - **Handover.** `FitsImportTask` reads the frames and the saved session data (catalogue, correction, Auto-Tune results) on a worker; each attempt closes its `FitsImportService` before it returns, so the result holds no resources. The window builds the session from that result. Only a completed import is installed, through `SessionOwner.replace(expected, candidate)`, which rejects a stale import and closes it. A failed, declined or cancelled import keeps the current session.
-- **Closing a session** stops its catalogue worker, closes its plate solver and releases its frames, caches and selection, also when the solver cannot confirm its shutdown. Every viewer is closed on import (a fresh start, per D-01) and at exit, through the central `ViewerRegistry`; disposed windows are unregistered and their workers and listeners released.
+- **Closing a session** stops its catalogue worker, closes its plate solver and releases its frames, caches and selection, also when the solver cannot confirm its shutdown. Every viewer is closed on import (a fresh start) and at exit, through the central `ViewerRegistry`; disposed windows are unregistered and their workers and listeners released.
 - **Session files** (`sky_catalogue.json`, `plate_correction.json`, `auto_tune.json`) are written on the window's session writer. They are restored at import only if they match the frames (field, plate solution, frame count and size).
 - **A run never reads the session files.** Detect and Detect Iteratively take the session's catalogue and correction when they are admitted (`SkyCatalogueModel.snapshot`, a `SkySnapshot`); an iterative pass on a prepared copy in another folder, and every headless run, read that folder's files once, at the start (`ReportRunContext.capture`). Jobs therefore never wait for session writes. When a save fails, the value stays in use until SpacePixels closes, in the viewers and in the reports, and the window says it was not saved.
 - **Application settings** (`ApplicationSettings`, the Astrometry Config tab) are loaded once by the window, before any import. Each session's plate solver reads that one live object, so unsaved edits reach the next solve; an import never reads or reloads them.
@@ -254,8 +254,6 @@ Saving the profile and the visualization preferences stages both files, but repl
 ## Testing
 
 Tests use JUnit 4.13.2. Start with the affected tests, then run the full suite.
-
-**Framework decision.** Stay on JUnit 4; a migration to JUnit 6 is optional future maintenance, with no application behaviour change. If revisited, run existing JUnit 4 tests on the Vintage engine, migrate classes as they are touched, and account for the GUI mechanics tests' move to AssertJ Swing's Jupiter variant.
 
 - **Boundaries and ownership:** `DependencyRulesTest` (no GUI in jobs, tasks or headless domain packages; no AWT in session state), `JobCoordinatorTest`, `ProcessingSessionTest`, `ApplicationStorageSessionTest`, `ApplicationStorageSettingsTest`. The storage tests cover one queue's settings/session order, reimport reads behind writes, target failures and retries, shutdown drain, and session completions already queued when their owner closes.
 - **Synthetic data:** `SyntheticDatasetFactory` builds disposable FITS datasets.

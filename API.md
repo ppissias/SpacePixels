@@ -15,6 +15,7 @@ Supported public types:
 - `SpacePixelsPipelineException`
 - `SpacePixelsProgressListener`
 - `InputPreparationMode`
+- `NegativeValueHandling`
 
 Other `eu.startales.spacepixels.*` packages should be treated as internal implementation details and may change between releases. The current public request/result model also exposes:
 
@@ -22,6 +23,9 @@ Other `eu.startales.spacepixels.*` packages should be treated as internal implem
 - `io.github.ppissias.jtransient.engine.AutoTuneProfile`
 - `io.github.ppissias.jtransient.engine.PipelineResult`
 - `eu.startales.spacepixels.fits.FitsFileInformation`
+- `eu.startales.spacepixels.config.DetectionRunOptions`
+- `eu.startales.spacepixels.config.VisualizationSettings`
+- `eu.startales.spacepixels.config.VariableStarReportOptions`
 
 ### Frame metadata (`FitsFileInformation`)
 
@@ -42,7 +46,7 @@ implementation 'eu.startales.spacepixels:spacepixels:<version>'
 
 `spacepixels` is the only Maven publication: the public API plus the headless configuration, session, FITS/preparation, processing, catalogue and reporting implementation/resources it needs. It also includes the `BatchDetectionCli` and `ArtificialStarInjector` command-line entrypoints, usable with a dependency-resolved Java classpath. Matching sources and Javadocs cover the same headless code. It contains no SpacePixels GUI, jobs/tasks, GUI icons or FlatLaf dependency.
 
-JTransient is an `api` dependency because its configuration and result types appear in the supported API. FITS, Gson and JPlateSolve remain `implementation` dependencies: consumers still receive them transitively at runtime, but they are not exposed on the compile classpath. The internal `platesolve.PlateSolveService` exposes solver types, but it is not a supported embedding contract; consumers using it must declare their own compile dependency. Promoting JPlateSolve to `api` would be appropriate only if solver types enter the supported public API.
+JTransient is an `api` dependency because its configuration and result types appear in the supported API. FITS, Gson and JPlateSolve are `implementation` dependencies: consumers receive them transitively at runtime, but they are not exposed on the compile classpath. The supported detection API does not expose plate-solver types.
 
 The desktop application is built separately by `run`/`installDist`, using an unpublished desktop companion JAR and GUI-only dependencies. A Maven API JAR is not a standalone desktop application or a shaded dependency bundle. Headless AWT image/report rendering still requires the JDK's `java.desktop` module; run servers with `-Djava.awt.headless=true` rather than removing that module. Java 21 is the compilation baseline.
 
@@ -80,7 +84,7 @@ Report cards, maps, CSV labels and viewer overlays share category-owned identity
 
 API requests use built-in rendering defaults and no configured observing site unless supplied explicitly. They do not load user-home preferences or modify desktop rendering/tuning defaults. The batch CLI reads the saved visualization preferences once at startup and passes them in its run options. Callers needing a particular site or presentation should supply run options.
 
-After input preparation, each ordinary run captures FITS metadata, the active plate correction and the matching saved catalogue before pixel loading/detection. The execution data carries this context into report export and viewer overlays. Later settings edits or catalogue/correction-file replacements affect subsequent runs. Iterative passes share admitted application options and each resolve their own input context before detection. This capture owns metadata/catalogue data, not duplicate image buffers, and does not implement saved-run restoration or diagnostic re-export.
+After input preparation, each run captures FITS metadata, the active plate correction and the matching saved catalogue before pixel loading/detection. Report export uses that captured context. Later settings edits or catalogue/correction-file replacements affect subsequent runs.
 
 ## Input preparation modes
 
@@ -109,7 +113,7 @@ with other scaling count as not detection-ready, because read as they are their 
 the wrong brightness level. The API closes its import executor on both success and failure.
 
 Unsigned 16-bit storage cannot hold values below zero, which signed or floating-point frames that
-were bias- or dark-subtracted without a pedestal contain. `NegativeValueHandling` chooses what
+were bias- or dark-subtracted without a pedestal contain. `SpacePixelsPipelineRequest.Builder.negativeValueHandling(NegativeValueHandling)` chooses what
 `AUTO_PREPARE_TO_16BIT_MONO` does with them:
 
 - `ADD_OFFSET` (default, recommended): the same whole number of ADU is added to every pixel of every
@@ -224,7 +228,7 @@ Use this when you want SpacePixels to optimize the effective detection configura
 
 Profiles: `LOW`, `MEDIUM`, `HIGH` and `MAXIMUM` (as sensitive as possible; on large sensors it leaves many candidates, so it is meant for small sensors or targeted searches). Auto-Tune measures false detections and sensitivity on the session and picks the most sensitive settings within the profile's budget.
 
-Progress is reported from 0 to 100% and only moves forward: input preparation up to 15%, Auto-Tune 15-35% when enabled, the detection pipeline up to 90%, and report generation 90-100%.
+Progress callbacks receive percentages from 0 to 100: input preparation up to 15%, Auto-Tune 15-35% when enabled, and the detection pipeline up to 90% when a report is requested or 100% otherwise. Report generation occupies 90-100%.
 
 ## Result object overview
 
@@ -242,6 +246,8 @@ Progress is reported from 0 to 100% and only moves forward: input preparation up
 - `getPipelineResult()`
 - `getExportDirectory()`
 - `getReportFile()`
+- `getCalibrationWarning()`
+- `hasCalibrationWarning()`
 
 Typical usage patterns:
 
@@ -266,7 +272,7 @@ Common-motion filtering precedes optional local rescue and activity clustering a
 
 Request construction snapshots an explicitly supplied `DetectionConfig` with JTransient's `DetectionConfigRules.Operation.CONFIGURATION`. Non-finite numbers, including hidden/disabled settings, throw `DetectionConfigRules.InvalidConfigurationException` from `build()`, before `run`; its `issues()` contain rule, stage and field identifiers. Profile loading uses the same validation and wraps this exception as an `IOException` cause. Profiles and sentinels are not silently aligned or rejected.
 
-Call `DetectionConfigRules.validate(config, operation[, timing])` for advisory issues, or explicitly request `align` and inspect its adjustments before building a request. Engine execution validates only the captured operation's read set; GUI spinner ranges are not extra API restrictions. SpacePixels uses detached `tune` results, including unsuccessful tuning fallbacks. Configuration warnings are available from the shared validator. See JTransient's [configuration contract](../JTransient/PIPELINE.md#configuration-snapshots-and-shared-rules).
+Call `DetectionConfigRules.validate(config, operation[, timing])` for advisory issues, or explicitly request `align` and inspect its adjustments before building a request. Engine execution validates only the captured operation's read set; GUI spinner ranges are not extra API restrictions. SpacePixels uses detached `tune` results, including unsuccessful tuning fallbacks. Configuration warnings are available from the shared validator. See JTransient's [configuration contract](https://github.com/ppissias/JTransient/blob/main/PIPELINE.md#configuration-snapshots-and-shared-rules).
 
 Example: 
 
