@@ -34,6 +34,10 @@ final class AppearancePanel extends JPanel {
         this.closing = closing;
         this.preferences = preferences;
         this.restart = restart;
+        browse.setToolTipText("Choose a FlatLaf .properties file to customise the theme, with an option to save and restart.");
+        clear.setToolTipText("Clear the custom style file selection. Save and restart to use the built-in theme.");
+        save.setToolTipText("Save these appearance settings, then choose when to restart SpacePixels to apply them.");
+        reset.setToolTipText("Select Dark at 100% and clear the custom style file. Save and restart to apply these defaults.");
         ((JSpinner.DefaultEditor) scale.getEditor()).getTextField().setColumns(4);
         Form form = new Form();
         JLabel title = new JLabel("Appearance");
@@ -52,7 +56,7 @@ final class AppearancePanel extends JPanel {
         AccessibleControls.label(fileLabel, custom, "An optional FlatLaf .properties file that overrides the selected theme.");
         form.row(fileLabel);
         form.compact(fileRow);
-        form.note("Advanced: choose a FlatLaf .properties file to customise colours or fonts. Relative paths are resolved in your home folder. Clear uses the built-in theme. An example is included in config/appearance-example.properties.");
+        form.note("Advanced: choose a FlatLaf .properties file to customise colours or fonts. Clear uses the built-in theme. An example is included in config/appearance-example.properties.");
         JPanel actions = new WrappingControlsPanel(UiStyle.space(8), UiStyle.space(4));
         actions.add(save);
         actions.add(reset);
@@ -71,7 +75,7 @@ final class AppearancePanel extends JPanel {
             show(AppearanceSettings.defaults());
             message("Defaults selected. Save and restart SpacePixels to apply them.");
         });
-        save.addActionListener(event -> save());
+        save.addActionListener(event -> save(false));
     }
 
     /** Shows values only; restoring defaults does not change a file or other application settings. */
@@ -81,18 +85,25 @@ final class AppearancePanel extends JPanel {
         custom.setText(settings.customProperties());
     }
 
-    /** Uses the normal file chooser; opening a file never changes it. */
+    /** Selects a custom style file and offers to save appearance settings and restart. */
     private void chooseFile() {
         JFileChooser chooser = WindowSizing.fileChooser(null);
         chooser.setDialogTitle("Choose appearance properties");
         chooser.setFileFilter(new FileNameExtensionFilter("FlatLaf properties (*.properties)", "properties"));
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             custom.setText(chooser.getSelectedFile().getAbsolutePath());
+            Object[] choices = {"Save and restart", "Keep editing"};
+            int answer = JOptionPane.showOptionDialog(this,
+                    "Custom style file selected. Save appearance settings and restart SpacePixels to apply the new look?\n"
+                            + "Running work will finish first.",
+                    "Apply custom appearance", JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE,
+                    null, choices, choices[1]);
+            if (answer == 0) save(true);
         }
     }
 
-    /** Captures checked controls on the EDT and reads/writes files exclusively on the settings worker. */
-    private void save() {
+    /** Saves checked controls on the settings worker; an agreed restart runs on the EDT only after a successful save. */
+    void save(boolean restartAfterSave) {
         AppearanceSettings requested;
         try {
             scale.commitEdit();
@@ -114,6 +125,10 @@ final class AppearancePanel extends JPanel {
             message(failure == null ? "Appearance saved. Restart SpacePixels to apply your changes."
                     : "Appearance was not saved: " + failure.getMessage());
             if (failure == null) {
+                if (restartAfterSave) {
+                    restart.run();
+                    return;
+                }
                 Object[] choices = {"Restart now", "Later"};
                 int answer = JOptionPane.showOptionDialog(this,
                         "Appearance saved. Restart SpacePixels to apply your changes?\nRunning work will finish first.",

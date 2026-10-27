@@ -93,17 +93,23 @@ The **User Manual** link at the right end of the tab bar opens this manual in yo
 
 Open **Appearance**, which is available before importing frames. Choose **Dark**, **High contrast dark** (white text and clear borders on a near-black background), or **Light**. **Interface size (%)** ranges from 100 to 300 and enlarges text and controls together. It applies in addition to operating-system display scaling and any launcher scaling option.
 
+![The Appearance tab with the Dark theme](docs/images/manual/ui-appearance-dark.png)
+
 Click **Save appearance**, then choose **Restart now** or **Later**. Restart now waits for any running task and pending saves before reopening SpacePixels automatically. Later keeps the current appearance until you next start the application. The selected size and colours are applied before any windows open. **Restore defaults** selects Dark at 100% and clears the custom style file; click Save and restart to keep that choice. The preferences are saved independently as `spacepixels_appearance.json` in your home folder. Image zoom, image stretch and the HTML report retain their separate presentation controls.
+
+Hover over **Browse…**, **Clear**, **Save appearance** or **Restore defaults** for a description of the action.
+
+![The same Appearance tab with the Light theme applied](docs/images/manual/ui-appearance-light.png)
 
 Appearance inputs keep compact widths that fit their values and options. Viewer and configuration windows have minimum sizes based on their controls and the current font size. On a display too small for all controls at once, scroll or Tab through the control area to reach the rest.
 
-For an editable stylesheet, copy `config/appearance-example.properties` from the archive (or `app/config/appearance-example.properties` from the Windows installation) to a writable location, edit it, and select it with **Browse…**. The example is intended for Dark or High contrast dark. The UTF-8 file uses FlatLaf properties such as `@background`, `@foreground`, `SpacePixels.helpForeground`, `SpacePixels.linkForeground` and `defaultFont`; unspecified values come from the selected theme. Save and restart after editing the file. Relative paths are resolved in your home folder. **Clear** removes the override when you next save. If the file cannot be read, startup uses the selected built-in theme and explains the problem on Appearance; a failed save keeps the previous preferences.
+For an editable stylesheet, copy `config/appearance-example.properties` from the archive (or `app/config/appearance-example.properties` from the Windows installation) to a writable location, edit it, and select it with **Browse…**. After you choose a file, SpacePixels offers **Save and restart** to apply it, or **Keep editing** to leave the selection in the form without saving. Restart follows a successful save and waits for running work. The example is intended for Dark or High contrast dark. The UTF-8 file uses FlatLaf properties such as `@background`, `@foreground`, `SpacePixels.helpForeground`, `SpacePixels.linkForeground` and `defaultFont`; unspecified values come from the selected theme. Save and restart after editing the file. **Clear** removes the override when you next save. If the file cannot be read, startup uses the selected built-in theme and explains the problem on Appearance; a failed save keeps the previous preferences.
 
 ---
 
 ## 3. Workflow: find moving objects in a session
 
-This is the main use of SpacePixels: **import → Auto-Tune → Detect → read the report**. The screenshots come from a session of 33 two-minute frames of a 61-megapixel camera.
+This is the main use of SpacePixels: **import → Auto-Tune → Detect → read the report**. The screenshots come from a session of 33 two-minute frames of a 61-megapixel camera. They illustrate several runs of that session, so finding numbers and counts can differ with the settings and software version.
 
 ### Step 1: import the frames
 
@@ -123,7 +129,7 @@ If **Solved** says `No`, select one frame and click **Plate Solve Selected** in 
 
 - **ASTAP Executable Path**: choose `astap.exe` (or the ASTAP program on Linux and macOS) and click **Check**. Or pick **Astrometry.net (online)** under the Plate Solve button, which needs nothing installed.
 - **Astrometry.net Account**: **Anonymous** (the default) needs no account. To solve with your own account, choose **My API key** and paste your key: sign in at [nova.astrometry.net](https://nova.astrometry.net) and find it in the **My Profile** section of the dashboard. Your uploads then also show up on your Astrometry.net profile. **Check** logs in without uploading anything. The choice and the key are saved at once, the key in plain text in `spacepixels_app.json` in your home folder. Either way, images are submitted as private. Anonymous uploads all belong to one Astrometry.net account shared by every anonymous user, so SpacePixels uploads a copy of the frame without your site location (`SITELAT`, `SITELONG`, elevation and similar header cards) or the observer and site names; the frame on disk is not changed and the solve is the same.
-- **Observing Site**: your latitude and longitude, or your IAU observatory code, make the object identification exact for your location. When the FITS headers contain the site (as here), SpacePixels uses them; **Fill Site from FITS Header** copies them into the fields.
+- **Observing Site**: your latitude and longitude, or your IAU observatory code, make the object identification exact for your location. When the FITS headers contain the site, SpacePixels uses them; **Fill Site from FITS Header** copies them into the fields.
 - **Sky Catalogue (Annotate)**: how faint the stars are that **Fetch Sky Catalogue** downloads (**Star Depth**, see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
 
 ASTAP checks run in the background and show **Checking ASTAP installation...** while inspecting the program and nearby star databases. Selecting a different executable supersedes an older check without freezing the window. Application-default saves also run in the background; a failed save leaves the valid settings in use, with a warning so you can retry.
@@ -285,7 +291,7 @@ With a plate solution, observing location and exposure timing, **Check satellite
 
 ### Maps
 
-![Global trajectory map](docs/images/manual/report-map.jpg)
+![Global trajectory map](docs/images/manual/report-map.png)
 
 The **Map of All Detections** draws every result over the whole field, with its label (T1, ST2, A3…) and one colour per kind, counted in the legend above it. Here the long lines are satellite trails, and the magenta circles single-frame anomalies. With the sky catalogue, the map also names the well-known deep-sky objects, the bright named stars and the brightest named variable stars of the field, as in the session picture. The map category buttons hide or show each type of finding; click a label or marker to open its card. **Catalogue** toggles the known sky objects, while **Variable-star candidate** toggles measured candidates. The full-size PNG remains available. The **Time Maps** below it show every detection that was not a star, coloured by time, which is useful to see where the noise is.
 
@@ -345,7 +351,7 @@ The buttons that say **Here** show the answer inside the report. They need Space
 
 ![JPL identifies the track](docs/images/manual/report-identify.png)
 
-Here **Render JPL Results Here** identifies track T1 of the session above as the asteroid **4767 Sutoku**, magnitude 17.7, 12″ from the measured track position. Look at the **distance from center** and the **visual magnitude** to decide which entry is your object: the right one is close to the track position (within a few pixels of your image scale) and bright enough for your setup.
+In this identification example, **Render JPL Results Here** identifies track T1 as the asteroid **4767 Sutoku**, magnitude 17.7, 12″ from the measured track position. Look at the **distance from center** and the **visual magnitude** to decide which entry is your object: the right one is close to the track position (within a few pixels of your image scale) and bright enough for your setup.
 
 For fast near-Earth objects, use **Render JPL NEO Recovery Results Here** as well:
 
@@ -361,7 +367,7 @@ For exact results, set your observing site on the **Astrometry Config** tab (or 
 
 ### Asteroids in a wide field
 
-The session of [section 3](#3-workflow-find-moving-objects-in-a-session): 33 frames of 2 minutes with a 61-megapixel camera, plate-solved in the FITS headers. SpacePixels found three moving objects, and the JPL buttons identified all three:
+The session of [section 3](#3-workflow-find-moving-objects-in-a-session): 33 frames of 2 minutes with a 61-megapixel camera, plate-solved in the FITS headers. In one run, SpacePixels found three moving objects, and the JPL buttons identified all three. These track numbers belong to that run:
 
 | Track | Object | Magnitude (V) |
 |---|---|---|
@@ -373,7 +379,7 @@ Sutoku moved only 15 pixels in 77 minutes, yet it was linked through 25 frames. 
 
 ![Detection summary, with the optional groups ticked for the report](docs/images/manual/ui-warning.png)
 
-In the picture the 74 single-frame anomalies are the largest group: short events or noise in single frames. Untick **In report** and they are left out of the report; the moving-object tracks stay. The run shown in [Reading the report](#4-reading-the-report) did that for the anomalies and the common-motion groups.
+The picture shows the current report choices, including camera-fixed groups and variable stars. Untick **In report** beside an optional group to leave it out of that report; moving-object tracks stay included. These choices change the export, not the detections or settings.
 
 ### A comet, without plate solving
 
@@ -403,9 +409,9 @@ The same 61-megapixel session with photometry switched on:
 
 ![Variable-star summary](docs/images/manual/variable-stars-summary.png)
 
-The verdict **Ready** means the data passed the linearity checks. SpacePixels measured 53,869 stars, scored 43,859 of them and reported 45 high-confidence and 22 possible variable stars. A **Limited** or **Not ready** verdict says in plain words why, and for Not ready what could help (for example unstretched frames or a longer sequence).
+The verdict **Ready** means the data passed the linearity checks. In the pictured run, SpacePixels measured 53,914 stars, scored 43,843 of them and reported 46 high-confidence and 25 possible variable stars. A **Limited** or **Not ready** verdict says in plain words why, and for Not ready what could help (for example unstretched frames or a longer sequence).
 
-The candidates are first listed in a table: tier, position, observed variation in this session, the shape of the change (faded, brightened, dipped and recovered…) and any failed check. When the sky catalogue was fetched before the detection, the **Known As** column shows a matched VSX variable name. Without a VSX match, it shows a nearby catalogue star's proper name or Gaia DR3 designation when available, with the source and angular separation. This identifies a catalogue star without claiming it is a known variable. **Look up the N others in VSX** still includes these candidates; this needs SpacePixels running, and the results are saved into the report. A positive VSX result takes precedence; an empty or failed lookup keeps the catalogue star's name. In this session, 52 of the 67 candidates were already in VSX in the saved catalogue, so the button reads **Look up the 15 others in VSX**:
+The candidates are first listed in a table: tier, position, observed variation in this session, the shape of the change (faded, brightened, dipped and recovered…) and any failed check. When the sky catalogue was fetched before the detection, the **Known As** column shows a matched VSX variable name. Without a VSX match, it shows a nearby catalogue star's proper name or Gaia DR3 designation when available, with the source and angular separation. This identifies a catalogue star without claiming it is a known variable. **Look up the N others in VSX** still includes these candidates; this needs SpacePixels running, and the results are saved into the report. A positive VSX result takes precedence; an empty or failed lookup keeps the catalogue star's name. The button counts the candidates still without a VSX match.
 
 **Observed variation in this session** is the 95th minus the 5th percentile of the usable differential magnitudes over the measured time span. It is not a full-cycle amplitude. **Catalogue range** and **Catalogue amplitude** refer to the listed catalogue passbands; filter, phase and time coverage can make them differ from the session measurement. A small fraction of an orbital period can still contain a substantial eclipse.
 
@@ -415,7 +421,7 @@ An amber **review amplitude** note is a conservative screening prompt: the obser
 
 **Review source metadata** identifies a source-verified catalogue discrepancy. The original VSX values remain visible alongside the publication and any unit conversion. Older saved catalogues still load; their shared passband and missing uncertainty metadata are identified as provisional. Fetching the sky catalogue again supplies the additional metadata when the service is available.
 
-![The candidate table. Known As comes from the sky catalogue; V2 was not in it](docs/images/manual/variable-stars-table.png)
+![The candidate table keeps fixed V numbers when presentation order changes; V32 has not yet been checked in VSX](docs/images/manual/variable-stars-table.png)
 
 The same catalogue-star fallback appears on detailed candidate cards. Older saved sky catalogues remain usable; fetch the catalogue again to add Gaia identifiers, which older versions did not retain. The report and Astrometry tooltip explain when those identifiers are missing. General-star matches use the nearest star within 5 arcseconds, moved to the session date; candidates fainter than the fetched Gaia **Star Depth** may need a deeper catalogue. Fetch before detection and regenerate the report; an existing report does not update its static catalogue names. No catalogue lookup is performed automatically during report generation, and the names do not alter measured variation or confidence.
 
@@ -482,7 +488,7 @@ Below the frame: the frame number, file name, capture time and time since the fi
 
 ### Preview Frame
 
-![Preview Frame at 100 %](docs/images/manual/ui-preview.jpg)
+![Preview Frame at 100 %, with its trial settings and Apply to Settings controls](docs/images/manual/ui-preview.png)
 
 Runs the source detection on the selected frame with the current settings and shows what it picks up: green boxes around point sources, red lines along streaks. **◀ ▶** (← →) move to the other frames of the session; each frame is detected when you get to it, with the settings as they are then, and the status bar shows how many point sources and streaks it has. Use it to see what the detector picks up in a single frame.
 
@@ -498,9 +504,9 @@ After a full detection, **Show tracks** (T) draws that run's tracks as Blink doe
 
 ### Manual Transient Inspection
 
-![Manual Transient Inspection: the comet is the only transient left in this frame](docs/images/manual/ui-inspection.jpg)
+![Manual Transient Inspection with trial thresholds and the captured master-mask settings above the comet frame](docs/images/manual/ui-inspection.png)
 
-Runs the detection on all frames of the session (not only the selected ones) and shows, frame by frame, every detection left after the star mask: the candidates for moving objects, before they are linked into tracks. The three per-frame thresholds can be tried without rebuilding the master mask; only the frame on show is re-detected, and Apply to Settings copies the edited values. Edits to other per-frame extraction and filtering settings take effect when a frame is shown again. If the master settings change while the window is open, it says so and keeps the reference, including its jitter radius, until you reopen it. Useful to judge the noise, or to find a faint object by eye that did not form a track. Above, at 200 %, the comet is the only transient left in its frame. The frames stay in memory until you close the window. After a full detection on the session, **Show tracks** (T) draws that run's tracks over these frames, as in Blink.
+Runs the detection on all frames of the session (not only the selected ones) and shows, frame by frame, every detection left after the star mask: the candidates for moving objects, before they are linked into tracks. The three per-frame thresholds can be tried without rebuilding the master mask; only the frame on show is re-detected, and Apply to Settings copies the edited values. Edits to other per-frame extraction and filtering settings take effect when a frame is shown again. If the master settings change while the window is open, it says so and keeps the reference, including its jitter radius, until you reopen it. Useful to judge the noise, or to find a faint object by eye that did not form a track. Above, at 200 %, the comet is outlined using the current trial settings. The frames stay in memory until you close the window. After a full detection on the session, **Show tracks** (T) draws that run's tracks over these frames, as in Blink.
 
 Both windows, and **Show full size** on the Image Stretch tab, work like the blink window: the same stretch as the Image Stretch tab, the same zoom (Fit, 100 %, 200 %, 400 %, scroll to zoom, drag to pan, double-click), and the same status bar with the frame, its time since the first frame, and under the cursor the pixel position, value and, on a plate-solved frame, RA and Dec. **Show detections** (D) hides the markers to see the frame underneath. From 100 % zoom the detected pixels are tinted too. When there are too many detections on screen to tell apart, the markers are left out until you zoom in. Esc closes the window.
 
