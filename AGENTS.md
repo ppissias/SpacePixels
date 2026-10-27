@@ -6,6 +6,7 @@ This file is the same in SpacePixels, JTransient and JPlateSolve, and on every m
 2. **Read `LOCAL-ENVIRONMENT.txt`** in the repository root, if it exists. It holds this machine's paths: tools, test datasets, scratch folders and memory limits. It is git-ignored and differs per machine. Never commit it, and never copy its paths into tracked files, commit messages or published reports. If it is missing and you need a path, ask the maintainer.
 3. **Pending work** is in `DESIGN-IMPROVEMENTS.md` (design and refactoring) and `FEATURE-REQUESTS.md` (functionality). An item there is a proposal, not an instruction to implement it; discuss before changing code, unless the maintainer has decided it.
 4. **The three repositories are developed together.** SpacePixels is the application; JTransient (detection engine) and JPlateSolve (plate solving) are its libraries, usually checked out side by side. A library change updates its SpacePixels callers in the same piece of work.
+5. **Branch policy.** For work assigned to an individual agent, work directly on the current branch (normally `master` or `main`); do not create or switch to a separate task or feature branch. Create a new branch only when the maintainer explicitly starts an agent collaboration. The collaborating agents use that shared branch.
 
 Working habits:
 
