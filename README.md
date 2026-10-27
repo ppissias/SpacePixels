@@ -223,7 +223,7 @@ The standard pipeline exports an HTML session report plus PNG and GIF assets. De
 
 ## Command-line utilities
 
-The Windows installer includes `spacepixels-batch.exe` beside `SpacePixels.exe`, with its example profile at `app/config/default_detection_profile.json`.
+The Windows installer includes `spacepixels-batch.exe` and `injectStars.exe` beside `SpacePixels.exe`, with its example detection profile at `app/config/default_detection_profile.json`.
 
 Archive distributions keep the generated application and tool launchers in `bin`, with top-level `StartSpacePixels` wrappers that delegate to the generated launcher. After building or unpacking an archive, you should find:
 
@@ -273,7 +273,11 @@ With the Gradle task, `-PbatchMaxHeap=8g` sets a fixed JVM heap instead of the d
 
 ### Artificial star injection
 
-Use either the archive's `injectStars` launcher or the Gradle task.
+Use the native Windows `injectStars.exe`, the archive's `injectStars` launcher or the Gradle task. From a Windows installation folder:
+
+```powershell
+.\injectStars.exe "C:\astro\sequence" 15 10.0 4500 4.0
+```
 
 Packaged launcher examples:
 

@@ -57,7 +57,7 @@ The first installer is unsigned, so Windows may show a SmartScreen notice. For a
 
 **ZIP/TAR distribution (Windows, Linux and macOS):** install Java 21 or newer, download and unpack the archive, then start `StartSpacePixels.bat` (Windows) or `./StartSpacePixels` (Linux, macOS). These archives use your installed Java.
 
-The Windows installer also includes `spacepixels-batch.exe` for command-line analysis. Its example profile is `app/config/default_detection_profile.json` under the installation folder; the archive's profile is `config/default_detection_profile.json`.
+The Windows installer also includes `spacepixels-batch.exe` for command-line analysis and `injectStars.exe` for adding artificial moving stars to test images. The example detection profile is `app/config/default_detection_profile.json` under the installation folder; the archive's profile is `config/default_detection_profile.json`.
 
 SpacePixels may use up to 80 % of the computer's memory. 8 GB of RAM is enough for typical cameras; very large sensors (60 MPix and more) with 30 or more frames need about 16 GB. When a newer release exists, a blue **New version** button appears at the top right of the window, next to **User Manual**; click it to open the releases page.
 

@@ -50,7 +50,7 @@ JTransient is an `api` dependency because its configuration and result types app
 
 The desktop application is built separately by `run`/`installDist`, using an unpublished desktop companion JAR and GUI-only dependencies. A Maven API JAR is not a standalone desktop application or a shaded dependency bundle. Headless AWT image/report rendering still requires the JDK's `java.desktop` module; run servers with `-Djava.awt.headless=true` rather than removing that module. Java 21 is the compilation baseline.
 
-`gradlew.bat apiConsumerTest` validates a separately resolved headless consumer against a local staging repository. See [PUBLISHING.md](PUBLISHING.md) for publishing and verification details.
+`gradlew.bat apiConsumerTest` compiles and runs a separate Java project against the packaged API and dependency JARs. It exercises preparation, detection, Auto-Tune, report generation and the command-line tools, and checks that report resources and transitive dependencies are included without GUI dependencies. See [PUBLISHING.md](PUBLISHING.md) for publishing and packaging checks.
 
 ## What the API does
 

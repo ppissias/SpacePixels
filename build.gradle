@@ -89,10 +89,10 @@ configurations {
 }
 
 dependencies {
-    api "io.github.ppissias.jtransient:jtransient:${providers.gradleProperty('jTransientVersion').getOrElse('1.0.6')}"
+    api 'io.github.ppissias.jtransient:jtransient:1.0.6'
     implementation 'gov.nasa.gsfc.heasarc:nom-tam-fits:1.23.0'
     implementation 'com.google.code.gson:gson:2.14.0'
-    implementation "io.github.ppissias.jplatesolve:jplatesolve:${providers.gradleProperty('jPlateSolveVersion').getOrElse('1.0.1')}"
+    implementation 'io.github.ppissias.jplatesolve:jplatesolve:1.0.1'
     desktopImplementation 'com.formdev:flatlaf:3.7.2'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'tokyo.northside:assertj-swing-junit:4.0.0-beta-3'
@@ -358,9 +358,6 @@ tasks.register('validateCentralReleaseConfiguration') {
     // A POM built against a local checkout can name a library version that Central does not have.
     def localLibraryBuilds = gradle.includedBuilds.collect { it.name }.findAll { it in ['JTransient', 'JPlateSolve'] }
     doLast {
-        if (providers.gradleProperty('releaseValidationRepository').isPresent()) {
-            throw new GradleException('A release validation repository is local-only; remove it for Central release staging.')
-        }
         if (localLibraryBuilds) {
             throw new GradleException("A Central bundle must be built against published libraries, but ${localLibraryBuilds.join(' and ')} " +
                     'come from local checkouts. Rerun with -PuseLocalJTransientBuild=false -PuseLocalJPlateSolveBuild=false; ' +
@@ -423,7 +420,6 @@ tasks.register('mavenCentralBundle') {
 
 apply from: 'gradle/api-artifact.gradle'
 apply from: 'gradle/api-consumer.gradle'
-apply from: 'gradle/release-artifacts.gradle'
 apply from: 'gradle/windows-installer.gradle'
 
 // The isolated API consumer build runs when the Central bundle is prepared (bundleCentralPortal), not on every check.

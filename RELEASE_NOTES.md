@@ -6,7 +6,7 @@ Not released yet.
 
 ### Changed
 
-- **Windows installer.** An unsigned EXE includes a private Java 21 runtime, a desktop launcher and a console batch launcher. Setup installs per user, offers a folder chooser and optional shortcuts, and uses a stable upgrade identity. ZIP/TAR distributions remain available for users with their own Java installation.
+- **Windows installer.** An unsigned EXE includes a private Java 21 runtime, a desktop launcher and console launchers for batch detection and artificial-star injection. Configuration files and examples are shared with the Java distribution. Setup installs per user, offers a folder chooser and optional shortcuts, and uses a stable upgrade identity. ZIP/TAR distributions remain available for users with their own Java installation.
 
 - **Report animation controls.** A shared toolbar pauses animations, steps through frames and changes playback speed from 0.25× to 4×. Frame sheets support immediate changes in the browser; standalone GIF downloads remain available. Reports honour reduced-motion preferences.
 

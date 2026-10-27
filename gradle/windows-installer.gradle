@@ -9,6 +9,7 @@ def imageDirectory = windowsRoot.map { it.dir('image') }
 def applicationImage = imageDirectory.map { it.dir('SpacePixels') }
 def iconFile = resourcesDirectory.map { it.file('SpacePixels.ico') }
 def batchProperties = resourcesDirectory.map { it.file('spacepixels-batch.properties') }
+def injectorProperties = resourcesDirectory.map { it.file('injectStars.properties') }
 // Keep this identity across releases so Windows upgrades the existing per-user installation.
 def upgradeUuid = '653582dd-afb5-4d57-8b05-b8c2e7447fc8'
 def installerVersion = providers.gradleProperty('windowsInstallerVersion').orElse(providers.provider {
@@ -64,7 +65,11 @@ def prepareInput = tasks.register('prepareWindowsInput', Sync) {
     into inputDirectory
     // Flat JAR input lets jpackage generate the complete classpath for both desktop and batch launchers.
     from(tasks.named('installDist').map { new File(it.destinationDir, 'lib') }) { include '*.jar' }
-    from(tasks.named('installDist').map { it.destinationDir }) { include 'config/**', 'LICENSE' }
+    // Keep all shared distribution files, including any future configuration files and examples.
+    // Native launchers replace the archive's scripts, and its JARs are copied flat above.
+    from(tasks.named('installDist').map { it.destinationDir }) {
+        exclude 'bin/**', 'lib/**', 'StartSpacePixels', 'StartSpacePixels.bat'
+    }
 }
 
 def prepareResources = tasks.register('prepareWindowsResources') {
@@ -73,7 +78,7 @@ def prepareResources = tasks.register('prepareWindowsResources') {
     inputs.files(icons)
     inputs.property('jvmOptions', jvmOptions)
     inputs.property('cliJar', cliJar)
-    outputs.files(iconFile, batchProperties)
+    outputs.files(iconFile, batchProperties, injectorProperties)
     doLast {
         resourcesDirectory.get().asFile.mkdirs()
         // ICO supports embedded PNG entries; retain the existing pixels at each native icon size.
@@ -89,23 +94,27 @@ def prepareResources = tasks.register('prepareWindowsResources') {
         }
         pngs.each { ico.put(it) }
         iconFile.get().asFile.bytes = ico.array()
-        def launcher = new Properties()
-        launcher.setProperty('main-jar', cliJar.get())
-        launcher.setProperty('main-class', 'eu.startales.spacepixels.tools.BatchDetectionCli')
-        launcher.setProperty('java-options', (jvmOptions.get() + ['-Djava.awt.headless=true']).join(' '))
-        launcher.setProperty('win-console', 'true')
-        launcher.setProperty('win-menu', 'false')
-        launcher.setProperty('win-shortcut', 'false')
-        batchProperties.get().asFile.withOutputStream { launcher.store(it, 'Console batch launcher; no menu or desktop entry.') }
+        def writeConsoleLauncher = { File output, String mainClass ->
+            def launcher = new Properties()
+            launcher.setProperty('main-jar', cliJar.get())
+            launcher.setProperty('main-class', mainClass)
+            launcher.setProperty('java-options', (jvmOptions.get() + ['-Djava.awt.headless=true']).join(' '))
+            launcher.setProperty('win-console', 'true')
+            launcher.setProperty('win-menu', 'false')
+            launcher.setProperty('win-shortcut', 'false')
+            output.withOutputStream { launcher.store(it, 'Console tool launcher; no menu or desktop entry.') }
+        }
+        writeConsoleLauncher(batchProperties.get().asFile, 'eu.startales.spacepixels.tools.BatchDetectionCli')
+        writeConsoleLauncher(injectorProperties.get().asFile, 'eu.startales.spacepixels.tools.ArtificialStarInjector')
     }
 }
 
 tasks.register('windowsAppImage', Exec) {
     group = 'distribution'
-    description = 'Builds SpacePixels.exe, its batch launcher and a private Java 21 runtime (Windows x64).'
+    description = 'Builds SpacePixels.exe, console tool launchers and a private Java 21 runtime (Windows x64).'
     dependsOn prepareInput, prepareResources
     inputs.dir(inputDirectory)
-    inputs.files(iconFile, batchProperties)
+    inputs.files(iconFile, batchProperties, injectorProperties)
     inputs.property('installerVersion', installerVersion)
     inputs.property('jvmOptions', jvmOptions)
     inputs.property('packagingJdk', System.getProperty('java.home'))
@@ -120,6 +129,7 @@ tasks.register('windowsAppImage', Exec) {
                 '--app-version', installerVersion.get(), '--vendor', 'SpacePixels',
                 '--description', 'Astronomical moving-object and transient detection',
                 '--icon', iconFile.get().asFile, '--add-launcher', "spacepixels-batch=${batchProperties.get().asFile}",
+                '--add-launcher', "injectStars=${injectorProperties.get().asFile}",
                 // Retain java/javaw: Appearance restart uses an owned helper JVM from this private runtime.
                 '--jlink-options', '--strip-debug --no-man-pages --no-header-files']
         jvmOptions.get().each { options.addAll(['--java-options', it]) }

@@ -21,16 +21,17 @@ Build on Windows x64 with a 64-bit JDK 21 selected by `JAVA_HOME`. The JDK suppl
 
 `windowsAppImage` creates `build/windows/image/SpacePixels/`. `windowsInstaller` creates the image if needed, then writes `build/installers/SpacePixels-<installer-version>.exe`. WiX can instead be configured with `wixHome` in git-ignored `gradle.properties`, `WIX_HOME`, `WIX`, or PATH. Ordinary builds and archive distributions do not require Windows or WiX.
 
-The image contains the desktop and headless JARs, their dependencies, the distributed profiles, the appearance example, the application license and a private Java 21 runtime with its legal notices. It has two launchers:
+The image contains the desktop and headless JARs, their dependencies, all shared files from the Java distribution and a private Java 21 runtime with its legal notices. The default detection profile, appearance example and application license are included unchanged under `app/`; future distribution configuration files and examples are copied too. Native launchers replace the archive's launcher scripts:
 
 - `SpacePixels.exe` opens the desktop without a console.
 - `spacepixels-batch.exe` runs the batch CLI in a console. For example, from the installation folder: `.\spacepixels-batch.exe "<sequence folder>" "app\config\default_detection_profile.json"`.
+- `injectStars.exe` runs the artificial-star injector in a console, with the same arguments as the archive's `injectStars` script.
 
-Both retain the distribution's `-XX:MaxRAMPercentage=80.0 -XX:+UseG1GC` defaults. Launcher options are in `app/SpacePixels.cfg` and `app/spacepixels-batch.cfg`; an upgrade can replace these application files. The bundled runtime retains `java.exe` and `javaw.exe`, which the Appearance restart helper needs. The ICO is generated from the existing application PNGs.
+All three retain the distribution's `-XX:MaxRAMPercentage=80.0 -XX:+UseG1GC` defaults. Launcher options are in `app/SpacePixels.cfg`, `app/spacepixels-batch.cfg` and `app/injectStars.cfg`; an upgrade can replace these application files. The bundled runtime retains `java.exe` and `javaw.exe`, which the Appearance restart helper needs. The ICO is generated from the existing application PNGs.
 
 Setup is unsigned and installs per user, with a directory chooser and optional Start menu and desktop shortcuts. A later installer upgrades the same installation. Keep the upgrade UUID in `gradle/windows-installer.gradle` unchanged across releases. The application version `2026.10-04` maps to Windows installer version `26.10.4`; `-PwindowsInstallerVersion=major.minor.build` overrides the mapping, with maximum components `255.255.65535`. Use a higher installer version for an upgrade; the application continues to display its own version.
 
-Local composite libraries are suitable for development builds. Before distributing an installer, complete the [selected-artifact release checks](docs/release-artifacts.md) and build with those exact published libraries, with both local composite flags disabled. This installer does not bypass that release gate or introduce an automatic updater. Code signing remains a separate release step.
+The installer bundles its library JARs and can use the local composite library builds. Users do not need those libraries to be published separately to Maven Central. Run the normal tests and API packaging checks before distribution. There is no automatic updater; code signing remains a separate release step.
 
 Before release, check the actual EXE on a clean Windows account or disposable VM with neither Java nor WiX installed:
 
@@ -101,18 +102,18 @@ First validate the packaging without signing or release credentials:
 
 The second command repeats the consumer checks using only Maven POM metadata, ignoring Gradle-module redirection; the default mode tests Gradle metadata. When a sibling flag is disabled, its group is excluded from the consumer's local staging repository, so stale staged source binaries cannot stand in for the selected published dependency.
 
-**Release dependencies:** before distributing, pin the engine/solver versions supplying the required APIs and validate that exact packaged combination on Java 21. Preserve the active-development flags; use explicit `-PuseLocalJTransientBuild=false -PuseLocalJPlateSolveBuild=false` for the artifact check. `validateCentralReleaseConfiguration`, which Central staging and `mavenCentralBundle` run, refuses while either library comes from a local checkout or `releaseValidationRepository` is set. Publish the selected libraries first, verify their availability, then inspect the application bundles/metadata and complete desktop/CLI checks before upload. See the [coordinated release policy](DEVELOPER.md#build-and-run).
+**Maven dependencies:** declare the required engine and solver versions directly in the `dependencies` block of `build.gradle`, alongside the other dependencies. For Maven Central publication, publish those library versions first and build with `-PuseLocalJTransientBuild=false -PuseLocalJPlateSolveBuild=false`. Gradle resolves the declared dependencies normally. `validateCentralReleaseConfiguration` requires the composite builds to be disabled and checks signing/developer configuration; `apiConsumerTest` checks that the packaged API works for another Java application. There is no separate list of expected library versions or release-staging validation workflow.
 
 Build the single headless API/CLI bundle:
 
 ```bash
-./gradlew mavenCentralBundle
+./gradlew -PuseLocalJTransientBuild=false -PuseLocalJPlateSolveBuild=false mavenCentralBundle
 ```
 
 On Windows:
 
 ```powershell
-.\gradlew.bat mavenCentralBundle
+.\gradlew.bat -PuseLocalJTransientBuild=false -PuseLocalJPlateSolveBuild=false mavenCentralBundle
 ```
 
 This will:
@@ -133,7 +134,7 @@ For the desktop application, use `gradlew.bat installDist` (or `./gradlew instal
 
 ## Upload to the Central Portal
 
-Before release, select and pin the exact JTransient/JPlateSolve versions for this SpacePixels release and use the [selected-artifact validation workflow](docs/release-artifacts.md). Verify actual public artifact availability with composites and the validation-only repository disabled. One application binary need not support historical engine versions, and an old-JAR/new-runtime or two-engine matrix is not required. Central staging rejects `releaseValidationRepository`; unsigned locally staged libraries cannot establish a publishable dependency combination.
+For Maven publication, the declared library dependencies must be available to external consumers through Maven Central. Local API consumer checks can also use source-built library JARs during development; those checks establish packaging correctness, independently of public availability.
 
 Upload the generated ZIP bundle manually in the Maven Central Portal after verifying that your namespace is ready there.
 
