@@ -33,16 +33,29 @@ tasks.register('stageApiConsumerDependencies') {
     }
 }
 
-tasks.register('apiConsumerTest', GradleBuild) {
+['gradle', 'pom'].each { String mode ->
+    tasks.register(mode == 'gradle' ? 'apiConsumerGradleTest' : 'apiConsumerPomTest', GradleBuild) {
+        group = 'verification'
+        description = "Runs the independent headless API consumer using ${mode} metadata."
+        dependsOn project.tasks.named('publishMavenJavaPublicationToConsumerTestRepository'), project.tasks.named('stageApiConsumerDependencies')
+        buildName = "spacepixels-consumer-${mode}"
+        dir = file('src/consumerTest')
+        tasks = ['check']
+        startParameter.projectProperties = [spacepixelsVersion: project.version.toString(),
+                consumerRepository: consumerRepository.get().asFile.absolutePath,
+                stagedLibraryGroups: libraryBuilds.collect { localLibraries[it.name] }.join(','),
+                consumerMetadata: mode]
+    }
+}
+
+tasks.named('apiConsumerPomTest') {
+    mustRunAfter project.tasks.named('apiConsumerGradleTest')
+}
+
+tasks.register('apiConsumerTest') {
     group = 'verification'
-    description = 'Runs an independent headless Maven/Gradle consumer with project/composite substitution disabled.'
-    dependsOn project.tasks.named('publishMavenJavaPublicationToConsumerTestRepository'), project.tasks.named('stageApiConsumerDependencies')
-    dir = file('src/consumerTest')
-    tasks = ['check']
-    startParameter.projectProperties = [spacepixelsVersion: project.version.toString(),
-            consumerRepository: consumerRepository.get().asFile.absolutePath,
-            stagedLibraryGroups: libraryBuilds.collect { localLibraries[it.name] }.join(','),
-            consumerMetadata: providers.gradleProperty('apiConsumerMetadata').orElse('gradle').get()]
+    description = 'Checks the packaged API in independent consumers using both Gradle and Maven POM metadata.'
+    dependsOn tasks.named('apiConsumerGradleTest'), tasks.named('apiConsumerPomTest')
 }
 
 tasks.register('verifyDesktopArchive') {

@@ -63,6 +63,7 @@ Use Java 21 and the Gradle wrapper (`gradlew.bat` on Windows, `./gradlew` elsewh
 .\gradlew.bat test                 # unit tests; GUI mechanics are excluded
 .\gradlew.bat guiMechanicsTest     # drives the real window; needs a desktop and moves the mouse
 .\gradlew.bat check                # tests plus API/desktop packaging checks
+.\gradlew.bat releaseCheck         # full release checks; needs Node and an unlocked desktop
 .\gradlew.bat run                  # the desktop application
 .\gradlew.bat installDist          # application and tool launchers under build/install/SpacePixels
 ```
@@ -79,7 +80,7 @@ Add `-PspacepixelsDebug` (or `-Dspacepixels.debug=true` on a plain `java` comman
 
 **Sibling libraries.** The required library versions are ordinary dependency declarations in `build.gradle`; update them there when selecting dependencies for a SpacePixels release. During development, both libraries can instead be built from their sibling checkouts. Set `useLocalJTransientBuild=true` and `useLocalJPlateSolveBuild=true` in the git-ignored `gradle.properties` (copy [gradle.properties.example](gradle.properties.example)). The environment variables `USE_LOCAL_JTRANSIENT_BUILD` and `USE_LOCAL_JPLATE_SOLVE_BUILD` also work; an explicit `-P` property wins. Without the flags, Gradle resolves the declared dependencies from Maven Central.
 
-**Releases.** Desktop distributions bundle the library JARs and can be built from the sibling checkouts. For a Maven Central publication, publish the library dependencies first and build with both composite flags disabled. Normal dependency resolution uses the versions declared in `build.gradle`. `mavenCentralBundle` runs `apiConsumerTest`, a separate Java project that consumes the packaged `spacepixels` artifact and exercises the API, report resources and command-line tools. See [PUBLISHING.md](PUBLISHING.md).
+**Releases.** Run `releaseCheck` before distributing desktop packages; `mavenCentralBundle` includes it automatically. It adds GUI mechanics, required report JavaScript checks, API consumers using both Gradle and Maven POM metadata, and the available small real-data smoke tests to the ordinary checks. Node and an unlocked desktop are required; missing optional datasets are reported as skips. Desktop distributions bundle the library JARs and can use sibling checkouts. For Maven Central publication, publish the library dependencies first and disable both composite flags. See [PUBLISHING.md](PUBLISHING.md).
 
 ### Dependencies
 
@@ -260,7 +261,8 @@ Tests use JUnit 4.13.2. Start with the affected tests, then run the full suite.
 - **Preparation parity:** `FitsPreparationParityTest` compares GUI and API preparation across formats.
 - **Iterative detection:** `IterativeDetectionPlanTest` and `IterativeDetectionRunTest`, which compares passes with ordinary runs on the same subsets.
 - **GUI mechanics** (`guiMechanicsTest`): drive the real window by the visible text of its controls, with a scratch `user.home` and restored preferences. Viewer navigation tests must send real `KeyEvent`s to the focus owner; invoking actions directly misses controls that consume Space or the arrow keys.
-- **Real-data harness:** `.\gradlew.bat realDataTest -PrealDataRoot=<folder>` runs the preparation, API and CLI checks on copies of real datasets. An existing data directory is required only when this opt-in task runs; there is no machine-specific default. Alternatively, set `realDataRoot` in the git-ignored `gradle.properties`; explicit `-P` wins. Relative paths are resolved against the project directory and passed to the test JVM as absolute paths.
+- **Release real-data smoke tests** (`realDataSmokeTest`): check a bounded selection of small reference datasets, sequentially on scratch copies, including scientific outcomes and report exports. Configure `realDataRoot` in git-ignored `gradle.properties` (see [gradle.properties.example](gradle.properties.example)), or override it with `-PrealDataRoot=<folder>`. Missing datasets are skipped; processing failures fail the build. These checks supplement the full scientific regression below.
+- **Real-data harness:** `.\gradlew.bat realDataTest -PrealDataRoot=<folder>` runs preparation, API and CLI checks on every dataset directory under the supplied root; supply scratch copies for this broader opt-in task. An existing data directory is required only when this task runs; there is no machine-specific default. Alternatively, set `realDataRoot` in git-ignored `gradle.properties`; explicit `-P` wins. Relative paths are resolved against the project directory and passed to the test JVM as absolute paths.
 
 `-PtestMaxHeap=6g` raises the heap of the test tasks.
 

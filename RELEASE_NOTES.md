@@ -22,6 +22,20 @@ Not released yet.
 
 - **Dataset quality warnings.** Import and both detection workflows offer recommended cancellation or an explicit override for sampled hot-pixel/alignment warnings. Alignment now matches coherent star centroids, handles normalized floating-point images, and avoids mistaking brightness changes for star shifts. Inspection responds to cancellation and reports read failures. Headless callers can inspect the warning result or select fail-fast policy.
 
+- **Responsive, cancellable workflows.** Import, detection, Auto-Tune, conversion, stretching and plate solving run as owned background jobs with progress and cancellation. Declining an import preserves the open session. Failure dialogs offer **Copy details**, and **Open last report** reopens the session's latest report.
+
+- **Preview Frame and viewer controls.** Try the per-frame detection thresholds directly in Preview Frame, then apply only the values you edited. Closing discards unapplied trials. Preview Frame and Manual Transient Inspection can overlay the last run's tracks, and image-navigation shortcuts leave text editing to the focused field. Catalogue name and magnitude controls are retained across viewer openings.
+
+- **Iterative detection.** Run ordinary detection on progressively larger, evenly spread subsets of a chosen dataset, with optional one-time Auto-Tune and input preparation. Each pass gets its own report and selected-input list, linked by an index. Cancellation preserves completed passes, and the session open in the main window stays available.
+
+- **Anomaly review.** Single-frame events show before/event/after comparisons, detection evidence and links to related tracks. Satellite lookups search across the full exposure and present possible associations for review.
+
+- **Variable-star report presentation.** Choose the detailed candidate-card limit and presentation order. Every candidate remains in the tables, maps and CSV exports, with stable candidate identifiers across presentation changes.
+
+- **Astrometry.net accounts.** Choose anonymous solving or your own API key. Online solving uploads a temporary copy with observing-site and observer header details removed, preserving the source frame.
+
+- **Auto-Tune.** The calibrated tuner is now the only tuning algorithm. Saved tuning results retain the chosen profiles and chart in a smaller file; existing results are compacted when their folder is imported again.
+
 - **Large text and display scaling.** Viewer controls wrap onto additional rows, and the star-mask sidebar scrolls when needed. The main workflow area keeps the frame table visible; Astrometry guidance and the Overview page reflow, with local horizontal scrolling for the wide Auto-Tune results table. Tab reveals controls below a scrollable viewport.
 - **Compressed (.fz) frames are decoded more exactly.** nom-tam-fits 1.23.0 fixes the decoding of 32-bit PLIO frames and of quantized floating-point frames: their blank pixels, and the rounding of frames without dithering. Integer frames (RICE, GZIP, HCOMPRESS) decode as before. Frames from 16-bit cameras are unaffected.
 - **A dataset folder that cannot be written.** When the plate-solution correction or the sky catalogue cannot be saved there, for example in a read-only folder, it stays in use until SpacePixels closes, in the viewers and in the reports, and the window says it was not saved. Before, a correction that could not be saved was switched back, and a catalogue that could not be saved was missing from the reports. A detection also no longer waits for a pending save before it starts.
@@ -33,7 +47,16 @@ Not released yet.
 
 - **The AI report sections.** Codex's **Signal Weave**, Claude's **The Night, Retold** and the **Include AI Creative Report Sections** setting are gone. A saved visualization preferences file that still holds the setting loads as before; the next save drops it.
 
+### Build and release checks
+
+- **Release validation.** `mavenCentralBundle` now includes `releaseCheck`: ordinary tests and packaging checks, GUI mechanics, required report JavaScript tests, API consumers using both Gradle and Maven POM metadata, and selected small real-data checks on scratch copies. Node and an unlocked desktop are required. Optional datasets are configured through local `realDataRoot`; missing data is reported as skipped. Run `releaseCheck` explicitly before distributing desktop archives or installers.
+- **Simpler dependency configuration.** Library versions are declared directly with the other dependencies in `build.gradle`. Separate version properties and expected-version validation have been removed; API consumer tests continue to check the packaged artifact. See [PUBLISHING.md](PUBLISHING.md).
+
 ### Upgrading and API changes
+
+- **Headless Maven artifact.** `eu.startales.spacepixels:spacepixels` contains the Java API, supporting report resources and command-line tools, with transitive dependencies. Desktop classes, icons and FlatLaf are supplied through the application distributions. API consumers require Java 21.
+
+- **Auto-Tune API migration.** Replace `JTransientAutoTuner.AutoTuneProfile` with `io.github.ppissias.jtransient.engine.AutoTuneProfile` and recompile. The request's `autoTuneAlgorithm(...)` builder method and `getAutoTuneAlgorithm()` are removed; choose a sensitivity profile through `autoTuneProfile(...)`.
 
 - **Domain package reorganization.** Core application and pipeline code previously located in `eu.startales.spacepixels.util` and `eu.startales.spacepixels.util.reporting` has moved into dedicated domain packages:
   - `eu.startales.spacepixels.fits`: FITS/XISF image loading, metadata, preparation, pixel conversion, batch operations and preview rendering (`FitsFileInformation`, `FitsImportService`, `FitsBatchService`, `FitsPixelConverter`, `FitsPreparation`, `FitsVisualizationRenderer`, `BlinkSequence`, etc.).

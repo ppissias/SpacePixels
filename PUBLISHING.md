@@ -31,7 +31,7 @@ All three retain the distribution's `-XX:MaxRAMPercentage=80.0 -XX:+UseG1GC` def
 
 Setup is unsigned and installs per user, with a directory chooser and optional Start menu and desktop shortcuts. A later installer upgrades the same installation. Keep the upgrade UUID in `gradle/windows-installer.gradle` unchanged across releases. The application version `2026.10-04` maps to Windows installer version `26.10.4`; `-PwindowsInstallerVersion=major.minor.build` overrides the mapping, with maximum components `255.255.65535`. Use a higher installer version for an upgrade; the application continues to display its own version.
 
-The installer bundles its library JARs and can use the local composite library builds. Users do not need those libraries to be published separately to Maven Central. Run the normal tests and API packaging checks before distribution. There is no automatic updater; code signing remains a separate release step.
+The installer bundles its library JARs and can use the local composite library builds. Users do not need those libraries to be published separately to Maven Central. Run `releaseCheck` before distribution; archive and installer tasks themselves only package the application. There is no automatic updater; code signing remains a separate release step.
 
 Before release, check the actual EXE on a clean Windows account or disposable VM with neither Java nor WiX installed:
 
@@ -91,16 +91,15 @@ export ORG_GRADLE_PROJECT_signingPassword="..."
 
 ## Build the Central bundle
 
-First validate the packaging without signing or release credentials:
+Run the release checks without signing or release credentials:
 
 ```powershell
-.\gradlew.bat check apiConsumerTest
-.\gradlew.bat apiConsumerTest -PapiConsumerMetadata=pom
+.\gradlew.bat releaseCheck
 ```
 
-`check` includes the API/CLI binary/sources/Javadoc/POM/Gradle-metadata checks, desktop/API ownership checks and ordinary tests. `apiConsumerTest` is an isolated headless consumer build; `mavenCentralBundle` runs it (with Gradle metadata) before it builds the bundle. The API is published unsigned to `build/repos/consumer-test`. With local composites enabled, the test also stages the local engine/solver binaries and their actual generated POMs there, without altering sibling publications or Maven Local. The consumer has no composite builds, disables global project substitution, and checks preparation, detection, calibrated Auto-Tune, reporting/assets, packaged CLI execution, compile/runtime dependency scopes and absence of GUI/FlatLaf. This proves packaging of the tested source pair, not that those dependencies are released to Central.
+`releaseCheck` runs the ordinary `check`, `apiConsumerTest`, report JavaScript regressions, GUI mechanics and available real-data smoke tests. Node (on PATH or selected with `NODE_EXECUTABLE`) and an unlocked desktop are required; the GUI tests move the mouse and type into the application. Configure optional reference data with `realDataRoot` in git-ignored `gradle.properties`; missing datasets are reported as skips. This does not replace installer lifecycle checks or full scientific regressions.
 
-The second command repeats the consumer checks using only Maven POM metadata, ignoring Gradle-module redirection; the default mode tests Gradle metadata. When a sibling flag is disabled, its group is excluded from the consumer's local staging repository, so stale staged source binaries cannot stand in for the selected published dependency.
+`check` includes the API/CLI binary/sources/Javadoc/POM/Gradle-metadata checks, desktop/API ownership checks and ordinary tests. `apiConsumerTest` runs independent headless consumers twice: once with Gradle metadata and once using only Maven POM metadata. The API is published unsigned to `build/repos/consumer-test`. With local composites enabled, the test also stages local library binaries and their generated POMs there, without changing sibling publications or Maven Local. Consumers disable project substitution and check preparation, detection, Auto-Tune, reporting/assets, CLI execution, dependency scopes and absence of GUI/FlatLaf. This proves packaging of the tested source pair. When a sibling flag is disabled, its group is excluded from local staging so stale source binaries cannot replace the published dependency.
 
 **Maven dependencies:** declare the required engine and solver versions directly in the `dependencies` block of `build.gradle`, alongside the other dependencies. For Maven Central publication, publish those library versions first and build with `-PuseLocalJTransientBuild=false -PuseLocalJPlateSolveBuild=false`. Gradle resolves the declared dependencies normally. `validateCentralReleaseConfiguration` requires the composite builds to be disabled and checks signing/developer configuration; `apiConsumerTest` checks that the packaged API works for another Java application. There is no separate list of expected library versions or release-staging validation workflow.
 
@@ -118,7 +117,7 @@ On Windows:
 
 This will:
 
-- run the normal checks
+- run `releaseCheck`
 - stage the signed API/CLI publication into `build/repos/central-staging`
 - create a ZIP containing only the API's current-version binary/sources/Javadoc, POM/module metadata, signatures and checksums
 

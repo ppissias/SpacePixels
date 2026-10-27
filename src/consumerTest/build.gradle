@@ -4,6 +4,7 @@ plugins {
 
 def metadataMode = providers.gradleProperty('consumerMetadata').orElse('gradle').get()
 if (!(metadataMode in ['gradle', 'pom'])) throw new GradleException('consumerMetadata must be gradle or pom.')
+layout.buildDirectory = file("build/${metadataMode}")
 def stagedGroups = providers.gradleProperty('stagedLibraryGroups').orElse('').get().split(',').findAll { it }
 
 repositories {

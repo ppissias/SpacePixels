@@ -1,0 +1,68 @@
+// Release validation is also callable without signing credentials for desktop-only releases.
+def reportJavascriptTest = tasks.register('reportJavascriptTest', Exec) {
+    group = 'verification'
+    description = 'Runs the report JavaScript regressions; Node is required for release validation.'
+    workingDir = layout.projectDirectory
+    commandLine providers.environmentVariable('NODE_EXECUTABLE').orElse('node').get(), '--test',
+            'src/test/javascript/catalogue-comparison.test.js',
+            'src/test/javascript/report-lookups.test.js',
+            'src/test/javascript/report-interactions.test.js'
+    shouldRunAfter tasks.named('test')
+}
+
+def realDataSmokeTest = tasks.register('realDataSmokeTest', Test) {
+    group = 'verification'
+    description = 'Checks selected small reference datasets when available, using isolated scratch copies.'
+    dependsOn tasks.named('testClasses')
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/SpacePixelsRealDataSmokeTest.class'
+    maxParallelForks = 1
+    maxHeapSize = providers.gradleProperty('testMaxHeap').orElse('4g').get()
+    systemProperty 'java.awt.headless', 'true'
+    def dataRoot = providers.gradleProperty('realDataRoot')
+    doFirst {
+        String root = dataRoot.orNull?.trim()
+        if (root) {
+            File directory = project.file(root)
+            if (!directory.isDirectory()) {
+                throw new GradleException('realDataRoot must name an existing directory.')
+            }
+            systemProperty 'spacepixels.testdata.root', directory.absolutePath
+        } else {
+            logger.lifecycle('Real-data smoke: no realDataRoot configured; dataset checks will be skipped.')
+        }
+    }
+    // Local datasets can change independently of source code and are deliberately outside Gradle's build tree.
+    outputs.upToDateWhen { false }
+    mustRunAfter tasks.named('check'), tasks.named('apiConsumerTest'), reportJavascriptTest
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+    }
+}
+
+tasks.named('guiMechanicsTest') {
+    mustRunAfter tasks.named('check'), tasks.named('apiConsumerTest'), reportJavascriptTest, realDataSmokeTest
+    doFirst {
+        logger.lifecycle('GUI mechanics: requires an unlocked desktop and takes control of the mouse and keyboard.')
+    }
+}
+
+[realDataSmokeTest, tasks.named('guiMechanicsTest')].each { testTask ->
+    testTask.configure {
+        File scratchHome
+        doFirst {
+            scratchHome = java.nio.file.Files.createTempDirectory('spacepixels-release-home-').toFile()
+            systemProperty 'user.home', scratchHome.absolutePath
+        }
+        doLast { project.delete(scratchHome) }
+    }
+}
+
+tasks.register('releaseCheck') {
+    group = 'verification'
+    description = 'Runs ordinary checks, both API consumers, report JavaScript, GUI mechanics and available real-data smoke tests.'
+    dependsOn tasks.named('check'), tasks.named('apiConsumerTest'), reportJavascriptTest,
+            realDataSmokeTest, tasks.named('guiMechanicsTest')
+}
