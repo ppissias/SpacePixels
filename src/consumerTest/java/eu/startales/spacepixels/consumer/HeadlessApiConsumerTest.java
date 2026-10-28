@@ -36,6 +36,14 @@ public class HeadlessApiConsumerTest {
     @Rule
     public final TemporaryFolder folder = new TemporaryFolder();
 
+    /** The published headless artifact exposes the safe default and both explicit outlier policies. */
+    @Test public void conversionOutlierPolicyIsAvailableInThePublishedApi() {
+        var defaults = SpacePixelsPipelineRequest.builder(folder.getRoot()).build();
+        assertEquals(eu.startales.spacepixels.fits.ImageScaling.OutlierHandling.REQUIRE_DECISION, defaults.getOutlierHandling());
+        for (var policy : eu.startales.spacepixels.fits.ImageScaling.OutlierHandling.values())
+            assertEquals(policy, SpacePixelsPipelineRequest.builder(folder.getRoot()).outlierHandling(policy).build().getOutlierHandling());
+    }
+
     /** The separately resolved artifact exposes warning-only and strict dataset-quality policies. */
     @Test public void datasetQualityPolicyIsAvailableInThePublishedApi() throws Exception {
         Path input = SyntheticDatasetFactory.createUncalibratedMono16FitsSequence(

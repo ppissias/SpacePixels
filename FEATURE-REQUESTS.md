@@ -10,7 +10,7 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F06](#f06-windows-installer) | Windows installer with a bundled Java runtime | Implemented locally; clean Windows acceptance pending. |
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Agreed. The matching policy is to be proposed. |
 | [F12](#f12-newer-flatlaf-features) | Newer FlatLaf features | Proposed; FlatLaf 3.7.2 is in use |
-| [F13](#f13-observing-session-preparation) | Observing-session preparation with Siril/DSS | Initial implementation; broader acceptance and follow-ups pending |
+| [F13](#f13-observing-session-preparation) | Observing-session preparation with Siril | Initial implementation; broader acceptance and follow-ups pending |
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
 | [F02](#f02-session-summary-and-multiple-night-warning) | Session summary and multiple-night warning | Deferred |
 | [F05](#f05-small-star-visibility-in-stretch-previews) | Small-star visibility in stretch previews | Deferred |
@@ -106,12 +106,11 @@ SpacePixels uses FlatLaf 3.7.2 (`FlatDarkLaf`) since the completed [SP-18 upgrad
 
 ## F13. Observing-session preparation
 
-**Maintainer direction (2026-10-28).** Start implementation using the supplied window mockup. A new button above **Import Aligned Frames** opens a separate window, replacing the earlier tab proposal. Include Siril and DSS installation/status controls, explicit folder mapping and sensor/Bayer choices; keep PixInsight WBPP on the existing import route. Incorporate the maintainer's Siril FITS-header corrections.
+**Maintainer direction (2026-10-28).** Start implementation using the supplied window mockup. A new button above **Import Aligned Frames** opens a separate window, replacing the earlier tab proposal. Include Siril installation/status controls, explicit folder mapping and sensor/Bayer choices; keep PixInsight WBPP on the existing import route. Incorporate the maintainer's Siril FITS-header corrections.
 
 The initial implementation and user workflow are described in [MANUAL.md](MANUAL.md#preparing-an-observing-session) and [Preparation implementation](docs/features/preparation-integrations.md). **Prepare Frames…** is the entry point. These acceptance and follow-ups remain:
 
 - Broaden native desktop and scientific acceptance across camera formats, calibration masters/dark-flats and supported operating systems. Initial representative sessions do not establish arbitrary camera/RAW or cross-platform support. Existing reference datasets remain the downstream scientific check; raw calibration recipes need their own suitable data.
-- Make DSS registration completely independent of saved desktop preferences. The current generated file list overrides linear-processing and output options, while its saved registration preferences remain applicable and are disclosed. Capture/control the remaining effective settings before promising full recipe reproducibility.
 - Consider **Preview one light** to review the selected decode/debayer interpretation. This is a usability aid, not proof of the correct Bayer pattern. Additional mosaics require explicit supported recipes and samples.
 - Consider richer folder suggestions or explicitly selected camera presets only after the manual workflow is accepted. Never merge multiple target/session groups or infer missing sensor/calibration facts from extensions.
 

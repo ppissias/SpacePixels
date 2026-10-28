@@ -18,15 +18,12 @@ public class SpacePixelsAppConfigIOTest {
     @Test public void preparationPathsRoundTripAndOldFilesKeepThemUnset() throws Exception {
         AppConfig config = new AppConfig();
         config.sirilExecutablePath = "tools/siril-cli";
-        config.dssExecutablePath = "tools/DeepSkyStackerCL";
         StringWriter writer = new StringWriter();
         SpacePixelsAppConfigIO.write(writer, config.copy());
         AppConfig loaded = SpacePixelsAppConfigIO.load(new StringReader(writer.toString()));
         assertEquals(config.sirilExecutablePath, loaded.sirilExecutablePath);
-        assertEquals(config.dssExecutablePath, loaded.dssExecutablePath);
         AppConfig old = SpacePixelsAppConfigIO.load(new StringReader("{}"));
         assertEquals("", old.sirilExecutablePath);
-        assertEquals("", old.dssExecutablePath);
     }
 
     @Test

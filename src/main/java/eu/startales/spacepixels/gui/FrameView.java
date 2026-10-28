@@ -233,6 +233,51 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         this.cursorListener = listener;
     }
 
+    /** Makes an export-owned view with frozen navigation, overlays and marker settings. Called and used only on EDT. */
+    FrameView copyForExport() {
+        if (!javax.swing.SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Capture the viewer on the EDT.");
+        FrameView copy = new FrameView();
+        ToolTipManager.sharedInstance().unregisterComponent(copy);
+        copy.setSize(getSize());
+        copy.link.zoom = link.zoom; copy.link.centerX = link.centerX; copy.link.centerY = link.centerY;
+        copy.frame = frame; copy.extremeColour = extremeColour;
+        copy.tables = tables == null ? null : java.util.Arrays.stream(tables).map(byte[]::clone).toArray(byte[][]::new);
+        copy.overlay = overlay; copy.overlayVisible = overlayVisible;
+        copy.detections = detections == null ? null : List.copyOf(detections); copy.detectionsVisible = detectionsVisible;
+        VisualizationSettings markers = markerSettings.get(); copy.markerSettings = () -> markers;
+        copy.variableStarOverlay = variableStarOverlay; copy.variableStarsVisible = variableStarsVisible;
+        copy.skyMarks = skyMarks == null ? null : List.copyOf(skyMarks); copy.skyStarLimit = skyStarLimit;
+        copy.skyStars = skyStars; copy.skyDeepSky = skyDeepSky; copy.skyVariables = skyVariables; copy.skyPreferences = skyPreferences;
+        return copy;
+    }
+
+    /** Frozen catalogue depth for an export's independently captured per-frame marks. EDT only. */
+    double exportStarLimit() { return skyStarLimit; }
+
+    /** Device-pixel bounds of a viewport rectangle; fractional HiDPI edges include the pixels touched by the selection. */
+    static java.awt.Rectangle deviceBounds(java.awt.Rectangle area, java.awt.geom.AffineTransform device) {
+        double sx = device.getScaleX(), sy = device.getScaleY();
+        if (!(sx > 0 && sy > 0) || !Double.isFinite(sx) || !Double.isFinite(sy)) throw new IllegalArgumentException("Invalid display scale.");
+        int x = (int) Math.floor(area.x * sx), y = (int) Math.floor(area.y * sy);
+        return new java.awt.Rectangle(x, y, (int) Math.ceil(area.getMaxX() * sx) - x, (int) Math.ceil(area.getMaxY() * sy) - y);
+    }
+
+    /** Paints the same viewport and overlays into a selected device-pixel crop; selection guides live outside this view. EDT only. */
+    BufferedImage renderRegion(java.awt.Rectangle area, java.awt.geom.AffineTransform device) {
+        if (!javax.swing.SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Render the viewer on the EDT.");
+        if (area.isEmpty() || !new java.awt.Rectangle(0, 0, getWidth(), getHeight()).contains(area))
+            throw new IllegalArgumentException("Select a nonempty area inside the image view.");
+        java.awt.Rectangle pixels = deviceBounds(area, device);
+        BufferedImage image = new BufferedImage(pixels.width, pixels.height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = image.createGraphics();
+        try {
+            graphics.translate(-pixels.x, -pixels.y);
+            graphics.scale(device.getScaleX(), device.getScaleY());
+            paint(graphics);
+        } finally { graphics.dispose(); }
+        return image;
+    }
+
     /** Shows this frame with these stretch tables; {@code extremeColour} draws a colour frame as the brightest channel. */
     void showFrame(BlinkSequence.Frame frame, byte[][] tables, boolean extremeColour) {
         this.picture = null;

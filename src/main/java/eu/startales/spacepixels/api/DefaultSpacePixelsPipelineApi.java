@@ -57,7 +57,8 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
                     request.getInputDirectory(),
                     request.getInputPreparationMode() == InputPreparationMode.AUTO_PREPARE_TO_16BIT_MONO,
                     request.getNegativeValueHandling() == NegativeValueHandling.ADD_OFFSET,
-                    (percentage, message) -> emitScaledProgress(progressListener, 0, 15, percentage, message));
+                    (percentage, message) -> emitScaledProgress(progressListener, 0, 15, percentage, message),
+                    eu.startales.spacepixels.fits.ImageScaling.policy(request.getOutlierHandling()));
 
             emitProgress(progressListener, 15, "Validating FITS metadata for pipeline execution...");
             FitsFileInformation[] filesInfo;

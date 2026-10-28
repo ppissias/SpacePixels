@@ -12,8 +12,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.logging.Level;
@@ -29,7 +27,6 @@ public final class OutputFolders {
 
     private static final Logger LOGGER = Logger.getLogger(OutputFolders.class.getName());
 
-    private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 
     private OutputFolders() {
     }
@@ -39,15 +36,8 @@ public final class OutputFolders {
      * When a folder of that name exists (two runs in one second), a number is added: {@code ..._204815_2}.
      */
     static File createNew(File parent, String prefix) {
-        String name = prefix + LocalDateTime.now().format(TIMESTAMP);
-        File folder = new File(parent, name);
-        for (int number = 2; folder.exists(); number++) {
-            folder = new File(parent, name + "_" + number);
-        }
-        if (!folder.mkdirs()) {
-            LOGGER.log(Level.WARNING, "Could not create the output folder " + folder.getAbsolutePath() + ". Check the folder permissions.");
-        }
-        return folder;
+        try { return eu.startales.spacepixels.util.RunDirectories.create(parent.toPath(), prefix).toFile(); }
+        catch (IOException failure) { throw new UncheckedIOException("Could not create the output folder.", failure); }
     }
 
     /**

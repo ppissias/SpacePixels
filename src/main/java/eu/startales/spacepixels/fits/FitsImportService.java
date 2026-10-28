@@ -183,14 +183,24 @@ public final class FitsImportService implements AutoCloseable {
 
     /** Writes final mono/color copies directly from either compressed or plain images, then offers import. */
     private FitsFileInformation[] standardizeAndOfferToLoad(File[] files, boolean isColor) throws Exception {
-        int addedOffset = chooseNegativeValueOffset(files);
-        if (addedOffset < 0) {
-            LOGGER.info("Conversion cancelled at the negative-value choice. Clearing the active import.");
-            return new FitsFileInformation[0];
+        ImageScaling.Summary scan;
+        try (FitsImportInteraction.Progress progress = interaction.progress("Checking pixel values...")) {
+            scan = ImageScaling.inspect(files, percent -> progress.onProgressUpdate(percent, "Inspecting sequence intensity range..."));
         }
+        boolean keepNegative = true;
+        if (scan.negativePixels() > 0) {
+            int choice = interaction.choose("This sequence contains values below zero. Add a common offset to preserve the background and its noise.\n"
+                    + "Setting negative values to zero discards the low side of that noise; registration margins remain zero in either case.",
+                    "Pixel Values Below Zero", new String[]{"Add an Offset (Recommended)", "Set to 0", "Cancel"});
+            if (choice < 0 || choice > 1) return new FitsFileInformation[0];
+            keepNegative = choice == 0;
+        }
+        ImageScaling.Plan scaling;
+        try { scaling = ImageScaling.plan(scan, keepNegative, ImageScaling.interactive(interaction)); }
+        catch (ImageScaling.DecisionCancelledException declined) { return new FitsFileInformation[0]; }
         File newDir;
         try (FitsImportInteraction.Progress progress = interaction.progress("Converting to standard 16-bit...")) {
-            newDir = batch.batchStandardizeTo16Bit(files, isColor, addedOffset, progress);
+            newDir = batch.batchStandardizeTo16Bit(files, isColor, scaling, progress);
         }
 
         int loadChoice = interaction.confirm(
@@ -201,40 +211,6 @@ public final class FitsImportService implements AutoCloseable {
             throw new RedirectImportException(newDir);
         }
         return new FitsFileInformation[0]; // Stop the current import
-    }
-
-    private int chooseNegativeValueOffset(File[] files) throws Exception {
-        FitsPixelConverter.NegativeValueScan scan;
-        try (FitsImportInteraction.Progress progress = interaction.progress("Checking pixel values...")) {
-            scan = FitsPixelConverter.scanNegativeValues(files,
-                    percent -> progress.onProgressUpdate(percent, "Checking for pixel values below zero..."));
-        }
-        if (!scan.hasNegativeValues()) {
-            return 0;
-        }
-
-        int offset = scan.offsetToKeepNegativeValues();
-        String[] options = {"Add an Offset (Recommended)", "Set to 0", "Cancel"};
-        int choice = interaction.choose(negativeValueQuestion(scan, offset), "Pixel Values Below Zero", options);
-        LOGGER.info(scan.negativePixels() + " of " + scan.totalPixels() + " pixels below zero, lowest "
-                + scan.lowest() + "; choice: " + (choice == 0 ? "add " + offset + " ADU" : choice == 1 ? "set to 0" : "cancel"));
-        return choice == 0 ? offset : choice == 1 ? 0 : -1;
-    }
-
-    static String negativeValueQuestion(FitsPixelConverter.NegativeValueScan scan, int offset) {
-        double percent = 100.0 * scan.negativePixels() / Math.max(1, scan.totalPixels());
-        String share = percent >= 10 ? String.format(Locale.ROOT, "%.0f %%", percent)
-                : percent >= 0.1 ? String.format(Locale.ROOT, "%.1f %%", percent) : "Less than 0.1 %";
-        return dialogParagraphs(
-                String.format(Locale.ROOT, "%s of the pixels are below zero (the lowest is %,.0f ADU). This usually means the "
-                        + "frames were bias- or dark-subtracted without a pedestal. Standard 16-bit images cannot store values "
-                        + "below zero.", share, scan.lowest()),
-                String.format(Locale.ROOT, "<b>Add an Offset (recommended):</b> adds %,d ADU to every pixel of every frame. All "
-                        + "values are kept, so the sky background and its noise stay intact. Padding left by registration stays "
-                        + "at 0, and the report takes the offset off again for the sky brightness.", offset),
-                "<b>Set to 0:</b> keeps the original levels, but every pixel below zero becomes 0. Where the sky is close to "
-                        + "zero this cuts off the low side of the noise, so the background is measured too high and the noise "
-                        + "too low. With the sky at zero, detection can fail.");
     }
 
     /**

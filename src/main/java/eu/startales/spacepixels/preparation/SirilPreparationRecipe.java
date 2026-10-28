@@ -69,7 +69,7 @@ public final class SirilPreparationRecipe {
 
     /** Uses no more workers than the host exposes, including low-core machines and constrained test JVMs. */
     private static String preamble() {
-        return "requires 1.4.0\nsetcpu " + Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()))
+        return "requires " + SirilInstallation.MINIMUM_VERSION + "\nsetcpu " + Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()))
                 + "\nset32bits\nset compression.enabled=false\n";
     }
 }

@@ -3,7 +3,6 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.preparation.PreparationRequest;
 import eu.startales.spacepixels.preparation.PreparationInputs;
-import eu.startales.spacepixels.preparation.PreparationTool;
 import eu.startales.spacepixels.session.ApplicationStorage;
 import org.junit.Rule;
 import org.junit.Test;
@@ -32,8 +31,8 @@ public class PreparationPanelTest {
         AtomicReference<PreparationPanel.Selection> admitted = new AtomicReference<>();
         AtomicReference<PreparationPanel> reference = new AtomicReference<>();
         try {
-            edt(() -> reference.set(new PreparationPanel(settings, storage, () -> false, admitted::set, () -> { },
-                    (tool, path) -> new PreparationPanel.Installation(executable, "siril 1.4.4"))));
+            edt(() -> reference.set(new PreparationPanel(settings, storage, () -> false, admitted::set,
+                    path -> new PreparationPanel.Installation(executable, "siril 1.4.4"))));
             PreparationPanel panel = reference.get();
             edt(() -> {
                 assertFalse(button(panel, "Prepare with Siril").isEnabled());
@@ -52,8 +51,15 @@ public class PreparationPanelTest {
                 assertTrue(button(panel, "Prepare with Siril").isEnabled());
                 button(panel, "Prepare with Siril").doClick();
                 assertNotNull(admitted.get());
-                assertEquals(PreparationTool.SIRIL, admitted.get().request().tool());
                 assertEquals(lights, admitted.get().request().outputParent());
+                var originalRequest = admitted.get().request();
+                assertFalse(originalRequest.keepWorkingFiles());
+                checkbox(panel, "Keep working files").doClick();
+                assertFalse(button(panel, "Prepare with Siril").isEnabled());
+                checkbox(panel, "I confirm this recipe").doClick();
+                button(panel, "Prepare with Siril").doClick();
+                assertTrue(admitted.get().request().keepWorkingFiles());
+                assertFalse("Earlier requests remain immutable", originalRequest.keepWorkingFiles());
                 assertTrue(text(panel).contains("Output parent (lights source folder): " + lights));
                 JTextField output = field(panel, "Output parent folder (optional)");
                 output.setText(temporary.getRoot().toString());
@@ -82,19 +88,23 @@ public class PreparationPanelTest {
     }
 
     /** A camera mode is intentionally unset rather than guessed from a two-dimensional image or extension. */
-    @Test public void cameraModeIsInitiallyUnknownAndBothToolRowsArePresent() throws Exception {
+    @Test public void cameraModeIsInitiallyUnknownWithOnlySirilInstallation() throws Exception {
         ApplicationStorage storage = new ApplicationStorage();
         AtomicReference<PreparationPanel> reference = new AtomicReference<>();
         var preferences = temporary.getRoot().toPath().resolve("unset-preferences.json").toFile();
         try {
             edt(() -> {
                 var panel = new PreparationPanel(ApplicationSettings.load(preferences), storage, () -> false,
-                        ignored -> { }, () -> { }, (tool, path) -> { throw new java.io.IOException("not installed"); });
+                        ignored -> { }, path -> { throw new java.io.IOException("not installed"); });
                 reference.set(panel);
                 assertNull(combo(panel, PreparationRequest.Sensor.class).getSelectedItem());
+                assertFalse(checkbox(panel, "Keep working files").isSelected());
                 assertNotNull(field(panel, "Siril installation path"));
-                assertNotNull(field(panel, "DeepSkyStacker installation path"));
-                assertNotNull(button(panel, "Import Aligned Frames…"));
+                assertEquals(1, all(panel).stream().filter(c -> c instanceof JTextField f
+                        && f.getAccessibleContext().getAccessibleName() != null
+                        && f.getAccessibleContext().getAccessibleName().endsWith("installation path")).count());
+                assertFalse(all(panel).stream().anyMatch(c -> c instanceof JButton b && "Import Aligned Frames…".equals(b.getText())));
+                assertFalse(all(panel).stream().anyMatch(c -> c instanceof JCheckBox b && b.getText().contains("Auto-Tune")));
             });
         } finally { if (reference.get() != null) edt(reference.get()::close); storage.finish(); }
     }
@@ -112,7 +122,7 @@ public class PreparationPanelTest {
         ApplicationStorage storage = new ApplicationStorage();
         AtomicReference<PreparationPanel> reference = new AtomicReference<>();
         try {
-            edt(() -> reference.set(new PreparationPanel(ApplicationSettings.inMemory(new AppConfig()), storage, () -> false, ignored -> { }, () -> { })));
+            edt(() -> reference.set(new PreparationPanel(ApplicationSettings.inMemory(new AppConfig()), storage, () -> false, ignored -> { })));
             PreparationPanel panel = reference.get();
             edt(() -> {
                 field(panel, "Output parent folder (optional)").setText(temporary.getRoot().toString());
@@ -165,7 +175,7 @@ public class PreparationPanelTest {
         AtomicReference<PreparationPanel> reference = new AtomicReference<>();
         try {
             edt(() -> {
-                var panel = new PreparationPanel(ApplicationSettings.inMemory(new AppConfig()), storage, () -> false, ignored -> { }, () -> { });
+                var panel = new PreparationPanel(ApplicationSettings.inMemory(new AppConfig()), storage, () -> false, ignored -> { });
                 reference.set(panel);
                 field(panel, "Observation session (optional)").setText(root.toString());
                 button(panel, "Scan and suggest folders").doClick();

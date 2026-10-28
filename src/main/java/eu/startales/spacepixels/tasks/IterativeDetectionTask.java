@@ -30,6 +30,12 @@ public class IterativeDetectionTask implements Job<File> {
     private final IterativeDetectionPipelineService pipeline = new IterativeDetectionPipelineService();
     /** Where the run's live-view pictures go; null makes none. */
     private RunPreviewSink previews;
+    private eu.startales.spacepixels.fits.ImageScaling.Decision scalingDecision;
+
+    /** Supplies the admitted worker's whole-sequence outlier decision before the task starts. */
+    public IterativeDetectionTask withScalingDecision(eu.startales.spacepixels.fits.ImageScaling.Decision decision) {
+        this.scalingDecision = decision; return this;
+    }
 
     /** Creates noninteractive passes that decline individual reports above 50 classified detections. */
     public IterativeDetectionTask(IterativeDetectionRequest request) {
@@ -69,7 +75,7 @@ public class IterativeDetectionTask implements Job<File> {
     }
 
     private JobOutcome<File> runCancellable(JobContext context) throws Exception {
-        File report = pipeline.run(request, reportPrompt, context::progress, preFlight);
+        File report = pipeline.run(request, reportPrompt, context::progress, preFlight, scalingDecision);
         return report == null ? JobOutcome.declined("Iterative detection declined after the dataset quality warning.")
                 : JobOutcome.completed(report);
     }

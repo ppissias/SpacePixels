@@ -32,6 +32,9 @@ public final class JobCoordinator {
 
         void jobProgress(JobHandle handle, int percent, String message);
 
+        /** Receives live diagnostic text on the UI thread while this job still owns admission. */
+        default void jobDetails(JobHandle handle, String text) { }
+
         /** The job has ended with {@code outcome}; its handler is told next. */
         void jobEnded(JobHandle handle, JobOutcome<?> outcome);
     }
@@ -167,6 +170,15 @@ public final class JobCoordinator {
 
         private Context(JobHandle handle) {
             this.handle = handle;
+        }
+
+        /** Queued diagnostics follow the same job-identity guard as progress and cannot leak into a later job. */
+        @Override public void details(String text) {
+            if (isCancelled()) throw new JobCancelledException();
+            ui.execute(() -> {
+                Listener target = listener;
+                if (current == handle && target != null) target.jobDetails(handle, text);
+            });
         }
 
         @Override

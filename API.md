@@ -116,14 +116,37 @@ Unsigned 16-bit storage cannot hold values below zero, which signed or floating-
 were bias- or dark-subtracted without a pedestal contain. `SpacePixelsPipelineRequest.Builder.negativeValueHandling(NegativeValueHandling)` chooses what
 `AUTO_PREPARE_TO_16BIT_MONO` does with them:
 
-- `ADD_OFFSET` (default, recommended): the same whole number of ADU is added to every pixel of every
-  frame so the lowest value becomes 0. All values and the sky noise are kept. The zero fill that
+- `ADD_OFFSET` (default, recommended): the same offset is added to every pixel of every
+  frame so the lowest retained value becomes 0. Normal negative values and the sky noise are kept. The zero fill that
   registration leaves at the frame edges stays at 0, so the detection still recognises it, and the
-  converted files record the offset in the `SPOFFSET` keyword, which the report subtracts for the sky
+  converted files record the pedestal in output ADU in the `SPOFFSET` keyword, which the report subtracts for the sky
   brightness.
 - `CLIP_TO_ZERO`: values below zero become 0. Where the sky is close to zero this cuts off the low
   side of the noise; when more than half of each frame is at 0, every frame counts as a failed
   registration and the run fails.
+
+### Conversion headroom and outliers
+
+FITS physical values are decoded using `BZERO`/`BSCALE`; floating-point FITS use a nominal `[0,1]` scale and integers use ADU. XISF declared bounds are interpreted before the same scaling policy is applied (missing floating bounds currently default to `[0,1]`). Conversion uses one linear transform for the whole sequence, including a common offset for retained negatives. It preserves the nominal level spacing while the actual range fits in 16 bits, and reduces the multiplier only when necessary. No individual-frame normalization or nonlinear stretch is applied. Existing ready mono16 inputs are not converted again.
+
+The accepted normalized headroom is `[-0.5,1.5]`. The optional request input `outlierHandling(ImageScaling.OutlierHandling)` applies to `AUTO_PREPARE_TO_16BIT_MONO`:
+
+| Policy | Behaviour outside the accepted range |
+|---|---|
+| `REQUIRE_DECISION` **(default)** | Rejects conversion before writing the converted sequence. No GUI is opened and no clipping or precision reduction for extremes is silently selected. |
+| `CLIP_EXTREMES` | Explicitly clips only values outside the headroom, then plans one common transform. The separate negative-value policy still applies to ordinary negative values. |
+| `PRESERVE_ALL` | Keeps every finite sample and expands the common range as necessary, accepting reduced 16-bit precision. |
+
+Nonfinite samples are rejected under every policy. A default refusal arrives as a `SpacePixelsPipelineException` with an `ImageScaling.OutlierException` cause; `summary()` exposes the observed range, counts and per-frame diagnostics. Callers can inspect it and submit a new request with an explicit policy. Output headers record the transform, clipping selection and outlier counts. A subsequent conversion creates a separate output directory and preserves previous results.
+
+```java
+import eu.startales.spacepixels.fits.ImageScaling;
+
+var request = SpacePixelsPipelineRequest.builder(inputDirectory)
+    .inputPreparationMode(InputPreparationMode.AUTO_PREPARE_TO_16BIT_MONO)
+    .outlierHandling(ImageScaling.OutlierHandling.PRESERVE_ALL) // explicit precision trade-off
+    .build();
+```
 
 `InputPreparationMode` controls how strictly the API treats the input directory:
 

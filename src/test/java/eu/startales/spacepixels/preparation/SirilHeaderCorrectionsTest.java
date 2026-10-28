@@ -54,6 +54,24 @@ public class SirilHeaderCorrectionsTest {
         assertThrows(java.io.IOException.class, () -> SirilHeaderCorrections.siteNumber("NaN", "SITELAT"));
     }
 
+    /** Nanosecond timestamps fit their fixed-width replacement card without losing precision or moving pixel data. */
+    @Test public void preservesLongFractionalTimestampsAndPixelBytes() throws Exception {
+        for (String fraction : new String[]{"12345678", "123456789"}) {
+            Path copy = temporary.newFile("private-" + fraction.length() + ".fit").toPath();
+            Header header = new Header();
+            header.addValue("DATE-OBS", "2020-02-29T23.59.58." + fraction, null);
+            try (Fits fits = FitsPixelConverter.createFitsFromData(new short[][]{{-32768, -123, 32767}}, header)) {
+                fits.write(copy.toFile());
+            }
+            byte[] before = Files.readAllBytes(copy);
+            assertEquals(1, SirilHeaderCorrections.normalizePrivateCopy(copy).size());
+            byte[] after = Files.readAllBytes(copy);
+            assertEquals(before.length, after.length);
+            assertEquals("2020-02-29T23:59:58." + fraction, SirilHeaderCorrections.imageHeader(copy).getStringValue("DATE-OBS"));
+            assertArrayEquals(Arrays.copyOfRange(before, 2880, before.length), Arrays.copyOfRange(after, 2880, after.length));
+        }
+    }
+
     /** Tile-compressed images keep their metadata in the image extension, behind an empty primary HDU. */
     @Test public void repairsCompressedExtensionWithoutChangingItsDataBlock() throws Exception {
         Path file = temporary.newFile("image.fit.fz").toPath();

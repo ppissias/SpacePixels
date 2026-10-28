@@ -2,6 +2,7 @@ package eu.startales.spacepixels.preparation;
 
 import eu.startales.spacepixels.fits.FitsInput;
 import eu.startales.spacepixels.fits.FitsPixelConverter;
+import eu.startales.spacepixels.fits.ImageScaling;
 import eu.startales.spacepixels.util.StagedFile;
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
@@ -22,7 +23,7 @@ public final class PreparedSequenceWriter {
     public record Frame(Path original, Path metadata, Path registered) { }
 
     /** The common physical-value transform and final files recorded in preparation provenance. */
-    public record Result(double multiplier, double addedOffset, int width, int height, List<Path> files) {
+    public record Result(double multiplier, double addedOffset, int width, int height, List<Path> files, ImageScaling.Plan scaling) {
         /** Detaches the published file list from working collections. */
         public Result { files = List.copyOf(files); }
     }
@@ -35,9 +36,14 @@ public final class PreparedSequenceWriter {
 
     /** Chooses a common cohort transform, then delegates conversion with the ordinary importer's shared pixel engine. */
     public static Result write(List<Frame> frames, Path folder, BooleanSupplier cancelled, IntConsumer progress) throws Exception {
+        return write(frames, folder, cancelled, progress, null);
+    }
+
+    /** Inspects the complete retained cohort and asks once about extremes before publishing final files. */
+    public static Result write(List<Frame> frames, Path folder, BooleanSupplier cancelled, IntConsumer progress,
+                               ImageScaling.Decision decision) throws Exception {
         if (frames.size() < 3) throw new IOException("Preparation needs at least three registered individual exposures.");
-        double minimum = 0;
-        double maximum = 0;
+        ImageScaling.Scan scan = new ImageScaling.Scan();
         int width = -1;
         int height = -1;
         boolean floating = true;
@@ -47,28 +53,21 @@ public final class PreparedSequenceWriter {
             if (width < 0) { width = image.pixels().width(); height = image.pixels().height(); }
             if (width != image.pixels().width() || height != image.pixels().height()) throw new IOException("Registered frames have inconsistent dimensions.");
             floating &= image.header().getIntValue("BITPIX") < 0;
-            for (int y = 0; y < height; y++) {
-                if ((y & 63) == 0) check(cancelled);
-                for (int x = 0; x < width; x++) {
-                    double value = image.pixels().monochromeValue(y, x);
-                    if (!Double.isFinite(value)) throw new IOException("Nonfinite pixels in external preparation output.");
-                    minimum = Math.min(minimum, value);
-                    maximum = Math.max(maximum, value);
-                }
-            }
+            scan.add(frames.get(i).original().getFileName().toString(), image.pixels(), cancelled);
             progress.accept((i + 1) * 40 / frames.size());
         }
-        double offset = minimum < 0 ? -minimum : 0;
-        if (!(maximum + offset > 0)) throw new IOException("The registered sequence has no usable intensity range.");
-        double preferred = floating && maximum <= 10 ? 65_535 : 1;
-        double multiplier = Math.min(preferred, 65_535 / (maximum + offset));
+        check(cancelled);
+        ImageScaling.Plan scaling = ImageScaling.plan(scan.summary(), true, decision);
+        check(cancelled);
+        double offset = scaling.physicalOffset(floating);
+        double multiplier = scaling.physicalMultiplier(floating);
         Files.createDirectory(folder);
         List<Path> written = new ArrayList<>();
         for (int i = 0; i < frames.size(); i++) {
             check(cancelled);
             Frame frame = frames.get(i);
             Image image = read(frame.registered());
-            short[][] pixels = FitsPixelConverter.to16BitMonochrome(image.pixels(), multiplier, offset,
+            short[][] pixels = FitsPixelConverter.to16BitMonochrome(image.pixels(), scaling,
                     () -> cancelled.getAsBoolean() || Thread.currentThread().isInterrupted());
             Header metadata = SirilHeaderCorrections.imageHeader(frame.metadata());
             Header outputHeader = image.header();
@@ -88,8 +87,7 @@ public final class PreparedSequenceWriter {
                         "XBAYROFF", "YBAYROFF", "CHECKSUM", "DATASUM", "SPOFFSET").contains(key))) remove.add(key);
             }
             remove.forEach(outputHeader::deleteKey);
-            outputHeader.addValue("SPPSCALE", multiplier, "Prepared sequence common linear multiplier");
-            outputHeader.addValue("SPPOFF", offset, "Image-data offset before SPPSCALE; fill stays 0");
+            scaling.record(outputHeader, image.pixels().floatingPoint());
             outputHeader.addValue("SPORIGIN", frame.original().getFileName().toString(), "Original exposure filename");
             outputHeader.insertHistory("SpacePixels preparation: RGB mean; common image-data scaling; zero registration fill preserved.");
             Path output = folder.resolve(String.format(java.util.Locale.ROOT, "frame_%06d.fit", i + 1));
@@ -99,7 +97,7 @@ public final class PreparedSequenceWriter {
             written.add(output);
             progress.accept(40 + (i + 1) * 60 / frames.size());
         }
-        return new Result(multiplier, offset, width, height, written);
+        return new Result(multiplier, offset, width, height, written, scaling);
     }
 
     /** Loads exactly one supported image; its FITS file handle closes before the kernel is used. */

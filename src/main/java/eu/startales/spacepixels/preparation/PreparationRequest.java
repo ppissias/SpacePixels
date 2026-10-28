@@ -5,9 +5,9 @@ import java.util.Map;
 import java.util.Objects;
 
 /** Immutable observer-selected inputs and interpretation; workers never read live window controls. */
-public record PreparationRequest(PreparationTool tool, Path executable, Map<PreparationInputs.Role, Path> inputs,
+public record PreparationRequest(Path executable, Map<PreparationInputs.Role, Path> inputs,
                                  Sensor sensor, Bayer bayer, RowOrder rowOrder, int offsetX, int offsetY,
-                                 Path outputParent, boolean referenceStack) {
+                                 Path outputParent, boolean referenceStack, boolean keepWorkingFiles) {
     /** Sensor interpretation is independent of the input file's number of image planes. */
     public enum Sensor {
         MONO("Monochrome"), CFA("Colour (Bayer CFA)"), RGB("Already debayered RGB");
@@ -36,7 +36,6 @@ public record PreparationRequest(PreparationTool tool, Path executable, Map<Prep
 
     /** Copies all collections and normalizes paths before the request leaves the EDT. */
     public PreparationRequest {
-        Objects.requireNonNull(tool);
         executable = Objects.requireNonNull(executable).toAbsolutePath().normalize();
         inputs = Map.copyOf(inputs);
         Objects.requireNonNull(sensor);

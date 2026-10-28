@@ -215,6 +215,13 @@ final class SkyAnnotations {
         return annotateBox.isSelected();
     }
 
+    /** Freezes this frame's currently enabled projected catalogue marks on the EDT, without changing the viewer. */
+    List<SkyMark> exportMarks(FitsFileInformation info) {
+        if (!annotateBox.isSelected() || catalogue == null) return List.of();
+        List<SkyMark> marks = marksFor(info);
+        return marks == null ? List.of() : List.copyOf(marks);
+    }
+
     private void apply() {
         notice.setText(" ");
         view.setSkyLayers(starsItem.isSelected(), deepSkyItem.isSelected(), variablesItem.isSelected());

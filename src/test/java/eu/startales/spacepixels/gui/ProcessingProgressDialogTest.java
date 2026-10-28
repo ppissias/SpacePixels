@@ -22,6 +22,39 @@ public class ProcessingProgressDialogTest {
     private ProcessingProgressDialog dialog;
     private final List<Boolean> savedPreferences = new ArrayList<>();
 
+    /** Live Siril text remains selectable and bounded, and is reset before a later job can show it. */
+    @Test public void sirilDetailsAreBoundedAndResetBetweenJobs() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            dialog.beginDetails(true);
+            dialog.appendDetails("Registering exposures…\n");
+            javax.swing.JTextArea text = findText(dialog);
+            assertTrue(text.getText().contains("Registering exposures"));
+            assertFalse(text.isEditable());
+            assertEquals(javax.swing.text.DefaultCaret.NEVER_UPDATE,
+                    ((javax.swing.text.DefaultCaret) text.getCaret()).getUpdatePolicy());
+            dialog.appendDetails("x".repeat(150_000) + "\nLatest stage\n");
+            assertTrue(text.getDocument().getLength() <= 120_000);
+            assertTrue(text.getText().endsWith("Latest stage\n"));
+            dialog.beginDetails(false);
+            dialog.appendDetails("stale");
+            assertEquals("", text.getText());
+            dialog.beginDetails(true);
+            assertEquals("", text.getText());
+        });
+    }
+
+    /** Finds the real details editor without exposing test-only production accessors. */
+    private static javax.swing.JTextArea findText(java.awt.Container parent) {
+        for (java.awt.Component child : parent.getComponents()) {
+            if (child instanceof javax.swing.JTextArea text) return text;
+            if (child instanceof java.awt.Container container) {
+                javax.swing.JTextArea found = findText(container);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
     @Before
     public void createDialog() throws Exception {
         SwingUtilities.invokeAndWait(() -> {

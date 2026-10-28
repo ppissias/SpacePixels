@@ -23,6 +23,37 @@ import static org.junit.Assert.assertTrue;
 
 public class XisfImageConverterTest {
 
+    /** Declared bounds are format metadata, while raw zero margins and the original-sample transform remain explicit. */
+    @Test public void declaredSignedBoundsPreserveMarginsAndSourceTransform() throws Exception {
+        Path source = Files.createTempDirectory("spacepixels-xisf-bounds");
+        ByteBuffer bytes = ByteBuffer.allocate(5 * 4).order(ByteOrder.LITTLE_ENDIAN);
+        for (float value : new float[]{0, -0.5f, 0, 0.5f, 0}) bytes.putFloat(value);
+        writeMonolithicXisf(source.resolve("bounded.xisf"), "5:1:1", "Float32", "Gray", "Planar", "-1:1", "", bytes.array(), "");
+        File converted = XisfImageConverter.prepareDirectoryForFitsImport(source.toFile());
+        try (Fits fits = new Fits(new File(converted, "bounded.fit"))) {
+            var image = FitsInput.getImageHDU(fits); var header = image.getHeader();
+            short[][] pixels = (short[][]) image.getKernel();
+            int[] expected = {0, 16384, 32768, 49151, 0};
+            for (int x = 0; x < expected.length; x++) assertEquals(expected[x], pixels[0][x] + 32768);
+            for (int x = 1; x < 4; x++) assertEquals(new double[]{-0.5, 0, 0.5}[x - 1],
+                    (pixels[0][x] + 32768.0) / header.getDoubleValue("SPPSCALE") - header.getDoubleValue("SPPOFF"), 2.0 / 65535);
+            assertEquals(-1, header.getDoubleValue("SPXLO"), 0); assertEquals(1, header.getDoubleValue("SPXHI"), 0);
+        }
+    }
+
+    /** UInt32 samples use their declared/default full scale, rather than saturating all counts above 65535. */
+    @Test public void unsigned32UsesItsNominalRange() throws Exception {
+        Path source = Files.createTempDirectory("spacepixels-xisf-uint32");
+        byte[] bytes = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putInt(0).putInt(-1).array();
+        writeMonolithicXisf(source.resolve("integer.xisf"), "2:1:1", "UInt32", "Gray", "Planar", null, "", bytes, "");
+        File converted = XisfImageConverter.prepareDirectoryForFitsImport(source.toFile());
+        try (Fits fits = new Fits(new File(converted, "integer.fit"))) {
+            var image = FitsInput.getImageHDU(fits); short[][] pixels = (short[][]) image.getKernel();
+            assertEquals(Short.MIN_VALUE, pixels[0][0]); assertEquals(Short.MAX_VALUE, pixels[0][1]);
+            assertEquals(65535.0 / 4_294_967_295.0, image.getHeader().getDoubleValue("SPPSCALE"), 1e-14);
+        }
+    }
+
     @Test
     public void prepareDirectoryForFitsImportConvertsFloatGrayXisfTo16BitMonoFits() throws Exception {
         Path sourceDirectory = Files.createTempDirectory("spacepixels-xisf-gray");

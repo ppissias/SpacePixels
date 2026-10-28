@@ -110,18 +110,6 @@ public class PreparationInputsTest {
         assertThrows(java.io.IOException.class, () -> FramePreparationService.inspect(Map.of(DARKS, folder)));
     }
 
-    /** A known unsupported DSS RAW override is rejected before any large source copy or native process is created. */
-    @Test public void rejectsUnsupportedRawOverrideBeforeCreatingOutput() throws Exception {
-        Path lights = temporary.newFolder("raw").toPath();
-        Path output = temporary.newFolder("output").toPath();
-        for (int i = 0; i < 3; i++) Files.writeString(lights.resolve(i + ".CR2"), "candidate only");
-        var request = new PreparationRequest(PreparationTool.DSS, output.resolve("DeepSkyStackerCL.exe"), Map.of(LIGHTS, lights),
-                PreparationRequest.Sensor.CFA, PreparationRequest.Bayer.BGGR, PreparationRequest.RowOrder.TOP_DOWN, 0, 0, output, false);
-        var failure = assertThrows(java.io.IOException.class, () -> new FramePreparationService().prepare(request, () -> false, (percent, message) -> { }));
-        assertTrue(failure.getMessage().contains("RAW"));
-        try (var files = Files.list(output)) { assertEquals(0, files.count()); }
-    }
-
     /** Creates candidate filenames only; these discovery tests do not claim image decoding or calibration compatibility. */
     private static Path images(Path root, String relative, int count) throws Exception {
         Path folder = Files.createDirectories(root.resolve(relative));

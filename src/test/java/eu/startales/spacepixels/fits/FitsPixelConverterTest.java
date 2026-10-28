@@ -61,17 +61,17 @@ public class FitsPixelConverterTest {
     @Test
     public void standardizeTo16BitMonoScalesUnitFloatDataIntoUnsignedShortStorage() throws Exception {
         short[][] converted = FitsPixelConverter.standardizeTo16BitMono(new float[][]{
-                {0.0f, 0.5f, 1.0f, 2.0f}
+                {0.0f, 0.5f, 1.0f, 1.25f}
         });
 
         assertEquals(Short.MIN_VALUE, converted[0][0]);
-        assertEquals(0, converted[0][1]);
-        assertEquals(Short.MAX_VALUE, converted[0][2]);
+        assertEquals(26214, converted[0][1] + 32768);
+        assertEquals(52428, converted[0][2] + 32768);
         assertEquals(Short.MAX_VALUE, converted[0][3]);
     }
 
     @Test
-    public void standardizeTo16BitColorClampsIntDataAndExtractsLuminance() throws Exception {
+    public void standardizeTo16BitColorRescalesHighIntDataAndExtractsLuminance() throws Exception {
         short[][][] converted = FitsPixelConverter.standardizeTo16BitColor(new int[][][]{
                 {{0, 70000}},
                 {{32768, -10}},
@@ -80,12 +80,13 @@ public class FitsPixelConverterTest {
 
         assertEquals(Short.MIN_VALUE, converted[0][0][0]);
         assertEquals(Short.MAX_VALUE, converted[0][0][1]);
-        assertEquals(0, converted[1][0][0]);
+        assertEquals(Math.round(32768 * 65535.0 / 70000), converted[1][0][0] + 32768);
         assertEquals(Short.MIN_VALUE, converted[1][0][1]);
-        assertEquals(Short.MAX_VALUE, converted[2][0][0]);
+        assertEquals(Math.round(65535 * 65535.0 / 70000), converted[2][0][0] + 32768);
 
         short[][] luminance = FitsPixelConverter.extractLuminance(converted);
-        assertEquals(0, luminance[0][0]);
+        assertEquals(Math.round((converted[0][0][0] + converted[1][0][0] + converted[2][0][0] + 3 * 32768.0) / 3),
+                luminance[0][0] + 32768);
         assertTrue(luminance[0][1] > Short.MIN_VALUE);
     }
 
@@ -145,7 +146,7 @@ public class FitsPixelConverterTest {
     public void scanSkipsUnsignedFramesAndIgnoresValuesThatRoundToZero() throws Exception {
         java.nio.file.Path directory = java.nio.file.Files.createTempDirectory("spacepixels-negative-scan");
         java.io.File unsigned = write(directory.resolve("u.fit").toFile(), new short[][]{{-32768, 0}}, 32768.0);
-        java.io.File tiny = write(directory.resolve("f.fit").toFile(), new float[][]{{-0.4f, 20.0f}}, null);
+        java.io.File tiny = write(directory.resolve("f.fit").toFile(), new float[][]{{-0.4f / 65535, 0.5f}}, null);
 
         FitsPixelConverter.NegativeValueScan scan = FitsPixelConverter.scanNegativeValues(new java.io.File[]{unsigned, tiny}, null);
 

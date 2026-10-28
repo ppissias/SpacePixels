@@ -149,7 +149,16 @@ public final class FitsBatchService {
     }
 
     File batchStandardizeTo16Bit(File[] files, boolean isColor, int addedOffset, TransientEngineProgressListener progress) throws Exception {
-        File targetDir = null;
+        ImageScaling.Summary scan = ImageScaling.inspect(files, null);
+        return batchStandardizeTo16Bit(files, isColor, ImageScaling.fixedPedestal(scan, addedOffset), progress);
+    }
+
+    /** Uses one already-approved scaling plan for every mono output and colour companion. */
+    File batchStandardizeTo16Bit(File[] files, boolean isColor, ImageScaling.Plan scaling, TransientEngineProgressListener progress) throws Exception {
+        if (files.length == 0) return null;
+        File parent = files[0].getAbsoluteFile().getParentFile();
+        File monoDirectory = newConversionDirectory(parent, isColor ? "_16bit_mono" : "_16bit_converted");
+        File colorDirectory = isColor ? newConversionDirectory(parent, "_16bit_color") : null;
         for (int fileIndex = 0; fileIndex < files.length; fileIndex++) {
             File file = files[fileIndex];
             int percent = (int) (((float) fileIndex / files.length) * 100);
@@ -157,22 +166,25 @@ public final class FitsBatchService {
             LOGGER.info("Converting file to standard 16-bit: " + file.getName());
             printFitsDebugInfo("ORIGINAL", file);
 
-            File monoDirectory = new File(file.getParentFile(), isColor ? "_16bit_mono" : "_16bit_converted");
-            Files.createDirectories(monoDirectory.toPath());
             File monoOutput = new File(monoDirectory,
                     FitsPreparation.preparedFilename(file, isColor ? "_16bit_mono" : "_16bit"));
             File colorOutput = null;
             if (isColor) {
-                File colorDirectory = new File(file.getParentFile(), "_16bit_color");
-                Files.createDirectories(colorDirectory.toPath());
                 colorOutput = new File(colorDirectory, FitsPreparation.preparedFilename(file, "_16bit_color"));
             }
-            FitsPreparation.standardizeFile(file, addedOffset, monoOutput, colorOutput);
+            FitsPreparation.standardizeFile(file, scaling, monoOutput, colorOutput);
             if (colorOutput != null) printFitsDebugInfo("CONVERTED 16-BIT COLOR", colorOutput);
             printFitsDebugInfo(isColor ? "CONVERTED 16-BIT LUMINANCE" : "CONVERTED 16-BIT MONO", monoOutput);
-            if (targetDir == null) targetDir = monoDirectory;
         }
-        return targetDir;
+        return monoDirectory;
+    }
+
+    /** Preserves an earlier conversion when a caller tries another scale or negative-value policy. */
+    private File newConversionDirectory(File parent, String name) throws IOException {
+        try { return Files.createDirectory(parent.toPath().resolve(name)).toFile(); }
+        catch (java.nio.file.FileAlreadyExistsException existing) {
+            return eu.startales.spacepixels.util.RunDirectories.create(parent.toPath(), name + "_").toFile();
+        }
     }
 
     private void printFitsDebugInfo(String label, File fitsFile) {

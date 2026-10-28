@@ -13,26 +13,24 @@ public final class FitsPreparation {
     /** Prevents construction of this stateless prepared-output helper. */
     private FitsPreparation() {}
 
-    /** Converts one input through the existing pixel converters and stages each requested prepared FITS output. */
-    public static void standardizeFile(File inputFile, int addedOffset, File monoOutput, File colorOutput) throws Exception {
-        try (Fits source = new Fits(inputFile)) {
-            BasicHDU<?> image = FitsInput.getImageHDU(source);
-            if (image == null) throw new IOException("No valid image HDU found in " + inputFile.getName());
-            Header header = image.getHeader();
-            Object kernel = image.getKernel();
-            short[][] mono;
-            if (kernel instanceof short[][][] || kernel instanceof int[][][] || kernel instanceof float[][][]) {
-                short[][][] color = FitsPixelConverter.standardizeTo16BitColor(kernel, header, addedOffset);
-                if (colorOutput != null) write(colorOutput, color, header, addedOffset);
-                mono = FitsPixelConverter.extractLuminance(color);
-            } else if (kernel instanceof short[][] || kernel instanceof int[][] || kernel instanceof float[][]) {
-                mono = FitsPixelConverter.standardizeTo16BitMono(kernel, header, addedOffset);
-            } else {
-                throw new IOException("Unsupported FITS kernel type in " + inputFile.getName() + ": "
-                        + (kernel == null ? "null" : kernel.getClass().getName()));
-            }
-            write(monoOutput, mono, header, addedOffset);
+    /** Writes mono and optional colour copies using the cohort's fixed transform and recorded pedestal. */
+    public static void standardizeFile(File inputFile, ImageScaling.Plan plan, File monoOutput, File colorOutput) throws Exception {
+        try (Fits fits = new Fits(inputFile)) {
+            BasicHDU<?> hdu = FitsInput.getImageHDU(fits);
+            if (hdu == null) throw new IOException("Missing FITS image: " + inputFile.getName());
+            var pixels = FitsPixelConverter.pixels(hdu.getKernel(), hdu.getHeader());
+            Header header = hdu.getHeader();
+            plan.record(header, pixels.floatingPoint());
+            short[][] mono = FitsPixelConverter.to16BitMonochrome(pixels, plan, () -> false);
+            if (colorOutput != null) write(colorOutput, FitsPixelConverter.to16BitColor(pixels, plan, () -> false), header, 0);
+            write(monoOutput, mono, header, 0);
         }
+    }
+
+    /** Converts one image with a caller-supplied ADU pedestal through the common plan and staged writer. */
+    public static void standardizeFile(File inputFile, int addedOffset, File monoOutput, File colorOutput) throws Exception {
+        standardizeFile(inputFile, ImageScaling.fixedPedestal(ImageScaling.inspect(new File[]{inputFile}, null), addedOffset),
+                monoOutput, colorOutput);
     }
 
     /** Stages one FITS output with the source metadata and added offset in ADU. */

@@ -76,7 +76,8 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
         File folder = directory;
         while (true) {
             try {
-                File importDirectory = XisfImageConverter.prepareDirectoryForFitsImport(folder, context::progress);
+                File importDirectory = XisfImageConverter.prepareDirectoryForFitsImport(folder, context::progress,
+                        eu.startales.spacepixels.fits.ImageScaling.interactive(interaction), true);
                 if (!folder.equals(importDirectory)) {
                     LOGGER.info("Redirecting import to converted XISF directory: " + importDirectory.getAbsolutePath());
                     context.progress(90, "Loading generated FITS metadata...");
@@ -99,6 +100,8 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
                 context.progress(100, "Import complete.");
                 return JobOutcome.completed(new Result(filesInfo, lastReport, metadata));
 
+            } catch (eu.startales.spacepixels.fits.ImageScaling.DecisionCancelledException declined) {
+                return JobOutcome.declined("The import was cancelled.");
             } catch (RedirectImportException e) {
                 // The user opted to automatically load the newly converted directory!
                 LOGGER.info("Redirecting import to newly created directory: " + e.getNewDirectory().getAbsolutePath());

@@ -42,6 +42,13 @@ public class ProcessingProgressDialog extends JDialog {
     private boolean exitOffered;
     private int dialogWidth;
 
+    private final JPanel detailsPanel = new JPanel(new BorderLayout(0, 6));
+    private final JTextArea detailsText = new JTextArea();
+    private final JScrollPane detailsScroll = new JScrollPane(detailsText);
+    private final JLabel elapsedLabel = new JLabel();
+    private final Timer elapsedTimer = new Timer(1000, event -> updateElapsed());
+    private long detailsStarted, lastDetails;
+
     private final JPanel previewPanel = new JPanel(new BorderLayout(0, 6));
     private final JPanel previewBody = new JPanel(new BorderLayout(0, 6));
     private final JLabel previewPicture = new JLabel(WAITING, SwingConstants.CENTER);
@@ -107,6 +114,19 @@ public class ProcessingProgressDialog extends JDialog {
         centerPanel.add(Box.createVerticalStrut(5));
         centerPanel.add(progressBar);
         centerPanel.add(previewPanel);
+        detailsText.setEditable(false);
+        detailsText.setFont(UiStyle.bodyFont());
+        if (detailsText.getCaret() instanceof javax.swing.text.DefaultCaret caret) {
+            caret.setUpdatePolicy(javax.swing.text.DefaultCaret.NEVER_UPDATE);
+        }
+        detailsText.getAccessibleContext().setAccessibleName("Siril live output");
+        detailsText.setToolTipText("Live Siril output. The complete log is saved as preparation.log in the run folder.");
+        detailsScroll.setPreferredSize(new Dimension(UiStyle.space(580), UiStyle.space(260)));
+        detailsPanel.add(elapsedLabel, BorderLayout.NORTH);
+        detailsPanel.add(detailsScroll, BorderLayout.CENTER);
+        detailsPanel.setBorder(BorderFactory.createTitledBorder("Siril live output"));
+        detailsPanel.setVisible(false);
+        centerPanel.add(detailsPanel);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         buttons.setBorder(BorderFactory.createEmptyBorder(0, 20, 12, 20));
@@ -218,9 +238,49 @@ public class ProcessingProgressDialog extends JDialog {
     public void setVisible(boolean visible) {
         if (!visible) {
             exitOffer.stop();
+            elapsedTimer.stop();
         }
         super.setVisible(visible);
     }
+
+    /** Starts a fresh bounded live-output view only for a preparation job; other jobs keep their normal dialog. */
+    public void beginDetails(boolean available) {
+        elapsedTimer.stop();
+        detailsText.setText("");
+        detailsPanel.setVisible(available);
+        dialogWidth = available ? Math.min(UiStyle.space(680), WindowSizing.usableBounds(this).width) : 0;
+        setResizable(available);
+        if (available) {
+            detailsStarted = lastDetails = System.nanoTime();
+            updateElapsed();
+            elapsedTimer.start();
+        }
+        fitSize();
+    }
+
+    /** Appends worker output on the EDT, preserving manual scrolling and bounding retained text to 120,000 characters. */
+    public void appendDetails(String text) {
+        if (!detailsPanel.isVisible() || text == null || text.isBlank()) return;
+        JScrollBar bar = detailsScroll.getVerticalScrollBar();
+        boolean follow = detailsText.getDocument().getLength() == 0 || bar.getValue() + bar.getVisibleAmount() >= bar.getMaximum() - 16;
+        detailsText.append(text);
+        int excess = detailsText.getDocument().getLength() - 120_000;
+        if (excess > 0) try { detailsText.getDocument().remove(0, excess); }
+        catch (javax.swing.text.BadLocationException impossible) { throw new IllegalStateException(impossible); }
+        if (follow) detailsText.setCaretPosition(detailsText.getDocument().getLength());
+        lastDetails = System.nanoTime();
+        updateElapsed();
+    }
+
+    /** Shows elapsed time even while Siril is quiet, without claiming new tool progress during that interval. */
+    private void updateElapsed() {
+        long seconds = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - detailsStarted);
+        long quiet = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - lastDetails);
+        elapsedLabel.setText(String.format("Elapsed %02d:%02d · last output %d s ago", seconds / 60, seconds % 60, quiet));
+    }
+
+    /** Stops owned timers when the dialog is discarded during application shutdown. */
+    @Override public void dispose() { elapsedTimer.stop(); exitOffer.stop(); slideTimer.stop(); super.dispose(); }
 
     private void requestCancel() {
         if (cancel == null || !cancelButton.isEnabled()) {

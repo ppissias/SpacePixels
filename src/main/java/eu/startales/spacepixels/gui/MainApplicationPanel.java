@@ -130,7 +130,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             CommandAvailability.Command.PLATE_SOLVE, this::commandFacts, this::solveSelectedFrame);
     // The commands with one entry point, enabled the same way.
     private final CommandAction prepareFramesAction = new CommandAction("Prepare Frames…",
-            "Prepare an observing session with Siril or DeepSkyStacker in a separate window, then import its aligned frames.",
+            "Prepare an observing session with Siril in a separate window, then import its aligned frames.",
             CommandAvailability.Command.PREPARE_FRAMES, this::commandFacts, () -> showPreparation.run());
     private final CommandAction importAction = new CommandAction("Import Aligned Frames…",
             "Choose a folder of aligned FITS or XISF frames to import (or drop the folder onto the window). "
@@ -245,6 +245,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 }
                 setProgressBarWorking();
                 progressDialog.beginPreview(handle.kind() == JobKind.DETECTION || handle.kind() == JobKind.ITERATIVE_DETECTION);
+                progressDialog.beginDetails(handle.kind() == JobKind.FRAME_PREPARATION);
                 progressDialog.offerCancel(handle.kind().cancellable() ? () -> jobs.cancel() : null);
                 if (texts.indeterminate()) {
                     progressDialog.showIndeterminateProgress(texts.initializing());
@@ -267,6 +268,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 } else if (progressDialog.isVisible()) {
                     progressDialog.updateProgress(percent, message);
                 }
+            }
+
+            @Override
+            public void jobDetails(JobHandle handle, String text) {
+                if (sessions.isCurrent(handle.session())) progressDialog.appendDetails(text);
             }
 
             @Override
@@ -519,9 +525,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         preparationLock = java.util.Objects.requireNonNull(lock);
     }
 
-    /** Uses the same configured Auto-Tune command after a successful prepared-folder import. */
-    void autoTuneImportedFrames() { autoTuneAction.actionPerformed(new java.awt.event.ActionEvent(this, 0, "prepared-import")); }
-
     /** Whether a folder can be imported now, from the button or by dropping it on the window. */
     boolean isImportEnabled() {
         return CommandAvailability.of(CommandAvailability.Command.IMPORT, commandFacts()).enabled();
@@ -686,6 +689,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         IterativeDetectionTask task = new IterativeDetectionTask(request, (summary, files, passSettings) ->
                 reportPrompt.confirm(summary, java.util.Arrays.stream(files).anyMatch(FitsFileInformation::isWcsSolved),
                         50, "Iterative pass: " + files.length + " frames", passSettings), reportPrompt::confirmPreFlight)
+                .withScalingDecision(eu.startales.spacepixels.fits.ImageScaling.interactive(new GuiFitsImportInteraction()))
                 .showingPreviews(progressDialog.previewSink());
         JobCoordinator.Admission admission = jobs.start(JobKind.ITERATIVE_DETECTION,
                 sessions.current(), task,

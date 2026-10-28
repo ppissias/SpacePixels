@@ -7,7 +7,7 @@ import eu.startales.spacepixels.preparation.PreparationInputs;
 import eu.startales.spacepixels.preparation.PreparationInputs.Role;
 import eu.startales.spacepixels.preparation.PreparationProcess;
 import eu.startales.spacepixels.preparation.PreparationRequest;
-import eu.startales.spacepixels.preparation.PreparationTool;
+import eu.startales.spacepixels.preparation.SirilInstallation;
 import eu.startales.spacepixels.session.ApplicationStorage;
 
 import javax.swing.*;
@@ -30,26 +30,25 @@ import java.util.function.Consumer;
 /** Preparation form, input readiness and owned installation checks; heavy processing is delegated as an immutable request. */
 final class PreparationPanel extends JPanel implements AutoCloseable {
     /** Follow-up choices are captured with the recipe, never read from live controls after a job starts. */
-    record Selection(PreparationRequest request, boolean importFrames, boolean autoTune) { }
+    record Selection(PreparationRequest request, boolean importFrames) { }
 
     /** A checked executable and the exact CLI identity it returned. */
     record Installation(Path executable, String version) { }
 
     /** Installation inspection seam used by UI contract tests without launching an external application. */
-    @FunctionalInterface interface Probe { Installation check(PreparationTool tool, Path selected) throws Exception; }
+    @FunctionalInterface interface Probe { Installation check(Path selected) throws Exception; }
 
     private final ApplicationSettings settings;
     private final ApplicationStorage storage;
     private final BooleanSupplier closing;
     private final Consumer<Selection> run;
     private final Probe probe;
-    private final Map<PreparationTool, ToolRow> tools = new EnumMap<>(PreparationTool.class);
+    private final SirilRow siril;
     private final Map<Role, JTextField> inputs = new EnumMap<>(Role.class);
     private final Map<Role, JLabel> counts = new EnumMap<>(Role.class);
     private final Map<Role, JComboBox<PreparationInputs.Candidate>> foundInputs = new EnumMap<>(Role.class);
     private final Map<Role, JPanel> foundRows = new EnumMap<>(Role.class);
     private final List<JComponent> editors = new ArrayList<>();
-    private final JComboBox<PreparationTool> tool = new JComboBox<>(PreparationTool.values());
     private final JTextField root = new JTextField(28);
     private final JTextField output = new JTextField(28);
     private final JComboBox<PreparationRequest.Sensor> sensor = new JComboBox<>(PreparationRequest.Sensor.values());
@@ -61,11 +60,11 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     private final JCheckBox recipeConfirmed = new JCheckBox("<html>I confirm this recipe, including<br>omitted calibration and<br>camera interpretation.</html>");
     private final JCheckBox stack = new JCheckBox("Generate a reference stack");
     private final JCheckBox importFrames = new JCheckBox("Import frames after preparation", true);
-    private final JCheckBox autoTune = new JCheckBox("Run Auto-Tune after import");
+    private final JCheckBox keepWorkingFiles = new JCheckBox("Keep working files");
     private final JButton prepare = new JButton("Prepare with Siril");
     private final JButton preview = new JButton("Preview processing instructions");
     private final JTextArea readiness = new JTextArea(17, 25);
-    private final JLabel feedback = new JLabel("Choose a tool, map the input folders and inspect the inputs.");
+    private final JLabel feedback = new JLabel("Check Siril, map the input folders and inspect the inputs.");
     private final JPanel cfaOptions = new JPanel(new GridBagLayout());
     private SwingWorker<?, ?> inspection;
     private long inspectionVersion;
@@ -77,13 +76,13 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
 
     /** Builds the production form with owned native-tool probes and explicit callbacks to the application shell. */
     PreparationPanel(ApplicationSettings settings, ApplicationStorage storage, BooleanSupplier closing,
-                     Consumer<Selection> run, Runnable normalImport) {
-        this(settings, storage, closing, run, normalImport, PreparationPanel::checkInstallation);
+                     Consumer<Selection> run) {
+        this(settings, storage, closing, run, PreparationPanel::checkInstallation);
     }
 
     /** Injects installation inspection for deterministic panel tests, without substituting processing behaviour. */
     PreparationPanel(ApplicationSettings settings, ApplicationStorage storage, BooleanSupplier closing,
-                     Consumer<Selection> run, Runnable normalImport, Probe probe) {
+                     Consumer<Selection> run, Probe probe) {
         this.settings = settings;
         this.storage = storage;
         this.closing = closing;
@@ -95,30 +94,12 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
         form.add(heading("Prepare an observing session"));
         form.add(help("Calibrate and register individual exposures for SpacePixels. Source files remain untouched."));
-        JPanel integrations = section("External processing tools");
-        JPanel installations = new JPanel(new WrapLayout(FlowLayout.LEFT, UiStyle.space(8), UiStyle.space(5)));
-        installations.setAlignmentX(LEFT_ALIGNMENT);
-        for (PreparationTool engine : PreparationTool.values()) {
-            ToolRow row = new ToolRow(engine, engine == PreparationTool.SIRIL ? settings.getConfig().sirilExecutablePath : settings.getConfig().dssExecutablePath);
-            tools.put(engine, row);
-            installations.add(row);
-        }
-        integrations.add(installations);
-        integrations.add(help("Only the processing tool you choose below needs an installation path and a successful check. Leave the other tool empty."));
-        integrations.add(help("PixInsight WBPP: use Import Aligned Frames for individual calibrated <b>and registered</b> exposures (FITS or supported XISF). Calibration-only output still needs alignment."));
-        JButton existing = new JButton("Import Aligned Frames…");
-        existing.setToolTipText("Use the existing importer for already calibrated and star-registered individual exposures.");
-        existing.addActionListener(event -> normalImport.run());
-        editors.add(existing);
-        integrations.add(row(existing));
+        JPanel integrations = section("Siril integration");
+        siril = new SirilRow(settings.getConfig().sirilExecutablePath);
+        integrations.add(siril);
+        integrations.add(help("<i>PixInsight WBPP: use Import Aligned Frames for individual calibrated and registered exposures (FITS or supported XISF).</i>"));
         form.add(integrations);
-
-        JPanel engine = section("1  Processing engine");
-        engine.add(row(new JLabel("Prepare with:"), tool));
-        engine.add(help("Siril runs a generated linear recipe. DSS saves registered individual lights and also generates a stack; its registration preferences apply."));
-        form.add(engine);
-
-        JPanel folders = section("2  Input folders");
+        JPanel folders = section("1  Input folders");
         JButton scan = new JButton("Scan and suggest folders");
         scan.setToolTipText("Replace the input mapping with a fresh scan; keep target, camera, filter and exposure groups separate.");
         scan.addActionListener(event -> scan());
@@ -171,7 +152,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         folders.add(rolesConfirmed);
         form.add(folders);
 
-        JPanel camera = section("3  Camera interpretation");
+        JPanel camera = section("2  Camera interpretation");
         cfaOptions.setAlignmentX(LEFT_ALIGNMENT);
         camera.add(row(new JLabel("Input data (required):"), sensor));
         addCfaRow(0, "Bayer pattern", bayer);
@@ -182,11 +163,15 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         camera.add(help("A single image plane may still contain a colour mosaic. Unknown Bayer metadata requires an explicit choice. Row order and offsets are applied once; already RGB data are never debayered again."));
         form.add(camera);
 
-        JPanel destination = section("4  Output and next steps");
+        JPanel destination = section("3  Output and next steps");
         destination.add(pathRow("Output parent folder (optional)", output, false, null));
         output.putClientProperty("JTextField.placeholderText", "Use the lights source folder");
         destination.add(help("Optional: leave blank to create the run folder inside the lights source folder, or choose another existing folder. Source images are preserved."));
-        destination.add(row(stack, importFrames, autoTune));
+        keepWorkingFiles.setToolTipText("Keep copied inputs, converted frames and calibration masters. Otherwise remove them after processing, including failed/cancelled runs; final images, scripts, settings, manifest and log remain.");
+        for (JCheckBox option : List.of(stack, importFrames, keepWorkingFiles)) {
+            option.setAlignmentX(LEFT_ALIGNMENT);
+            destination.add(option);
+        }
         destination.add(help("Each run creates its own folder, with individual linear 16-bit mono FITS, a log and provenance. One scale/offset is shared by the sequence; RGB uses a fixed arithmetic mean. Plate solve the prepared frames before astrometric work."));
         form.add(destination);
         JScrollPane scroll = new JScrollPane(form);
@@ -220,10 +205,10 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         add(summary, BorderLayout.EAST);
         feedback.setForeground(UiStyle.helpColor());
         add(feedback, BorderLayout.SOUTH);
-        editors.addAll(List.of(tool, root, output, sensor, bayer, rowOrder, offsetX, offsetY, rolesConfirmed, recipeConfirmed, stack, importFrames, autoTune, scan));
+        editors.addAll(List.of(root, output, sensor, bayer, rowOrder, offsetX, offsetY, rolesConfirmed, recipeConfirmed, stack, importFrames, keepWorkingFiles, scan));
         inputs.values().forEach(editors::add);
-        for (JComboBox<?> choice : List.of(tool, sensor, bayer, rowOrder, offsetX, offsetY)) choice.addActionListener(event -> recipeChanged());
-        for (JCheckBox choice : List.of(stack, importFrames, autoTune)) choice.addActionListener(event -> recipeChanged());
+        for (JComboBox<?> choice : List.of(sensor, bayer, rowOrder, offsetX, offsetY)) choice.addActionListener(event -> recipeChanged());
+        for (JCheckBox choice : List.of(stack, importFrames, keepWorkingFiles)) choice.addActionListener(event -> recipeChanged());
         rolesConfirmed.addActionListener(event -> refresh());
         recipeConfirmed.addActionListener(event -> refresh());
         changed(output, this::recipeChanged);
@@ -238,15 +223,17 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     void setBusy(boolean busy) {
         this.busy = busy;
         for (JComponent editor : editors) editor.setEnabled(!busy && !closed);
-        tools.values().forEach(value -> value.setEditable(!busy && !closed));
+        siril.setEditable(!busy && !closed);
         refresh();
     }
 
-    /** Presents completed products even when a later import or tuning job is not selected. */
+    /** Presents completed products even when a later import is not selected. */
     void completed(FramePreparationService.Result result) {
         if (closed) return;
-        message("Prepared " + result.frames() + " frames: " + result.aligned());
-        readiness.setText("Preparation complete.\n\n" + result.frames() + " validated individual exposures.\n\nOutput: " + result.aligned()
+        message("Prepared " + result.frames() + " of " + result.inputFrames() + " frames: " + result.aligned());
+        readiness.setText("Preparation complete.\n\n" + result.frames() + " of " + result.inputFrames() + " validated individual exposures."
+                + (result.excluded().isEmpty() ? "" : "\nSiril excluded " + result.excluded().size() + " during registration; see preparation.json.")
+                + "\n\nOutput: " + result.aligned()
                 + "\n\nLogs and provenance: " + result.directory() + "\n\nPlate solve the prepared sequence before astrometric analysis.");
     }
 
@@ -255,19 +242,18 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
 
     /** Captures the exact selected values; filesystem inventory and processing run on owned workers. */
     Selection selection() throws IOException {
-        ToolRow engine = tools.get((PreparationTool) tool.getSelectedItem());
-        if (engine.installation == null) throw new IOException("Check the selected processing-tool installation first.");
+        if (siril.installation == null) throw new IOException("Check the Siril installation first.");
         Map<Role, Path> paths = inputPaths();
         Path parent = outputParent();
         if (sensor.getSelectedItem() == null) throw new IOException("Choose the input camera interpretation.");
         boolean cfa = sensor.getSelectedItem() == PreparationRequest.Sensor.CFA;
         boolean manualPattern = cfa && bayer.getSelectedItem() != PreparationRequest.Bayer.METADATA;
-        PreparationRequest request = new PreparationRequest(engine.engine, engine.installation.executable(), paths,
+        PreparationRequest request = new PreparationRequest(siril.installation.executable(), paths,
                 (PreparationRequest.Sensor) sensor.getSelectedItem(), cfa ? (PreparationRequest.Bayer) bayer.getSelectedItem() : PreparationRequest.Bayer.METADATA,
                 cfa ? (PreparationRequest.RowOrder) rowOrder.getSelectedItem() : PreparationRequest.RowOrder.METADATA,
                 manualPattern ? (Integer) offsetX.getSelectedItem() : 0, manualPattern ? (Integer) offsetY.getSelectedItem() : 0,
-                parent, stack.isSelected());
-        return new Selection(request, importFrames.isSelected(), importFrames.isSelected() && autoTune.isSelected());
+                parent, stack.isSelected(), keepWorkingFiles.isSelected());
+        return new Selection(request, importFrames.isSelected());
     }
 
     /** Resolves the optional destination from current controls without filesystem I/O; explicit invalid text never falls back. */
@@ -393,32 +379,22 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         boolean manual = bayer.getSelectedItem() != PreparationRequest.Bayer.METADATA;
         offsetX.setEnabled(!busy && cfa && manual);
         offsetY.setEnabled(!busy && cfa && manual);
-        autoTune.setEnabled(!busy && importFrames.isSelected());
-        PreparationTool selected = (PreparationTool) tool.getSelectedItem();
-        stack.setEnabled(!busy && selected == PreparationTool.SIRIL);
-        ToolRow engine = tools.get(selected);
-        boolean available = engine != null && engine.installation != null;
-        int lightCount = inspected == null ? 0 : inspected.files().get(Role.LIGHTS).size();
-        int tuneMinimum = eu.startales.spacepixels.config.SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
-        boolean enoughForTune = !importFrames.isSelected() || !autoTune.isSelected() || lightCount >= tuneMinimum;
-        boolean dssRawOverride = selected == PreparationTool.DSS && cfa && inspected != null
-                && inspected.files().get(Role.LIGHTS).stream().anyMatch(file -> !java.util.Set.of("fit", "fits", "fts", "fz", "fit.fz", "fits.fz", "fts.fz").contains(PreparationInputs.extension(file)))
-                && (bayer.getSelectedItem() != PreparationRequest.Bayer.METADATA || rowOrder.getSelectedItem() != PreparationRequest.RowOrder.METADATA);
+        stack.setEnabled(!busy);
+        boolean available = siril.installation != null;
         Path destination = null;
         String outputProblem = null;
         try { destination = outputParent(); } catch (IOException invalid) { outputProblem = invalid.getMessage(); }
         boolean ready = !busy && !closed && available && inspected != null && rolesConfirmed.isSelected()
-                && recipeConfirmed.isSelected() && sensor.getSelectedItem() != null && destination != null && enoughForTune && !dssRawOverride;
-        prepare.setText("Prepare with " + selected);
+                && recipeConfirmed.isSelected() && sensor.getSelectedItem() != null && destination != null;
         prepare.setEnabled(ready);
         preview.setEnabled(!busy && available && inspected != null);
         StringBuilder text = new StringBuilder(busy ? "A processing job is running.\n\n" : "");
-        text.append(available ? "✓ " : "○ ").append(selected).append(available ? " CLI checked\n" : " needs an installation check\n");
+        text.append(available ? "✓ Siril CLI checked\n" : "○ Siril needs an installation check\n");
         text.append(inspected != null ? "✓ Inputs counted\n" : "○ Inspect selected inputs\n");
         text.append(rolesConfirmed.isSelected() ? "✓ Folder roles confirmed\n" : "○ Confirm folder roles\n");
         text.append(recipeConfirmed.isSelected() ? "✓ Recipe confirmed\n" : "○ Confirm the recipe\n");
         if (outputProblem != null) text.append("○ ").append(outputProblem).append('\n');
-        text.append("\nEffective recipe\nEngine: ").append(selected).append("\nInput: ")
+        text.append("\nEffective recipe\nEngine: Siril\nInput: ")
                 .append(sensor.getSelectedItem() == null ? "choose camera interpretation" : sensor.getSelectedItem());
         if (cfa) text.append("\nBayer: ").append(bayer.getSelectedItem()).append("\nRows: ").append(rowOrder.getSelectedItem());
         if (inspected != null) {
@@ -432,10 +408,9 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         text.append("\n\nRegistration: reference size, dark margins retained for drift/dither analysis.");
         if (destination != null) text.append("\n\nOutput parent").append(output.getText().isBlank() ? " (lights source folder): " : ": ").append(destination)
                 .append("\nA new spacepixels_prepared_… run folder will be created here.");
-        text.append("\n\nReference stack: ").append(selected == PreparationTool.DSS ? "DSS always creates one" : stack.isSelected() ? "yes" : "no");
-        text.append("\nAfter preparation: ").append(!importFrames.isSelected() ? "keep output" : autoTune.isSelected() ? "import → Auto-Tune" : "import");
-        if (!enoughForTune && inspected != null) text.append("\n○ Auto-Tune needs at least ").append(tuneMinimum).append(" lights. Choose more lights or untick Auto-Tune.");
-        if (dssRawOverride) text.append("\n○ DSS camera RAW uses decoder metadata: choose Resolve from metadata and From metadata, or use Siril for explicit overrides.");
+        text.append("\n\nReference stack: ").append(stack.isSelected() ? "yes" : "no");
+        text.append("\nAfter preparation: ").append(importFrames.isSelected() ? "import, then close this window" : "keep output");
+        text.append("\nWorking files: ").append(keepWorkingFiles.isSelected() ? "retained" : "removed; final images and logs kept");
         text.append("\n\nThe external tool validates RAW decoding. Every requested light must produce a registered exposure. A partial sequence is never imported automatically.");
         readiness.setText(text.toString());
         readiness.setCaretPosition(0);
@@ -486,8 +461,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) field.setText(chooser.getSelectedFile().getAbsolutePath());
         });
         editors.add(browse);
-        JPanel buttons = row(browse);
-        if (extra != null) buttons.add(extra);
+        Box buttons = fixedButtons(browse, extra);
         edit.add(buttons, BorderLayout.EAST);
         JPanel line = new JPanel();
         line.setLayout(new BoxLayout(line, BoxLayout.X_AXIS));
@@ -529,6 +503,16 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         return panel;
     }
 
+    /** Keeps paired actions at their natural width; the adjacent path editor absorbs width changes without wrapping buttons away. */
+    private static Box fixedButtons(JComponent... components) {
+        Box box = Box.createHorizontalBox();
+        for (JComponent component : components) if (component != null) {
+            if (box.getComponentCount() > 0) box.add(Box.createHorizontalStrut(UiStyle.space(6)));
+            box.add(component);
+        }
+        return box;
+    }
+
     /** A relative-size heading that follows the selected appearance theme. */
     private static JLabel heading(String title) {
         JLabel label = new JLabel(title);
@@ -537,8 +521,18 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         return label;
     }
 
-    /** Readable form guidance that wraps instead of clipping. */
-    private static JComponent help(String text) { return new WrappingHelpLabel(text, 720); }
+    /** Re-measures guidance after its allocated width changes, so the first narrow layout reserves every wrapped line. */
+    private static JComponent help(String text) {
+        WrappingHelpLabel label = new WrappingHelpLabel(text, 720);
+        label.addComponentListener(new java.awt.event.ComponentAdapter() {
+            private int width = -1;
+            /** Invalidates cached BoxLayout heights once the actual wrapping width is known. */
+            @Override public void componentResized(java.awt.event.ComponentEvent event) {
+                if (width != label.getWidth()) { width = label.getWidth(); label.revalidate(); }
+            }
+        });
+        return label;
+    }
 
     /** Converts an optional path field, retaining invalid text for a later actionable error. */
     private static Path path(String text) {
@@ -572,13 +566,13 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     }
 
     /** Probes only the selected CLI with a private workspace and joins its process tree before returning. */
-    private static Installation checkInstallation(PreparationTool tool, Path selected) throws Exception {
-        Path executable = tool.resolve(selected);
+    private static Installation checkInstallation(Path selected) throws Exception {
+        Path executable = SirilInstallation.resolve(selected);
         Path workspace = Files.createTempDirectory("spacepixels-tool-check-");
         try {
-            var result = PreparationProcess.run(tool.probe(executable, workspace), workspace, Map.of("LC_ALL", "C", "LANG", "C"),
+            var result = PreparationProcess.run(SirilInstallation.probe(executable, workspace), workspace, Map.of("LC_ALL", "C", "LANG", "C"),
                     workspace.resolve("check.log"), Duration.ofSeconds(15), Thread.currentThread()::isInterrupted);
-            return new Installation(executable, tool.describeProbe(result.output()));
+            return new Installation(executable, SirilInstallation.describeProbe(result.output()));
         } finally {
             try (var entries = Files.walk(workspace)) {
                 for (Path entry : entries.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(entry);
@@ -592,12 +586,11 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         closed = true;
         inspectionVersion++;
         if (inspection != null) inspection.cancel(true);
-        tools.values().forEach(ToolRow::close);
+        siril.close();
     }
 
     /** One external application's path, bounded probe, saved selection and stale-result guard. */
-    private final class ToolRow extends JPanel implements AutoCloseable {
-        private final PreparationTool engine;
+    private final class SirilRow extends JPanel implements AutoCloseable {
         private final JTextField path = new JTextField(27);
         private final JLabel status = new JLabel("Not configured");
         private final JButton browse = new JButton("Browse…");
@@ -608,19 +601,18 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         private boolean settingPath;
 
         /** Creates an installation row without launching the tool or automatically saving any preference. */
-        ToolRow(PreparationTool engine, String saved) {
-            this.engine = engine;
+        SirilRow(String saved) {
             setLayout(new BorderLayout(UiStyle.space(6), UiStyle.space(3)));
             setAlignmentX(LEFT_ALIGNMENT);
-            setBorder(BorderFactory.createTitledBorder(engine.toString()));
             path.setText(saved == null ? "" : saved);
-            path.setToolTipText("Choose the installation folder or its command-line executable.");
-            path.getAccessibleContext().setAccessibleName(engine + " installation path");
+            path.setToolTipText("Choose the installation folder or its command-line executable. Siril "
+                    + SirilInstallation.MINIMUM_VERSION + " or newer is required.");
+            path.getAccessibleContext().setAccessibleName("Siril installation path");
             if (!path.getText().isBlank()) status.setText("Saved path · not checked in this window");
             add(path, BorderLayout.CENTER);
-            add(row(browse, check), BorderLayout.EAST);
-            JButton download = AccessibleControls.link("Get " + engine, "Download " + engine, () -> {
-                try { Desktop.getDesktop().browse(URI.create(engine.website())); } catch (Exception failure) { message(reason(failure)); }
+            add(fixedButtons(browse, check), BorderLayout.EAST);
+            JButton download = AccessibleControls.link("Get Siril", "Download Siril", () -> {
+                try { Desktop.getDesktop().browse(URI.create(SirilInstallation.WEBSITE)); } catch (Exception failure) { message(reason(failure)); }
             });
             add(row(status, download), BorderLayout.SOUTH);
             browse.setToolTipText("Choose the installation folder, or select the command-line executable directly.");
@@ -628,7 +620,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
             browse.addActionListener(event -> {
                 JFileChooser chooser = WindowSizing.fileChooser(null);
                 chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
-                chooser.setDialogTitle(engine + " installation or CLI executable");
+                chooser.setDialogTitle("Siril installation or CLI executable");
                 if (chooser.showOpenDialog(PreparationPanel.this) == JFileChooser.APPROVE_OPTION) {
                     path.setText(chooser.getSelectedFile().getAbsolutePath());
                     check();
@@ -654,7 +646,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
             if (worker != null) worker.cancel(true);
             worker = new SwingWorker<>() {
                 /** Performs the bounded CLI probe outside Swing. */
-                @Override protected Installation doInBackground() throws Exception { return probe.check(engine, selected); }
+                @Override protected Installation doInBackground() throws Exception { return probe.check(selected); }
                 /** Applies only the latest selected installation and saves its explicit preference snapshot. */
                 @Override protected void done() {
                     if (closed || closing.getAsBoolean() || version != request) return;
@@ -666,8 +658,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
                         settingPath = false;
                         status.setText("Available · " + installation.version());
                         AppConfig config = settings.getConfig();
-                        if (engine == PreparationTool.SIRIL) config.sirilExecutablePath = installation.executable().toString();
-                        else config.dssExecutablePath = installation.executable().toString();
+                        config.sirilExecutablePath = installation.executable().toString();
                         AppConfig snapshot = config.copy();
                         storage.submit("Application defaults", () -> { settings.save(snapshot); return null; }).whenComplete((value, failure) -> EventQueue.invokeLater(() -> {
                             if (!closed && version == request && failure != null) {
@@ -684,11 +675,8 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
             refresh();
         }
 
-        /** Fits two installation cards on a wide form and lets their status rows grow naturally when wrapped. */
-        @Override public Dimension getPreferredSize() {
-            Dimension natural = super.getPreferredSize();
-            return new Dimension(UiStyle.space(400), natural.height);
-        }
+        /** Keeps the single installation row at its natural height on the first layout pass. */
+        @Override public Dimension getMaximumSize() { return new Dimension(Integer.MAX_VALUE, getPreferredSize().height); }
 
         /** Follows the shared job lock while keeping a running probe's Check action disabled. */
         void setEditable(boolean enabled) { path.setEnabled(enabled); browse.setEnabled(enabled); check.setEnabled(enabled && (worker == null || worker.isDone())); }

@@ -477,7 +477,7 @@ public class ApplicationWindow {
         if (closing || jobCoordinator.current() != null) return;
         if (preparationWindow == null || !preparationWindow.isDisplayable()) {
             preparationWindow = new PreparationWindow(frmIpodImage, applicationSettings, storage, () -> closing,
-                    this::prepareFrames, this::chooseAndImportFolder, () -> {
+                    this::prepareFrames, () -> {
                         if (jobCoordinator.current() != null && jobCoordinator.current().kind() == JobKind.FRAME_PREPARATION) jobCoordinator.cancel();
                     });
         }
@@ -485,11 +485,12 @@ public class ApplicationWindow {
         preparationWindow.toFront();
     }
 
-    /** Admits a captured recipe and chains ordinary import/Auto-Tune only while its window and expected session remain current. */
+    /** Imports a prepared result through the ordinary guarded handover, closing its window only after successful installation. */
     private void prepareFrames(PreparationPanel.Selection selected) {
         PreparationWindow owner = preparationWindow;
         if (closing || owner == null) return;
-        var task = new FramePreparationTask(selected.request());
+        var task = new FramePreparationTask(selected.request(),
+                eu.startales.spacepixels.fits.ImageScaling.interactive(new GuiFitsImportInteraction()));
         preparationTask = task;
         JobCoordinator.Admission admission = jobCoordinator.start(JobKind.FRAME_PREPARATION, sessions.current(),
                 task, (handle, outcome) -> {
@@ -499,13 +500,21 @@ public class ApplicationWindow {
                         owner.completed(completed.result());
                         if (selected.importFrames() && sessions.isCurrent(handle.session())) {
                             importFolder(completed.result().aligned().toFile(), imported -> {
-                                if (!closing && owner == preparationWindow && owner.isDisplayable() && selected.autoTune()) mainApplicationPanel.autoTuneImportedFrames();
+                                if (!closing && owner == preparationWindow && owner.isDisplayable() && sessions.isCurrent(imported)) {
+                                    preparationWindow = null;
+                                    String message = "Imported " + imported.getFiles().length + " of " + completed.result().inputFrames()
+                                            + " prepared frames."
+                                            + (completed.result().excluded().isEmpty() ? "" : " Siril excluded " + completed.result().excluded().size() + " during registration.")
+                                            + " The new dataset is ready.";
+                                    mainApplicationPanel.showStatus(message);
+                                    owner.imported(() -> JOptionPane.showMessageDialog(frmIpodImage, message, "Prepared frames imported", JOptionPane.INFORMATION_MESSAGE));
+                                }
                             });
                         }
                     } else if (outcome instanceof JobOutcome.Failed<?> failed) {
                         owner.failed(failed.reason());
                         FailureDialog.show(owner, "Preparation failed", failed.reason(), failed.cause());
-                    } else owner.failed("Preparation cancelled. The open session is unchanged; run files are retained for inspection.");
+                    } else owner.failed("Preparation cancelled. The open session is unchanged; logs and run metadata are retained.");
                 });
         if (!admission.admitted()) { preparationTask = null; owner.failed(admission.refusal()); }
     }

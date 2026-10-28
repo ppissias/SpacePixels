@@ -80,6 +80,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     private final JComponent controls;
     private final JComponent statusBar;
     private final Timer timer;
+    private final BlinkGifExport gifExport;
 
     private StretchControls stretch;
     private final ViewerSupport.CursorReadout cursorReadout = new ViewerSupport.CursorReadout();
@@ -104,13 +105,14 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         setLocationRelativeTo(null);
 
         timer = new Timer(DEFAULT_MILLIS, e -> step(1, true));
+        gifExport = new BlinkGifExport(view, this::captureGifSource, this::pause);
 
         JPanel contentPane = new JPanel(new BorderLayout(0, 6));
         contentPane.setBorder(new EmptyBorder(6, 6, 6, 6));
         setContentPane(contentPane);
         controls = buildControls();
         statusBar = buildStatusBar();
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildFrameList(), view);
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildFrameList(), gifExport.image());
         split.setFocusable(false);
         split.setContinuousLayout(true);
         // The split pane would take the arrow keys to move its divider; they step frames here.
@@ -128,7 +130,8 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         ViewerSupport.prepareControls(statusBar);
         view.getAccessibleContext().setAccessibleName("Blink image");
         view.getAccessibleContext().setAccessibleDescription("Space plays or pauses and arrow keys step frames "
-                + "while the image has focus. Tab reaches controls; Escape from controls returns to the image.");
+                + "while the image has focus. G selects a GIF region; drag, then right-click inside it or press Ctrl+E to export. "
+                + "Tab reaches controls; Escape from controls returns to the image.");
         view.setFocusable(true);
         view.addMouseListener(new MouseAdapter() {
             @Override
@@ -208,6 +211,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         centerCards.show(center, BLINK_CARD);
         view.fit();
         showCurrent();
+        gifExport.setAvailable(true);
         if (!isVisible()) {
             setVisible(true);
         }
@@ -297,6 +301,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
 
     /** Stops and lets go of the frames of the current blink, if any. */
     private void release() {
+        gifExport.release();
         open = false;
         loading = false;
         loadingFiles = null;
@@ -369,6 +374,9 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         stretchRow.setAlignmentX(Component.LEFT_ALIGNMENT);
         controls.add(playbackRow);
         controls.add(stretchRow);
+        JComponent gifControls = gifExport.controls();
+        gifControls.setAlignmentX(Component.LEFT_ALIGNMENT);
+        controls.add(gifControls);
         return controls;
     }
 
@@ -467,7 +475,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
 
     private JComponent buildStatusBar() {
         return ViewerSupport.statusBar(frameLabel, cursorLabel, "Space play/pause · ← → step · ↑ ↓ speed · "
-                + "S skip frame (paused) · T tracks · A annotate · C correct plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
+                + "S skip frame (paused) · T tracks · A annotate · C correct plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · G GIF region · Esc cancel/close");
     }
 
     private void installKeyBindings() {
@@ -503,7 +511,10 @@ public class BlinkFrame extends JFrame implements SessionViewer {
             updateCursorLabel();
         });
         ViewerSupport.bindZoomKeys(getRootPane(), view);
-        bind("ESCAPE", "close", this::close);
+        bind("G", "selectGifRegion", gifExport::toggleSelection);
+        bind("ctrl E", "exportGifRegion", gifExport::chooseFile);
+        bind("meta E", "exportGifRegionMac", gifExport::chooseFile);
+        bind("ESCAPE", "close", () -> { if (!gifExport.escape()) close(); });
     }
 
     private void bind(String key, String name, Runnable action) {
@@ -658,6 +669,17 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         updateCursorLabel();
         frameTable.repaint();
         frameTable.scrollRectToVisible(frameTable.getCellRect(current, 0, true));
+    }
+
+    /** Captures the included loop in viewing order and freezes per-frame catalogue projections on the EDT. */
+    private BlinkGifExport.Source captureGifSource() {
+        if (!open || sequence == null || stretch == null) throw new IllegalStateException("No Blink sequence is loaded.");
+        List<BlinkGifExport.FrameInput> frames = new java.util.ArrayList<>();
+        for (int index = 0; index < skipped.length; index++) if (!skipped[index]) {
+            BlinkSequence.Frame frame = sequence.getFrames().get(index);
+            frames.add(new BlinkGifExport.FrameInput(frame, sky.exportMarks(frame.getInfo())));
+        }
+        return new BlinkGifExport.Source(frames, stretch.snapshot(), speedMillis());
     }
 
     /** "Frame 7 of 20 · name · time · +12 min 30 s", and whether the frame is skipped. */

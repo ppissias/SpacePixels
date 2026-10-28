@@ -32,6 +32,7 @@ public final class SpacePixelsPipelineRequest {
     private final int autoTuneMaxCandidateFrames;
     private final InputPreparationMode inputPreparationMode;
     private final NegativeValueHandling negativeValueHandling;
+    private final eu.startales.spacepixels.fits.ImageScaling.OutlierHandling outlierHandling;
     private final boolean generateReport;
     private final boolean failIfUncalibratedOrMisaligned;
     private final VariableStarReportOptions variableStarReportOptions;
@@ -46,6 +47,7 @@ public final class SpacePixelsPipelineRequest {
         this.autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.normalizeAutoTuneMaxCandidateFrames(builder.autoTuneMaxCandidateFrames);
         this.inputPreparationMode = builder.inputPreparationMode;
         this.negativeValueHandling = builder.negativeValueHandling;
+        this.outlierHandling = builder.outlierHandling;
         this.generateReport = builder.generateReport;
         this.failIfUncalibratedOrMisaligned = builder.failIfUncalibratedOrMisaligned;
         this.variableStarReportOptions = builder.variableStarReportOptions;
@@ -125,6 +127,15 @@ public final class SpacePixelsPipelineRequest {
     }
 
     /**
+     * Returns the preparation outlier policy. The optional builder input defaults to REQUIRE_DECISION: automatic
+     * FITS/XISF preparation fails with ImageScaling.OutlierException as the SpacePixelsPipelineException cause before
+     * writing a converted sequence when physical
+     * samples exceed normalized [-0.5,1.5]. CLIP_EXTREMES explicitly limits those values; PRESERVE_ALL explicitly
+     * accepts the precision reduction of one common full-range transform. Ready mono16 input is not rescaled.
+     */
+    public eu.startales.spacepixels.fits.ImageScaling.OutlierHandling getOutlierHandling() { return outlierHandling; }
+
+    /**
      * Returns whether the standard HTML report and export assets should be generated.
      *
      * @return {@code true} to export the report, {@code false} to return only in-memory results
@@ -152,6 +163,17 @@ public final class SpacePixelsPipelineRequest {
      * Builder for {@link SpacePixelsPipelineRequest}.
      */
     public static final class Builder {
+        private eu.startales.spacepixels.fits.ImageScaling.OutlierHandling outlierHandling =
+                eu.startales.spacepixels.fits.ImageScaling.OutlierHandling.REQUIRE_DECISION;
+
+        /**
+         * Optional policy for AUTO_PREPARE_TO_16BIT_MONO. REQUIRE_DECISION (the default) refuses out-of-headroom
+         * values with structured diagnostics. CLIP_EXTREMES and PRESERVE_ALL are explicit alternatives; neither
+         * opens a GUI or changes source files. The separate negative-value policy still controls ordinary negatives.
+         */
+        public Builder outlierHandling(eu.startales.spacepixels.fits.ImageScaling.OutlierHandling handling) {
+            this.outlierHandling = Objects.requireNonNull(handling, "outlierHandling"); return this;
+        }
         private DetectionRunOptions runOptions = DetectionRunOptions.defaults();
         private final File inputDirectory;
         private DetectionConfig detectionConfig;

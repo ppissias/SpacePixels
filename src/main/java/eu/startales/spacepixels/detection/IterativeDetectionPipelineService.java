@@ -78,11 +78,17 @@ public final class IterativeDetectionPipelineService {
     /** Confirms sampled quality warnings on the worker before tuning or any pass; null records warnings only. */
     public File run(IterativeDetectionRequest request, ReportPrompt prompt,
                     TransientEngineProgressListener progress, PreFlightSafetyPrompt preFlight) throws Exception {
+        return run(request, prompt, progress, preFlight, null);
+    }
+
+    /** Uses an explicit preparation outlier decision before tuning or starting any detection pass. */
+    public File run(IterativeDetectionRequest request, ReportPrompt prompt, TransientEngineProgressListener progress,
+                    PreFlightSafetyPrompt preFlight, eu.startales.spacepixels.fits.ImageScaling.Decision scalingDecision) throws Exception {
         indexFile = null;
         emit(progress, 0, "Preparing iterative input...");
         DetectionInputPreparation.PreparedDirectory preparation = DetectionInputPreparation.prepareInputDirectory(
                 request.directory(), request.autoPrepare(), request.keepNegativeValues(),
-                (percent, message) -> emit(progress, percent / 10, message));
+                (percent, message) -> emit(progress, percent / 10, message), scalingDecision);
         try {
             return runPrepared(request, preparation.getPreparedInputDirectory(), prompt, progress, preFlight);
         } catch (Exception failure) {

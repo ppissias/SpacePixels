@@ -24,4 +24,7 @@ public interface JobContext {
      * while SpacePixels closes.
      */
     void progress(int percent, String message);
+
+    /** Optional live diagnostic text; contexts without a details view may discard it. Called from the worker. */
+    default void details(String text) { }
 }

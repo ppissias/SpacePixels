@@ -97,7 +97,9 @@ public class FitsPreparationParityTest {
                             FitsInput.list(input), null).offsetToKeepNegativeValues() : 0;
                     FitsBatchService batch = new FitsBatchService(input, new FitsVisualizationRenderer());
                     File plain = batch.batchDecompress(FitsInput.list(input), null);
-                    File previous = batch.batchStandardizeTo16Bit(FitsInput.list(plain), color, offset, null);
+                    ImageScaling.Plan scaling = ImageScaling.plan(ImageScaling.inspect(FitsInput.list(plain), null), keepNegative,
+                            ImageScaling.policy(ImageScaling.OutlierHandling.PRESERVE_ALL));
+                    File previous = batch.batchStandardizeTo16Bit(FitsInput.list(plain), color, scaling, null);
                     String filename = color ? "frame_16bit_mono.fit" : "frame_16bit.fit";
                     assertSamePreparedImage(new File(previous, filename), new File(direct, filename));
                     if (color) {
@@ -249,7 +251,8 @@ public class FitsPreparationParityTest {
                 interactive = redirect.getNewDirectory();
             }
         }
-        File automatic = DetectionInputPreparation.prepareInputDirectory(input, true, keepNegative, null).getPreparedInputDirectory();
+        File automatic = DetectionInputPreparation.prepareInputDirectory(input, true, keepNegative, null,
+                ImageScaling.policy(ImageScaling.OutlierHandling.PRESERVE_ALL)).getPreparedInputDirectory();
         FitsFileInformation[] interactiveFiles;
         FitsFileInformation[] automaticFiles;
         try (FitsImportService importer = new FitsImportService(interactive, null, null);
@@ -337,6 +340,7 @@ public class FitsPreparationParityTest {
         }
         /** Selects the requested offset policy or simulates cancelling the negative-value question. */
         @Override public int choose(String message, String title, String[] options) {
+            if (title.equals("Extreme pixel values")) return 1;
             return negativeChoice >= 0 ? negativeChoice : keepNegative ? 0 : 1;
         }
         @Override public void error(String message, String title) { throw new AssertionError(title + ": " + message); }

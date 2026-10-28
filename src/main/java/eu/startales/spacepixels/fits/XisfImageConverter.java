@@ -63,6 +63,12 @@ public final class XisfImageConverter {
     }
 
     public static File prepareDirectoryForFitsImport(File directory, ProgressListener progressListener) throws Exception {
+        return prepareDirectoryForFitsImport(directory, progressListener, null, true);
+    }
+
+    /** Converts a sequence with the shared explicit outlier policy, preserving ordinary negative noise by default. */
+    public static File prepareDirectoryForFitsImport(File directory, ProgressListener progressListener,
+                                                     ImageScaling.Decision decision, boolean keepNegative) throws Exception {
         if (directory == null || !directory.isDirectory()) {
             return directory;
         }
@@ -80,7 +86,7 @@ public final class XisfImageConverter {
         // The conversion turns every file into 16-bit mono, so the sequence is checked before it hides the differences.
         validateSequence(xisfFiles);
         LOGGER.info("No FITS files found. Converting " + xisfFiles.length + " XISF files to 16-bit monochrome FITS.");
-        return convertDirectory(directory, xisfFiles, progressListener);
+        return convertDirectory(directory, xisfFiles, progressListener, decision, keepNegative);
     }
 
     /**
@@ -135,19 +141,30 @@ public final class XisfImageConverter {
         }
     }
 
-    private static File convertDirectory(File sourceDirectory, File[] xisfFiles, ProgressListener progressListener) throws Exception {
-        File outputDirectory = new File(sourceDirectory, GENERATED_DIRECTORY_NAME);
-        Files.createDirectories(outputDirectory.toPath());
+    private static File convertDirectory(File sourceDirectory, File[] xisfFiles, ProgressListener progressListener,
+                                         ImageScaling.Decision decision, boolean keepNegative) throws Exception {
+        ImageScaling.Scan scan = new ImageScaling.Scan();
+        for (int i = 0; i < xisfFiles.length; i++) {
+            XisfImageData data = readImage(xisfFiles[i]);
+            scan.add(xisfFiles[i].getName(), FitsPixelConverter.pixels(data.samples, null));
+            if (progressListener != null) progressListener.onProgress((i + 1) * 30 / xisfFiles.length, "Inspecting XISF intensity range...");
+        }
+        ImageScaling.Plan scaling = ImageScaling.plan(scan.summary(), keepNegative, decision);
+        File outputDirectory;
+        try { outputDirectory = Files.createDirectory(sourceDirectory.toPath().resolve(GENERATED_DIRECTORY_NAME)).toFile(); }
+        catch (java.nio.file.FileAlreadyExistsException existing) {
+            outputDirectory = eu.startales.spacepixels.util.RunDirectories.create(sourceDirectory.toPath(), GENERATED_DIRECTORY_NAME + "_").toFile();
+        }
 
         for (int i = 0; i < xisfFiles.length; i++) {
             File xisfFile = xisfFiles[i];
             if (progressListener != null) {
-                int percent = xisfFiles.length == 0 ? 0 : (int) ((i * 80.0f) / xisfFiles.length);
+                int percent = 30 + (int) ((i * 50.0f) / xisfFiles.length);
                 progressListener.onProgress(percent, "Converting XISF " + (i + 1) + " of " + xisfFiles.length + ": " + xisfFile.getName());
             }
             XisfImageData imageData = readImage(xisfFile);
             File outputFile = new File(outputDirectory, stripExtension(xisfFile.getName()) + ".fit");
-            writeFits(imageData, outputFile);
+            writeFits(imageData, outputFile, scaling);
         }
 
         if (progressListener != null) {
@@ -157,9 +174,10 @@ public final class XisfImageConverter {
         return outputDirectory;
     }
 
-    private static void writeFits(XisfImageData imageData, File outputFile) throws FitsException, IOException {
+    private static void writeFits(XisfImageData imageData, File outputFile, ImageScaling.Plan scaling) throws FitsException, IOException {
         try (Fits fits = new Fits()) {
-            BasicHDU<?> hdu = Fits.makeHDU(imageData.monoData);
+            BasicHDU<?> hdu = Fits.makeHDU(FitsPixelConverter.to16BitMonochrome(
+                    FitsPixelConverter.pixels(imageData.samples, null), scaling, () -> false));
             fits.addHDU(hdu);
 
             Header header = hdu.getHeader();
@@ -168,9 +186,14 @@ public final class XisfImageConverter {
             header.addValue("BZERO", 32768.0, "offset data range to that of unsigned short");
             header.addValue("BSCALE", 1.0, "default scaling factor");
             applyFitsKeywords(header, imageData.fitsKeywords);
+            scaling.record(header, true);
+            double width = imageData.range.upperBound - imageData.range.lowerBound;
+            header.addValue("SPPSCALE", scaling.physicalMultiplier(true) / width, "Common multiplier from original XISF samples");
+            header.addValue("SPPOFF", -imageData.range.lowerBound + scaling.physicalOffset(true) * width, "Original XISF offset before SPPSCALE");
+            header.addValue("SPXLO", imageData.range.lowerBound, "XISF declared nominal lower bound");
+            header.addValue("SPXHI", imageData.range.upperBound, "XISF declared nominal upper bound");
 
-            Files.deleteIfExists(outputFile.toPath());
-            fits.write(outputFile);
+            eu.startales.spacepixels.util.StagedFile.write(outputFile, staged -> fits.write(staged.toFile()));
         } catch (HeaderCardException e) {
             throw new IOException("Failed to write FITS header for " + outputFile.getName(), e);
         }
@@ -281,14 +304,14 @@ public final class XisfImageConverter {
             String colorSpace = imageElement.hasAttribute("colorSpace") ? imageElement.getAttribute("colorSpace") : "Gray";
             String pixelStorage = imageElement.hasAttribute("pixelStorage") ? imageElement.getAttribute("pixelStorage") : "Planar";
             ByteOrder byteOrder = "big".equalsIgnoreCase(imageElement.getAttribute("byteOrder")) ? ByteOrder.BIG_ENDIAN : ByteOrder.LITTLE_ENDIAN;
-            SampleScaling scaling = SampleScaling.forImage(sampleFormat, imageElement.getAttribute("bounds"));
+            SampleRange scaling = SampleRange.forImage(sampleFormat, imageElement.getAttribute("bounds"));
 
             byte[] serializedBlock = readDataBlock(xisfFile, input, imageElement);
             byte[] decodedBlock = decodeDataBlock(serializedBlock, imageElement.getAttribute("compression"));
 
-            short[][] monoData = decodeMonochromeImage(decodedBlock, geometry, sampleFormat, colorSpace, pixelStorage, byteOrder, scaling);
+            double[][][] samples = decodeSamples(decodedBlock, geometry, sampleFormat, colorSpace, pixelStorage, byteOrder, scaling);
             List<FitsKeyword> fitsKeywords = extractFitsKeywords(rootElement, imageElement);
-            return new XisfImageData(monoData, fitsKeywords);
+            return new XisfImageData(samples, fitsKeywords, scaling);
         }
     }
 
@@ -670,13 +693,13 @@ public final class XisfImageConverter {
         return output;
     }
 
-    private static short[][] decodeMonochromeImage(byte[] rawData,
+    private static double[][][] decodeSamples(byte[] rawData,
                                                    Geometry geometry,
                                                    SampleFormat sampleFormat,
                                                    String colorSpace,
                                                    String pixelStorage,
                                                    ByteOrder byteOrder,
-                                                   SampleScaling scaling) throws IOException {
+                                                   SampleRange scaling) throws IOException {
         int sampleSize = sampleFormat.byteSize;
         int totalSamples = geometry.width * geometry.height * geometry.channels;
         int expectedSize = totalSamples * sampleSize;
@@ -692,28 +715,19 @@ public final class XisfImageConverter {
 
         boolean planarStorage = pixelStorage == null || pixelStorage.isBlank() || "Planar".equalsIgnoreCase(pixelStorage);
         ByteBuffer buffer = ByteBuffer.wrap(rawData).order(byteOrder);
-        short[][] output = new short[geometry.height][geometry.width];
         int usableChannels = grayscale ? 1 : Math.min(3, geometry.channels);
+        double[][][] output = new double[usableChannels][geometry.height][geometry.width];
 
         for (int y = 0; y < geometry.height; y++) {
+            if ((y & 63) == 0) io.github.ppissias.jtransient.execution.CancellationScope.check();
             for (int x = 0; x < geometry.width; x++) {
                 int pixelIndex = (y * geometry.width) + x;
-                double sampleValue = 0.0;
-
-                if (grayscale) {
-                    sampleValue = readSample(buffer, sampleFormat, geometry, planarStorage, pixelIndex, 0);
-                } else {
-                    for (int channel = 0; channel < usableChannels; channel++) {
-                        sampleValue += readSample(buffer, sampleFormat, geometry, planarStorage, pixelIndex, channel);
-                    }
-                    sampleValue /= usableChannels;
-                }
-
-                int unsignedValue = scaling.toUnsigned16(sampleValue);
-                output[y][x] = (short) (unsignedValue - 32768);
+                for (int channel = 0; channel < usableChannels; channel++)
+                    output[channel][y][x] = readSample(buffer, sampleFormat, geometry, planarStorage, pixelIndex, channel);
             }
         }
 
+        FitsPixelConverter.normalizeSamples(output, scaling::normalized);
         return output;
     }
 
@@ -864,18 +878,17 @@ public final class XisfImageConverter {
         }
     }
 
-    private static final class SampleScaling {
-        private final boolean scaleToFull16BitRange;
+    /** Declared nominal sample coordinates; interpretation alone never clips or quantizes the image. */
+    private static final class SampleRange {
         private final double lowerBound;
         private final double upperBound;
 
-        private SampleScaling(boolean scaleToFull16BitRange, double lowerBound, double upperBound) {
-            this.scaleToFull16BitRange = scaleToFull16BitRange;
+        private SampleRange(double lowerBound, double upperBound) {
             this.lowerBound = lowerBound;
             this.upperBound = upperBound;
         }
 
-        private static SampleScaling forImage(SampleFormat format, String boundsText) throws IOException {
+        private static SampleRange forImage(SampleFormat format, String boundsText) throws IOException {
             if (boundsText != null && !boundsText.isBlank()) {
                 String[] parts = boundsText.split(":");
                 if (parts.length != 2) {
@@ -884,37 +897,25 @@ public final class XisfImageConverter {
 
                 double lower = Double.parseDouble(parts[0]);
                 double upper = Double.parseDouble(parts[1]);
-                if (upper <= lower) {
+                if (!Double.isFinite(lower) || !Double.isFinite(upper) || upper <= lower) {
                     throw new IOException("Invalid XISF bounds value: " + boundsText);
                 }
-                return new SampleScaling(true, lower, upper);
+                return new SampleRange(lower, upper);
             }
 
             if (format == SampleFormat.FLOAT32 || format == SampleFormat.FLOAT64) {
-                return new SampleScaling(true, 0.0, 1.0);
+                return new SampleRange(0.0, 1.0);
             }
             if (format == SampleFormat.UINT8) {
-                return new SampleScaling(true, 0.0, 255.0);
+                return new SampleRange(0.0, 255.0);
             }
-            return new SampleScaling(false, 0.0, 65535.0);
+            if (format == SampleFormat.UINT32) return new SampleRange(0.0, 4_294_967_295.0);
+            return new SampleRange(0.0, 65535.0);
         }
 
-        private int toUnsigned16(double sampleValue) {
-            double normalizedValue = sampleValue;
-            if (scaleToFull16BitRange) {
-                normalizedValue = ((sampleValue - lowerBound) / (upperBound - lowerBound)) * 65535.0;
-            }
-
-            if (Double.isNaN(normalizedValue) || Double.isInfinite(normalizedValue)) {
-                normalizedValue = 0.0;
-            }
-            if (normalizedValue < 0.0) {
-                normalizedValue = 0.0;
-            } else if (normalizedValue > 65535.0) {
-                normalizedValue = 65535.0;
-            }
-
-            return (int) Math.round(normalizedValue);
+        /** Interprets declared storage bounds without clipping, quantizing or choosing a per-image scale. */
+        private double normalized(double sampleValue) {
+            return (sampleValue - lowerBound) / (upperBound - lowerBound);
         }
     }
 
@@ -930,13 +931,16 @@ public final class XisfImageConverter {
         }
     }
 
+    /** One exclusively owned decoded image, with source metadata and its declared nominal sample coordinates. */
     private static final class XisfImageData {
-        private final short[][] monoData;
+        private final double[][][] samples;
         private final List<FitsKeyword> fitsKeywords;
+        private final SampleRange range;
 
-        private XisfImageData(short[][] monoData, List<FitsKeyword> fitsKeywords) {
-            this.monoData = monoData;
+        private XisfImageData(double[][][] samples, List<FitsKeyword> fitsKeywords, SampleRange range) {
+            this.samples = samples;
             this.fitsKeywords = fitsKeywords;
+            this.range = range;
         }
     }
 }

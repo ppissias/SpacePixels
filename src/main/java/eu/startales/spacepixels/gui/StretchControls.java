@@ -109,18 +109,29 @@ final class StretchControls {
 
     /** The stretch table of each channel of this frame, for the current stretch. */
     byte[][] tablesFor(BlinkSequence.Frame frame) {
-        return tables.computeIfAbsent(frame, f -> {
-            StretchAlgorithm algorithm = panel.getStretchAlgorithm();
-            int primary = panel.getStretchSlider().getValue();
-            int secondary = panel.getStretchIterationsSlider().getValue();
-            byte[][] channelTables = new byte[f.getChannelCount()][];
+        return tables.computeIfAbsent(frame, f -> snapshot().tablesFor(f));
+    }
+
+    /** Captures controls on the EDT so an export worker never consults live Swing models. */
+    Snapshot snapshot() {
+        return new Snapshot(panel.isDisplayStretchEnabled(), panel.getStretchAlgorithm(),
+                panel.getStretchSlider().getValue(), panel.getStretchIterationsSlider().getValue());
+    }
+
+    /** Immutable display settings; LUT calculation reads only the immutable frame histograms on its caller's worker. */
+    record Snapshot(boolean enabled, StretchAlgorithm algorithm, int primary, int secondary) {
+        /** Calculates one frame's LUTs without reading a live panel or retaining previous frames' LUTs. */
+        byte[][] tablesFor(BlinkSequence.Frame frame) {
+            byte[][] channelTables = new byte[frame.getChannelCount()][];
             for (int channel = 0; channel < channelTables.length; channel++) {
-                channelTables[channel] = panel.isDisplayStretchEnabled()
-                        ? DisplayStretch.lookupTable(f.getHistogram(channel), algorithm, primary, secondary)
+                channelTables[channel] = enabled
+                        ? DisplayStretch.lookupTable(frame.getHistogram(channel), algorithm, primary, secondary)
                         : DisplayStretch.linearLookupTable();
             }
             return channelTables;
-        });
+        }
+        /** Uses the same colour presentation as the visible viewer. */
+        boolean extremeColour(BlinkSequence.Frame frame) { return enabled && algorithm == StretchAlgorithm.EXTREME && frame.getChannelCount() == 3; }
     }
 
     /** Whether a colour frame is drawn as its brightest channel, as the Extreme stretch does. */

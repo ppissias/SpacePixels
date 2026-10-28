@@ -18,6 +18,30 @@ import static org.junit.Assert.*;
 public class PreparationProcessTest {
     @Rule public final TemporaryFolder temporary = new TemporaryFolder();
 
+    /** Tool output reaches the caller before exit, excludes earlier commands and preserves split UTF-8 and final partial lines. */
+    @Test public void streamsNewOutputWhileChildIsStillRunning() throws Exception {
+        Path root = temporary.getRoot().toPath();
+        Path log = root.resolve("live.log");
+        Files.writeString(log, "EARLIER COMMAND\n");
+        var executor = Executors.newSingleThreadExecutor();
+        var received = new StringBuffer();
+        var live = new java.util.concurrent.CountDownLatch(1);
+        AtomicBoolean stop = new AtomicBoolean();
+        try {
+            var future = executor.submit(() -> PreparationProcess.run(command("stream", root), root, Map.of(), log,
+                    Duration.ofSeconds(15), stop::get, text -> { received.append(text); if (text.contains("LIVE π")) live.countDown(); }));
+            assertTrue("Output must arrive during execution", live.await(10, TimeUnit.SECONDS));
+            assertFalse("The child is still waiting for release", future.isDone());
+            assertFalse(received.toString().contains("EARLIER COMMAND"));
+            assertFalse(received.toString().contains("\u001b"));
+            Files.writeString(root.resolve("release"), "go");
+            var completed = future.get(10, TimeUnit.SECONDS);
+            assertEquals(0, completed.exitCode());
+            assertFalse(completed.output().contains("EARLIER COMMAND"));
+            assertTrue(received.toString().contains("FINAL WITHOUT NEWLINE"));
+        } finally { stop.set(true); executor.shutdownNow(); assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS)); }
+    }
+
     /** A large log remains on disk while the result delivered to Swing stays bounded. */
     @Test public void keepsLargeLogsOnDiskAndReturnsExitStatus() throws Exception {
         Path root = temporary.getRoot().toPath();
@@ -71,11 +95,22 @@ public class PreparationProcessTest {
             Path root = Path.of(args[1]);
             if (args[0].equals("log")) {
                 System.out.println("x".repeat(40_000)); System.out.println("LOG-END"); System.exit(7);
+            } else if (args[0].equals("stream")) {
+                byte[] text = "\u001b[32mLIVE π\u001b[0m\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                for (int i = 0; i < text.length; i++) {
+                    System.out.write(text[i]); System.out.flush();
+                    if ((text[i] & 255) == 0xcf) Thread.sleep(150);
+                }
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(12);
+                while (!Files.exists(root.resolve("release")) && System.nanoTime() < deadline) Thread.sleep(20);
+                System.out.print("FINAL WITHOUT NEWLINE"); System.out.flush();
             } else if (args[0].equals("parent")) {
                 Process child = new ProcessBuilder(command("sleep", root)).inheritIO().start();
                 child.waitFor();
             } else {
-                Files.writeString(root.resolve("child.pid"), Long.toString(ProcessHandle.current().pid()));
+                Path pid = root.resolve("child.pid.pending");
+                Files.writeString(pid, Long.toString(ProcessHandle.current().pid()));
+                Files.move(pid, root.resolve("child.pid"), java.nio.file.StandardCopyOption.ATOMIC_MOVE);
                 Thread.sleep(60_000);
             }
         }

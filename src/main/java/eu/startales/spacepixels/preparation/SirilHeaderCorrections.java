@@ -61,7 +61,7 @@ public final class SirilHeaderCorrections {
                     if (key.equals("DATE-OBS")) {
                         String normalized = normalizeDate(value);
                         if (!normalized.equals(value)) {
-                            edits.add(new Edit(position, card(key + "= '" + normalized + "' / Exposure start; separators normalized"),
+                            edits.add(new Edit(position, card(key + "= '" + normalized + "' / Exposure start"),
                                     new Correction(key, value, normalized)));
                         }
                     } else {

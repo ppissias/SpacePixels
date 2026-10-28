@@ -14,8 +14,18 @@ public final class GuiFitsImportInteraction implements FitsImportInteraction {
     }
 
     @Override public int choose(String message, String title, String[] options) {
-        return onEdt(() -> JOptionPane.showOptionDialog(null, message, title,
+        return onEdt(() -> JOptionPane.showOptionDialog(null, choiceContent(message), title,
                 JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]));
+    }
+
+    /** Keeps long plain-text diagnostics selectable and scrollable, with the decision buttons visible. EDT only. */
+    private static Object choiceContent(String message) {
+        if (message.length() < 700 || message.stripLeading().startsWith("<html>")) return message;
+        javax.swing.JTextArea details = new javax.swing.JTextArea(message, 14, 64);
+        details.setEditable(false); details.setLineWrap(true); details.setWrapStyleWord(true);
+        details.setFont(javax.swing.UIManager.getFont("OptionPane.messageFont"));
+        details.setCaretPosition(0);
+        return new javax.swing.JScrollPane(details);
     }
 
     @Override public void error(String message, String title) {

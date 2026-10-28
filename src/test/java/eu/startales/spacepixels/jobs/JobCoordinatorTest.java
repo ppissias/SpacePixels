@@ -34,6 +34,33 @@ public class JobCoordinatorTest {
     private final List<Runnable> workers = new ArrayList<>();
     private final List<String> calls = new ArrayList<>();
     private boolean otherWorkRunning;
+
+    /** Diagnostic batches are dispatched on the UI executor and late output cannot reach a replacement job. */
+    @Test public void detailsFollowJobIdentityAndUiDelivery() {
+        var queuedWorkers = new ArrayList<Runnable>();
+        var queuedUi = new ArrayList<Runnable>();
+        var received = new ArrayList<String>();
+        var jobs = new JobCoordinator(queuedWorkers::add, queuedUi::add, () -> false);
+        var context = new AtomicReference<JobContext>();
+        jobs.setListener(new JobCoordinator.Listener() {
+            @Override public void jobStarted(JobHandle handle) { }
+            @Override public void jobProgress(JobHandle handle, int percent, String text) { }
+            @Override public void jobEnded(JobHandle handle, JobOutcome<?> outcome) { }
+            @Override public void jobDetails(JobHandle handle, String text) { received.add(text); }
+        });
+        jobs.start(JobKind.FRAME_PREPARATION, null, running -> {
+            context.set(running); running.details("Calibrating frame 2"); return JobOutcome.completed("frames");
+        }, (handle, outcome) -> { });
+        queuedWorkers.remove(0).run();
+        assertTrue(received.isEmpty());
+        queuedUi.remove(0).run();
+        assertEquals(List.of("Calibrating frame 2"), received);
+        queuedUi.remove(0).run();
+        jobs.start(JobKind.IMPORT, null, running -> JobOutcome.completed("imported"), (handle, outcome) -> { });
+        context.get().details("late output from the old process");
+        queuedUi.remove(0).run();
+        assertEquals(List.of("Calibrating frame 2"), received);
+    }
     private final JobCoordinator coordinator = new JobCoordinator(workers::add, Runnable::run, () -> otherWorkRunning);
 
     {

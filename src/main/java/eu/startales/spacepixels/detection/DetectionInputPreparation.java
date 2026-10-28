@@ -10,8 +10,6 @@ package eu.startales.spacepixels.detection;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Objects;
@@ -19,6 +17,7 @@ import eu.startales.spacepixels.fits.FitsInput;
 import eu.startales.spacepixels.fits.FitsPixelConverter;
 import eu.startales.spacepixels.fits.FitsPreparation;
 import eu.startales.spacepixels.fits.XisfImageConverter;
+import eu.startales.spacepixels.fits.ImageScaling;
 
 /**
  * Headless preparation utility that normalizes supported FITS/XISF inputs into a directory of
@@ -26,7 +25,6 @@ import eu.startales.spacepixels.fits.XisfImageConverter;
  */
 public final class DetectionInputPreparation {
 
-    private static final DateTimeFormatter OUTPUT_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
     private static final String OUTPUT_DIRECTORY_PREFIX = "_spacepixels_prepared_mono16_";
 
     private DetectionInputPreparation() {
@@ -86,6 +84,12 @@ public final class DetectionInputPreparation {
                                                           boolean autoPrepare,
                                                           boolean keepNegativeValues,
                                                           ProgressListener progressListener) throws Exception {
+        return prepareInputDirectory(inputDirectory, autoPrepare, keepNegativeValues, progressListener, null);
+    }
+
+    /** Applies an explicit outlier decision; null rejects extremes before any converted sequence is written. */
+    public static PreparedDirectory prepareInputDirectory(File inputDirectory, boolean autoPrepare, boolean keepNegativeValues,
+                                                          ProgressListener progressListener, ImageScaling.Decision decision) throws Exception {
         Objects.requireNonNull(inputDirectory, "inputDirectory");
         if (!inputDirectory.exists() || !inputDirectory.isDirectory()) {
             throw new IOException("Input path is not a directory: " + inputDirectory.getAbsolutePath());
@@ -99,7 +103,7 @@ public final class DetectionInputPreparation {
         emitProgress(progressListener, 0, "Inspecting input directory...");
 
         File workingDirectory = XisfImageConverter.prepareDirectoryForFitsImport(inputDirectory,
-                (percentage, message) -> emitProgress(progressListener, scaleProgress(percentage, 5, 70), message));
+                (percentage, message) -> emitProgress(progressListener, scaleProgress(percentage, 5, 70), message), decision, keepNegativeValues);
         boolean inputWasPrepared = !inputDirectory.equals(workingDirectory);
         File[] fitsFiles = FitsInput.list(workingDirectory);
 
@@ -107,21 +111,12 @@ public final class DetectionInputPreparation {
         FitsInput.Input[] inputs = FitsInput.inspect(fitsFiles, null, false);
         if (Arrays.stream(inputs).allMatch(FitsInput.Input::detectionReady)) {
             emitProgress(progressListener, 100, "Input directory is already ready for 16-bit monochrome detection.");
-            return new PreparedDirectory(inputDirectory, workingDirectory, inputWasPrepared, null);
+            return new PreparedDirectory(inputDirectory, workingDirectory, inputWasPrepared, inputWasPrepared ? workingDirectory : null);
         }
 
-        int addedOffset = 0;
-        if (keepNegativeValues) {
-            emitProgress(progressListener, 73, "Checking for pixel values below zero...");
-            FitsPixelConverter.NegativeValueScan scan = FitsPixelConverter.scanNegativeValues(fitsFiles,
-                    percentage -> emitProgress(progressListener, scaleProgress(percentage, 73, 75), "Checking for pixel values below zero..."));
-            addedOffset = scan.offsetToKeepNegativeValues();
-            if (addedOffset > 0) {
-                emitProgress(progressListener, 75, String.format(Locale.ROOT,
-                        "%d pixels are below zero (lowest %.0f ADU): adding %d ADU to every pixel of every frame to keep them.",
-                        scan.negativePixels(), scan.lowest(), addedOffset));
-            }
-        }
+        ImageScaling.Summary inspection = ImageScaling.inspect(fitsFiles,
+                percentage -> emitProgress(progressListener, scaleProgress(percentage, 73, 75), "Inspecting sequence intensity range..."));
+        ImageScaling.Plan scaling = ImageScaling.plan(inspection, keepNegativeValues, decision);
 
         File preparedOutputDirectory = createPreparedOutputDirectory(workingDirectory);
         try {
@@ -131,7 +126,7 @@ public final class DetectionInputPreparation {
                         scaleProgress(fileIndex + 1, fitsFiles.length, 75, 100),
                         "Preparing " + fitsFile.getName() + " for mono 16-bit detection...");
                 File outputFile = new File(preparedOutputDirectory, FitsPreparation.preparedFilename(fitsFile, ""));
-                FitsPreparation.standardizeFile(fitsFile, addedOffset, outputFile, null);
+                FitsPreparation.standardizeFile(fitsFile, scaling, outputFile, null);
             }
         } catch (Exception failure) {
             // A stopped or failed conversion leaves a partial copy that nothing refers to.
@@ -144,11 +139,7 @@ public final class DetectionInputPreparation {
     }
 
     private static File createPreparedOutputDirectory(File workingDirectory) throws IOException {
-        File preparedOutputDirectory = new File(
-                workingDirectory,
-                OUTPUT_DIRECTORY_PREFIX + LocalDateTime.now().format(OUTPUT_TIMESTAMP));
-        Files.createDirectories(preparedOutputDirectory.toPath());
-        return preparedOutputDirectory;
+        return eu.startales.spacepixels.util.RunDirectories.create(workingDirectory.toPath(), OUTPUT_DIRECTORY_PREFIX).toFile();
     }
 
     private static void emitProgress(ProgressListener progressListener, int percentage, String message) {

@@ -139,10 +139,12 @@ public final class FitsPixelConverter {
         return standardizePlanes(pixels(kernel, header), addedOffset);
     }
 
-    /** Retains ordinary import's normalization, clipping and per-channel rounding policy. */
+    /** Plans a standalone conversion with an explicit legacy pedestal; sequence callers pass a shared plan instead. */
     private static short[][][] standardizePlanes(Pixels pixels, int addedOffset) throws IOException {
-        double normalization = normalization(pixels);
-        return convertPlanes(pixels, value -> value * normalization + addedOffset, false, false, () -> false);
+        ImageScaling.Scan scan = new ImageScaling.Scan();
+        scan.add("image", pixels);
+        ImageScaling.Plan plan = ImageScaling.fixedPedestal(scan.summary(), addedOffset);
+        return convertPlanes(pixels, value -> plan.convert(value, pixels.floatingPoint), false, true, () -> false);
     }
 
     /**
@@ -177,6 +179,9 @@ public final class FitsPixelConverter {
             scale = header == null ? 1 : header.getDoubleValue("BSCALE", 1);
             if (!Double.isFinite(offset) || !Double.isFinite(scale)) throw new IOException("FITS BZERO and BSCALE must be finite.");
         }
+
+        /** Whether physical samples use a nominal floating [0,1] scale rather than integer ADU. */
+        public boolean floatingPoint() { return floatingPoint; }
 
         /** The image width in pixels. */
         public int width() { return width; }
@@ -224,12 +229,23 @@ public final class FitsPixelConverter {
         return convertPlanes(pixels, value -> (value + addedOffset) * multiplier, true, true, cancelled)[0];
     }
 
+    /** Applies the same sequence plan to mono output; averaging precedes quantization for every input format. */
+    public static short[][] to16BitMonochrome(Pixels pixels, ImageScaling.Plan plan, BooleanSupplier cancelled) throws IOException {
+        return convertPlanes(pixels, value -> plan.convert(value, pixels.floatingPoint), true, true, cancelled)[0];
+    }
+
+    /** Writes a colour companion with exactly the mono output's common scale and explicit outlier policy. */
+    static short[][][] to16BitColor(Pixels pixels, ImageScaling.Plan plan, BooleanSupplier cancelled) throws IOException {
+        return convertPlanes(pixels, value -> plan.convert(value, pixels.floatingPoint), false, true, cancelled);
+    }
+
     /** One conversion loop owns zero-fill preservation, output quantization and unsigned-short storage for both callers. */
     private static short[][][] convertPlanes(Pixels pixels, DoubleUnaryOperator transform, boolean averageChannels,
                                             boolean strict, BooleanSupplier cancelled) throws IOException {
         int channels = averageChannels ? 1 : pixels.channels();
         short[][][] result = new short[channels][pixels.height()][pixels.width()];
         for (int c = 0; c < channels; c++) for (int y = 0; y < pixels.height(); y++) {
+            if ((y & 63) == 0) io.github.ppissias.jtransient.execution.CancellationScope.check();
             if ((y & 63) == 0 && cancelled.getAsBoolean()) throw new CancellationException("FITS conversion cancelled.");
             int[] image = columnsInsidePadding(pixels, averageChannels ? -1 : c, y);
             for (int x = 0; x < pixels.width(); x++) {
@@ -242,6 +258,17 @@ public final class FitsPixelConverter {
             }
         }
         return result;
+    }
+
+    /** Normalizes a new exclusively owned XISF buffer in place, preserving raw zero registration margins. */
+    static void normalizeSamples(double[][][] data, DoubleUnaryOperator normalize) throws IOException {
+        Pixels raw = pixels(data, null);
+        for (int y = 0; y < raw.height(); y++) {
+            if ((y & 63) == 0) io.github.ppissias.jtransient.execution.CancellationScope.check();
+            int[] footprint = columnsInsidePadding(raw, -1, y);
+            for (int c = 0; c < data.length; c++) for (int x = 0; x < raw.width(); x++)
+                data[c][y][x] = x < footprint[0] || x >= footprint[1] ? 0 : normalize.applyAsDouble(data[c][y][x]);
+        }
     }
 
     /**
@@ -311,7 +338,7 @@ public final class FitsPixelConverter {
                     continue;
                 }
                 Pixels pixels = pixels(kernel, hdu.getHeader());
-                double normalization = normalization(pixels);
+                double normalization = pixels.floatingPoint ? ImageScaling.FULL_SCALE : 1;
                 for (int channel = 0; channel < pixels.channels(); channel++) {
                     for (int row = 0; row < pixels.height(); row++) {
                         for (int column = 0; column < pixels.width(); column++) {
@@ -336,16 +363,6 @@ public final class FitsPixelConverter {
         return scan;
     }
 
-    /** Ordinary import's existing unit-range normalization, after physical FITS storage decoding. */
-    private static double normalization(Pixels pixels) {
-        if (!pixels.floatingPoint) return 1;
-        double maximum = Double.NEGATIVE_INFINITY;
-        for (int c = 0; c < pixels.channels(); c++) for (int y = 0; y < pixels.height(); y++) for (int x = 0; x < pixels.width(); x++) {
-            double physical = pixels.physicalValue(c, y, x);
-            if (Double.isFinite(physical)) maximum = Math.max(maximum, physical);
-        }
-        return maximum > 0 && maximum <= 10 ? 65535 : 1;
-    }
 
     static short[][] extractLuminance(short[][][] color16) {
         int height = color16[0].length;

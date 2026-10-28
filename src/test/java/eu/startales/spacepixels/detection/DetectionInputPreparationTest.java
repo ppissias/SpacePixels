@@ -135,7 +135,8 @@ public class DetectionInputPreparationTest {
 
     @Test
     public void preparationAppliesFloatingPointScalingBeforeNormalization() throws Exception {
-        assertScaledPreparation(new float[][]{{1.0f, 2.0f}}, 100.0, 900.0, new int[]{1000, 1900});
+        assertScaledPreparation(new float[][]{{1.0f, 2.0f}}, 100.0, 900.0,
+                new int[]{(int) Math.round(1000 * 65535.0 / 1900), 65535});
     }
 
     @Test
@@ -184,7 +185,8 @@ public class DetectionInputPreparationTest {
         }
         byte[] originalBytes = Files.readAllBytes(originalFile.toPath());
         DetectionInputPreparation.PreparedDirectory prepared =
-                DetectionInputPreparation.prepareInputDirectory(inputDirectory.toFile(), true, keepNegativeValues, null);
+                DetectionInputPreparation.prepareInputDirectory(inputDirectory.toFile(), true, keepNegativeValues, null,
+                        eu.startales.spacepixels.fits.ImageScaling.policy(eu.startales.spacepixels.fits.ImageScaling.OutlierHandling.PRESERVE_ALL));
         assertTrue(prepared.isInputWasPrepared());
         File preparedFile = new File(prepared.getPreparedInputDirectory(), "scaled.fit");
         try (Fits fits = new Fits(preparedFile)) {

@@ -68,7 +68,7 @@ public class PreparationSensorTest {
 
     /** Captures an explicit pattern override for a run-owned FITS copy. */
     private PreparationRequest request(PreparationRequest.Bayer pattern) {
-        return new PreparationRequest(PreparationTool.SIRIL, Path.of("siril-cli"), Map.of(), PreparationRequest.Sensor.CFA,
-                pattern, PreparationRequest.RowOrder.TOP_DOWN, 1, 0, temporary.getRoot().toPath(), false);
+        return new PreparationRequest(Path.of("siril-cli"), Map.of(), PreparationRequest.Sensor.CFA,
+                pattern, PreparationRequest.RowOrder.TOP_DOWN, 1, 0, temporary.getRoot().toPath(), false, false);
     }
 }

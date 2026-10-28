@@ -11,8 +11,8 @@ import static org.junit.Assert.*;
 public class PreparationRecipeTest {
     /** A dark master already contains bias: the light correction must not subtract both again. */
     @Test public void avoidsDoubleBiasSubtractionAndKeepsRegisteredIndividuals() {
-        var request = new PreparationRequest(PreparationTool.SIRIL, Path.of("siril-cli"), Map.of(), PreparationRequest.Sensor.CFA,
-                PreparationRequest.Bayer.METADATA, PreparationRequest.RowOrder.METADATA, 0, 0, Path.of("."), false);
+        var request = new PreparationRequest(Path.of("siril-cli"), Map.of(), PreparationRequest.Sensor.CFA,
+                PreparationRequest.Bayer.METADATA, PreparationRequest.RowOrder.METADATA, 0, 0, Path.of("."), false, false);
         String script = SirilPreparationRecipe.processing(request, Map.of(LIGHTS, 3, DARKS, 3, BIASES, 3, FLATS, 3), Set.of());
         String lightLine = script.lines().filter(line -> line.startsWith("calibrate lights")).findFirst().orElseThrow();
         assertTrue(lightLine.contains("-dark="));
@@ -26,19 +26,24 @@ public class PreparationRecipeTest {
         assertFalse(script.contains("-equalize_cfa"));
     }
 
-    /** Standard Mode retains each reference-sized registered light and its dark margins for drift analysis. */
-    @Test public void dssUsesStandardModeWithoutDrizzle() {
-        var request = new PreparationRequest(PreparationTool.DSS, Path.of("DeepSkyStackerCL"), Map.of(), PreparationRequest.Sensor.MONO,
-                PreparationRequest.Bayer.METADATA, PreparationRequest.RowOrder.METADATA, 0, 0, Path.of("."), false);
-        String list = DssPreparationRecipe.fileList(request, Map.of(LIGHTS, java.util.List.of(Path.of("light.fit"))), null);
-        assertTrue(list.contains("#V5WS#Stacking/Mosaic#0\n"));
-        assertTrue(list.contains("#V5WS#Stacking/PixelSizeMultiplier#1\n"));
+    /** A probe must identify a Siril version instead of accepting a different program's version text. */
+    @Test public void checksSirilCliIdentity() throws Exception {
+        assertEquals("siril 1.4.4", SirilInstallation.describeProbe("siril 1.4.4\n"));
+        assertThrows(java.io.IOException.class, () -> SirilInstallation.describeProbe("different program 1.2"));
     }
 
-    /** Installation checks must reject graphical launchers, rather than accidentally opening them as CLI jobs. */
-    @Test public void checksCliIdentityAndToleratesExpectedHelpExitSemantics() throws Exception {
-        assertEquals("siril 1.4.4", PreparationTool.SIRIL.describeProbe("siril 1.4.4\n"));
-        assertEquals("DeepSkyStacker 6.2.3 Command Line", PreparationTool.DSS.describeProbe("DeepSkyStacker 6.2.3 Command Line\nUsage..."));
-        assertThrows(java.io.IOException.class, () -> PreparationTool.SIRIL.describeProbe("different program 1.2"));
+    /** Numeric version comparison is shared by installation checks and the recipe's minimum requirement. */
+    @Test public void requiresSupportedSirilBeforePreparation() throws Exception {
+        for (String version : new String[]{"1.4.0", "1.4.4", "1.10.0", "2.0.0"})
+            assertEquals("siril " + version, SirilInstallation.describeProbe("siril " + version));
+        for (String version : new String[]{"0.99.12", "1.2.6", "1.3.99"}) {
+            var failure = assertThrows(java.io.IOException.class, () -> SirilInstallation.describeProbe("siril " + version));
+            assertTrue(failure.getMessage().contains(SirilInstallation.MINIMUM_VERSION));
+            assertTrue(failure.getMessage().contains(version));
+        }
+        assertEquals("Siril version 1.4.4", SirilInstallation.describeProbe("\u001b[32mSiril version 1.4.4\u001b[0m"));
+        assertThrows(java.io.IOException.class, () -> SirilInstallation.describeProbe("siril unknown"));
+        assertTrue(SirilPreparationRecipe.conversion(Set.of(LIGHTS), Set.of())
+                .startsWith("requires " + SirilInstallation.MINIMUM_VERSION + "\n"));
     }
 }

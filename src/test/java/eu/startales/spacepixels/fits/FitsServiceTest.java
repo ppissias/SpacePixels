@@ -150,7 +150,7 @@ public class FitsServiceTest {
                 converted = redirect.getNewDirectory();
             }
         }
-        assertEquals(List.of("Format Conversion Required", "Success"), interaction.questions);
+        assertEquals(List.of("Format Conversion Required", "Extreme pixel values", "Success"), interaction.questions);
         assertEquals(0, interaction.openProgress);
         try (FitsImportService importer = new FitsImportService(converted, null)) {
             assertEquals(1, importer.readFiles().length);
@@ -172,7 +172,7 @@ public class FitsServiceTest {
     @Test
     public void negativeFloatConversionPreservesPixelsPaddingHeadersAndOutputNames() throws Exception {
         File input = folder.newFolder("negative");
-        File original = write(input, "sample.fit", new float[][]{{0, -12, 100}, {45, 300, 800}}, false);
+        File original = write(input, "sample.fit", new float[][]{{0, -0.012f, 0.100f}, {0.045f, 0.300f, 0.800f}}, false);
         Interaction interaction = new Interaction();
         FitsBatchService batch = new FitsBatchService(input, new FitsVisualizationRenderer());
         int offset = FitsPixelConverter.scanNegativeValues(new File[]{original}, ignored -> {}).offsetToKeepNegativeValues();
@@ -186,9 +186,15 @@ public class FitsServiceTest {
         try (Fits source = new Fits(original); Fits result = new Fits(converted)) {
             BasicHDU<?> before = FitsInput.getImageHDU(source);
             BasicHDU<?> after = FitsInput.getImageHDU(result);
-            assertRows(FitsPixelConverter.standardizeTo16BitMono(before.getKernel(), before.getHeader(), offset),
-                    (short[][]) after.getKernel());
-            assertEquals(offset, after.getHeader().getIntValue("SPOFFSET"));
+            float[][] sourcePixels = (float[][]) before.getKernel();
+            short[][] output = (short[][]) after.getKernel();
+            double multiplier = after.getHeader().getDoubleValue("SPPSCALE");
+            double pedestal = after.getHeader().getDoubleValue("SPPOFF");
+            for (int y = 0; y < sourcePixels.length; y++) for (int x = 0; x < sourcePixels[y].length; x++) {
+                if (y == 0 && x == 0) continue; // Registration fill remains physical zero.
+                assertEquals(sourcePixels[y][x], (output[y][x] + 32768.0) / multiplier - pedestal, 0.51 / multiplier);
+            }
+            assertEquals(-sourcePixels[0][1] * 65535.0, after.getHeader().getDoubleValue("SPOFFSET"), 1e-6);
             assertEquals("target", after.getHeader().getStringValue("OBJECT"));
             assertEquals(20, after.getHeader().getDoubleValue("CRVAL2"), 0);
             assertEquals(32768, after.getHeader().getDoubleValue("BZERO"), 0);
@@ -246,7 +252,10 @@ public class FitsServiceTest {
                 short[][][] expected = FitsPixelConverter.standardizeTo16BitColor(image.getKernel(), image.getHeader(), 0);
                 short[][][] actual = (short[][][]) FitsInput.getImageHDU(color).getKernel();
                 for (int channel = 0; channel < expected.length; channel++) assertRows(expected[channel], actual[channel]);
-                assertRows(FitsPixelConverter.extractLuminance(expected), (short[][]) FitsInput.getImageHDU(mono).getKernel());
+                short[][] colorMean = FitsPixelConverter.extractLuminance(expected);
+                short[][] monoPixels = (short[][]) FitsInput.getImageHDU(mono).getKernel();
+                for (int y = 0; y < colorMean.length; y++) for (int x = 0; x < colorMean[y].length; x++)
+                    assertEquals(colorMean[y][x], monoPixels[y][x], 1); // Mono averages physical samples before quantization.
             }
         }
     }

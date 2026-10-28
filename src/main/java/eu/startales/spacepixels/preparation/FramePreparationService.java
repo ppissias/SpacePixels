@@ -12,6 +12,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.FileVisitResult;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -25,13 +28,20 @@ import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** Prepares a private copy of one observing sequence, validating complete individual-frame output before publication. */
 public final class FramePreparationService {
-    /** Completed preparation products survive a subsequent import or Auto-Tune failure. */
-    public record Result(Path directory, Path aligned, int frames, String tool, double multiplier, double addedOffset) { }
+    /** Completed preparation products survive a subsequent import failure. */
+    public record Result(Path directory, Path aligned, int frames, String tool, double multiplier, double addedOffset,
+                         List<Path> excluded) {
+        /** Captures the excluded input identities without retaining the worker's mutable collection. */
+        public Result { excluded = List.copyOf(excluded); }
+        /** Number of original lights, including exposures excluded by registration. */
+        public int inputFrames() { return frames + excluded.size(); }
+    }
 
     /** Captured input lists distinguish existing master FITS files from folders of calibration exposures. */
     public record Inputs(Map<Role, List<Path>> files, Set<Role> masters, long sourceBytes) {
@@ -85,28 +95,41 @@ public final class FramePreparationService {
     }
 
     /** Runs conversion/calibration/registration on the worker, observing cancellation through owned subprocess cleanup. */
-    public Result prepare(PreparationRequest request, BooleanSupplier cancelled, BiConsumer<Integer, String> progress) throws Exception {
+    public Result prepare(PreparationRequest request, BooleanSupplier cancelled, BiConsumer<Integer, String> progress, Consumer<String> details) throws Exception {
+        return prepare(request, cancelled, progress, details, null);
+    }
+
+    /** Uses the desktop's explicit outlier decision, or rejects extremes when invoked without an interaction. */
+    public Result prepare(PreparationRequest request, BooleanSupplier cancelled, BiConsumer<Integer, String> progress, Consumer<String> details,
+                          eu.startales.spacepixels.fits.ImageScaling.Decision decision) throws Exception {
         Inputs inputs = inspect(request.inputs());
-        validateDssInterpretation(request, inputs);
-        Path executable = request.tool().resolve(request.executable());
+        Path executable = SirilInstallation.resolve(request.executable());
         Path parent = request.outputParent().toRealPath();
         if (!Files.isDirectory(parent)) throw new IOException("Choose an existing output parent folder.");
         long estimated = Math.max(256L * 1024 * 1024, inputs.sourceBytes() * 12);
         if (Files.getFileStore(parent).getUsableSpace() < estimated) throw new IOException("The output disk needs more working space (approximately " + (estimated / 1_073_741_824.0) + " GiB).");
-        Path run = Files.createTempDirectory(parent, "spacepixels_prepared_");
+        Path run = eu.startales.spacepixels.util.RunDirectories.create(parent, "spacepixels_prepared_");
         Path log = run.resolve("preparation.log");
         Map<String, Object> manifest = new LinkedHashMap<>();
         manifest.put("version", 1);
         manifest.put("outcome", "RUNNING");
-        manifest.put("engine", request.tool().name());
+        manifest.put("engine", "SIRIL");
         manifest.put("sensor", request.sensor().name());
         manifest.put("bayerSource", request.bayer().name());
         manifest.put("rowOrder", request.rowOrder().name());
         manifest.put("offsetX", request.offsetX());
         manifest.put("offsetY", request.offsetY());
+        manifest.put("keepWorkingFiles", request.keepWorkingFiles());
+        boolean cleaned = false;
         try {
             Files.createDirectories(run.resolve("masters"));
-            Files.createDirectories(run.resolve("reference"));
+            if (request.referenceStack()) Files.createDirectories(run.resolve("reference"));
+            progress.accept(0, "Checking the Siril installation…");
+            details.accept("Run files and complete log: " + run + "\n");
+            Files.writeString(run.resolve("siril.cfg"), SirilPreparationRecipe.configuration());
+            PreparationProcess.Result probe = PreparationProcess.run(SirilInstallation.probe(executable, run), run, environment(), log,
+                    Duration.ofSeconds(15), cancelled);
+            String tool = SirilInstallation.describeProbe(probe.output());
             progress.accept(0, "Copying selected inputs; original files remain untouched…");
             Map<Role, List<Path>> copies = new EnumMap<>(Role.class);
             List<HeaderFix> fixes = new ArrayList<>();
@@ -133,72 +156,47 @@ public final class FramePreparationService {
                 copies.put(role, List.copyOf(copied));
             }
             manifest.put("headerCorrections", fixes);
-            String tool;
             List<PreparedSequenceWriter.Frame> frames;
-            if (request.tool() == PreparationTool.SIRIL) {
-                Files.writeString(run.resolve("siril.cfg"), SirilPreparationRecipe.configuration());
-                PreparationProcess.Result probe = PreparationProcess.run(request.tool().probe(executable, run), run, environment(), log,
-                        Duration.ofSeconds(15), cancelled);
-                tool = request.tool().describeProbe(probe.output());
-                progress.accept(5, "Siril: converting working copies…");
-                runSiril(executable, run, "convert.ssf", SirilPreparationRecipe.conversion(copies.keySet(), inputs.masters()), log, cancelled);
-                Map<Role, Integer> counts = new EnumMap<>(Role.class);
-                Map<Role, Header> roleHeaders = new EnumMap<>(Role.class);
-                for (Role role : copies.keySet()) {
-                    counts.put(role, copies.get(role).size());
-                    if (inputs.masters().contains(role)) {
-                        Files.copy(copies.get(role).getFirst(), run.resolve("masters").resolve(role.folder() + ".fit"));
-                        roleHeaders.put(role, SirilHeaderCorrections.imageHeader(copies.get(role).getFirst()));
-                    } else {
-                        List<Path> converted = sequence(run.resolve("converted").resolve(role.folder()), role.folder() + "_");
-                        if (converted.size() != copies.get(role).size()) throw new IOException("Siril did not convert every selected " + role + " image. See preparation.log.");
-                        for (int i = 0; i < converted.size(); i++) if (isFits(copies.get(role).get(i))) verifyMetadata(copies.get(role).get(i), converted.get(i));
-                        validateSensor(request, converted, role);
-                        roleHeaders.put(role, SirilHeaderCorrections.imageHeader(converted.getFirst()));
-                        if (role == Role.LIGHTS && request.sensor() == PreparationRequest.Sensor.CFA) {
-                            Header cfa = SirilHeaderCorrections.imageHeader(converted.getFirst());
-                            manifest.put("resolvedCfa", Map.of("pattern", cfa.getStringValue("BAYERPAT"), "rowOrder", cfa.getStringValue("ROWORDER"),
-                                    "offsetX", cfa.getIntValue("XBAYROFF", 0), "offsetY", cfa.getIntValue("YBAYROFF", 0)));
-                        }
+            progress.accept(5, "Siril: converting working copies…");
+            runSiril(executable, run, "convert.ssf", SirilPreparationRecipe.conversion(copies.keySet(), inputs.masters()), log, cancelled, details);
+            progress.accept(10, "Checking converted frames, calibration compatibility and camera interpretation…");
+            Map<Role, Integer> counts = new EnumMap<>(Role.class);
+            Map<Role, Header> roleHeaders = new EnumMap<>(Role.class);
+            for (Role role : copies.keySet()) {
+                counts.put(role, copies.get(role).size());
+                if (inputs.masters().contains(role)) {
+                    Files.copy(copies.get(role).getFirst(), run.resolve("masters").resolve(role.folder() + ".fit"));
+                    roleHeaders.put(role, SirilHeaderCorrections.imageHeader(copies.get(role).getFirst()));
+                } else {
+                    List<Path> converted = sequence(run.resolve("converted").resolve(role.folder()), role.folder() + "_");
+                    if (converted.size() != copies.get(role).size()) throw new IOException("Siril did not convert every selected " + role + " image. See preparation.log.");
+                    for (int i = 0; i < converted.size(); i++) if (isFits(copies.get(role).get(i))) verifyMetadata(copies.get(role).get(i), converted.get(i));
+                    validateSensor(request, converted, role);
+                    roleHeaders.put(role, SirilHeaderCorrections.imageHeader(converted.getFirst()));
+                    if (role == Role.LIGHTS && request.sensor() == PreparationRequest.Sensor.CFA) {
+                        Header cfa = SirilHeaderCorrections.imageHeader(converted.getFirst());
+                        manifest.put("resolvedCfa", Map.of("pattern", cfa.getStringValue("BAYERPAT"), "rowOrder", cfa.getStringValue("ROWORDER"),
+                                "offsetX", cfa.getIntValue("XBAYROFF", 0), "offsetY", cfa.getIntValue("YBAYROFF", 0)));
                     }
                 }
-                validateCalibrationHeaders(roleHeaders);
-                progress.accept(15, "Siril: calibrating and registering individual exposures…");
-                runSiril(executable, run, "prepare.ssf", SirilPreparationRecipe.processing(request, counts, inputs.masters()), log, cancelled);
-                Path lights = run.resolve("converted/lights");
-                List<Path> registered = sequence(lights, "r_");
-                List<Path> converted = sequence(lights, "lights_");
-                List<Path> originalMetadata = new ArrayList<>();
-                for (int i = 0; i < converted.size(); i++) originalMetadata.add(isFits(copies.get(Role.LIGHTS).get(i)) ? copies.get(Role.LIGHTS).get(i) : converted.get(i));
-                frames = associate(inputs.files().get(Role.LIGHTS), originalMetadata, registered, true);
-            } else {
-                PreparationProcess.Result probe = PreparationProcess.run(request.tool().probe(executable, run), run, environment(), log,
-                        Duration.ofSeconds(15), cancelled);
-                tool = request.tool().describeProbe(probe.output());
-                List<Path> lightCopies = copies.get(Role.LIGHTS);
-                Map<Role, Header> knownHeaders = new EnumMap<>(Role.class);
-                for (Role role : copies.keySet()) {
-                    if (copies.get(role).stream().allMatch(FramePreparationService::isFits)) {
-                        if (!inputs.masters().contains(role)) validateSensor(request, copies.get(role), role);
-                        knownHeaders.put(role, SirilHeaderCorrections.imageHeader(copies.get(role).getFirst()));
-                    }
-                }
-                validateCalibrationHeaders(knownHeaders);
-                String pattern = !knownHeaders.containsKey(Role.LIGHTS) || request.sensor() != PreparationRequest.Sensor.CFA ? null
-                        : knownHeaders.get(Role.LIGHTS).getStringValue("BAYERPAT").strip();
-                manifest.put("resolvedCfa", pattern == null ? "DSS decoder; camera RAW mosaic metadata is not exposed by the CLI" : pattern);
-                manifest.put("registrationPreferences", "DSS saved registration preferences; generated file-list overrides are in frames.txt");
-                String list = DssPreparationRecipe.fileList(request, copies, pattern);
-                Files.writeString(run.resolve("frames.txt"), list);
-                progress.accept(10, "DeepSkyStacker: registering and saving individual exposures (also creates a stack)…");
-                PreparationProcess.Result result = PreparationProcess.run(List.of(executable.toString(), "/R", "/SR", "/FITS", "/OF32r",
-                        "/O:" + run.resolve("reference/reference.fit"), run.resolve("frames.txt").toString()), run,
-                        environment(), log, Duration.ofHours(24), cancelled);
-                if (result.exitCode() != 0) throw new IOException("DSS failed. See preparation.log.");
-                List<Path> registered = sequence(run.resolve("input/lights"), "").stream()
-                        .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).contains(".reg.")).toList();
-                frames = associate(inputs.files().get(Role.LIGHTS), lightCopies, registered, false);
             }
+            validateCalibrationHeaders(roleHeaders);
+            progress.accept(15, "Siril: calibrating and registering individual exposures…");
+            runSiril(executable, run, "prepare.ssf", SirilPreparationRecipe.processing(request, counts, inputs.masters()), log, cancelled, details);
+            Path lights = run.resolve("converted/lights");
+            List<Path> registered = sequence(lights, "r_");
+            List<Path> converted = sequence(lights, "lights_");
+            List<Path> originalMetadata = new ArrayList<>();
+            for (int i = 0; i < converted.size(); i++) originalMetadata.add(isFits(copies.get(Role.LIGHTS).get(i)) ? copies.get(Role.LIGHTS).get(i) : converted.get(i));
+            frames = associate(inputs.files().get(Role.LIGHTS), originalMetadata, registered);
+            Set<Path> retained = new HashSet<>();
+            for (PreparedSequenceWriter.Frame frame : frames) retained.add(frame.original());
+            List<Path> excluded = inputs.files().get(Role.LIGHTS).stream().filter(path -> !retained.contains(path)).toList();
+            manifest.put("inputFrameCount", inputs.files().get(Role.LIGHTS).size());
+            manifest.put("registeredFrameCount", frames.size());
+            manifest.put("excludedSources", excluded.stream().map(Path::toString).toList());
+            if (!excluded.isEmpty()) details.accept("Registration kept " + frames.size() + " of " + inputs.files().get(Role.LIGHTS).size()
+                    + " lights; excluded " + excluded.size() + ". Excluded source identities are recorded in preparation.json.\n");
             for (PreparedSequenceWriter.Frame frame : frames) {
                 Header header = SirilHeaderCorrections.imageHeader(frame.registered());
                 int planes = header.getIntValue("NAXIS", 0);
@@ -208,11 +206,12 @@ public final class FramePreparationService {
             }
             progress.accept(70, "Validating and writing the common 16-bit monochrome sequence…");
             PreparedSequenceWriter.Result written = PreparedSequenceWriter.write(frames, run.resolve("aligned"), cancelled,
-                    percent -> progress.accept(70 + percent * 29 / 100, "Validating prepared frames… " + percent + "%"));
+                    percent -> progress.accept(70 + percent * 29 / 100, "Validating prepared frames… " + percent + "%"), decision);
             check(cancelled);
             try (var importer = new eu.startales.spacepixels.fits.FitsImportService(run.resolve("aligned").toFile(), null)) {
                 if (importer.readFiles().length != frames.size()) throw new IOException("The completed sequence did not pass ordinary import validation.");
             }
+            check(cancelled);
             List<FrameMapping> mappings = new ArrayList<>();
             for (int i = 0; i < frames.size(); i++) mappings.add(new FrameMapping(frames.get(i).original().toString(),
                     run.relativize(frames.get(i).metadata()).toString(), run.relativize(written.files().get(i)).toString()));
@@ -220,14 +219,28 @@ public final class FramePreparationService {
             manifest.put("frames", mappings);
             manifest.put("intensityMultiplier", written.multiplier());
             manifest.put("addedOffsetBeforeMultiplier", written.addedOffset());
+            manifest.put("scaling", written.scaling());
             manifest.put("monochromeMethod", "Fixed RGB arithmetic mean, common image-data scale and offset; no nonlinear stretch");
             manifest.put("registrationFraming", "Reference-sized canvas; zero registration margins retained for drift/dither analysis");
             manifest.put("astrometry", "Plate solve the registered prepared sequence; source WCS is not reused");
+            if (!request.keepWorkingFiles()) {
+                progress.accept(99, "Removing copied inputs and intermediate files…");
+                details.accept("Removing working files; final frames, requested stack, scripts, settings and logs are kept.\n");
+                removeWorkingFiles(run);
+                cleaned = true;
+            }
+            check(cancelled);
             manifest.put("outcome", "COMPLETED");
             writeManifest(run, manifest);
-            progress.accept(100, "Prepared " + frames.size() + " individual frames.");
-            return new Result(run, run.resolve("aligned"), frames.size(), tool, written.multiplier(), written.addedOffset());
+            check(cancelled);
+            progress.accept(100, "Prepared " + frames.size() + " of " + inputs.files().get(Role.LIGHTS).size() + " individual frames."
+                    + (excluded.isEmpty() ? "" : " Registration excluded " + excluded.size() + "."));
+            return new Result(run, run.resolve("aligned"), frames.size(), tool, written.multiplier(), written.addedOffset(), excluded);
         } catch (Exception failure) {
+            if (!request.keepWorkingFiles() && !cleaned) {
+                try { removeWorkingFiles(run); }
+                catch (Exception cleanup) { failure.addSuppressed(cleanup); manifest.put("cleanupProblem", cleanup.getMessage()); }
+            }
             manifest.put("outcome", failure instanceof CancellationException ? "CANCELLED" : "FAILED");
             manifest.put("reason", failure.getMessage());
             try { writeManifest(run, manifest); } catch (Exception saving) { failure.addSuppressed(saving); }
@@ -236,40 +249,52 @@ public final class FramePreparationService {
         }
     }
 
+    /**
+     * Removes only the three known working trees of this unique owned run, without following symbolic links.
+     * Real-path checks also refuse junctions or a replaced run root that could redirect cleanup outside the run.
+     */
+    static void removeWorkingFiles(Path run) throws IOException {
+        Path root = run.toAbsolutePath().normalize();
+        if (root.getFileName() == null || !root.getFileName().toString().startsWith("spacepixels_prepared_")
+                || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS) || !root.equals(root.toRealPath())) {
+            throw new IOException("Refusing cleanup outside the owned preparation run.");
+        }
+        List<Path> targets = List.of(root.resolve("input"), root.resolve("converted"), root.resolve("masters"));
+        for (Path target : targets) {
+            if (!target.getParent().equals(root)) throw new IOException("Unsafe preparation cleanup path.");
+            if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) continue;
+            Files.walkFileTree(target, new SimpleFileVisitor<>() {
+                /** Refuses directory redirections before visiting anything inside them, including links to final output. */
+                @Override public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) throws IOException {
+                    if (!directory.toRealPath().equals(directory.toAbsolutePath().normalize())) throw new IOException("A working directory redirects preparation cleanup.");
+                    return FileVisitResult.CONTINUE;
+                }
+                /** Deletes the owned file or link itself, never a symbolic link's target. */
+                @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                    Files.delete(file);
+                    return FileVisitResult.CONTINUE;
+                }
+                /** Deletes an owned directory after its contents, preserving failures rather than silently skipping them. */
+                @Override public FileVisitResult postVisitDirectory(Path directory, IOException problem) throws IOException {
+                    if (problem != null) throw problem;
+                    Files.delete(directory);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        }
+    }
+
     /** Previews reproducible generated instructions without touching selected originals or launching a tool. */
     public static String preview(PreparationRequest request) throws IOException {
         Inputs inputs = inspect(request.inputs());
         String interpretation = "# Input: " + request.sensor() + "; Bayer: " + request.bayer() + "; rows: " + request.rowOrder()
-                + "; offsets: " + request.offsetX() + ", " + request.offsetY() + "\n";
-        if (request.tool() == PreparationTool.DSS) {
-            Map<Role, List<Path>> copies = new EnumMap<>(Role.class);
-            inputs.files().forEach((role, files) -> {
-                List<Path> paths = new ArrayList<>();
-                for (int i = 0; i < files.size(); i++) paths.add(request.outputParent().resolve("spacepixels_prepared_NEW/input/" + role.folder())
-                        .resolve(String.format(Locale.ROOT, "%06d.%s", i + 1, PreparationInputs.extension(files.get(i)))));
-                copies.put(role, paths);
-            });
-            return interpretation + "# NEW is a placeholder: execution creates a unique run directory.\n"
-                    + "DeepSkyStackerCL /R /SR /FITS /OF32r /O:<run>/reference/reference.fit <run>/frames.txt\n\n"
-                    + "# DSS also generates a stack. Its saved registration preferences remain applicable.\n"
-                    + "# Metadata-based Bayer values are resolved when the inputs are read.\n\n"
-                    + DssPreparationRecipe.fileList(request, copies, request.bayer() == PreparationRequest.Bayer.METADATA ? null : request.bayer().name());
-        }
+                + "; offsets: " + request.offsetX() + ", " + request.offsetY() + "\n"
+                + "# Working files: " + (request.keepWorkingFiles() ? "kept" : "removed after processing; final images, scripts, settings and logs kept") + "\n";
         Map<Role, Integer> counts = new EnumMap<>(Role.class);
         inputs.files().forEach((role, files) -> counts.put(role, files.size()));
         return interpretation + "# CFA overrides are applied to private converted headers before processing.\n# Private Siril configuration\n" + SirilPreparationRecipe.configuration() + "\n# Conversion\n"
                 + SirilPreparationRecipe.conversion(inputs.files().keySet(), inputs.masters()) + "\n# Preparation\n"
                 + SirilPreparationRecipe.processing(request, counts, inputs.masters());
-    }
-
-    /** Rejects a known unsupported recipe before creating a workspace or copying a large RAW cohort. */
-    private static void validateDssInterpretation(PreparationRequest request, Inputs inputs) throws IOException {
-        if (request.tool() == PreparationTool.DSS && request.sensor() == PreparationRequest.Sensor.CFA
-                && inputs.files().get(Role.LIGHTS).stream().anyMatch(file -> !isFits(file))
-                && (request.bayer() != PreparationRequest.Bayer.METADATA || request.rowOrder() != PreparationRequest.RowOrder.METADATA
-                || request.offsetX() != 0 || request.offsetY() != 0)) {
-            throw new IOException("DSS resolves camera RAW mosaics through its decoder. Use metadata mode, or Siril for an explicit RAW Bayer/orientation override.");
-        }
     }
 
     /** Reads and verifies every converted image's mode; explicit CFA overrides affect only run-owned working copies. */
@@ -368,11 +393,12 @@ public final class FramePreparationService {
         }
     }
 
-    /** Associates numeric working-copy identities; every requested light must have exactly one registered output. */
-    private static List<PreparedSequenceWriter.Frame> associate(List<Path> sources, List<Path> metadata, List<Path> registered, boolean siril) throws Exception {
-        if (registered.size() != sources.size()) throw new IOException("Registration produced " + registered.size() + " of " + sources.size()
-                + " requested frames. No incomplete sequence was imported; inspect preparation.log and adjust the input selection.");
-        Pattern identity = Pattern.compile(siril ? ".*_(\\d+)\\.(?:fit|fits|fts)$" : "(\\d+)\\.reg\\.(?:fit|fits|fts)$", Pattern.CASE_INSENSITIVE);
+    /** Associates retained numeric source identities without closing gaps left by registration exclusions. */
+    static List<PreparedSequenceWriter.Frame> associate(List<Path> sources, List<Path> metadata, List<Path> registered) throws Exception {
+        if (metadata.size() != sources.size()) throw new IOException("Source metadata does not match the selected lights.");
+        if (registered.size() < 3) throw new IOException("Registration kept " + registered.size() + " of " + sources.size()
+                + " lights; at least three registered exposures are required. See preparation.log.");
+        Pattern identity = Pattern.compile(".*_(\\d+)\\.(?:fit|fits|fts)$", Pattern.CASE_INSENSITIVE);
         Map<Integer, Path> outputs = new HashMap<>();
         for (Path path : registered) {
             Matcher match = identity.matcher(path.getFileName().toString());
@@ -384,9 +410,8 @@ public final class FramePreparationService {
         for (int i = 0; i < sources.size(); i++) {
             Path expected = metadata.get(i);
             Path output = outputs.get(i);
-            if (output == null) throw new IOException("Missing registered exposure identity.");
-            if (siril) verifyMetadata(expected, output);
-            else if (!isFits(expected)) expected = output;
+            if (output == null) continue;
+            verifyMetadata(expected, output);
             result.add(new PreparedSequenceWriter.Frame(sources.get(i), expected, output));
         }
         return List.copyOf(result);
@@ -420,11 +445,17 @@ public final class FramePreparationService {
     }
 
     /** Runs one generated script against a private settings file and requires Siril's explicit success marker. */
-    private static void runSiril(Path executable, Path run, String name, String script, Path log, BooleanSupplier cancelled) throws Exception {
+    private static void runSiril(Path executable, Path run, String name, String script, Path log, BooleanSupplier cancelled, Consumer<String> details) throws Exception {
         Path file = run.resolve(name);
         Files.writeString(file, script);
+        details.accept("\n=== Siril: " + name + " ===\n");
         PreparationProcess.Result result = PreparationProcess.run(List.of(executable.toString(), "-i", run.resolve("siril.cfg").toString(),
-                "-d", run.toString(), "-s", file.toString()), run, environment(), log, Duration.ofHours(24), cancelled);
+                "-d", run.toString(), "-s", file.toString()), run, environment(), log, Duration.ofHours(24), cancelled, batch -> {
+                    String text = batch.lines().filter(line -> !line.equals("T") && !line.matches("\\d+: running command .*"))
+                            .map(line -> line.replaceFirst("^(?:log|progress):\\s*", ""))
+                            .collect(java.util.stream.Collectors.joining("\n"));
+                    if (!text.isBlank()) details.accept(text + "\n");
+                });
         if (result.exitCode() != 0 || !result.output().contains("Script execution finished successfully")) throw new IOException("Siril failed while running " + name + ". See preparation.log.");
     }
 
