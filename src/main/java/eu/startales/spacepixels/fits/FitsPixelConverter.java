@@ -18,10 +18,13 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Array;
 import java.util.List;
+import java.util.concurrent.CancellationException;
+import java.util.function.BooleanSupplier;
+import java.util.function.DoubleUnaryOperator;
 import java.util.function.IntConsumer;
 
 /**
- * Converts FITS pixel kernels into SpacePixels' normalized 16-bit formats.
+ * Converts FITS pixel kernels into SpacePixels' 16-bit formats, sharing storage decoding, padding and quantization.
  */
 public final class FitsPixelConverter {
 
@@ -117,7 +120,7 @@ public final class FitsPixelConverter {
         if (!(kernel instanceof short[][] || kernel instanceof int[][] || kernel instanceof float[][])) {
             throw new IOException("Unsupported FITS format for Mono Standardization");
         }
-        return standardizePlanes(new Object[]{kernel}, kernel instanceof float[][], header, addedOffset)[0];
+        return standardizePlanes(pixels(kernel, header), addedOffset)[0];
     }
 
     static short[][][] standardizeTo16BitColor(Object kernel) throws IOException {
@@ -133,25 +136,109 @@ public final class FitsPixelConverter {
         if (!(kernel instanceof short[][][] || kernel instanceof int[][][] || kernel instanceof float[][][])) {
             throw new IOException("Unsupported FITS format for Color Standardization");
         }
-        return standardizePlanes((Object[]) kernel, kernel instanceof float[][][], header, addedOffset);
+        return standardizePlanes(pixels(kernel, header), addedOffset);
     }
 
-    private static short[][][] standardizePlanes(Object[] planes, boolean floatingPoint, Header header, int addedOffset)
-            throws IOException {
-        Scaling scaling = Scaling.of(planes, floatingPoint, header);
-        Object[] firstPlane = (Object[]) planes[0];
-        int height = firstPlane.length;
-        int width = Array.getLength(firstPlane[0]);
-        short[][][] result = new short[planes.length][height][width];
-        for (int channel = 0; channel < planes.length; channel++) {
-            Object[] rows = (Object[]) planes[channel];
-            for (int row = 0; row < height; row++) {
-                int[] image = addedOffset > 0 ? columnsInsidePadding(rows[row], scaling, width) : new int[]{0, width};
-                for (int column = 0; column < width; column++) {
-                    double physicalValue = scaling.apply(Array.getDouble(rows[row], column));
-                    boolean padding = column < image[0] || column >= image[1];
-                    result[channel][row][column] = toUnsigned16Storage(padding ? physicalValue : physicalValue + addedOffset);
+    /** Retains ordinary import's normalization, clipping and per-channel rounding policy. */
+    private static short[][][] standardizePlanes(Pixels pixels, int addedOffset) throws IOException {
+        double normalization = normalization(pixels);
+        return convertPlanes(pixels, value -> value * normalization + addedOffset, false, false, () -> false);
+    }
+
+    /**
+     * Borrows a mono or colour short/int/float/double kernel and captures its BZERO/BSCALE. No pixels are copied;
+     * the caller owns the buffers and must keep them unchanged until scanning/conversion completes.
+     */
+    public static Pixels pixels(Object kernel, Header header) throws IOException {
+        Object[] planes;
+        if (kernel instanceof short[][] || kernel instanceof int[][] || kernel instanceof float[][] || kernel instanceof double[][]) {
+            planes = new Object[]{kernel};
+        } else if (kernel instanceof short[][][] || kernel instanceof int[][][] || kernel instanceof float[][][] || kernel instanceof double[][][]) {
+            planes = (Object[]) kernel;
+        } else throw new IOException("Unsupported FITS pixel type.");
+        return new Pixels(planes, kernel instanceof float[][] || kernel instanceof float[][][]
+                || kernel instanceof double[][] || kernel instanceof double[][][], header);
+    }
+
+    /** A read-only physical-value view over caller-owned pixels; storage decoding has one implementation. */
+    public static final class Pixels {
+        private final Object[] planes;
+        private final int width, height;
+        private final boolean floatingPoint;
+        private final double scale, offset;
+
+        /** Captures storage facts without retaining the mutable header or modifying the borrowed kernel. */
+        private Pixels(Object[] planes, boolean floatingPoint, Header header) throws IOException {
+            this.planes = planes;
+            this.floatingPoint = floatingPoint;
+            height = Array.getLength(planes[0]);
+            width = Array.getLength(Array.get(planes[0], 0));
+            offset = header == null ? 0 : header.getDoubleValue("BZERO", 0);
+            scale = header == null ? 1 : header.getDoubleValue("BSCALE", 1);
+            if (!Double.isFinite(offset) || !Double.isFinite(scale)) throw new IOException("FITS BZERO and BSCALE must be finite.");
+        }
+
+        /** The image width in pixels. */
+        public int width() { return width; }
+        /** The image height in pixels. */
+        public int height() { return height; }
+        /** The number of stored channels, before any monochrome reduction. */
+        public int channels() { return planes.length; }
+
+        /** Applies FITS storage scaling only; nonfinite values remain available for the caller's acceptance policy. */
+        public double physicalValue(int channel, int row, int column) {
+            double stored = switch (planes[channel]) {
+                case short[][] data -> data[row][column];
+                case int[][] data -> data[row][column];
+                case float[][] data -> data[row][column];
+                case double[][] data -> data[row][column];
+                default -> throw new IllegalStateException("Unsupported captured FITS plane.");
+            };
+            return stored * scale + offset;
+        }
+
+        /** Fixed arithmetic mean in physical units, before output scaling, clipping or quantization. */
+        public double monochromeValue(int row, int column) {
+            double sum = 0;
+            for (int c = 0; c < channels(); c++) sum += physicalValue(c, row, column);
+            return sum / channels();
+        }
+
+        /** A negative channel index selects shared RGB fill: every channel must be zero, not just their mean. */
+        private boolean zeroFill(int channel, int row, int column) {
+            if (channel >= 0) return physicalValue(channel, row, column) == 0;
+            for (int c = 0; c < channels(); c++) if (physicalValue(c, row, column) != 0) return false;
+            return true;
+        }
+    }
+
+    /**
+     * Converts a sequence-planned image to mono16: (physical RGB mean + addedOffset) * multiplier. All frames
+     * receive the same transform from their caller. Registration fill remains zero; nonfinite or out-of-range
+     * measurements fail instead of clipping. Cancellation is checked every 64 rows on the calling worker.
+     */
+    public static short[][] to16BitMonochrome(Pixels pixels, double multiplier, double addedOffset, BooleanSupplier cancelled) throws IOException {
+        if (!Double.isFinite(multiplier) || multiplier <= 0 || !Double.isFinite(addedOffset) || addedOffset < 0) {
+            throw new IOException("Invalid common FITS conversion transform.");
+        }
+        return convertPlanes(pixels, value -> (value + addedOffset) * multiplier, true, true, cancelled)[0];
+    }
+
+    /** One conversion loop owns zero-fill preservation, output quantization and unsigned-short storage for both callers. */
+    private static short[][][] convertPlanes(Pixels pixels, DoubleUnaryOperator transform, boolean averageChannels,
+                                            boolean strict, BooleanSupplier cancelled) throws IOException {
+        int channels = averageChannels ? 1 : pixels.channels();
+        short[][][] result = new short[channels][pixels.height()][pixels.width()];
+        for (int c = 0; c < channels; c++) for (int y = 0; y < pixels.height(); y++) {
+            if ((y & 63) == 0 && cancelled.getAsBoolean()) throw new CancellationException("FITS conversion cancelled.");
+            int[] image = columnsInsidePadding(pixels, averageChannels ? -1 : c, y);
+            for (int x = 0; x < pixels.width(); x++) {
+                double value = x < image[0] || x >= image[1] ? 0
+                        : transform.applyAsDouble(averageChannels ? pixels.monochromeValue(y, x) : pixels.physicalValue(c, y, x));
+                if (strict && (!Double.isFinite(value) || value < -0.000001 || value > 65535.000001)) {
+                    throw new IOException("Nonfinite or out-of-range pixels in prepared FITS conversion.");
                 }
+                result[c][y][x] = toUnsigned16Storage(value);
             }
         }
         return result;
@@ -163,13 +250,13 @@ public final class FitsPixelConverter {
      * and the first column of the last run, so the fill can stay at 0 when an offset lifts every other pixel: the
      * detection recognises padding by its near-zero level.
      */
-    private static int[] columnsInsidePadding(Object row, Scaling scaling, int width) {
+    private static int[] columnsInsidePadding(Pixels pixels, int channel, int row) {
         int start = 0;
-        while (start < width && scaling.apply(Array.getDouble(row, start)) == 0.0) {
+        while (start < pixels.width() && pixels.zeroFill(channel, row, start)) {
             start++;
         }
-        int end = width;
-        while (end > start && scaling.apply(Array.getDouble(row, end - 1)) == 0.0) {
+        int end = pixels.width();
+        while (end > start && pixels.zeroFill(channel, row, end - 1)) {
             end--;
         }
         return new int[]{start, end};
@@ -219,17 +306,16 @@ public final class FitsPixelConverter {
                     continue;
                 }
                 Object kernel = hdu.getKernel();
-                Object[] planes = planesOf(kernel);
-                if (planes == null) {
+                if (!(kernel instanceof short[][] || kernel instanceof int[][] || kernel instanceof float[][]
+                        || kernel instanceof short[][][] || kernel instanceof int[][][] || kernel instanceof float[][][])) {
                     continue;
                 }
-                boolean floatingPoint = kernel instanceof float[][] || kernel instanceof float[][][];
-                Scaling scaling = Scaling.of(planes, floatingPoint, hdu.getHeader());
-                for (Object plane : planes) {
-                    for (Object row : (Object[]) plane) {
-                        int width = Array.getLength(row);
-                        for (int column = 0; column < width; column++) {
-                            double value = scaling.apply(Array.getDouble(row, column));
+                Pixels pixels = pixels(kernel, hdu.getHeader());
+                double normalization = normalization(pixels);
+                for (int channel = 0; channel < pixels.channels(); channel++) {
+                    for (int row = 0; row < pixels.height(); row++) {
+                        for (int column = 0; column < pixels.width(); column++) {
+                            double value = pixels.physicalValue(channel, row, column) * normalization;
                             if (!Double.isFinite(value)) {
                                 continue;
                             }
@@ -250,55 +336,15 @@ public final class FitsPixelConverter {
         return scan;
     }
 
-    private static Object[] planesOf(Object kernel) {
-        if (kernel instanceof short[][] || kernel instanceof int[][] || kernel instanceof float[][]) {
-            return new Object[]{kernel};
+    /** Ordinary import's existing unit-range normalization, after physical FITS storage decoding. */
+    private static double normalization(Pixels pixels) {
+        if (!pixels.floatingPoint) return 1;
+        double maximum = Double.NEGATIVE_INFINITY;
+        for (int c = 0; c < pixels.channels(); c++) for (int y = 0; y < pixels.height(); y++) for (int x = 0; x < pixels.width(); x++) {
+            double physical = pixels.physicalValue(c, y, x);
+            if (Double.isFinite(physical)) maximum = Math.max(maximum, physical);
         }
-        if (kernel instanceof short[][][] || kernel instanceof int[][][] || kernel instanceof float[][][]) {
-            return (Object[]) kernel;
-        }
-        return null;
-    }
-
-    /** BZERO and BSCALE, then floating-point data in unit range stretched to 0..65535. */
-    private static final class Scaling {
-        private final double offset;
-        private final double scale;
-        private final double normalization;
-
-        private Scaling(double offset, double scale, double normalization) {
-            this.offset = offset;
-            this.scale = scale;
-            this.normalization = normalization;
-        }
-
-        static Scaling of(Object[] planes, boolean floatingPoint, Header header) throws IOException {
-            double offset = header == null ? 0.0 : header.getDoubleValue("BZERO", 0.0);
-            double scale = header == null ? 1.0 : header.getDoubleValue("BSCALE", 1.0);
-            if (!Double.isFinite(offset) || !Double.isFinite(scale)) {
-                throw new IOException("FITS BZERO and BSCALE must be finite.");
-            }
-            double maximum = Double.NEGATIVE_INFINITY;
-            if (floatingPoint) {
-                for (Object plane : planes) {
-                    for (Object row : (Object[]) plane) {
-                        int width = Array.getLength(row);
-                        for (int column = 0; column < width; column++) {
-                            double physicalValue = Array.getDouble(row, column) * scale + offset;
-                            if (Double.isFinite(physicalValue)) {
-                                maximum = Math.max(maximum, physicalValue);
-                            }
-                        }
-                    }
-                }
-            }
-            double normalization = floatingPoint && maximum > 0.0 && maximum <= 10.0 ? 65535.0 : 1.0;
-            return new Scaling(offset, scale, normalization);
-        }
-
-        double apply(double storedValue) {
-            return (storedValue * scale + offset) * normalization;
-        }
+        return maximum > 0 && maximum <= 10 ? 65535 : 1;
     }
 
     static short[][] extractLuminance(short[][][] color16) {

@@ -9,7 +9,36 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+/** Tests shared pixel conversion and the existing ordinary-import scaling/quantization contract. */
 public class FitsPixelConverterTest {
+
+    /** Both entry points decode physical FITS units and preserve the same margins when given equivalent transforms. */
+    @Test public void sharedConversionAgreesWithOrdinaryImportForEquivalentTransforms() throws Exception {
+        short[][] kernel = {{-5, -7, -5, 10, -5}};
+        Header header = header(16, 10, 2);
+        short[][] ordinary = FitsPixelConverter.standardizeTo16BitMono(kernel, header, 5);
+        short[][] planned = FitsPixelConverter.to16BitMonochrome(FitsPixelConverter.pixels(kernel, header), 1, 5, () -> false);
+        int[] expected = {0, 1, 5, 35, 0};
+        for (int x = 0; x < expected.length; x++) {
+            assertEquals(expected[x], ordinary[0][x] + 32768);
+            assertEquals(expected[x], planned[0][x] + 32768);
+        }
+    }
+
+    /** Sequence-planned double data uses the common decoder without widening ordinary import's accepted types. */
+    @Test public void plannedConversionSupportsDoubleDataAndFailsRatherThanClipping() throws Exception {
+        double[][] values = {{0, -0.125, 0, 0.25, 0}};
+        var pixels = FitsPixelConverter.pixels(values, null);
+        short[][] result = FitsPixelConverter.to16BitMonochrome(pixels, 1000, 0.125, () -> false);
+        int[] expected = {0, 0, 125, 375, 0};
+        for (int x = 0; x < expected.length; x++) assertEquals(expected[x], result[0][x] + 32768);
+        org.junit.Assert.assertThrows(java.io.IOException.class, () -> FitsPixelConverter.standardizeTo16BitMono(values));
+        org.junit.Assert.assertThrows(java.io.IOException.class, () -> FitsPixelConverter.to16BitMonochrome(pixels, 1_000_000, 0.125, () -> false));
+        org.junit.Assert.assertThrows(java.io.IOException.class, () -> FitsPixelConverter.to16BitMonochrome(
+                FitsPixelConverter.pixels(new float[][]{{Float.NaN}}, null), 1, 0, () -> false));
+        org.junit.Assert.assertThrows(java.util.concurrent.CancellationException.class,
+                () -> FitsPixelConverter.to16BitMonochrome(pixels, 1, 0, () -> true));
+    }
 
     @Test
     public void createFitsFromDataPreservesCustomHeaderAndRebuildsMonoStructure() throws Exception {
