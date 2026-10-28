@@ -6,6 +6,10 @@ Not released yet.
 
 ### Changed
 
+- **Observing-session preparation.** **Prepare Frames…**, above ordinary import, opens a dedicated window for Siril/DSS installation checks, explicit input roles, camera/Bayer interpretation and calibration/registration on private copies. It preserves individual exposures and the supported legacy FITS metadata corrections, writes a validated mono16 sequence with common linear scaling, and offers ordinary import and Auto-Tune afterwards. Cancellation joins owned external processes. PixInsight WBPP output continues through the normal aligned-frame importer.
+  Registration retains the reference-sized canvas and dark margins for drift/dither analysis. Negative-value offsets preserve these margins at zero.
+  Session scans replace earlier input selections, recognize prefixed/filter-labelled folders and offer separate choices for nested camera, filter and exposure groups. Named calibration masters require explicit file selection and cannot be recombined through a folder containing their source exposures.
+
 - **Windows installer.** An unsigned EXE includes a private Java 21 runtime, a desktop launcher and console launchers for batch detection and artificial-star injection. Configuration files and examples are shared with the Java distribution. Setup installs per user, offers a folder chooser and optional shortcuts, and uses a stable upgrade identity. ZIP/TAR distributions remain available for users with their own Java installation.
 
 - **Report animation controls.** A shared toolbar pauses animations, steps through frames and changes playback speed from 0.25× to 4×. Frame sheets support immediate changes in the browser; standalone GIF downloads remain available. Reports honour reduced-motion preferences.

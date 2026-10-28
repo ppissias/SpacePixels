@@ -76,7 +76,7 @@ Headless batch run of one dataset (it prints `Report file: ...` and any problems
 
 Add `-PspacepixelsDebug` (or `-Dspacepixels.debug=true` on a plain `java` command) for progress, per-frame statistics and the engine's debug output.
 
-**Source sets.** `main` is the headless API and CLI artifact (`eu.startales.spacepixels:spacepixels`): `api`, `config`, `session`, `fits`, `detection`, `platesolve`, `skycatalog`, `report`, `util` and `tools`, with no Swing and no FlatLaf. `desktop` holds `gui`, `jobs`, `tasks` and the icons, and is not published. `run`, `installDist` and the desktop launchers use both; the CLI launchers use only `main`. `check` verifies the published jar, its POM and Gradle metadata, and that the two source sets own disjoint classes.
+**Source sets.** `main` is the headless API and CLI artifact (`eu.startales.spacepixels:spacepixels`): `api`, `config`, `session`, `fits`, `preparation`, `detection`, `platesolve`, `skycatalog`, `report`, `util` and `tools`, with no Swing and no FlatLaf. `desktop` holds `gui`, `jobs`, `tasks` and the icons, and is not published. `run`, `installDist` and the desktop launchers use both; the CLI launchers use only `main`. `check` verifies the published jar, its POM and Gradle metadata, and that the two source sets own disjoint classes.
 
 **Sibling libraries.** The required library versions are ordinary dependency declarations in `build.gradle`; update them there when selecting dependencies for a SpacePixels release. During development, both libraries can instead be built from their sibling checkouts. Set `useLocalJTransientBuild=true` and `useLocalJPlateSolveBuild=true` in the git-ignored `gradle.properties` (copy [gradle.properties.example](gradle.properties.example)). The environment variables `USE_LOCAL_JTRANSIENT_BUILD` and `USE_LOCAL_JPLATE_SOLVE_BUILD` also work; an explicit `-P` property wins. Without the flags, Gradle resolves the declared dependencies from Maven Central.
 
@@ -110,6 +110,7 @@ All packages are under `eu.startales.spacepixels`.
 | `session` | The imported dataset: identity, owned state and handover; the application I/O queue; no Swing | `ProcessingSession`, `SessionOwner`, `SkyCatalogueModel`, `AutoTuneState`, `ApplicationStorage` |
 | `config` | Application settings, detection profiles, visualization settings and their files; the typed setting definitions | `ApplicationSettings`, `AppConfig`, `SpacePixelsDetectionProfileIO`, `DetectionSetting`, `DetectionRunOptions`, `VisualizationSettings` |
 | `fits` | FITS/XISF input, validation, preparation, pixel converters, display stretch, WCS | `FitsFileInformation`, `FitsImportService`, `FitsBatchService`, `FitsInput`, `FitsPixelConverter`, `FitsPreparation`, `WcsCoordinateTransformer` |
+| `preparation` | External observing-session preparation, conservative input inventories, metadata preservation and common output conversion; no Swing or session state | `FramePreparationService`, `PreparationRequest`, `PreparationProcess`, `SirilHeaderCorrections`, `PreparedSequenceWriter` |
 | `detection` | Detection pipeline services, iterative detection, live preview, auto-tune runners, overlays | `StandardDetectionPipelineService`, `IterativeDetectionPipelineService`, `AutoTunerRunner`, `TrackOverlay`, `VariableStarOverlay` |
 | `platesolve` | Plate solving integration and session plate solution correction | `PlateSolveService`, `PlateSolutionCorrection`, `AstrometryNetAccount` |
 | `skycatalog` | Fetching and storing the sky catalogue; the plate-solution correction fit; sky snapshots | `SkyCatalogueClient`, `SkyCatalogueStore`, `PlateCorrectionFitter`, `SkySnapshot` |
@@ -132,6 +133,8 @@ before cohort consistency; interactive import preserves its sequence checks befo
 `FitsPreparation` writes prepared copies through `FitsPixelConverter`; `XisfImageConverter` remains separate.
 These are static helpers; `FitsImportService` and `FitsBatchService` retain their instance-owned work.
 
+`FitsPixelConverter` owns FITS storage decoding, registration-fill preservation and 16-bit quantization for both ordinary import and external preparation. Their scaling policies remain explicit: import retains its existing normalization/clipping, while external preparation selects one common sequence transform and rejects invalid output. `PreparedSequenceWriter` owns sequence planning, metadata association and publication, and delegates pixel conversion to that shared implementation.
+
 `FrameCalibrationInspector` reads the first/middle/last frame without changing pixels. Its sharp-spike criterion (above sky + 10 sigma, four-neighbour excess sum below 0.25 of the peak) warns at at least 5 spikes/MP and 30 spikes in a sample.
 
 Alignment uses spaced optical-peak centroids, requiring at least three matches and half of the smaller star set to support one translation above 2.5 pixels. Missing or dimmer stars do not become artificial offsets. Floating samples keep their physical noise scale; only known unsigned-integer samples use integer histogram bins. Pixel-row and matching checks observe `CancellationScope`; unreadable samples fail rather than returning a clean verdict.
@@ -140,7 +143,7 @@ Interactive import can decline before session replacement. Both desktop detectio
 
 ## How a user action runs
 
-Eleven workflows use the job pattern: import, Convert to Mono, Batch Stretch, plate solve, writing the WCS header, Blink, Auto-Tune, Detect, Detect Iteratively, Manual Transient Inspection and the Test Star Mask stack.
+Twelve workflows use the job pattern: observing-session preparation, import, Convert to Mono, Batch Stretch, plate solve, writing the WCS header, Blink, Auto-Tune, Detect, Detect Iteratively, Manual Transient Inspection and the Test Star Mask stack.
 
 1. **The command, on the EDT.** `CommandAvailability` decides from session facts whether the command can run, and why not. `CommandAction` is the one Swing `Action` behind the command's button, shortcut, menu item and Overview button. The handler captures what the job needs: a validated copy of the settings (`DetectionConfigurationPanel.checkedSettings`), the files, the run options and the session.
 
@@ -150,6 +153,8 @@ The window creates the four panels and passes each one the collaborators it uses
 4. **The outcome, on the EDT,** arrives exactly once after the window is unlocked, and is applied only if its session is still the current one (`ApplicationWindow.forCurrentSession`).
 
 Blink is the exception: loading the frames is the job, and the blink window then keeps the main window locked until it closes. Work outside the job slot has its own owner: the sky-catalogue fetch and correction fit (`gui.SkyCatalogueController`, with one executor per session and a future per request), session and preference writes (single-thread writers owned by the window), ASTAP checks, stretch previews and viewer preparation (newest request wins).
+
+**Observing-session preparation** opens in one application-owned `PreparationWindow`, launched by **Prepare Frames…** above ordinary import. Its panel captures the recipe; `FramePreparationTask` uses the shared job slot and `FramePreparationService` works only on private input copies. Native CLI checks and input inspection run outside the EDT and discard stale completions. The process owner waits for owned descendants on completion/cancellation; application shutdown also joins preparation cleanup. Successful products are independent of later import/Auto-Tune outcomes. Those follow-ups use the existing guarded import and commands, and are suppressed after closure or a session change. See [Preparation implementation](docs/features/preparation-integrations.md) for the current tool contracts and metadata handling.
 
 The catalogue controller owns its progress timer and delivers model changes and status on the EDT. Delivery checks the request identity and the current session even after cancellation, replacement or shutdown. The session owns a non-blocking shutdown callback, with no dependency on the GUI; closing it cancels work, shuts down the executor, stops the timer and detaches the view. A catalogue completed before its correction remains available and saves independently of the fit outcome.
 
@@ -249,8 +254,11 @@ The report never changes the engine's results. When the engine stops after quali
 | `user.home/spacepixels_appearance.json` | Desktop theme, interface size and optional custom-properties file |
 | Dataset folder | `sky_catalogue.json`, `plate_correction.json`, `auto_tune.json` |
 | Run output folder | `detection_report.html`, `detection_config.json`, `report-data.json`, CSVs, images and GIFs; iterative runs add per-pass folders, `index.html`, `run-data.json` and input manifests |
+| Selected preparation output parent | A unique `spacepixels_prepared_…` folder with private working copies, `aligned/`, optional reference stack, generated instructions, log and versioned preparation manifest |
 
 Saving the profile and the visualization preferences stages both files, but replaces them independently; an error names the file that was not saved. A cancelled run removes its unfinished output folder; a cancelled iterative run keeps the passes it finished.
+
+Siril/DSS executable selections belong to `AppConfig` and its `copy()`, persisted through the existing application settings queue. Recipe, input-role and sensor/CFA selections are request values recorded in the local preparation manifest, not detection settings or Gradle properties. Preparation preserves failed/cancelled work for diagnosis and never automatically imports incomplete output.
 
 ## Testing
 

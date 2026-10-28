@@ -19,6 +19,8 @@ import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.SessionOwner;
 import eu.startales.spacepixels.jobs.JobFailures;
 import eu.startales.spacepixels.jobs.JobKind;
+import eu.startales.spacepixels.preparation.FramePreparationService;
+import eu.startales.spacepixels.tasks.FramePreparationTask;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.tasks.FitsImportTask;
 import eu.startales.spacepixels.util.DebugOutput;
@@ -81,6 +83,10 @@ public class ApplicationWindow {
     private volatile ConfigurationPanel configurationApplicationPanel;
     private volatile StretchPanel stretchPanel;
     private volatile DetectionConfigurationPanel detectionConfigurationPanel;
+    /** The preparation workflow outlives session changes and closes only with its window or the application. */
+    private PreparationWindow preparationWindow;
+    /** Owns external process shutdown until the current preparation worker has actually stopped. */
+    private FramePreparationTask preparationTask;
 
     /** Runs the jobs that have moved off the event bus; the others still lock the window through their own events. */
     private final List<SessionListener> sessionListeners = new ArrayList<>();
@@ -229,6 +235,8 @@ public class ApplicationWindow {
                 mainApplicationPanel, mainApplicationPanel, viewers);
         mainApplicationPanel.attach(stretchPanel, detectionConfigurationPanel,
                 () -> tabbedPane.setSelectedComponent(detectionConfigurationPanel));
+        mainApplicationPanel.configurePreparation(this::showPreparation,
+                busy -> { if (preparationWindow != null) preparationWindow.setBusy(busy); });
 
         // In the order the panels used to hear of a new session.
         addSessionListener(viewers::sessionChanged);
@@ -290,6 +298,8 @@ public class ApplicationWindow {
         restartCheck.stop();
         restartRequested = false;
         jobCoordinator.cancel();
+        if (preparationTask != null) preparationTask.cancel();
+        if (preparationWindow != null) preparationWindow.dispose();
         viewers.closeAll();
         if (configurationApplicationPanel != null) configurationApplicationPanel.close();
         if (mainApplicationPanel != null) mainApplicationPanel.closeSessionViews();
@@ -305,8 +315,10 @@ public class ApplicationWindow {
 
     /** The restart helper is committed only after accepted writes drain; it cannot relaunch before this JVM exits. */
     private void finishStorage(boolean exit, ApplicationRestart.Pending restart) {
+        FramePreparationTask stoppingPreparation = preparationTask;
         new Thread(() -> {
             try {
+                if (stoppingPreparation != null) stoppingPreparation.awaitCleanup();
                 storage.finish();
                 String restartProblem = null;
                 if (restart != null) {
@@ -406,10 +418,15 @@ public class ApplicationWindow {
 
     /** Imports a folder of aligned frames in the background. */
     public void importFolder(File folder) {
+        importFolder(folder, ignored -> { });
+    }
+
+    /** Imports through the existing guarded handover, with an optional follow-up only after successful installation. */
+    private void importFolder(File folder, java.util.function.Consumer<ProcessingSession> imported) {
         if (folder != null && folder.isDirectory()) {
             JobCoordinator.Admission admission = jobCoordinator.start(JobKind.IMPORT, sessions.current(),
                     new FitsImportTask(folder, storage, new GuiFitsImportInteraction()),
-                    (handle, outcome) -> importFinished(handle.session(), outcome));
+                    (handle, outcome) -> importFinished(handle.session(), outcome, imported));
             if (!admission.admitted()) {
                 mainApplicationPanel.showStatus(admission.refusal());
             }
@@ -428,7 +445,9 @@ public class ApplicationWindow {
     }
 
     /** The end of an import: installs the imported session, or says why there is none. */
-    private void importFinished(ProcessingSession expectedSession, JobOutcome<FitsImportTask.Result> outcome) {
+    private void importFinished(ProcessingSession expectedSession, JobOutcome<FitsImportTask.Result> outcome,
+                                java.util.function.Consumer<ProcessingSession> afterImport) {
+        if (closing) return;
         if (outcome instanceof JobOutcome.Completed<FitsImportTask.Result> completed) {
             // The session's solver reads the window's settings, so Astrometry Config edits reach the next solve.
             ProcessingSession imported = new ProcessingSession(new PlateSolveService(applicationSettings.getConfig()),
@@ -437,6 +456,7 @@ public class ApplicationWindow {
             if (sessions.replace(expectedSession, imported)) {
                 installSession(imported);
                 mainApplicationPanel.showLastReport(imported.getLastReport());
+                afterImport.accept(imported);
             }
             return;
         }
@@ -450,6 +470,44 @@ public class ApplicationWindow {
             FailureDialog.show(frmIpodImage, "Import Error", "Error loading files: " + failed.reason(), failed.cause());
         }
         // The session is unchanged, and the end of the lock opened the session tabs only if there is one.
+    }
+
+    /** Opens one modeless preparation window; all entry points share the main command's availability rules. */
+    private void showPreparation() {
+        if (closing || jobCoordinator.current() != null) return;
+        if (preparationWindow == null || !preparationWindow.isDisplayable()) {
+            preparationWindow = new PreparationWindow(frmIpodImage, applicationSettings, storage, () -> closing,
+                    this::prepareFrames, this::chooseAndImportFolder, () -> {
+                        if (jobCoordinator.current() != null && jobCoordinator.current().kind() == JobKind.FRAME_PREPARATION) jobCoordinator.cancel();
+                    });
+        }
+        preparationWindow.setVisible(true);
+        preparationWindow.toFront();
+    }
+
+    /** Admits a captured recipe and chains ordinary import/Auto-Tune only while its window and expected session remain current. */
+    private void prepareFrames(PreparationPanel.Selection selected) {
+        PreparationWindow owner = preparationWindow;
+        if (closing || owner == null) return;
+        var task = new FramePreparationTask(selected.request());
+        preparationTask = task;
+        JobCoordinator.Admission admission = jobCoordinator.start(JobKind.FRAME_PREPARATION, sessions.current(),
+                task, (handle, outcome) -> {
+                    if (preparationTask == task) preparationTask = null;
+                    if (closing || owner != preparationWindow || !owner.isDisplayable()) return;
+                    if (outcome instanceof JobOutcome.Completed<FramePreparationService.Result> completed) {
+                        owner.completed(completed.result());
+                        if (selected.importFrames() && sessions.isCurrent(handle.session())) {
+                            importFolder(completed.result().aligned().toFile(), imported -> {
+                                if (!closing && owner == preparationWindow && owner.isDisplayable() && selected.autoTune()) mainApplicationPanel.autoTuneImportedFrames();
+                            });
+                        }
+                    } else if (outcome instanceof JobOutcome.Failed<?> failed) {
+                        owner.failed(failed.reason());
+                        FailureDialog.show(owner, "Preparation failed", failed.reason(), failed.cause());
+                    } else owner.failed("Preparation cancelled. The open session is unchanged; run files are retained for inspection.");
+                });
+        if (!admission.admitted()) { preparationTask = null; owner.failed(admission.refusal()); }
     }
 
     /** Makes the imported folder the window's session, in place of the one before it. */

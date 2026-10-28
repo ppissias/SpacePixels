@@ -21,7 +21,7 @@ final class CommandAvailability {
 
     /** The workflow commands of the Main tab. */
     enum Command {
-        IMPORT, CONVERT_TO_MONO, BATCH_STRETCH, PLATE_SOLVE, SKY_CATALOGUE, BLINK, PREVIEW, INSPECTION,
+        PREPARE_FRAMES, IMPORT, CONVERT_TO_MONO, BATCH_STRETCH, PLATE_SOLVE, SKY_CATALOGUE, BLINK, PREVIEW, INSPECTION,
         AUTO_TUNE, DETECT, DETECT_ITERATIVELY
     }
 
@@ -61,7 +61,7 @@ final class CommandAvailability {
         if (facts.busy()) {
             return Availability.unavailable("wait until the current task has finished.");
         }
-        if (command == Command.IMPORT || command == Command.DETECT_ITERATIVELY
+        if (command == Command.PREPARE_FRAMES || command == Command.IMPORT || command == Command.DETECT_ITERATIVELY
                 || (command == Command.SKY_CATALOGUE && facts.skyFetching())) {
             return Availability.AVAILABLE;
         }

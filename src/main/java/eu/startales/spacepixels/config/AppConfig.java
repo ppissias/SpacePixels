@@ -4,6 +4,8 @@ public class AppConfig {
     public AppConfig copy() {
         AppConfig copy = new AppConfig();
         copy.astapExecutablePath = astapExecutablePath;
+        copy.sirilExecutablePath = sirilExecutablePath;
+        copy.dssExecutablePath = dssExecutablePath;
         copy.astrometryNetUseOwnKey = astrometryNetUseOwnKey;
         copy.astrometryNetApiKey = astrometryNetApiKey;
         copy.observatoryCode = observatoryCode;
@@ -18,6 +20,10 @@ public class AppConfig {
     }
 
     public String astapExecutablePath = "";
+    /** Explicit CLI path for observing-session preparation; empty until the observer configures Siril. */
+    public String sirilExecutablePath = "";
+    /** Explicit DeepSkyStackerCL path, kept separately from the graphical application. */
+    public String dssExecutablePath = "";
     /** False (the default): Astrometry.net solves log in anonymously. True: with {@link #astrometryNetApiKey}. */
     public boolean astrometryNetUseOwnKey = false;
     /** The observer's own Astrometry.net API key. Kept while solving anonymously, so it can be chosen again. */

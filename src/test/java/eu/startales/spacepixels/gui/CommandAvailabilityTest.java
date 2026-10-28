@@ -18,7 +18,7 @@ public class CommandAvailabilityTest {
     public void importAndDirectoryBasedIterationAreAvailableBeforeASession() {
         Facts none = session().frames(0).build();
         for (Command command : Command.values()) {
-            if (command == Command.IMPORT || command == Command.DETECT_ITERATIVELY) {
+            if (command == Command.PREPARE_FRAMES || command == Command.IMPORT || command == Command.DETECT_ITERATIVELY) {
                 assertTrue(enabled(command, none));
             } else {
                 assertEquals(command.name(), "import frames first (Import Aligned Frames…, or drop a folder on the window).",

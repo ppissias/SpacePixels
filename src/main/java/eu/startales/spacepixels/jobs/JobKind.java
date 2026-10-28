@@ -15,6 +15,7 @@ package eu.startales.spacepixels.jobs;
  * a file that must be written completely, and Blink has its own Stop, so those two cannot be cancelled.
  */
 public enum JobKind {
+    FRAME_PREPARATION("Prepare Frames", true),
     DETECTION("Detect Moving Targets", true),
     ITERATIVE_DETECTION("Detect Iteratively", true),
     TRANSIENT_INSPECTION("Manual Transient Inspection", true),

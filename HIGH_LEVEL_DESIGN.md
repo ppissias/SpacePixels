@@ -25,6 +25,7 @@ SpacePixels is one Gradle project with headless `main` and application-only `des
 SpacePixels owns:
 
 - FITS/XISF import and preparation
+- external observing-session calibration/registration through Siril or DeepSkyStacker
 - GUI workflow orchestration
 - persisted application and detection settings
 - plate-solving integration and WCS header updates
@@ -155,6 +156,12 @@ Main classes:
 - `SessionListener` (how `ApplicationWindow` tells the main panel, Image Stretch and Detection Settings that a new session was imported)
 
 The GUI layer currently combines view and controller behavior in several panels. That is an accepted current state and a refactor boundary.
+
+`PreparationWindow` is a separate application-owned modeless window, opened by **Prepare Frames…** on Main. It survives ordinary session replacement and is closed at application shutdown. `PreparationPanel` owns only form values, installation checks and inspection requests; processing runs through the same coordinator as detection. It returns an immutable selection to `ApplicationWindow`, which admits `FramePreparationTask` and optionally chains the existing guarded import and Auto-Tune action. Closing/cancellation invalidates pending follow-ups.
+
+### `eu.startales.spacepixels.preparation`
+
+Headless internal integration with external preprocessing tools. `PreparationInputs` inventories explicit roles and offers bounded, unambiguous folder suggestions. `FramePreparationService` creates private copies, corrects supported legacy FITS metadata, generates tool instructions and accounts for every requested light. `PreparationProcess` owns native process trees and disk logs, including cancellation and timeout cleanup. `PreparedSequenceWriter` validates the cohort, chooses its common linear transform and restores acquisition metadata. It delegates pixel decoding, RGB reduction, padding preservation and quantization to `FitsPixelConverter`, shared with ordinary import; the existing import behaviour is preserved. The completed manifest links every output to its source. Acquisition metadata is preserved, while source WCS is removed after registration and requires a new solve. Detailed implementation contracts are in [Preparation integrations](docs/features/preparation-integrations.md).
 
 ### `eu.startales.spacepixels.tasks`
 

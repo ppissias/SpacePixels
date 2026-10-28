@@ -57,7 +57,8 @@ sourceSets {
                 'eu/startales/spacepixels/session/**', 'eu/startales/spacepixels/util/**',
                 'eu/startales/spacepixels/tools/**', 'eu/startales/spacepixels/fits/**',
                 'eu/startales/spacepixels/detection/**', 'eu/startales/spacepixels/platesolve/**',
-                'eu/startales/spacepixels/report/**', 'eu/startales/spacepixels/skycatalog/**'
+                'eu/startales/spacepixels/report/**', 'eu/startales/spacepixels/skycatalog/**',
+                'eu/startales/spacepixels/preparation/**'
         resources.include 'spacepixels-build.properties', 'eu/startales/spacepixels/util/**',
                 'eu/startales/spacepixels/tools/**', 'eu/startales/spacepixels/report/**'
     }
@@ -89,7 +90,7 @@ configurations {
 }
 
 dependencies {
-    api 'io.github.ppissias.jtransient:jtransient:1.0.6'
+    api 'io.github.ppissias.jtransient:jtransient:1.0.7'
     implementation 'gov.nasa.gsfc.heasarc:nom-tam-fits:1.23.0'
     implementation 'com.google.code.gson:gson:2.14.0'
     implementation 'io.github.ppissias.jplatesolve:jplatesolve:1.0.1'

@@ -47,6 +47,8 @@ SpacePixels samples the first, middle and last frames for unusually sharp hot pi
 
 A typical source is the folder of registered frames that your stacking program writes before it stacks them (for example the `r_*.fit` files of Siril or the registered frames of PixInsight).
 
+If the exposures still need preparation, **Prepare Frames…** can run a separately installed Siril or DeepSkyStacker on private copies and then import the resulting sequence. See [Preparing an observing session](#preparing-an-observing-session).
+
 With Deep Sky Stacker, open Stacking Settings and choose **Standard Mode** on the **Result** tab. The registered frames then keep a dark border where a frame was shifted which is useful for the analysis done by SpacePixels. On the **Intermediate Files** tab, tick **Create a registered/calibrated file for each light frame**, choose **FITS Files**, and leave **Compress FITS files** unticked. Import the folder of those frames. Screenshots of both settings are on the [Deep Sky Stacker export settings](https://github.com/ppissias/SpacePixels/wiki/Deep-Sky-Stacker-export-settings) page of the project wiki.
 
 ### Installing
@@ -107,6 +109,49 @@ For an editable stylesheet, copy `config/appearance-example.properties` from the
 
 ---
 
+### Preparing an observing session
+
+Click **Prepare Frames…**, above **Import Aligned Frames…** in **1 Prepare**. It opens a separate window; a dataset does not need to be imported first.
+
+![Preparing an observing session](docs/images/manual/ui-preparation.png)
+
+1. **Check the processing tool.** Browse to the Siril or DeepSkyStacker installation folder, or select its command-line executable (`siril-cli` or `DeepSkyStackerCL`). **Check** identifies the program without processing images. Successful selections are saved as application preferences.
+2. **Choose inputs.** Select the light-exposure folder and any matching darks, flats, biases or dark-flats. A calibration role accepts either a folder of exposures or an existing master FITS file. The optional session scan suggests input groups using the [folder-scanning rules below](#how-the-session-scan-finds-image-groups). Use the **Found** choices when several groups are listed, selecting one group per role and checking that calibration matches the chosen lights. Missing calibration roles remain omitted. Click **Inspect inputs**, then confirm the mapping.
+3. **Choose camera interpretation.** Select **Monochrome**, **Colour (Bayer CFA)**, or **Already debayered RGB**. For CFA, use metadata when it supplies the pattern and row order, or choose the correct Bayer pattern and orientation yourself. Manual pattern selection also exposes X/Y offsets. An unknown pattern is never assumed to be RGGB. DSS camera RAW inputs use its decoder's metadata; use Siril for explicit RAW Bayer overrides. Verify the pattern against the camera/acquisition settings.
+4. **Choose output and follow-up.** The output parent folder is optional: leave it blank to create the run folder inside the lights source folder, or select another existing folder. The readiness panel shows the effective destination. Optionally import the results and run Auto-Tune with the currently selected detection profile. Auto-Tune needs enough light frames; the readiness panel explains any missing requirement. Siril can optionally create a separate reference stack; DSS always creates one while saving registered individual exposures.
+5. **Review and run.** The readiness panel stays visible beside the scrolling form and lists the effective choices, including omitted dark subtraction or uncalibrated flats. Confirm the recipe, then click **Prepare with Siril** or **Prepare with DeepSkyStacker**. **Preview processing instructions** shows the generated recipe without running it.
+
+Preparation copies the inputs into a new `spacepixels_prepared_…` run folder. It normalizes legacy dotted observation times and quoted site coordinates on working FITS copies before Siril can discard them, and checks metadata preservation. Final exposures use a single linear scale/offset for the whole sequence and a fixed RGB arithmetic mean; they are unsigned 16-bit monochrome FITS. The original images are unchanged. Plate solve the prepared frames before astrometric analysis: source WCS is not reused after registration.
+
+Registration keeps a canvas the size of the reference frame, including the dark margins left when exposures shift or rotate: **Standard Mode** in DSS and **current** framing in Siril. These margins remain at zero during conversion, including when an offset preserves negative image values. SpacePixels uses them to measure drift/dither and identify valid image coverage. Keep them when preparing data externally too; do not crop the sequence to its common overlap.
+
+The final input sequence is in `aligned/`; a reference stack is kept separately. The run folder also contains `preparation.log`, generated instructions and `preparation.json` with source mappings, settings and outcome. These are local working records and can contain private paths or observing metadata. A failed or cancelled run retains its files for diagnosis and is marked accordingly. A partial registered sequence is never imported automatically. Cancel stops the owned external processes before the processing slot is released; closing the preparation window also cancels its preparation and prevents automatic follow-up.
+
+For **PixInsight WBPP**, use ordinary **Import Aligned Frames…** on one compatible folder of individual calibrated **and registered** exposures, using FITS or supported XISF. A calibration-only intermediate still needs star registration. No PixInsight installation or separate import workflow is required.
+
+#### How the session scan finds image groups
+
+**Scan and suggest folders** uses folder names and image filename extensions to help fill the input roles. It does not read image pixels or camera metadata to decide which frames belong together.
+
+- **Search area.** It examines the selected session folder and up to four folder levels below it, without following symbolic links. Every new scan clears the previous input mapping, including roles with no new match; an explicit output-folder selection is kept.
+- **Role names.** Matching ignores case and treats spaces, hyphens and underscores as separators. Common role names can appear at the start or end of a folder name; compact filter labels and numbers are also recognized. Examples:
+
+  | Role | Example folder names |
+  |---|---|
+  | Lights | `light`, `lights`, `light M13`, `andromeda_lights`, `lightB`, `light1` |
+  | Darks | `dark`, `darks`, `dark 180s ISO800` |
+  | Flats | `flat`, `flats`, `andromeda_flats`, `flatB` |
+  | Biases | `bias`, `biases`, `session_bias` |
+  | Dark-flats | `darkflats`, `dark-flat 0.1s`, `flatdarks` |
+
+- **Nested groups.** A child folder inherits its parent's recognized role unless its own name specifies another role. For example, `camera/lights/Blue` and `camera/lights/Green` become two separate lights groups. Likewise, `flats/0.10` and `flats/0.15` become separate flat groups. Each group's count includes only image candidates directly inside that folder. Empty containers are skipped, and files from different folders are never merged.
+- **Candidate files.** Recognized extensions include FITS (also compressed FITS), XISF, TIFF and supported RAW filename families such as CR2, CR3, CRW, NEF, ARW and DNG. Other files are ignored. Recognizing an extension does not guarantee that the external tool can decode the file.
+- **Previous outputs.** Known processing folders are skipped, including `siril`, `_siril`, `iris`, registered/aligned/calibrated/processed folders, `reg`, and SpacePixels preparation/detection output folders. This also covers names such as `light-aligned` and `light-calibrated-pproc`.
+- **Calibration masters.** Files named as masters, such as `master_bias.fit`, are offered as explicit FITS-file choices. A calibration folder containing a named master is not offered as a folder of exposures; manually selecting such a folder is also rejected during inspection. Master recognition uses filenames, so unfamiliar or unlabelled masters need your own verification.
+- **Automatic selection.** Exactly one discovered exposure folder for a role is filled in automatically. Several groups remain unselected until you choose one through **Found**. A master always requires an explicit choice, even if it is the only result. Unrecognized target-only names such as `M81`, or groups beyond the search depth, can still be selected with **Browse…**.
+
+The scan does not split images within one folder by filter, exposure, camera or target, and choosing `lightB` does not automatically choose `flatB`. Keep different groups in separate folders and confirm the calibration match yourself. **Inspect inputs** requires at least three lights, at least two exposures for each selected calibration folder, or one explicitly selected master FITS file. Camera interpretation, decoding and the later preparation checks remain necessary.
+
 ## 3. Workflow: find moving objects in a session
 
 This is the main use of SpacePixels: **import → Auto-Tune → Detect → read the report**. The screenshots come from a session of 33 two-minute frames of a 61-megapixel camera. They illustrate several runs of that session, so finding numbers and counts can differ with the settings and software version.
@@ -114,6 +159,8 @@ This is the main use of SpacePixels: **import → Auto-Tune → Detect → read 
 ### Step 1: import the frames
 
 Click **Import Aligned Frames…** (the highlighted button in **1 Prepare**) and choose the folder, or simply drag the folder onto the window.
+
+For exposures that still need calibration or alignment, use **Prepare Frames…** immediately above that button.
 
 ![The imported session](docs/images/manual/ui-imported.png)
 

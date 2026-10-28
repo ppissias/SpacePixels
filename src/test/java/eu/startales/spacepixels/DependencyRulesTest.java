@@ -63,7 +63,7 @@ public class DependencyRulesTest {
     /** Keeps all processing and reporting utilities window-free while allowing headless AWT rendering. */
     @Test
     public void processingUtilitiesDoNotDependOnSwingOrTheWindow() throws IOException {
-        for (String pkg : List.of("fits", "detection", "platesolve", "report", "skycatalog", "util")) {
+        for (String pkg : List.of("fits", "detection", "platesolve", "report", "skycatalog", "util", "preparation")) {
             assertNoReferences(pkg, "eu.startales.spacepixels.gui.", "javax.swing.");
         }
     }
@@ -71,7 +71,7 @@ public class DependencyRulesTest {
     /** Processing returns values to the session instead of owning or mutating session state. */
     @Test
     public void processingUtilitiesDoNotDependOnSessionState() throws IOException {
-        for (String pkg : List.of("fits", "detection", "platesolve", "report", "skycatalog", "util")) {
+        for (String pkg : List.of("fits", "detection", "platesolve", "report", "skycatalog", "util", "preparation")) {
             assertNoReferences(pkg, "eu.startales.spacepixels.session.");
         }
     }
@@ -80,7 +80,7 @@ public class DependencyRulesTest {
     @Test
     public void headlessPackagesDoNotDependOnDesktopCode() throws IOException {
         for (String packageName : List.of("api", "config", "session", "util", "tools",
-                "fits", "detection", "platesolve", "report", "skycatalog")) {
+                "fits", "detection", "platesolve", "report", "skycatalog", "preparation")) {
             assertNoReferences(packageName, "eu.startales.spacepixels.gui.", "eu.startales.spacepixels.tasks.",
                     "eu.startales.spacepixels.jobs.", "javax.swing.");
         }

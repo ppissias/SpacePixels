@@ -78,6 +78,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private volatile JTable table;
 
     private final JProgressBar progressBar = new JProgressBar();
+    private final JButton prepareFramesButton = new JButton("Prepare Frames…");
+    private Runnable showPreparation = () -> { };
+    private Consumer<Boolean> preparationLock = busy -> { };
     private final JButton importButton = new JButton("Import Aligned Frames…");
     private final JButton convertMonoButton = new JButton("Convert to Mono");
     private final JButton stretchButton = new JButton("Batch Stretch");
@@ -126,6 +129,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             "Calculate the celestial coordinates (WCS) for the selected frame.",
             CommandAvailability.Command.PLATE_SOLVE, this::commandFacts, this::solveSelectedFrame);
     // The commands with one entry point, enabled the same way.
+    private final CommandAction prepareFramesAction = new CommandAction("Prepare Frames…",
+            "Prepare an observing session with Siril or DeepSkyStacker in a separate window, then import its aligned frames.",
+            CommandAvailability.Command.PREPARE_FRAMES, this::commandFacts, () -> showPreparation.run());
     private final CommandAction importAction = new CommandAction("Import Aligned Frames…",
             "Choose a folder of aligned FITS or XISF frames to import (or drop the folder onto the window). "
                     + "Compressed, 32-bit and XISF data are converted to a working folder first.",
@@ -147,7 +153,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final CommandAction iterativeAction = new CommandAction("Detect Iteratively (large datasets)",
             "For datasets too large for the standard run: multiple temporally spaced passes across the sequence.",
             CommandAvailability.Command.DETECT_ITERATIVELY, this::commandFacts, this::startIterativeDetection);
-    private final List<CommandAction> commandActions = List.of(importAction, convertMonoAction, stretchAction, solveAction,
+    private final List<CommandAction> commandActions = List.of(prepareFramesAction, importAction, convertMonoAction, stretchAction, solveAction,
             skyCatalogueAction, blinkAction, previewAction, inspectionAction, autoTuneAction, detectAction, iterativeAction);
     private final JRadioButton astapSolveRadio = new JRadioButton("ASTAP");
     private final JRadioButton astrometryNetSolveRadio = new JRadioButton("Astrometry.net (online)");
@@ -283,6 +289,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         // ==========================================
         // A workflow strip: four labelled groups in the order of use, wrapping onto a second line when narrow.
         // Every workflow button takes its caption, tooltip and enabled state from its command (see commandFacts).
+        prepareFramesButton.setAction(prepareFramesAction);
         importButton.setAction(importAction);
         convertMonoButton.setAction(convertMonoAction);
         stretchButton.setAction(stretchAction);
@@ -309,6 +316,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         autoTuneButton.putClientProperty("FlatLaf.style", "font: +2; margin: 5,10,5,14; iconTextGap: 6");
 
         JPanel prepareGroup = workflowGroup("1  Prepare", prepareStatus,
+                buttonRow(prepareFramesButton),
                 buttonRow(importButton),
                 buttonRow(convertMonoButton),
                 buttonRow(stretchButton));
@@ -500,9 +508,19 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             action.refresh();
         }
         CommandAvailability.Facts facts = commandFacts();
+        preparationLock.accept(facts.busy());
         blinkAction.putValue(Action.NAME, facts.blinking() ? "Stop Blinking" : BLINK_SELECTED);
         skyCatalogueAction.putValue(Action.NAME, facts.skyFetching() ? "Cancel Sky Catalogue" : FETCH_SKY_CATALOGUE);
     }
+
+    /** Wires the independent preparation window and its job lock without taking the application window as a dependency. */
+    void configurePreparation(Runnable opener, Consumer<Boolean> lock) {
+        showPreparation = java.util.Objects.requireNonNull(opener);
+        preparationLock = java.util.Objects.requireNonNull(lock);
+    }
+
+    /** Uses the same configured Auto-Tune command after a successful prepared-folder import. */
+    void autoTuneImportedFrames() { autoTuneAction.actionPerformed(new java.awt.event.ActionEvent(this, 0, "prepared-import")); }
 
     /** Whether a folder can be imported now, from the button or by dropping it on the window. */
     boolean isImportEnabled() {
@@ -1800,6 +1818,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             return switch (kind) {
                 case BLINK -> new JobTexts("Loading frames for blinking...", null, false, "Blink frames loaded");
                 case IMPORT -> new JobTexts("Importing FITS/XISF sequence...", "Loading FITS/XISF sequence in the background...", true, "Import finished");
+                case FRAME_PREPARATION -> new JobTexts("Preparing observing session...", "Preparing private input copies...", true, "Frame preparation finished");
                 case WRITE_WCS -> new JobTexts("Writing the WCS solution into the FITS header...", "Writing the WCS solution into the FITS header...", true, "FITS header write finished");
                 case CONVERT_TO_MONO -> new JobTexts("Batch conversion started", "Initializing batch conversion...", false, "Batch conversion finished");
                 case BATCH_STRETCH -> new JobTexts("Batch stretch started", "Initializing batch stretch...", false, "Batch stretch finished");
