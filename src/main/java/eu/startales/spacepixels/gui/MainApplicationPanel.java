@@ -1689,7 +1689,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                     JOptionPane.QUESTION_MESSAGE);
 
             if (choice == JOptionPane.YES_OPTION) {
-                // Writing rewrites the whole frame, which takes a while for a large one: it is a job, off this thread.
+                // Copying and verifying a large FITS container is a job, off this thread.
                 ProcessingSession owner = sessions.current();
                 JobCoordinator.Admission admission = jobs.start(JobKind.WRITE_WCS, owner,
                         new WriteWcsTask(owner.getPlateSolveService(), fileInfo.getFilePath(), result),

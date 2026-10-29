@@ -55,6 +55,12 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 ![Sample Detection](docs/images/streak-track-1.png)
 <br/>*Sample Detection - Streak track*
 
+![Asteroid Bondia detection report](docs/images/Bondia-Screenshot.png)
+<br/>*Asteroid Bondia - hiding in a 2017 dataset*
+
+![Asteroid Bondia animation](docs/images/Bondia-moving_track_1_star_centric.gif)
+<br/>*Asteroid Bondia - hiding in a 2017 dataset*
+
 ![Sample Detection](docs/images/Prokne-detection.png)
 <br/>*Sample Detection - asteroid Prokne (data credit Klangwolke @ Cloudynights)*
 

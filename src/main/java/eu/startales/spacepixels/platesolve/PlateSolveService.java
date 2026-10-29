@@ -23,7 +23,10 @@ import nom.tam.fits.FitsException;
 import nom.tam.fits.Header;
 import nom.tam.fits.HeaderCard;
 import nom.tam.fits.HeaderCardException;
+import nom.tam.fits.ImageHDU;
+import nom.tam.image.compression.hdu.CompressedImageHDU;
 import nom.tam.util.Cursor;
+import nom.tam.util.FitsOutputStream;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -164,8 +167,8 @@ public final class PlateSolveService implements AutoCloseable {
     }
 
     /**
-     * Writes the solution's WCS cards into the frame's FITS header, replacing the file only when the new one is
-     * complete and reads back, and returns the header values written.
+     * Replaces only the selected image's stored header, retaining every other byte including compressed payloads
+     * and later extensions. Publishes only after complete-file and header read-back checks; returns the saved image metadata.
      */
     public Map<String, String> updateFitsHeaderWithWCS(String fitsFileFullPath, Map<String, String> wcsData)
             throws Exception {
@@ -176,45 +179,125 @@ public final class PlateSolveService implements AutoCloseable {
         File originalFile = new File(fitsFileFullPath);
         Map<String, String> updatedHeader;
 
-        // The updated copy replaces the original only once it is complete and reads back as the same image.
+        List<HeaderCard> wcsHeaderCards = resolveWcsHeaderCards(wcsData);
         try (StagedFile staged = new StagedFile(originalFile)) {
-            int[] axes;
             try (Fits fits = new Fits(originalFile)) {
-                BasicHDU<?> hdu = FitsInput.getImageHDU(fits);
-                if (hdu == null || hdu.getHeader() == null) {
-                    throw new IOException("Could not locate an image header in " + originalFile.getName());
-                }
-
+                if (!(fits.getStream() instanceof nom.tam.util.RandomAccess))
+                    throw new IOException("Writing WCS requires a seekable FITS file; decompress whole-file archives first.");
+                BasicHDU<?>[] original = fits.read();
+                requireCompleteData(original, originalFile.length());
+                int imageIndex = imageIndex(original);
+                BasicHDU<?> hdu = original[imageIndex];
                 Header header = hdu.getHeader();
+                long headerStart = header.getFileOffset(), dataStart = hdu.getData().getFileOffset();
+                int[] axes = imageAxes(imageHeader(hdu));
+                if (headerStart < 0 || dataStart <= headerStart)
+                    throw new IOException("Cannot locate the stored image header; the original is unchanged.");
                 clearExistingWcsHeader(header);
                 clearLegacySolveMetadata(header);
-
-                List<HeaderCard> wcsHeaderCards = resolveWcsHeaderCards(wcsData);
-                for (HeaderCard card : wcsHeaderCards) {
-                    header.addLine(card.copy());
-                }
-
+                for (HeaderCard card : wcsHeaderCards) header.addLine(card.copy());
                 writeSolveProvenance(header, wcsData);
-                updatedHeader = extractHeaderMap(header);
-                axes = hdu.getAxes();
-                fits.write(staged.path().toFile());
+                // The uncompressed header changed; its old checksum is no longer valid. Stored-data sums stay valid.
+                if (hdu instanceof CompressedImageHDU) header.deleteKey("ZHECKSUM");
+                writeHeaderCopy(originalFile, staged.path().toFile(), headerStart, dataStart, header);
+                Map<String, String> expected = extractHeaderMap(imageHeader(hdu));
+                BasicHDU<?>[] written = checkReadsBack(staged.path().toFile(), axes, originalFile.getName());
+                if (written.length != original.length || imageIndex(written) != imageIndex)
+                    throw new IOException("The updated FITS structure differs; the original is unchanged.");
+                for (int index = 0; index < written.length; index++)
+                    if (original[index].getClass() != written[index].getClass())
+                        throw new IOException("An updated FITS extension changed type; the original is unchanged.");
+                updatedHeader = extractHeaderMap(imageHeader(written[imageIndex]));
+                if (!expected.equals(updatedHeader))
+                    throw new IOException("The WCS header did not read back correctly; the original is unchanged.");
+                long writtenDataStart = written[imageIndex].getData().getFileOffset();
+                long tailLength = originalFile.length() - dataStart;
+                if (Files.size(staged.path()) - writtenDataStart != tailLength)
+                    throw new IOException("The updated FITS payload changed size; the original is unchanged.");
+                requireIdenticalBytes(originalFile, 0, staged.path().toFile(), 0, headerStart);
+                requireIdenticalBytes(originalFile, dataStart, staged.path().toFile(), writtenDataStart, tailLength);
             }
-            checkReadsBack(staged.path().toFile(), axes, originalFile.getName());
             staged.publish();
         }
 
         return updatedHeader;
     }
 
-    /** Fails unless the written copy holds an image of the expected size with all of its data present. */
-    static void checkReadsBack(File written, int[] expectedAxes, String name) throws IOException, FitsException {
+    /** Validates all stored extensions and image dimensions; returns metadata only, with the input already closed. */
+    static BasicHDU<?>[] checkReadsBack(File written, int[] expectedAxes, String name) throws IOException, FitsException {
         try (Fits fits = new Fits(written)) {
-            BasicHDU<?> hdu = FitsInput.getImageHDU(fits);
-            boolean complete = hdu != null
-                    && Arrays.equals(hdu.getAxes(), expectedAxes)
-                    && hdu.getData().getFileOffset() + hdu.getData().getSize() <= written.length();
-            if (!complete) {
+            BasicHDU<?>[] hdus = fits.read();
+            requireCompleteData(hdus, written.length());
+            if (!Arrays.equals(imageAxes(imageHeader(hdus[imageIndex(hdus)])), expectedAxes)) {
                 throw new IOException("The updated copy of " + name + " did not read back correctly; the original is unchanged.");
+            }
+            return hdus;
+        }
+    }
+
+    /** Finds a real image, skipping empty primaries and ordinary binary tables without decompressing pixel data. */
+    private static int imageIndex(BasicHDU<?>[] hdus) throws IOException, FitsException {
+        for (int index = 0; index < hdus.length; index++) {
+            if (!(hdus[index] instanceof ImageHDU || hdus[index] instanceof CompressedImageHDU)) continue;
+            int[] axes = imageAxes(imageHeader(hdus[index]));
+            if (axes.length >= 2 && Arrays.stream(axes).allMatch(value -> value > 0)) return index;
+        }
+        throw new IOException("Could not locate a nonempty FITS image header.");
+    }
+
+    /** Exposes logical image metadata while edits still target the actual compressed or ordinary stored header. */
+    private static Header imageHeader(BasicHDU<?> hdu) throws FitsException {
+        return hdu instanceof CompressedImageHDU packed ? packed.getImageHeader() : hdu.getHeader();
+    }
+
+    /** Returns image dimensions in nom-tam's Java array order, including the logical axes of compressed images. */
+    private static int[] imageAxes(Header header) throws IOException {
+        int count = header.getIntValue("NAXIS");
+        if (count < 0 || count > 999) throw new IOException("Invalid FITS image axis count.");
+        int[] axes = new int[count];
+        for (int index = 0; index < count; index++) axes[index] = header.getIntValue("NAXIS" + (count - index));
+        return axes;
+    }
+
+    /** Checks padded physical data bounds for all HDUs, including extensions beyond the selected image. */
+    private static void requireCompleteData(BasicHDU<?>[] hdus, long length) throws IOException {
+        for (BasicHDU<?> hdu : hdus) {
+            long start = hdu.getData().getFileOffset(), size = hdu.getData().getSize();
+            if (size > 0 && (start < 0 || start > length || size > length - start))
+                throw new IOException("Incomplete FITS extension; the original is unchanged.");
+        }
+    }
+
+    /** Streams the original bytes around one serialized header; no image, table or compressed data is re-encoded. */
+    private static void writeHeaderCopy(File original, File written, long headerStart, long dataStart, Header header)
+            throws IOException, FitsException {
+        try (var input = Files.newInputStream(original.toPath());
+             var output = new FitsOutputStream(Files.newOutputStream(written.toPath()))) {
+            byte[] buffer = new byte[64 * 1024];
+            long remaining = headerStart;
+            while (remaining > 0) {
+                int count = input.readNBytes(buffer, 0, (int) Math.min(buffer.length, remaining));
+                if (count == 0) throw new IOException("FITS file ended before the selected header.");
+                output.write(buffer, 0, count); remaining -= count;
+            }
+            input.skipNBytes(dataStart - headerStart);
+            header.write(output);
+            input.transferTo(output);
+        }
+    }
+
+    /** Read-back byte comparison also protects all unedited headers and payloads when the edited header grows. */
+    private static void requireIdenticalBytes(File original, long sourceStart, File written, long writtenStart, long length)
+            throws IOException {
+        try (var source = Files.newInputStream(original.toPath()); var copy = Files.newInputStream(written.toPath())) {
+            source.skipNBytes(sourceStart); copy.skipNBytes(writtenStart);
+            byte[] a = new byte[64 * 1024], b = new byte[a.length];
+            for (long left = length; left > 0;) {
+                int count = (int) Math.min(a.length, left);
+                if (source.readNBytes(a, 0, count) != count || copy.readNBytes(b, 0, count) != count
+                        || !Arrays.equals(a, 0, count, b, 0, count))
+                    throw new IOException("Unedited FITS bytes changed; the original is unchanged.");
+                left -= count;
             }
         }
     }

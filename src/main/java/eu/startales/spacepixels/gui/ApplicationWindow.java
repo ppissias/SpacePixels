@@ -85,7 +85,7 @@ public class ApplicationWindow {
     private volatile DetectionConfigurationPanel detectionConfigurationPanel;
     /** The preparation workflow outlives session changes and closes only with its window or the application. */
     private PreparationWindow preparationWindow;
-    /** Owns external process shutdown until the current preparation worker has actually stopped. */
+    /** Direct cancellation handle for preparation while its job owns admission. */
     private FramePreparationTask preparationTask;
 
     /** Runs the jobs that have moved off the event bus; the others still lock the window through their own events. */
@@ -94,7 +94,7 @@ public class ApplicationWindow {
     private final JobCoordinator jobCoordinator = new JobCoordinator(
             work -> new Thread(work, "SpacePixels-job").start(),
             EventQueue::invokeLater,
-            () -> restartRequested || preparingRestart || mainApplicationPanel != null && mainApplicationPanel.isUiLocked());
+            () -> closing || restartRequested || preparingRestart || mainApplicationPanel != null && mainApplicationPanel.isUiLocked());
 
     private static final Logger logger = Logger.getLogger(ApplicationWindow.class.getName());
 
@@ -308,17 +308,17 @@ public class ApplicationWindow {
         ReportLookupProxyServer.getInstance().stop();
     }
 
-    /** Drains the shared queue on a shutdown worker, then reports unsaved data and closes on the EDT. */
+    /** Joins processing cleanup and drains writes on a shutdown worker, then closes on the EDT. */
     private void finishStorage(boolean exit) {
         finishStorage(exit, null);
     }
 
-    /** The restart helper is committed only after accepted writes drain; it cannot relaunch before this JVM exits. */
+    /** Commits restart only after processing cleanup and accepted writes finish; relaunch waits for this JVM's exit. */
     private void finishStorage(boolean exit, ApplicationRestart.Pending restart) {
-        FramePreparationTask stoppingPreparation = preparationTask;
+        var stoppingJob = jobCoordinator.workCompletion().toCompletableFuture();
         new Thread(() -> {
             try {
-                if (stoppingPreparation != null) stoppingPreparation.awaitCleanup();
+                stoppingJob.get(30, java.util.concurrent.TimeUnit.SECONDS);
                 storage.finish();
                 String restartProblem = null;
                 if (restart != null) {
@@ -350,11 +350,11 @@ public class ApplicationWindow {
                     if (exit) System.exit(0);
                 });
             } catch (Exception failure) {
-                logger.log(Level.WARNING, "Application data is still being saved", failure);
+                logger.log(Level.WARNING, "Application work or file writes have not finished", failure);
                 EventQueue.invokeLater(() -> {
                     int answer = JOptionPane.showConfirmDialog(frmIpodImage,
-                            "Session metadata or settings have not finished saving. Wait and try closing again?\n" + failure.getMessage(),
-                            "Pending writes", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                            "Processing cleanup or file writes have not finished. Wait and try closing again?\n" + failure.getMessage(),
+                            "Pending work", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
                     if (answer == JOptionPane.YES_OPTION) {
                         finishStorage(exit, restart);
                     } else {

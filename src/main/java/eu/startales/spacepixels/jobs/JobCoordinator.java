@@ -12,6 +12,8 @@ package eu.startales.spacepixels.jobs;
 import eu.startales.spacepixels.session.ProcessingSession;
 import java.util.Objects;
 import java.util.concurrent.Executor;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -59,6 +61,8 @@ public final class JobCoordinator {
     private final BooleanSupplier otherWorkRunning;
     private volatile Listener listener;
     private volatile JobHandle current;
+    /** Actual worker completion, independent of queued UI outcome delivery; captured by application shutdown. */
+    private volatile CompletableFuture<Void> workFinished = CompletableFuture.completedFuture(null);
     /** The job the user has cancelled, if it is still running. */
     private volatile JobHandle cancelled;
     private long nextId = 1;
@@ -82,6 +86,9 @@ public final class JobCoordinator {
     public JobHandle current() {
         return current;
     }
+
+    /** Captures the admitted worker's completion after its job and cleanup return, without depending on the EDT. */
+    public CompletionStage<Void> workCompletion() { return workFinished.minimalCompletionStage(); }
 
     /**
      * Cancels the running job: it stops at its next progress report and ends as {@link JobOutcome.Cancelled}. Returns
@@ -114,13 +121,19 @@ public final class JobCoordinator {
             return new Admission(null, "Wait until the current task has finished.");
         }
         JobHandle handle = new JobHandle(nextId++, kind, session);
+        CompletableFuture<Void> finished = new CompletableFuture<>();
+        workFinished = finished;
         current = handle;
         if (listener != null) {
             listener.jobStarted(handle);
         }
         try {
-            workers.execute(() -> work(handle, job, handler));
+            workers.execute(() -> {
+                try { work(handle, job, handler); }
+                finally { finished.complete(null); }
+            });
         } catch (RuntimeException e) {
+            finished.complete(null);
             LOGGER.log(Level.SEVERE, kind.title() + " could not start", e);
             end(handle, JobOutcome.failed("The job could not start: " + JobFailures.message(e), e), handler);
         }

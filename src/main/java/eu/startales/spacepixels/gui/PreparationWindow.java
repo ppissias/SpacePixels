@@ -25,6 +25,8 @@ final class PreparationWindow extends JDialog {
         AppIcon.apply(this);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
+            /** Checks a configured installation after the window opens, without blocking its first display. */
+            @Override public void windowOpened(WindowEvent event) { panel.checkConfiguredInstallation(); }
             /** Closing cancels this preparation and prevents its pending automatic follow-up. */
             @Override public void windowClosing(WindowEvent event) { if (preparing) cancel.run(); dispose(); }
         });

@@ -219,6 +219,11 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         refresh();
     }
 
+    /** Checks a configured path once on opening, reusing the owned background probe and its stale-result guards. EDT only. */
+    void checkConfiguredInstallation() {
+        if (!closed && !closing.getAsBoolean() && !siril.path.getText().isBlank() && siril.worker == null) siril.check();
+    }
+
     /** Applies the shared application job lock; a preparation form cannot launch work beside a detection or import. */
     void setBusy(boolean busy) {
         this.busy = busy;

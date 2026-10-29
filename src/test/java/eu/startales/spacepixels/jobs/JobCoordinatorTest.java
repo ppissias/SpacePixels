@@ -28,6 +28,38 @@ import static org.junit.Assert.assertTrue;
  */
 public class JobCoordinatorTest {
 
+    /** Shutdown must wait for cancellation cleanup, but must not need an EDT callback to complete that wait. */
+    @Test public void workerCompletionIncludesCleanupAndDoesNotWaitForUiDelivery() throws Exception {
+        var ui = new ArrayList<Runnable>();
+        var started = new java.util.concurrent.CountDownLatch(1);
+        var cleanup = new java.util.concurrent.CountDownLatch(1);
+        var jobs = new JobCoordinator(command -> new Thread(command, "test-job-cleanup").start(), ui::add, () -> false);
+        assertTrue(jobs.workCompletion().toCompletableFuture().isDone());
+        jobs.start(JobKind.PLATE_SOLVE, null, context -> {
+            started.countDown();
+            while (!context.isCancelled()) Thread.sleep(5);
+            cleanup.await();
+            return JobOutcome.cancelled();
+        }, (handle, outcome) -> { });
+        var finished = jobs.workCompletion().toCompletableFuture();
+        try {
+            assertTrue(started.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            jobs.cancel();
+            assertFalse("Cancellation alone does not finish cleanup", finished.isDone());
+        } finally { cleanup.countDown(); }
+        finished.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        assertTrue("UI outcome is still queued", jobs.current() != null);
+        ui.removeFirst().run();
+        assertNull(jobs.current());
+    }
+
+    /** A rejected executor has no running body to join and must not leave shutdown waiting forever. */
+    @Test public void rejectedWorkerCompletesTheShutdownWait() {
+        var jobs = new JobCoordinator(command -> { throw new RejectedExecutionException("No worker"); }, Runnable::run, () -> false);
+        jobs.start(JobKind.PLATE_SOLVE, null, context -> JobOutcome.completed(null), (handle, outcome) -> { });
+        assertTrue(jobs.workCompletion().toCompletableFuture().isDone());
+    }
+
     @Rule
     public TemporaryFolder folder = new TemporaryFolder();
 

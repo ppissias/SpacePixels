@@ -18,9 +18,9 @@ import io.github.ppissias.jplatesolve.PlateSolveResult;
 import java.util.Map;
 
 /**
- * Writes a plate solution into the frame's FITS header, which rewrites the whole file, and then removes the solver's
- * temporary files. The result is the frame's new header. The original file is replaced only once the new one is
- * complete, so a failure leaves it unchanged.
+ * Writes a plate solution into a staged copy's image header, preserving all stored image/table bytes, then removes
+ * the solver's temporary files. The result is the saved image metadata. Publication follows complete-file and
+ * WCS verification; failure leaves the original unchanged.
  */
 public class WriteWcsTask implements Job<Map<String, String>> {
     private final PlateSolveService solver;
