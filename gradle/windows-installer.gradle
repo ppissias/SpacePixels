@@ -137,11 +137,14 @@ tasks.register('windowsAppImage', Exec) {
     }
 }
 
+def installerResources = layout.projectDirectory.dir('src/windows-installer')
+
 tasks.register('windowsInstaller', Exec) {
     group = 'distribution'
     description = 'Builds an unsigned per-user Windows EXE installer with Java and optional shortcuts (WiX 3).'
     dependsOn tasks.named('windowsAppImage')
     inputs.dir(applicationImage)
+    inputs.dir(installerResources)
     inputs.file('LICENSE')
     inputs.property('installerVersion', installerVersion)
     inputs.property('upgradeUuid', upgradeUuid)
@@ -154,6 +157,7 @@ tasks.register('windowsInstaller', Exec) {
         removeGenerated(installerFile.get())
         commandLine(packager, '--type', 'exe', '--name', 'SpacePixels',
                 '--app-image', applicationImage.get().asFile, '--dest', installerFile.get().parentFile,
+                '--resource-dir', installerResources.asFile,
                 '--app-version', installerVersion.get(), '--vendor', 'SpacePixels',
                 '--description', 'Astronomical moving-object and transient detection',
                 '--about-url', 'https://github.com/ppissias/SpacePixels',
