@@ -26,6 +26,8 @@
 
 - **Batch Stretch and monochrome conversion.** A prominent, theme-accented **Batch Stretch** button on Image Stretch processes the entire imported dataset and writes separate `_stretched` copies. The enable checkbox is removed. Convert to Mono writes only linear `_mono` copies. Importing colour frames offers to start conversion automatically; the existing completion prompt then lets you import the mono dataset. Declining leaves the colour dataset available.
 
+- **Siril light-exposure validation.** Preparation accepts the same small camera-reported exposure variations as ordinary import, instead of rejecting differences above half a millisecond. It compares the whole exposure range, preserves recorded durations and still rejects genuinely mixed groups. Dark and dark-flat calibration checks remain strict.
+
 - **Manual Transient Inspection.** The window keeps the master star mask, including its jitter footprint, from its first pass. Trying Detection Sigma, Grow Sigma or Minimum Pixels re-detects only the frame on show. Cached results account for all detection settings, including background clipping and mask overlap. Apply to Settings copies the edited values. If the master settings change while the window is open, it says so and keeps the reference until the window is opened again. Closing during re-detection lets the cancelled worker close its engine safely.
 
 - **Clean moving-object downloads.** Narrow and Wide GIFs contain no highlight circle or frame label. Wide shows twice the narrow field where the input frame permits and scales the complete picture to at most 1000 pixels per side, preserving both ends of long tracks.

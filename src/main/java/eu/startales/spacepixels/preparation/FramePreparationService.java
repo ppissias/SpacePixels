@@ -2,6 +2,7 @@ package eu.startales.spacepixels.preparation;
 
 import com.google.gson.GsonBuilder;
 import eu.startales.spacepixels.fits.FitsInput;
+import eu.startales.spacepixels.fits.ExposureGroup;
 import eu.startales.spacepixels.preparation.PreparationInputs.Role;
 import eu.startales.spacepixels.util.StagedFile;
 import nom.tam.fits.BasicHDU;
@@ -297,10 +298,12 @@ public final class FramePreparationService {
                 + SirilPreparationRecipe.processing(request, counts, inputs.masters());
     }
 
-    /** Reads and verifies every converted image's mode; explicit CFA overrides affect only run-owned working copies. */
+    /** Validates converted image modes and exposure cohorts; explicit CFA overrides affect only run-owned working copies. */
     static String validateSensor(PreparationRequest request, List<Path> files, Role role) throws Exception {
         String first = null;
         Header reference = null;
+        double minimumLightExposure = Double.POSITIVE_INFINITY;
+        double maximumLightExposure = Double.NEGATIVE_INFINITY;
         for (Path path : files) {
             try (Fits fits = new Fits(path.toFile())) {
                 BasicHDU<?> image = FitsInput.getImageHDU(fits);
@@ -315,8 +318,20 @@ public final class FramePreparationService {
                     if ((role == Role.LIGHTS || role == Role.FLATS) && !java.util.Objects.equals(reference.getStringValue("FILTER"), header.getStringValue("FILTER"))) {
                         throw new IOException("Selected " + role + " images have different or inconsistently missing filter metadata. Choose one group.");
                     }
-                    if (role == Role.LIGHTS || role == Role.DARKS || role == Role.DARK_FLATS || role == Role.FLATS && request.inputs().containsKey(Role.DARK_FLATS)) {
+                    if (role == Role.DARKS || role == Role.DARK_FLATS || role == Role.FLATS && request.inputs().containsKey(Role.DARK_FLATS)) {
                         requireExposure(reference, header, role + " inputs");
+                    }
+                }
+                if (role == Role.LIGHTS) {
+                    double exposure = header.getDoubleValue("EXPTIME", header.getDoubleValue("EXPOSURE", Double.NaN));
+                    if (Double.isFinite(exposure)) {
+                        minimumLightExposure = Math.min(minimumLightExposure, exposure);
+                        maximumLightExposure = Math.max(maximumLightExposure, exposure);
+                        // Match ordinary import's millisecond interpretation and compare the full range, independent of file order.
+                        if (!ExposureGroup.sameExposure((long) (minimumLightExposure * 1000.0), (long) (maximumLightExposure * 1000.0))) {
+                            throw new IOException("Light frame exposures range from " + minimumLightExposure + " s to "
+                                    + maximumLightExposure + " s. Choose one exposure group.");
+                        }
                     }
                 }
                 String pattern = header.getStringValue("BAYERPAT");

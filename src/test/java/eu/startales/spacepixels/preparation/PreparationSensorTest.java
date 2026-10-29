@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import static org.junit.Assert.*;
 
-/** Sensor interpretation must not guess an unknown Bayer pattern or reinterpret a known different mosaic. */
+/** Validates sensor interpretation and measured light exposures without guessing CFA metadata or relaxing calibration matches. */
 public class PreparationSensorTest {
     @Rule public final TemporaryFolder temporary = new TemporaryFolder();
 
@@ -52,6 +52,59 @@ public class PreparationSensorTest {
         assertThrows(java.io.IOException.class, () -> FramePreparationService.validateCalibrationHeaders(inputs));
         dark.addValue("EXPTIME", 30.0, null);
         FramePreparationService.validateCalibrationHeaders(inputs);
+    }
+
+    /** Measured shutter variations use the same tolerance as ordinary import, without rewriting their durations. */
+    @Test public void acceptsLightExposureVariationsWithinTheImportGroup() throws Exception {
+        var frames = List.of(exposure(30.3), exposure(30.0), exposure(30.5), exposure(30.1));
+        FramePreparationService.validateSensor(monoRequest(), frames, PreparationInputs.Role.LIGHTS);
+        assertEquals(30.3, SirilHeaderCorrections.imageHeader(frames.getFirst()).getDoubleValue("EXPTIME"), 0.0);
+        assertEquals(30.5, SirilHeaderCorrections.imageHeader(frames.get(2)).getDoubleValue("EXPTIME"), 0.0);
+        FramePreparationService.validateSensor(monoRequest(), List.of(exposure(1.0), exposure(1.1)), PreparationInputs.Role.LIGHTS);
+    }
+
+    /** Full-range comparison rejects a mixed group even when both extremes resemble the first frame. */
+    @Test public void rejectsLightExposureDriftAndClearlyDifferentExposures() throws Exception {
+        var mixed = assertThrows(java.io.IOException.class, () -> FramePreparationService.validateSensor(monoRequest(),
+                List.of(exposure(30.5), exposure(30.0), exposure(31.0)), PreparationInputs.Role.LIGHTS));
+        assertTrue(mixed.getMessage().contains("30.0 s to 31.0 s"));
+        assertTrue(mixed.getMessage().contains("Choose one exposure group"));
+        assertThrows(java.io.IOException.class, () -> FramePreparationService.validateSensor(monoRequest(),
+                List.of(exposure(30.0), exposure(60.0)), PreparationInputs.Role.LIGHTS));
+        assertThrows(java.io.IOException.class, () -> FramePreparationService.validateSensor(monoRequest(),
+                List.of(exposure(1.0), exposure(1.102)), PreparationInputs.Role.LIGHTS));
+    }
+
+    /** Light-frame grouping must not relax dark cohorts or the exposure match needed for calibration subtraction. */
+    @Test public void calibrationExposureChecksRemainStrict() throws Exception {
+        var frames = List.of(exposure(30.0), exposure(30.1));
+        for (var role : List.of(PreparationInputs.Role.DARKS, PreparationInputs.Role.DARK_FLATS)) {
+            assertThrows(java.io.IOException.class, () -> FramePreparationService.validateSensor(monoRequest(), frames, role));
+        }
+        var light = SirilHeaderCorrections.imageHeader(frames.getFirst());
+        var dark = SirilHeaderCorrections.imageHeader(frames.get(1));
+        assertThrows(java.io.IOException.class, () -> FramePreparationService.validateCalibrationHeaders(
+                Map.of(PreparationInputs.Role.LIGHTS, light, PreparationInputs.Role.DARKS, dark)));
+        assertThrows(java.io.IOException.class, () -> FramePreparationService.validateCalibrationHeaders(
+                Map.of(PreparationInputs.Role.FLATS, light, PreparationInputs.Role.DARK_FLATS, dark)));
+    }
+
+    /** Creates a monochrome working image with its recorded exposure in seconds. */
+    private Path exposure(double seconds) throws Exception {
+        Path file = temporary.newFile().toPath();
+        try (Fits fits = new Fits()) {
+            var image = Fits.makeHDU(new short[][]{{1, 2}, {3, 4}});
+            image.getHeader().addValue("EXPTIME", seconds, null);
+            fits.addHDU(image); fits.write(file.toFile());
+        }
+        return file;
+    }
+
+    /** Sensor-independent exposure tests need no CFA overrides or calibration input selections. */
+    private PreparationRequest monoRequest() {
+        return new PreparationRequest(Path.of("siril-cli"), Map.of(), PreparationRequest.Sensor.MONO,
+                PreparationRequest.Bayer.METADATA, PreparationRequest.RowOrder.METADATA, 0, 0,
+                temporary.getRoot().toPath(), false, false);
     }
 
     /** Creates a private uncompressed working frame with a known pixel ordering. */

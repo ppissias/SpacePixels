@@ -183,6 +183,9 @@ public class FitsSequenceValidationTest {
         assertEquals(1, ExposureGroup.of(new File[]{new File("a"), new File("b")}, new long[]{1_000, 1_100}).size());
         assertEquals(2, ExposureGroup.of(new File[]{new File("a"), new File("b")}, new long[]{1_000, 1_101}).size());
         assertEquals("_exposure_0.5s", ExposureGroup.of(new File[]{new File("a")}, new long[]{500}).get(0).getFolderName());
+        assertTrue(ExposureGroup.sameExposure(30_500, 30_000));
+        assertFalse(ExposureGroup.sameExposure(30_000, 30_601));
+        assertFalse(ExposureGroup.sameExposure(-1, 30_000));
     }
 
     @Test

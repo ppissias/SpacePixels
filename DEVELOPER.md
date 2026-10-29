@@ -166,6 +166,8 @@ Blink is the exception: loading the frames is the job, and the blink window then
 
 Camera presets are desktop shortcuts into the existing captured Bayer settings. Metadata remains the default; a camera model never determines file row order. Advanced Bayer controls retain their values when collapsed, and the readiness summary shows the effective interpretation.
 
+Preparation light-frame exposure validation shares ordinary import's exposure-group tolerance and checks the whole range. Calibration exposure checks remain strict; accepted measured variations do not rewrite the per-frame metadata.
+
 The catalogue controller owns its progress timer and delivers model changes and status on the EDT. Delivery checks the request identity and the current session even after cancellation, replacement or shutdown. The session owns a non-blocking shutdown callback, with no dependency on the GUI; closing it cancels work, shuts down the executor, stops the timer and detaches the view. A catalogue completed before its correction remains available and saves independently of the fit outcome.
 
 ## The session

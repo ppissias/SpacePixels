@@ -79,11 +79,17 @@ public final class ExposureGroup {
         return groups;
     }
 
-    private static boolean sameExposure(long shortest, long exposure) {
-        if (shortest < 0 || exposure < 0) {
-            return shortest < 0 && exposure < 0;
+    /**
+     * Compares two recorded durations in milliseconds using the import tolerance; negative values mean unknown.
+     * To validate a whole sequence, compare its shortest and longest durations rather than neighbouring frames.
+     */
+    public static boolean sameExposure(long firstMillis, long secondMillis) {
+        if (firstMillis < 0 || secondMillis < 0) {
+            return firstMillis < 0 && secondMillis < 0;
         }
-        return exposure - shortest <= Math.max(MIN_TOLERANCE_MILLIS, Math.round(shortest * RELATIVE_TOLERANCE));
+        long shortest = Math.min(firstMillis, secondMillis);
+        long longest = Math.max(firstMillis, secondMillis);
+        return longest - shortest <= Math.max(MIN_TOLERANCE_MILLIS, Math.round(shortest * RELATIVE_TOLERANCE));
     }
 
     public List<File> getFiles() {
