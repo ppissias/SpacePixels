@@ -96,7 +96,7 @@ The application and both libraries compile for Java 21. The Windows installer bu
 
 The tasks reuse `installDist`'s complete JAR set and all shared distribution files, including the default detection profile, appearance example and license. Archive launcher scripts are replaced by `SpacePixels.exe`, `spacepixels-batch.exe` and `injectStars.exe`; both command-line tools have console launchers. The multi-size ICO embeds the existing PNG icons without changing their pixels. `jpackage` links the packaging JDK's Java 21 runtime; native `java`/`javaw` commands are retained for Appearance's helper-based restart, and runtime legal notices stay included. All three launchers keep the existing memory/G1 options.
 
-The installer uses per-user installation and directory selection, optional desktop and Start menu shortcuts, unsigned output, local Gradle builds, and upgrades through a new installer. The fixed upgrade UUID must not change between releases. Application `2026.10-04` maps to Windows version `26.10.4`; `-PwindowsInstallerVersion=major.minor.build` can override it (Windows limits: 255.255.65535). Home settings and datasets are kept outside the installation folder and are not installer payload or cleanup targets. There is no automatic updater.
+The installer uses per-user installation and directory selection, optional desktop and Start menu shortcuts, unsigned output, local Gradle builds, and upgrades through a new installer. The fixed upgrade UUID must not change between releases. The Windows installer uses a numeric version derived from the application version; `-PwindowsInstallerVersion=major.minor.build` can override it (Windows limits: 255.255.65535). Home settings and datasets are kept outside the installation folder and are not installer payload or cleanup targets. There is no automatic updater.
 
 ## The packages
 
@@ -236,7 +236,7 @@ The report has three stages:
 2. **Sections:** one writer per section, such as `TargetVisualizationSectionWriter`, `AnomalySectionWriter` and `PhotometryReportSectionWriter`.
 3. **Publish:** the HTML is published only when complete (`AtomicReportFile`).
 
-`ReportMaps` draws the map and mask pictures, and `ReportFormat` formats report text. `DetectionReportGenerator` keeps the iterative index.
+`ReportMaps` draws the map and mask pictures, and `ReportFormat` formats report text. `IterativeDetectionIndex` writes the iterative index; `DetectionReportGenerator` retains representative-frame sampling helpers.
 Internal Java callers use `ReportExporter.export(new ReportRequest(...))`; the supported `api` surface and report schemas are unchanged.
 
 Moving-object clean Wide downloads crop twice the narrow source field, with a minimum of 400 source pixels per side when available and dimensions bounded by the input frame. The complete field is then scaled proportionally to at most 1000 output pixels per side. This separates sky coverage from output resolution, so the size limit cannot crop the ends of a long track. Narrow downloads and the annotated animations keep their existing geometry.
@@ -279,6 +279,8 @@ Tests use JUnit 4.13.2. Start with the affected tests, then run the full suite.
 - **Real-data harness:** `.\gradlew.bat realDataTest -PrealDataRoot=<folder>` runs preparation, API and CLI checks on every dataset directory under the supplied root; supply scratch copies for this broader opt-in task. An existing data directory is required only when this task runs; there is no machine-specific default. Alternatively, set `realDataRoot` in git-ignored `gradle.properties`; explicit `-P` wins. Relative paths are resolved against the project directory and passed to the test JVM as absolute paths.
 
 `-PtestMaxHeap=6g` raises the heap of the test tasks.
+
+`AutoTunerRealDataDiagnosticsIT` prints the calibrated tuner’s report for one dataset without running the full pipeline. It is skipped unless `SPACEPIXELS_TUNER_DATASET` points to an aligned 16-bit FITS folder. Optional `SPACEPIXELS_TUNER_PROFILE` selects a base profile and `SPACEPIXELS_TUNER_PREPARE=1` enables format preparation. Use scratch copies and the isolated settings setup described above.
 
 ### Real-data regression
 

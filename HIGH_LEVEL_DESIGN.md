@@ -14,6 +14,19 @@ Related documents:
 - Pending design work: [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md); pending functionality: [FEATURE-REQUESTS.md](FEATURE-REQUESTS.md)
 - JTransient algorithm, pipeline, config, and Auto-Tune details live in the JTransient project docs.
 
+## Contents
+
+- [1. System Summary](#1-system-summary)
+- [2. External Dependencies](#2-external-dependencies)
+- [3. Package Boundaries](#3-package-boundaries)
+- [4. Main Facades](#4-main-facades)
+- [5. Runtime Flows](#5-runtime-flows)
+- [6. Main Data Contracts](#6-main-data-contracts)
+- [7. Persistence and Outputs](#7-persistence-and-outputs)
+- [8. Threading and Progress Model](#8-threading-and-progress-model)
+- [9. Design Constraints](#9-design-constraints)
+- [10. Current Design Debt and Refactor Boundaries](#10-current-design-debt-and-refactor-boundaries)
+
 ## 1. System Summary
 
 SpacePixels is one Gradle project with headless `main` and application-only `desktop` source sets, with three entry surfaces:
@@ -90,7 +103,7 @@ Owns:
 - `SpacePixelsSettingsFiles` (Save on the detection settings tab)
 - `DetectionSettingsPresentation` (application titles/messages for shared JTransient issues and adjustments)
 
-The detection profile wraps JTransient `DetectionConfig` plus SpacePixels' Auto-Tune candidate-frame limit. Visualization preferences are intentionally separate because they do not affect detection results.
+The detection profile wraps JTransient `DetectionConfig` plus SpacePixels' Auto-Tune candidate-frame limit and variable-star card presentation options. Visualization preferences are intentionally separate because they do not affect detection results.
 
 ### `eu.startales.spacepixels.jobs`
 
@@ -109,7 +122,7 @@ The job coordinator, with no Swing or `gui` dependency. A `Job` runs on a worker
   - Plate solving uses JPlateSolve 1.0.1's `PlateSolveOperation`: Cancel requests a stop, and `PlateSolveTask` joins completion after process/HTTP and sidecar cleanup before releasing coordinator admission. Phase text and elapsed seconds are shown with indeterminate progress. The WCS write and Blink cannot be cancelled (`JobKind.cancellable()`); their dialog shows no Cancel.
   - The dialog offers to exit SpacePixels if a cancelled job has not stopped after 15 seconds.
   - `JobCancelledException` is a `java.util.concurrent.CancellationException`, so services in `util` recognise a cancel with `util.Cancellation.isCancellation(...)` (which looks through wrapping exceptions, as when the engine's worker threads carry it) without depending on `jobs`.
-  - A cancelled detection removes the `detections_` folder it was writing. A cancelled iterative run removes the pass it was writing and writes the index of the finished passes with a note, or removes its folder when none finished. In that case it also removes the `_spacepixels_prepared_mono16_` copy its preparation converted (`PreparedDirectory.getCreatedDirectory`), never the reused XISF folder; a copy an index links to stays. A conversion that is stopped part-way removes its partial copy. `util.OutputFolders` creates every run's folder new (a number is added when two runs start in the same second), so only the run's own output is removed.
+  - A cancelled detection removes the `detections_` folder it was writing. A cancelled iterative run removes the pass it was writing and writes the index of the finished passes with a note, or removes its folder when none finished. In that case it also removes the `_spacepixels_prepared_mono16_` copy its preparation converted (`PreparedDirectory.getCreatedDirectory`), never the reused XISF folder; a copy an index links to stays. A conversion that is stopped part-way removes its partial copy. `detection.OutputFolders` creates every run's folder new (a number is added when two runs start in the same second), so only the run's own output is removed.
   - JTransient stops queued work and waits for running task bodies and cleanup before propagating cancellation or worker failure. Engines are closed after the operation returns. Calibrated Auto-Tune now propagates cancellation directly; `AutoTuneTask` no longer needs to infer cancellation from a failed tuning result.
 - **Live view:** for detection and iterative runs the progress dialog shows a picture of the work under way, and while the engine runs, what it has found so far.
   - `MainApplicationPanel` gives each such task a sink from `ProcessingProgressDialog.previewSink()` (`DetectionTask.showingPreviews`, `IterativeDetectionTask.showingPreviews`). The task binds it to its thread with `util.RunPreviewScope`, as it binds cancellation.
@@ -459,7 +472,7 @@ The context factory normalizes optional outputs and initializes its final model 
 them. Each export owns its progress counter. Section fixtures use this same construction path, so finding identities
 and quality-filtered frame choices always come from the prepared model.
 
-`ReportMaps` draws the map and mask pictures. `ReportFormat` formats report text. `DetectionReportGenerator` writes the iterative index.
+`ReportMaps` draws the map and mask pictures. `ReportFormat` formats report text. `IterativeDetectionIndex` writes the iterative index.
 
 Responsibilities:
 
@@ -745,6 +758,7 @@ JTransient `DetectionConfig` is the engine configuration contract.
 SpacePixels wraps it in `SpacePixelsDetectionProfile` to add:
 
 - `autoTuneMaxCandidateFrames`
+- `variableStarMaxCandidateCards` and `variableStarSortOrder` (report presentation, not detection gates)
 
 Visualization preferences are separate and must not be treated as detection inputs.
 
@@ -773,17 +787,20 @@ Pipeline runs return or export the effective config actually used. This may diff
 User-level JSON files under `user.home`:
 
 - `spacepixels_app.json`
-  - ASTAP path and observer/astrometry metadata
+  - ASTAP and Siril paths and observer/astrometry metadata
   - the Astrometry.net account: anonymous (JPlateSolve's guest key) or the observer's own API key, stored in plain text and kept while Anonymous is chosen
 - `spacepixels_detection_profile.json`
-  - JTransient `DetectionConfig` plus `autoTuneMaxCandidateFrames`
+  - JTransient `DetectionConfig`, `autoTuneMaxCandidateFrames` and variable-star card presentation options
 - `spacepixels_jtransient.json`
   - legacy detection-profile filename read for compatibility
 - `spacepixels_visualization.json`
   - report and visualization preferences
+- `spacepixels_appearance.json`
+  - desktop theme, interface scale and optional custom style file
 
 Generated working directories:
 
+- observing-session preparation run folders, with `aligned/`, optional `reference/`, logs and a manifest
 - XISF conversion output
 - decompressed FITS output
 - prepared mono-16 FITS output for API auto-preparation
@@ -849,14 +866,15 @@ JTransient:
 - Keep `jobs` and `tasks` free of Swing and the `gui` package; `DependencyRulesTest` checks this.
 - Replace files through `StagedFile`; never delete a user's file before its replacement is complete.
 - Start every GUI run and save from `DetectionConfigurationPanel.checkedSettings(...)`; never hand a task the panel's live `DetectionConfig`.
-- Do not add concurrent Auto-Tune API execution without removing the shared JTransient sample-size mutation.
+- Keep Auto-Tune configuration and diagnostics scoped to each operation; do not introduce shared mutable tuning defaults. The current runner uses the calibrated tuner without mutating a global sample-size setting.
 
 ## 10. Current Design Debt and Refactor Boundaries
 
 Accepted current debt:
 
 - `DetectionConfigurationPanel` and `MainApplicationPanel` still combine Swing view logic and workflow control.
-- `DetectionReportGenerator` now keeps the iterative index. Map pictures and text formatting live in `ReportMaps` and `ReportFormat`.
+
+The iterative index is owned by `IterativeDetectionIndex`; map pictures and text formatting live in `ReportMaps` and `ReportFormat`.
 
 Preferred refactor direction:
 

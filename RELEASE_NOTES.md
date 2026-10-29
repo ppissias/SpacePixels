@@ -2,8 +2,6 @@
 
 ## 2026.10-04
 
-Not released yet.
-
 ### Changed
 
 - **Safe plate-solver shutdown.** Closing waits for the running job's cleanup before exit, including ASTAP termination and sidecar cleanup. An accepted WCS write finishes before closing; Appearance restart retains its existing wait for running work.

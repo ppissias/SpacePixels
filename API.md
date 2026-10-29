@@ -1,47 +1,19 @@
 # SpacePixels Java API
 
-This document describes the supported Java API for embedding SpacePixels pipeline execution in another JVM application.
+This guide describes the supported SpacePixels Java API. Consult [release notes](RELEASE_NOTES.md) when upgrading an existing integration. The supported API runs the standard pipeline synchronously in another JVM application; it does not expose the desktop UI, iterative detection or the Siril calibration/registration workflow.
 
-## Official API surface
 
-The official supported API is the [`eu.startales.spacepixels.api`](src/main/java/eu/startales/spacepixels/api) package.
-
-Supported public types:
-
-- `SpacePixelsPipelineApi`
-- `DefaultSpacePixelsPipelineApi`
-- `SpacePixelsPipelineRequest`
-- `SpacePixelsPipelineResult`
-- `SpacePixelsPipelineException`
-- `SpacePixelsProgressListener`
-- `InputPreparationMode`
-- `NegativeValueHandling`
-
-Other `eu.startales.spacepixels.*` packages should be treated as internal implementation details and may change between releases. The current public request/result model also exposes:
-
-- `io.github.ppissias.jtransient.config.DetectionConfig`
-- `io.github.ppissias.jtransient.engine.AutoTuneProfile`
-- `io.github.ppissias.jtransient.engine.PipelineResult`
-- `eu.startales.spacepixels.fits.FitsFileInformation`
-- `eu.startales.spacepixels.config.DetectionRunOptions`
-- `eu.startales.spacepixels.config.VisualizationSettings`
-- `eu.startales.spacepixels.config.VariableStarReportOptions`
-
-### Frame metadata (`FitsFileInformation`)
-
-`eu.startales.spacepixels.fits.FitsFileInformation` represents immutable metadata for an imported frame:
-
-- **Immutability:** `FitsFileInformation` is `final` and deeply immutable. `getFitsHeader()` returns an unmodifiable map.
-- **Construction:** Use `new FitsFileInformation(filePath, fileName, monochrome, sizeWidth, sizeHeight, fitsHeader)` to construct frame descriptors. The constructor freezes the header map into an unmodifiable map (preserving null commentary card values) and normalises ISO-8601 observation timestamps at construction time.
-- **Copy with updated header:** Use `fileInfo.withFitsHeader(updatedHeaderMap)` to produce an updated descriptor (for example when applying a newly computed WCS solution) without mutating existing descriptors.
-- **Container protection:** Array getters in results (`result.getFilesInformation()`) clone the array container to protect ordering, while individual descriptors remain shared and immutable.
+[Dependency](#dependency) · [First example](#example-basic-pipeline-run-with-report-export) · [Input preparation](#input-preparation-modes) · [Results](#result-object-overview) · [Errors](#error-handling)
 
 ## Dependency
 
-When the artifact is published to Maven Central, depend on it as:
+Choose a version that has actually been published to Maven Central; a desktop release or local build does not establish Maven availability. Use the JTransient and JPlateSolve dependencies declared by the selected SpacePixels artifact; do not replace them with arbitrary older JARs. Add Maven Central to your repositories and replace `<version>` with the published SpacePixels version:
 
 ```groovy
-implementation 'eu.startales.spacepixels:spacepixels:<version>'
+repositories { mavenCentral() }
+dependencies {
+    implementation 'eu.startales.spacepixels:spacepixels:<version>'
+}
 ```
 
 `spacepixels` is the only Maven publication: the public API plus the headless configuration, session, FITS/preparation, processing, catalogue and reporting implementation/resources it needs. It also includes the `BatchDetectionCli` and `ArtificialStarInjector` command-line entrypoints, usable with a dependency-resolved Java classpath. Matching sources and Javadocs cover the same headless code. It contains no SpacePixels GUI, jobs/tasks, GUI icons or FlatLaf dependency.
@@ -76,17 +48,85 @@ The report directory also contains `report-data.json` (schema version 1): genera
 
 Report cards, maps, CSV labels and viewer overlays share category-owned identity rules. Track grouping retains engine order for multi-frame tracks and frame/file/position order for single-frame streaks. Variable IDs follow exported candidate order, not presentation sorting or card limits; candidates without a card link to the variable table.
 
+## Example: basic pipeline run with report export
+
+```java
+import eu.startales.spacepixels.api.DefaultSpacePixelsPipelineApi;
+import eu.startales.spacepixels.api.InputPreparationMode;
+import eu.startales.spacepixels.api.SpacePixelsPipelineApi;
+import eu.startales.spacepixels.api.SpacePixelsPipelineRequest;
+import eu.startales.spacepixels.api.SpacePixelsPipelineResult;
+import io.github.ppissias.jtransient.config.DetectionConfig;
+
+import java.io.File;
+
+DetectionConfig config = new DetectionConfig();
+
+SpacePixelsPipelineApi api = new DefaultSpacePixelsPipelineApi();
+SpacePixelsPipelineResult result = api.run(
+        SpacePixelsPipelineRequest.builder(new File("C:/astro/sequence"))
+                .detectionConfig(config)
+                .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
+                .generateReport(true)
+                .build());
+
+System.out.println("Prepared input directory: " + result.getPreparedInputDirectory());
+System.out.println("Report file: " + result.getReportFile());
+System.out.println("Track count: " + result.getPipelineResult().tracks.size());
+```
+
+Use this mode when your input directory is already detection-ready and you want the standard HTML report on disk.
+
+## Official API surface
+
+The official supported API is the [`eu.startales.spacepixels.api`](src/main/java/eu/startales/spacepixels/api) package.
+
+Supported public types:
+
+- `SpacePixelsPipelineApi`
+- `DefaultSpacePixelsPipelineApi`
+- `SpacePixelsPipelineRequest`
+- `SpacePixelsPipelineResult`
+- `SpacePixelsPipelineException`
+- `SpacePixelsProgressListener`
+- `InputPreparationMode`
+- `NegativeValueHandling`
+
+Other `eu.startales.spacepixels.*` packages should be treated as internal implementation details and may change between releases. The current public request/result model also exposes the following types. Their use here is part of the request/result contract; it does not make every other type in their packages a supported API:
+
+- `io.github.ppissias.jtransient.config.DetectionConfig`
+- `io.github.ppissias.jtransient.engine.AutoTuneProfile`
+- `io.github.ppissias.jtransient.engine.PipelineResult`
+- `eu.startales.spacepixels.fits.FitsFileInformation`
+- `eu.startales.spacepixels.config.DetectionRunOptions`
+- `eu.startales.spacepixels.config.VisualizationSettings`
+- `eu.startales.spacepixels.config.VariableStarReportOptions`
+- `eu.startales.spacepixels.fits.ImageScaling.OutlierHandling` (conversion policy); `ImageScaling.OutlierException` and its summary provide refusal diagnostics
+
+### Frame metadata (`FitsFileInformation`)
+
+`eu.startales.spacepixels.fits.FitsFileInformation` represents immutable metadata for an imported frame:
+
+- **Immutability:** `FitsFileInformation` is `final` and deeply immutable. `getFitsHeader()` returns an unmodifiable map.
+- **Construction:** Use `new FitsFileInformation(filePath, fileName, monochrome, sizeWidth, sizeHeight, fitsHeader)` to construct frame descriptors. The constructor freezes the header map into an unmodifiable map (preserving null commentary card values) and normalises ISO-8601 observation timestamps at construction time.
+- **Copy with updated header:** Use `fileInfo.withFitsHeader(updatedHeaderMap)` to produce an updated descriptor (for example when applying a newly computed WCS solution) without mutating existing descriptors.
+- **Container protection:** Array getters in results (`result.getFilesInformation()`) clone the array container to protect ordering, while individual descriptors remain shared and immutable.
+
 ## Run options and isolation
 
 `SpacePixelsPipelineRequest.Builder.runOptions(DetectionRunOptions)` supplies the observing-site fallback, the immutable `VisualizationSettings` and the Auto-Tune candidate-frame limit. The `autoTuneMaxCandidateFrames` and `variableStarReportOptions` setters override those values when called afterwards.
 
 `VisualizationSettings` (package `eu.startales.spacepixels.config`) holds every choice about how report pictures are drawn: the display stretch, the GIF speed, crop sizes and target circles, the detection marker sizes, the most animated detections, and the variable-star presentation. None of them changes a detection result. Start from `VisualizationSettings.defaults()` and replace values with its `with…` methods, for example `VisualizationSettings.defaults().withAutoStretchWhiteSigma(4.0).withGifBlinkSpeedMs(200)`, then pass the value to `DetectionRunOptions.withVisualization(..)`. `DetectionRunOptions.capture(AppConfig, int)` takes only the observing site from the `AppConfig` and uses the built-in visualization settings. Site latitude/longitude strings keep the application's decimal-degree/cardinal syntax; FITS site cards still take priority. Invalid or absent configured coordinates retain the existing no-site behavior.
 
+The request defaults to `FAIL_IF_NOT_READY`, `ADD_OFFSET`, outlier policy `REQUIRE_DECISION`, report generation enabled, Auto-Tune disabled and calibration/alignment warnings recorded without rejection.
+
 API requests use built-in rendering defaults and no configured observing site unless supplied explicitly. They do not load user-home preferences or modify desktop rendering/tuning defaults. The batch CLI reads the saved visualization preferences once at startup and passes them in its run options. Callers needing a particular site or presentation should supply run options.
 
 After input preparation, each run captures FITS metadata, the active plate correction and the matching saved catalogue before pixel loading/detection. Report export uses that captured context. Later settings edits or catalogue/correction-file replacements affect subsequent runs.
 
 ## Input preparation modes
+
+**Preparation converts file representation; it does not calibrate or star-register images.** Supply aligned, linear exposures in either mode. Detection needs at least three frames retained by quality control; Auto-Tune needs at least four input frames.
 
 All imported images must use the same extension (case-insensitive), so FITS and XISF files cannot
 be mixed. FITS frames must also share their BITPIX storage type, `BZERO`/`BSCALE` sample scaling,
@@ -164,35 +204,6 @@ Use `.failIfUncalibratedOrMisaligned(true)` on the request builder to reject a f
 
 The inspector samples the first, middle and last frames. It requires a coherent displacement of at least three optical stars before reporting a registration shift; dimming or missing stars alone are not a measured displacement. A clean result means no sampled warning was found, not that every frame is certified calibrated and aligned. The check does not edit input pixels, engine settings or findings.
 
-## Example: basic pipeline run with report export
-
-```java
-import eu.startales.spacepixels.api.DefaultSpacePixelsPipelineApi;
-import eu.startales.spacepixels.api.InputPreparationMode;
-import eu.startales.spacepixels.api.SpacePixelsPipelineApi;
-import eu.startales.spacepixels.api.SpacePixelsPipelineRequest;
-import eu.startales.spacepixels.api.SpacePixelsPipelineResult;
-import io.github.ppissias.jtransient.config.DetectionConfig;
-
-import java.io.File;
-
-DetectionConfig config = new DetectionConfig();
-
-SpacePixelsPipelineApi api = new DefaultSpacePixelsPipelineApi();
-SpacePixelsPipelineResult result = api.run(
-        SpacePixelsPipelineRequest.builder(new File("C:/astro/sequence"))
-                .detectionConfig(config)
-                .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
-                .generateReport(true)
-                .build());
-
-System.out.println("Prepared input directory: " + result.getPreparedInputDirectory());
-System.out.println("Report file: " + result.getReportFile());
-System.out.println("Track count: " + result.getPipelineResult().tracks.size());
-```
-
-Use this mode when your input directory is already detection-ready and you want the standard HTML report on disk.
-
 ## Example: auto-prepare inputs and return raw results only
 
 ```java
@@ -251,7 +262,7 @@ Use this when you want SpacePixels to optimize the effective detection configura
 
 Profiles: `LOW`, `MEDIUM`, `HIGH` and `MAXIMUM` (as sensitive as possible; on large sensors it leaves many candidates, so it is meant for small sensors or targeted searches). Auto-Tune measures false detections and sensitivity on the session and picks the most sensitive settings within the profile's budget.
 
-Progress callbacks receive percentages from 0 to 100: input preparation up to 15%, Auto-Tune 15-35% when enabled, and the detection pipeline up to 90% when a report is requested or 100% otherwise. Report generation occupies 90-100%.
+`run(...)` blocks until processing and any requested export finish. Progress callbacks are not dispatched to a GUI event thread; keep them quick and marshal UI updates yourself. Progress is a phase indicator, not an estimate of remaining time. Callbacks receive percentages from 0 to 100: input preparation up to 15%, Auto-Tune 15-35% when enabled, and the detection pipeline up to 90% when a report is requested or 100% otherwise. Report generation occupies 90-100%.
 
 ## Result object overview
 
@@ -315,7 +326,7 @@ try {
 - Best results come from calibrated inputs with a consistent frame size.
 - `FAIL_IF_NOT_READY` is stricter and is best for automated production workflows.
 - `AUTO_PREPARE_TO_16BIT_MONO` is more forgiving and is best when input format may vary.
-- The API returns a defensive copy for exposed configs and FITS metadata arrays.
+- Config getters and FITS metadata array getters return defensive copies. Individual `FitsFileInformation` elements are immutable. `getPipelineResult()` returns the raw engine result, not a deep defensive copy.
 - The API is quiet by default; problems are thrown or logged as `java.util.logging` warnings. Engine/tuner diagnostics capture `spacepixels.debug` per run through a scoped sink; an explicit caller `DiagnosticContext` policy takes precedence. No shared engine/tuner debug flags or mutable tuning defaults are changed.
 - The public API artifact is headless and contains no GUI classes.
 - Auto-Tune uses independent per-operation options. Use the engine/solver versions selected for this SpacePixels release; arbitrary older replacement JARs are not supported.

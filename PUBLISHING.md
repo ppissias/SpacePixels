@@ -10,6 +10,18 @@ The same single Gradle project builds the desktop application separately. `run`,
 
 The API artifact compiles for Java 21 and supplies matching sources, Javadocs, POM and Gradle module metadata. JTransient is a compile/API dependency because public requests/results expose its types. FITS, Gson and JPlateSolve are runtime-transitive implementation dependencies; JPlateSolve does not need `api` scope for the supported detection API. Headless AWT/`java.desktop` remains necessary for images/reports. See [API.md](API.md#dependency) for the embedding boundary.
 
+## Desktop release archives
+
+Run `releaseCheck` before packaging. From the repository root:
+
+```powershell
+.\gradlew.bat distZip distTar
+```
+
+The application archives are written to `build/distributions/`. They include launchers, application and dependency JARs, configuration examples and the license, but no Java runtime. Users need Java 21 or newer. GitHub's automatically generated **Source code** downloads are not these application archives.
+
+Before publishing a release, upload the intended application archives and, for a Windows installer release, the separately built EXE. Check their actual names under GitHub **Assets**, keep the installation guidance in README/MANUAL and the website consistent with the published packages, and verify that the website links to the correct branch or release tag. A successful local package build does not publish a release or establish installer lifecycle acceptance.
+
 ## Windows installer
 
 Build on Windows x64 with a 64-bit JDK 21 selected by `JAVA_HOME`. The JDK supplies `jpackage` and `jlink`. Building the installer also requires the WiX 3 build tools (`candle.exe` and `light.exe`); WiX is not needed by the installed application.
@@ -29,7 +41,7 @@ The image contains the desktop and headless JARs, their dependencies, all shared
 
 All three retain the distribution's `-XX:MaxRAMPercentage=80.0 -XX:+UseG1GC` defaults. Launcher options are in `app/SpacePixels.cfg`, `app/spacepixels-batch.cfg` and `app/injectStars.cfg`; an upgrade can replace these application files. The bundled runtime retains `java.exe` and `javaw.exe`, which the Appearance restart helper needs. The ICO is generated from the existing application PNGs.
 
-Setup is unsigned and installs per user, with a directory chooser and optional Start menu and desktop shortcuts. A later installer upgrades the same installation. Keep the upgrade UUID in `gradle/windows-installer.gradle` unchanged across releases. The application version `2026.10-04` maps to Windows installer version `26.10.4`; `-PwindowsInstallerVersion=major.minor.build` overrides the mapping, with maximum components `255.255.65535`. Use a higher installer version for an upgrade; the application continues to display its own version.
+Setup is unsigned and installs per user, with a directory chooser and optional Start menu and desktop shortcuts. A later installer upgrades the same installation. Keep the upgrade UUID in `gradle/windows-installer.gradle` unchanged across releases. The application version is mapped to a numeric Windows installer version; `-PwindowsInstallerVersion=major.minor.build` overrides the mapping, with maximum components `255.255.65535`. Use a higher installer version for an upgrade; the application continues to display its own version.
 
 The installer bundles its library JARs and can use the local composite library builds. Users do not need those libraries to be published separately to Maven Central. Run `releaseCheck` before distribution; archive and installer tasks themselves only package the application. There is no automatic updater; code signing remains a separate release step.
 

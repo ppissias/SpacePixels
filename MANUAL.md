@@ -2,7 +2,7 @@
 
 <sub><i>Many thanks to Klangwolke at Cloudynights and Duncan Warren for providing some of the test data used in this manual.</i></sub>
 
-SpacePixels finds what moves or changes in your astrophotography sessions: asteroids, comets, satellites, flashes and variable stars. You give it the aligned sub-exposures of a session, and it gives you an HTML report with every object it found, with crops, animations, maps and buttons that look the objects up in JPL, SkyBoT and other catalogues.
+SpacePixels searches your astrophotography exposures for moving objects and brightness changes. Give it a sequence of aligned sub-exposures to obtain an HTML report with candidate tracks, crops, animations, maps and optional variable-star light curves. Catalogue searches help investigate candidates; a detection or catalogue association is not, by itself, a confirmed discovery.
 
 This manual walks through the everyday workflows with screenshots from real sessions. For the detailed meaning of every setting, hover the setting in the program: each one has a description. Watch the [latest video tutorial](https://youtu.be/LhA1izPFql0) or the [earlier tutorial](https://youtu.be/7XBdYh0Wn7A). The detection engine is documented in the [JTransient repository](https://github.com/ppissias/JTransient).
 
@@ -12,13 +12,13 @@ This manual walks through the everyday workflows with screenshots from real sess
 
 ## Contents
 
-1. [Before you start](#1-before-you-start)
+1. [Before you start](#1-before-you-start): [install](#installing), [choose your data](#your-data)
 2. [The main window](#2-the-main-window)
 3. [Workflow: find moving objects in a session](#3-workflow-find-moving-objects-in-a-session)
 4. [Reading the report](#4-reading-the-report)
 5. [Identifying objects](#5-identifying-objects)
 6. [Examples from real sessions](#6-examples-from-real-sessions)
-7. [Other tools](#7-other-tools)
+7. [Other tools](#7-other-tools): [prepare exposures](#preparing-an-observing-session), [variable stars](#variable-stars), [Blink](#blink-selected), [iterative detection](#detect-iteratively-large-datasets), [command line](#command-line)
 8. [Detection settings in brief](#8-detection-settings-in-brief)
 9. [Tips and troubleshooting](#9-tips-and-troubleshooting)
 
@@ -26,20 +26,34 @@ This manual walks through the everyday workflows with screenshots from real sess
 
 ## 1. Before you start
 
+### Installing
+
+**Windows x64 installer:** download `SpacePixels-<installer-version>.exe` from [SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases) and run it. It includes its own Java 21 runtime; Java and WiX do not need to be installed on your computer. Setup installs for your Windows account, lets you choose the folder, and offers Start menu and desktop shortcuts. Start **SpacePixels** from a shortcut or the installed `SpacePixels.exe`.
+
+The installer is unsigned, so Windows may show a SmartScreen notice. For an installer downloaded from the project's release page, **More info → Run anyway** proceeds. A new release is installed by running its installer; close SpacePixels first. Uninstall it through Windows **Installed apps**. Upgrades and uninstall leave settings in your home folder and your image datasets in place.
+
+**ZIP/TAR distribution (Windows, Linux and macOS):** install Java 21 or newer, download and unpack the archive, then start `StartSpacePixels.bat` (Windows) or `./StartSpacePixels` (Linux, macOS). These archives use your installed Java. Download the application archive under **Assets**, not GitHub’s **Source code** archive, and extract the whole folder before launching. In PowerShell, run `.\StartSpacePixels.bat` from that folder.
+
+The Windows installer also includes `spacepixels-batch.exe` for command-line analysis and `injectStars.exe` for adding artificial moving stars to test images. The example detection profile is `app/config/default_detection_profile.json` under the installation folder; the archive's profile is `config/default_detection_profile.json`.
+
+The launchers allow Java’s heap to grow to 80 % of the memory available to the JVM; the process and operating system also need memory. Memory needs depend on image size, frame count and enabled analyses. As a guide, a tested 33-frame, 61-megapixel session needed about 11 GB of Java heap on a 16 GB computer; start with a smaller sequence if memory is limited. When a newer release exists, a blue **New version** button appears at the top right of the window, next to **User Manual**; click it to open the releases page.
+
 ### Your data
 
-The input to SpacePixels is the same input files for your stacking software: the aligned  + calibrated dataset.
-But SpacePixels is the opposite of a stacker: it looks for what changes between your frames. It works best with:
+Use the individual calibrated, registered exposures that you would otherwise combine into a stacked image. SpacePixels compares those exposures to find changes. Prepare:
 
 - **aligned (registered) sub-exposures**, so the stars stay in the same place in every frame;
 - **calibrated** frames (darks and flats), although uncalibrated data also works, with more noise detections;
 - frames from **one session and one camera setup**, all with the same size and exposure time;
-- **timestamps** in the FITS headers (`DATE-OBS`), so speeds and object identification work.
-- **unprocessed** data (i.e. just raw images, calibrated and aligned)
+- **timestamps** in the FITS headers (`DATE-OBS`), so speeds and object identification work;
+- **linear, unstretched** image values; do not apply denoising, star removal or a nonlinear stretch before detection;
+- **zero-filled registration borders** retained around shifted frames; do not crop all frames to their common overlap.
+
+Detection needs at least three usable frames after quality control. Auto-Tune requires at least four input frames; variable-star photometry requires at least 20 after quality control and additional readiness checks.
 
 
 
-Supported files: FITS (`.fit`, `.fits`, `.fts`), compressed FITS (`.fz`) and XISF, 16 or 32 bit, monochrome or colour. SpacePixels offers to convert what the detection needs (decompression, standard unsigned 16 bit, monochrome) when you import. Keep one sequence per folder: all files in a folder must have the same type, bit depth, size, layout and exposure time, and either all frames have timestamps or none. When the exposure times differ, for example 20 frames of 60 s and 2 of 120 s, import names the odd frames and offers to import only the largest set: it copies those frames into a subfolder such as `_exposure_60s` and imports that, and your folder stays as it is. Exposures within 2 % of each other count as the same, because many cameras record the measured exposure (60.0, 60.1 and 60.2 s).
+Supported input includes 16-bit integer and 32-bit integer/floating FITS (`.fit`, `.fits`, `.fts`), tile-compressed FITS (`.fz`) and supported monochrome/RGB XISF. XISF supports unsigned 8/16/32/64-bit and floating 32/64-bit samples; unsupported containers or codecs are rejected. SpacePixels offers to convert what the detection needs (decompression, standard unsigned 16 bit, monochrome) when you import. Keep one sequence per folder: all files in a folder must have the same filename extension (case-insensitive), bit depth, sample scaling, size, layout, compression state and exposure time, and either all frames have timestamps or none. When the exposure times differ, for example 20 frames of 60 s and 2 of 120 s, import names the odd frames and offers to import only the largest set: it copies those frames into a subfolder such as `_exposure_60s` and imports that, and your folder stays as it is. Exposures within 2 % of each other, with a minimum tolerance of 0.1 s, count as the same, because many cameras record the measured exposure (60.0, 60.1 and 60.2 s).
 
 Compressed 32-bit and signed/scaled 16-bit FITS offer **Combined FITS Preparation**: decompression and conversion write the final unsigned 16-bit files directly, preserving the compressed originals. Mono output goes in `_16bit_converted`; colour input produces `_16bit_mono` and `_16bit_color`. There is no intermediate uncompressed 32-bit folder. The existing negative-value choice applies once to the whole sequence, and the completion prompt can load the final mono folder. Compressed images already in standard unsigned 16-bit format only need decompression into `_uncompressed`.
 
@@ -50,18 +64,6 @@ A typical source is the folder of registered frames that your stacking program w
 If the exposures still need preparation, **Prepare Frames…** can run a separately installed Siril on private copies and then import the resulting sequence. See [Preparing an observing session](#preparing-an-observing-session).
 
 With Deep Sky Stacker, open Stacking Settings and choose **Standard Mode** on the **Result** tab. The registered frames then keep a dark border where a frame was shifted which is useful for the analysis done by SpacePixels. On the **Intermediate Files** tab, tick **Create a registered/calibrated file for each light frame**, choose **FITS Files**, and leave **Compress FITS files** unticked. Import the folder of those frames. Screenshots of both settings are on the [Deep Sky Stacker export settings](https://github.com/ppissias/SpacePixels/wiki/Deep-Sky-Stacker-export-settings) page of the project wiki.
-
-### Installing
-
-**Windows installer:** download `SpacePixels-<version>.exe` from [SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases) and run it. It includes its own Java 21 runtime; Java and WiX do not need to be installed on your computer. Setup installs for your Windows account, lets you choose the folder, and offers Start menu and desktop shortcuts. Start **SpacePixels** from a shortcut or the installed `SpacePixels.exe`.
-
-The first installer is unsigned, so Windows may show a SmartScreen notice. For an installer downloaded from the project's release page, **More info → Run anyway** proceeds. A new release is installed by running its installer; close SpacePixels first. Uninstall it through Windows **Installed apps**. Upgrades and uninstall leave settings in your home folder and your image datasets in place.
-
-**ZIP/TAR distribution (Windows, Linux and macOS):** install Java 21 or newer, download and unpack the archive, then start `StartSpacePixels.bat` (Windows) or `./StartSpacePixels` (Linux, macOS). These archives use your installed Java.
-
-The Windows installer also includes `spacepixels-batch.exe` for command-line analysis and `injectStars.exe` for adding artificial moving stars to test images. The example detection profile is `app/config/default_detection_profile.json` under the installation folder; the archive's profile is `config/default_detection_profile.json`.
-
-SpacePixels may use up to 80 % of the computer's memory. 8 GB of RAM is enough for typical cameras; very large sensors (60 MPix and more) with 30 or more frames need about 16 GB. When a newer release exists, a blue **New version** button appears at the top right of the window, next to **User Manual**; click it to open the releases page.
 
 ### Optional: plate solving
 
@@ -109,53 +111,6 @@ For an editable stylesheet, copy `config/appearance-example.properties` from the
 
 ---
 
-### Preparing an observing session
-
-Click **Prepare Frames…**, above **Import Aligned Frames…** in **1 Prepare**. It opens a separate window; a dataset does not need to be imported first.
-
-![Preparing an observing session](docs/images/manual/ui-preparation.png)
-
-1. **Check Siril.** Browse to the Siril installation folder, or select its command-line executable (`siril-cli`). Siril 1.4.0 or newer is required. **Check** identifies the program and checks its version without processing images. Successful selections are saved as application preferences; opening the preparation window automatically checks a configured path. Use **Check** to repeat the check when needed.
-2. **Choose inputs.** Select the light-exposure folder and any matching darks, flats, biases or dark-flats. A calibration role accepts either a folder of exposures or an existing master FITS file. The optional session scan suggests input groups using the [folder-scanning rules below](#how-the-session-scan-finds-image-groups). Use the **Found** choices when several groups are listed, selecting one group per role and checking that calibration matches the chosen lights. Missing calibration roles remain omitted. Click **Inspect inputs**, then confirm the mapping.
-3. **Choose camera interpretation.** Select **Monochrome**, **Colour (Bayer CFA)**, or **Already debayered RGB**. For CFA, use metadata when it supplies the pattern and row order, or choose the correct Bayer pattern and orientation yourself. Manual pattern selection also exposes X/Y offsets. An unknown pattern is never assumed to be RGGB. Verify the pattern against the camera/acquisition settings.
-4. **Choose output and follow-up.** The output parent folder is optional: leave it blank to create the run folder inside the lights source folder, or select another existing folder. The readiness panel shows the effective destination. Optionally import the results automatically and create a separate reference stack. **Keep working files** is unchecked by default: copied inputs, converted frames and calibration masters are removed after processing. Enable it to retain those files for inspection. Final aligned frames, any requested stack, scripts, configuration, manifest and log are kept. After a successful automatic import, the preparation window closes and a message confirms that the new dataset is ready. If import is disabled, the completed output remains available in this window.
-5. **Review and run.** The readiness panel stays visible beside the scrolling form and lists the effective choices, including omitted dark subtraction or uncalibrated flats. Confirm the recipe, then click **Prepare with Siril**. **Preview processing instructions** shows the generated recipe without running it.
-
-Preparation copies the inputs into a new `spacepixels_prepared_…` run folder. It normalizes legacy dotted observation times and quoted site coordinates on working FITS copies before Siril can discard them, and checks metadata preservation. Final exposures use a single linear scale/offset for the whole sequence and a fixed RGB arithmetic mean; they are unsigned 16-bit monochrome FITS. The original images are unchanged. Plate solve the prepared frames before astrometric analysis: source WCS is not reused after registration.
-
-Registration keeps a canvas the size of the reference frame, including the dark margins left when exposures shift or rotate: **current** framing in Siril. These margins remain at zero during conversion, including when an offset preserves negative image values. SpacePixels uses them to measure drift/dither and identify valid image coverage. Keep them when preparing data externally too; do not crop the sequence to its common overlap.
-
-The progress dialog streams Siril output while scripts run, including file counts, stage messages and tool percentages. It shows elapsed time and how long ago output last arrived; you can select/copy the text and scroll back while processing continues. The displayed text is bounded; the full `preparation.log` stays on disk.
-
-Each run gets a dated folder such as `spacepixels_prepared_20261028_201500`; a numbered suffix avoids collisions. The final input sequence is in `aligned/`; a requested reference stack is kept separately in `reference/`. The run folder also contains `preparation.log`, generated instructions, `siril.cfg` and `preparation.json` with source mappings, settings and outcome. These are local working records and can contain private paths or observing metadata. Failed/cancelled runs are marked accordingly; their logs and metadata remain, while working-file retention follows the checkbox. Siril may exclude exposures that cannot be registered. SpacePixels continues with the retained frames when at least three have valid source associations; the completion message reports the counts and the manifest lists exclusions. Failed or unvalidated output is never imported automatically. Cleanup removes only owned working trees after Siril has stopped, never the source files. Cancel stops the owned external processes before the processing slot is released; closing the preparation window also cancels its preparation and prevents automatic follow-up.
-
-FITS, Siril and XISF conversions use one linear scale across the sequence, preserving ordinary negative values with a common offset and keeping registration margins at zero. For normalized values outside the accepted `[-0.5,1.5]` headroom, one dialog reports the range, counts, percentages and affected frames. **Clip extremes** limits only those values; **Preserve all values** keeps them with reduced 16-bit precision; **Cancel** leaves the original files unchanged. The selected transform and outlier counts are recorded in the output headers. Trying another conversion policy creates a new directory and preserves earlier results.
-
-For **PixInsight WBPP**, use ordinary **Import Aligned Frames…** on one compatible folder of individual calibrated **and registered** exposures, using FITS or supported XISF. A calibration-only intermediate still needs star registration. No PixInsight installation or separate import workflow is required.
-
-#### How the session scan finds image groups
-
-**Scan and suggest folders** uses folder names and image filename extensions to help fill the input roles. It does not read image pixels or camera metadata to decide which frames belong together.
-
-- **Search area.** It examines the selected session folder and up to four folder levels below it, without following symbolic links. Every new scan clears the previous input mapping, including roles with no new match; an explicit output-folder selection is kept.
-- **Role names.** Matching ignores case and treats spaces, hyphens and underscores as separators. Common role names can appear at the start or end of a folder name; compact filter labels and numbers are also recognized. Examples:
-
-  | Role | Example folder names |
-  |---|---|
-  | Lights | `light`, `lights`, `light M13`, `andromeda_lights`, `lightB`, `light1` |
-  | Darks | `dark`, `darks`, `dark 180s ISO800` |
-  | Flats | `flat`, `flats`, `andromeda_flats`, `flatB` |
-  | Biases | `bias`, `biases`, `session_bias` |
-  | Dark-flats | `darkflats`, `dark-flat 0.1s`, `flatdarks` |
-
-- **Nested groups.** A child folder inherits its parent's recognized role unless its own name specifies another role. For example, `camera/lights/Blue` and `camera/lights/Green` become two separate lights groups. Likewise, `flats/0.10` and `flats/0.15` become separate flat groups. Each group's count includes only image candidates directly inside that folder. Empty containers are skipped, and files from different folders are never merged.
-- **Candidate files.** Recognized extensions include FITS (also compressed FITS), XISF, TIFF and supported RAW filename families such as CR2, CR3, CRW, NEF, ARW and DNG. Other files are ignored. Recognizing an extension does not guarantee that the external tool can decode the file.
-- **Previous outputs.** Known processing folders are skipped, including `siril`, `_siril`, `iris`, registered/aligned/calibrated/processed folders, `reg`, and SpacePixels preparation/detection output folders. This also covers names such as `light-aligned` and `light-calibrated-pproc`.
-- **Calibration masters.** Files named as masters, such as `master_bias.fit`, are offered as explicit FITS-file choices. A calibration folder containing a named master is not offered as a folder of exposures; manually selecting such a folder is also rejected during inspection. Master recognition uses filenames, so unfamiliar or unlabelled masters need your own verification.
-- **Automatic selection.** Exactly one discovered exposure folder for a role is filled in automatically. Several groups remain unselected until you choose one through **Found**. A master always requires an explicit choice, even if it is the only result. Unrecognized target-only names such as `M81`, or groups beyond the search depth, can still be selected with **Browse…**.
-
-The scan does not split images within one folder by filter, exposure, camera or target, and choosing `lightB` does not automatically choose `flatB`. Keep different groups in separate folders and confirm the calibration match yourself. **Inspect inputs** requires at least three lights, at least two exposures for each selected calibration folder, or one explicitly selected master FITS file. Camera interpretation, decoding and the later preparation checks remain necessary.
-
 ## 3. Workflow: find moving objects in a session
 
 This is the main use of SpacePixels: **import → Auto-Tune → Detect → read the report**. The screenshots come from a session of 33 two-minute frames of a 61-megapixel camera. They illustrate several runs of that session, so finding numbers and counts can differ with the settings and software version.
@@ -187,7 +142,7 @@ ASTAP checks run in the background and show **Checking ASTAP installation...** w
 
 After a successful solve, SpacePixels offers to write the WCS solution into the frame. This preserves all image pixels, tile compression and additional FITS extensions, and verifies the complete updated file and WCS before replacing the original. Whole-file archives such as `.fits.gz` must be decompressed before import. Closing SpacePixels during a solve waits for solver cleanup; an accepted header write finishes before exit.
 
-Without a plate solution everything still works except sky coordinates and the identification buttons. With one, **Fetch Sky Catalogue** in **2 Astrometry** downloads the stars, deep-sky objects and variable stars of the field, which the viewers can then draw on your frames (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
+Without a plate solution you can still detect, blink and inspect objects in pixel coordinates. Sky-coordinate overlays, coordinate-based catalogue searches and some calibrated diagnostics require astrometry. With one, **Fetch Sky Catalogue** in **2 Astrometry** downloads the stars, deep-sky objects and variable stars of the field, which the viewers can then draw on your frames (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
 
 ### Step 3: Auto-Tune
 
@@ -195,7 +150,7 @@ Open **Detection Settings** (or click **Edit settings…** in **4 Detect**). The
 
 ![Auto-Tune running](docs/images/manual/ui-autotune-running.png)
 
-Click **Run Auto-Tune**, or **Auto-Tune Settings** on the Main tab (or press **Ctrl+T**), which opens this page and starts the run with the tuner and profile chosen here. It measures your own frames: how sharp the stars are, how much the stars jitter, how many noise detections each setting produces and how faint a test star each setting still finds. This takes from a few seconds to a few minutes (here 1 min 45 s for 33 × 61 MPix). While it runs, the button reads **Tuning…** and a progress window shows the frame it is on. **Preview Frame** on this page opens the same preview as **Preview Frame** on the Main tab.
+Click **Run Auto-Tune**, or **Auto-Tune Settings** on the Main tab (or press **Ctrl+T**), which opens this page and starts the calibrated tuner with the sensitivity profile chosen here. It measures your own frames: how sharp the stars are, how much the stars jitter, how many noise detections each setting produces and how faint a test star each setting still finds. This takes from a few seconds to a few minutes (here 1 min 45 s for 33 × 61 MPix). While it runs, the button reads **Tuning…** and a progress window shows the frame it is on. **Preview Frame** on this page opens the same preview as **Preview Frame** on the Main tab.
 
 ![Auto-Tune results](docs/images/manual/ui-autotune-done.png)
 
@@ -245,7 +200,7 @@ The text above the picture is the progress. **Hide picture** removes the view an
   - A cancelled iterative run keeps the passes it finished, with an index page that says the run was cancelled, and removes the pass it was writing. When no pass had finished, it also removes the converted copy of the frames it made for the run.
   - Convert to Mono and Batch Stretch keep the frames converted or stretched so far.
 
-SpacePixels checks the quality of every frame (blank, blurred or failed frames are left out), builds a star mask from the median of the frames, finds everything that is not a star in each frame, links the detections into tracks, and writes the report with crops and animations of every object. When it finishes, it offers to open the report:
+SpacePixels checks the quality of every frame (blank, blurred or failed frames are left out), builds a star mask from the median of the frames, extracts candidate transient sources in each frame, links the detections into tracks, and writes the report with crops and animations of the included findings. When it finishes, it offers to open the report:
 
 ![Detection finished](docs/images/manual/ui-complete.png)
 
@@ -303,7 +258,7 @@ Common-motion filtering runs after the main tracks, streaks and anomalies, befor
 
 In Variable Stars, **Frames excluded: spatial residuals** counts frames omitted from photometry because a region of the field retains a brightness offset relative to the centre after ensemble correction. The count appears in the session summary when nonzero and in the detailed readiness diagnostics. Per-frame reasons remain in the table and CSV. These photometry exclusions do not remove frames from moving-object detection.
 
-With the sky catalogue, the Overview also gives the **Field depth**: how faint the detection reached in the median frame, as a Gaia G magnitude. In four small patches of the field, away from large galaxies and nebulae, the Gaia stars are matched with the stars found there, and the depth is the magnitude where the share found falls to half of the share among the brighter stars. It is measured with the settings of the run, so it tells you how faint an object the detection could have found. **Quality Control: Field Depth** in the Diagnostics shows it frame by frame: clouds, haze, a bright sky or poor focus show up as frames that go less deep. Gaia G is close to a clear or luminance filter; with other filters, compare frames rather than the number itself.
+With the sky catalogue, the Overview also gives the **Field depth**: how faint the detection reached in the median frame, as a Gaia G magnitude. In four small patches of the field, away from large galaxies and nebulae, the Gaia stars are matched with the stars found there, and the depth is the magnitude where the share found falls to half of the share among the brighter stars. It is measured with the settings of the run and estimates stationary point-source depth; it does not guarantee that a moving, trailed or variable object of that magnitude will be recovered. **Quality Control: Field Depth** in the Diagnostics shows it frame by frame: clouds, haze, a bright sky or poor focus show up as frames that go less deep. Gaia G is close to a clear or luminance filter; with other filters, compare frames rather than the number itself.
 
 ### A moving object
 
@@ -318,7 +273,7 @@ Each object has a card with its times, speed and direction, and:
 - **Pixel Evolution**: the object in every frame, so you can check that it is the same object each time;
 - the sky position and the identification buttons (see [Identifying objects](#5-identifying-objects)).
 
-A real object looks the same in every crop and moves evenly. A noise track jumps around, changes shape or appears in only some crops.
+Consistent position changes and a similar image profile across several frames support a real track. Jumps, changing shapes and isolated appearances deserve closer inspection, although seeing, faint signal and masked stars can also interrupt a real object’s detections.
 
 Track duration covers the observing span from the start of the first exposure to the end of the last. Mean speed and identification epochs use exposure midpoints, corresponding to the measured centroids. Anomaly context uses the nearest kept frames before and after the event, with one shared stretch and visible frame/time labels. Slow-mover and residual animations also skip frames rejected by detection quality control.
 
@@ -412,7 +367,7 @@ For fast near-Earth objects, use **Render JPL NEO Recovery Results Here** as wel
 
 In this session (see [the example below](#a-faint-near-earth-asteroid-among-satellite-trails)), the exact-field search found only a magnitude 24 object 39″ away, which is not the detection, while the **NEO Recovery** search lists **99942 Apophis** 1.4″ from the track, at magnitude 15.6.
 
-For exact results, set your observing site on the **Astrometry Config** tab (or keep it in the FITS headers). Without a site, the lookups use the centre of the Earth, which is fine for main-belt asteroids but can shift close near-Earth objects by many arcseconds.
+For exact results, set your observing site on the **Astrometry Config** tab (or keep it in the FITS headers). Without a site, the lookups use the centre of the Earth, which may be adequate for a broad main-belt search but is less accurate than the observing location, especially for nearby objects.
 
 ---
 
@@ -444,7 +399,7 @@ The object-centric animation of the report follows the comet:
 
 ![Comet Africano, object-centric animation](docs/images/manual/africano-object-centric.gif)
 
-Without a plate solution the report has no sky coordinates or identification buttons, but everything else works. Plate-solve one frame to identify the object.
+Without a plate solution this report still shows the moving track and animations, but has no sky coordinates or coordinate-based identification buttons. Plate-solve one frame to identify the object.
 
 ### A faint near-Earth asteroid among satellite trails
 
@@ -452,7 +407,56 @@ Without a plate solution the report has no sky coordinates or identification but
 
 ![Apophis](docs/images/manual/apophis-track.png)
 
-The JPL NEO Recovery search then identified it (see [Identifying objects](#5-identifying-objects)). If a profile does not find an object you expect, try the next profile or the other tuner before changing single settings.
+The JPL NEO Recovery search then identified it (see [Identifying objects](#5-identifying-objects)). If a profile does not find an object you expect, try the next sensitivity profile before changing individual settings.
+
+## 7. Other tools
+
+### Preparing an observing session
+
+Click **Prepare Frames…**, above **Import Aligned Frames…** in **1 Prepare**. It opens a separate window; a dataset does not need to be imported first.
+
+![Preparing an observing session](docs/images/manual/ui-preparation.png)
+
+1. **Check Siril.** Browse to the Siril installation folder, or select its command-line executable (`siril-cli`). Siril 1.4.0 or newer is required. **Check** identifies the program and checks its version without processing images. Successful selections are saved as application preferences; opening the preparation window automatically checks a configured path. Use **Check** to repeat the check when needed.
+2. **Choose inputs.** Select the light-exposure folder and any matching darks, flats, biases or dark-flats. A calibration role accepts either a folder of exposures or an existing master FITS file. The optional session scan suggests input groups using the [folder-scanning rules below](#how-the-session-scan-finds-image-groups). Use the **Found** choices when several groups are listed, selecting one group per role and checking that calibration matches the chosen lights. Missing calibration roles remain omitted. Click **Inspect inputs**, then confirm the mapping.
+3. **Choose camera interpretation.** Select **Monochrome**, **Colour (Bayer CFA)**, or **Already debayered RGB**. For CFA, use metadata when it supplies the pattern and row order, or choose the correct Bayer pattern and orientation yourself. Manual pattern selection also exposes X/Y offsets. An unknown pattern is never assumed to be RGGB. Verify the pattern against the camera/acquisition settings.
+4. **Choose output and follow-up.** The output parent folder is optional: leave it blank to create the run folder inside the lights source folder, or select another existing folder. The readiness panel shows the effective destination. Optionally import the results automatically and create a separate reference stack. **Keep working files** is unchecked by default: copied inputs, converted frames and calibration masters are removed after processing. Enable it to retain those files for inspection. Final aligned frames, any requested stack, scripts, configuration, manifest and log are kept. After a successful automatic import, the preparation window closes and a message confirms that the new dataset is ready. If import is disabled, the completed output remains available in this window.
+5. **Review and run.** The readiness panel stays visible beside the scrolling form and lists the effective choices, including omitted dark subtraction or uncalibrated flats. Confirm the recipe, then click **Prepare with Siril**. **Preview processing instructions** shows the generated recipe without running it.
+
+Preparation copies the inputs into a new `spacepixels_prepared_…` run folder. It normalizes legacy dotted observation times and quoted site coordinates on working FITS copies before Siril can discard them, and checks metadata preservation. Final exposures use a single linear scale/offset for the whole sequence and a fixed RGB arithmetic mean; they are unsigned 16-bit monochrome FITS. The original images are unchanged. Plate solve the prepared frames before astrometric analysis: source WCS is not reused after registration.
+
+Registration keeps a canvas the size of the reference frame, including the dark margins left when exposures shift or rotate: **current** framing in Siril. These margins remain at zero during conversion, including when an offset preserves negative image values. SpacePixels uses them to measure drift/dither and identify valid image coverage. Keep them when preparing data externally too; do not crop the sequence to its common overlap.
+
+The progress dialog streams Siril output while scripts run, including file counts, stage messages and tool percentages. It shows elapsed time and how long ago output last arrived; you can select/copy the text and scroll back while processing continues. The displayed text is bounded; the full `preparation.log` stays on disk.
+
+Each run gets a dated folder such as `spacepixels_prepared_20261028_201500`; a numbered suffix avoids collisions. The final input sequence is in `aligned/`; a requested reference stack is kept separately in `reference/`. The run folder also contains `preparation.log`, generated instructions, `siril.cfg` and `preparation.json` with source mappings, settings and outcome. These are local working records and can contain private paths or observing metadata. Failed/cancelled runs are marked accordingly; their logs and metadata remain, while working-file retention follows the checkbox. Siril may exclude exposures that cannot be registered. SpacePixels continues with the retained frames when at least three have valid source associations; the completion message reports the counts and the manifest lists exclusions. Failed or unvalidated output is never imported automatically. Cleanup removes only owned working trees after Siril has stopped, never the source files. Cancel stops the owned external processes before the processing slot is released; closing the preparation window also cancels its preparation and prevents automatic follow-up.
+
+FITS, Siril and XISF conversions use one linear scale across the sequence, preserving ordinary negative values with a common offset and keeping registration margins at zero. For normalized values outside the accepted `[-0.5,1.5]` headroom, one dialog reports the range, counts, percentages and affected frames. **Clip extremes** limits only those values; **Preserve all values** keeps them with reduced 16-bit precision; **Cancel** leaves the original files unchanged. The selected transform and outlier counts are recorded in the output headers. Trying another conversion policy creates a new directory and preserves earlier results.
+
+For **PixInsight WBPP**, use ordinary **Import Aligned Frames…** on one compatible folder of individual calibrated **and registered** exposures, using FITS or supported XISF. A calibration-only intermediate still needs star registration. No PixInsight installation or separate import workflow is required.
+
+#### How the session scan finds image groups
+
+**Scan and suggest folders** uses folder names and image filename extensions to help fill the input roles. It does not read image pixels or camera metadata to decide which frames belong together.
+
+- **Search area.** It examines the selected session folder and up to four folder levels below it, without following symbolic links. Every new scan clears the previous input mapping, including roles with no new match; an explicit output-folder selection is kept.
+- **Role names.** Matching ignores case and treats spaces, hyphens and underscores as separators. Common role names can appear at the start or end of a folder name; compact filter labels and numbers are also recognized. Examples:
+
+  | Role | Example folder names |
+  |---|---|
+  | Lights | `light`, `lights`, `light M13`, `andromeda_lights`, `lightB`, `light1` |
+  | Darks | `dark`, `darks`, `dark 180s ISO800` |
+  | Flats | `flat`, `flats`, `andromeda_flats`, `flatB` |
+  | Biases | `bias`, `biases`, `session_bias` |
+  | Dark-flats | `darkflats`, `dark-flat 0.1s`, `flatdarks` |
+
+- **Nested groups.** A child folder inherits its parent's recognized role unless its own name specifies another role. For example, `camera/lights/Blue` and `camera/lights/Green` become two separate lights groups. Likewise, `flats/0.10` and `flats/0.15` become separate flat groups. Each group's count includes only image candidates directly inside that folder. Empty containers are skipped, and files from different folders are never merged.
+- **Candidate files.** Recognized extensions include FITS (also compressed FITS), XISF, TIFF and supported RAW filename families such as CR2, CR3, CRW, NEF, ARW and DNG. Other files are ignored. Recognizing an extension does not guarantee that the external tool can decode the file.
+- **Previous outputs.** Known processing folders are skipped, including `siril`, `_siril`, `iris`, registered/aligned/calibrated/processed folders, `reg`, and SpacePixels preparation/detection output folders. This also covers names such as `light-aligned` and `light-calibrated-pproc`.
+- **Calibration masters.** Files named as masters, such as `master_bias.fit`, are offered as explicit FITS-file choices. A calibration folder containing a named master is not offered as a folder of exposures; manually selecting such a folder is also rejected during inspection. Master recognition uses filenames, so unfamiliar or unlabelled masters need your own verification.
+- **Automatic selection.** Exactly one discovered exposure folder for a role is filled in automatically. Several groups remain unselected until you choose one through **Found**. A master always requires an explicit choice, even if it is the only result. Unrecognized target-only names such as `M81`, or groups beyond the search depth, can still be selected with **Browse…**.
+
+The scan does not split images within one folder by filter, exposure, camera or target, and choosing `lightB` does not automatically choose `flatB`. Keep different groups in separate folders and confirm the calibration match yourself. **Inspect inputs** requires at least three lights, at least two exposures for each selected calibration folder, or one explicitly selected master FITS file. Camera interpretation, decoding and the later preparation checks remain necessary.
 
 ### Variable stars
 
@@ -462,7 +466,7 @@ The same 61-megapixel session with photometry switched on:
 
 ![Variable-star summary](docs/images/manual/variable-stars-summary.png)
 
-The verdict **Ready** means the data passed the linearity checks. In the pictured run, SpacePixels measured 53,914 stars, scored 43,843 of them and reported 46 high-confidence and 25 possible variable stars. A **Limited** or **Not ready** verdict says in plain words why, and for Not ready what could help (for example unstretched frames or a longer sequence).
+The verdict **Ready** means the data passed the photometry readiness checks; it does not confirm that every reported candidate is astrophysical. In the pictured run, SpacePixels measured 53,914 stars, scored 43,843 of them and reported 46 high-confidence and 25 possible variable stars. A **Limited** or **Not ready** verdict says in plain words why, and for Not ready what could help (for example unstretched frames or a longer sequence).
 
 The candidates are first listed in a table: tier, position, observed variation in this session, the shape of the change (faded, brightened, dipped and recovered…) and any failed check. When the sky catalogue was fetched before the detection, the **Known As** column shows a matched VSX variable name. Without a VSX match, it shows a nearby catalogue star's proper name or Gaia DR3 designation when available, with the source and angular separation. This identifies a catalogue star without claiming it is a known variable. **Look up the N others in VSX** still includes these candidates; this needs SpacePixels running, and the results are saved into the report. A positive VSX result takes precedence; an empty or failed lookup keeps the catalogue star's name. The button counts the candidates still without a VSX match.
 
@@ -487,7 +491,7 @@ When the sky catalogue of the session was fetched before the detection (see [Ann
 Candidate V1 is already named from the catalogue: the high-amplitude δ Scuti star ASASSN-V J063632.76+064632.3, 0.2″ away, with a period of 2.5 hours. The light curve shows it rising and falling by 0.43 magnitudes within the 75 minutes of the session. **Check VSX Here** searches the full VSX for that position, using saved lookup results when available. A candidate without a VSX match may be a new variable, or a false one: check its light curve, the comparison stars and the cutouts before reporting it.
 
 
-### Candidate card limit and presentation order
+#### Candidate card limit and presentation order
 
 Under **Detection Settings → Variable Stars → Report Presentation**, **Maximum Detailed Candidate Cards** controls how many candidates get full cards with charts and cutouts. The default is **40**; set **60** for a longer report. Values from 1 to 1,000 are allowed. Every candidate remains in the table, field maps and CSVs. This setting changes presentation, not how many stars are measured or classified.
 
@@ -504,7 +508,7 @@ SpacePixels does not estimate a period from the session. Curve shape is a descri
 
 Changes apply to the next report. **Save** keeps these choices in the SpacePixels detection profile, **Revert** restores saved values, and **Load Defaults** restores 40 cards and Observed changes first. Older profiles load with those defaults; the usual backed-up migration offer adds the two presentation fields.
 
-### Following up an unmatched candidate
+#### Following up an unmatched candidate
 
 Every plate-solved candidate card has **Research this star**, with the search radius around its measured position:
 
@@ -517,10 +521,6 @@ These links open online in your browser, even if the session has no downloaded c
 Confirm that a result is the same star using separation, brightness and images. Nearby entries are possible associations; catalogue epochs and proper motion can affect their positions. **High confidence** means the candidate passed SpacePixels' checks, and an empty VSX result does not establish a new discovery.
 
 The report's expandable **Following up an unmatched candidate** note describes the next steps: inspect measurements, uncertainties, comparison stars and image defects; seek additional nights and independent survey light curves (for example ASAS-SN or ZTF where available); and retain identifiers, coordinates/epoch, timing, filter and comparison-star details. A missing Gaia variability flag does not establish constancy. Before submitting a possible new variable, follow the [AAVSO VSX submission guidance](https://vsx.aavso.org/index.php?view=about.notice), including literature and archival-data checks. SpacePixels' exported instrumental/differential magnitudes are not automatically calibrated submission data.
-
----
-
-## 7. Other tools
 
 ### Blink Selected
 
@@ -662,7 +662,7 @@ From an unpacked Windows archive:
 bin\batchDetect.bat "C:\astro\session1" "config\default_detection_profile.json" --auto-tune high
 ```
 
-On Linux and macOS use `bin/batchDetect`. The profile can be `low`, `medium`, `high` or `maximum`. See [README.md](README.md) for all options.
+On Linux and macOS use `bin/batchDetect`. The profile can be `low`, `medium`, `high` or `maximum`. The CLI requires already prepared, uncompressed unsigned 16-bit monochrome FITS. It does not calibrate, align or convert input images. See the [command-line guide in the README](README.md#command-line-utilities) for launcher examples, profile files and memory settings; `--help` lists the accepted arguments.
 
 ---
 
@@ -712,4 +712,4 @@ In most sessions you only need Auto-Tune and the profile. Change single settings
 
 **Colour frames.** Detection works on monochrome data; click **Convert to Mono** after importing.
 
-**Signed 16-bit frames, or pixel values below zero.** SpacePixels reads 16-bit frames as unsigned values (`BZERO` 32768). Frames stored as signed 16 bit (`BZERO` 0) or with other scaling would be read at the wrong brightness level, so import offers to convert them into a new folder. When the conversion finds pixels below zero (frames bias- or dark-subtracted without a pedestal, in signed 16 bit or 32 bit), it asks how to store them. **Add an Offset** (recommended) adds one common offset before the sequence-wide linear scale, keeps normal negative values and leaves registration padding at 0; extreme values follow the separate outlier choice; the report takes the offset off again for the sky brightness. **Set to 0** keeps the original levels but cuts off the low side of the noise; when the sky itself is near zero, most of each frame becomes 0, every frame then looks like a failed registration and detection fails.
+**Signed 16-bit frames, or pixel values below zero.** SpacePixels reads 16-bit frames as unsigned values (`BZERO` 32768). Frames stored as signed 16 bit (`BZERO` 0) or with other scaling would be read at the wrong brightness level, so import offers to convert them into a new folder. When the conversion finds pixels below zero (frames bias- or dark-subtracted without a pedestal, in signed 16 bit or 32 bit), it asks how to store them. **Add an Offset** (recommended) adds one common offset before the sequence-wide linear scale, keeps normal negative values and leaves registration padding at 0; extreme values follow the separate outlier choice; the report takes the offset off again for the sky brightness. **Set to 0** clips negative values before the common linear conversion and cuts off the low side of the noise; when the sky itself is near zero, most of each frame becomes 0, every frame then looks like a failed registration and detection fails.
