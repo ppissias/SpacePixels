@@ -2,9 +2,10 @@
 <!--
   JDK 21 jpackage main.wxs, with one addition: remember the folder chosen in the
   directory page. The generated file components use registry key paths, so Windows
-  Installer does not keep that folder for repair or removal and otherwise rewrites
-  the default LocalAppData location. This records the chosen folder and restores it
-  before costing when the product is already installed.
+  Installer does not keep that folder and otherwise rewrites the default LocalAppData
+  location. The saved folder is restored before costing for repair, removal, and a
+  different release. A command-line INSTALLDIR still wins. The folder page shows the
+  saved path, and the user can change it.
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
      xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
@@ -125,7 +126,7 @@
     <UIRef Id="JpUI"/>
 
     <InstallExecuteSequence>
-      <Custom Action="JpRestoreInstallDir" After="AppSearch">Installed AND JPSAVEDINSTALLDIR</Custom>
+      <Custom Action="JpRestoreInstallDir" After="AppSearch">JPSAVEDINSTALLDIR AND NOT INSTALLDIR</Custom>
       <Custom Action="JpSetARPINSTALLLOCATION" After="CostFinalize">Not Installed</Custom>
       <Custom Action="JpSetARPCOMMENTS" After="CostFinalize">Not Installed</Custom>
       <Custom Action="JpSetARPCONTACT" After="CostFinalize">Not Installed</Custom>
@@ -152,7 +153,7 @@
 
     <InstallUISequence>
       <Custom Action="JpFindRelatedProducts" After="FindRelatedProducts"/>
-      <Custom Action="JpRestoreInstallDir" After="AppSearch">Installed AND JPSAVEDINSTALLDIR</Custom>
+      <Custom Action="JpRestoreInstallDir" After="AppSearch">JPSAVEDINSTALLDIR AND NOT INSTALLDIR</Custom>
     </InstallUISequence>
 
   </Product>

@@ -28,7 +28,7 @@ This manual walks through the everyday workflows with screenshots from real sess
 
 ### Installing
 
-**Windows x64 installer:** download `SpacePixels-<installer-version>.exe` from [SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases) and run it. It includes its own Java 21 runtime; Java and WiX do not need to be installed on your computer. Setup installs for your Windows account, lets you choose the folder, and offers Start menu and desktop shortcuts. Repair and uninstall use that same folder. Start **SpacePixels** from a shortcut or the installed `SpacePixels.exe`.
+**Windows x64 installer:** download `SpacePixels-<installer-version>.exe` from [SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases) and run it. It includes its own Java 21 runtime; Java and WiX do not need to be installed on your computer. Setup installs for your Windows account, lets you choose the folder, and offers Start menu and desktop shortcuts. Repair and uninstall use that same folder. A later release suggests that folder on its folder page; you can still choose another. Start **SpacePixels** from a shortcut or the installed `SpacePixels.exe`.
 
 The installer is unsigned, so Windows may show a SmartScreen notice. For an installer downloaded from the project's release page, **More info → Run anyway** proceeds. A new release is installed by running its installer; close SpacePixels first. Uninstall it through Windows **Installed apps**. Upgrades and uninstall leave settings in your home folder and your image datasets in place.
 
