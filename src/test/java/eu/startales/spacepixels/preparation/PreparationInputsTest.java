@@ -87,6 +87,32 @@ public class PreparationInputsTest {
         assertEquals(List.of(master), inputs.files().get(BIASES));
     }
 
+    /** A TIFF named like a master is not a FITS master, so the calibration exposures in that folder remain usable. */
+    @Test public void tiffNamedLikeAMasterDoesNotReplaceTheExposureFolder() throws Exception {
+        Path root = temporary.getRoot().toPath();
+        Path lights = images(root, "lights", 3);
+        Path flats = Files.createDirectories(root.resolve("flat"));
+        Files.createFile(flats.resolve("F_0043.CR2"));
+        Files.createFile(flats.resolve("F_0044.CR2"));
+        Path tiff = Files.createFile(flats.resolve("MasterFlat_ISO200.tif"));
+        var scan = PreparationInputs.scan(root);
+        assertEquals(List.of(new PreparationInputs.Candidate(flats, 3, false)), scan.candidates().get(FLATS));
+        var inputs = FramePreparationService.inspect(Map.of(LIGHTS, lights, FLATS, flats));
+        assertFalse(inputs.masters().contains(FLATS));
+        var question = PreparationCohort.questions(inputs).get(0);
+        assertEquals(FLATS, question.role());
+        assertTrue(question.excludeMinority());
+        assertEquals(List.of(tiff), question.omittedByKeeping(0));
+        assertThrows(java.io.IOException.class, () -> FramePreparationService.inspect(Map.of(LIGHTS, lights, FLATS, tiff)));
+    }
+
+    /** Siril names its bias folder offsets; that folder is a bias group. */
+    @Test public void recognizesSirilOffsetFoldersAsBias() throws Exception {
+        Path root = temporary.getRoot().toPath();
+        Path offsets = images(root, "offsets", 2);
+        assertEquals(Map.of(BIASES, offsets), PreparationInputs.suggest(root));
+    }
+
     /** Extensions are candidates only; image files in child output folders are never mixed with the selected inputs. */
     @Test public void inventoriesCandidatesWithoutReadingRawOrFollowingSubdirectories() throws Exception {
         Path folder = temporary.getRoot().toPath();

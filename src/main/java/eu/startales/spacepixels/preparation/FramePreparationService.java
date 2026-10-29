@@ -53,6 +53,27 @@ public final class FramePreparationService {
             files = Map.copyOf(detached);
             masters = Set.copyOf(masters);
         }
+
+        /** Returns the inventory without files the observer confirmed should stay out of this preparation. */
+        public Inputs excluding(Iterable<Path> omitted) throws IOException {
+            Set<Path> skip = new HashSet<>();
+            for (Path path : omitted) skip.add(path.toAbsolutePath().normalize());
+            if (skip.isEmpty()) return this;
+            Map<Role, List<Path>> kept = new EnumMap<>(Role.class);
+            long bytes = 0;
+            for (var entry : files.entrySet()) {
+                List<Path> list = new ArrayList<>();
+                for (Path file : entry.getValue()) {
+                    if (skip.contains(file.toAbsolutePath().normalize())) continue;
+                    list.add(file);
+                    bytes += Files.size(file);
+                }
+                if (!list.isEmpty()) kept.put(entry.getKey(), list);
+            }
+            Inputs result = new Inputs(kept, masters, bytes);
+            requireCounts(result);
+            return result;
+        }
     }
 
     /** Local header-fix provenance, written only in the run's manifest. */
@@ -66,6 +87,16 @@ public final class FramePreparationService {
 
     /** Inventories explicitly selected roles; a supplied calibration file means an existing master FITS. */
     public static Inputs inspect(Map<Role, Path> paths) throws IOException {
+        return inspect(paths, Set.of());
+    }
+
+    /** Inventories the selected roles, leaving out files the observer confirmed during inspection. */
+    public static Inputs inspect(Map<Role, Path> paths, Set<Path> omitted) throws IOException {
+        Set<Path> skip = new HashSet<>();
+        for (Path path : omitted) {
+            skip.add(path.toAbsolutePath().normalize());
+            try { skip.add(path.toRealPath()); } catch (IOException ignored) { /* The normalized path still matches an inventory entry. */ }
+        }
         Map<Role, List<Path>> files = new EnumMap<>(Role.class);
         Set<Role> masters = new HashSet<>();
         long bytes = 0;
@@ -74,25 +105,45 @@ public final class FramePreparationService {
             Path path = paths.get(role);
             if (path == null) continue;
             List<Path> found;
+            boolean master;
             if (role != Role.LIGHTS && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
                 if (!isFits(path)) throw new IOException("An existing " + role + " master must be a FITS file.");
                 found = List.of(path.toRealPath());
-                masters.add(role);
+                master = true;
             } else {
-                found = PreparationInputs.inspect(path).files();
+                found = PreparationInputs.inspect(path).files().stream().filter(file -> !omitted(file, skip)).toList();
+                if (found.isEmpty()) continue;
                 if (role != Role.LIGHTS && found.stream().anyMatch(PreparationInputs::namedMaster))
                     throw new IOException(role + " folder contains an existing master. Select the master FITS file directly, or use a folder containing only individual calibration exposures.");
+                master = false;
             }
-            int required = role == Role.LIGHTS ? 3 : masters.contains(role) ? 1 : 2;
-            if (found.size() < required) throw new IOException(role + " needs at least " + required + " image(s), or select an existing calibration master.");
+            if (master) masters.add(role);
             for (Path file : found) {
                 if (!unique.add(file.toRealPath())) throw new IOException("An input image was assigned to more than one role.");
                 bytes += Files.size(file);
             }
             files.put(role, found);
         }
-        if (!files.containsKey(Role.LIGHTS)) throw new IOException("Choose the folder of individual light exposures.");
-        return new Inputs(files, masters, bytes);
+        Inputs inputs = new Inputs(files, masters, bytes);
+        requireCounts(inputs);
+        return inputs;
+    }
+
+    /** A confirmed inspection still has to leave enough individual exposures for the selected roles. */
+    static void requireCounts(Inputs inputs) throws IOException {
+        if (!inputs.files().containsKey(Role.LIGHTS)) throw new IOException("Choose the folder of individual light exposures.");
+        for (Role role : inputs.files().keySet()) {
+            int required = role == Role.LIGHTS ? 3 : inputs.masters().contains(role) ? 1 : 2;
+            if (inputs.files().get(role).size() < required) {
+                throw new IOException(role + " needs at least " + required + " image(s), or select an existing calibration master.");
+            }
+        }
+    }
+
+    /** True when this inventory path is one the observer chose to leave out. */
+    private static boolean omitted(Path file, Set<Path> skip) {
+        if (skip.contains(file.toAbsolutePath().normalize())) return true;
+        try { return skip.contains(file.toRealPath()); } catch (IOException ignored) { return false; }
     }
 
     /** Runs conversion/calibration/registration on the worker, observing cancellation through owned subprocess cleanup. */
@@ -103,12 +154,17 @@ public final class FramePreparationService {
     /** Uses the desktop's explicit outlier decision, or rejects extremes when invoked without an interaction. */
     public Result prepare(PreparationRequest request, BooleanSupplier cancelled, BiConsumer<Integer, String> progress, Consumer<String> details,
                           eu.startales.spacepixels.fits.ImageScaling.Decision decision) throws Exception {
-        Inputs inputs = inspect(request.inputs());
+        Inputs inputs = inspect(request.inputs(), request.omittedInputs());
         Path executable = SirilInstallation.resolve(request.executable());
         Path parent = request.outputParent().toRealPath();
         if (!Files.isDirectory(parent)) throw new IOException("Choose an existing output parent folder.");
         long estimated = Math.max(256L * 1024 * 1024, inputs.sourceBytes() * 12);
-        if (Files.getFileStore(parent).getUsableSpace() < estimated) throw new IOException("The output disk needs more working space (approximately " + (estimated / 1_073_741_824.0) + " GiB).");
+        boolean freeSpaceChecked = true;
+        try {
+            if (Files.getFileStore(parent).getUsableSpace() < estimated) throw new IOException("The output disk needs more working space (approximately " + (estimated / 1_073_741_824.0) + " GiB).");
+        } catch (java.nio.file.FileSystemException | UnsupportedOperationException | SecurityException unavailable) {
+            freeSpaceChecked = false;
+        }
         Path run = eu.startales.spacepixels.util.RunDirectories.create(parent, "spacepixels_prepared_");
         Path log = run.resolve("preparation.log");
         Map<String, Object> manifest = new LinkedHashMap<>();
@@ -121,6 +177,8 @@ public final class FramePreparationService {
         manifest.put("offsetX", request.offsetX());
         manifest.put("offsetY", request.offsetY());
         manifest.put("keepWorkingFiles", request.keepWorkingFiles());
+        manifest.put("omittedInputs", request.omittedInputs().stream().map(Path::toString).toList());
+        manifest.put("freeSpaceChecked", freeSpaceChecked);
         boolean cleaned = false;
         try {
             Files.createDirectories(run.resolve("masters"));
@@ -163,16 +221,21 @@ public final class FramePreparationService {
             progress.accept(10, "Checking converted frames, calibration compatibility and camera interpretation…");
             Map<Role, Integer> counts = new EnumMap<>(Role.class);
             Map<Role, Header> roleHeaders = new EnumMap<>(Role.class);
+            Map<Role, ExposureSpan> exposures = new EnumMap<>(Role.class);
             for (Role role : copies.keySet()) {
                 counts.put(role, copies.get(role).size());
                 if (inputs.masters().contains(role)) {
                     Files.copy(copies.get(role).getFirst(), run.resolve("masters").resolve(role.folder() + ".fit"));
-                    roleHeaders.put(role, SirilHeaderCorrections.imageHeader(copies.get(role).getFirst()));
+                    Header master = SirilHeaderCorrections.imageHeader(copies.get(role).getFirst());
+                    roleHeaders.put(role, master);
+                    exposures.put(role, ExposureSpan.of(master));
                 } else {
                     List<Path> converted = sequence(run.resolve("converted").resolve(role.folder()), role.folder() + "_");
                     if (converted.size() != copies.get(role).size()) throw new IOException("Siril did not convert every selected " + role + " image. See preparation.log.");
                     for (int i = 0; i < converted.size(); i++) if (isFits(copies.get(role).get(i))) verifyMetadata(copies.get(role).get(i), converted.get(i));
-                    validateSensor(request, converted, role);
+                    ExposureSpan span = new ExposureSpan();
+                    validateSensor(request, converted, role, span);
+                    exposures.put(role, span);
                     roleHeaders.put(role, SirilHeaderCorrections.imageHeader(converted.getFirst()));
                     if (role == Role.LIGHTS && request.sensor() == PreparationRequest.Sensor.CFA) {
                         Header cfa = SirilHeaderCorrections.imageHeader(converted.getFirst());
@@ -181,7 +244,7 @@ public final class FramePreparationService {
                     }
                 }
             }
-            validateCalibrationHeaders(roleHeaders);
+            validateCalibrationHeaders(roleHeaders, exposures);
             progress.accept(15, "Siril: calibrating and registering individual exposures…");
             runSiril(executable, run, "prepare.ssf", SirilPreparationRecipe.processing(request, counts, inputs.masters()), log, cancelled, details);
             Path lights = run.resolve("converted/lights");
@@ -287,7 +350,7 @@ public final class FramePreparationService {
 
     /** Previews reproducible generated instructions without touching selected originals or launching a tool. */
     public static String preview(PreparationRequest request) throws IOException {
-        Inputs inputs = inspect(request.inputs());
+        Inputs inputs = inspect(request.inputs(), request.omittedInputs());
         String interpretation = "# Input: " + request.sensor() + "; Bayer: " + request.bayer() + "; rows: " + request.rowOrder()
                 + "; offsets: " + request.offsetX() + ", " + request.offsetY() + "\n"
                 + "# Working files: " + (request.keepWorkingFiles() ? "kept" : "removed after processing; final images, scripts, settings and logs kept") + "\n";
@@ -300,16 +363,22 @@ public final class FramePreparationService {
 
     /** Validates converted image modes and exposure cohorts; explicit CFA overrides affect only run-owned working copies. */
     static String validateSensor(PreparationRequest request, List<Path> files, Role role) throws Exception {
+        return validateSensor(request, files, role, new ExposureSpan());
+    }
+
+    /** Records the role's known exposure range while validating. The span is the full minimum and maximum, not the first file. */
+    static String validateSensor(PreparationRequest request, List<Path> files, Role role, ExposureSpan exposures) throws Exception {
         String first = null;
         Header reference = null;
-        double minimumLightExposure = Double.POSITIVE_INFINITY;
-        double maximumLightExposure = Double.NEGATIVE_INFINITY;
         for (Path path : files) {
             try (Fits fits = new Fits(path.toFile())) {
                 BasicHDU<?> image = FitsInput.getImageHDU(fits);
                 if (image == null) throw new IOException("Converted input has no image HDU.");
-                int dimensions = image.getAxes().length;
+                int[] axes = image.getAxes();
+                int dimensions = axes == null ? 0 : axes.length;
                 Header header = image.getHeader();
+                int planes = dimensions < 2 ? 0 : dimensions == 2 ? 1 : header.getIntValue("NAXIS3", 1);
+                exposures.include(header);
                 if (reference == null) reference = header;
                 else {
                     if (reference.getIntValue("NAXIS1") != header.getIntValue("NAXIS1") || reference.getIntValue("NAXIS2") != header.getIntValue("NAXIS2")) {
@@ -317,21 +386,6 @@ public final class FramePreparationService {
                     }
                     if ((role == Role.LIGHTS || role == Role.FLATS) && !java.util.Objects.equals(reference.getStringValue("FILTER"), header.getStringValue("FILTER"))) {
                         throw new IOException("Selected " + role + " images have different or inconsistently missing filter metadata. Choose one group.");
-                    }
-                    if (role == Role.DARKS || role == Role.DARK_FLATS || role == Role.FLATS && request.inputs().containsKey(Role.DARK_FLATS)) {
-                        requireExposure(reference, header, role + " inputs");
-                    }
-                }
-                if (role == Role.LIGHTS) {
-                    double exposure = header.getDoubleValue("EXPTIME", header.getDoubleValue("EXPOSURE", Double.NaN));
-                    if (Double.isFinite(exposure)) {
-                        minimumLightExposure = Math.min(minimumLightExposure, exposure);
-                        maximumLightExposure = Math.max(maximumLightExposure, exposure);
-                        // Match ordinary import's millisecond interpretation and compare the full range, independent of file order.
-                        if (!ExposureGroup.sameExposure((long) (minimumLightExposure * 1000.0), (long) (maximumLightExposure * 1000.0))) {
-                            throw new IOException("Light frame exposures range from " + minimumLightExposure + " s to "
-                                    + maximumLightExposure + " s. Choose one exposure group.");
-                        }
                     }
                 }
                 String pattern = header.getStringValue("BAYERPAT");
@@ -341,8 +395,8 @@ public final class FramePreparationService {
                         throw new IOException("This is not an ordinary Bayer mosaic. Prepare it with a supported external recipe and import the registered result.");
                     }
                 }
-                if (request.sensor() == PreparationRequest.Sensor.RGB && dimensions != 3) throw new IOException(role + " is not already debayered RGB.");
-                if (request.sensor() != PreparationRequest.Sensor.RGB && dimensions != 2) throw new IOException(role + " has colour channels inconsistent with the chosen sensor mode.");
+                if (request.sensor() == PreparationRequest.Sensor.RGB && planes != 3) throw new IOException(role + " is not already debayered RGB.");
+                if (request.sensor() != PreparationRequest.Sensor.RGB && planes != 1) throw new IOException(role + " has colour channels inconsistent with the chosen sensor mode.");
                 if (request.sensor() == PreparationRequest.Sensor.MONO && pattern != null && !pattern.isBlank()) throw new IOException("CFA metadata was found. Choose Colour (Bayer CFA), or use a genuinely monochrome sequence.");
                 if (request.sensor() != PreparationRequest.Sensor.CFA) continue;
                 if (role != Role.LIGHTS) continue; // Calibration stays in the sensor domain and is never debayered independently.
@@ -374,11 +428,23 @@ public final class FramePreparationService {
                 }
             }
         }
+        // One group is the full range, in any file order. Flats may differ only when no dark-flat is subtracted.
+        if (role == Role.LIGHTS || role == Role.DARKS || role == Role.DARK_FLATS
+                || role == Role.FLATS && request.inputs().containsKey(Role.DARK_FLATS)) {
+            exposures.requireOneGroup(role);
+        }
         return first == null ? null : first.split("/")[0];
     }
 
     /** Rejects contradictions that are known from FITS metadata; unknown RAW facts are still delegated to the tool. */
     static void validateCalibrationHeaders(Map<Role, Header> headers) throws IOException {
+        Map<Role, ExposureSpan> exposures = new EnumMap<>(Role.class);
+        headers.forEach((role, header) -> exposures.put(role, ExposureSpan.of(header)));
+        validateCalibrationHeaders(headers, exposures);
+    }
+
+    /** Matches calibration exposures to the whole light or flat range, not to whichever file was converted first. */
+    static void validateCalibrationHeaders(Map<Role, Header> headers, Map<Role, ExposureSpan> exposures) throws IOException {
         Header light = headers.get(Role.LIGHTS);
         if (light != null) for (Role role : new Role[]{Role.DARKS, Role.FLATS, Role.BIASES, Role.DARK_FLATS}) {
             Header calibration = headers.get(role);
@@ -388,24 +454,70 @@ public final class FramePreparationService {
                 int actual = calibration.getIntValue(key, 0);
                 if (expected > 0 && actual > 0 && expected != actual) throw new IOException(role + " does not match the light frames' " + key + ".");
             }
-            if (role == Role.DARKS) requireExposure(light, calibration, "Dark/light calibration");
             if (role == Role.FLATS && light.getStringValue("FILTER") != null && calibration.getStringValue("FILTER") != null
                     && !light.getStringValue("FILTER").equals(calibration.getStringValue("FILTER"))) {
                 throw new IOException("The flat filter does not match the selected lights.");
             }
         }
-        if (headers.containsKey(Role.FLATS) && headers.containsKey(Role.DARK_FLATS)) {
-            requireExposure(headers.get(Role.FLATS), headers.get(Role.DARK_FLATS), "Dark-flat calibration");
-        }
+        requireExposureGroup(exposures.get(Role.LIGHTS), exposures.get(Role.DARKS), "Dark/light calibration");
+        requireExposureGroup(exposures.get(Role.FLATS), exposures.get(Role.DARK_FLATS), "Dark-flat calibration");
     }
 
-    /** Known exposure durations must agree when optimization is disabled; missing values remain explicit unknowns. */
-    private static void requireExposure(Header first, Header second, String context) throws IOException {
-        double expected = first.getDoubleValue("EXPTIME", first.getDoubleValue("EXPOSURE", Double.NaN));
-        double actual = second.getDoubleValue("EXPTIME", second.getDoubleValue("EXPOSURE", Double.NaN));
-        if (Double.isFinite(expected) && Double.isFinite(actual) && Math.abs(expected - actual) > 0.0005) {
-            throw new IOException(context + " has different exposure durations. Choose matching inputs; dark optimization is disabled.");
+    /** Known durations must belong to one import exposure group; missing values remain explicit unknowns. */
+    private static void requireExposureGroup(ExposureSpan first, ExposureSpan second, String context) throws IOException {
+        if (first == null || second == null || first.matches(second)) return;
+        throw new IOException(context + " has different exposure durations (" + first.describe() + " and " + second.describe()
+                + "). Choose matching inputs; dark optimization is disabled.");
+    }
+
+    /** The known exposure minimum and maximum of one role. An empty span means the duration was not recorded. */
+    static final class ExposureSpan {
+        private double minimum = Double.NaN;
+        private double maximum = Double.NaN;
+
+        /** A single header, such as an existing calibration master. */
+        static ExposureSpan of(Header header) {
+            ExposureSpan span = new ExposureSpan();
+            span.include(header);
+            return span;
         }
+
+        /** Adds one recorded duration. Negative or absent values stay unknown. */
+        void include(Header header) {
+            double seconds = header.getDoubleValue("EXPTIME", header.getDoubleValue("EXPOSURE", Double.NaN));
+            if (!Double.isFinite(seconds) || seconds < 0) return;
+            if (!known()) {
+                minimum = seconds;
+                maximum = seconds;
+            } else {
+                minimum = Math.min(minimum, seconds);
+                maximum = Math.max(maximum, seconds);
+            }
+        }
+
+        /** Rejects a cohort whose shortest and longest durations are different exposure groups. */
+        void requireOneGroup(Role role) throws IOException {
+            if (!known() || ExposureGroup.sameExposure(millis(minimum), millis(maximum))) return;
+            String label = role == Role.LIGHTS ? "Light frame" : role.toString();
+            throw new IOException(label + " exposures range from " + minimum + " s to " + maximum + " s. Choose one exposure group.");
+        }
+
+        /** True when both durations are unknown, or their combined range is one exposure group. */
+        boolean matches(ExposureSpan other) {
+            if (!known() || !other.known()) return true;
+            return ExposureGroup.sameExposure(millis(Math.min(minimum, other.minimum)), millis(Math.max(maximum, other.maximum)));
+        }
+
+        /** Renders one duration, or the full range when the role varies inside its group. */
+        String describe() {
+            if (!known()) return "unknown";
+            return minimum == maximum ? minimum + " s" : minimum + "–" + maximum + " s";
+        }
+
+        private boolean known() { return Double.isFinite(minimum) && Double.isFinite(maximum); }
+
+        /** Truncates to milliseconds, matching ordinary import's exposure grouping. */
+        private static long millis(double seconds) { return (long) (seconds * 1000.0); }
     }
 
     /** Associates retained numeric source identities without closing gaps left by registration exclusions. */
@@ -445,7 +557,8 @@ public final class FramePreparationService {
         for (String key : List.of("DATE-OBS", "EXPTIME")) {
             if (expected.containsKey(key) && !actual.containsKey(key)) throw new IOException("Siril removed " + key + " metadata from a registered frame.");
         }
-        if (expected.containsKey("EXPTIME") && Math.abs(expected.getDoubleValue("EXPTIME") - actual.getDoubleValue("EXPTIME")) > 0.000001) {
+        // One millisecond covers a 32-bit rewrite of the same duration; a tenth of a second still fails.
+        if (expected.containsKey("EXPTIME") && Math.abs(expected.getDoubleValue("EXPTIME") - actual.getDoubleValue("EXPTIME")) > 0.001) {
             throw new IOException("Siril changed an exposure duration.");
         }
         Map<String, String> sourceTime = new HashMap<>();

@@ -1,13 +1,23 @@
 package eu.startales.spacepixels.preparation;
 
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /** Immutable observer-selected inputs and interpretation; workers never read live window controls. */
 public record PreparationRequest(Path executable, Map<PreparationInputs.Role, Path> inputs,
                                  Sensor sensor, Bayer bayer, RowOrder rowOrder, int offsetX, int offsetY,
-                                 Path outputParent, boolean referenceStack, boolean keepWorkingFiles) {
+                                 Path outputParent, boolean referenceStack, boolean keepWorkingFiles,
+                                 Set<Path> omittedInputs) {
+    /** A request that keeps every inspected image. */
+    public PreparationRequest(Path executable, Map<PreparationInputs.Role, Path> inputs,
+                              Sensor sensor, Bayer bayer, RowOrder rowOrder, int offsetX, int offsetY,
+                              Path outputParent, boolean referenceStack, boolean keepWorkingFiles) {
+        this(executable, inputs, sensor, bayer, rowOrder, offsetX, offsetY, outputParent, referenceStack, keepWorkingFiles, Set.of());
+    }
+
     /** Sensor interpretation is independent of the input file's number of image planes. */
     public enum Sensor {
         MONO("Monochrome"), CFA("Colour (Bayer CFA)"), RGB("Already debayered RGB");
@@ -43,5 +53,8 @@ public record PreparationRequest(Path executable, Map<PreparationInputs.Role, Pa
         Objects.requireNonNull(rowOrder);
         outputParent = Objects.requireNonNull(outputParent).toAbsolutePath().normalize();
         if ((offsetX & ~1) != 0 || (offsetY & ~1) != 0) throw new IllegalArgumentException("Bayer offsets must be 0 or 1 pixel.");
+        Set<Path> normalized = new LinkedHashSet<>();
+        for (Path path : omittedInputs) normalized.add(Objects.requireNonNull(path).toAbsolutePath().normalize());
+        omittedInputs = Set.copyOf(normalized);
     }
 }

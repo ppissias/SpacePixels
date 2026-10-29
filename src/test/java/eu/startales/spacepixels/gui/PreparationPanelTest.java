@@ -109,6 +109,25 @@ public class PreparationPanelTest {
         } finally { if (reference.get() != null) edt(reference.get()::close); storage.finish(); }
     }
 
+    /** Incomplete checks are red; an accepted check stays in the normal text colour. */
+    @Test public void readinessPaintsValidationErrorsInRed() throws Exception {
+        var settings = ApplicationSettings.inMemory(new AppConfig());
+        var storage = new ApplicationStorage();
+        var owner = new AtomicReference<PreparationPanel>();
+        try {
+            edt(() -> owner.set(new PreparationPanel(settings, storage, () -> false, ignored -> { },
+                    ignored -> new PreparationPanel.Installation(temporary.newFile("siril-cli.exe").toPath(), "siril 1.4.4"))));
+            PreparationPanel panel = owner.get();
+            edt(() -> {
+                Color error = readinessColor(panel, "Siril needs an installation check");
+                Color normal = readinessColor(panel, "Engine: Siril");
+                Color expected = UIManager.getColor("Component.error.foreground");
+                assertFalse(error.equals(normal));
+                assertEquals(expected != null ? expected : new Color(0xC62828), error);
+            });
+        } finally { if (owner.get() != null) edt(owner.get()::close); storage.finish(); }
+    }
+
     /** Presets capture existing recipe fields, keep file row order explicit, and never discard hidden custom choices. */
     @Test public void cameraPresetsAndAdvancedOptionsCaptureOneConsistentRecipe() throws Exception {
         Path lights = images(temporary.getRoot().toPath(), "cfa-lights", 3);
@@ -128,26 +147,25 @@ public class PreparationPanelTest {
             await(() -> settings.getConfig().sirilExecutablePath.equals(executable.toString()));
             edt(() -> {
                 var panel = owner.get();
-                var preset = combo(panel, CameraBayerPreset.class);
+                var preset = cameraPreset(panel);
                 var pattern = combo(panel, PreparationRequest.Bayer.class);
                 var rows = combo(panel, PreparationRequest.RowOrder.class);
                 var advanced = checkbox(panel, "Show advanced de-bayer options");
-                assertEquals(CameraBayerPreset.METADATA, preset.getSelectedItem());
+                assertEquals(CameraBayerPreset.METADATA, preset.selected());
                 assertFalse("No CFA controls before choosing the sensor", visible(preset, panel));
                 combo(panel, PreparationRequest.Sensor.class).setSelectedItem(PreparationRequest.Sensor.CFA);
                 assertTrue(visible(preset, panel));
                 assertFalse(visible(rows, panel));
-                preset.setSelectedItem(CameraBayerPreset.ZWO_ASI1600MC);
+                preset.select(CameraBayerPreset.ZWO_ASI1600MC);
                 assertEquals(PreparationRequest.Bayer.GRBG, request(panel).bayer());
-                assertEquals("Camera model cannot determine stored row order", PreparationRequest.RowOrder.METADATA,
-                        request(panel).rowOrder());
+                assertEquals(PreparationRequest.RowOrder.TOP_DOWN, request(panel).rowOrder());
                 checkbox(panel, "I confirm this recipe").doClick();
                 advanced.doClick();
                 assertTrue("Disclosure is not a recipe change", checkbox(panel, "I confirm this recipe").isSelected());
                 assertTrue(visible(rows, panel));
                 rows.setSelectedItem(PreparationRequest.RowOrder.TOP_DOWN);
                 assertFalse(checkbox(panel, "I confirm this recipe").isSelected());
-                assertEquals(CameraBayerPreset.CUSTOM, preset.getSelectedItem());
+                assertEquals(CameraBayerPreset.CUSTOM, preset.selected());
                 var x = labelledCombo(panel, "X offset (px)");
                 var y = labelledCombo(panel, "Y offset (px)");
                 x.setSelectedItem(1); y.setSelectedItem(1);
@@ -156,17 +174,20 @@ public class PreparationPanelTest {
                 assertFalse(visible(rows, panel));
                 assertEquals(captured, request(panel));
                 assertTrue(text(panel).contains("Bayer offsets: 1, 1"));
-                preset.setSelectedItem(CameraBayerPreset.QHY533C);
+                preset.select(CameraBayerPreset.QHY533C);
                 assertEquals(PreparationRequest.Bayer.GBRG, request(panel).bayer());
-                assertEquals(PreparationRequest.RowOrder.METADATA, request(panel).rowOrder());
+                assertEquals(PreparationRequest.RowOrder.TOP_DOWN, request(panel).rowOrder());
+                preset.select(CameraBayerPreset.SBIG_ST2000XCM);
+                assertEquals(PreparationRequest.Bayer.BGGR, request(panel).bayer());
+                assertEquals(PreparationRequest.RowOrder.BOTTOM_UP, request(panel).rowOrder());
                 assertEquals(0, request(panel).offsetX());
                 assertEquals(0, request(panel).offsetY());
                 assertEquals("Earlier requests retain custom phase", 1, captured.offsetX());
-                preset.setSelectedItem(CameraBayerPreset.QHY12);
+                preset.select(CameraBayerPreset.QHY12);
                 assertEquals(PreparationRequest.Bayer.BGGR, request(panel).bayer());
                 pattern.setSelectedItem(PreparationRequest.Bayer.RGGB);
-                assertEquals(CameraBayerPreset.CUSTOM, preset.getSelectedItem());
-                preset.setSelectedItem(CameraBayerPreset.CANON_RAW);
+                assertEquals(CameraBayerPreset.CUSTOM, preset.selected());
+                preset.select(CameraBayerPreset.CANON_RAW);
                 assertEquals(PreparationRequest.Bayer.METADATA, request(panel).bayer());
                 assertFalse(x.isEnabled());
                 panel.setBusy(true);
@@ -185,6 +206,13 @@ public class PreparationPanelTest {
     private static PreparationRequest request(PreparationPanel panel) {
         try { return panel.selection().request(); }
         catch (java.io.IOException failure) { throw new AssertionError(failure); }
+    }
+
+    /** Finds the camera search field through the label attached to it. */
+    private static CameraPresetField cameraPreset(Container root) {
+        return all(root).stream().filter(component -> component instanceof CameraPresetField field
+                && "Camera preset".equals(field.getAccessibleContext().getAccessibleName()))
+                .map(CameraPresetField.class::cast).findFirst().orElseThrow();
     }
 
     /** Finds a CFA phase editor by its accessible field label. */
@@ -351,7 +379,15 @@ public class PreparationPanelTest {
 
     /** Reads readiness text while on the EDT. */
     private static String text(Container root) {
-        return all(root).stream().filter(JTextArea.class::isInstance).map(JTextArea.class::cast).map(JTextArea::getText).reduce("", String::concat);
+        return all(root).stream().filter(JTextPane.class::isInstance).map(JTextPane.class::cast).map(JTextPane::getText).reduce("", String::concat);
+    }
+
+    /** The foreground colour of the first occurrence of a readiness phrase. */
+    private static Color readinessColor(Container root, String phrase) {
+        JTextPane pane = all(root).stream().filter(JTextPane.class::isInstance).map(JTextPane.class::cast).findFirst().orElseThrow();
+        int offset = pane.getText().indexOf(phrase);
+        assertTrue(phrase + " is missing from readiness", offset >= 0);
+        return javax.swing.text.StyleConstants.getForeground(pane.getStyledDocument().getCharacterElement(offset).getAttributes());
     }
 
     /** Enumerates this panel's controls without constructing or displaying a native window. */

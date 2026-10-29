@@ -3,16 +3,22 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.preparation.FramePreparationService;
+import eu.startales.spacepixels.preparation.PreparationCohort;
 import eu.startales.spacepixels.preparation.PreparationInputs;
 import eu.startales.spacepixels.preparation.PreparationInputs.Role;
 import eu.startales.spacepixels.preparation.PreparationProcess;
 import eu.startales.spacepixels.preparation.PreparationRequest;
 import eu.startales.spacepixels.preparation.SirilInstallation;
+import eu.startales.spacepixels.preparation.SirilPreparationRecipe;
 import eu.startales.spacepixels.session.ApplicationStorage;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.Style;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyledDocument;
 import java.awt.*;
 import java.io.IOException;
 import java.net.URI;
@@ -21,8 +27,10 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -52,7 +60,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     private final JTextField root = new JTextField(28);
     private final JTextField output = new JTextField(28);
     private final JComboBox<PreparationRequest.Sensor> sensor = new JComboBox<>(PreparationRequest.Sensor.values());
-    private final JComboBox<CameraBayerPreset> cameraPreset = new JComboBox<>(CameraBayerPreset.values());
+    private final CameraPresetField cameraPreset = new CameraPresetField(this::applyCameraPreset);
     private final JComboBox<PreparationRequest.Bayer> bayer = new JComboBox<>(PreparationRequest.Bayer.values());
     private final JComboBox<PreparationRequest.RowOrder> rowOrder = new JComboBox<>(PreparationRequest.RowOrder.values());
     private final JComboBox<Integer> offsetX = new JComboBox<>(new Integer[]{0, 1});
@@ -64,7 +72,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     private final JCheckBox keepWorkingFiles = new JCheckBox("Keep working files");
     private final JButton prepare = new JButton("Prepare with Siril");
     private final JButton preview = new JButton("Preview processing instructions");
-    private final JTextArea readiness = new JTextArea(17, 25);
+    private final JTextPane readiness = new WrappingText();
     private final JLabel feedback = new JLabel("Check Siril, map the input folders and inspect the inputs.");
     private final JPanel cfaOptions = new JPanel();
     private final JCheckBox showAdvanced = new JCheckBox("Show advanced de-bayer options");
@@ -72,6 +80,8 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     private SwingWorker<?, ?> inspection;
     private long inspectionVersion;
     private FramePreparationService.Inputs inspected;
+    private Set<Path> omittedInputs = Set.of();
+    private boolean fitsNeedExplicitRowOrder;
     private Path scannedRoot;
     private boolean updating;
     private boolean applyingPreset;
@@ -164,8 +174,6 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         basicCfa.setAlignmentX(LEFT_ALIGNMENT);
         addCfaRow(basicCfa, 0, "Camera preset", cameraPreset);
         addCfaRow(basicCfa, 1, "Bayer pattern", bayer);
-        cameraPreset.setMaximumRowCount(14);
-        cameraPreset.setToolTipText("Nominal camera patterns; capture software, cropping or flipping can change the file's mosaic. Prefer correct file metadata.");
         bayer.setToolTipText("Use the decoded file metadata, or explicitly override the Bayer pattern. Editing a preset selects Custom.");
         cfaOptions.add(basicCfa);
         showAdvanced.setAlignmentX(LEFT_ALIGNMENT);
@@ -203,10 +211,10 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         summary.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder("Preparation readiness"),
                 BorderFactory.createEmptyBorder(UiStyle.space(8), UiStyle.space(8), UiStyle.space(8), UiStyle.space(8))));
         readiness.setEditable(false);
-        readiness.setLineWrap(true);
-        readiness.setWrapStyleWord(true);
         readiness.setFont(UiStyle.bodyFont());
         readiness.setOpaque(false);
+        readiness.addStyle("normal", null);
+        readiness.addStyle("error", readiness.getStyle("normal"));
         summary.add(new JScrollPane(readiness), BorderLayout.CENTER);
         JPanel actions = new JPanel();
         actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS));
@@ -229,11 +237,10 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         editors.addAll(List.of(root, output, sensor, cameraPreset, bayer, showAdvanced, rowOrder, offsetX, offsetY, rolesConfirmed, recipeConfirmed, stack, importFrames, keepWorkingFiles, scan));
         inputs.values().forEach(editors::add);
         sensor.addActionListener(event -> recipeChanged());
-        cameraPreset.addActionListener(event -> applyCameraPreset());
         for (JComboBox<?> choice : List.of(bayer, rowOrder, offsetX, offsetY)) choice.addActionListener(event -> {
             if (applyingPreset) return;
             applyingPreset = true;
-            try { cameraPreset.setSelectedItem(CameraBayerPreset.CUSTOM); }
+            try { cameraPreset.select(CameraBayerPreset.CUSTOM); }
             finally { applyingPreset = false; }
             recipeChanged();
         });
@@ -249,19 +256,17 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         refresh();
     }
 
-    /** Applies an explicit shortcut atomically; file row order is never inferred from a camera model. EDT only. */
+    /** Applies an explicit shortcut atomically. Custom leaves the current interpretation untouched. EDT only. */
     private void applyCameraPreset() {
         if (applyingPreset) return;
-        CameraBayerPreset preset = (CameraBayerPreset) cameraPreset.getSelectedItem();
-        if (preset == null) return;
+        CameraBayerPreset preset = cameraPreset.selected();
+        if (preset == null || preset.pattern() == null) return;
         applyingPreset = true;
         try {
-            if (preset.pattern() != null) {
-                bayer.setSelectedItem(preset.pattern());
-                rowOrder.setSelectedItem(PreparationRequest.RowOrder.METADATA);
-                offsetX.setSelectedItem(0);
-                offsetY.setSelectedItem(0);
-            }
+            bayer.setSelectedItem(preset.pattern());
+            if (preset.rowOrder() != null) rowOrder.setSelectedItem(preset.rowOrder());
+            offsetX.setSelectedItem(0);
+            offsetY.setSelectedItem(0);
         } finally { applyingPreset = false; }
         recipeChanged();
     }
@@ -283,14 +288,14 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     void completed(FramePreparationService.Result result) {
         if (closed) return;
         message("Prepared " + result.frames() + " of " + result.inputFrames() + " frames: " + result.aligned());
-        readiness.setText("Preparation complete.\n\n" + result.frames() + " of " + result.inputFrames() + " validated individual exposures."
+        replaceReadiness("Preparation complete.\n\n" + result.frames() + " of " + result.inputFrames() + " validated individual exposures."
                 + (result.excluded().isEmpty() ? "" : "\nSiril excluded " + result.excluded().size() + " during registration; see preparation.json.")
                 + "\n\nOutput: " + result.aligned()
-                + "\n\nLogs and provenance: " + result.directory() + "\n\nPlate solve the prepared sequence before astrometric analysis.");
+                + "\n\nLogs and provenance: " + result.directory() + "\n\nPlate solve the prepared sequence before astrometric analysis.", false);
     }
 
     /** Shows an actionable failure without changing the current imported session or clearing the user's form. */
-    void failed(String reason) { if (!closed) { message(reason); readiness.setText(reason); } }
+    void failed(String reason) { if (!closed) { message(reason); replaceReadiness(reason, true); } }
 
     /** Captures the exact selected values; filesystem inventory and processing run on owned workers. */
     Selection selection() throws IOException {
@@ -304,7 +309,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
                 (PreparationRequest.Sensor) sensor.getSelectedItem(), cfa ? (PreparationRequest.Bayer) bayer.getSelectedItem() : PreparationRequest.Bayer.METADATA,
                 cfa ? (PreparationRequest.RowOrder) rowOrder.getSelectedItem() : PreparationRequest.RowOrder.METADATA,
                 manualPattern ? (Integer) offsetX.getSelectedItem() : 0, manualPattern ? (Integer) offsetY.getSelectedItem() : 0,
-                parent, stack.isSelected(), keepWorkingFiles.isSelected());
+                parent, stack.isSelected(), keepWorkingFiles.isSelected(), omittedInputs);
         return new Selection(request, importFrames.isSelected());
     }
 
@@ -372,16 +377,74 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     private void inspect() {
         try {
             Map<Role, Path> paths = inputPaths();
-            background(() -> FramePreparationService.inspect(paths), value -> {
-            inspected = value;
-            for (Role role : Role.values()) {
-                List<Path> files = value.files().get(role);
-                counts.get(role).setText(files == null ? "Omitted" : value.masters().contains(role) ? "Existing master FITS" : files.size() + " image candidates");
-            }
-            message("Inputs counted. Confirm role matching and camera interpretation; RAW decoding is checked during preparation.");
-            refresh();
+            background(() -> {
+                FramePreparationService.Inputs inputs = FramePreparationService.inspect(paths);
+                return new Inspection(inputs, PreparationCohort.questions(inputs),
+                        PreparationCohort.fitsMissingRowOrder(inputs.files().getOrDefault(Role.LIGHTS, List.of())));
+            }, pending -> {
+                try {
+                    FramePreparationService.Inputs accepted = pending.inputs;
+                    Set<Path> omitted = new LinkedHashSet<>();
+                    for (PreparationCohort.Question question : pending.questions) {
+                        List<Path> leaveOut = choose(question);
+                        if (leaveOut == null) {
+                            inspected = null;
+                            omittedInputs = Set.of();
+                            fitsNeedExplicitRowOrder = false;
+                            rolesConfirmed.setSelected(false);
+                            recipeConfirmed.setSelected(false);
+                            counts.values().forEach(label -> label.setText("Not inspected"));
+                            message("Inspection cancelled. The folder is unchanged.");
+                            refresh();
+                            return;
+                        }
+                        omitted.addAll(leaveOut);
+                    }
+                    accepted = accepted.excluding(omitted);
+                    inspected = accepted;
+                    omittedInputs = Set.copyOf(omitted);
+                    Set<Path> keptLights = new java.util.HashSet<>();
+                    for (Path light : accepted.files().getOrDefault(Role.LIGHTS, List.of())) keptLights.add(light.toAbsolutePath().normalize());
+                    fitsNeedExplicitRowOrder = pending.fitsMissingRowOrder.stream().anyMatch(keptLights::contains);
+                    for (Role role : Role.values()) {
+                        List<Path> files = accepted.files().get(role);
+                        int excluded = (int) omitted.stream().filter(path -> pending.inputs.files().getOrDefault(role, List.of()).contains(path)).count();
+                        counts.get(role).setText(files == null ? "Omitted" : accepted.masters().contains(role) ? "Existing master FITS"
+                                : files.size() + " image candidates" + (excluded == 0 ? "" : " (" + excluded + " excluded)"));
+                    }
+                    message(omitted.isEmpty() ? "Inputs counted. Confirm role matching and camera interpretation; RAW decoding is checked during preparation."
+                            : "Inputs counted. " + omitted.size() + " file(s) excluded. Confirm role matching and camera interpretation.");
+                    refresh();
+                } catch (IOException invalid) { failed(invalid.getMessage()); }
             });
         } catch (IOException invalid) { failed(invalid.getMessage()); }
+    }
+
+    /** Header classification captured with the inventory, so the question is shown only after the worker returns. */
+    private record Inspection(FramePreparationService.Inputs inputs, List<PreparationCohort.Question> questions, Set<Path> fitsMissingRowOrder) { }
+
+    /** Asks which different files to leave out. Cancel leaves the folder selection unchanged. */
+    private List<Path> choose(PreparationCohort.Question question) {
+        boolean majority = question.excludeMinority();
+        JTextArea details = new JTextArea(question.details());
+        details.setEditable(false);
+        details.setFont(UiStyle.bodyFont());
+        JScrollPane scroll = new JScrollPane(details);
+        scroll.setPreferredSize(new Dimension(520, 180));
+        JList<PreparationCohort.Group> choices = new JList<>(question.groups().toArray(PreparationCohort.Group[]::new));
+        choices.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        choices.setSelectedIndex(0);
+        JPanel form = new JPanel(new BorderLayout(0, UiStyle.space(8)));
+        form.add(new JLabel("<html><body style='width:460px'>" + question.prompt() + "</body></html>"), BorderLayout.NORTH);
+        form.add(majority ? scroll : new JScrollPane(choices), BorderLayout.CENTER);
+        String confirm = majority ? "Exclude and continue" : "Keep selected group";
+        Object[] options = {confirm, "Cancel"};
+        int answer = JOptionPane.showOptionDialog(this, form, question.role() + " files", JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+        if (answer != 0) return null;
+        int kept = majority ? 0 : choices.getSelectedIndex();
+        if (kept < 0) return null;
+        return question.omittedByKeeping(kept);
     }
 
     /** Runs one short operation off the EDT; edits invalidate its delivery and closing cancels its ownership. */
@@ -418,6 +481,8 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         if (updating) return;
         inspectionVersion++;
         inspected = null;
+        omittedInputs = Set.of();
+        fitsNeedExplicitRowOrder = false;
         rolesConfirmed.setSelected(false);
         recipeConfirmed.setSelected(false);
         counts.values().forEach(label -> label.setText("Not inspected"));
@@ -437,38 +502,96 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         Path destination = null;
         String outputProblem = null;
         try { destination = outputParent(); } catch (IOException invalid) { outputProblem = invalid.getMessage(); }
+        boolean missingRowOrder = cfa && rowOrder.getSelectedItem() == PreparationRequest.RowOrder.METADATA && fitsNeedExplicitRowOrder;
         boolean ready = !busy && !closed && available && inspected != null && rolesConfirmed.isSelected()
-                && recipeConfirmed.isSelected() && sensor.getSelectedItem() != null && destination != null;
+                && recipeConfirmed.isSelected() && sensor.getSelectedItem() != null && destination != null && !missingRowOrder;
         prepare.setEnabled(ready);
         preview.setEnabled(!busy && available && inspected != null);
-        StringBuilder text = new StringBuilder(busy ? "A processing job is running.\n\n" : "");
-        text.append(available ? "✓ Siril CLI checked\n" : "○ Siril needs an installation check\n");
-        text.append(inspected != null ? "✓ Inputs counted\n" : "○ Inspect selected inputs\n");
-        text.append(rolesConfirmed.isSelected() ? "✓ Folder roles confirmed\n" : "○ Confirm folder roles\n");
-        text.append(recipeConfirmed.isSelected() ? "✓ Recipe confirmed\n" : "○ Confirm the recipe\n");
-        if (outputProblem != null) text.append("○ ").append(outputProblem).append('\n');
-        text.append("\nEffective recipe\nEngine: Siril\nInput: ")
-                .append(sensor.getSelectedItem() == null ? "choose camera interpretation" : sensor.getSelectedItem());
-        if (cfa) text.append("\nBayer: ").append(bayer.getSelectedItem()).append("\nRows: ").append(rowOrder.getSelectedItem())
-                .append("\nBayer offsets: ").append(manual ? offsetX.getSelectedItem() + ", " + offsetY.getSelectedItem() : "from metadata");
+        prepareReadinessStyles();
+        clearReadiness();
+        if (busy) appendReadiness("A processing job is running.\n\n", false);
+        appendReadiness(available ? "✓ Siril CLI checked\n" : "○ Siril needs an installation check\n", !available);
+        appendReadiness(inspected != null ? "✓ Inputs counted\n" : "○ Inspect selected inputs\n", inspected == null);
+        appendReadiness(rolesConfirmed.isSelected() ? "✓ Folder roles confirmed\n" : "○ Confirm folder roles\n", !rolesConfirmed.isSelected());
+        appendReadiness(recipeConfirmed.isSelected() ? "✓ Recipe confirmed\n" : "○ Confirm the recipe\n", !recipeConfirmed.isSelected());
+        if (outputProblem != null) appendReadiness("○ " + outputProblem + "\n", true);
+        boolean sensorMissing = sensor.getSelectedItem() == null;
+        appendReadiness("\nEffective recipe\nEngine: Siril\n", false);
+        appendReadiness("Input: " + (sensorMissing ? "choose camera interpretation" : sensor.getSelectedItem()) + "\n", sensorMissing);
+        if (missingRowOrder) appendReadiness("○ FITS files lack ROWORDER metadata. Select Top-down or Bottom-up under advanced options.\n", true);
+        if (cfa) appendReadiness("Bayer: " + bayer.getSelectedItem() + "\nRows: " + rowOrder.getSelectedItem()
+                + "\nBayer offsets: " + (manual ? offsetX.getSelectedItem() + ", " + offsetY.getSelectedItem() : "from metadata"), false);
         if (inspected != null) {
-            for (Role role : Role.values()) text.append('\n').append(role).append(": ")
+            StringBuilder roles = new StringBuilder();
+            for (Role role : Role.values()) roles.append('\n').append(role).append(": ")
                     .append(inspected.files().containsKey(role) ? inspected.files().get(role).size() : "omitted");
-            if (!inspected.files().containsKey(Role.DARKS)) text.append("\n\nNo dark subtraction will be performed.");
+            if (!inspected.files().containsKey(Role.DARKS)) roles.append("\n\nNo dark subtraction will be performed.");
             if (inspected.files().containsKey(Role.FLATS) && !inspected.files().containsKey(Role.BIASES) && !inspected.files().containsKey(Role.DARK_FLATS)) {
-                text.append("\nFlats will be normalized without bias or dark-flat subtraction.");
+                roles.append("\nFlats will be normalized without bias or dark-flat subtraction.");
             }
+            if (!omittedInputs.isEmpty()) {
+                roles.append("\n\nExcluded after inspection:");
+                int listed = 0;
+                for (Path omitted : omittedInputs) {
+                    if (listed == 8) { roles.append("\nand ").append(omittedInputs.size() - listed).append(" more"); break; }
+                    roles.append('\n').append(omitted.getFileName());
+                    listed++;
+                }
+            }
+            appendReadiness(roles.toString(), false);
         }
-        text.append("\n\nRegistration: reference size, dark margins retained for drift/dither analysis.");
-        if (destination != null) text.append("\n\nOutput parent").append(output.getText().isBlank() ? " (lights source folder): " : ": ").append(destination)
+        StringBuilder rest = new StringBuilder("\n\nRegistration: reference size, dark margins retained for drift/dither analysis.");
+        if (destination != null) rest.append("\n\nOutput parent").append(output.getText().isBlank() ? " (lights source folder): " : ": ").append(destination)
                 .append("\nA new spacepixels_prepared_… run folder will be created here.");
-        text.append("\n\nReference stack: ").append(stack.isSelected() ? "yes" : "no");
-        text.append("\nAfter preparation: ").append(importFrames.isSelected() ? "import, then close this window" : "keep output");
-        text.append("\nWorking files: ").append(keepWorkingFiles.isSelected() ? "retained" : "removed; final images and logs kept");
-        text.append("\n\nSiril validates RAW decoding and may exclude lights during registration. At least three validated registered exposures are required; exclusions are recorded in the manifest.");
-        readiness.setText(text.toString());
+        rest.append("\n\nReference stack: ").append(stack.isSelected() ? "yes" : "no");
+        rest.append("\nAfter preparation: ").append(importFrames.isSelected() ? "import, then close this window" : "keep output");
+        rest.append("\nWorking files: ").append(keepWorkingFiles.isSelected() ? "retained" : "removed; final images and logs kept");
+        rest.append("\n\nSiril validates RAW decoding and may exclude lights during registration. At least three validated registered exposures are required; exclusions are recorded in the manifest.");
+        appendReadiness(rest.toString(), false);
         readiness.setCaretPosition(0);
         revalidate();
+    }
+
+    /** Uses the current theme colours so validation lines stay red after a look-and-feel change. */
+    private void prepareReadinessStyles() {
+        StyledDocument document = readiness.getStyledDocument();
+        Style normal = document.getStyle("normal");
+        StyleConstants.setFontFamily(normal, UiStyle.bodyFont().getFamily());
+        StyleConstants.setFontSize(normal, UiStyle.bodyFont().getSize());
+        Color body = UIManager.getColor("Label.foreground");
+        if (body != null) StyleConstants.setForeground(normal, body);
+        Style error = document.getStyle("error");
+        Color red = UIManager.getColor("Component.error.foreground");
+        StyleConstants.setForeground(error, red != null ? red : new Color(0xC62828));
+        StyleConstants.setFontFamily(error, UiStyle.bodyFont().getFamily());
+        StyleConstants.setFontSize(error, UiStyle.bodyFont().getSize());
+    }
+
+    /** Replaces the readiness text with one block, used for a finished run or a failed one. */
+    private void replaceReadiness(String text, boolean error) {
+        prepareReadinessStyles();
+        clearReadiness();
+        appendReadiness(text, error);
+        readiness.setCaretPosition(0);
+    }
+
+    /** Removes the previous readiness text before rewriting it. */
+    private void clearReadiness() {
+        try { readiness.getStyledDocument().remove(0, readiness.getStyledDocument().getLength()); }
+        catch (BadLocationException ignored) { readiness.setText(""); }
+    }
+
+    /** Adds one readiness passage. Validation failures use the error style. */
+    private void appendReadiness(String text, boolean error) {
+        StyledDocument document = readiness.getStyledDocument();
+        try { document.insertString(document.getLength(), text, document.getStyle(error ? "error" : "normal")); }
+        catch (BadLocationException ignored) { }
+    }
+
+    /** Wraps readiness text to the pane width inside the summary scroll pane. */
+    private static final class WrappingText extends JTextPane {
+        /** Tracks the viewport width so lines wrap instead of growing a horizontal scrollbar. */
+        @Override public boolean getScrollableTracksViewportWidth() { return true; }
     }
 
     /** Starts only an enabled, still-confirmed request, rechecking the native application job slot in the shell. */
@@ -628,16 +751,25 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
 
     /** Probes only the selected CLI with a private workspace and joins its process tree before returning. */
     private static Installation checkInstallation(Path selected) throws Exception {
+        // A reused SwingWorker thread can still be interrupted by an earlier cancelled task. That is not this check.
+        Thread.interrupted();
         Path executable = SirilInstallation.resolve(selected);
         Path workspace = Files.createTempDirectory("spacepixels-tool-check-");
         try {
+            Files.writeString(workspace.resolve("siril.cfg"), SirilPreparationRecipe.configuration());
             var result = PreparationProcess.run(SirilInstallation.probe(executable, workspace), workspace, Map.of("LC_ALL", "C", "LANG", "C"),
                     workspace.resolve("check.log"), Duration.ofSeconds(15), Thread.currentThread()::isInterrupted);
             return new Installation(executable, SirilInstallation.describeProbe(result.output()));
         } finally {
             try (var entries = Files.walk(workspace)) {
-                for (Path entry : entries.sorted(java.util.Comparator.reverseOrder()).toList()) Files.deleteIfExists(entry);
-            }
+                for (Path entry : entries.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                    try {
+                        Files.deleteIfExists(entry);
+                    } catch (IOException ignored) {
+                        entry.toFile().deleteOnExit();
+                    }
+                }
+            } catch (IOException ignored) { }
         }
     }
 
@@ -728,7 +860,12 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
                             }
                         }));
                     } catch (CancellationException ignored) { }
-                    catch (Exception failure) { status.setText("Cannot use this installation"); message(reason(failure)); }
+                    catch (Exception failure) {
+                        Throwable cause = failure instanceof java.util.concurrent.ExecutionException ? failure.getCause() : failure;
+                        if (cause instanceof CancellationException || cause instanceof InterruptedException) return;
+                        status.setText("Cannot use this installation");
+                        message(reason(failure));
+                    }
                     recipeChanged();
                 }
             };

@@ -127,7 +127,7 @@ public final class PreparationInputs {
         name = name.replaceFirst("^master\\s*", "");
         if (name.matches("(?:.* )?(?:dark ?flats?|flat ?darks?)(?: .*|[0-9].*)?")) return Role.DARK_FLATS;
         for (Role role : List.of(Role.LIGHTS, Role.DARKS, Role.FLATS, Role.BIASES)) {
-            String word = switch (role) { case LIGHTS -> "lights?"; case DARKS -> "darks?"; case FLATS -> "flats?"; default -> "bias(?:es)?"; };
+            String word = switch (role) { case LIGHTS -> "lights?"; case DARKS -> "darks?"; case FLATS -> "flats?"; default -> "(?:bias(?:es)?|offsets?)"; };
             if (name.matches(word + "(?: .*|[bgrl]|ha|oiii|sii|[0-9].*|m[0-9].*|ngc[0-9].*)?") || name.matches(".* " + word)) return role;
         }
         return null;
@@ -141,9 +141,9 @@ public final class PreparationInputs {
                 || name.matches("(?:.*[ _-])?(?:registered|aligned|calibrated|processed|reg)(?:[ _-].*)?");
     }
 
-    /** A named master must be selected as a file, never combined again with the exposures beside it. */
+    /** A FITS master must be selected as a file. A TIFF or other product with "master" in its name is not one. */
     static boolean namedMaster(Path file) {
-        return file.getFileName().toString().toLowerCase(Locale.ROOT).matches("(?:master.*|.*[ _-]master(?:[ _.-].*)?)");
+        return fitsFile(file) && file.getFileName().toString().toLowerCase(Locale.ROOT).matches("(?:master.*|.*[ _-]master(?:[ _.-].*)?)");
     }
 
     /** Identifies the existing-master formats accepted by the preparation service. */

@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import static org.junit.Assert.*;
 
-/** Validates sensor interpretation and measured light exposures without guessing CFA metadata or relaxing calibration matches. */
+/** Validates sensor interpretation and measured exposures without guessing CFA metadata. */
 public class PreparationSensorTest {
     @Rule public final TemporaryFolder temporary = new TemporaryFolder();
 
@@ -54,6 +54,28 @@ public class PreparationSensorTest {
         FramePreparationService.validateCalibrationHeaders(inputs);
     }
 
+    /** A third axis of length 1 is one channel. Two channels are neither one channel nor RGB. */
+    @Test public void singletonThirdAxisIsOneChannel() throws Exception {
+        Path one = temporary.newFile("one.fit").toPath();
+        try (Fits fits = new Fits()) {
+            var image = Fits.makeHDU(new short[][][]{{{1, 2}}});
+            image.getHeader().addValue("BAYERPAT", "RGGB", null);
+            image.getHeader().addValue("ROWORDER", "TOP-DOWN", null);
+            fits.addHDU(image);
+            fits.write(one.toFile());
+        }
+        FramePreparationService.validateSensor(request(PreparationRequest.Bayer.RGGB), List.of(one), PreparationInputs.Role.LIGHTS);
+        Path two = temporary.newFile("two.fit").toPath();
+        try (Fits fits = new Fits()) {
+            fits.addHDU(Fits.makeHDU(new short[][][]{{{1}}, {{2}}}));
+            fits.write(two.toFile());
+        }
+        assertThrows(java.io.IOException.class, () -> FramePreparationService.validateSensor(monoRequest(), List.of(two), PreparationInputs.Role.LIGHTS));
+        var rgb = new PreparationRequest(Path.of("siril-cli"), Map.of(), PreparationRequest.Sensor.RGB,
+                PreparationRequest.Bayer.METADATA, PreparationRequest.RowOrder.METADATA, 0, 0, temporary.getRoot().toPath(), false, false);
+        assertThrows(java.io.IOException.class, () -> FramePreparationService.validateSensor(rgb, List.of(one), PreparationInputs.Role.LIGHTS));
+    }
+
     /** Measured shutter variations use the same tolerance as ordinary import, without rewriting their durations. */
     @Test public void acceptsLightExposureVariationsWithinTheImportGroup() throws Exception {
         var frames = List.of(exposure(30.3), exposure(30.0), exposure(30.5), exposure(30.1));
@@ -75,18 +97,39 @@ public class PreparationSensorTest {
                 List.of(exposure(1.0), exposure(1.102)), PreparationInputs.Role.LIGHTS));
     }
 
-    /** Light-frame grouping must not relax dark cohorts or the exposure match needed for calibration subtraction. */
-    @Test public void calibrationExposureChecksRemainStrict() throws Exception {
-        var frames = List.of(exposure(30.0), exposure(30.1));
+    /** Camera-reported tenths of a second are one group for darks, flats and dark-flats, as they are for lights. */
+    @Test public void acceptsMeasuredCalibrationExposureVariations() throws Exception {
+        var frames = List.of(exposure(30.0), exposure(30.1), exposure(30.3), exposure(30.5));
         for (var role : List.of(PreparationInputs.Role.DARKS, PreparationInputs.Role.DARK_FLATS)) {
-            assertThrows(java.io.IOException.class, () -> FramePreparationService.validateSensor(monoRequest(), frames, role));
+            FramePreparationService.validateSensor(monoRequest(), frames, role);
         }
-        var light = SirilHeaderCorrections.imageHeader(frames.getFirst());
-        var dark = SirilHeaderCorrections.imageHeader(frames.get(1));
+        FramePreparationService.validateSensor(requestWithDarkFlats(), List.of(exposure(0.125), exposure(0.126)), PreparationInputs.Role.FLATS);
+        FramePreparationService.validateSensor(monoRequest(), List.of(exposure(0.125), exposure(0.250)), PreparationInputs.Role.FLATS);
+        var light = SirilHeaderCorrections.imageHeader(exposure(30.1000003814697));
+        var dark = SirilHeaderCorrections.imageHeader(exposure(30.2999992370605));
+        FramePreparationService.validateCalibrationHeaders(Map.of(PreparationInputs.Role.LIGHTS, light, PreparationInputs.Role.DARKS, dark));
+        var flat = SirilHeaderCorrections.imageHeader(exposure(0.125));
+        var darkFlat = SirilHeaderCorrections.imageHeader(exposure(0.126));
+        FramePreparationService.validateCalibrationHeaders(Map.of(PreparationInputs.Role.FLATS, flat, PreparationInputs.Role.DARK_FLATS, darkFlat));
+    }
+
+    /** A different exposure group is still rejected for darks, flats paired with dark-flats, and calibration matches. */
+    @Test public void rejectsDifferentCalibrationExposureGroups() throws Exception {
+        for (var role : List.of(PreparationInputs.Role.DARKS, PreparationInputs.Role.DARK_FLATS)) {
+            assertThrows(java.io.IOException.class, () -> FramePreparationService.validateSensor(monoRequest(),
+                    List.of(exposure(30.0), exposure(60.0)), role));
+        }
+        var flats = assertThrows(java.io.IOException.class, () -> FramePreparationService.validateSensor(requestWithDarkFlats(),
+                List.of(exposure(0.125), exposure(0.250)), PreparationInputs.Role.FLATS));
+        assertTrue(flats.getMessage().contains("0.125 s to 0.25 s"));
+        var light = SirilHeaderCorrections.imageHeader(exposure(30.0));
+        var dark = SirilHeaderCorrections.imageHeader(exposure(60.0));
         assertThrows(java.io.IOException.class, () -> FramePreparationService.validateCalibrationHeaders(
                 Map.of(PreparationInputs.Role.LIGHTS, light, PreparationInputs.Role.DARKS, dark)));
+        var flat = SirilHeaderCorrections.imageHeader(exposure(0.125));
+        var darkFlat = SirilHeaderCorrections.imageHeader(exposure(1.0));
         assertThrows(java.io.IOException.class, () -> FramePreparationService.validateCalibrationHeaders(
-                Map.of(PreparationInputs.Role.FLATS, light, PreparationInputs.Role.DARK_FLATS, dark)));
+                Map.of(PreparationInputs.Role.FLATS, flat, PreparationInputs.Role.DARK_FLATS, darkFlat)));
     }
 
     /** Creates a monochrome working image with its recorded exposure in seconds. */
@@ -98,6 +141,14 @@ public class PreparationSensorTest {
             fits.addHDU(image); fits.write(file.toFile());
         }
         return file;
+    }
+
+    /** Flat grouping is required only when a dark-flat will be subtracted. */
+    private PreparationRequest requestWithDarkFlats() {
+        return new PreparationRequest(Path.of("siril-cli"),
+                Map.of(PreparationInputs.Role.DARK_FLATS, temporary.getRoot().toPath()), PreparationRequest.Sensor.MONO,
+                PreparationRequest.Bayer.METADATA, PreparationRequest.RowOrder.METADATA, 0, 0,
+                temporary.getRoot().toPath(), false, false);
     }
 
     /** Sensor-independent exposure tests need no CFA overrides or calibration input selections. */

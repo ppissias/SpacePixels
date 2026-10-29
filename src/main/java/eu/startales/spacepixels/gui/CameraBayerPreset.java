@@ -1,9 +1,11 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.preparation.PreparationRequest.Bayer;
+import eu.startales.spacepixels.preparation.PreparationRequest.RowOrder;
 
 /**
- * Desktop shortcuts for nominal camera mosaics, never guesses about file row order or cropping.
+ * Desktop shortcuts for nominal camera mosaics and the usual file row order.
+ * Row order is how the file is stored, not a display flip. RAW shortcuts leave both to the decoder.
  * Manufacturer references and the distinction from decoded RAW metadata are recorded in
  * {@code docs/features/preparation-integrations.md}. Custom preserves the current controls.
  */
@@ -20,6 +22,8 @@ enum CameraBayerPreset {
     ZWO_ASI294MC("ZWO ASI294MC / Pro", Bayer.RGGB),
     ZWO_ASI533MC("ZWO ASI533MC Pro", Bayer.RGGB),
     ZWO_ASI2600MC("ZWO ASI2600MC Pro", Bayer.RGGB),
+    ZWO_ASI071MC("ZWO ASI071MC Pro", Bayer.RGGB),
+    ZWO_ASI2400MC("ZWO ASI2400MC Pro", Bayer.RGGB),
     QHY8L("QHY8L-C", Bayer.GBRG),
     QHY10("QHY10-C", Bayer.RGGB),
     QHY12("QHY12-C", Bayer.BGGR),
@@ -39,19 +43,36 @@ enum CameraBayerPreset {
     PLAYER_ONE_ARES("Player One Ares-C Pro", Bayer.RGGB),
     PLAYER_ONE_ARTEMIS("Player One Artemis-C Pro", Bayer.RGGB),
     PLAYER_ONE_POSEIDON("Player One Poseidon-C Pro", Bayer.RGGB),
-    PLAYER_ONE_URANUS("Player One Uranus-C Pro", Bayer.RGGB);
+    PLAYER_ONE_URANUS("Player One Uranus-C Pro", Bayer.RGGB),
+    SBIG_ST2000XCM("SBIG ST-2000XCM", Bayer.BGGR, RowOrder.BOTTOM_UP),
+    SBIG_STF8300C("SBIG STF-8300C", Bayer.BGGR, RowOrder.BOTTOM_UP),
+    SVBONY_SV605CC("SVBONY SV605CC", Bayer.GRBG);
 
     private final String label;
     private final Bayer pattern;
+    private final RowOrder rowOrder;
 
-    /** Captures only the published nominal pattern, or null for the editable custom choice. */
-    CameraBayerPreset(String label, Bayer pattern) { this.label = label; this.pattern = pattern; }
+    /** A CMOS preset uses top-down storage. RAW and metadata shortcuts keep the decoder's row order. */
+    CameraBayerPreset(String label, Bayer pattern) {
+        this(label, pattern, pattern == null || pattern == Bayer.METADATA ? null : RowOrder.TOP_DOWN);
+    }
+
+    /** A camera whose usual files are stored bottom-up, such as classic SBIG FITS. */
+    CameraBayerPreset(String label, Bayer pattern, RowOrder rowOrder) {
+        this.label = label;
+        this.pattern = pattern;
+        this.rowOrder = rowOrder;
+    }
 
     /** Returns the pattern to apply; Custom leaves all existing interpretation controls untouched. */
     Bayer pattern() { return pattern; }
 
-    /** Includes the pattern so the observer can review the shortcut before selecting it. */
+    /** Returns the file row order to apply, or null when the preset must not replace it. */
+    RowOrder rowOrder() { return pattern == Bayer.METADATA ? RowOrder.METADATA : rowOrder; }
+
+    /** Includes the pattern and row order so the observer can review the shortcut before selecting it. */
     @Override public String toString() {
-        return pattern == null || pattern == Bayer.METADATA ? label : label + " — " + pattern;
+        if (pattern == null || pattern == Bayer.METADATA) return label;
+        return label + " — " + pattern + ", " + (rowOrder == RowOrder.BOTTOM_UP ? "bottom-up" : "top-down");
     }
 }
