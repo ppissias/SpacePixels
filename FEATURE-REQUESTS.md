@@ -11,6 +11,7 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Agreed. The matching policy is to be proposed. |
 | [F12](#f12-newer-flatlaf-features) | Newer FlatLaf features | Proposed; FlatLaf 3.7.2 is in use |
 | [F13](#f13-observing-session-preparation) | Observing-session preparation with Siril | Initial implementation; broader acceptance and follow-ups pending |
+| [F15](#f15-report-themes-and-custom-css) | Report themes and custom CSS | Planned for the next release; not implemented |
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
 | [F02](#f02-session-summary-and-multiple-night-warning) | Session summary and multiple-night warning | Deferred |
 | [F05](#f05-small-star-visibility-in-stretch-previews) | Small-star visibility in stretch previews | Deferred |
@@ -115,6 +116,23 @@ The initial implementation and user workflow are described in [MANUAL.md](MANUAL
 - Consider richer folder suggestions or explicitly selected camera presets only after the manual workflow is accepted. Never merge multiple target/session groups or infer missing sensor/calibration facts from extensions.
 
 **Acceptance.** Native workflows must preserve originals, account for every exposure, preserve source timing/site metadata through the supported corrections, produce a valid linear mono16 sequence, cancel owned processes and preserve the open session on failure. Compare with an equivalent manual tool recipe and confirm downstream findings on appropriate known data before widening support.
+
+## F15. Report themes and custom CSS
+
+Offer a light report theme alongside the current dark appearance, and make report colours easier to customize through CSS.
+
+**Decision (made, 2026-10-29):** "I will do it on the next release". Deferred from the current release; implementation has not started.
+
+**Proposed scope:**
+
+- Built-in **Dark** and **Light** palettes, with Dark as the default and a selector in the report toolbar. Switching changes the open report immediately, without rerunning detection, and is independent of the desktop application's theme.
+- A shared **`report.css`** with named CSS variables for backgrounds, text, borders and accents, replacing hardcoded presentation colours. An optional **`report-custom.css`** provides advanced overrides; editing it only requires refreshing the browser. Stylesheets travel with the report folder and work offline.
+- Apply the same themes to ordinary reports and iterative summary/index pages. Review controls, tables, status messages, legends and inline SVG charts for contrast and consistent category meanings in both themes.
+- Preserve astronomical image/GIF pixels and their dark viewing areas. Review colours already drawn into diagnostic images separately; changing page CSS does not update those image assets.
+
+A graphical colour editor is outside this proposal. Still to decide: whether custom CSS can also be selected once for future exports, and whether/how the browser remembers a theme selection.
+
+**Acceptance.** Check both themes on representative complete reports and iterative indexes, including charts, warnings, filters and lookup results. Verify custom overrides and offline use after copying the report folder. Theme changes must not change measurements, detection results or exported scientific data.
 
 ## F01. Slow-mover and per-frame tuning relation
 
