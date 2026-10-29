@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -33,10 +34,12 @@ public class BatchJobsTest {
     public void convertToMonoReturnsTheFolderOfTheMonoFrames() throws Exception {
         Path sequence = SyntheticDatasetFactory.createColor16FitsSequence(folder.getRoot().toPath(), "color16", FRAME_COUNT);
         FitsBatchService batch = new FitsBatchService(sequence.toFile(), new FitsVisualizationRenderer());
-        JobOutcome<File> outcome = outcomeOf(new BatchConvertMonoTask(batch, false, 1, 1, StretchAlgorithm.values()[0]));
+        JobOutcome<File> outcome = outcomeOf(new BatchConvertMonoTask(batch));
         File mono = ((JobOutcome.Completed<File>) outcome).result();
         assertNotNull(mono);
         assertEquals(FRAME_COUNT, mono.listFiles().length);
+        assertFalse(sequence.resolve("_mono_stretched").toFile().exists());
+        assertFalse(sequence.resolve("_stretched").toFile().exists());
     }
 
     @Test

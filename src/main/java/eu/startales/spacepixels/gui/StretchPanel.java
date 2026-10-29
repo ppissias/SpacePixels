@@ -35,7 +35,6 @@ public class StretchPanel extends JPanel {
 
     // Controls
     private final JSlider stretchSlider = new JSlider();
-    private final JCheckBox stretchCheckbox = new JCheckBox("Enable batch stretch");
     private final JCheckBox displayStretchCheckbox = new JCheckBox("Stretch display", true);
     private final JComboBox<StretchAlgorithm> stretchAlgoCombo = new JComboBox<>(StretchAlgorithm.values());
     private final JSlider stretchIterationsSlider = new JSlider();
@@ -75,8 +74,8 @@ public class StretchPanel extends JPanel {
         return view;
     }
 
-    /** The frame list is the main panel. The full-size viewer is created by the window. */
-    public StretchPanel(SessionAccess sessions, FrameList frames, FullSizeViewer fullSize) {
+    /** Captures frame access, the shared batch command and the full-size viewer factory on the EDT. */
+    public StretchPanel(SessionAccess sessions, FrameList frames, Action batchStretch, FullSizeViewer fullSize) {
         this.sessions = sessions;
         this.frames = frames;
         this.fullSize = fullSize;
@@ -129,13 +128,14 @@ public class StretchPanel extends JPanel {
         slidersRow.add(sliderPanel(stretchIterationsLabel, stretchIterationsSlider));
         controls.add(left(slidersRow));
 
-        stretchCheckbox.setToolTipText("<html>Enable this to batch stretch a dataset from the main screen by clicking <b>Batch Stretch</b>.<br>"
-                + "Uses the selected algorithm and sliders, independently of Stretch display.<br>"
-                + "Convert to Mono also writes stretched copies in a separate _mono_stretched folder.<br>"
-                + "The original linear files used for detection are never changed.</html>");
-        JPanel outputRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        outputRow.setBorder(new EmptyBorder(4, 0, 0, 0));
-        outputRow.add(stretchCheckbox);
+        JButton batchStretchButton = new JButton(batchStretch);
+        batchStretchButton.putClientProperty("FlatLaf.style", MainApplicationPanel.PRIMARY_BUTTON_STYLE);
+        JPanel outputRow = new WrappingControlsPanel(UiStyle.space(12), UiStyle.space(6));
+        outputRow.setBorder(new EmptyBorder(UiStyle.space(6), 0, UiStyle.space(6), 0));
+        outputRow.add(batchStretchButton);
+        outputRow.add(new WrappingHelpLabel("<b>Batch stretch the entire dataset.</b><br>"
+                + "Write stretched copies in _stretched using the algorithm and sliders, even when Stretch display is off. "
+                + "Source files remain unchanged.", 500));
         controls.add(left(outputRow));
         add(controls, BorderLayout.NORTH);
 
@@ -179,9 +179,6 @@ public class StretchPanel extends JPanel {
         // ==========================================
         // LISTENERS
         // ==========================================
-        stretchCheckbox.addItemListener(e -> {
-            frames.refreshCommands();
-        });
         displayStretchCheckbox.addItemListener(e -> {
             updateDisplayControls();
             if (!adjusting) {
@@ -458,23 +455,18 @@ public class StretchPanel extends JPanel {
     }
 
     // ==========================================
-    // ACCESSORS (used by Blink, Batch Stretch, Convert to Mono and the full-size viewer)
+    // ACCESSORS (used by Blink, Batch Stretch and the full-size viewer)
     // ==========================================
 
     public StretchAlgorithm getStretchAlgorithm() {
         return (StretchAlgorithm) stretchAlgoCombo.getSelectedItem();
     }
 
-    /** Whether stretched copies are written (Batch Stretch, Convert to Mono). */
-    public boolean isStretchEnabled() {
-        return stretchCheckbox.isSelected();
-    }
-
     public boolean isDisplayStretchEnabled() {
         return displayStretchCheckbox.isSelected();
     }
 
-    /** Shared with each viewer; the separate batch-stretch checkbox only controls disk output. */
+    /** Shared display choice for every viewer; Batch Stretch is an independent explicit file operation. */
     ButtonModel getDisplayStretchModel() {
         return displayStretchCheckbox.getModel();
     }

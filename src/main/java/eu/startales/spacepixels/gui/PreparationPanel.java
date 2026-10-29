@@ -52,6 +52,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     private final JTextField root = new JTextField(28);
     private final JTextField output = new JTextField(28);
     private final JComboBox<PreparationRequest.Sensor> sensor = new JComboBox<>(PreparationRequest.Sensor.values());
+    private final JComboBox<CameraBayerPreset> cameraPreset = new JComboBox<>(CameraBayerPreset.values());
     private final JComboBox<PreparationRequest.Bayer> bayer = new JComboBox<>(PreparationRequest.Bayer.values());
     private final JComboBox<PreparationRequest.RowOrder> rowOrder = new JComboBox<>(PreparationRequest.RowOrder.values());
     private final JComboBox<Integer> offsetX = new JComboBox<>(new Integer[]{0, 1});
@@ -65,12 +66,15 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     private final JButton preview = new JButton("Preview processing instructions");
     private final JTextArea readiness = new JTextArea(17, 25);
     private final JLabel feedback = new JLabel("Check Siril, map the input folders and inspect the inputs.");
-    private final JPanel cfaOptions = new JPanel(new GridBagLayout());
+    private final JPanel cfaOptions = new JPanel();
+    private final JCheckBox showAdvanced = new JCheckBox("Show advanced de-bayer options");
+    private final JPanel advancedCfa = new JPanel(new GridBagLayout());
     private SwingWorker<?, ?> inspection;
     private long inspectionVersion;
     private FramePreparationService.Inputs inspected;
     private Path scannedRoot;
     private boolean updating;
+    private boolean applyingPreset;
     private boolean busy;
     private boolean closed;
 
@@ -94,7 +98,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
         form.add(heading("Prepare an observing session"));
         form.add(help("Calibrate and register individual exposures for SpacePixels. Source files remain untouched."));
-        JPanel integrations = section("Siril integration");
+        JPanel integrations = section("Siril integration", true);
         siril = new SirilRow(settings.getConfig().sirilExecutablePath);
         integrations.add(siril);
         integrations.add(help("<i>PixInsight WBPP: use Import Aligned Frames for individual calibrated and registered exposures (FITS or supported XISF).</i>"));
@@ -153,14 +157,31 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         form.add(folders);
 
         JPanel camera = section("2  Camera interpretation");
+        cfaOptions.setLayout(new BoxLayout(cfaOptions, BoxLayout.Y_AXIS));
         cfaOptions.setAlignmentX(LEFT_ALIGNMENT);
         camera.add(row(new JLabel("Input data (required):"), sensor));
-        addCfaRow(0, "Bayer pattern", bayer);
-        addCfaRow(1, "Row order", rowOrder);
-        addCfaRow(2, "X offset (px)", offsetX);
-        addCfaRow(3, "Y offset (px)", offsetY);
+        JPanel basicCfa = new JPanel(new GridBagLayout());
+        basicCfa.setAlignmentX(LEFT_ALIGNMENT);
+        addCfaRow(basicCfa, 0, "Camera preset", cameraPreset);
+        addCfaRow(basicCfa, 1, "Bayer pattern", bayer);
+        cameraPreset.setMaximumRowCount(14);
+        cameraPreset.setToolTipText("Nominal camera patterns; capture software, cropping or flipping can change the file's mosaic. Prefer correct file metadata.");
+        bayer.setToolTipText("Use the decoded file metadata, or explicitly override the Bayer pattern. Editing a preset selects Custom.");
+        cfaOptions.add(basicCfa);
+        showAdvanced.setAlignmentX(LEFT_ALIGNMENT);
+        showAdvanced.setToolTipText("Show row order and Bayer phase offsets. Hiding these controls keeps their selected values.");
+        cfaOptions.add(showAdvanced);
+        advancedCfa.setAlignmentX(LEFT_ALIGNMENT);
+        addCfaRow(advancedCfa, 0, "Row order", rowOrder);
+        addCfaRow(advancedCfa, 1, "X offset (px)", offsetX);
+        addCfaRow(advancedCfa, 2, "Y offset (px)", offsetY);
+        rowOrder.setToolTipText("The stored row order affects which pixels are red, green and blue; it is not a display flip. Missing metadata requires an explicit choice.");
+        offsetX.setToolTipText("Shift the explicit Bayer pattern by 0 or 1 column. Metadata mode uses the file's offsets.");
+        offsetY.setToolTipText("Shift the explicit Bayer pattern by 0 or 1 row. Metadata mode uses the file's offsets.");
+        cfaOptions.add(advancedCfa);
+        cfaOptions.add(help("Prefer file metadata, including for DSLR/mirrorless RAW. Presets supply nominal patterns; verify them against your capture settings. If row order is missing, choose it under advanced options. Row order affects debayering, not just orientation."));
         camera.add(cfaOptions);
-        camera.add(help("A single image plane may still contain a colour mosaic. Unknown Bayer metadata requires an explicit choice. Row order and offsets are applied once; already RGB data are never debayered again."));
+        camera.add(help("A single image plane may still contain a colour mosaic. Unknown Bayer metadata requires an explicit choice; already RGB data are never debayered again."));
         form.add(camera);
 
         JPanel destination = section("3  Output and next steps");
@@ -205,9 +226,18 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         add(summary, BorderLayout.EAST);
         feedback.setForeground(UiStyle.helpColor());
         add(feedback, BorderLayout.SOUTH);
-        editors.addAll(List.of(root, output, sensor, bayer, rowOrder, offsetX, offsetY, rolesConfirmed, recipeConfirmed, stack, importFrames, keepWorkingFiles, scan));
+        editors.addAll(List.of(root, output, sensor, cameraPreset, bayer, showAdvanced, rowOrder, offsetX, offsetY, rolesConfirmed, recipeConfirmed, stack, importFrames, keepWorkingFiles, scan));
         inputs.values().forEach(editors::add);
-        for (JComboBox<?> choice : List.of(sensor, bayer, rowOrder, offsetX, offsetY)) choice.addActionListener(event -> recipeChanged());
+        sensor.addActionListener(event -> recipeChanged());
+        cameraPreset.addActionListener(event -> applyCameraPreset());
+        for (JComboBox<?> choice : List.of(bayer, rowOrder, offsetX, offsetY)) choice.addActionListener(event -> {
+            if (applyingPreset) return;
+            applyingPreset = true;
+            try { cameraPreset.setSelectedItem(CameraBayerPreset.CUSTOM); }
+            finally { applyingPreset = false; }
+            recipeChanged();
+        });
+        showAdvanced.addActionListener(event -> refresh());
         for (JCheckBox choice : List.of(stack, importFrames, keepWorkingFiles)) choice.addActionListener(event -> recipeChanged());
         rolesConfirmed.addActionListener(event -> refresh());
         recipeConfirmed.addActionListener(event -> refresh());
@@ -217,6 +247,23 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         });
         sensor.setSelectedIndex(-1);
         refresh();
+    }
+
+    /** Applies an explicit shortcut atomically; file row order is never inferred from a camera model. EDT only. */
+    private void applyCameraPreset() {
+        if (applyingPreset) return;
+        CameraBayerPreset preset = (CameraBayerPreset) cameraPreset.getSelectedItem();
+        if (preset == null) return;
+        applyingPreset = true;
+        try {
+            if (preset.pattern() != null) {
+                bayer.setSelectedItem(preset.pattern());
+                rowOrder.setSelectedItem(PreparationRequest.RowOrder.METADATA);
+                offsetX.setSelectedItem(0);
+                offsetY.setSelectedItem(0);
+            }
+        } finally { applyingPreset = false; }
+        recipeChanged();
     }
 
     /** Checks a configured path once on opening, reusing the owned background probe and its stale-result guards. EDT only. */
@@ -381,6 +428,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     private void refresh() {
         boolean cfa = sensor.getSelectedItem() == PreparationRequest.Sensor.CFA;
         cfaOptions.setVisible(cfa);
+        advancedCfa.setVisible(showAdvanced.isSelected());
         boolean manual = bayer.getSelectedItem() != PreparationRequest.Bayer.METADATA;
         offsetX.setEnabled(!busy && cfa && manual);
         offsetY.setEnabled(!busy && cfa && manual);
@@ -401,7 +449,8 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         if (outputProblem != null) text.append("○ ").append(outputProblem).append('\n');
         text.append("\nEffective recipe\nEngine: Siril\nInput: ")
                 .append(sensor.getSelectedItem() == null ? "choose camera interpretation" : sensor.getSelectedItem());
-        if (cfa) text.append("\nBayer: ").append(bayer.getSelectedItem()).append("\nRows: ").append(rowOrder.getSelectedItem());
+        if (cfa) text.append("\nBayer: ").append(bayer.getSelectedItem()).append("\nRows: ").append(rowOrder.getSelectedItem())
+                .append("\nBayer offsets: ").append(manual ? offsetX.getSelectedItem() + ", " + offsetY.getSelectedItem() : "from metadata");
         if (inspected != null) {
             for (Role role : Role.values()) text.append('\n').append(role).append(": ")
                     .append(inspected.files().containsKey(role) ? inspected.files().get(role).size() : "omitted");
@@ -416,7 +465,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         text.append("\n\nReference stack: ").append(stack.isSelected() ? "yes" : "no");
         text.append("\nAfter preparation: ").append(importFrames.isSelected() ? "import, then close this window" : "keep output");
         text.append("\nWorking files: ").append(keepWorkingFiles.isSelected() ? "retained" : "removed; final images and logs kept");
-        text.append("\n\nThe external tool validates RAW decoding. Every requested light must produce a registered exposure. A partial sequence is never imported automatically.");
+        text.append("\n\nSiril validates RAW decoding and may exclude lights during registration. At least three validated registered exposures are required; exclusions are recorded in the manifest.");
         readiness.setText(text.toString());
         readiness.setCaretPosition(0);
         revalidate();
@@ -477,25 +526,32 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     }
 
     /** Adds a CFA option with an associated label and natural editor size. */
-    private void addCfaRow(int row, String title, JComponent value) {
+    private static void addCfaRow(JPanel parent, int row, String title, JComponent value) {
         GridBagConstraints c = new GridBagConstraints();
         c.gridx = 0; c.gridy = row; c.anchor = GridBagConstraints.WEST; c.insets = new Insets(3, 3, 3, 12);
         JLabel label = new JLabel(title);
         AccessibleControls.label(label, value, title);
-        cfaOptions.add(label, c);
+        parent.add(label, c);
         c.gridx = 1; c.weightx = 1;
-        cfaOptions.add(value, c);
+        parent.add(value, c);
     }
 
     /** A theme-aware section containing vertically stacked, naturally sized controls. */
     private static JPanel section(String title) {
+        return section(title, false);
+    }
+
+    /** Optionally emphasizes an integration heading using the selected theme's body font. */
+    private static JPanel section(String title, boolean bold) {
         JPanel panel = new JPanel() {
             /** Section height follows its controls, leaving spare viewport height below the complete form. */
             @Override public Dimension getMaximumSize() { return new Dimension(Integer.MAX_VALUE, getPreferredSize().height); }
         };
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setAlignmentX(LEFT_ALIGNMENT);
-        panel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder(title),
+        var border = BorderFactory.createTitledBorder(title);
+        if (bold) border.setTitleFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
+        panel.setBorder(BorderFactory.createCompoundBorder(border,
                 BorderFactory.createEmptyBorder(UiStyle.space(7), UiStyle.space(9), UiStyle.space(7), UiStyle.space(9))));
         return panel;
     }

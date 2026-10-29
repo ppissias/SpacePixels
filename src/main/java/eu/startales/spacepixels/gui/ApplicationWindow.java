@@ -228,7 +228,7 @@ public class ApplicationWindow {
                 }, this::setSessionTabsEnabled, viewers);
         configurationApplicationPanel = new ConfigurationPanel(applicationSettings, sessionAccess, mainApplicationPanel,
                 storage, () -> closing);
-        stretchPanel = new StretchPanel(sessionAccess, mainApplicationPanel,
+        stretchPanel = new StretchPanel(sessionAccess, mainApplicationPanel, mainApplicationPanel.batchStretchAction(),
                 stretch -> viewers.register(new StretchedSequenceFrame(this, stretch)));
         detectionConfigurationPanel = new DetectionConfigurationPanel(sessionAccess, jobCoordinator, storage, frmIpodImage,
                 () -> closing, () -> tabbedPane.setSelectedComponent(detectionConfigurationPanel),
@@ -457,6 +457,7 @@ public class ApplicationWindow {
                 installSession(imported);
                 mainApplicationPanel.showLastReport(imported.getLastReport());
                 afterImport.accept(imported);
+                EventQueue.invokeLater(() -> offerMonochromeConversion(imported));
             }
             return;
         }
@@ -470,6 +471,20 @@ public class ApplicationWindow {
             FailureDialog.show(frmIpodImage, "Import Error", "Error loading files: " + failed.reason(), failed.cause());
         }
         // The session is unchanged, and the end of the lock opened the session tabs only if there is one.
+    }
+
+    /** Offers a separate conversion job after successful colour import; stale imports and shutdown cannot start follow-up work. EDT only. */
+    private void offerMonochromeConversion(ProcessingSession imported) {
+        if (closing || !sessions.isCurrent(imported) || jobCoordinator.current() != null) return;
+        boolean colour = java.util.Arrays.stream(imported.getFiles()).anyMatch(file -> !file.isMonochrome());
+        if (!colour) return;
+        int choice = JOptionPane.showConfirmDialog(frmIpodImage,
+                "This dataset contains colour frames. Detection requires monochrome frames.\n\n"
+                        + "Convert the dataset to linear monochrome copies now?\n"
+                        + "The source files remain unchanged. After conversion, you can choose whether to import the mono dataset.",
+                "Colour dataset imported", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (choice == JOptionPane.YES_OPTION && !closing && sessions.isCurrent(imported)
+                && jobCoordinator.current() == null) mainApplicationPanel.convertToMono();
     }
 
     /** Opens one modeless preparation window; all entry points share the main command's availability rules. */

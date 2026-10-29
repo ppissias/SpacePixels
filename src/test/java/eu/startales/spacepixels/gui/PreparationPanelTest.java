@@ -109,6 +109,99 @@ public class PreparationPanelTest {
         } finally { if (reference.get() != null) edt(reference.get()::close); storage.finish(); }
     }
 
+    /** Presets capture existing recipe fields, keep file row order explicit, and never discard hidden custom choices. */
+    @Test public void cameraPresetsAndAdvancedOptionsCaptureOneConsistentRecipe() throws Exception {
+        Path lights = images(temporary.getRoot().toPath(), "cfa-lights", 3);
+        Path executable = temporary.newFile("camera-siril.exe").toPath();
+        var settings = ApplicationSettings.inMemory(new AppConfig());
+        var storage = new ApplicationStorage();
+        var owner = new AtomicReference<PreparationPanel>();
+        try {
+            edt(() -> {
+                var panel = new PreparationPanel(settings, storage, () -> false, ignored -> { },
+                        ignored -> new PreparationPanel.Installation(executable, "siril 1.4.4"));
+                owner.set(panel);
+                field(panel, "Siril installation path").setText(executable.toString());
+                button(panel, "Check").doClick();
+                field(panel, "Lights (required)").setText(lights.toString());
+            });
+            await(() -> settings.getConfig().sirilExecutablePath.equals(executable.toString()));
+            edt(() -> {
+                var panel = owner.get();
+                var preset = combo(panel, CameraBayerPreset.class);
+                var pattern = combo(panel, PreparationRequest.Bayer.class);
+                var rows = combo(panel, PreparationRequest.RowOrder.class);
+                var advanced = checkbox(panel, "Show advanced de-bayer options");
+                assertEquals(CameraBayerPreset.METADATA, preset.getSelectedItem());
+                assertFalse("No CFA controls before choosing the sensor", visible(preset, panel));
+                combo(panel, PreparationRequest.Sensor.class).setSelectedItem(PreparationRequest.Sensor.CFA);
+                assertTrue(visible(preset, panel));
+                assertFalse(visible(rows, panel));
+                preset.setSelectedItem(CameraBayerPreset.ZWO_ASI1600MC);
+                assertEquals(PreparationRequest.Bayer.GRBG, request(panel).bayer());
+                assertEquals("Camera model cannot determine stored row order", PreparationRequest.RowOrder.METADATA,
+                        request(panel).rowOrder());
+                checkbox(panel, "I confirm this recipe").doClick();
+                advanced.doClick();
+                assertTrue("Disclosure is not a recipe change", checkbox(panel, "I confirm this recipe").isSelected());
+                assertTrue(visible(rows, panel));
+                rows.setSelectedItem(PreparationRequest.RowOrder.TOP_DOWN);
+                assertFalse(checkbox(panel, "I confirm this recipe").isSelected());
+                assertEquals(CameraBayerPreset.CUSTOM, preset.getSelectedItem());
+                var x = labelledCombo(panel, "X offset (px)");
+                var y = labelledCombo(panel, "Y offset (px)");
+                x.setSelectedItem(1); y.setSelectedItem(1);
+                var captured = request(panel);
+                advanced.doClick();
+                assertFalse(visible(rows, panel));
+                assertEquals(captured, request(panel));
+                assertTrue(text(panel).contains("Bayer offsets: 1, 1"));
+                preset.setSelectedItem(CameraBayerPreset.QHY533C);
+                assertEquals(PreparationRequest.Bayer.GBRG, request(panel).bayer());
+                assertEquals(PreparationRequest.RowOrder.METADATA, request(panel).rowOrder());
+                assertEquals(0, request(panel).offsetX());
+                assertEquals(0, request(panel).offsetY());
+                assertEquals("Earlier requests retain custom phase", 1, captured.offsetX());
+                preset.setSelectedItem(CameraBayerPreset.QHY12);
+                assertEquals(PreparationRequest.Bayer.BGGR, request(panel).bayer());
+                pattern.setSelectedItem(PreparationRequest.Bayer.RGGB);
+                assertEquals(CameraBayerPreset.CUSTOM, preset.getSelectedItem());
+                preset.setSelectedItem(CameraBayerPreset.CANON_RAW);
+                assertEquals(PreparationRequest.Bayer.METADATA, request(panel).bayer());
+                assertFalse(x.isEnabled());
+                panel.setBusy(true);
+                assertFalse(preset.isEnabled()); assertFalse(advanced.isEnabled());
+                panel.setBusy(false);
+                assertTrue(preset.isEnabled()); assertTrue(advanced.isEnabled());
+                combo(panel, PreparationRequest.Sensor.class).setSelectedItem(PreparationRequest.Sensor.RGB);
+                assertFalse(visible(preset, panel));
+                assertEquals(PreparationRequest.Bayer.METADATA, request(panel).bayer());
+                assertEquals(PreparationRequest.RowOrder.METADATA, request(panel).rowOrder());
+            });
+        } finally { if (owner.get() != null) edt(owner.get()::close); storage.finish(); }
+    }
+
+    /** Captures a valid form on the EDT, reporting an unexpected validation failure as a test failure. */
+    private static PreparationRequest request(PreparationPanel panel) {
+        try { return panel.selection().request(); }
+        catch (java.io.IOException failure) { throw new AssertionError(failure); }
+    }
+
+    /** Finds a CFA phase editor by its accessible field label. */
+    private static JComboBox<?> labelledCombo(Container panel, String label) {
+        return all(panel).stream().filter(c -> c instanceof JComboBox<?> box
+                && label.equals(box.getAccessibleContext().getAccessibleName()))
+                .map(JComboBox.class::cast).findFirst().orElseThrow();
+    }
+
+    /** Offscreen visibility includes ancestor disclosures, without requiring a native window. */
+    private static boolean visible(Component component, Container root) {
+        for (Component current = component; current != root; current = current.getParent()) {
+            if (current == null || !current.isVisible()) return false;
+        }
+        return true;
+    }
+
     /** Scanning a second session replaces every role, offers ambiguous groups and preserves an explicit output destination. */
     @Test public void sessionScansReplaceAllRolesAndExposeSeparateChoices() throws Exception {
         Path first = temporary.newFolder("first").toPath();

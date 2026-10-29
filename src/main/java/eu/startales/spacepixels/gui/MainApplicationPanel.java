@@ -83,7 +83,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private Consumer<Boolean> preparationLock = busy -> { };
     private final JButton importButton = new JButton("Import Aligned Frames…");
     private final JButton convertMonoButton = new JButton("Convert to Mono");
-    private final JButton stretchButton = new JButton("Batch Stretch");
     private static final String BLINK_SELECTED = "Blink Selected";
     private final JButton blinkButton = new JButton(BLINK_SELECTED);
     private final JButton solveButton = new JButton("Plate Solve Selected");
@@ -137,10 +136,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                     + "Compressed, 32-bit and XISF data are converted to a working folder first.",
             CommandAvailability.Command.IMPORT, this::commandFacts, this::chooseAndImportFolder);
     private final CommandAction convertMonoAction = new CommandAction("Convert to Mono",
-            "Extract luminance and convert all loaded FITS files to 16-bit monochrome. Applies stretch if enabled.",
+            "Extract luminance and convert all loaded FITS files to linear 16-bit monochrome copies in _mono.",
             CommandAvailability.Command.CONVERT_TO_MONO, this::commandFacts, this::convertToMono);
     private final CommandAction stretchAction = new CommandAction("Batch Stretch",
-            "Apply the current non-linear stretch settings to all imported FITS files and save as new files.",
+            "Batch stretch the entire dataset with the selected algorithm and sliders, independently of Stretch display. "
+                    + "Save new copies in _stretched; the source files remain unchanged.",
             CommandAvailability.Command.BATCH_STRETCH, this::commandFacts, this::batchStretch);
     private final CommandAction skyCatalogueAction = new CommandAction(FETCH_SKY_CATALOGUE,
             "<html>Download the stars (Gaia), galaxies, nebulae and clusters (SIMBAD) and variable stars "
@@ -298,7 +298,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         prepareFramesButton.setAction(prepareFramesAction);
         importButton.setAction(importAction);
         convertMonoButton.setAction(convertMonoAction);
-        stretchButton.setAction(stretchAction);
         skyCatalogueButton.setAction(skyCatalogueAction);
         manualTransientInspectionButton.setAction(inspectionAction);
         detectIterativelyButton.setAction(iterativeAction);
@@ -324,8 +323,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         JPanel prepareGroup = workflowGroup("1  Prepare", prepareStatus,
                 buttonRow(prepareFramesButton),
                 buttonRow(importButton),
-                buttonRow(convertMonoButton),
-                buttonRow(stretchButton));
+                buttonRow(convertMonoButton));
         JPanel astrometryGroup = workflowGroup("2  Astrometry", astrometryStatus,
                 buttonRow(solveButton),
                 buttonRow(skyCatalogueButton),
@@ -480,6 +478,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         this.showDetectionSettings = showDetectionSettings;
     }
 
+    /** The Image Stretch tab uses the same guarded command and job lock as the other workflow actions. EDT only. */
+    Action batchStretchAction() { return stretchAction; }
+
     /** The facts the shared commands are enabled from, as they are now. */
     private CommandAvailability.Facts commandFacts() {
         int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
@@ -493,10 +494,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         JobCoordinator coordinator = jobs;
         JobHandle running = coordinator == null ? null : coordinator.current();
         boolean blinking = blinkPlaying || (running != null && running.kind() == JobKind.BLINK);
-        StretchPanel stretchPanel = stretch;
         return new CommandAvailability.Facts(frames, !containsColorImages,
                 table == null ? 0 : table.getSelectedRowCount(), selectedRow >= 0 && isSolvedRow(selectedRow), solved,
-                stretchPanel != null && stretchPanel.isStretchEnabled(), uiLocked, blinking, skyController != null && skyController.isRunning());
+                uiLocked, blinking, skyController != null && skyController.isRunning());
     }
 
     private boolean isSolvedRow(int row) {
@@ -505,8 +505,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
 
     /**
      * Enables every command from the facts as they are now. While a blink loads or plays, Blink stops it, and while
-     * the sky catalogue is fetched, its command cancels the fetch. Call it when a fact changes outside this panel,
-     * such as the batch-stretch switch.
+     * the sky catalogue is fetched, its command cancels the fetch. Call it when a session or work fact changes.
      */
     @Override
     public void refreshCommands() {
@@ -617,17 +616,12 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         folderImport.choose();
     }
 
-    /** Converts every frame to 16-bit monochrome in a new folder, stretched when the Image Stretch tab says so. */
-    private void convertToMono() {
-        int stretchFactor = stretch.getStretchSlider().getValue();
-        int iterations = stretch.getStretchIterationsSlider().getValue();
-        boolean stretchEnabled = stretch.isStretchEnabled();
-        StretchAlgorithm algo = stretch.getStretchAlgorithm();
-
+    /** Converts every colour frame to linear 16-bit monochrome in a new folder, independently of display settings. */
+    void convertToMono() {
         ProcessingSession owner = sessions.current();
         if (owner == null) return;
         startJob(JobKind.CONVERT_TO_MONO, owner,
-                new BatchConvertMonoTask(owner.getBatchService(), stretchEnabled, stretchFactor, iterations, algo),
+                new BatchConvertMonoTask(owner.getBatchService()),
                 this::showConversionOutcome);
     }
 

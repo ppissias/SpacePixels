@@ -23,6 +23,7 @@ import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.EventQueue;
@@ -70,8 +71,9 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
         waitFor("first inspected frame", () -> caption(inspection).contains("Frame 1 of") && !caption(inspection).contains("preparing"));
         JCheckBoxFixture inspectionTracks = inspection.checkBox(VisibleText.checkBox("Show tracks"));
         assertTrue("The last run's tracks are offered here too", inspectionTracks.target().isEnabled());
-        inspectionTracks.check();
         JComponent inspected = image(inspection, "Manual Transient Inspection image");
+        focus(inspected);
+        inspectionTracks.check().requireSelected();
         waitForDescription(inspected, "Tracks on.", "Manual Transient Inspection describes its tracks");
         focus(inspected);
         robot().pressAndReleaseKeys(KeyEvent.VK_ESCAPE);
@@ -217,8 +219,13 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
         });
     }
 
+    /** Raises the viewer before input: closing a modal progress dialog can restore focus to the main window. */
     private void focus(JComponent control) {
-        GuiActionRunner.execute(() -> control.requestFocusInWindow());
+        GuiActionRunner.execute(() -> {
+            Window viewer = SwingUtilities.getWindowAncestor(control);
+            if (viewer != null) viewer.toFront();
+            control.requestFocusInWindow();
+        });
         waitFor("focus reaches the image", () -> KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() == control);
     }
 

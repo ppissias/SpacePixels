@@ -57,7 +57,7 @@ For supported formats and detailed preparation rules, see [Input requirements](#
 - Long jobs, such as a detection run or Auto-Tune, can be cancelled from their progress window.
 - Blinks aligned frames for traditional visual inspection.
 - Plate-solves images through ASTAP or Astrometry.net and uses WCS for RA/Dec overlays, SkyBoT/JPL moving-object identification, SatChecker satellite identification for streaks, and Stellarium Web context links.
-- Batch-converts color FITS to monochrome and batch-stretches imported datasets.
+- Offers linear monochrome conversion after importing color FITS, and separately batch-stretches entire datasets from Image Stretch.
 - Includes headless utilities for batch detection.
 - **Prepare Frames…** runs a separately installed Siril to calibrate and register exposures on private copies. The [manual](MANUAL.md#preparing-an-observing-session) explains the required inputs.
 

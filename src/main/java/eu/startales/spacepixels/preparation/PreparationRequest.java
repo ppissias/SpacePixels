@@ -24,7 +24,7 @@ public record PreparationRequest(Path executable, Map<PreparationInputs.Role, Pa
         @Override public String toString() { return this == METADATA ? "Resolve from metadata" : name(); }
     }
 
-    /** Row orientation is applied once by the external tool, using the effective FITS pixel origin. */
+    /** Stored row order lets the external tool interpret Bayer colours; this is not a cosmetic image flip. */
     public enum RowOrder {
         METADATA("From metadata"), TOP_DOWN("Top-down"), BOTTOM_UP("Bottom-up");
         private final String label;

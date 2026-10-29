@@ -68,6 +68,8 @@ Use Java 21 and the Gradle wrapper (`gradlew.bat` on Windows, `./gradlew` elsewh
 .\gradlew.bat installDist          # application and tool launchers under build/install/SpacePixels
 ```
 
+GUI mechanics send real mouse and keyboard events. Keep the desktop unlocked and idle while they run so other windows or input do not intercept those events.
+
 Headless batch run of one dataset (it prints `Report file: ...` and any problems):
 
 ```bash
@@ -147,6 +149,8 @@ Interactive import can decline before session replacement. Both desktop detectio
 
 Twelve workflows use the job pattern: observing-session preparation, import, Convert to Mono, Batch Stretch, plate solve, writing the WCS header, Blink, Auto-Tune, Detect, Detect Iteratively, Manual Transient Inspection and the Test Star Mask stack.
 
+Batch Stretch is an explicit whole-dataset action on Image Stretch, sharing the normal command/job lock and capturing its stretch settings at admission. Convert to Mono writes linear copies only. Successful colour import offers conversion, followed by the existing optional import of the mono output; these follow-ups check the session and shutdown state before starting another job.
+
 1. **The command, on the EDT.** `CommandAvailability` decides from session facts whether the command can run, and why not. `CommandAction` is the one Swing `Action` behind the command's button, shortcut, menu item and Overview button. The handler captures what the job needs: a validated copy of the settings (`DetectionConfigurationPanel.checkedSettings`), the files, the run options and the session.
 
 The window creates the four panels and passes each one the collaborators it uses (`SessionAccess`, the job coordinator, the frame list, the settings readout, storage and the folder import). Panels do not take the window or call each other by type. The settings page publishes the current `DetectionConfig`; the main readout copies the eight Overview values during that EDT call and does not keep the configuration. The wiring lasts as long as the window, so there is no listener to detach. A job still copies the session and settings at admission.
@@ -159,6 +163,8 @@ Shutdown cancels the current job and waits off the EDT for its worker to return 
 Blink is the exception: loading the frames is the job, and the blink window then keeps the main window locked until it closes. Work outside the job slot has its own owner: the sky-catalogue fetch and correction fit (`gui.SkyCatalogueController`, with one executor per session and a future per request), session and preference writes (single-thread writers owned by the window), ASTAP checks, stretch previews and viewer preparation (newest request wins).
 
 **Observing-session preparation** opens in one application-owned `PreparationWindow`, launched by **Prepare Frames…** above ordinary import. Its panel captures the Siril recipe; `FramePreparationTask` uses the shared job slot and `FramePreparationService` works only on private input copies. Installation checks and input inspection run outside the EDT and discard stale completions; opening the window checks an already configured Siril path automatically. Live script output reaches a bounded progress-dialog log through guarded job detail callbacks, alongside elapsed time. The process owner waits for owned descendants on completion/cancellation; application shutdown also joins preparation cleanup. Successful products are independent of later import outcomes. The optional guarded import closes the preparation window and confirms the new dataset only after successful session installation; failures keep the window available. Pending follow-ups are suppressed after closure or a session change. See [Preparation implementation](docs/features/preparation-integrations.md) for the current contracts and metadata handling.
+
+Camera presets are desktop shortcuts into the existing captured Bayer settings. Metadata remains the default; a camera model never determines file row order. Advanced Bayer controls retain their values when collapsed, and the readiness summary shows the effective interpretation.
 
 The catalogue controller owns its progress timer and delivers model changes and status on the EDT. Delivery checks the request identity and the current session even after cancellation, replacement or shutdown. The session owns a non-blocking shutdown callback, with no dependency on the GUI; closing it cancels work, shuts down the executor, stops the timer and detaches the view. A catalogue completed before its correction remains available and saves independently of the fit outcome.
 

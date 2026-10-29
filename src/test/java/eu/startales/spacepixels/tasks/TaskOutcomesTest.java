@@ -64,7 +64,7 @@ public class TaskOutcomesTest {
     public void failingJobsEndAsFailedWithTheReason() {
         StretchAlgorithm algorithm = StretchAlgorithm.values()[0];
         assertFailed(outcomeOf(new BatchStretchTask(null, 1, 1, algorithm)));
-        assertFailed(outcomeOf(new BatchConvertMonoTask(null, false, 1, 1, algorithm)));
+        assertFailed(outcomeOf(new BatchConvertMonoTask(null)));
         assertFailed(outcomeOf(new PlateSolveTask(null, missingFrame().getFilePath(), true, false)));
         assertFailed(outcomeOf(new AutoTuneTask(null, new DetectionConfig(), 10,
                 AutoTuneProfile.values()[0])));

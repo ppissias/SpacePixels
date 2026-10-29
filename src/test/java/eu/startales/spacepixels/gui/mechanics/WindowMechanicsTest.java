@@ -30,7 +30,6 @@ public class WindowMechanicsTest extends MechanicsTestCase {
     public void workflowButtonsArePresentAndIdleBeforeImport() {
         requireButton("Import Aligned Frames…", true);
         requireButton("Convert to Mono", false);
-        requireButton("Batch Stretch", false);
         requireButton("Blink Selected", false);
         requireButton("Plate Solve Selected", false);
         requireButton("Fetch Sky Catalogue", false);

@@ -54,11 +54,11 @@ public class CommandAvailabilityTest {
     }
 
     @Test
-    public void batchStretchFollowsItsSwitchOnTheImageStretchTab() {
-        assertEquals("tick \"Enable batch stretch\" in the Image Stretch tab first.",
-                CommandAvailability.of(Command.BATCH_STRETCH, session().build()).reason());
-        assertTrue(enabled(Command.BATCH_STRETCH, session().stretch().build()));
-        assertTrue(enabled(Command.BATCH_STRETCH, session().colour().stretch().build()));
+    public void batchStretchNeedsAnImportedIdleDatasetRegardlessOfSelectionOrColour() {
+        assertTrue(enabled(Command.BATCH_STRETCH, session().build()));
+        assertTrue(enabled(Command.BATCH_STRETCH, session().colour().build()));
+        assertFalse(enabled(Command.BATCH_STRETCH, session().frames(0).build()));
+        assertFalse(enabled(Command.BATCH_STRETCH, session().busy().build()));
     }
 
     @Test
@@ -94,7 +94,7 @@ public class CommandAvailabilityTest {
 
     @Test
     public void nothingStartsWhileAJobHoldsTheWindow() {
-        Facts busy = session().selected(3).solved(1).stretch().busy().build();
+        Facts busy = session().selected(3).solved(1).busy().build();
         for (Command command : Command.values()) {
             assertEquals(command.name(), "wait until the current task has finished.",
                     CommandAvailability.of(command, busy).reason());
@@ -118,7 +118,6 @@ public class CommandAvailabilityTest {
         private int selected;
         private boolean selectedSolved;
         private int solved;
-        private boolean stretch;
         private boolean busy;
         private boolean blinking;
         private boolean fetching;
@@ -148,11 +147,6 @@ public class CommandAvailabilityTest {
             return this;
         }
 
-        FactsBuilder stretch() {
-            stretch = true;
-            return this;
-        }
-
         FactsBuilder busy() {
             busy = true;
             return this;
@@ -169,7 +163,7 @@ public class CommandAvailabilityTest {
         }
 
         Facts build() {
-            return new Facts(frames, monochrome, selected, selectedSolved, solved, stretch, busy, blinking, fetching);
+            return new Facts(frames, monochrome, selected, selectedSolved, solved, busy, blinking, fetching);
         }
     }
 }

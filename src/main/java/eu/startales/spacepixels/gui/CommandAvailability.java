@@ -12,14 +12,14 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 
 /**
- * Which workflow commands of the Main tab can run now, and why the others cannot. The rules read facts about the
+ * Which workflow commands can run now, and why the others cannot. The rules read facts about the
  * session, the selection and the work in progress, never the state of other controls, so every entry point of a
  * command (its button, shortcut, table menu item, Overview button or a dropped folder) agrees. Nothing here touches
  * Swing.
  */
 final class CommandAvailability {
 
-    /** The workflow commands of the Main tab. */
+    /** The application workflow commands, including Batch Stretch on the Image Stretch tab. */
     enum Command {
         PREPARE_FRAMES, IMPORT, CONVERT_TO_MONO, BATCH_STRETCH, PLATE_SOLVE, SKY_CATALOGUE, BLINK, PREVIEW, INSPECTION,
         AUTO_TUNE, DETECT, DETECT_ITERATIVELY
@@ -33,13 +33,12 @@ final class CommandAvailability {
      * @param selectedFrames how many frames are selected in the table
      * @param selectedSolved whether the selected frame (the first of a selection) has a plate solution
      * @param solvedFrames   how many frames have a plate solution in their header
-     * @param stretchEnabled whether "Enable batch stretch" is ticked on the Image Stretch tab
      * @param busy           whether a job holds the window, or a blink plays
      * @param blinking       whether a blink is loading or playing (its command then stops it)
      * @param skyFetching    whether the sky catalogue is being fetched (its command then cancels it)
      */
     record Facts(int frames, boolean monochrome, int selectedFrames, boolean selectedSolved, int solvedFrames,
-                 boolean stretchEnabled, boolean busy, boolean blinking, boolean skyFetching) {
+                 boolean busy, boolean blinking, boolean skyFetching) {
     }
 
     /** Whether a command can run; when it cannot, why, worded to follow "Not available: ". */
@@ -73,8 +72,7 @@ final class CommandAvailability {
                 return facts.monochrome() ? Availability.unavailable("all frames are already monochrome.")
                         : Availability.AVAILABLE;
             case BATCH_STRETCH:
-                return facts.stretchEnabled() ? Availability.AVAILABLE
-                        : Availability.unavailable("tick \"Enable batch stretch\" in the Image Stretch tab first.");
+                return Availability.AVAILABLE;
             case SKY_CATALOGUE:
                 return facts.solvedFrames() > 0 ? Availability.AVAILABLE
                         : Availability.unavailable("plate solve at least one frame first, and write the solution to its FITS header.");

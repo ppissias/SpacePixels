@@ -287,17 +287,21 @@ public class FitsServiceTest {
     }
 
     @Test
-    public void batchMonoAndStretchKeepPixelsOriginalsAndLegacyOutputNames() throws Exception {
+    public void monoConversionIsLinearAndStretchingRequiresASeparateOperation() throws Exception {
         File input = SyntheticDatasetFactory.createColor16FitsSequence(folder.getRoot().toPath(), "batch", 2).toFile();
         File original = FitsInput.list(input)[0];
         byte[] untouched = Files.readAllBytes(original.toPath());
         FitsBatchService batch = new FitsBatchService(input, new FitsVisualizationRenderer());
-        File generated = batch.batchConvertToMono(true, 10, 2, StretchAlgorithm.ASINH, null);
+        File generated = batch.batchConvertToMono(null);
         assertEquals("_mono", generated.getName());
+        assertFalse(new File(input, "_mono_stretched").exists());
+        assertFalse(new File(input, "_stretched").exists());
+        FitsBatchService monoBatch = new FitsBatchService(generated, new FitsVisualizationRenderer());
+        monoBatch.batchStretch(10, 2, StretchAlgorithm.ASINH, null);
         String stem = original.getName().replace(".fit", "");
         try (Fits source = new Fits(original);
              Fits mono = new Fits(new File(input, "_mono/" + stem + "_mono.fit"));
-             Fits stretched = new Fits(new File(input, "_mono_stretched/" + stem + "_mono_stretch.fit"))) {
+             Fits stretched = new Fits(new File(generated, "_stretched/" + stem + "_mono_stretch.fit"))) {
             BasicHDU<?> image = FitsInput.getImageHDU(source);
             short[][] expected = FitsPixelConverter.extractLuminance(
                     FitsPixelConverter.standardizeTo16BitColor(image.getKernel(), image.getHeader()));

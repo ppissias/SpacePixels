@@ -44,8 +44,16 @@ final class AppearancePanel extends JPanel {
         title.setFont(UiStyle.sectionFont());
         form.row(title);
         form.note("Choose comfortable colours and text size. Save your changes, then restart SpacePixels to apply them to every window.");
-        form.field("Theme", theme, "High contrast dark uses white text and clearer borders on a near-black background.");
-        form.field("Interface size (%)", scale, "100% follows your system size. Larger values enlarge text and controls in addition to your operating system's display scaling.");
+        JPanel builtIn = new JPanel();
+        builtIn.setLayout(new BoxLayout(builtIn, BoxLayout.Y_AXIS));
+        Form themeSection = new Form(300);
+        themeSection.field("Theme", theme, "High contrast dark uses white text and clearer borders on a near-black background.");
+        builtIn.add(section("Theme", themeSection));
+        builtIn.add(Box.createVerticalStrut(UiStyle.space(10)));
+        Form sizeSection = new Form(300);
+        sizeSection.field("Interface size (%)", scale, "100% follows your system size. Larger values enlarge text and controls in addition to your operating system's display scaling.");
+        builtIn.add(section("Interface Size", sizeSection));
+        Form customSection = new Form(380);
         JPanel fileRow = new JPanel(new BorderLayout(UiStyle.space(8), 0));
         fileRow.add(custom, BorderLayout.CENTER);
         JPanel fileActions = new WrappingControlsPanel(UiStyle.space(8), UiStyle.space(4));
@@ -54,9 +62,25 @@ final class AppearancePanel extends JPanel {
         fileRow.add(fileActions, BorderLayout.SOUTH);
         JLabel fileLabel = new JLabel("Custom style file (optional)");
         AccessibleControls.label(fileLabel, custom, "An optional FlatLaf .properties file that overrides the selected theme.");
-        form.row(fileLabel);
-        form.compact(fileRow);
-        form.note("Advanced: choose a FlatLaf .properties file to customise colours or fonts. Clear uses the built-in theme. An example is included in config/appearance-example.properties.");
+        customSection.row(fileLabel);
+        customSection.compact(fileRow);
+        customSection.note("Choose a FlatLaf .properties file to customise colours or fonts. Clear uses the built-in theme. An example is included in config/appearance-example.properties.");
+        JPanel sections = new WrappingControlsPanel(UiStyle.space(14), UiStyle.space(10));
+        sections.setLayout(new WrapLayout(FlowLayout.LEFT, UiStyle.space(14), UiStyle.space(10)) {
+            /** Aligns the two sections at the top when side by side, retaining ordinary wrapping on narrow displays. */
+            @Override public void layoutContainer(Container parent) {
+                super.layoutContainer(parent);
+                Component left = parent.getComponent(0), right = parent.getComponent(1);
+                if (right.getX() > left.getX()) {
+                    int top = Math.min(left.getY(), right.getY());
+                    left.setLocation(left.getX(), top);
+                    right.setLocation(right.getX(), top);
+                }
+            }
+        });
+        sections.add(builtIn);
+        sections.add(section("Custom style (advanced)", customSection));
+        form.row(sections);
         JPanel actions = new WrappingControlsPanel(UiStyle.space(8), UiStyle.space(4));
         actions.add(save);
         actions.add(reset);
@@ -76,6 +100,16 @@ final class AppearancePanel extends JPanel {
             message("Defaults selected. Save and restart SpacePixels to apply them.");
         });
         save.addActionListener(event -> save(false));
+    }
+
+    /** Groups related controls in a theme-derived rectangle; wrapping places the custom section below on narrow displays. */
+    private static JPanel section(String title, JPanel content) {
+        JPanel panel = new JPanel(new BorderLayout());
+        var border = BorderFactory.createTitledBorder(title);
+        border.setTitleFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
+        panel.setBorder(border);
+        panel.add(content);
+        return panel;
     }
 
     /** Shows values only; restoring defaults does not change a file or other application settings. */
@@ -160,12 +194,18 @@ final class AppearancePanel extends JPanel {
     /** A single-column form whose help text rewraps to the viewport before its content height is measured. */
     private static final class Form extends WidthTrackingPanel {
         private final List<WrappingHelpLabel> notes = new ArrayList<>();
+        private final int logicalWidth;
         private int nextRow;
 
         /** Leaves vertical space below the controls and keeps each editor at its natural, scaled height. */
-        Form() {
+        Form() { this(780); }
+
+        /** Gives a boxed subsection a natural wrapping width while retaining scaled editor sizes. */
+        Form(int logicalWidth) {
+            this.logicalWidth = logicalWidth;
             setLayout(new GridBagLayout());
-            setBorder(BorderFactory.createEmptyBorder(UiStyle.space(18), UiStyle.space(22), UiStyle.space(18), UiStyle.space(22)));
+            int padding = logicalWidth == 780 ? 18 : 10;
+            setBorder(BorderFactory.createEmptyBorder(UiStyle.space(padding), UiStyle.space(padding), UiStyle.space(padding), UiStyle.space(padding)));
         }
 
         /** Adds one full-width component without a fixed height. */
@@ -217,7 +257,8 @@ final class AppearancePanel extends JPanel {
 
         /** Computes the actual wrapped height at any window width and startup font size. */
         @Override public Dimension getPreferredSize() {
-            int width = getParent() == null ? UiStyle.space(780) : getParent().getWidth();
+            int width = UiStyle.space(logicalWidth);
+            if (getParent() != null && getParent().getWidth() > 0) width = Math.min(width, getParent().getWidth());
             Insets insets = getInsets();
             for (WrappingHelpLabel label : notes) label.wrapAt(Math.max(100, width - insets.left - insets.right));
             return super.getPreferredSize();

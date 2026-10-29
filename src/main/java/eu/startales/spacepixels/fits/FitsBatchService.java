@@ -26,10 +26,10 @@ public final class FitsBatchService {
     }
 
     /**
-     * Converts all color images in the folder to monochrome and returns the generated mono directory, so the window
-     * can offer to import it. With {@code stretch}, stretched mono derivatives are written beside the mono copies.
+     * Converts all color images in the folder to linear monochrome copies and returns their directory for optional
+     * import. Stretching is a separate operation and never runs as part of conversion.
      */
-    public File batchConvertToMono(boolean stretch, int stretchFactor, int iterations, StretchAlgorithm algo, TransientEngineProgressListener progressListener) throws IOException, FitsException {
+    public File batchConvertToMono(TransientEngineProgressListener progressListener) throws IOException, FitsException {
         File[] fitsFileInformation = FitsInput.list(directory);
         File generatedMonoDirectory = null;
 
@@ -57,13 +57,6 @@ public final class FitsBatchService {
                     }
                     writeFitsWithSuffix(monochromeFits, monoFilename, "_mono");
 
-                    // If stretch is enabled, stretch the mono version and save it
-                    if (stretch) {
-                        LOGGER.info("Stretching newly converted mono image: " + fileInfo.getName());
-                        stretchFITSImage(monochromeFits, stretchFactor, iterations, algo);
-                        String monoStretchFilename = addDirectory(fileInfo, "_mono_stretched");
-                        writeFitsWithSuffix(monochromeFits, monoStretchFilename, "_mono_stretch");
-                    }
                 } else {
                     LOGGER.info("Skipping mono conversion (already mono): " + fileInfo.getName());
                 }
