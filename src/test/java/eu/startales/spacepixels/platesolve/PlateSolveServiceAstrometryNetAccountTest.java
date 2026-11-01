@@ -4,7 +4,6 @@ import eu.startales.spacepixels.config.AppConfig;
 import io.github.ppissias.jplatesolve.PlateSolveOperation;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jplatesolve.astrometrydotnet.AstrometryDotNet;
-import io.github.ppissias.jplatesolve.astrometrydotnet.SubmitFileRequest;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -63,8 +62,7 @@ public class PlateSolveServiceAstrometryNetAccountTest {
         }
 
         @Override
-        public PlateSolveOperation startCustomSolve(File imageFile, SubmitFileRequest parameters,
-                                                    Consumer<PlateSolveOperation.Progress> progress) {
+        public PlateSolveOperation startBlindSolve(File imageFile, Consumer<PlateSolveOperation.Progress> progress) {
             solves++;
             uploaded = imageFile;
             uploadExisted = imageFile.isFile();

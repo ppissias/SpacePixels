@@ -16,7 +16,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import io.github.ppissias.jplatesolve.astap.ASTAPInterface;
 import io.github.ppissias.jplatesolve.astrometrydotnet.AstrometryDotNet;
-import io.github.ppissias.jplatesolve.astrometrydotnet.SubmitFileRequest;
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
 import nom.tam.fits.FitsException;
@@ -106,19 +105,11 @@ public final class PlateSolveService implements AutoCloseable {
             return ASTAPInterface.startSolve(new File(executable), path, null, progress);
         }
         if (astrometry) {
-            SubmitFileRequest parameters = SubmitFileRequest.builder()
-                    .withPublicly_visible("n")
-                    .withScale_units("degwidth")
-                    .withScale_lower(0.1f)
-                    .withScale_upper(180.0f)
-                    .withDownsample_factor(2f)
-                    .withRadius(10f)
-                    .build();
             // Anonymous uploads share one account: send a copy without the site and the observer.
             File upload = FitsUploadCopy.create(new File(path));
             try {
                 PlateSolveOperation operation = astrometryNetClient(appConfig.astrometryNetApiKeyInUse())
-                        .startCustomSolve(upload, parameters, progress);
+                        .startBlindSolve(upload, progress);
                 operation.completion().whenComplete((outcome, failure) -> deleteUploadCopy(upload));
                 return operation;
             } catch (RuntimeException failure) {

@@ -1704,13 +1704,21 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             }
             sessions.current().getPlateSolveService().cleanupSolveArtifacts(fileInfo.getFilePath(), result);
         } else {
-            String errorMsg = result != null ? result.getFailureReason() + " " + result.getWarning()
+            String errorMsg = result != null ? plateSolveFailureMessage(result)
                     : outcome instanceof JobOutcome.Failed<PlateSolveResult> failed ? failed.reason() : "Internal Error";
             statusLabel.setText("Plate solve failed");
             FailureDialog.show(this, "Error", "Image was not plate-solved successfully: " + errorMsg,
                     outcome instanceof JobOutcome.Failed<PlateSolveResult> failed ? failed.cause() : null);
         }
         refreshCommands();
+    }
+
+    /** Formats a rejected solve for the dialog, preserving real warnings and omitting absent text. */
+    static String plateSolveFailureMessage(PlateSolveResult result) {
+        String reason = result.getFailureReason();
+        String warning = result.getWarning();
+        if (reason == null || reason.isBlank()) reason = "The solver returned no solution.";
+        return warning == null || warning.isBlank() ? reason : reason + " " + warning;
     }
 
     /** The end of writing the WCS solution: the frame's row shows its new header, or the error says why it is unchanged. */

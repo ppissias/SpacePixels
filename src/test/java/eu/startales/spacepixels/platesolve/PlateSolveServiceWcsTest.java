@@ -224,6 +224,19 @@ public class PlateSolveServiceWcsTest {
         assertFalse(Files.exists(temporaryPreviewPath));
     }
 
+    /** Blind ASTAP results do not authorize cleanup of a pre-existing annotated image. */
+    @Test
+    public void blindSolveCleanupPreservesAnUnownedAnnotation() throws Exception {
+        Path directory = Files.createTempDirectory("spacepixels-blind-cleanup");
+        Path image = directory.resolve("sample.fits");
+        Path annotation = directory.resolve("sample_annotated.jpg");
+        writeFitsFile(image, 100, 80, new HashMap<>());
+        Files.writeString(annotation, "user-image");
+        PlateSolveService solver = new PlateSolveService(new AppConfig());
+        solver.cleanupSolveArtifacts(image.toString(), new PlateSolveResult(true, null, null, Map.of("source", "astap")));
+        assertEquals("user-image", Files.readString(annotation));
+    }
+
     private static Map<String, String> createStandardWcsSolveInfo() {
         Map<String, String> solveInfo = new LinkedHashMap<>();
         solveInfo.put("source", "astap");
