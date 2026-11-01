@@ -259,7 +259,7 @@ Related functionality, not part of this item: an **Auto** setting on the Image S
 
 #### Follow-up after the implementation review (2026-11-01)
 
-- **White Sigma default 20.** On real crops of six reference datasets, the old standard deviation was 2.4 to 25 times the robust sky noise, because it included the stars and gradients. With White Sigma 5 the robust white point clipped most stars to white and spread the sky noise over the grey range. The maintainer chose a new default of 20; the settings page now allows up to 100. Black Sigma stays 0.5. Saved visualization files keep their value.
+- **New defaults: Black Sigma 2, White Sigma 20.** On real crops of six reference datasets, the old standard deviation was 2.4 to 25 times the robust sky noise, because it included the stars and gradients. With White Sigma 5 the robust white point clipped most stars to white and spread the sky noise over the grey range. With Black Sigma 0.5 about 31% of the sky was clipped to black, which left a grainy sky even at White Sigma 20; at Black Sigma 2 about 2% is, and faint streaks stay visible. The maintainer chose 2 and 20; the settings page allows White Sigma up to 100. Saved visualization files keep their values; the maintainer decided against migrating them, since the change was not yet released.
 - **Track animations hold one crop at a time.** The shared levels are measured from crops made one by one, and each crop is made again to draw it, so a long track with frame-wide crops does not hold all of them.
 - **Batch Stretch is pinned** by a checksum test (`DisplayStretchTest.batchStretchKeepsItsOutput`) recorded from the per-pixel code before the stretch tables.
 
